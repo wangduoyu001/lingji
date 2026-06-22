@@ -12,8 +12,10 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - LLM推理
   - GPU加速
+  - LLM推理
+  - 本地AI
+  - 推理引擎
 ---
 
 # vLLM

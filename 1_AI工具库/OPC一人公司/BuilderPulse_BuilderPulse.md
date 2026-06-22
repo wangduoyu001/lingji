@@ -12,7 +12,8 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - OPC一人公司
+  - 项目管理
+  - 一人公司
 ---
 
 # BuilderPulse

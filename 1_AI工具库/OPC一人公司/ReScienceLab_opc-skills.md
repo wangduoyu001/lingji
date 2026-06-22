@@ -12,7 +12,8 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - OPC一人公司
+  - 技能包
+  - 一人公司
 ---
 
 # OPC Skills

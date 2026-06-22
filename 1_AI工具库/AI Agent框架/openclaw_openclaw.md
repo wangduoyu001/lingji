@@ -12,8 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI Agent
-  - 个人助手
+  - AI框架
+  - 多Agent
+  - 自动化
 ---
 
 # OpenClaw

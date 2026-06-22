@@ -12,7 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - OPC一人公司
+  - AI分析
+  - 金融
+  - 量化交易
 ---
 
 # OpenAlice

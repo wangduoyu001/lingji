@@ -12,8 +12,8 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - LLM框架
-  - Agent框架
+  - AI框架
+  - 编程工具
 ---
 
 # LangChain

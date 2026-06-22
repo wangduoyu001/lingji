@@ -12,9 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI-Agent
+  - AI框架
+  - 个人助手
   - 桌面应用
-  - MCP
 ---
 
 # Goose — 电脑上的全能 AI 助手

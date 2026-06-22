@@ -1,4 +1,4 @@
----
+﻿---
 title: "用Codex做视频后，我觉得我正常发挥才是在水视频... #Codex做视频 #AI剪辑 #AI做视频 #Codex"
 author: "KARMASHH"
 platform: "抖音"
@@ -7,6 +7,7 @@ category: "其他"
 subcategory: "AI工具教程/视频创作技巧分享"
 tags: [AI全自动视频生成, Codex使用教程, HyperFrames插件, GPT Image 2, 零门槛视频制作]
 date: 2026-06-22
+link_tags: [AI工具, 视频创作, 自动化, Codex]
 ---
 
 # 用Codex做视频后，我觉得我正常发挥才是在水视频... #Codex做视频 #AI剪辑 #AI做视频 #Codex

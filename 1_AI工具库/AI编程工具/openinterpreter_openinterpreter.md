@@ -12,7 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI编程工具
+  - 编程工具
+  - 计算机控制
+  - 自动化
 ---
 
 # Open Interpreter

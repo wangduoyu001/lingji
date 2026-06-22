@@ -12,9 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI编程
-  - 工程技能
-  - 工作流
+  - 编程工具
+  - 技能
+  - 提示词
 ---
 
 # Matt Pocock Skills — 真正的工程师怎么用 AI 写代码

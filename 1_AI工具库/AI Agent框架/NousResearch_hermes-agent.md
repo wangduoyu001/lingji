@@ -12,7 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI编程工具
+  - AI框架
+  - 多Agent
+  - 自我进化
 ---
 
 # Hermes Agent

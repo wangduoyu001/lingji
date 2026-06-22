@@ -12,8 +12,8 @@ tags:
   - AI工具
   - GitHub
   - AI项目
+  - 本地AI
   - 本地大模型
-  - LLM
 ---
 
 # Ollama

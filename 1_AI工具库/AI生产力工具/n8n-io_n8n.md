@@ -12,8 +12,8 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - 工作流自动化
-  - AI Agent
+  - 工作流
+  - 自动化
 ---
 
 # n8n

@@ -1,4 +1,4 @@
----
+﻿---
 title: "claudecode桌面端可以接国产模型了，三步配置教程 #科技下一站 #claude #ai #claudecode"
 author: "51479765074"
 platform: "抖音"
@@ -7,6 +7,7 @@ category: "其他"
 subcategory: "AI工具更新与配置教程"
 tags: [Claude桌面端教程, AI大模型使用指南, 国产大模型接入, AI编程工具, Anthropic]
 date: 2026-06-21
+link_tags: [AI工具, 编程工具, Claude]
 ---
 
 # claudecode桌面端可以接国产模型了，三步配置教程 #科技下一站 #claude #ai #claudecode

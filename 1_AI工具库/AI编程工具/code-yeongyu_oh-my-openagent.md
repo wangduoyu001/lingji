@@ -12,9 +12,8 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI编程
   - Agent编排
-  - 多模型
+  - AI框架
 ---
 
 # Oh-My-OpenAgent — 用"最便宜"的模型跑出最优效果

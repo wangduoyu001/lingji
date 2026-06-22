@@ -13,8 +13,8 @@ tags:
   - GitHub
   - AI项目
   - RAG
+  - 文档处理
   - 知识库
-  - Agent
 ---
 
 # RAGFlow

@@ -12,7 +12,10 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI编程工具
+  - Claude
+  - Codex
+  - 编程工具
+  - 切换工具
 ---
 
 # CC Switch

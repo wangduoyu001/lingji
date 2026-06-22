@@ -13,7 +13,8 @@ tags:
   - GitHub
   - AI项目
   - AI编程
-  - Agent Skills
+  - 编程工具
+  - 增强工具
 ---
 
 # superpowers

@@ -12,9 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI生产力
+  - AI分析
+  - 个人助手
   - 屏幕录制
-  - MCP
 ---
 
 # Screenpipe

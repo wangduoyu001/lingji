@@ -12,9 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI编程工具
-  - Claude-Code
   - AI记忆
+  - Claude
+  - 编程工具
 ---
 
 # Claude-Mem

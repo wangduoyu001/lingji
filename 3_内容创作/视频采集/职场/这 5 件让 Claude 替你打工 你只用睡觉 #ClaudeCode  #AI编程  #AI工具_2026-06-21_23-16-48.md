@@ -1,4 +1,4 @@
----
+﻿---
 title: "这 5 件让 Claude 替你打工 你只用睡觉 #ClaudeCode  #AI编程  #AI工具 #人间变量 #一人公司"
 author: "renjianbianliang"
 platform: "抖音"
@@ -7,6 +7,7 @@ category: "职场"
 subcategory: "AI生产力工具科普推荐"
 tags: [AI工具, 开源项目, 自动办公, 单人AI创业, 效率提升]
 date: 2026-06-21
+link_tags: [AI工具, 编程工具, Claude, 自动化]
 ---
 
 # 这 5 件让 Claude 替你打工 你只用睡觉 #ClaudeCode  #AI编程  #AI工具 #人间变量 #一人公司

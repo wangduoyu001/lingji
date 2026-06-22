@@ -12,7 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI生产力工具
+  - AI搜索
+  - 个人助手
+  - 知识库
 ---
 
 # Khoj

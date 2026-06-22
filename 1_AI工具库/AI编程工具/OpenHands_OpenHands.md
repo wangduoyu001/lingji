@@ -12,8 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI编程
-  - AI Agent
+  - Devin替代
+  - 编程工具
+  - 自动化
 ---
 
 # OpenHands

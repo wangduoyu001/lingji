@@ -12,9 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI生产力工具
-  - 网页爬虫
-  - RAG
+  - 爬虫
+  - 网页采集
+  - 自动化
 ---
 
 # Crawl4AI

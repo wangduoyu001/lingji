@@ -12,7 +12,8 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - MCP生态
+  - MCP
+  - 调试工具
   - 浏览器自动化
 ---
 

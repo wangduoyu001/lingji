@@ -12,7 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI Agent框架
+  - AI框架
+  - 多Agent
+  - 工作流
 ---
 
 # Ruflo

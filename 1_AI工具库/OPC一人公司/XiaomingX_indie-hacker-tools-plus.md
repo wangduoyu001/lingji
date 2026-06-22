@@ -12,7 +12,8 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - OPC一人公司
+  - 独立开发
+  - 一人公司
 ---
 
 # 独立开发者工具集 (Indie Hacker Tools Plus)

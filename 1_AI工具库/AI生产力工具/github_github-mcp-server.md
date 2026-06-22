@@ -12,6 +12,7 @@ tags:
   - AI工具
   - GitHub
   - AI项目
+  - GitHub
   - MCP
   - 开发工具
 ---

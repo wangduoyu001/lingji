@@ -12,9 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI编程
-  - 工程技能
-  - 工作流
+  - Agent
+  - 编程工具
+  - 技能
 ---
 
 # Agent Skills — Google 工程师的 AI 编程标准流程

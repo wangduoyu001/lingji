@@ -12,8 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI API
-  - AI网关
+  - AI框架
+  - API网关
+  - 多模型
 ---
 
 # LiteLLM

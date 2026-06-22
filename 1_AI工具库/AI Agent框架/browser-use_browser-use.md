@@ -12,7 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI Agent工具
+  - 浏览器自动化
+  - 网页采集
+  - 自动化
 ---
 
 # Browser Use

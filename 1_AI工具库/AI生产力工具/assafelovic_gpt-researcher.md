@@ -12,7 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI Agent框架
+  - AI研究
+  - 报告生成
+  - 自动化
 ---
 
 # GPT Researcher

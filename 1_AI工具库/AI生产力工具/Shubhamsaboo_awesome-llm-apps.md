@@ -12,7 +12,8 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI生产力工具
+  - AI应用
+  - 示例集合
 ---
 
 # Awesome LLM Apps

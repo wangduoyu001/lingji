@@ -12,8 +12,8 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI编程工具
   - AI研究
+  - 编程工具
 ---
 
 # AutoResearch

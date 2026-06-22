@@ -12,9 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI-Agent
-  - 多Agent
-  - 工作流
+  - AI Agent
+  - 多模型
+  - 聊天界面
 ---
 
 # LobeHub — 你的 AI 团队大管家

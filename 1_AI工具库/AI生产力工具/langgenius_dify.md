@@ -13,7 +13,8 @@ tags:
   - GitHub
   - AI项目
   - AI应用平台
-  - Agent工作流
+  - RAG
+  - 工作流
 ---
 
 # Dify

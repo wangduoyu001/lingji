@@ -12,7 +12,8 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI编程工具
+  - AI编程
+  - 编程工具
 ---
 
 # Pi

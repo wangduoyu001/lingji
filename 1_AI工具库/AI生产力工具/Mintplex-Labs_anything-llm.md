@@ -12,9 +12,10 @@ tags:
   - AI工具
   - GitHub
   - AI项目
+  - RAG
   - 本地AI
+  - 文档处理
   - 知识库
-  - Agent
 ---
 
 # AnythingLLM

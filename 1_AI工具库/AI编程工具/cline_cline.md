@@ -12,7 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI编程工具
+  - AI编程
+  - VS Code
+  - 编程工具
 ---
 
 # Cline

@@ -12,9 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI视频
   - 短视频
-  - 内容生产
+  - 视频创作
+  - 自动化
 ---
 
 # MoneyPrinterTurbo — 一句话生成高清短视频

@@ -13,7 +13,8 @@ tags:
   - GitHub
   - AI项目
   - AI绘图
-  - Stable Diffusion
+  - StableDiffusion
+  - 图像生成
 ---
 
 # ComfyUI

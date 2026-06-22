@@ -12,9 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - 推理引擎
-  - 本地模型
   - DeepSeek
+  - 本地AI
+  - 推理引擎
 ---
 
 # ds4 — Redis 作者亲手打造的 DeepSeek 本地推理引擎

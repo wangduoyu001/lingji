@@ -12,8 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI生产力
-  - 提示词框架
+  - AI框架
+  - 工作流
+  - 提示词
 ---
 
 # Fabric

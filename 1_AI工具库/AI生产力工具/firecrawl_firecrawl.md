@@ -12,9 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI自动化
-  - 网页抓取
-  - MCP
+  - 爬虫
+  - 网页采集
+  - 自动化
 ---
 
 # Firecrawl

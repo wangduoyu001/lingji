@@ -12,8 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - Multi-Agent
-  - 多Agent协作
+  - AI框架
+  - 多Agent
+  - 模拟
 ---
 
 # MetaGPT

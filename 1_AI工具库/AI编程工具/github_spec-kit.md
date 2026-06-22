@@ -13,7 +13,8 @@ tags:
   - GitHub
   - AI项目
   - AI编程
-  - 规格驱动开发
+  - 编程工具
+  - 规格驱动
 ---
 
 # Spec Kit

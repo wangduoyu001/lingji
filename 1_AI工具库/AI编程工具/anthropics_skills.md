@@ -12,8 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - Agent Skills
-  - Claude Code
+  - Anthropic
+  - 编程工具
+  - 技能
 ---
 
 # Anthropic Skills

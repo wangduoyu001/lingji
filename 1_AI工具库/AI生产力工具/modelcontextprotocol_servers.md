@@ -12,8 +12,8 @@ tags:
   - AI工具
   - GitHub
   - AI项目
+  - AI框架
   - MCP
-  - AI工具
 ---
 
 # MCP Servers

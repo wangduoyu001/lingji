@@ -12,7 +12,9 @@ tags:
   - AI工具
   - GitHub
   - AI项目
-  - AI生产力工具
+  - 本地AI
+  - 多模型
+  - 聊天界面
 ---
 
 # Cherry Studio
