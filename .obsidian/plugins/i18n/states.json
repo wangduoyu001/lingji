@@ -1,0 +1,53 @@
+{
+    "plugins": {
+        "tag-wrangler": {
+            "id": "tag-wrangler",
+            "isApplied": true,
+            "pluginVersion": "0.6.4",
+            "translationVersion": "1.0.0"
+        },
+        "auto-classifier": {
+            "id": "auto-classifier",
+            "isApplied": true,
+            "pluginVersion": "1.3.0",
+            "translationVersion": "1.0.0"
+        },
+        "auto-note-mover": {
+            "id": "auto-note-mover",
+            "isApplied": true,
+            "pluginVersion": "1.2.0",
+            "translationVersion": "1.0.0"
+        },
+        "floating-toc": {
+            "id": "floating-toc",
+            "isApplied": true,
+            "pluginVersion": "2.7.1",
+            "translationVersion": "1.0.0"
+        },
+        "obsidian-outliner": {
+            "id": "obsidian-outliner",
+            "isApplied": true,
+            "pluginVersion": "4.10.1",
+            "translationVersion": "1.0.0"
+        },
+        "teleprompter-plus": {
+            "id": "teleprompter-plus",
+            "isApplied": true,
+            "pluginVersion": "0.11.1",
+            "translationVersion": "1.0.0"
+        },
+        "obsidian-tagfolder": {
+            "id": "obsidian-tagfolder",
+            "isApplied": true,
+            "pluginVersion": "0.18.14",
+            "translationVersion": "1.0.0"
+        },
+        "dataview": {
+            "id": "dataview",
+            "isApplied": true,
+            "pluginVersion": "0.5.68",
+            "translationVersion": "1.0.0"
+        }
+    },
+    "themes": {}
+}
