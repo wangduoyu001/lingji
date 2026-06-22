@@ -1,0 +1,675 @@
+{
+  "projects": {
+    "https://github.com/anthropics/claude-code": {
+      "name": "Claude Code",
+      "fullName": "anthropics/claude-code",
+      "githubUrl": "https://github.com/anthropics/claude-code",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/anthropics_claude-code.md",
+      "stars": 132446,
+      "description": "",
+      "lastPushTime": "2026-06-13T18:20:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/nousresearch/hermes-agent": {
+      "name": "Hermes Agent",
+      "fullName": "NousResearch/hermes-agent",
+      "githubUrl": "https://github.com/NousResearch/hermes-agent",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/NousResearch_hermes-agent.md",
+      "stars": 195949,
+      "description": "",
+      "lastPushTime": "2026-06-13T15:30:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/significant-gravitas/autogpt": {
+      "name": "AutoGPT",
+      "fullName": "Significant-Gravitas/AutoGPT",
+      "githubUrl": "https://github.com/Significant-Gravitas/AutoGPT",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/Significant-Gravitas_AutoGPT.md",
+      "stars": 184946,
+      "description": "",
+      "lastPushTime": "2026-06-12T10:00:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/ruvnet/ruflo": {
+      "name": "Ruflo",
+      "fullName": "ruvnet/ruflo",
+      "githubUrl": "https://github.com/ruvnet/ruflo",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/ruvnet_ruflo.md",
+      "stars": 59509,
+      "description": "",
+      "lastPushTime": "2026-06-15",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/cherryhq/cherry-studio": {
+      "name": "Cherry Studio",
+      "fullName": "CherryHQ/cherry-studio",
+      "githubUrl": "https://github.com/CherryHQ/cherry-studio",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/CherryHQ_cherry-studio.md",
+      "stars": 47344,
+      "description": "",
+      "lastPushTime": "2026-06-15",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/khoj-ai/khoj": {
+      "name": "Khoj",
+      "fullName": "khoj-ai/khoj",
+      "githubUrl": "https://github.com/khoj-ai/khoj",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/khoj-ai_khoj.md",
+      "stars": 35132,
+      "description": "",
+      "lastPushTime": "2026-06-15",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/fosowl/agenticseek": {
+      "name": "agenticSeek",
+      "fullName": "Fosowl/agenticSeek",
+      "githubUrl": "https://github.com/Fosowl/agenticSeek",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/Fosowl_agenticSeek.md",
+      "stars": 26521,
+      "description": "",
+      "lastPushTime": "2026-06-15",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/assafelovic/gpt-researcher": {
+      "name": "GPT Researcher",
+      "fullName": "assafelovic/gpt-researcher",
+      "githubUrl": "https://github.com/assafelovic/gpt-researcher",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/assafelovic_gpt-researcher.md",
+      "stars": 27713,
+      "description": "",
+      "lastPushTime": "2026-06-15",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/snarktank/ralph": {
+      "name": "Ralph",
+      "fullName": "snarktank/ralph",
+      "githubUrl": "https://github.com/snarktank/ralph",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/snarktank_ralph.md",
+      "stars": 20254,
+      "description": "",
+      "lastPushTime": "2026-06-15",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/elizaos/eliza": {
+      "name": "elizaOS",
+      "fullName": "elizaOS/eliza",
+      "githubUrl": "https://github.com/elizaOS/eliza",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/elizaOS_eliza.md",
+      "stars": 18585,
+      "description": "",
+      "lastPushTime": "2026-06-15",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/crewaiinc/crewai": {
+      "name": "CrewAI",
+      "fullName": "crewAIInc/crewAI",
+      "githubUrl": "https://github.com/crewAIInc/crewAI",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/crewAIInc_crewAI.md",
+      "stars": 53575,
+      "description": "",
+      "lastPushTime": "2026-06-15",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/affaan-m/ecc": {
+      "name": "ECC",
+      "fullName": "affaan-m/ECC",
+      "githubUrl": "https://github.com/affaan-m/ECC",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/affaan-m_ECC.md",
+      "stars": 217446,
+      "description": "AI代理性能优化系统，为Claude Code/Codex/Cursor等提供262+技能、67+代理、91+命令的完整工作流",
+      "lastPushTime": "2026-06-17T17:04:18Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/anomalyco/opencode": {
+      "name": "OpenCode",
+      "fullName": "anomalyco/opencode",
+      "githubUrl": "https://github.com/anomalyco/opencode",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/anomalyco_opencode.md",
+      "stars": 175000,
+      "description": "开源AI编程代理，内置双代理系统（build开发+plan规划），支持CLI和桌面应用",
+      "lastPushTime": "2026-06-16T14:00:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/garrytan/gstack": {
+      "name": "gstack",
+      "fullName": "garrytan/gstack",
+      "githubUrl": "https://github.com/garrytan/gstack",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/garrytan_gstack.md",
+      "stars": 80000,
+      "description": "YC总裁Garry Tan的Claude Code精确配置：23个有主见的工具，模拟CEO/设计师/工程经理/QA等完整团队角色",
+      "lastPushTime": "2026-06-15T20:00:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/shubhamsaboo/awesome-llm-apps": {
+      "name": "Awesome LLM Apps",
+      "fullName": "Shubhamsaboo/awesome-llm-apps",
+      "githubUrl": "https://github.com/Shubhamsaboo/awesome-llm-apps",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/Shubhamsaboo_awesome-llm-apps.md",
+      "stars": 114833,
+      "description": "100+ AI Agent & RAG应用合集，可直接克隆运行，涵盖客服/金融/医疗/教育等场景",
+      "lastPushTime": "2026-06-15T08:00:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/google-gemini/gemini-cli": {
+      "name": "Gemini CLI",
+      "fullName": "google-gemini/gemini-cli",
+      "githubUrl": "https://github.com/google-gemini/gemini-cli",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/google-gemini_gemini-cli.md",
+      "stars": 105000,
+      "description": "Google开源AI代理，将Gemini大模型能力直接嵌入终端，支持1M token上下文窗口",
+      "lastPushTime": "2026-06-16T09:00:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/farion1231/cc-switch": {
+      "name": "CC Switch",
+      "fullName": "farion1231/cc-switch",
+      "githubUrl": "https://github.com/farion1231/cc-switch",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/farion1231_cc-switch.md",
+      "stars": 44000,
+      "description": "跨平台桌面All-in-One助手，统一管理Claude Code/Codex/Gemini CLI/OpenCode/Hermes Agent等7款AI工具",
+      "lastPushTime": "2026-06-16T15:00:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/browser-use/browser-use": {
+      "name": "Browser Use",
+      "fullName": "browser-use/browser-use",
+      "githubUrl": "https://github.com/browser-use/browser-use",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/browser-use_browser-use.md",
+      "stars": 99100,
+      "description": "让网页可被AI代理访问，支持浏览器自动化任务，可自托管也可云端使用",
+      "lastPushTime": "2026-06-15T12:00:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/openai/codex": {
+      "name": "Codex CLI",
+      "fullName": "openai/codex",
+      "githubUrl": "https://github.com/openai/codex",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/openai_codex.md",
+      "stars": 91400,
+      "description": "OpenAI官方轻量级编程代理CLI，直接在终端中运行，支持Rust核心+TypeScript CLI",
+      "lastPushTime": "2026-06-16T16:00:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/openinterpreter/openinterpreter": {
+      "name": "Open Interpreter",
+      "fullName": "openinterpreter/openinterpreter",
+      "githubUrl": "https://github.com/openinterpreter/openinterpreter",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/openinterpreter_openinterpreter.md",
+      "stars": 64000,
+      "description": "面向低成本模型的编程代理，支持Deepseek/Kimi/Qwen等国产模型，原生沙箱运行",
+      "lastPushTime": "2026-06-16T11:00:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/cline/cline": {
+      "name": "Cline",
+      "fullName": "cline/cline",
+      "githubUrl": "https://github.com/cline/cline",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/cline_cline.md",
+      "stars": 63400,
+      "description": "自主编程代理，支持SDK/IDE扩展/CLI三种形态，多代理团队协作，定时代理任务",
+      "lastPushTime": "2026-06-16T13:00:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/earendil-works/pi": {
+      "name": "Pi",
+      "fullName": "earendil-works/pi",
+      "githubUrl": "https://github.com/earendil-works/pi",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/earendil-works_pi.md",
+      "stars": 63100,
+      "description": "AI代理工具包：统一LLM API+代理运行时+编码代理CLI+TUI界面，支持多提供商切换",
+      "lastPushTime": "2026-06-16T08:00:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/traderalice/openalice": {
+      "name": "OpenAlice",
+      "fullName": "TraderAlice/OpenAlice",
+      "githubUrl": "https://github.com/TraderAlice/OpenAlice",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/TraderAlice_OpenAlice.md",
+      "stars": 10000,
+      "description": "你的一人华尔街——AI交易代理，覆盖股票/加密货币/大宗商品/外汇/宏观分析",
+      "lastPushTime": "2026-06-16T17:00:00Z",
+      "lastRecordTime": "2026-06-17"
+    },
+    "https://github.com/xiaomingx/indie-hacker-tools-plus": {
+      "name": "独立开发者工具集",
+      "fullName": "XiaomingX/indie-hacker-tools-plus",
+      "githubUrl": "https://github.com/XiaomingX/indie-hacker-tools-plus",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/XiaomingX_indie-hacker-tools-plus.md",
+      "stars": 33000,
+      "description": "为独立开发者精选的技术栈和工具仓库，覆盖开发/部署/营销/变现全链路",
+      "lastPushTime": "2026-06-16T06:00:00Z",
+      "lastRecordTime": "2026-06-16T11:37:45.119Z"
+    },
+    "https://github.com/builderpulse/builderpulse": {
+      "name": "BuilderPulse",
+      "fullName": "BuilderPulse/BuilderPulse",
+      "githubUrl": "https://github.com/BuilderPulse/BuilderPulse",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/BuilderPulse_BuilderPulse.md",
+      "stars": 1000,
+      "description": "AI驱动的独立黑客每日情报：每天一个可做的项目点子+为什么现在是好时机",
+      "lastPushTime": "2026-06-16T02:00:00Z",
+      "lastRecordTime": "2026-06-16T11:37:45.120Z"
+    },
+    "https://github.com/resciencelab/opc-skills": {
+      "name": "OPC Skills",
+      "fullName": "ReScienceLab/opc-skills",
+      "githubUrl": "https://github.com/ReScienceLab/opc-skills",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/ReScienceLab_opc-skills.md",
+      "stars": 930,
+      "description": "一人公司AI技能集：SEO优化/Reddit调研/Twitter搜索/Logo生成/域名查找等10个Skills",
+      "lastPushTime": "2026-06-16T07:00:00Z",
+      "lastRecordTime": "2026-06-16T11:37:45.120Z"
+    },
+    "https://github.com/openclaw/openclaw": {
+      "name": "OpenClaw",
+      "fullName": "openclaw/openclaw",
+      "githubUrl": "https://github.com/openclaw/openclaw",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/openclaw_openclaw.md",
+      "stars": 379288,
+      "description": "2026年GitHub全站第一的个人AI助手，7x24跨平台自动执行任务，数据完全本地化",
+      "lastPushTime": "2026-06-18T07:05:46Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/obra/superpowers": {
+      "name": "superpowers",
+      "fullName": "obra/superpowers",
+      "githubUrl": "https://github.com/obra/superpowers",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/obra_superpowers.md",
+      "stars": 231491,
+      "description": "AI编程"先想后做"方法论与技能框架，强制AI先确认需求再写代码，减少60%返工",
+      "lastPushTime": "2026-06-17T20:58:54Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/n8n-io/n8n": {
+      "name": "n8n",
+      "fullName": "n8n-io/n8n",
+      "githubUrl": "https://github.com/n8n-io/n8n",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/n8n-io_n8n.md",
+      "stars": 192989,
+      "description": "拖拽式AI自动化工作流平台，400+连接器，可自建或云用，支持AI Agent模块",
+      "lastPushTime": "2026-06-18T07:07:15Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/anthropics/skills": {
+      "name": "Anthropic Skills",
+      "fullName": "anthropics/skills",
+      "githubUrl": "https://github.com/anthropics/skills",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/anthropics_skills.md",
+      "stars": 152293,
+      "description": "Claude Code官方技能插件包，包含文档/设计/测试/PPT/Excel等20+专业Skills",
+      "lastPushTime": "2026-06-09T20:35:19Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/langgenius/dify": {
+      "name": "Dify",
+      "fullName": "langgenius/dify",
+      "githubUrl": "https://github.com/langgenius/dify",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/langgenius_dify.md",
+      "stars": 145670,
+      "description": "零代码AI应用搭建平台，可视化工作流，支持知识库/Agent/API发布，中文支持最好",
+      "lastPushTime": "2026-06-18T06:57:50Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/open-webui/open-webui": {
+      "name": "Open WebUI",
+      "fullName": "open-webui/open-webui",
+      "githubUrl": "https://github.com/open-webui/open-webui",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/open-webui_open-webui.md",
+      "stars": 142086,
+      "description": "完全私有的本地ChatGPT界面，数据不出电脑，支持Ollama/OpenAI/Claude多种后端",
+      "lastPushTime": "2026-06-17T01:18:08Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/langchain-ai/langchain": {
+      "name": "LangChain",
+      "fullName": "langchain-ai/langchain",
+      "githubUrl": "https://github.com/langchain-ai/langchain",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/langchain-ai_langchain.md",
+      "stars": 139607,
+      "description": "AI开发的事实标准框架，Python/TypeScript双语言，LangGraph支持复杂多Agent编排",
+      "lastPushTime": "2026-06-18T04:47:04Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/comfy-org/comfyui": {
+      "name": "ComfyUI",
+      "fullName": "Comfy-Org/ComfyUI",
+      "githubUrl": "https://github.com/Comfy-Org/ComfyUI",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/Comfy-Org_ComfyUI.md",
+      "stars": 117435,
+      "description": "专业级AI绘图节点工作流工具，支持Stable Diffusion/Flux等，控制力极强",
+      "lastPushTime": "2026-06-18T07:03:50Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/modelcontextprotocol/servers": {
+      "name": "MCP Servers",
+      "fullName": "modelcontextprotocol/servers",
+      "githubUrl": "https://github.com/modelcontextprotocol/servers",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/modelcontextprotocol_servers.md",
+      "stars": 87406,
+      "description": "AI工具的"万能转接头"——MCP官方Server实现集，让AI连接文件系统/GitHub/数据库等",
+      "lastPushTime": "2026-06-17T01:40:52Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/openhands/openhands": {
+      "name": "OpenHands",
+      "fullName": "OpenHands/OpenHands",
+      "githubUrl": "https://github.com/OpenHands/OpenHands",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/OpenHands_OpenHands.md",
+      "stars": 77601,
+      "description": "AI全栈开发代理，从需求到代码到测试到部署一条龙，有自主错误修复能力",
+      "lastPushTime": "2026-06-18T06:17:00Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/foundationagents/metagpt": {
+      "name": "MetaGPT",
+      "fullName": "FoundationAgents/MetaGPT",
+      "githubUrl": "https://github.com/FoundationAgents/MetaGPT",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/FoundationAgents_MetaGPT.md",
+      "stars": 68880,
+      "description": "多AI角色协作开发框架，模拟产品经理+架构师+程序员+QA的真实软件团队",
+      "lastPushTime": "2026-01-21T10:12:33Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/berriai/litellm": {
+      "name": "LiteLLM",
+      "fullName": "BerriAI/litellm",
+      "githubUrl": "https://github.com/BerriAI/litellm",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/BerriAI_litellm.md",
+      "stars": 50758,
+      "description": "统一调用100+大模型的万能网关，含费用追踪/负载均衡/安全防护，一行代码切换模型",
+      "lastPushTime": "2026-06-18T06:36:17Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/aider-ai/aider": {
+      "name": "Aider",
+      "fullName": "Aider-AI/aider",
+      "githubUrl": "https://github.com/Aider-AI/aider",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/Aider-AI_aider.md",
+      "stars": 46403,
+      "description": "轻量级AI结对编程工具，SWE-bench排名前列，专注代码修改，支持OpenAI/Claude/Gemini/Ollama",
+      "lastPushTime": "2026-05-22T14:02:20Z",
+      "lastRecordTime": "2026-06-18"
+    },
+    "https://github.com/ollama/ollama": {
+      "name": "Ollama",
+      "fullName": "ollama/ollama",
+      "githubUrl": "https://github.com/ollama/ollama",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/ollama_ollama.md",
+      "stars": 174600,
+      "description": "本地AI模型管家，一条命令运行DeepSeek/Qwen/Gemma等几十种大模型，数据完全本地",
+      "lastPushTime": "2026-06-19T17:12:13Z",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/firecrawl/firecrawl": {
+      "name": "Firecrawl",
+      "fullName": "firecrawl/firecrawl",
+      "githubUrl": "https://github.com/firecrawl/firecrawl",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/firecrawl_firecrawl.md",
+      "stars": 135647,
+      "description": "AI网页数据抓取/搜索API，覆盖96%网页，自动处理反爬/JS渲染，支持MCP接入",
+      "lastPushTime": "2026-06-20T13:12:17Z",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/infiniflow/ragflow": {
+      "name": "RAGFlow",
+      "fullName": "infiniflow/ragflow",
+      "githubUrl": "https://github.com/infiniflow/ragflow",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/infiniflow_ragflow.md",
+      "stars": 83235,
+      "description": "领先开源RAG引擎，文档问答有出处不胡编，支持Agent/MCP/代码执行，中文友好",
+      "lastPushTime": "2026-06-20T13:38:47Z",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/vllm-project/vllm": {
+      "name": "vLLM",
+      "fullName": "vllm-project/vllm",
+      "githubUrl": "https://github.com/vllm-project/vllm",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/vllm-project_vllm.md",
+      "stars": 83406,
+      "description": "高吞吐LLM推理引擎，PagedAttention技术让模型跑更快省显存，OpenAI兼容API",
+      "lastPushTime": "2026-06-20T15:16:47Z",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/Mintplex-Labs/anything-llm": {
+      "name": "AnythingLLM",
+      "fullName": "Mintplex-Labs/anything-llm",
+      "githubUrl": "https://github.com/Mintplex-Labs/anything-llm",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/Mintplex-Labs_anything-llm.md",
+      "stars": 61847,
+      "description": "本地私有AI办公平台，ChatGPT+知识库+Agent+定时任务+模型路由，双击安装即用",
+      "lastPushTime": "2026-06-19T01:13:32Z",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/danielmiessler/fabric": {
+      "name": "Fabric",
+      "fullName": "danielmiessler/Fabric",
+      "githubUrl": "https://github.com/danielmiessler/Fabric",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/danielmiessler_Fabric.md",
+      "stars": 42486,
+      "description": "AI提示词工具箱，几百个众包验证的Pattern一键调用，覆盖总结/分析/写作/编程等",
+      "lastPushTime": "2026-06-09T21:57:19Z",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/github/github-mcp-server": {
+      "name": "GitHub MCP Server",
+      "fullName": "github/github-mcp-server",
+      "githubUrl": "https://github.com/github/github-mcp-server",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/github_github-mcp-server.md",
+      "stars": 30841,
+      "description": "GitHub官方MCP Server，让AI工具直接操作仓库/Issue/PR/Actions/安全扫描",
+      "lastPushTime": "2026-06-20T05:42:41Z",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/screenpipe/screenpipe": {
+      "name": "Screenpipe",
+      "fullName": "screenpipe/screenpipe",
+      "githubUrl": "https://github.com/screenpipe/screenpipe",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/screenpipe_screenpipe.md",
+      "stars": 19391,
+      "description": "YC S26项目，AI记忆眼镜，24/7录制屏幕/音频给AI加上下文，完全本地私密，支持MCP",
+      "lastPushTime": "2026-06-20T14:01:30Z",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/langflow-ai/langflow": {
+      "name": "Langflow",
+      "fullName": "langflow-ai/langflow",
+      "githubUrl": "https://github.com/langflow-ai/langflow",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/langflow-ai_langflow.md",
+      "stars": 149871,
+      "description": "AI Agent可视化构建平台，拖拽搭建工作流，无需写代码",
+      "lastPushTime": "2026-06-20",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/github/spec-kit": {
+      "name": "Spec Kit",
+      "fullName": "github/spec-kit",
+      "githubUrl": "https://github.com/github/spec-kit",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/github_spec-kit.md",
+      "stars": 114280,
+      "description": "GitHub官方规格驱动开发工具，先出图纸再写代码",
+      "lastPushTime": "2026-06-20",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/multica-ai/andrej-karpathy-skills": {
+      "name": "Karpathy Skills",
+      "fullName": "multica-ai/andrej-karpathy-skills",
+      "githubUrl": "https://github.com/multica-ai/andrej-karpathy-skills",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/multica-ai_andrej-karpathy-skills.md",
+      "stars": 179097,
+      "description": "AI大神Karpathy的四条AI行为准则，让AI不再自以为是",
+      "lastPushTime": "2026-06-20",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/mattpocock/skills": {
+      "name": "Matt Pocock Skills",
+      "fullName": "mattpocock/skills",
+      "githubUrl": "https://github.com/mattpocock/skills",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/mattpocock_skills.md",
+      "stars": 137784,
+      "description": "TypeScript大神AI编程技能包，需求审讯+测试驱动+定期重构",
+      "lastPushTime": "2026-06-20",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/msitarzewski/agency-agents": {
+      "name": "Agency Agents",
+      "fullName": "msitarzewski/agency-agents",
+      "githubUrl": "https://github.com/msitarzewski/agency-agents",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/msitarzewski_agency-agents.md",
+      "stars": 114667,
+      "description": "232个专业AI Agent，覆盖16个部门，一人公司利器",
+      "lastPushTime": "2026-06-20",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/lobehub/lobehub": {
+      "name": "LobeHub",
+      "fullName": "lobehub/lobehub",
+      "githubUrl": "https://github.com/lobehub/lobehub",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/lobehub_lobehub.md",
+      "stars": 78895,
+      "description": "AI Agent管理编排平台，创建、调度、协作、记忆学习",
+      "lastPushTime": "2026-06-20",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/addyosmani/agent-skills": {
+      "name": "Agent Skills (Osmani)",
+      "fullName": "addyosmani/agent-skills",
+      "githubUrl": "https://github.com/addyosmani/agent-skills",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/addyosmani_agent-skills.md",
+      "stars": 63971,
+      "description": "Google工程师AI编程SOP，24技能+质量门禁全链路",
+      "lastPushTime": "2026-06-20",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/aaif-goose/goose": {
+      "name": "Goose",
+      "fullName": "aaif-goose/goose",
+      "githubUrl": "https://github.com/aaif-goose/goose",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/aaif-goose_goose.md",
+      "stars": 49906,
+      "description": "Linux Foundation托管的通用AI Agent，桌面+CLI+API三形态",
+      "lastPushTime": "2026-06-20",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/code-yeongyu/oh-my-openagent": {
+      "name": "Oh-My-OpenAgent",
+      "fullName": "code-yeongyu/oh-my-openagent",
+      "githubUrl": "https://github.com/code-yeongyu/oh-my-openagent",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/code-yeongyu_oh-my-openagent.md",
+      "stars": 63029,
+      "description": "多模型智能调度插件，花最少钱干最好活",
+      "lastPushTime": "2026-06-20",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/bytedance/UI-TARS-desktop": {
+      "name": "UI-TARS Desktop",
+      "fullName": "bytedance/UI-TARS-desktop",
+      "githubUrl": "https://github.com/bytedance/UI-TARS-desktop",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/bytedance_UI-TARS-desktop.md",
+      "stars": 36975,
+      "description": "字节跳动AI操作电脑工具，看屏幕、点鼠标、替你干活",
+      "lastPushTime": "2026-06-20",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/antirez/ds4": {
+      "name": "ds4 (DwarfStar)",
+      "fullName": "antirez/ds4",
+      "githubUrl": "https://github.com/antirez/ds4",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/antirez_ds4.md",
+      "stars": 14737,
+      "description": "Redis作者纯C写的DeepSeek V4本地推理引擎",
+      "lastPushTime": "2026-06-20",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/harry0703/MoneyPrinterTurbo": {
+      "name": "MoneyPrinterTurbo",
+      "fullName": "harry0703/MoneyPrinterTurbo",
+      "githubUrl": "https://github.com/harry0703/MoneyPrinterTurbo",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/harry0703_MoneyPrinterTurbo.md",
+      "stars": 90280,
+      "description": "全自动AI短视频生产线，一句话生成高清视频",
+      "lastPushTime": "2026-06-20",
+      "lastRecordTime": "2026-06-20"
+    },
+    "https://github.com/microsoft/markitdown": {
+      "name": "MarkItDown",
+      "fullName": "microsoft/markitdown",
+      "githubUrl": "https://github.com/microsoft/markitdown",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/microsoft_markitdown.md",
+      "stars": 156672,
+      "description": "微软文档→Markdown转换工具，PDF/Word/Excel/PPT/HTML全覆盖，LLM最佳输入格式",
+      "lastPushTime": "2026-05-26T22:41:34Z",
+      "lastRecordTime": "2026-06-21"
+    },
+    "https://github.com/karpathy/autoresearch": {
+      "name": "AutoResearch",
+      "fullName": "karpathy/autoresearch",
+      "githubUrl": "https://github.com/karpathy/autoresearch",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/karpathy_autoresearch.md",
+      "stars": 87823,
+      "description": "Karpathy出品，AI自动做AI研究，一晚上100次实验自动优化模型",
+      "lastPushTime": "2026-03-26T00:07:37Z",
+      "lastRecordTime": "2026-06-21"
+    },
+    "https://github.com/thedotmack/claude-mem": {
+      "name": "Claude-Mem",
+      "fullName": "thedotmack/claude-mem",
+      "githubUrl": "https://github.com/thedotmack/claude-mem",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/thedotmack_claude-mem.md",
+      "stars": 83452,
+      "description": "Claude Code持久记忆插件，跨会话保留上下文，三层渐进式披露，token高效",
+      "lastPushTime": "2026-06-21T05:14:53Z",
+      "lastRecordTime": "2026-06-21"
+    },
+    "https://github.com/opendatalab/MinerU": {
+      "name": "MinerU",
+      "fullName": "opendatalab/MinerU",
+      "githubUrl": "https://github.com/opendatalab/MinerU",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/opendatalab_MinerU.md",
+      "stars": 68168,
+      "description": "中文PDF/Office→Markdown/JSON最强工具，版面还原+表格提取+OCR，国内团队出品",
+      "lastPushTime": "2026-06-21T06:15:41Z",
+      "lastRecordTime": "2026-06-21"
+    },
+    "https://github.com/unclecode/crawl4ai": {
+      "name": "Crawl4AI",
+      "fullName": "unclecode/crawl4ai",
+      "githubUrl": "https://github.com/unclecode/crawl4ai",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/unclecode_crawl4ai.md",
+      "stars": 69040,
+      "description": "开源LLM友好网页爬虫，网页→干净Markdown，Firecrawl的开源替代",
+      "lastPushTime": "2026-06-18T09:32:24Z",
+      "lastRecordTime": "2026-06-21"
+    },
+    "https://github.com/rtk-ai/rtk": {
+      "name": "RTK",
+      "fullName": "rtk-ai/rtk",
+      "githubUrl": "https://github.com/rtk-ai/rtk",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/rtk-ai_rtk.md",
+      "stars": 64301,
+      "description": "LLM token杀手，减少60-90%命令输出token，Rust单文件，支持14种AI工具",
+      "lastPushTime": "2026-06-20T15:24:24Z",
+      "lastRecordTime": "2026-06-21"
+    },
+    "https://github.com/ChromeDevTools/chrome-devtools-mcp": {
+      "name": "Chrome DevTools MCP",
+      "fullName": "ChromeDevTools/chrome-devtools-mcp",
+      "githubUrl": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/ChromeDevTools_chrome-devtools-mcp.md",
+      "stars": 44093,
+      "description": "Chrome官方MCP Server，让AI操控浏览器，47个工具覆盖调试/性能/自动化",
+      "lastPushTime": "2026-06-21T02:05:29Z",
+      "lastRecordTime": "2026-06-21"
+    },
+    "https://github.com/chopratejas/headroom": {
+      "name": "Headroom",
+      "fullName": "chopratejas/headroom",
+      "githubUrl": "https://github.com/chopratejas/headroom",
+      "filePath": "E:/obsidian/本地知识库/GitHub高分AI项目/项目/chopratejas_headroom.md",
+      "stars": 42377,
+      "description": "AI Agent上下文压缩层，60-95%token减少，可逆压缩，跨Agent共享记忆",
+      "lastPushTime": "2026-06-21T04:26:29Z",
+      "lastRecordTime": "2026-06-21"
+    }
+  },
+  "last_updated": "2026-06-21T14:55:00.000Z"
+}

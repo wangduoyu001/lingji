@@ -1,0 +1,436 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "plugin": "auto-note-mover",
+    "version": "1.0.0",
+    "title": "Auto Note Mover",
+    "description": "Auto Note Mover Localization & Tweaks",
+    "language": "zh-cn",
+    "supportedVersions": "1.2.0",
+    "author": ""
+  },
+  "dict": {
+    "main.js": {
+      "ast": [
+        {
+          "type": "CallExpression",
+          "name": "addOption",
+          "source": "Manual",
+          "target": "手动"
+        },
+        {
+          "type": "CallExpression",
+          "name": "addOption",
+          "source": "Automatic",
+          "target": "自动"
+        },
+        {
+          "type": "CallExpression",
+          "name": "createDiv",
+          "source": "suggestion",
+          "target": "建议"
+        },
+        {
+          "type": "CallExpression",
+          "name": "createEl",
+          "source": "br",
+          "target": "br"
+        },
+        {
+          "type": "CallExpression",
+          "name": "createEl",
+          "source": "strong",
+          "target": "strong"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setDesc",
+          "source": "Auto Note Mover will automatically move the active notes to their respective folders according to the rules.",
+          "target": "自动笔记移动器将根据规则自动将活动笔记移动到其对应的文件夹。"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setName",
+          "source": "Trigger",
+          "target": "触发器"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setName",
+          "source": "Use regular expressions to check for tags",
+          "target": "使用正则表达式检查标签"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setName",
+          "source": "Add new rule",
+          "target": "添加新规则"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setName",
+          "source": "Use regular expressions to check for excluded folder",
+          "target": "使用正则表达式检查排除的文件夹"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setName",
+          "source": "Add Excluded Folder",
+          "target": "添加排除文件夹"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setName",
+          "source": "Status Bar Trigger Indicator",
+          "target": "状态栏触发器指示器"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setPlaceholder",
+          "source": "Folder",
+          "target": "文件夹"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setPlaceholder",
+          "source": "Tag",
+          "target": "标签"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setPlaceholder",
+          "source": "Title by regex",
+          "target": "按正则表达式匹配标题"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setTooltip",
+          "source": "Add new rule",
+          "target": "添加新规则"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setTooltip",
+          "source": "Move up",
+          "target": "上移"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setTooltip",
+          "source": "Move down",
+          "target": "下移"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setTooltip",
+          "source": "Delete",
+          "target": "删除"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setTooltip",
+          "source": "Add Excluded Folders",
+          "target": "添加排除文件夹"
+        },
+        {
+          "type": "NewExpression",
+          "name": "Notice",
+          "source": "You can set either the tag or the title.",
+          "target": "您可以设置标签或标题。"
+        },
+        {
+          "type": "NewExpression",
+          "name": "Notice",
+          "source": "This tag is already used.",
+          "target": "此标签已被使用。"
+        },
+        {
+          "type": "NewExpression",
+          "name": "Notice",
+          "source": "This pattern is already used.",
+          "target": "此模式已被使用。"
+        },
+        {
+          "type": "NewExpression",
+          "name": "Notice",
+          "source": "Auto Note Mover is disabled in the frontmatter.",
+          "target": "在前置元数据中已禁用自动笔记移动器。"
+        },
+        {
+          "type": "NewExpression",
+          "name": "Notice",
+          "source": "[Auto Note Mover]\nTrigger is Manual.",
+          "target": "[自动笔记移动器]\n触发方式为手动。"
+        },
+        {
+          "type": "NewExpression",
+          "name": "Notice",
+          "source": "[Auto Note Mover]\nTrigger is Automatic.",
+          "target": "[自动笔记移动器]\n触发方式为自动。"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "name",
+          "source": "arrow",
+          "target": "箭头"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "name",
+          "source": "flip",
+          "target": "翻转"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "name",
+          "source": "hide",
+          "target": "隐藏"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "name",
+          "source": "offset",
+          "target": "偏移"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "name",
+          "source": "Move the note",
+          "target": "移动笔记"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "name",
+          "source": "Toggle Auto-Manual",
+          "target": "切换自动/手动"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "text",
+          "source": "Auto Note Mover",
+          "target": "自动笔记移动器"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "text",
+          "source": "Automatic ",
+          "target": "自动"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "text",
+          "source": "Manual ",
+          "target": "手动"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "text",
+          "source": "If you want to use the suggested tags as they are, it is recommended to disable this setting.",
+          "target": "如果您希望直接使用建议的标签，建议禁用此设置。"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "text",
+          "source": "You can set either the tag or the title. ",
+          "target": "您可以设置标签或标题。"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "text",
+          "source": "first matching rule.",
+          "target": "第一个匹配规则。"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "text",
+          "source": " # ",
+          "target": " # "
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "text",
+          "source": "AutoNoteMover: disable",
+          "target": "AutoNoteMover: 禁用"
+        }
+      ],
+      "regex": [
+        {
+          "source": "error('PopperJS: an invalid property has been provided to the \"' + modifier.name + '\" modifier, valid properties are ' + VALID_PROPERTIES.map(function(s) {\n            return '\"' + s + '\"';\n          }).join(\", \") + '; but \"' + key + '\" was provided.')",
+          "target": "error('PopperJS: 已为\"' + modifier.name + '\"修饰符提供了无效属性，有效属性为' + VALID_PROPERTIES.map(function(s) {\n            return '\"' + s + '\"';\n          }).join(\", \") + '；但提供了\"' + key + '\"。')"
+        },
+        {
+          "source": "error(`[Auto Note Mover] The destination folder \"${settingFolder}\" does not exist.`)",
+          "target": "错误(`[自动笔记移动器] 目标文件夹 \"${settingFolder}\" 不存在。`)"
+        },
+        {
+          "source": "Notice(`[Auto Note Mover]\n\"Error: The destination folder\n\"${settingFolder}\"\ndoes not exist.`)",
+          "target": "通知(`[自动笔记移动器]\n\"错误：目标文件夹\n\"${settingFolder}\"\n不存在。`)"
+        },
+        {
+          "source": "error(`[Auto Note Mover] Error: A file with the same name \"${fileFullName}\" exists at the destination folder.`)",
+          "target": "错误(`[自动笔记移动器] 错误：目标文件夹中存在同名文件 \"${fileFullName}\"。`)"
+        },
+        {
+          "source": "Notice(`[Auto Note Mover]\nError: A file with the same name\n\"${fileFullName}\"\nexists at the destination folder.`)",
+          "target": "通知(`[自动笔记移动器]\n错误：存在同名文件\n\"${fileFullName}\"\n在目标文件夹中。`)"
+        },
+        {
+          "source": "log(`[Auto Note Mover] Moved the note \"${fileFullName}\" to the \"${settingFolder}\".`)",
+          "target": "日志(`[自动笔记移动器] 已将笔记 \"${fileFullName}\" 移动到 \"${settingFolder}\"。`)"
+        },
+        {
+          "source": "Notice(`[Auto Note Mover]\nMoved the note \"${fileFullName}\"\nto the \"${settingFolder}\".`)",
+          "target": "通知(`[自动笔记移动器]\n已将笔记 \"${fileFullName}\"\n移动到 \"${settingFolder}\"。`)"
+        },
+        {
+          "source": "setDesc(\"Auto Note Mover will automatically move the active notes to their respective folders according to the rules.\")",
+          "target": "setDesc(\"自动笔记移动器将根据规则自动将活动笔记移动到其对应的文件夹。\")"
+        },
+        {
+          "source": "setName(\"Use regular expressions to check for tags\")",
+          "target": "setName(\"使用正则表达式检查标签\")"
+        },
+        {
+          "source": "setName(\"Add new rule\")",
+          "target": "setName(\"添加新规则\")"
+        },
+        {
+          "source": "setTooltip(\"Add new rule\")",
+          "target": "setTooltip(\"添加新规则\")"
+        },
+        {
+          "source": "Notice(`You can set either the tag or the title.`)",
+          "target": "通知(`您可以设置标签或标题。`)"
+        },
+        {
+          "source": "Notice(\"This tag is already used.\")",
+          "target": "通知(\"此标签已被使用。\")"
+        },
+        {
+          "source": "setPlaceholder(\"Title by regex\")",
+          "target": "setPlaceholder(\"按正则表达式匹配标题\")"
+        },
+        {
+          "source": "Notice(\"This pattern is already used.\")",
+          "target": "通知(\"此模式已被使用。\")"
+        },
+        {
+          "source": "setTooltip(\"Move up\")",
+          "target": "setTooltip(\"上移\")"
+        },
+        {
+          "source": "setTooltip(\"Move down\")",
+          "target": "setTooltip(\"下移\")"
+        },
+        {
+          "source": "setName(\"Use regular expressions to check for excluded folder\")",
+          "target": "setName(\"使用正则表达式检查排除文件夹\")"
+        },
+        {
+          "source": "setName(\"Add Excluded Folder\")",
+          "target": "setName(\"添加排除文件夹\")"
+        },
+        {
+          "source": "setTooltip(\"Add Excluded Folders\")",
+          "target": "setTooltip(\"添加排除文件夹\")"
+        },
+        {
+          "source": "setName(\"Status Bar Trigger Indicator\")",
+          "target": "setName(\"状态栏触发指示器\")"
+        },
+        {
+          "source": "Notice(\"Auto Note Mover is disabled in the frontmatter.\")",
+          "target": "Notice(\"自动笔记移动器在前置元数据中已禁用。\")"
+        },
+        {
+          "source": "name: \"applyStyles\"",
+          "target": "name: \"applyStyles\""
+        },
+        {
+          "source": "name: \"arrow\"",
+          "target": "name: \"arrow\""
+        },
+        {
+          "source": "name: \"computeStyles\"",
+          "target": "name: \"computeStyles\""
+        },
+        {
+          "source": "name: \"eventListeners\"",
+          "target": "name: \"eventListeners\""
+        },
+        {
+          "source": "name: \"flip\"",
+          "target": "name: \"flip\""
+        },
+        {
+          "source": "text: \"reference\"",
+          "target": "text: \"reference\""
+        },
+        {
+          "source": "name: \"hide\"",
+          "target": "name: \"hide\""
+        },
+        {
+          "source": "name: \"offset\"",
+          "target": "name: \"offset\""
+        },
+        {
+          "source": "name: \"popperOffsets\"",
+          "target": "name: \"popperOffsets\""
+        },
+        {
+          "source": "name: \"preventOverflow\"",
+          "target": "name: \"preventOverflow\""
+        },
+        {
+          "source": "name: \"sameWidth\"",
+          "target": "name: \"sameWidth\""
+        },
+        {
+          "source": "text: \"Auto Note Mover\"",
+          "target": "text: \"自动笔记移动器\""
+        },
+        {
+          "source": "text: \"Automatic \"",
+          "target": "text: \"自动 \""
+        },
+        {
+          "source": "text: \"Manual \"",
+          "target": "text: \"手动 \""
+        },
+        {
+          "source": "text: \"^#tag$\"",
+          "target": "text: \"^#tag$\""
+        },
+        {
+          "source": "text: \"If you want to use the suggested tags as they are, it is recommended to disable this setting.\"",
+          "target": "text: \"如果您希望按原样使用建议的标签，建议禁用此设置。\""
+        },
+        {
+          "source": "text: \"You can set either the tag or the title. \"",
+          "target": "text: \"您可以设置标签或标题。 \""
+        },
+        {
+          "source": "text: \"first matching rule.\"",
+          "target": "text: \"第一个匹配规则。\""
+        },
+        {
+          "source": "text: \" # \"",
+          "target": "text: \" # \""
+        },
+        {
+          "source": "text: \"AutoNoteMover: disable\"",
+          "target": "text: \"AutoNoteMover: 禁用\""
+        },
+        {
+          "source": "name: \"Move the note\"",
+          "target": "name: \"移动笔记\""
+        },
+        {
+          "source": "name: \"Toggle Auto-Manual\"",
+          "target": "name: \"切换自动/手动\""
+        }
+      ]
+    }
+  }
+}

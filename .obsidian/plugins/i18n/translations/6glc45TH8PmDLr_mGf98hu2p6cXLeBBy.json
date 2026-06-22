@@ -1,0 +1,406 @@
+{
+    "schemaVersion": 1,
+    "metadata": {
+        "plugin": "at-symbol-linking",
+        "version": "2.0.0",
+        "title": "@ Symbol Linking",
+        "description": "@ 符号链接汉化与微调",
+        "language": "zh-cn",
+        "supportedVersions": "2.1.0",
+        "author": "Machine丶YU"
+    },
+    "dict": {
+        "main.js": {
+            "ast": [
+                {
+                    "type": "AssignmentExpression",
+                    "name": "ariaLabel",
+                    "source": "Alias",
+                    "target": "别名"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "log",
+                    "source": "@ Symbol Linking: Error creating first link",
+                    "target": "@ 符号链接：创建首个链接时出错"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "If the note doesn't exist when symbol linking, add an option to create the note.",
+                    "target": "如果在使用符号链接时笔记不存在，则添加一个创建该笔记的选项。"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "e.g. é -> e when searching or creating links via the popup.",
+                    "target": "例如：在弹窗搜索或创建链接时，将 é 视为 e。"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Global Trigger Symbol",
+                    "target": "全局触发符号"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Include link symbol prefix in display text",
+                    "target": "在显示文本中包含链接符号前缀"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Limit links to folders by symbol",
+                    "target": "按符号限制链接到特定文件夹"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Add new note",
+                    "target": "添加新笔记"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Add new note if it doesn't exist",
+                    "target": "笔记不存在时自动添加"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Include link symbol prefix in new file names",
+                    "target": "在新文件名中包含链接符号前缀"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Add new notes for folders by symbol",
+                    "target": "按符号为特定文件夹添加新笔记"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Suggestion popup behavior",
+                    "target": "建议弹窗行为"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Use compatibility mode",
+                    "target": "使用兼容模式"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Leave popup open for X spaces",
+                    "target": "在输入 X 个空格内保持弹窗开启"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Allowed code block types",
+                    "target": "允许的代码块类型"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Advanced settings",
+                    "target": "高级设置"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Invalid character Regex",
+                    "target": "无效字符正则表达式 (Regex)"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Invalid character Regex flags",
+                    "target": "无效字符正则表达式标志 (Flags)"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setPlaceholder",
+                    "source": "Symbol",
+                    "target": "符号"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setPlaceholder",
+                    "source": "Folder",
+                    "target": "文件夹"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setTooltip",
+                    "source": "Add limit folder",
+                    "target": "添加限制文件夹"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setTooltip",
+                    "source": "Delete",
+                    "target": "删除"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setTooltip",
+                    "source": "Add folder",
+                    "target": "添加文件夹"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setTooltip",
+                    "source": "Add code block type",
+                    "target": "添加代码块类型"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setTooltip",
+                    "source": "Move up",
+                    "target": "上移"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setTooltip",
+                    "source": "Move down",
+                    "target": "下移"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Global trigger symbol must be a single character.",
+                    "target": "全局触发符号必须是单个字符。"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "New note folder symbol must be a single character.",
+                    "target": "新笔记文件夹符号必须是单个字符。"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Invalid regex or flags",
+                    "target": "正则表达式或标志无效"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Please type a note name before creating",
+                    "target": "创建前请输入笔记名称"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Select next suggestion",
+                    "target": "选择下一个建议"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Select previous suggestion",
+                    "target": "选择上一个建议"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Insert selected suggestion",
+                    "target": "插入选中的建议"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Exit suggestions",
+                    "target": "退出建议弹窗"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "May be slower than the native popup.",
+                    "target": "可能比原生弹窗稍慢。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "When set above 0, you'll need to press escape, return/enter, or type over X spaces to close the popup.",
+                    "target": "当设置大于 0 时，您需要按下 Esc、回车或输入超过 X 个空格才能关闭弹窗。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Example: 'ad-note' will allow linking inside ```ad-note code blocks.",
+                    "target": "例如：输入 'ad-note' 将允许在 ```ad-note 代码块内进行链接。"
+                }
+            ],
+            "regex": [
+                {
+                    "source": "setName(\"Global Trigger Symbol\")",
+                    "target": "setName(\"全局触发符号\")"
+                },
+                {
+                    "source": "setName(`Include link symbol prefix in display text`)",
+                    "target": "setName(\"在显示文本中包含链接符号前缀\")"
+                },
+                {
+                    "source": "setName(\"Limit links to folders by symbol\")",
+                    "target": "setName(\"按符号限制链接到特定文件夹\")"
+                },
+                {
+                    "source": "setTooltip(\"Add limit folder\")",
+                    "target": "setTooltip(\"添加限制文件夹\")"
+                },
+                {
+                    "source": "setName(\"Add new note\")",
+                    "target": "setName(\"添加新笔记\")"
+                },
+                {
+                    "source": "setName(\"Add new note if it doesn't exist\")",
+                    "target": "setName(\"笔记不存在时自动添加\")"
+                },
+                {
+                    "source": "setDesc(\n      `If the note doesn't exist when symbol linking, add an option to create the note.`\n    )",
+                    "target": "setDesc(\n      \"如果在使用符号链接时笔记不存在，则添加一个创建该笔记的选项。\"\n    )"
+                },
+                {
+                    "source": "setName(\"Include link symbol prefix in new file names\")",
+                    "target": "setName(\"在新文件名中包含链接符号前缀\")"
+                },
+                {
+                    "source": "setName(\"Add new notes for folders by symbol\")",
+                    "target": "setName(\"按符号为特定文件夹添加新笔记\")"
+                },
+                {
+                    "source": "setTooltip(\"Add folder\")",
+                    "target": "setTooltip(\"添加文件夹\")"
+                },
+                {
+                    "source": "setName(\"Suggestion popup behavior\")",
+                    "target": "setName(\"建议弹窗行为\")"
+                },
+                {
+                    "source": "setName(\"Use compatibility mode\")",
+                    "target": "setName(\"使用兼容模式\")"
+                },
+                {
+                    "source": "setName(\"Leave popup open for X spaces\")",
+                    "target": "setName(\"在输入 X 个空格内保持弹窗开启\")"
+                },
+                {
+                    "source": "setName(\"Allowed code block types\")",
+                    "target": "setName(\"允许的代码块类型\")"
+                },
+                {
+                    "source": "setTooltip(\"Add code block type\")",
+                    "target": "setTooltip(\"添加代码块类型\")"
+                },
+                {
+                    "source": "setName(`Code block type ${index + 1}`)",
+                    "target": "setName(`代码块类型 ${index + 1}`)"
+                },
+                {
+                    "source": "setTooltip(\"Move up\")",
+                    "target": "setTooltip(\"上移\")"
+                },
+                {
+                    "source": "setTooltip(\"Move down\")",
+                    "target": "setTooltip(\"下移\")"
+                },
+                {
+                    "source": "setName(\"Advanced settings\")",
+                    "target": "setName(\"高级设置\")"
+                },
+                {
+                    "source": "setName(\"Invalid character Regex\")",
+                    "target": "setName(\"无效字符正则表达式\")"
+                },
+                {
+                    "source": "setName(\"Invalid character Regex flags\")",
+                    "target": "setName(\"无效字符正则表达式标志\")"
+                },
+                {
+                    "source": "setDesc(\n      \"e.g. \\xE9 -> e when searching or creating links via the popup.\"\n    )",
+                    "target": "setDesc(\n      \"例如：在弹窗搜索或创建链接时，将 é 视为 e。\"\n    )"
+                },
+                {
+                    "source": "Notice(`Global trigger symbol must be a single character.`)",
+                    "target": "Notice(\"全局触发符号必须是单个字符。\")"
+                },
+                {
+                    "source": "Notice(\n          `Unable to find folder at path: ${mapping.folder}. Please add it if you want to limit links to this folder.`\n        )",
+                    "target": "Notice(\n          `无法在路径：${mapping.folder} 中找到文件夹。如果您想将链接限制在该文件夹，请先创建它。`\n        )"
+                },
+                {
+                    "source": "Notice(\n              `Folder symbol \"${mapping.symbol}\" matches invalid character regex and will not work properly.`\n            )",
+                    "target": "Notice(\n              `文件夹符号 \"${mapping.symbol}\" 匹配无效字符正则，将无法正常工作。`\n            )"
+                },
+                {
+                    "source": "Notice(\n            `New note folder symbol must be a single character.`\n          )",
+                    "target": "Notice(\n            \"新笔记文件夹符号必须是单个字符。\"\n          )"
+                },
+                {
+                    "source": "Notice(\n              `New note folder symbol \"${mapping.symbol}\" must be unique. Clearing duplicate occurrence.`\n            )",
+                    "target": "Notice(\n              `新笔记文件夹符号 \"${mapping.symbol}\" 必须唯一。已清除重复项。`\n            )"
+                },
+                {
+                    "source": "Notice(\n                `New note folder symbol \"${mapping.symbol}\" matches invalid character regex and will not work properly.`\n              )",
+                    "target": "Notice(\n                `新笔记文件夹符号 \"${mapping.symbol}\" 匹配无效字符正则，将无法正常工作。`\n              )"
+                },
+                {
+                    "source": "Notice(\n              `Unable to find folder at path: ${mapping.folder}. Please add it if you want to create new notes in this folder.`\n            )",
+                    "target": "Notice(\n              `无法在路径：${mapping.folder} 中找到文件夹。如果您想在该文件夹中创建新笔记，请先创建它。`\n            )"
+                },
+                {
+                    "source": "Notice(`Invalid regex or flags`)",
+                    "target": "Notice(\"正则表达式或标志无效\")"
+                },
+                {
+                    "source": "Notice(\"Please type a note name before creating\")",
+                    "target": "Notice(\"创建前请输入笔记名称\")"
+                },
+                {
+                    "source": "Notice(\n          `Note \"${(_j = value.obj) == null ? void 0 : _j.query}\" already exists at path: ${(_k = value.obj) == null ? void 0 : _k.filePath}`\n        )",
+                    "target": "Notice(\n          `笔记 \"${(_j = value.obj) == null ? void 0 : _j.query}\" 已存在于路径：${(_k = value.obj) == null ? void 0 : _k.filePath}`\n        )"
+                },
+                {
+                    "source": "text: `E.g. [${this.plugin.settings.includeSymbol ? this.plugin.settings.globalTriggerSymbol : \"\"}evan](./evan)`",
+                    "target": "text: `例如 [${this.plugin.settings.includeSymbol ? this.plugin.settings.globalTriggerSymbol : \"\"}evan](./evan)`"
+                },
+                {
+                    "source": "text: `E.g. typing \"${this.plugin.settings.globalTriggerSymbol}John Doe\" will create \"${this.plugin.settings.includeSymbolInNewFileName ? this.plugin.settings.globalTriggerSymbol : \"\"}John Doe.md\"`",
+                    "target": "text: `例如输入 \"${this.plugin.settings.globalTriggerSymbol}张三\" 将创建 \"${this.plugin.settings.includeSymbolInNewFileName ? this.plugin.settings.globalTriggerSymbol : \"\"}张三.md\"`"
+                },
+                {
+                    "source": "text: \"May be slower than the native popup.\"",
+                    "target": "text: \"可能比原生弹窗稍慢。\""
+                },
+                {
+                    "source": "text: \"When set above 0, you'll need to press escape, return/enter, or type over X spaces to close the popup.\"",
+                    "target": "text: \"当设置大于 0 时，您需要按下 Esc、回车或输入超过 X 个空格才能关闭弹窗。\""
+                },
+                {
+                    "source": "text: \"Example: 'ad-note' will allow linking inside ```ad-note code blocks.\"",
+                    "target": "text: \"例如：输入 'ad-note' 将允许在 ```ad-note 代码块内进行链接。\""
+                },
+                {
+                    "source": "name: \"Select next suggestion\"",
+                    "target": "name: \"选择下一个建议\""
+                },
+                {
+                    "source": "name: \"Select previous suggestion\"",
+                    "target": "name: \"选择上一个建议\""
+                },
+                {
+                    "source": "name: \"Insert selected suggestion\"",
+                    "target": "name: \"插入选中的建议\""
+                },
+                {
+                    "source": "name: \"Exit suggestions\"",
+                    "target": "name: \"退出建议弹窗\""
+                }
+            ]
+        }
+    }
+}
