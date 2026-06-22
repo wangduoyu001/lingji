@@ -95,3 +95,7 @@ Goose 最近被捐给了 Linux Foundation 旗下的 Agentic AI Foundation（AAIF
 ---
 
 *记录时间: 2026-06-20*
+
+---
+
+📂 **同类别工具**：[[_索引_AI Agent框架|查看 AI Agent框架 全部 15 个工具]]

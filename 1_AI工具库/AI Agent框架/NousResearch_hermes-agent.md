@@ -107,3 +107,7 @@ Hermes Agent 是由 Nous Research（做 Hermes 大模型的那家公司）开发
 ---
 
 *记录时间: 2026-06-17*
+
+---
+
+📂 **同类别工具**：[[_索引_AI Agent框架|查看 AI Agent框架 全部 15 个工具]]
