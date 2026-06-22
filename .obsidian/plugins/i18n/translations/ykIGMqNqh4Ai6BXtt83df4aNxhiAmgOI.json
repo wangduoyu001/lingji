@@ -1,0 +1,4462 @@
+{
+    "schemaVersion": 1,
+    "metadata": {
+        "plugin": "teleprompter-plus",
+        "version": "1.0.0",
+        "title": "Teleprompter Plus",
+        "description": "Teleprompter Plus Localization & Tweaks",
+        "language": "zh-cn",
+        "supportedVersions": "0.11.1",
+        "author": ""
+    },
+    "dict": {
+        "main.js": {
+            "ast": [
+                {
+                    "type": "AssignmentExpression",
+                    "name": "title",
+                    "source": "Apply profile",
+                    "target": "应用配置文件"
+                },
+                {
+                    "type": "AssignmentExpression",
+                    "name": "title",
+                    "source": "Delete profile",
+                    "target": "删除配置文件"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "appendText",
+                    "source": "To access from your phone, change the host setting above to ",
+                    "target": "要从手机访问，请将上方的主机设置更改为"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "appendText",
+                    "source": " and use your computer's local IP address. On macOS: System Settings → Network → Details → TCP/IP → IP address. Or run ",
+                    "target": "并使用电脑的本地 IP 地址。在 macOS 上：系统设置 → 网络 → 详情 → TCP/IP → IP 地址。或者运行"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "appendText",
+                    "source": " in terminal.",
+                    "target": "在终端中。"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createDiv",
+                    "source": "tp-flex-container tp-flex-container--mt",
+                    "target": "tp-flex-container tp-flex-container--mt"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createDiv",
+                    "source": "tp-connection-status tp-flex-container--mb",
+                    "target": "tp-connection-status tp-flex-container--mb"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "button",
+                    "target": "button"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "input",
+                    "target": "input"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "ol",
+                    "target": "ol"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "li",
+                    "target": "li"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "strong",
+                    "target": "strong"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "code",
+                    "target": "code"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "table",
+                    "target": "table"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "tr",
+                    "target": "tr"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "thead",
+                    "target": "thead"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "th",
+                    "target": "th"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "tbody",
+                    "target": "tbody"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "span",
+                    "target": "span"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "td",
+                    "target": "td"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "br",
+                    "target": "br"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "createEl",
+                    "source": "ul",
+                    "target": "ul"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "Syntax highlighting error:",
+                    "target": "语法高亮错误："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "Markdown rendering error:",
+                    "target": "Markdown渲染错误："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[Voice] Failed to toggle voice tracking:",
+                    "target": "[语音] 切换语音追踪失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[TTS] Error:",
+                    "target": "[TTS] 错误："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[KeepAwake] powerSaveBlocker API not available",
+                    "target": "[保持唤醒] powerSaveBlocker API不可用"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[KeepAwake] Failed to toggle keep awake:",
+                    "target": "[保持唤醒] 切换保持唤醒失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[KeepAwake] Cleanup error:",
+                    "target": "[保持唤醒] 清理错误："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[Teleprompter] WebSocket module failed to load - Stream Deck integration unavailable",
+                    "target": "[提词器] WebSocket模块加载失败 - Stream Deck集成不可用"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[TeleprompterWS] WebSocket module failed to load",
+                    "target": "[TeleprompterWS] WebSocket 模块加载失败"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[TeleprompterWS] Error:",
+                    "target": "[TeleprompterWS] 错误："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[TeleprompterWS] Diagnostics:",
+                    "target": "[TeleprompterWS] 诊断信息："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[TeleprompterWS] Plugin will continue without WebSocket support",
+                    "target": "[TeleprompterWS] 插件将在没有 WebSocket 支持的情况下继续运行"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[TeleprompterWS] WebSocket server error:",
+                    "target": "[TeleprompterWS] WebSocket 服务器错误："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[TeleprompterWS] HTTP server error:",
+                    "target": "[TeleprompterWS] HTTP 服务器错误："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[TeleprompterWS] Failed to start server:",
+                    "target": "[TeleprompterWS] 启动服务器失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[TeleprompterWS] Client error:",
+                    "target": "[TeleprompterWS] 客户端错误："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[TeleprompterWS] Error sending to client:",
+                    "target": "[TeleprompterWS] 发送到客户端时出错："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[TeleprompterWS] Failed to get local network IP:",
+                    "target": "[TeleprompterWS] 获取本地网络 IP 失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[OBS] Connection error:",
+                    "target": "[OBS] 连接错误："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[OBS] Connection failed:",
+                    "target": "[OBS] 连接失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[OBS] Failed to refresh state:",
+                    "target": "[OBS] 刷新状态失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[OBS] Failed to start recording:",
+                    "target": "[OBS] 开始录制失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[OBS] Failed to stop recording:",
+                    "target": "[OBS] 停止录制失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[OBS] Failed to toggle recording:",
+                    "target": "[OBS] 切换录制失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[OBS] Failed to start streaming:",
+                    "target": "[OBS] 开始推流失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[OBS] Failed to stop streaming:",
+                    "target": "[OBS] 停止推流失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[OBS] Failed to toggle streaming:",
+                    "target": "[OBS] 切换推流失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[OBS] Failed to get scenes:",
+                    "target": "[OBS] 获取场景失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[OBS] Failed to switch scene:",
+                    "target": "[OBS] 切换场景失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[Teleprompter] Failed to start WebSocket server:",
+                    "target": "[提词器] 启动 WebSocket 服务器失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "[Teleprompter] Error stopping WebSocket server:",
+                    "target": "[提词器] 停止 WebSocket 服务器时出错："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "error",
+                    "source": "Failed to start voice tracking:",
+                    "target": "启动语音跟踪失败："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setButtonText",
+                    "source": "Apply recommended layout",
+                    "target": "应用推荐的布局"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Move low-frequency controls into the ⋯ More menu and keep the essentials on the bar. Reversible — re-pin anything below.",
+                    "target": "将低频控件移至 ⋯ 更多菜单，并在栏上保留基本控件。可逆操作——可随时重新固定任何项目。"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Start websocket server when Obsidian loads",
+                    "target": "Obsidian 加载时启动 WebSocket 服务器"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Server port (requires restart)",
+                    "target": "服务器端口（需要重启）"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Server host address (127.0.0.1 recommended for security)",
+                    "target": "服务器主机地址（出于安全考虑，建议使用 127.0.0.1）"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Show notifications when clients connect/disconnect",
+                    "target": "客户端连接/断开时显示通知"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Broadcast scroll position to connected devices for multi-device sync. Other devices can follow this teleprompter.",
+                    "target": "将滚动位置广播到连接的设备以实现多设备同步。其他设备可以跟随此提词器。"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "How often to broadcast scroll position during playback. Lower = smoother sync but more network traffic. (50-500ms)",
+                    "target": "播放期间广播滚动位置的频率。数值越低同步越平滑，但网络流量越大。（50-500毫秒）"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Allow the plugin to connect to the streaming software",
+                    "target": "允许插件连接到流媒体软件"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Automatically connect to streaming software when the plugin loads",
+                    "target": "插件加载时自动连接到流媒体软件"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Server host (usually 127.0.0.1)",
+                    "target": "服务器主机（通常为127.0.0.1）"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Server port (default: 4455)",
+                    "target": "服务器端口（默认：4455）"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Server password (leave empty if not set)",
+                    "target": "服务器密码（未设置则留空）"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Start streaming software recording when teleprompter plays, stop when reset",
+                    "target": "提词器播放时开始流媒体软件录制，重置时停止"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "Start streaming software streaming when teleprompter plays, stop when reset",
+                    "target": "提词器播放时开始流媒体软件推流，重置时停止"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setDesc",
+                    "source": "You can re-enable this in settings",
+                    "target": "您可以在设置中重新启用此功能"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Configuration",
+                    "target": "配置"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Recommended layout",
+                    "target": "推荐布局"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Auto-start server",
+                    "target": "自动启动服务器"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Port",
+                    "target": "端口"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Host",
+                    "target": "主机"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Connection notifications",
+                    "target": "连接通知"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Enable network broadcast",
+                    "target": "启用网络广播"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Broadcast interval (ms)",
+                    "target": "广播间隔（毫秒）"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Enable streaming integration",
+                    "target": "启用流媒体集成"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Auto-connect on startup",
+                    "target": "启动时自动连接"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Password",
+                    "target": "密码"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Sync recording",
+                    "target": "同步录制"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Sync streaming",
+                    "target": "同步流媒体"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Support development",
+                    "target": "支持开发"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setName",
+                    "source": "Don't show on updates",
+                    "target": "更新时不显示"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setPlaceholder",
+                    "source": "••••••••",
+                    "target": "••••••••"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "setText",
+                    "source": "Sample teleprompter text that shows your current settings in real-time as you make changes...",
+                    "target": "示例提词器文本，实时显示您更改时的当前设置..."
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "warn",
+                    "source": "One of your code blocks includes unescaped HTML. This is a potentially serious security risk.",
+                    "target": "您的某个代码块包含未转义的HTML。这是一个潜在的安全风险。"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "warn",
+                    "source": "The element with unescaped HTML:",
+                    "target": "包含未转义HTML的元素："
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "warn",
+                    "source": "Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.",
+                    "target": "实例方法 `debug.destroy()` 已弃用且不再执行任何操作。它将在下一个主要版本的 `debug` 中被移除。"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "warn",
+                    "source": "[OBS] Not connected, cannot start recording",
+                    "target": "[OBS] 未连接，无法开始录制"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "warn",
+                    "source": "[OBS] Not connected, cannot stop recording",
+                    "target": "[OBS] 未连接，无法停止录制"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "warn",
+                    "source": "[OBS] Not connected, cannot toggle recording",
+                    "target": "[OBS] 未连接，无法切换录制状态"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "warn",
+                    "source": "[OBS] Not connected, cannot start streaming",
+                    "target": "[OBS] 未连接，无法开始推流"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "warn",
+                    "source": "[OBS] Not connected, cannot stop streaming",
+                    "target": "[OBS] 未连接，无法停止推流"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "warn",
+                    "source": "[OBS] Not connected, cannot toggle streaming",
+                    "target": "[OBS] 未连接，无法切换推流状态"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "warn",
+                    "source": "[OBS] Not connected, cannot switch scene",
+                    "target": "[OBS] 未连接，无法切换场景"
+                },
+                {
+                    "type": "CallExpression",
+                    "name": "warn",
+                    "source": "Failed to cache model:",
+                    "target": "无法缓存模型："
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Settings reset to defaults",
+                    "target": "设置已重置为默认值"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Settings exported",
+                    "target": "设置已导出"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Settings imported",
+                    "target": "设置已导入"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Failed to import settings",
+                    "target": "导入设置失败"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Recommended toolbar layout applied",
+                    "target": "已应用推荐的工具栏布局"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "ElevenLabs is a cloud, paid service. Your script text is sent to ElevenLabs servers, playback uses your ElevenLabs account credits, and you must supply your own API key (get one at elevenlabs.io). Prefer offline and free? Kokoro, macOS, and Web Speech remain available.",
+                    "target": "ElevenLabs 是一项云端付费服务。您的脚本文本会发送至 ElevenLabs 服务器，播放会消耗您的 ElevenLabs 账户额度，且您需要自行提供 API 密钥（可在 elevenlabs.io 获取）。偏好离线免费方案？Kokoro、macOS 和 Web Speech 仍可使用。"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Profile deleted",
+                    "target": "配置文件已删除"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Invalid profile file",
+                    "target": "无效的配置文件"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Failed to import profile",
+                    "target": "导入配置文件失败"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Non-localhost binding exposes the server to the network",
+                    "target": "非本地主机绑定会将服务器暴露到网络中"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Voice tracking: re-syncing — keep reading",
+                    "target": "语音追踪：正在重新同步——请继续朗读"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Connected to streaming software",
+                    "target": "已连接到流媒体软件"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Failed to start remote server",
+                    "target": "无法启动远程服务器"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Remote server not running",
+                    "target": "远程服务器未运行"
+                },
+                {
+                    "type": "NewExpression",
+                    "name": "Notice",
+                    "source": "Teleprompter: invalid note path",
+                    "target": "提词器：无效的笔记路径"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "cls",
+                    "source": "confirm-modal-button mod-warning",
+                    "target": "confirm-modal-button mod-warning"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "cls",
+                    "source": "prompt-modal-button mod-cta",
+                    "target": "prompt-modal-button mod-cta"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "cls",
+                    "source": "tp-slider-value tp-value-display",
+                    "target": "tp-slider-value tp-value-display"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "cls",
+                    "source": "tp-profile-action danger",
+                    "target": "tp-profile-action danger"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "cls",
+                    "source": "tp-btn tp-btn-primary",
+                    "target": "tp-btn tp-btn-primary"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "cls",
+                    "source": "whats-new-close-button mod-cta",
+                    "target": "whats-new-close-button mod-cta"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Comfortable shows a text label under each icon (easier to hit live); compact is icon-only.",
+                    "target": "舒适模式在每个图标下方显示文字标签（更易于点击）；紧凑模式仅显示图标。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Native uses Obsidian’s Lucide icons (consistent with the rest of Obsidian and your Stream Deck keys). Custom uses the bespoke Teleprompter Plus icon set.",
+                    "target": "原生使用 Obsidian 的 Lucide 图标（与 Obsidian 其他部分和 Stream Deck 按键保持一致）。自定义使用专属的 Teleprompter Plus 图标集。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Seconds before auto-scroll starts (0-30)",
+                    "target": "自动滚动开始前的秒数（0-30）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Start playing when teleprompter opens",
+                    "target": "提词器打开时开始播放"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Initial speed (0.5-10)",
+                    "target": "初始速度（0.5-10）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Amount per +/- press (0.1-2)",
+                    "target": "每次 +/- 按下的调整量（0.1-2）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Vertical position (0-100%)",
+                    "target": "垂直位置（0-100%）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "How much to dim text outside the focus area (0.1-0.5)",
+                    "target": "焦点区域外文字的变暗程度（0.1-0.5）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Lines above/below eyeline to keep bright (1-10)",
+                    "target": "视线上下保持明亮的行数（1-10）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Display chronometer since playback started",
+                    "target": "显示自播放开始以来的计时器"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Compact: click to toggle. Full: show both times",
+                    "target": "紧凑模式：点击切换。完整模式：同时显示两个时间"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Words per minute for estimation (100-250)",
+                    "target": "每分钟字数估算（100-250）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Text size in pixels (12-72)",
+                    "target": "文本大小（像素，12-72）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Space between lines (1.0-3.0x)",
+                    "target": "行间距（1.0-3.0倍）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Choose a font family",
+                    "target": "选择字体"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Color for body text",
+                    "target": "正文颜色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Background color for content",
+                    "target": "内容背景颜色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Opacity level (0-100%)",
+                    "target": "不透明度（0-100%）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Space above/below content (0-100px)",
+                    "target": "内容上下间距（0-100像素）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Space on left/right sides (0-200px)",
+                    "target": "左右边距（0-200像素）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Mirror text left-to-right",
+                    "target": "左右镜像文本"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Flip text upside-down",
+                    "target": "将文本上下翻转"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Speech recognition language",
+                    "target": "语音识别语言"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "How the teleprompter scrolls to match speech",
+                    "target": "提词器如何滚动以匹配语音"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Minimum match confidence (0.3-0.9)",
+                    "target": "最低匹配置信度（0.3-0.9）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Display recognized text overlay",
+                    "target": "显示识别出的文本叠加层"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Maximum words to scroll at once (smaller = smoother, 2-30)",
+                    "target": "一次滚动的最大字数（越小越平滑，2-30）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Minimum words before scrolling (smaller = more frequent, 1-10)",
+                    "target": "滚动前的最少字数（越小越频繁，1-10）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "How often to match speech (lower = more responsive, 100-1000ms)",
+                    "target": "语音匹配频率（越低响应越快，100-1000毫秒）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Base scroll animation duration (higher = smoother, 100-1500ms)",
+                    "target": "基础滚动动画时长（越高越平滑，100-1500毫秒）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Extra time per word jumped (higher = smoother for big jumps, 10-200ms)",
+                    "target": "每跳过一个单词的额外时间（大跳转时越高越平滑，10-200毫秒）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Time without speech before pausing scroll (500-3000ms)",
+                    "target": "无语音时暂停滚动前的时间（500-3000毫秒）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Where current word appears on screen (10% = near top with more text below, 50% = middle)",
+                    "target": "当前单词在屏幕上的位置（10% = 靠近顶部，下方有更多文本；50% = 中间）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "If the prompter runs AHEAD of you, raise this. Anchors the scroll this many words behind the word you just spoke. Re-toggle voice tracking (V) to apply.",
+                    "target": "如果提词器运行在您前面，请提高此值。将滚动锚定在您刚说出的单词后面这么多单词处。重新切换语音跟踪（V）以应用。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Lower = calmer/slower glide, higher = snappier (value ×100, so 16 = 0.16). Re-toggle voice tracking (V) to apply.",
+                    "target": "数值越低 = 滚动更平稳/更慢，数值越高 = 更灵敏（值×100，所以16 = 0.16）。重新切换语音跟踪（V）以应用。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Paint a karaoke-style marker on the word you are speaking. Off (default) = the page still scrolls smoothly to follow your voice, but no per-word box jumps around — easier to keep your place. Re-toggle voice tracking (V) to apply.",
+                    "target": "在您正在说的单词上绘制卡拉OK风格的标记。关闭（默认）= 页面仍会平滑滚动以跟随您的语音，但没有逐字框跳动——更容易保持位置。重新切换语音跟踪（V）以应用。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Only applies when \"Highlight the current word\" is on. Fine-tunes where the highlight sits relative to the word you are speaking. 0 = on the recognized word. If the highlight feels AHEAD of you, go negative (-1, -2). If it feels BEHIND, go positive (+1, +2). Re-toggle voice tracking (V) to apply.",
+                    "target": "仅在“高亮当前单词”开启时适用。微调高亮相对于您正在说的单词的位置。0 = 在识别到的单词上。如果高亮感觉在您前面，请设为负数（-1，-2）。如果感觉在后面，请设为正数（+1，+2）。重新切换语音跟踪（V）以应用。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Speech engine to use (auto-detect recommended)",
+                    "target": "要使用的语音引擎（建议自动检测）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Select a voice preset (22 neural voices available with Kokoro)",
+                    "target": "选择语音预设（Kokoro提供22种神经语音）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Language code for speech (e.g., en, pt, fr)",
+                    "target": "语音的语言代码（例如 en、pt、fr）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Speech rate (0.5 = slow, 1.0 = normal, 2.0 = fast)",
+                    "target": "语速（0.5 = 慢速，1.0 = 正常，2.0 = 快速）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Cloud, PAID service. Your script text is sent to ElevenLabs and playback uses your account credits. Bring your own key from elevenlabs.io. Used only when the engine above is set to ElevenLabs; offline engines stay available.",
+                    "target": "云服务，付费服务。您的脚本文本会发送至ElevenLabs，播放将消耗您的账户积分。请从elevenlabs.io获取您自己的密钥。仅当上述引擎设置为ElevenLabs时使用；离线引擎仍可正常使用。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Flash = fastest/cheapest, Turbo = low latency, Multilingual = best quality",
+                    "target": "Flash = 最快/最便宜，Turbo = 低延迟，Multilingual = 最佳质量"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "ElevenLabs voice ID. Default is Rachel (21m00Tcm4TlvDq8ikWAM). Find more in your ElevenLabs Voice Library; paste a cloned-voice ID here too.",
+                    "target": "ElevenLabs 语音ID。默认为 Rachel (21m00Tcm4TlvDq8ikWAM)。在您的ElevenLabs语音库中查找更多语音；也可在此粘贴克隆语音的ID。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Path to .bib file (relative to vault root)",
+                    "target": ".bib 文件路径（相对于仓库根目录）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Skip fenced code blocks when reading",
+                    "target": "朗读时跳过围栏代码块"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Skip tables when reading",
+                    "target": "朗读时跳过表格"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Adjustable speed",
+                    "target": "可调节速度"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Lucide + custom set",
+                    "target": "Lucide + 自定义集"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Persistent toolbar",
+                    "target": "持久工具栏"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Minimap & sections",
+                    "target": "缩略图与章节"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Remote API",
+                    "target": "远程API"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Save configurations",
+                    "target": "保存配置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Corporate presentations",
+                    "target": "企业演示"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "News anchor, professional video",
+                    "target": "新闻主播、专业视频"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Conference talks, large screens",
+                    "target": "会议演讲、大屏幕"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Film credits, dramatic reading",
+                    "target": "电影片尾、戏剧朗读"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Video production with chroma key",
+                    "target": "带色键的视频制作"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Twitch/YouTube streaming",
+                    "target": "Twitch/YouTube直播"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "Rehearsal, easy on eyes",
+                    "target": "排练、护眼模式"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "desc",
+                    "source": "High contrast, large text",
+                    "target": "高对比度、大文本"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "Best for non-native speakers or careful reading. Follows closely, small smooth movements.",
+                    "target": "适合非母语者或仔细阅读。紧密跟随，小幅平滑移动。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "Default setting. Works well for most speakers at normal pace.",
+                    "target": "默认设置。适用于正常语速的大多数说话者。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "For experienced speakers or fast pace. More responsive, larger movements.",
+                    "target": "适合经验丰富的说话者或快速语速。响应更快，移动幅度更大。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "Corporate presentations, clean look",
+                    "target": "企业演示，简洁外观"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "News anchor, professional video",
+                    "target": "新闻主播，专业视频"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "Twitch/YouTube streaming",
+                    "target": "Twitch/YouTube 直播"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "Rehearsal, easy on eyes",
+                    "target": "排练，护眼模式"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "High contrast, large text",
+                    "target": "高对比度，大字体"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "Film credits, dramatic reading",
+                    "target": "电影字幕，戏剧性朗读"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "Custom profile",
+                    "target": "自定义配置文件"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "Read your script aloud — ElevenLabs cloud voices, or offline Kokoro / macOS / Web Speech",
+                    "target": "大声朗读你的脚本 — ElevenLabs 云端语音，或离线 Kokoro / macOS / Web Speech"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "The prompter follows your voice and scrolls smoothly to keep your place",
+                    "target": "提词器跟随你的声音，平滑滚动以保持你的位置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "Grouped zones, a hero Play, and a tidy More menu — fully theme-aware",
+                    "target": "分组区域、一个主角播放按钮和一个整洁的更多菜单 — 完全适配主题"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "Cleaner Obsidian-native settings with a status dashboard and density options",
+                    "target": "更简洁的 Obsidian 原生设置，带有状态仪表板和密度选项"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "description",
+                    "source": "Unified Lucide icon set, a new brand mark, and a re-skinned mobile remote",
+                    "target": "统一的 Lucide 图标集、新的品牌标识和重新设计的移动端遥控器"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "error",
+                    "source": "Speed must be between 0.1 and 100",
+                    "target": "速度必须在 0.1 到 100 之间"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "error",
+                    "source": "Font size must be between 8 and 200",
+                    "target": "字体大小必须在 8 到 200 之间"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "error",
+                    "source": "Countdown must be between 0 and 3600 seconds",
+                    "target": "倒计时必须在 0 到 3600 秒之间"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "error",
+                    "source": "Scroll amount must be between -10000 and 10000",
+                    "target": "滚动量必须在 -10000 到 10000 之间"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "error",
+                    "source": "Index must be between 0 and 1000",
+                    "target": "索引必须在 0 到 1000 之间"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "error",
+                    "source": "Header ID too long (max 200 chars)",
+                    "target": "标头ID过长（最多200个字符）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "error",
+                    "source": "Header ID contains invalid characters",
+                    "target": "标头ID包含无效字符"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "id",
+                    "source": "play",
+                    "target": "播放"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "id",
+                    "source": "pause",
+                    "target": "暂停"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Compact (icons only)",
+                    "target": "紧凑（仅图标）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Comfortable (icons + labels)",
+                    "target": "舒适（图标+标签）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Native (Lucide)",
+                    "target": "原生（Lucide）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Custom (Teleprompter Plus)",
+                    "target": "自定义（提词器Plus）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Compact (toggle)",
+                    "target": "紧凑（切换）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Full (both times)",
+                    "target": "完整（显示两个时间）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "System default",
+                    "target": "系统默认"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Arial",
+                    "target": "Arial"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Courier New",
+                    "target": "Courier New"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Georgia",
+                    "target": "Georgia"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Helvetica",
+                    "target": "Helvetica"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Roboto",
+                    "target": "Roboto"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Tahoma",
+                    "target": "Tahoma"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Times New Roman",
+                    "target": "Times New Roman"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Trebuchet MS",
+                    "target": "Trebuchet MS"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Verdana",
+                    "target": "Verdana"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "English (US)",
+                    "target": "英语（美国）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Smooth",
+                    "target": "平滑"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Instant",
+                    "target": "即时"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Auto-detect (Kokoro > macOS Say > Web Speech)",
+                    "target": "自动检测（Kokoro > macOS Say > Web Speech）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Kokoro (neural, best quality)",
+                    "target": "Kokoro（神经网络，最佳质量）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "macOS Say (native, good quality)",
+                    "target": "macOS Say（原生，良好质量）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Web Speech API (basic fallback)",
+                    "target": "Web Speech API（基础回退）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "ElevenLabs (cloud, paid — needs API key)",
+                    "target": "ElevenLabs（云端，付费——需要API密钥）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Default",
+                    "target": "默认"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Heart (Female)",
+                    "target": "心形（女性）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Alloy (Female)",
+                    "target": "Alloy（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Aoede (Female)",
+                    "target": "Aoede（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Bella (Female)",
+                    "target": "Bella（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Jessica (Female)",
+                    "target": "Jessica（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Kore (Female)",
+                    "target": "Kore（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Nicole (Female)",
+                    "target": "Nicole（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Nova (Female)",
+                    "target": "Nova（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "River (Female)",
+                    "target": "River（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Sarah (Female)",
+                    "target": "Sarah（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Sky (Female)",
+                    "target": "Sky（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Adam (Male)",
+                    "target": "亚当（男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Echo (Male)",
+                    "target": "回声（男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Eric (Male)",
+                    "target": "埃里克（男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Liam (Male)",
+                    "target": "利亚姆（男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Michael (Male)",
+                    "target": "迈克尔（男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Onyx (Male)",
+                    "target": "缟玛瑙（男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Emma (British F)",
+                    "target": "艾玛（英女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Isabella (British F)",
+                    "target": "伊莎贝拉（英女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Daniel (British M)",
+                    "target": "丹尼尔（英男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "George (British M)",
+                    "target": "乔治（英男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Lewis (British M)",
+                    "target": "Lewis（英式男声）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Flash v2.5 (fastest ~75ms)",
+                    "target": "Flash v2.5（最快约75ms）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Turbo v2.5 (low latency)",
+                    "target": "Turbo v2.5（低延迟）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Multilingual v2 (best quality)",
+                    "target": "多语言 v2（最佳质量）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Native icons",
+                    "target": "原生图标"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Fullscreen",
+                    "target": "全屏"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Navigation",
+                    "target": "导航"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "External control",
+                    "target": "外部控制"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "Profiles",
+                    "target": "配置文件"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "label",
+                    "source": "shebang",
+                    "target": "shebang"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "message",
+                    "source": "Unrecognized message format. Expected: {\"command\": \"...\"} or {\"type\": \"ping\"}",
+                    "target": "无法识别的消息格式。应为：{\"command\": \"...\"} 或 {\"type\": \"ping\"}"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Professional",
+                    "target": "专业"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Broadcast",
+                    "target": "广播"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Stream",
+                    "target": "流"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Practice",
+                    "target": "练习"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Accessibility",
+                    "target": "无障碍"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Cinema",
+                    "target": "影院"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Speed controls",
+                    "target": "速度控制"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Countdown",
+                    "target": "倒计时"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Reset position",
+                    "target": "重置位置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Font size",
+                    "target": "字体大小"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Line height",
+                    "target": "行高"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Letter spacing",
+                    "target": "字间距"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Font family",
+                    "target": "字体"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Opacity",
+                    "target": "不透明度"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Padding",
+                    "target": "内边距"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Text color",
+                    "target": "文字颜色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Background color",
+                    "target": "背景颜色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Eyeline",
+                    "target": "眼线"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Focus mode",
+                    "target": "专注模式"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Navigation panel",
+                    "target": "导航面板"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Fullscreen",
+                    "target": "全屏"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Flip horizontal",
+                    "target": "水平翻转"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Flip vertical",
+                    "target": "垂直翻转"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Minimap",
+                    "target": "小地图"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Auto-pause on edit",
+                    "target": "编辑时自动暂停"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Progress indicator",
+                    "target": "进度指示器"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Text alignment",
+                    "target": "文本对齐"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Keep awake",
+                    "target": "保持唤醒"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Pin note",
+                    "target": "固定笔记"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Open in window",
+                    "target": "在窗口中打开"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Quick presets",
+                    "target": "快速预设"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Time display",
+                    "target": "时间显示"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Voice tracking",
+                    "target": "语音跟踪"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Dashboard",
+                    "target": "仪表盘"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toolbar",
+                    "target": "工具栏"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Features",
+                    "target": "功能"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Profiles",
+                    "target": "配置文件"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Connection",
+                    "target": "连接"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Streaming",
+                    "target": "流媒体"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "About",
+                    "target": "关于"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Density",
+                    "target": "密度"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Button density",
+                    "target": "按钮密度"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Icon style",
+                    "target": "图标样式"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toolbar icons",
+                    "target": "工具栏图标"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Zone labels",
+                    "target": "区域标签"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Countdown timer",
+                    "target": "倒计时器"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Default countdown duration",
+                    "target": "默认倒计时时长"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Auto-start playback",
+                    "target": "自动开始播放"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Speed control",
+                    "target": "速度控制"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Default scroll speed",
+                    "target": "默认滚动速度"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Speed increment",
+                    "target": "速度增量"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Eyeline indicator",
+                    "target": "视线指示器"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Position",
+                    "target": "位置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Dim opacity",
+                    "target": "暗淡不透明度"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Focus range",
+                    "target": "焦点范围"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Show elapsed time",
+                    "target": "显示已用时间"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Display style",
+                    "target": "显示样式"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Speaking pace (WPM)",
+                    "target": "说话速度（词/分钟）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Default font size",
+                    "target": "默认字体大小"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Line spacing",
+                    "target": "行间距"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Font",
+                    "target": "字体"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Color scheme",
+                    "target": "配色方案"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Transparency",
+                    "target": "透明度"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Background opacity",
+                    "target": "背景不透明度"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Vertical padding",
+                    "target": "垂直内边距"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Horizontal padding",
+                    "target": "水平内边距"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Horizontal flip",
+                    "target": "水平翻转"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Vertical flip",
+                    "target": "垂直翻转"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Double-click to edit",
+                    "target": "双击编辑"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Scroll sync",
+                    "target": "滚动同步"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Debug mode",
+                    "target": "调试模式"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Voice-activated scrolling",
+                    "target": "语音激活滚动"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Language",
+                    "target": "语言"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Scroll behavior",
+                    "target": "滚动行为"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Confidence threshold",
+                    "target": "置信度阈值"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Show status indicator",
+                    "target": "显示状态指示器"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Scroll tuning",
+                    "target": "滚动调优"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Max jump distance",
+                    "target": "最大跳跃距离"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Min jump distance",
+                    "target": "最小跳跃距离"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Update frequency",
+                    "target": "更新频率"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Animation base time",
+                    "target": "动画基准时间"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Animation per word",
+                    "target": "每词动画"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Pause detection",
+                    "target": "暂停检测"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Pause threshold",
+                    "target": "暂停阈值"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Scroll position",
+                    "target": "滚动位置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Current word position",
+                    "target": "当前词位置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Scroll trail (words behind your voice)",
+                    "target": "滚动尾迹（语音后的词数）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Scroll smoothness",
+                    "target": "滚动平滑度"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Highlight the current word",
+                    "target": "高亮当前词"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Highlight offset (words ahead/behind your voice)",
+                    "target": "高亮偏移（语音前后字数）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Speech engine",
+                    "target": "语音引擎"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Engine",
+                    "target": "引擎"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Voice",
+                    "target": "语音"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Speed",
+                    "target": "语速"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "ElevenLabs (cloud, paid)",
+                    "target": "ElevenLabs（云端，付费）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "API key",
+                    "target": "API 密钥"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Model",
+                    "target": "模型"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Voice ID",
+                    "target": "语音 ID"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Citation handling",
+                    "target": "引用处理"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Default bibliography path",
+                    "target": "默认参考文献路径"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Content filtering",
+                    "target": "内容过滤"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Skip code blocks",
+                    "target": "跳过代码块"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Skip tables",
+                    "target": "跳过表格"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Heart (Female)",
+                    "target": "心形（女性）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Alloy (Female)",
+                    "target": "合金（女性）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Aoede (Female)",
+                    "target": "Aoede（女性）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Bella (Female)",
+                    "target": "Bella（女性）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Jessica (Female)",
+                    "target": "Jessica（女性）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Kore (Female)",
+                    "target": "Kore（女性）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Nicole (Female)",
+                    "target": "妮可（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Nova (Female)",
+                    "target": "诺娃（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "River (Female)",
+                    "target": "里弗（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Sarah (Female)",
+                    "target": "莎拉（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Sky (Female)",
+                    "target": "斯凯（女）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Adam (Male)",
+                    "target": "亚当（男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Echo (Male)",
+                    "target": "埃科（男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Eric (Male)",
+                    "target": "埃里克（男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Liam (Male)",
+                    "target": "利亚姆（男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Michael (Male)",
+                    "target": "迈克尔（男）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Onyx (Male)",
+                    "target": "Onyx (男)"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Emma (British F)",
+                    "target": "Emma (英女)"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Isabella (British F)",
+                    "target": "Isabella (英女)"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Daniel (British M)",
+                    "target": "Daniel (英男)"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "George (British M)",
+                    "target": "George (英男)"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Lewis (British M)",
+                    "target": "Lewis (英男)"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Plain text",
+                    "target": "纯文本"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "JavaScript",
+                    "target": "JavaScript"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "TypeScript",
+                    "target": "TypeScript"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Python",
+                    "target": "Python"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Bash",
+                    "target": "Bash"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Shell Session",
+                    "target": "Shell 会话"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Markdown",
+                    "target": "Markdown"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Reset",
+                    "target": "重置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Navigation",
+                    "target": "导航"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Open in Window",
+                    "target": "在窗口中打开"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Presentation",
+                    "target": "演示"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Green screen",
+                    "target": "绿屏"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "White",
+                    "target": "白色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Light gray",
+                    "target": "浅灰色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Gray",
+                    "target": "灰色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Dark gray",
+                    "target": "深灰色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Black",
+                    "target": "黑色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Yellow",
+                    "target": "黄色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Orange",
+                    "target": "橙色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Red",
+                    "target": "红色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Green",
+                    "target": "绿色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Blue",
+                    "target": "蓝色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Charcoal",
+                    "target": "炭灰色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "VS Code",
+                    "target": "VS Code"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "GitHub Dark",
+                    "target": "GitHub Dark"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Dark blue",
+                    "target": "深蓝"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Dark green",
+                    "target": "深绿"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Dark red",
+                    "target": "深红"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Cream",
+                    "target": "奶油色"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Open teleprompter",
+                    "target": "打开提词器"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Show websocket info",
+                    "target": "显示WebSocket信息"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Increase font size",
+                    "target": "增大字体"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Decrease font size",
+                    "target": "减小字体"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Reset font size",
+                    "target": "重置字体大小"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle playback",
+                    "target": "切换播放"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Start playback",
+                    "target": "开始播放"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Pause playback",
+                    "target": "暂停播放"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Increase speed",
+                    "target": "提高速度"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Decrease speed",
+                    "target": "降低速度"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Next section",
+                    "target": "下一节"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Previous section",
+                    "target": "上一节"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle navigation",
+                    "target": "切换导航"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle eyeline",
+                    "target": "切换视线"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle focus",
+                    "target": "切换焦点"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle fullscreen",
+                    "target": "切换全屏"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Show/hide minimap",
+                    "target": "显示/隐藏小地图"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle pin",
+                    "target": "切换固定"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Refresh pinned",
+                    "target": "刷新固定项"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle awake mode",
+                    "target": "切换唤醒模式"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Increase countdown",
+                    "target": "增加倒计时"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Decrease countdown",
+                    "target": "减少倒计时"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle mirror mode",
+                    "target": "切换镜像模式"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle vertical flip mode",
+                    "target": "切换垂直翻转模式"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle scroll sync",
+                    "target": "切换滚动同步"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Connect to streaming software",
+                    "target": "连接到流媒体软件"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Disconnect from streaming software",
+                    "target": "断开与流媒体软件的连接"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle recording",
+                    "target": "切换录制"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Start recording",
+                    "target": "开始录制"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Stop recording",
+                    "target": "停止录制"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle streaming",
+                    "target": "切换直播"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Start streaming",
+                    "target": "开始直播"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Stop streaming",
+                    "target": "停止直播"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Toggle text-to-speech",
+                    "target": "切换文本转语音"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Stop text-to-speech",
+                    "target": "停止文本转语音"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Next sentence (text-to-speech)",
+                    "target": "下一句（文本转语音）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Previous sentence (text-to-speech)",
+                    "target": "上一句（文本转语音）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Increase speech speed",
+                    "target": "提高语速"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "Decrease speech speed",
+                    "target": "降低语速"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "name",
+                    "source": "English (US)",
+                    "target": "英语（美国）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "placeholder",
+                    "source": "Search settings...",
+                    "target": "搜索设置..."
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Cancel",
+                    "target": "取消"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Confirm",
+                    "target": "确认"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "OK",
+                    "target": "确定"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Live preview",
+                    "target": "实时预览"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Current settings",
+                    "target": "当前设置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "System status",
+                    "target": "系统状态"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Server",
+                    "target": "服务器"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Clients",
+                    "target": "客户端"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Default speed",
+                    "target": "默认速度"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Font size",
+                    "target": "字体大小"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Quick actions",
+                    "target": "快速操作"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Reset all",
+                    "target": "全部重置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Export",
+                    "target": "导出"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Import",
+                    "target": "导入"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Configure which controls appear in the teleprompter toolbar",
+                    "target": "配置提词器工具栏中显示哪些控件"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Toolbar preview",
+                    "target": "工具栏预览"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Primary controls",
+                    "target": "主要控件"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Always visible in the main toolbar",
+                    "target": "始终在主工具栏中可见"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Configure all teleprompter features and their settings",
+                    "target": "配置所有提词器功能及其设置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Save and manage complete configuration profiles",
+                    "target": "保存并管理完整的配置方案"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Built-in profiles",
+                    "target": "内置方案"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Custom profiles",
+                    "target": "自定义方案"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "No custom profiles yet",
+                    "target": "暂无自定义方案"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Save your current settings as a profile",
+                    "target": "将当前设置保存为方案"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Save current as profile",
+                    "target": "将当前保存为配置文件"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Import profile",
+                    "target": "导入配置文件"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Configure server for external devices and remote control",
+                    "target": "为外部设备和远程控制配置服务器"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Network broadcast",
+                    "target": "网络广播"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "When enabled, this teleprompter becomes the \"master\" and broadcasts its scroll position. Other devices can connect via websocket and follow along in sync.",
+                    "target": "启用后，此提词器将成为“主控”并广播其滚动位置。其他设备可通过WebSocket连接并同步跟随。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Remote interface",
+                    "target": "远程界面"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Open remote",
+                    "target": "打开远程"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Control the teleprompter from your phone or tablet:",
+                    "target": "从手机或平板电脑控制提词器："
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Ensure your phone is on the same network as this computer",
+                    "target": "确保手机与此计算机处于同一网络"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Open the address above in your phone's browser",
+                    "target": "在手机浏览器中打开上述地址"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Use the play/pause button to control playback",
+                    "target": "使用播放/暂停按钮控制播放"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Adjust speed, jump to sections, and more from your phone",
+                    "target": "在手机上调整速度、跳转章节等"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Tip: ",
+                    "target": "提示："
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "External control",
+                    "target": "外部控制"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "To control the teleprompter from external devices:",
+                    "target": "从外部设备控制提词器："
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Ensure the server is running (see status above)",
+                    "target": "确保服务器正在运行（见上方状态）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Install the plugin for your control device",
+                    "target": "为控制设备安装插件"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Add actions to your device buttons",
+                    "target": "为设备按钮添加操作"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "By default, the server only accepts local connections for security.",
+                    "target": "默认情况下，出于安全考虑，服务器仅接受本地连接。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Integrate with streaming software for recording and streaming sync",
+                    "target": "与流媒体软件集成，实现录制和直播同步"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Integration",
+                    "target": "集成"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Connection",
+                    "target": "连接"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Sync",
+                    "target": "同步"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Controls",
+                    "target": "控制"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Setup",
+                    "target": "设置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "To enable streaming integration, follow these steps:",
+                    "target": "要启用流集成，请按照以下步骤操作："
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Open the streaming software (version 28 or later)",
+                    "target": "打开流媒体软件（版本 28 或更高版本）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Go to tools menu, then websocket server settings",
+                    "target": "前往工具菜单，然后选择 WebSocket 服务器设置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Enable the websocket server",
+                    "target": "启用 WebSocket 服务器"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Set a password if desired (optional)",
+                    "target": "如果需要，可设置密码（可选）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Note the port number (default: 4455)",
+                    "target": "注意端口号（默认：4455）"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Apply the settings and close the dialog",
+                    "target": "应用设置并关闭对话框"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Enter the same settings above and click connect",
+                    "target": "输入相同的设置并点击连接"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Version 28 and later has the websocket server built-in.",
+                    "target": "版本28及更高版本内置了WebSocket服务器。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Teleprompter Plus",
+                    "target": "提词器Plus"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Docs",
+                    "target": "文档"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Support",
+                    "target": "支持"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Features",
+                    "target": "功能"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Shortcuts",
+                    "target": "快捷键"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Key",
+                    "target": "键"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Action",
+                    "target": "操作"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Credits",
+                    "target": "致谢"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Built for the Obsidian community.",
+                    "target": "专为 Obsidian 社区构建。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Built with modern web technologies.",
+                    "target": "采用现代网络技术构建。"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "● running",
+                    "target": "● 运行中"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "● stopped",
+                    "target": "● 已停止"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "If this plugin helps your workflow, consider supporting its development!",
+                    "target": "如果此插件有助于您的工作流程，请考虑支持其开发！"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Buy me a coffee",
+                    "target": "请我喝杯咖啡"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "View documentation →",
+                    "target": "查看文档 →"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "text",
+                    "source": "Get started",
+                    "target": "开始使用"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "title",
+                    "source": "Neural text-to-speech",
+                    "target": "神经文本转语音"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "title",
+                    "source": "Voice-tracked scrolling",
+                    "target": "语音跟踪滚动"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "title",
+                    "source": "Redesigned toolbar",
+                    "target": "重新设计的工具栏"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "title",
+                    "source": "Native settings",
+                    "target": "原生设置"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "title",
+                    "source": "A fresh look",
+                    "target": "全新外观"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "type",
+                    "source": "text",
+                    "target": "text"
+                },
+                {
+                    "type": "ObjectProperty",
+                    "name": "type",
+                    "source": "color",
+                    "target": "color"
+                }
+            ],
+            "regex": [
+                {
+                    "source": "setText(\"Sample teleprompter text that shows your current settings in real-time as you make changes...\")",
+                    "target": "setText(\"Sample teleprompter text that shows your current settings in real-time as you make changes...\")"
+                },
+                {
+                    "source": "Notice(`Applied \"${aF.name}\" profile`)",
+                    "target": "Notice(`Applied \"${aF.name}\" profile`)"
+                },
+                {
+                    "source": "Notice(\"Settings reset to defaults\")",
+                    "target": "Notice(\"Settings reset to defaults\")"
+                },
+                {
+                    "source": "Notice(\"Settings exported\")",
+                    "target": "Notice(\"Settings exported\")"
+                },
+                {
+                    "source": "Notice(\"Settings imported\")",
+                    "target": "Notice(\"Settings imported\")"
+                },
+                {
+                    "source": "Notice(\"Failed to import settings\")",
+                    "target": "Notice(\"Failed to import settings\")"
+                },
+                {
+                    "source": "Notice(\"Recommended toolbar layout applied\")",
+                    "target": "Notice(\"Recommended toolbar layout applied\")"
+                },
+                {
+                    "source": "setName(\"Recommended layout\")",
+                    "target": "setName(\"Recommended layout\")"
+                },
+                {
+                    "source": "setDesc(\"Move low-frequency controls into the ⋯ More menu and keep the essentials on the bar. Reversible — re-pin anything below.\")",
+                    "target": "setDesc(\"Move low-frequency controls into the ⋯ More menu and keep the essentials on the bar. Reversible — re-pin anything below.\")"
+                },
+                {
+                    "source": "setButtonText(\"Apply recommended layout\")",
+                    "target": "setButtonText(\"Apply recommended layout\")"
+                },
+                {
+                    "source": "Notice(`Applied \"${D.name}\" profile`)",
+                    "target": "Notice(`Applied \"${D.name}\" profile`)"
+                },
+                {
+                    "source": "Notice(\"Profile deleted\")",
+                    "target": "Notice(\"Profile deleted\")"
+                },
+                {
+                    "source": "Notice(`Profile \"${D}\" saved`)",
+                    "target": "Notice(`Profile \"${D}\" saved`)"
+                },
+                {
+                    "source": "Notice(`Profile \"${m.name}\" imported`)",
+                    "target": "Notice(`Profile \"${m.name}\" imported`)"
+                },
+                {
+                    "source": "Notice(\"Invalid profile file\")",
+                    "target": "Notice(\"Invalid profile file\")"
+                },
+                {
+                    "source": "Notice(\"Failed to import profile\")",
+                    "target": "Notice(\"Failed to import profile\")"
+                },
+                {
+                    "source": "setName(\"Auto-start server\")",
+                    "target": "setName(\"Auto-start server\")"
+                },
+                {
+                    "source": "setDesc(\"Start websocket server when Obsidian loads\")",
+                    "target": "setDesc(\"Start websocket server when Obsidian loads\")"
+                },
+                {
+                    "source": "setDesc(\"Server port (requires restart)\")",
+                    "target": "setDesc(\"Server port (requires restart)\")"
+                },
+                {
+                    "source": "Notice(\"Non-localhost binding exposes the server to the network\")",
+                    "target": "Notice(\"Non-localhost binding exposes the server to the network\")"
+                },
+                {
+                    "source": "setName(\"Connection notifications\")",
+                    "target": "setName(\"Connection notifications\")"
+                },
+                {
+                    "source": "setDesc(\"Show notifications when clients connect/disconnect\")",
+                    "target": "setDesc(\"Show notifications when clients connect/disconnect\")"
+                },
+                {
+                    "source": "setName(\"Enable network broadcast\")",
+                    "target": "setName(\"Enable network broadcast\")"
+                },
+                {
+                    "source": "setDesc(\"Broadcast scroll position to connected devices for multi-device sync. Other devices can follow this teleprompter.\")",
+                    "target": "setDesc(\"Broadcast scroll position to connected devices for multi-device sync. Other devices can follow this teleprompter.\")"
+                },
+                {
+                    "source": "setName(\"Broadcast interval (ms)\")",
+                    "target": "setName(\"Broadcast interval (ms)\")"
+                },
+                {
+                    "source": "setDesc(\"How often to broadcast scroll position during playback. Lower = smoother sync but more network traffic. (50-500ms)\")",
+                    "target": "setDesc(\"How often to broadcast scroll position during playback. Lower = smoother sync but more network traffic. (50-500ms)\")"
+                },
+                {
+                    "source": "appendText(\"To access from your phone, change the host setting above to \")",
+                    "target": "appendText(\"To access from your phone, change the host setting above to \")"
+                },
+                {
+                    "source": "appendText(\" and use your computer's local IP address. On macOS: System Settings → Network → Details → TCP/IP → IP address. Or run \")",
+                    "target": "appendText(\" and use your computer's local IP address. On macOS: System Settings → Network → Details → TCP/IP → IP address. Or run \")"
+                },
+                {
+                    "source": "appendText(\" in terminal.\")",
+                    "target": "appendText(\" in terminal.\")"
+                },
+                {
+                    "source": "setName(\"Enable streaming integration\")",
+                    "target": "setName(\"Enable streaming integration\")"
+                },
+                {
+                    "source": "setDesc(\"Allow the plugin to connect to the streaming software\")",
+                    "target": "setDesc(\"Allow the plugin to connect to the streaming software\")"
+                },
+                {
+                    "source": "setName(\"Auto-connect on startup\")",
+                    "target": "setName(\"Auto-connect on startup\")"
+                },
+                {
+                    "source": "setDesc(\"Automatically connect to streaming software when the plugin loads\")",
+                    "target": "setDesc(\"Automatically connect to streaming software when the plugin loads\")"
+                },
+                {
+                    "source": "setDesc(\"Server port (default: 4455)\")",
+                    "target": "setDesc(\"Server port (default: 4455)\")"
+                },
+                {
+                    "source": "setDesc(\"Server password (leave empty if not set)\")",
+                    "target": "setDesc(\"Server password (leave empty if not set)\")"
+                },
+                {
+                    "source": "setPlaceholder(\"••••••••\")",
+                    "target": "setPlaceholder(\"••••••••\")"
+                },
+                {
+                    "source": "setName(\"Sync recording\")",
+                    "target": "setName(\"Sync recording\")"
+                },
+                {
+                    "source": "setDesc(\"Start streaming software recording when teleprompter plays, stop when reset\")",
+                    "target": "setDesc(\"Start streaming software recording when teleprompter plays, stop when reset\")"
+                },
+                {
+                    "source": "setName(\"Sync streaming\")",
+                    "target": "setName(\"Sync streaming\")"
+                },
+                {
+                    "source": "setDesc(\"Start streaming software streaming when teleprompter plays, stop when reset\")",
+                    "target": "setDesc(\"Start streaming software streaming when teleprompter plays, stop when reset\")"
+                },
+                {
+                    "source": "error(`[WikiLink] Error loading embedded note: ${i}`,u);const BU=x.querySelector(\".embedded-note-content\");BU&&BU.replaceChildren(G.sanitizeHTMLToDom('<p class=\"embed-error\">⚠️ Failed to load</p>'))}}}let s=P(`# Welcome to Teleprompter Plus! 🎬\n\nOpen a note in Obsidian to see it here!`)",
+                    "target": "error(`[WikiLink] Error loading embedded note: ${i}`,u);const BU=x.querySelector(\".embedded-note-content\");BU&&BU.replaceChildren(G.sanitizeHTMLToDom('<p class=\"embed-error\">⚠️ Failed to load</p>'))}}}let s=P(`# Welcome to Teleprompter Plus! 🎬\n\nOpen a note in Obsidian to see it here!`)"
+                },
+                {
+                    "source": "error(\"Markdown rendering error:\",Z),n(L,'<p class=\"error\">Error rendering markdown</p>')}});function m0(){if(V(TQ)){H(\"[Pin] Note is pinned, skipping auto-update\")",
+                    "target": "error(\"Markdown rendering error:\",Z),n(L,'<p class=\"error\">Error rendering markdown</p>')}});function m0(){if(V(TQ)){H(\"[Pin] Note is pinned, skipping auto-update\")"
+                },
+                {
+                    "source": "error(`[Voice] Error: ${M} - ${x}`)",
+                    "target": "error(`[Voice] Error: ${M} - ${x}`)"
+                },
+                {
+                    "source": "error(\"[Voice] Failed to toggle voice tracking:\",Z),n(nU,\"error\")",
+                    "target": "error(\"[Voice] Failed to toggle voice tracking:\",Z),n(nU,\"error\")"
+                },
+                {
+                    "source": "error(\"[KeepAwake] powerSaveBlocker API not available\")",
+                    "target": "error(\"[KeepAwake] powerSaveBlocker API not available\")"
+                },
+                {
+                    "source": "error(\"[KeepAwake] Failed to toggle keep awake:\",Z),n(FQ,!1),nB=null}}function SJ(){if(V(FQ)&&nB!==null){try{const Z=require(\"electron\")",
+                    "target": "error(\"[KeepAwake] Failed to toggle keep awake:\",Z),n(FQ,!1),nB=null}}function SJ(){if(V(FQ)&&nB!==null){try{const Z=require(\"electron\")"
+                },
+                {
+                    "source": "error(\"[KeepAwake] Cleanup error:\",Z)}nB=null,n(FQ,!1)}}function IZ(){V(FQ)||lV()}function JV(){n(tQ,!V(tQ)),H(`[FullScreen] ${V(tQ)?\"Enabled\":\"Disabled\"}`),N({isFullScreen:V(tQ)})}function NJ(Z){V(tQ)&&(Z.key===\"Control\"||Z.key===\"Meta\")",
+                    "target": "error(\"[KeepAwake] Cleanup error:\",Z)}nB=null,n(FQ,!1)}}function IZ(){V(FQ)||lV()}function JV(){n(tQ,!V(tQ)),H(`[FullScreen] ${V(tQ)?\"Enabled\":\"Disabled\"}`),N({isFullScreen:V(tQ)})}function NJ(Z){V(tQ)&&(Z.key===\"Control\"||Z.key===\"Meta\")"
+                },
+                {
+                    "source": "error(\"[Teleprompter] WebSocket module failed to load - Stream Deck integration unavailable\")",
+                    "target": "error(\"[Teleprompter] WebSocket module failed to load - Stream Deck integration unavailable\")"
+                },
+                {
+                    "source": "error('Failed to parse message:', e);\n          }\n        };\n\n        ws.onclose = function() {\n          console.debug('Disconnected from teleprompter')",
+                    "target": "error('Failed to parse message:', e);\n          }\n        };\n\n        ws.onclose = function() {\n          console.debug('Disconnected from teleprompter')"
+                },
+                {
+                    "source": "error('WebSocket error:', error);\n        };\n      } catch (e) {\n        console.error('Failed to connect:', e);\n        setConnectionStatus('disconnected')",
+                    "target": "error('WebSocket error:', error);\n        };\n      } catch (e) {\n        console.error('Failed to connect:', e);\n        setConnectionStatus('disconnected')"
+                },
+                {
+                    "source": "error(\"[TeleprompterWS] WebSocket module failed to load\")",
+                    "target": "error(\"[TeleprompterWS] WebSocket module failed to load\")"
+                },
+                {
+                    "source": "error(\"[TeleprompterWS] Error:\",TV.error),console.error(\"[TeleprompterWS] Diagnostics:\",OT(U)),console.error(\"[TeleprompterWS] Plugin will continue without WebSocket support\")",
+                    "target": "error(\"[TeleprompterWS] Error:\",TV.error),console.error(\"[TeleprompterWS] Diagnostics:\",OT(U)),console.error(\"[TeleprompterWS] Plugin will continue without WebSocket support\")"
+                },
+                {
+                    "source": "Notice(\"Connected to streaming software\")",
+                    "target": "Notice(\"Connected to streaming software\")"
+                },
+                {
+                    "source": "error(\"[OBS] Failed to refresh state:\",U)}}async startRecording(){if(this.state.status!==\"connected\")",
+                    "target": "error(\"[OBS] Failed to refresh state:\",U)}}async startRecording(){if(this.state.status!==\"connected\")"
+                },
+                {
+                    "source": "error(\"[OBS] Failed to start recording:\",U),!1}}async stopRecording(){if(this.state.status!==\"connected\")",
+                    "target": "error(\"[OBS] Failed to start recording:\",U),!1}}async stopRecording(){if(this.state.status!==\"connected\")"
+                },
+                {
+                    "source": "error(\"[OBS] Failed to stop recording:\",U),!1}}async toggleRecording(){if(this.state.status!==\"connected\")",
+                    "target": "error(\"[OBS] Failed to stop recording:\",U),!1}}async toggleRecording(){if(this.state.status!==\"connected\")"
+                },
+                {
+                    "source": "error(\"[OBS] Failed to toggle recording:\",U),!1}}async startStreaming(){if(this.state.status!==\"connected\")",
+                    "target": "error(\"[OBS] Failed to toggle recording:\",U),!1}}async startStreaming(){if(this.state.status!==\"connected\")"
+                },
+                {
+                    "source": "error(\"[OBS] Failed to start streaming:\",U),!1}}async stopStreaming(){if(this.state.status!==\"connected\")",
+                    "target": "error(\"[OBS] Failed to start streaming:\",U),!1}}async stopStreaming(){if(this.state.status!==\"connected\")"
+                },
+                {
+                    "source": "error(\"[OBS] Failed to stop streaming:\",U),!1}}async toggleStreaming(){if(this.state.status!==\"connected\")",
+                    "target": "error(\"[OBS] Failed to stop streaming:\",U),!1}}async toggleStreaming(){if(this.state.status!==\"connected\")"
+                },
+                {
+                    "source": "error(\"[OBS] Failed to toggle streaming:\",U),!1}}async getScenes(){if(this.state.status!==\"connected\")",
+                    "target": "error(\"[OBS] Failed to toggle streaming:\",U),!1}}async getScenes(){if(this.state.status!==\"connected\")"
+                },
+                {
+                    "source": "error(\"[OBS] Failed to get scenes:\",U),[]}}async setScene(U){if(this.state.status!==\"connected\")",
+                    "target": "error(\"[OBS] Failed to get scenes:\",U),[]}}async setScene(U){if(this.state.status!==\"connected\")"
+                },
+                {
+                    "source": "setName(`What's new in v${this.version}`)",
+                    "target": "setName(`What's new in v${this.version}`)"
+                },
+                {
+                    "source": "setName(\"Support development\")",
+                    "target": "setName(\"Support development\")"
+                },
+                {
+                    "source": "setName(\"Don't show on updates\")",
+                    "target": "setName(\"Don't show on updates\")"
+                },
+                {
+                    "source": "setDesc(\"You can re-enable this in settings\")",
+                    "target": "setDesc(\"You can re-enable this in settings\")"
+                },
+                {
+                    "source": "Notice(`Font size: ${this.settings.fontSize}px`)",
+                    "target": "Notice(`Font size: ${this.settings.fontSize}px`)"
+                },
+                {
+                    "source": "Notice(`Font size reset to ${TR.fontSize}px`)",
+                    "target": "Notice(`Font size reset to ${TR.fontSize}px`)"
+                },
+                {
+                    "source": "Notice(`Remote server ready on port ${this.settings.wsPort}`)",
+                    "target": "Notice(`Remote server ready on port ${this.settings.wsPort}`)"
+                },
+                {
+                    "source": "error(\"[Teleprompter] Failed to start WebSocket server:\",U),this.wsServer){try{await this.wsServer.stop()}catch{}this.wsServer=null}U instanceof Error&&U.message.includes(\"EADDRINUSE\")",
+                    "target": "error(\"[Teleprompter] Failed to start WebSocket server:\",U),this.wsServer){try{await this.wsServer.stop()}catch{}this.wsServer=null}U instanceof Error&&U.message.includes(\"EADDRINUSE\")"
+                },
+                {
+                    "source": "Notice(\"Remote server not running\")",
+                    "target": "Notice(\"Remote server not running\")"
+                },
+                {
+                    "source": "Notice(\"Teleprompter: invalid note path\")",
+                    "target": "Notice(\"Teleprompter: invalid note path\")"
+                },
+                {
+                    "source": "Notice(`Teleprompter: Could not find note \"${R}\"`)",
+                    "target": "Notice(`Teleprompter: Could not find note \"${R}\"`)"
+                },
+                {
+                    "source": "Notice(`Teleprompter: Opened \"${F}\"`)",
+                    "target": "Notice(`Teleprompter: Opened \"${F}\"`)"
+                },
+                {
+                    "source": "description:\"Best for non-native speakers or careful reading. Follows closely, small smooth movements.\"",
+                    "target": "description:\"Best for non-native speakers or careful reading. Follows closely, small smooth movements.\""
+                },
+                {
+                    "source": "description:\"Default setting. Works well for most speakers at normal pace.\"",
+                    "target": "description:\"Default setting. Works well for most speakers at normal pace.\""
+                },
+                {
+                    "source": "description:\"For experienced speakers or fast pace. More responsive, larger movements.\"",
+                    "target": "description:\"For experienced speakers or fast pace. More responsive, larger movements.\""
+                },
+                {
+                    "source": "description:\"Corporate presentations, clean look\"",
+                    "target": "description:\"Corporate presentations, clean look\""
+                },
+                {
+                    "source": "description:\"News anchor, professional video\"",
+                    "target": "description:\"News anchor, professional video\""
+                },
+                {
+                    "source": "description:\"Twitch/YouTube streaming\"",
+                    "target": "description:\"Twitch/YouTube streaming\""
+                },
+                {
+                    "source": "description:\"Rehearsal, easy on eyes\"",
+                    "target": "description:\"Rehearsal, easy on eyes\""
+                },
+                {
+                    "source": "description:\"High contrast, large text\"",
+                    "target": "description:\"High contrast, large text\""
+                },
+                {
+                    "source": "description:\"Film credits, dramatic reading\"",
+                    "target": "description:\"Film credits, dramatic reading\""
+                },
+                {
+                    "source": "name:\"Speed controls\"",
+                    "target": "name:\"Speed controls\""
+                },
+                {
+                    "source": "name:\"Reset position\"",
+                    "target": "name:\"Reset position\""
+                },
+                {
+                    "source": "name:\"Font size\"",
+                    "target": "name:\"Font size\""
+                },
+                {
+                    "source": "name:\"Line height\"",
+                    "target": "name:\"Line height\""
+                },
+                {
+                    "source": "name:\"Letter spacing\"",
+                    "target": "name:\"Letter spacing\""
+                },
+                {
+                    "source": "name:\"Font family\"",
+                    "target": "name:\"Font family\""
+                },
+                {
+                    "source": "name:\"Text color\"",
+                    "target": "name:\"Text color\""
+                },
+                {
+                    "source": "name:\"Background color\"",
+                    "target": "name:\"Background color\""
+                },
+                {
+                    "source": "name:\"Focus mode\"",
+                    "target": "name:\"Focus mode\""
+                },
+                {
+                    "source": "name:\"Navigation panel\"",
+                    "target": "name:\"Navigation panel\""
+                },
+                {
+                    "source": "name:\"Flip horizontal\"",
+                    "target": "name:\"Flip horizontal\""
+                },
+                {
+                    "source": "name:\"Flip vertical\"",
+                    "target": "name:\"Flip vertical\""
+                },
+                {
+                    "source": "name:\"Auto-pause on edit\"",
+                    "target": "name:\"Auto-pause on edit\""
+                },
+                {
+                    "source": "name:\"Progress indicator\"",
+                    "target": "name:\"Progress indicator\""
+                },
+                {
+                    "source": "name:\"Text alignment\"",
+                    "target": "name:\"Text alignment\""
+                },
+                {
+                    "source": "name:\"Keep awake\"",
+                    "target": "name:\"Keep awake\""
+                },
+                {
+                    "source": "name:\"Pin note\"",
+                    "target": "name:\"Pin note\""
+                },
+                {
+                    "source": "name:\"Open in window\"",
+                    "target": "name:\"Open in window\""
+                },
+                {
+                    "source": "name:\"Quick presets\"",
+                    "target": "name:\"Quick presets\""
+                },
+                {
+                    "source": "name:\"Time display\"",
+                    "target": "name:\"Time display\""
+                },
+                {
+                    "source": "name:\"Voice tracking\"",
+                    "target": "name:\"Voice tracking\""
+                },
+                {
+                    "source": "text:\"Live preview\"",
+                    "target": "text:\"Live preview\""
+                },
+                {
+                    "source": "text:\"Current settings\"",
+                    "target": "text:\"Current settings\""
+                },
+                {
+                    "source": "text:\"System status\"",
+                    "target": "text:\"System status\""
+                },
+                {
+                    "source": "text:\"Default speed\"",
+                    "target": "text:\"Default speed\""
+                },
+                {
+                    "source": "text:\"Font size\"",
+                    "target": "text:\"Font size\""
+                },
+                {
+                    "source": "text:\"Quick actions\"",
+                    "target": "text:\"Quick actions\""
+                },
+                {
+                    "source": "text:\"Reset all\"",
+                    "target": "text:\"Reset all\""
+                },
+                {
+                    "source": "text:\"Configure which controls appear in the teleprompter toolbar\"",
+                    "target": "text:\"Configure which controls appear in the teleprompter toolbar\""
+                },
+                {
+                    "source": "name:\"Button density\"",
+                    "target": "name:\"Button density\""
+                },
+                {
+                    "source": "name:\"Icon style\"",
+                    "target": "name:\"Icon style\""
+                },
+                {
+                    "source": "name:\"Toolbar icons\"",
+                    "target": "name:\"Toolbar icons\""
+                },
+                {
+                    "source": "name:\"Zone labels\"",
+                    "target": "name:\"Zone labels\""
+                },
+                {
+                    "source": "text:\"Toolbar preview\"",
+                    "target": "text:\"Toolbar preview\""
+                },
+                {
+                    "source": "text:\"Primary controls\"",
+                    "target": "text:\"Primary controls\""
+                },
+                {
+                    "source": "text:\"Always visible in the main toolbar\"",
+                    "target": "text:\"Always visible in the main toolbar\""
+                },
+                {
+                    "source": "text:\"Configure all teleprompter features and their settings\"",
+                    "target": "text:\"Configure all teleprompter features and their settings\""
+                },
+                {
+                    "source": "name:\"Countdown timer\"",
+                    "target": "name:\"Countdown timer\""
+                },
+                {
+                    "source": "name:\"Default countdown duration\"",
+                    "target": "name:\"Default countdown duration\""
+                },
+                {
+                    "source": "name:\"Auto-start playback\"",
+                    "target": "name:\"Auto-start playback\""
+                },
+                {
+                    "source": "name:\"Speed control\"",
+                    "target": "name:\"Speed control\""
+                },
+                {
+                    "source": "name:\"Default scroll speed\"",
+                    "target": "name:\"Default scroll speed\""
+                },
+                {
+                    "source": "name:\"Speed increment\"",
+                    "target": "name:\"Speed increment\""
+                },
+                {
+                    "source": "name:\"Eyeline indicator\"",
+                    "target": "name:\"Eyeline indicator\""
+                },
+                {
+                    "source": "name:\"Dim opacity\"",
+                    "target": "name:\"Dim opacity\""
+                },
+                {
+                    "source": "name:\"Focus range\"",
+                    "target": "name:\"Focus range\""
+                },
+                {
+                    "source": "name:\"Show elapsed time\"",
+                    "target": "name:\"Show elapsed time\""
+                },
+                {
+                    "source": "name:\"Display style\"",
+                    "target": "name:\"Display style\""
+                },
+                {
+                    "source": "name:\"Speaking pace (WPM)\"",
+                    "target": "name:\"Speaking pace (WPM)\""
+                },
+                {
+                    "source": "name:\"Default font size\"",
+                    "target": "name:\"Default font size\""
+                },
+                {
+                    "source": "name:\"Line spacing\"",
+                    "target": "name:\"Line spacing\""
+                },
+                {
+                    "source": "name:\"Color scheme\"",
+                    "target": "name:\"Color scheme\""
+                },
+                {
+                    "source": "name:\"Background opacity\"",
+                    "target": "name:\"Background opacity\""
+                },
+                {
+                    "source": "name:\"Vertical padding\"",
+                    "target": "name:\"Vertical padding\""
+                },
+                {
+                    "source": "name:\"Horizontal padding\"",
+                    "target": "name:\"Horizontal padding\""
+                },
+                {
+                    "source": "name:\"Horizontal flip\"",
+                    "target": "name:\"Horizontal flip\""
+                },
+                {
+                    "source": "name:\"Vertical flip\"",
+                    "target": "name:\"Vertical flip\""
+                },
+                {
+                    "source": "name:\"Double-click to edit\"",
+                    "target": "name:\"Double-click to edit\""
+                },
+                {
+                    "source": "name:\"Scroll sync\"",
+                    "target": "name:\"Scroll sync\""
+                },
+                {
+                    "source": "name:\"Debug mode\"",
+                    "target": "name:\"Debug mode\""
+                },
+                {
+                    "source": "name:\"Voice-activated scrolling\"",
+                    "target": "name:\"Voice-activated scrolling\""
+                },
+                {
+                    "source": "name:\"Scroll behavior\"",
+                    "target": "name:\"Scroll behavior\""
+                },
+                {
+                    "source": "name:\"Confidence threshold\"",
+                    "target": "name:\"Confidence threshold\""
+                },
+                {
+                    "source": "name:\"Show status indicator\"",
+                    "target": "name:\"Show status indicator\""
+                },
+                {
+                    "source": "name:\"Scroll tuning\"",
+                    "target": "name:\"Scroll tuning\""
+                },
+                {
+                    "source": "name:\"Max jump distance\"",
+                    "target": "name:\"Max jump distance\""
+                },
+                {
+                    "source": "name:\"Min jump distance\"",
+                    "target": "name:\"Min jump distance\""
+                },
+                {
+                    "source": "name:\"Update frequency\"",
+                    "target": "name:\"Update frequency\""
+                },
+                {
+                    "source": "name:\"Animation base time\"",
+                    "target": "name:\"Animation base time\""
+                },
+                {
+                    "source": "name:\"Animation per word\"",
+                    "target": "name:\"Animation per word\""
+                },
+                {
+                    "source": "name:\"Pause detection\"",
+                    "target": "name:\"Pause detection\""
+                },
+                {
+                    "source": "name:\"Pause threshold\"",
+                    "target": "name:\"Pause threshold\""
+                },
+                {
+                    "source": "name:\"Scroll position\"",
+                    "target": "name:\"Scroll position\""
+                },
+                {
+                    "source": "name:\"Current word position\"",
+                    "target": "name:\"Current word position\""
+                },
+                {
+                    "source": "name:\"Scroll trail (words behind your voice)\"",
+                    "target": "name:\"Scroll trail (words behind your voice)\""
+                },
+                {
+                    "source": "name:\"Scroll smoothness\"",
+                    "target": "name:\"Scroll smoothness\""
+                },
+                {
+                    "source": "name:\"Highlight the current word\"",
+                    "target": "name:\"Highlight the current word\""
+                },
+                {
+                    "source": "name:\"Highlight offset (words ahead/behind your voice)\"",
+                    "target": "name:\"Highlight offset (words ahead/behind your voice)\""
+                },
+                {
+                    "source": "name:\"Speech engine\"",
+                    "target": "name:\"Speech engine\""
+                },
+                {
+                    "source": "name:\"ElevenLabs (cloud, paid)\"",
+                    "target": "name:\"ElevenLabs (cloud, paid)\""
+                },
+                {
+                    "source": "name:\"API key\"",
+                    "target": "name:\"API key\""
+                },
+                {
+                    "source": "name:\"Voice ID\"",
+                    "target": "name:\"Voice ID\""
+                },
+                {
+                    "source": "name:\"Citation handling\"",
+                    "target": "name:\"Citation handling\""
+                },
+                {
+                    "source": "name:\"Default bibliography path\"",
+                    "target": "name:\"Default bibliography path\""
+                },
+                {
+                    "source": "name:\"Content filtering\"",
+                    "target": "name:\"Content filtering\""
+                },
+                {
+                    "source": "name:\"Skip code blocks\"",
+                    "target": "name:\"Skip code blocks\""
+                },
+                {
+                    "source": "name:\"Skip tables\"",
+                    "target": "name:\"Skip tables\""
+                },
+                {
+                    "source": "text:\"Save and manage complete configuration profiles\"",
+                    "target": "text:\"Save and manage complete configuration profiles\""
+                },
+                {
+                    "source": "text:\"Built-in profiles\"",
+                    "target": "text:\"Built-in profiles\""
+                },
+                {
+                    "source": "text:\"Custom profiles\"",
+                    "target": "text:\"Custom profiles\""
+                },
+                {
+                    "source": "text:\"No custom profiles yet\"",
+                    "target": "text:\"No custom profiles yet\""
+                },
+                {
+                    "source": "text:\"Save your current settings as a profile\"",
+                    "target": "text:\"Save your current settings as a profile\""
+                },
+                {
+                    "source": "text:\"Save current as profile\"",
+                    "target": "text:\"Save current as profile\""
+                },
+                {
+                    "source": "description:\"Custom profile\"",
+                    "target": "description:\"Custom profile\""
+                },
+                {
+                    "source": "text:\"Import profile\"",
+                    "target": "text:\"Import profile\""
+                },
+                {
+                    "source": "text:\"Configure server for external devices and remote control\"",
+                    "target": "text:\"Configure server for external devices and remote control\""
+                },
+                {
+                    "source": "text:\"Network broadcast\"",
+                    "target": "text:\"Network broadcast\""
+                },
+                {
+                    "source": "text:'When enabled, this teleprompter becomes the \"master\" and broadcasts its scroll position. Other devices can connect via websocket and follow along in sync.'",
+                    "target": "text:'When enabled, this teleprompter becomes the \"master\" and broadcasts its scroll position. Other devices can connect via websocket and follow along in sync.'"
+                },
+                {
+                    "source": "text:`Connect other devices to: ws://${this.plugin.settings.wsHost}:${this.plugin.settings.wsPort}`",
+                    "target": "text:`Connect other devices to: ws://${this.plugin.settings.wsHost}:${this.plugin.settings.wsPort}`"
+                },
+                {
+                    "source": "text:\"Remote interface\"",
+                    "target": "text:\"Remote interface\""
+                },
+                {
+                    "source": "text:\"Open remote\"",
+                    "target": "text:\"Open remote\""
+                },
+                {
+                    "source": "text:\"Control the teleprompter from your phone or tablet:\"",
+                    "target": "text:\"Control the teleprompter from your phone or tablet:\""
+                },
+                {
+                    "source": "text:\"Ensure your phone is on the same network as this computer\"",
+                    "target": "text:\"Ensure your phone is on the same network as this computer\""
+                },
+                {
+                    "source": "text:\"Open the address above in your phone's browser\"",
+                    "target": "text:\"Open the address above in your phone's browser\""
+                },
+                {
+                    "source": "text:\"Use the play/pause button to control playback\"",
+                    "target": "text:\"Use the play/pause button to control playback\""
+                },
+                {
+                    "source": "text:\"Adjust speed, jump to sections, and more from your phone\"",
+                    "target": "text:\"Adjust speed, jump to sections, and more from your phone\""
+                },
+                {
+                    "source": "text:\"Tip: \"",
+                    "target": "text:\"Tip: \""
+                },
+                {
+                    "source": "text:\"External control\"",
+                    "target": "text:\"External control\""
+                },
+                {
+                    "source": "text:\"To control the teleprompter from external devices:\"",
+                    "target": "text:\"To control the teleprompter from external devices:\""
+                },
+                {
+                    "source": "text:\"Ensure the server is running (see status above)\"",
+                    "target": "text:\"Ensure the server is running (see status above)\""
+                },
+                {
+                    "source": "text:\"Install the plugin for your control device\"",
+                    "target": "text:\"Install the plugin for your control device\""
+                },
+                {
+                    "source": "text:`Configure the plugin to connect to ws://${this.plugin.settings.wsHost}:${this.plugin.settings.wsPort}`",
+                    "target": "text:`Configure the plugin to connect to ws://${this.plugin.settings.wsHost}:${this.plugin.settings.wsPort}`"
+                },
+                {
+                    "source": "text:\"Add actions to your device buttons\"",
+                    "target": "text:\"Add actions to your device buttons\""
+                },
+                {
+                    "source": "text:\"By default, the server only accepts local connections for security.\"",
+                    "target": "text:\"By default, the server only accepts local connections for security.\""
+                },
+                {
+                    "source": "text:\"Integrate with streaming software for recording and streaming sync\"",
+                    "target": "text:\"Integrate with streaming software for recording and streaming sync\""
+                },
+                {
+                    "source": "text:`Current Scene: ${F.currentScene}`",
+                    "target": "text:`Current Scene: ${F.currentScene}`"
+                },
+                {
+                    "source": "text:\"To enable streaming integration, follow these steps:\"",
+                    "target": "text:\"To enable streaming integration, follow these steps:\""
+                },
+                {
+                    "source": "text:\"Go to tools menu, then websocket server settings\"",
+                    "target": "text:\"Go to tools menu, then websocket server settings\""
+                },
+                {
+                    "source": "text:\"Enable the websocket server\"",
+                    "target": "text:\"Enable the websocket server\""
+                },
+                {
+                    "source": "text:\"Set a password if desired (optional)\"",
+                    "target": "text:\"Set a password if desired (optional)\""
+                },
+                {
+                    "source": "text:\"Note the port number (default: 4455)\"",
+                    "target": "text:\"Note the port number (default: 4455)\""
+                },
+                {
+                    "source": "text:\"Apply the settings and close the dialog\"",
+                    "target": "text:\"Apply the settings and close the dialog\""
+                },
+                {
+                    "source": "text:\"Enter the same settings above and click connect\"",
+                    "target": "text:\"Enter the same settings above and click connect\""
+                },
+                {
+                    "source": "text:\"Teleprompter Plus\"",
+                    "target": "text:\"Teleprompter Plus\""
+                },
+                {
+                    "source": "text:`Version ${this.plugin.manifest.version}`",
+                    "target": "text:`Version ${this.plugin.manifest.version}`"
+                },
+                {
+                    "source": "text:\"Built for the Obsidian community.\"",
+                    "target": "text:\"Built for the Obsidian community.\""
+                },
+                {
+                    "source": "text:\"Built with modern web technologies.\"",
+                    "target": "text:\"Built with modern web technologies.\""
+                },
+                {
+                    "source": "text:\"● running\"",
+                    "target": "text:\"● running\""
+                },
+                {
+                    "source": "text:`${F.clientCount} client(s) connected`",
+                    "target": "text:`${F.clientCount} client(s) connected`"
+                },
+                {
+                    "source": "text:\"● stopped\"",
+                    "target": "text:\"● stopped\""
+                },
+                {
+                    "source": "name=\"Web Speech\"",
+                    "target": "name=\"Web Speech\""
+                },
+                {
+                    "source": "name=\"macOS Say\"",
+                    "target": "name=\"macOS Say\""
+                },
+                {
+                    "source": "name:\"Heart (Female)\"",
+                    "target": "name:\"Heart (Female)\""
+                },
+                {
+                    "source": "name:\"Alloy (Female)\"",
+                    "target": "name:\"Alloy (Female)\""
+                },
+                {
+                    "source": "name:\"Aoede (Female)\"",
+                    "target": "name:\"Aoede (Female)\""
+                },
+                {
+                    "source": "name:\"Bella (Female)\"",
+                    "target": "name:\"Bella (Female)\""
+                },
+                {
+                    "source": "name:\"Jessica (Female)\"",
+                    "target": "name:\"Jessica (Female)\""
+                },
+                {
+                    "source": "name:\"Kore (Female)\"",
+                    "target": "name:\"Kore (Female)\""
+                },
+                {
+                    "source": "name:\"Nicole (Female)\"",
+                    "target": "name:\"Nicole (Female)\""
+                },
+                {
+                    "source": "name:\"Nova (Female)\"",
+                    "target": "name:\"Nova (Female)\""
+                },
+                {
+                    "source": "name:\"River (Female)\"",
+                    "target": "name:\"River (Female)\""
+                },
+                {
+                    "source": "name:\"Sarah (Female)\"",
+                    "target": "name:\"Sarah (Female)\""
+                },
+                {
+                    "source": "name:\"Sky (Female)\"",
+                    "target": "name:\"Sky (Female)\""
+                },
+                {
+                    "source": "name:\"Adam (Male)\"",
+                    "target": "name:\"Adam (Male)\""
+                },
+                {
+                    "source": "name:\"Echo (Male)\"",
+                    "target": "name:\"Echo (Male)\""
+                },
+                {
+                    "source": "name:\"Eric (Male)\"",
+                    "target": "name:\"Eric (Male)\""
+                },
+                {
+                    "source": "name:\"Liam (Male)\"",
+                    "target": "name:\"Liam (Male)\""
+                },
+                {
+                    "source": "name:\"Michael (Male)\"",
+                    "target": "name:\"Michael (Male)\""
+                },
+                {
+                    "source": "name:\"Onyx (Male)\"",
+                    "target": "name:\"Onyx (Male)\""
+                },
+                {
+                    "source": "name:\"Emma (British F)\"",
+                    "target": "name:\"Emma (British F)\""
+                },
+                {
+                    "source": "name:\"Isabella (British F)\"",
+                    "target": "name:\"Isabella (British F)\""
+                },
+                {
+                    "source": "name:\"Daniel (British M)\"",
+                    "target": "name:\"Daniel (British M)\""
+                },
+                {
+                    "source": "name:\"George (British M)\"",
+                    "target": "name:\"George (British M)\""
+                },
+                {
+                    "source": "name:\"Lewis (British M)\"",
+                    "target": "name:\"Lewis (British M)\""
+                },
+                {
+                    "source": "name:\"Plain text\"",
+                    "target": "name:\"Plain text\""
+                },
+                {
+                    "source": "name:\"Shell Session\"",
+                    "target": "name:\"Shell Session\""
+                },
+                {
+                    "source": "name:\"Open in Window\"",
+                    "target": "name:\"Open in Window\""
+                },
+                {
+                    "source": "name:\"Green screen\"",
+                    "target": "name:\"Green screen\""
+                },
+                {
+                    "source": "name:\"Light gray\"",
+                    "target": "name:\"Light gray\""
+                },
+                {
+                    "source": "name:\"Dark gray\"",
+                    "target": "name:\"Dark gray\""
+                },
+                {
+                    "source": "name:\"VS Code\"",
+                    "target": "name:\"VS Code\""
+                },
+                {
+                    "source": "name:\"GitHub Dark\"",
+                    "target": "name:\"GitHub Dark\""
+                },
+                {
+                    "source": "name:\"Dark blue\"",
+                    "target": "name:\"Dark blue\""
+                },
+                {
+                    "source": "name:\"Dark green\"",
+                    "target": "name:\"Dark green\""
+                },
+                {
+                    "source": "name:\"Dark red\"",
+                    "target": "name:\"Dark red\""
+                },
+                {
+                    "source": "settings:\",Z.name)),n(cF,!1)}const zZ={speed:\"",
+                    "target": "settings:\",Z.name)),n(cF,!1)}const zZ={speed:\""
+                },
+                {
+                    "source": "textContent = 'Connected'",
+                    "target": "textContent = 'Connected'"
+                },
+                {
+                    "source": "textContent = 'Connecting...'",
+                    "target": "textContent = 'Connecting...'"
+                },
+                {
+                    "source": "textContent = 'Disconnected'",
+                    "target": "textContent = 'Disconnected'"
+                },
+                {
+                    "source": "textContent = 'Playing'",
+                    "target": "textContent = 'Playing'"
+                },
+                {
+                    "source": "textContent = 'Paused'",
+                    "target": "textContent = 'Paused'"
+                },
+                {
+                    "source": "textContent = ''",
+                    "target": "textContent = ''"
+                },
+                {
+                    "source": "textContent = 'No sections available'",
+                    "target": "textContent = 'No sections available'"
+                },
+                {
+                    "source": "description:\"Read your script aloud — ElevenLabs cloud voices, or offline Kokoro / macOS / Web Speech\"",
+                    "target": "description:\"Read your script aloud — ElevenLabs cloud voices, or offline Kokoro / macOS / Web Speech\""
+                },
+                {
+                    "source": "description:\"The prompter follows your voice and scrolls smoothly to keep your place\"",
+                    "target": "description:\"The prompter follows your voice and scrolls smoothly to keep your place\""
+                },
+                {
+                    "source": "description:\"Grouped zones, a hero Play, and a tidy More menu — fully theme-aware\"",
+                    "target": "description:\"Grouped zones, a hero Play, and a tidy More menu — fully theme-aware\""
+                },
+                {
+                    "source": "description:\"Cleaner Obsidian-native settings with a status dashboard and density options\"",
+                    "target": "description:\"Cleaner Obsidian-native settings with a status dashboard and density options\""
+                },
+                {
+                    "source": "description:\"Unified Lucide icon set, a new brand mark, and a re-skinned mobile remote\"",
+                    "target": "description:\"Unified Lucide icon set, a new brand mark, and a re-skinned mobile remote\""
+                },
+                {
+                    "source": "text:` - ${b.description}`",
+                    "target": "text:` - ${b.description}`"
+                },
+                {
+                    "source": "text:\"If this plugin helps your workflow, consider supporting its development!\"",
+                    "target": "text:\"If this plugin helps your workflow, consider supporting its development!\""
+                },
+                {
+                    "source": "text:\"Buy me a coffee\"",
+                    "target": "text:\"Buy me a coffee\""
+                },
+                {
+                    "source": "text:\"View documentation →\"",
+                    "target": "text:\"View documentation →\""
+                },
+                {
+                    "source": "text:\"Get started\"",
+                    "target": "text:\"Get started\""
+                },
+                {
+                    "source": "name:\"Open teleprompter\"",
+                    "target": "name:\"Open teleprompter\""
+                },
+                {
+                    "source": "name:\"Show websocket info\"",
+                    "target": "name:\"Show websocket info\""
+                },
+                {
+                    "source": "name:\"Increase font size\"",
+                    "target": "name:\"Increase font size\""
+                },
+                {
+                    "source": "name:\"Decrease font size\"",
+                    "target": "name:\"Decrease font size\""
+                },
+                {
+                    "source": "name:\"Reset font size\"",
+                    "target": "name:\"Reset font size\""
+                },
+                {
+                    "source": "name:\"Toggle playback\"",
+                    "target": "name:\"Toggle playback\""
+                },
+                {
+                    "source": "name:\"Start playback\"",
+                    "target": "name:\"Start playback\""
+                },
+                {
+                    "source": "name:\"Pause playback\"",
+                    "target": "name:\"Pause playback\""
+                },
+                {
+                    "source": "name:\"Increase speed\"",
+                    "target": "name:\"Increase speed\""
+                },
+                {
+                    "source": "name:\"Decrease speed\"",
+                    "target": "name:\"Decrease speed\""
+                },
+                {
+                    "source": "name:\"Next section\"",
+                    "target": "name:\"Next section\""
+                },
+                {
+                    "source": "name:\"Previous section\"",
+                    "target": "name:\"Previous section\""
+                },
+                {
+                    "source": "name:\"Toggle navigation\"",
+                    "target": "name:\"Toggle navigation\""
+                },
+                {
+                    "source": "name:\"Toggle eyeline\"",
+                    "target": "name:\"Toggle eyeline\""
+                },
+                {
+                    "source": "name:\"Toggle focus\"",
+                    "target": "name:\"Toggle focus\""
+                },
+                {
+                    "source": "name:\"Toggle fullscreen\"",
+                    "target": "name:\"Toggle fullscreen\""
+                },
+                {
+                    "source": "name:\"Show/hide minimap\"",
+                    "target": "name:\"Show/hide minimap\""
+                },
+                {
+                    "source": "name:\"Toggle pin\"",
+                    "target": "name:\"Toggle pin\""
+                },
+                {
+                    "source": "name:\"Refresh pinned\"",
+                    "target": "name:\"Refresh pinned\""
+                },
+                {
+                    "source": "name:\"Toggle awake mode\"",
+                    "target": "name:\"Toggle awake mode\""
+                },
+                {
+                    "source": "name:\"Increase countdown\"",
+                    "target": "name:\"Increase countdown\""
+                },
+                {
+                    "source": "name:\"Decrease countdown\"",
+                    "target": "name:\"Decrease countdown\""
+                },
+                {
+                    "source": "name:\"Toggle mirror mode\"",
+                    "target": "name:\"Toggle mirror mode\""
+                },
+                {
+                    "source": "name:\"Toggle vertical flip mode\"",
+                    "target": "name:\"Toggle vertical flip mode\""
+                },
+                {
+                    "source": "name:\"Toggle scroll sync\"",
+                    "target": "name:\"Toggle scroll sync\""
+                },
+                {
+                    "source": "name:\"Connect to streaming software\"",
+                    "target": "name:\"Connect to streaming software\""
+                },
+                {
+                    "source": "name:\"Disconnect from streaming software\"",
+                    "target": "name:\"Disconnect from streaming software\""
+                },
+                {
+                    "source": "name:\"Toggle recording\"",
+                    "target": "name:\"Toggle recording\""
+                },
+                {
+                    "source": "name:\"Start recording\"",
+                    "target": "name:\"Start recording\""
+                },
+                {
+                    "source": "name:\"Stop recording\"",
+                    "target": "name:\"Stop recording\""
+                },
+                {
+                    "source": "name:\"Toggle streaming\"",
+                    "target": "name:\"Toggle streaming\""
+                },
+                {
+                    "source": "name:\"Start streaming\"",
+                    "target": "name:\"Start streaming\""
+                },
+                {
+                    "source": "name:\"Stop streaming\"",
+                    "target": "name:\"Stop streaming\""
+                },
+                {
+                    "source": "name:\"Toggle text-to-speech\"",
+                    "target": "name:\"Toggle text-to-speech\""
+                },
+                {
+                    "source": "name:\"Stop text-to-speech\"",
+                    "target": "name:\"Stop text-to-speech\""
+                },
+                {
+                    "source": "name:\"Next sentence (text-to-speech)\"",
+                    "target": "name:\"Next sentence (text-to-speech)\""
+                },
+                {
+                    "source": "name:\"Previous sentence (text-to-speech)\"",
+                    "target": "name:\"Previous sentence (text-to-speech)\""
+                },
+                {
+                    "source": "name:\"Increase speech speed\"",
+                    "target": "name:\"Increase speech speed\""
+                },
+                {
+                    "source": "name:\"Decrease speech speed\"",
+                    "target": "name:\"Decrease speech speed\""
+                },
+                {
+                    "source": "name:\"English (US)\"",
+                    "target": "name:\"English (US)\""
+                }
+            ]
+        }
+    }
+}
