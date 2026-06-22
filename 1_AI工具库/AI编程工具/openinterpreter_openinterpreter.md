@@ -9,6 +9,7 @@ usable: 待评估
 category: AI编程工具
 实际用途: 本地 AI 计算机操作助手
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI编程工具

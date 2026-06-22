@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: AI 推理引擎/DSL
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - 推理引擎

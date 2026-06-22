@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: AI Agent 开发框架（类似 Manus）
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI Agent

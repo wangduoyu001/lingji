@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: AI 图像生成工作流工具（Stable Diffusion）
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI绘图

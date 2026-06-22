@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: AI Agent 管理平台/对话界面
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI-Agent

@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: AI Agent 上下文压缩，减少 Token 消耗
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI编程工具

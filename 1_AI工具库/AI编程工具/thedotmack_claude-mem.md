@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: Claude 持久记忆插件
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI编程工具

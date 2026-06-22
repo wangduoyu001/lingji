@@ -9,6 +9,7 @@ usable: 待评估
 category: AI编程工具
 实际用途: Codex/Claude 快速切换工具
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI编程工具

@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: 终端 AI 结对编程工具，支持多文件编辑
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI编程

@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: RAG 知识库问答系统
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - RAG

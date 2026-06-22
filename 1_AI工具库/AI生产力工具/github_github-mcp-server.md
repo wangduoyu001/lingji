@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: GitHub MCP 服务器，AI 操作 GitHub
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - MCP

@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: 字节跳动 AI 桌面助手（GUI 操作）
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI-Agent

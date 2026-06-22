@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: 本地 AI 聊天界面，可连接 Ollama/OpenAI
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - 本地AI

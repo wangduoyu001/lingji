@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: Karpathy 风格 AI 技能/提示词
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI编程

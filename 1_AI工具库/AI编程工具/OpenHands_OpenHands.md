@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: AI 编程助手（开源版 Devin）
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI编程

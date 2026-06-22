@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: AI Agent 编排框架
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI编程

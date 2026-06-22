@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: 网页爬取转 AI 可用格式
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI自动化

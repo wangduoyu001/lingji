@@ -9,6 +9,7 @@ usable: 待评估
 category: AI生产力工具
 实际用途: AI 对话客户端，支持多模型
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI生产力工具

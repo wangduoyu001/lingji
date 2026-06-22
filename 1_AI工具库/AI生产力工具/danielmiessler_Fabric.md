@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: AI 提示词和模式集合框架
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI生产力

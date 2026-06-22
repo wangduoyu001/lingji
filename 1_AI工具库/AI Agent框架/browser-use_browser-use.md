@@ -9,6 +9,7 @@ usable: 待评估
 category: AI Agent工具
 实际用途: AI 浏览器自动化操作框架
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI Agent工具

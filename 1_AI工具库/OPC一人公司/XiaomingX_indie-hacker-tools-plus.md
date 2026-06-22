@@ -9,6 +9,7 @@ usable: 待评估
 category: OPC一人公司
 实际用途: 独立开发者工具集合
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - OPC一人公司

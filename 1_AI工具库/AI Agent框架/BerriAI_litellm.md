@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: LLM API 统一调用接口（兼容所有模型）
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI API

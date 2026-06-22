@@ -9,6 +9,7 @@ usable: 待评估
 category: AI Agent框架
 实际用途: AI Agent 框架（TypeScript）
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI Agent框架

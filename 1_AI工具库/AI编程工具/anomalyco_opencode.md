@@ -9,6 +9,7 @@ usable: 待评估
 category: AI编程工具
 实际用途: AI CLI 编程工具（Rust）
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI编程工具

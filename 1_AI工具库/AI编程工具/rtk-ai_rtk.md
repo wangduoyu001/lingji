@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: LLM Token 优化工具，减少 60-90% 输出
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI编程工具

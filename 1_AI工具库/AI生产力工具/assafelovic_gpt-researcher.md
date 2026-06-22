@@ -9,6 +9,7 @@ usable: 待评估
 category: AI Agent框架
 实际用途: AI 自动研究报告生成
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI Agent框架

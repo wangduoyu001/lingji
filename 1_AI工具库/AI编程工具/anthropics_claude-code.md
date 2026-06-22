@@ -9,6 +9,7 @@ usable: 待评估
 category: AI编程工具
 实际用途: Anthropic 官方终端 AI 编程助手
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI编程工具

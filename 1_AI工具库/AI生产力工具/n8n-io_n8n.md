@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: AI 工作流自动化工具（类似 Make/Zapier）
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - 工作流自动化

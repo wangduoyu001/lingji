@@ -9,6 +9,7 @@ usable: 待评估
 category: AI生产力工具
 实际用途: AI 个人知识搜索助手
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI生产力工具

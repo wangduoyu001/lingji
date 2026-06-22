@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: AI 自动化科研实验工具
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - AI编程工具

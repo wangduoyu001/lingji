@@ -9,6 +9,7 @@ status: 未试
 usable: 待评估
 实际用途: 多角色 AI Agent 协作框架（模拟公司）
 tags:
+  - AI工具
   - GitHub
   - AI项目
   - Multi-Agent
