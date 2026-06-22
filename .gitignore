@@ -1,20 +1,9 @@
-﻿# Obsidian 缓存和布局（不同机器的布局不同）
+﻿# Obsidian
 .obsidian/workspace.json
+.obsidian/graph.json
 .obsidian/cache/
-.obsidian/workspace-data.json
+.obsidian/plugins/*/data.json
 
-# 操作系统
+# OS
 Thumbs.db
 .DS_Store
-desktop.ini
-ehthumbs.db
-
-# 大型二进制文件（归档素材）
-*.doc
-*.docx
-*.zip
-*.7z
-*.exe
-
-# 日志
-*.log
