@@ -12,6 +12,7 @@ from src.scheduler.distillation import DistillationEngine
 from src.scheduler.integrity import IntegrityChecker
 from src.security.safety import SafetyGuard
 from src.api.decision_engine import DecisionEngine
+from src.dashboard import update_dashboard
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(levelname)s: %(message)s')
 logger = logging.getLogger('pemis.main')
@@ -91,6 +92,25 @@ class PEMISCore:
         except ImportError:
             pass
 
+    def _on_file_change(self, action, file_path):
+        try:
+            if action == 'deleted':
+                self.indexer.incremental_remove(Path(file_path).stem)
+            elif action == 'modified':
+                self.indexer.incremental_update(Path(file_path))
+            elif action == 'created':
+                self.indexer.incremental_add(Path(file_path))
+            self.decision.decide(count=3)
+            self._update_dashboard()
+        except Exception as e:
+            self.safety.log_error('watchdog_cb', str(e))
+
+    def _update_dashboard(self):
+        try:
+            update_dashboard(self)
+        except Exception as e:
+            self.safety.log_error('dashboard', str(e))
+
     def status(self):
         elapsed = int(time.time() - self._start_time) if self._start_time else 0
         h, r = divmod(elapsed, 3600)
@@ -110,6 +130,9 @@ class PEMISCore:
             'fallback_model': settings.fallback_llm,
             'embed_model': embed_status['current_model'],
             'fallback_embed_active': embed_status['fallback_active'],
+            'recent_errors': [],
+            'persistent_errors': [],
+            'embed_switches': embed_status['switches'],
             'index_entries': len(self.indexer.get_all()),
             'cache_size': embed_status['cache_size'],
             'jobs': self.scheduler.get_status(),

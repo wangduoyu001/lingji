@@ -13,6 +13,7 @@ class PEMISIndex:
         self._index = None
         self._lock = threading.Lock()
         self._watchdog_running = False
+        self._callback = None
 
     def _parse_frontmatter(self, text):
         meta = {}
@@ -127,9 +128,10 @@ class PEMISIndex:
                 return True
         return False
 
-    def start_watchdog(self):
+    def start_watchdog(self, callback=None):
         if self._watchdog_running:
             return
+        self._callback = callback
         self._watchdog_running = True
         t = threading.Thread(target=self._watchdog_loop, daemon=True)
         t.start()
@@ -145,14 +147,20 @@ class PEMISIndex:
                 for path_str, (mtime, size) in current.items():
                     if path_str not in known:
                         self.incremental_add(Path(path_str))
+                        if self._callback:
+                            self._callback('created', path_str)
                     else:
                         old_mtime, old_size = known[path_str]
                         if mtime != old_mtime or size != old_size:
                             self.incremental_update(Path(path_str))
+                            if self._callback:
+                                self._callback('modified', path_str)
                 for path_str in list(known.keys()):
                     if path_str not in current:
                         file_id = Path(path_str).stem
                         self.incremental_remove(file_id)
+                        if self._callback:
+                            self._callback('deleted', path_str)
                 known = current
                 time.sleep(10)
             except Exception as e:
@@ -161,6 +169,7 @@ class PEMISIndex:
 
     def stop_watchdog(self):
         self._watchdog_running = False
+        self._callback = None
 
     def get_entry(self, file_id):
         idx = self._load()
