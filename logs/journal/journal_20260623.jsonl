@@ -1,0 +1,5 @@
+{"timestamp": "2026-06-23T17:23:50.971936", "action": "search", "mode": "NORMAL", "result": "allowed", "context": {}}
+{"timestamp": "2026-06-23T17:23:50.972936", "action": "rebuild", "mode": "NORMAL", "result": "denied", "context": {}}
+{"timestamp": "2026-06-23T17:28:06.231920", "action": "search", "mode": "NORMAL", "result": "allowed", "context": {}}
+{"timestamp": "2026-06-23T17:28:06.231920", "action": "rebuild", "mode": "NORMAL", "result": "denied", "context": {}}
+{"timestamp": "2026-06-23T17:28:06.233920", "action": "rebuild", "mode": "MAINTENANCE", "result": "allowed", "context": {}}

@@ -1,0 +1,48 @@
+{
+  "timestamp": "2026-06-23T17:28:06.230919",
+  "decisions": [
+    {
+      "id": "1a9d7712-2940-4ebe-9282-61cf04cf2c77",
+      "title": "AI Research Automation",
+      "decision_score": 0.665,
+      "score": 0.81,
+      "speed": "fast",
+      "monetization": "tool",
+      "summary": "",
+      "tags": [
+        "AI",
+        "Research",
+        "Automation"
+      ]
+    },
+    {
+      "id": "06492c5d-58ca-426c-9173-e4234923c0b4",
+      "title": "Charge Robotics Hiring Software and Hardware Engineers",
+      "decision_score": 0.66,
+      "score": 0.8,
+      "speed": "fast",
+      "monetization": "service",
+      "summary": "",
+      "tags": [
+        "robotics",
+        "innovation",
+        "startup",
+        "trend"
+      ]
+    },
+    {
+      "id": "0751ee16-efea-408e-b667-d31e0480a552",
+      "title": "Real-Engineer Skill Repository",
+      "decision_score": 0.66,
+      "score": 0.8,
+      "speed": "fast",
+      "monetization": "tool",
+      "summary": "",
+      "tags": [
+        "real_engineers",
+        "knowledge_base",
+        "technical_skills"
+      ]
+    }
+  ]
+}

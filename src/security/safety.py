@@ -10,6 +10,9 @@ class SafetyGuard:
         self.log_dir = Path(getattr(settings, 'log_dir', 'logs')) / 'journal'
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
+    def get_mode(self):
+        return self.mode
+
     def set_mode(self, mode):
         old = self.mode
         self.mode = mode
