@@ -1,69 +1,36 @@
-﻿---
+---
 type: dashboard
-version: "5.0"
-updated: "2026-06-23 02:15"
-description: "灵机控制中心 - 全部基于 frontmatter metadata，无路径依赖"
-state: NORMAL
-opp_count: 109
-decision_count: 3
+updated: 2026-06-22T21:24:48.569111
+system_state: NORMAL
 ---
 
-# 灵机 控制中心
+# PEMIS Control Center
 
-> **Obsidian = 编辑器 | 所有数据来自 frontmatter metadata**
+## System Status
+- State: **NORMAL**
+- TopK: 10
+- Healthy: True
+- Distillation: normal
 
----
+## Top 3 Decisions
 
-## Top 3 最优机会
+### [FAST] Walt Disney Company's Nostalgia Monetization Strategy
+- Score: 0.81 | MoneyScore: 0.972
+- Monetization: service
 
-```dataview
-TABLE score AS "评分", speed AS "速度", monetization AS "变现", difficulty AS "难度"
-FROM "PEMIS/opportunities"
-WHERE type = "opportunity" AND score > 0
-SORT score DESC
-LIMIT 3
-```
+### [FAST] Agent Skills Repository
+- Score: 0.8 | MoneyScore: 0.96
+- Monetization: tool
 
----
+### [FAST] Real-World Skill Learning Platform
+- Score: 0.81 | MoneyScore: 0.875
+- Monetization: saas
 
-## 快速变现机会 (speed=fast)
+## Pipeline
+- P95 Latency: 0.0ms
+- Total Evaluated: 50
+- Last Decision: 2026-06-22T21:15:59.340123
 
-```dataview
-TABLE score AS "评分", monetization AS "变现", difficulty AS "难度"
-FROM "PEMIS/opportunities"
-WHERE type = "opportunity" AND speed = "fast"
-SORT score DESC
-LIMIT 10
-```
-
----
-
-## 优质工具型变现
-
-```dataview
-TABLE score AS "评分", speed AS "速度", difficulty AS "难度"
-FROM "PEMIS/opportunities"
-WHERE type = "opportunity" AND monetization = "tool"
-SORT score DESC
-LIMIT 10
-```
-
----
-
-## 系统状态
-
-```dataview
-TABLE state AS "当前状态", updated AS "更新时间"
-FROM "PEMIS/status"
-WHERE type = "status"
-```
-
----
-
-## 统计
-
-- 总机会数: `= length(filter(rows, (r) => r.type = "opportunity"))`
-- 快速变现: `= length(filter(rows, (r) => r.speed = "fast"))`
-- 工具类: `= length(filter(rows, (r) => r.monetization = "tool"))`
-
----
+## Index
+- Total Entries: 119
+- Opportunities: 100
