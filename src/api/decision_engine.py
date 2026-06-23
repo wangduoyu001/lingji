@@ -1,14 +1,18 @@
-import json, logging
+import json, logging, time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
-logger = logging.getLogger('pemis.api')
+logger = logging.getLogger('pemis.decision')
+
 
 class DecisionEngine:
-    def __init__(self, index, storage_dir):
+    def __init__(self, index, storage_dir, history_days=90):
         self.index = index
         self.storage_dir = Path(storage_dir)
         self.output_path = self.storage_dir / 'decision_output.json'
+        self.history_dir = self.storage_dir / 'decision_history'
+        self.history_dir.mkdir(parents=True, exist_ok=True)
+        self.history_days = history_days
 
     def compute_decision_score(self, entry):
         score = entry.get('score', 0)
@@ -27,6 +31,7 @@ class DecisionEngine:
             scored.append((ds, e))
         scored.sort(key=lambda x: -x[0])
         top = scored[:count]
+
         output = []
         for ds, e in top:
             output.append({
@@ -36,17 +41,75 @@ class DecisionEngine:
                 'score': e.get('score', 0),
                 'speed': e.get('speed', ''),
                 'monetization': e.get('monetization', ''),
-                'summary': e.get('summary', '')[:200],
+                'summary': e.get('summary', '')[:300],
                 'tags': e.get('tags', []),
+                'difficulty': e.get('difficulty', 0),
+                'recommendation': self._build_recommendation(ds, e),
             })
-        result = {'timestamp': datetime.now().isoformat(), 'decisions': output}
+
+        now = datetime.now()
+        result = {
+            'timestamp': now.isoformat(),
+            'ts': now.timestamp(),
+            'total_evaluated': len(scored),
+            'decisions': output,
+        }
+
+        # Save latest
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         with open(self.output_path, 'w', encoding='utf-8') as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
-        logger.info('Decision engine: %d opportunities evaluated, top %d selected', len(scored), count)
+
+        # Save history (one file per day)
+        history_file = self.history_dir / f'decisions_{now.strftime("%Y%m%d")}.json'
+        with open(history_file, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+
+        # Cleanup old history
+        self._cleanup_old()
+
+        logger.info(f'Decision: {len(scored)} evaluated, top {count} saved')
         return result
+
+    def _build_recommendation(self, ds, entry):
+        speed = entry.get('speed', 'mid')
+        mon = entry.get('monetization', '')
+        diff = entry.get('difficulty', 3)
+        if speed == 'fast' and diff <= 2:
+            return 'Quick win: low difficulty + fast execution. Start immediately.'
+        if ds > 0.6 and speed == 'fast':
+            return 'High confidence fast opportunity. Prioritize this week.'
+        if ds > 0.6:
+            return 'Strong opportunity. Plan execution within 2 weeks.'
+        if mon == 'saas' or mon == 'tool':
+            return 'Long-term asset potential. Build for recurring income.'
+        return 'Evaluate resources before committing. Medium priority.'
 
     def get_latest(self):
         if self.output_path.exists():
-            return json.loads(self.output_path.read_text(encoding='utf-8'))
+            with open(self.output_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
         return {'decisions': []}
+
+    def get_history(self, days=7):
+        results = []
+        now = datetime.now()
+        for i in range(days):
+            d = now - timedelta(days=i)
+            f = self.history_dir / f'decisions_{d.strftime("%Y%m%d")}.json'
+            if f.exists():
+                with open(f, 'r', encoding='utf-8') as fh:
+                    results.append(json.load(fh))
+        return results
+
+    def _cleanup_old(self):
+        cutoff = datetime.now() - timedelta(days=self.history_days)
+        for f in self.history_dir.glob('decisions_*.json'):
+            try:
+                parts = f.stem.replace('decisions_', '')
+                fd = datetime.strptime(parts, '%Y%m%d')
+                if fd < cutoff:
+                    f.unlink()
+                    logger.info(f'Removed old decision history: {f.name}')
+            except Exception:
+                pass

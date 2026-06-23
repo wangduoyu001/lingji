@@ -1,11 +1,10 @@
-import sys
-import os
-import time
-import logging
+import sys, os, time, logging
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
 sys.path.insert(0, str(BASE_DIR))
+
+(BASE_DIR / 'logs').mkdir(exist_ok=True)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
     handlers=[logging.FileHandler(str(BASE_DIR / 'logs' / 'lingji_service.log'), encoding='utf-8'), logging.StreamHandler()])
@@ -17,10 +16,10 @@ core = None
 
 def start():
     global core
-    logger.info('LingJi starting...')
+    logger.info('LingJi v5.2 starting...')
     core = PEMISCore()
     core.start()
-    logger.info('LingJi started')
+    logger.info('LingJi v5.2 started')
 
 def stop():
     global core

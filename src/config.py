@@ -3,24 +3,23 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    llm_model: str = "qwen2.5:7b"
+    fallback_llm: str = "qwen3:8b"
+    embed_model: str = "bge-m3"
+    fallback_embed_model: str = "nomic-embed-text"
     ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "qwen2.5:7b"
-    embedding_model: str = "bge-m3"
     vault_dir: str = "vault"
     storage_dir: str = "storage"
     snapshot_dir: str = "snapshot"
-    backup_dir: str = "D:/codex/backups"
+    backup_dir: str = "D:/codex/backups/pemis"
     log_dir: str = "logs"
     safety_mode: str = "NORMAL"
-    qdrant_host: str = "127.0.0.1"
-    qdrant_port: int = 6333
-    cron_job_1: str = "scan,6"
-    cron_job_2: str = "distill,24"
-    cron_job_3: str = "integrity,24"
     topk_normal: int = 10
     topk_degraded: int = 6
     topk_safe: int = 3
     cache_max: int = 100
+    decision_history_days: int = 90
+    watchdog_enabled: bool = True
 
     class Config:
         env_file = ".env"
