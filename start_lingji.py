@@ -1,4 +1,4 @@
-import sys, os, time, logging
+﻿import sys, os, time, logging
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
@@ -16,10 +16,10 @@ core = None
 
 def start():
     global core
-    logger.info('LingJi v5.2 starting...')
+    logger.info('LingJi v6 starting...')
     core = PEMISCore()
     core.start()
-    logger.info('LingJi v5.2 started')
+    logger.info('LingJi v6 started')
 
 def stop():
     global core

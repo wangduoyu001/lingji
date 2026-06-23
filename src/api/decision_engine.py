@@ -6,7 +6,7 @@ logger = logging.getLogger('pemis.decision')
 
 
 class DecisionEngine:
-    def __init__(self, index, storage_dir, history_days=90, vault_path=None):
+    def __init__(self, index, storage_dir, history_days=90, vault_path=None, opp_generator=None, user_feedback=None):
         self.profile = None
         self.index = index
         self.storage_dir = Path(storage_dir)
@@ -15,6 +15,8 @@ class DecisionEngine:
         self.history_dir.mkdir(parents=True, exist_ok=True)
         self.history_days = history_days
         self.vault_path = vault_path
+        self.generator = opp_generator
+        self.feedback = user_feedback
 
     def _load_profile(self):
         if self.vault_path:
@@ -42,10 +44,24 @@ class DecisionEngine:
                 cap_match = 0.65
             else:
                 cap_match = 0.35
-        return round(score * 0.35 + speed_bonus * 0.25 + difficulty_factor * 0.15 + cap_match * 0.25, 4)
+
+        # User feedback adjustment
+        feedback_adj = 1.0
+        if self.feedback:
+            mon_type = entry.get('monetization', '')
+            feedback_adj = self.feedback.get_weight_adjustment(mon_type)
+
+        return round((score * 0.35 + speed_bonus * 0.25 + difficulty_factor * 0.15 + cap_match * 0.25) * feedback_adj, 4)
 
     def decide(self, count=6):
         self._load_profile()
+
+        # Read user feedback from Control Center
+        if self.feedback:
+            self.feedback.read_from_control_center()
+
+        # Note: opportunity generation is triggered separately, not on every decide()
+
         entries = self.index.get_all()
         scored = []
         for e in entries:
@@ -55,6 +71,7 @@ class DecisionEngine:
             scored.append((ds, e))
         scored.sort(key=lambda x: -x[0])
         top = scored[:count]
+
         output = []
         for ds, e in top:
             output.append({
@@ -69,6 +86,7 @@ class DecisionEngine:
                 'difficulty': e.get('difficulty', 0),
                 'recommendation': self._build_recommendation(ds, e),
             })
+
         now = datetime.now()
         result = {
             'timestamp': now.isoformat(),
@@ -76,13 +94,20 @@ class DecisionEngine:
             'total_evaluated': len(scored),
             'decisions': output,
         }
+
+        # Save latest
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         with open(self.output_path, 'w', encoding='utf-8') as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
+
+        # Save history (one file per day)
         fname = 'decisions_' + now.strftime('%Y%m%d') + '.json'
         with open(self.history_dir / fname, 'w', encoding='utf-8') as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
+
+        # Cleanup old history
         self._cleanup_old()
+
         logger.info('Decision: %d evaluated, top %d saved', len(scored), count)
         return result
 
@@ -99,7 +124,7 @@ class DecisionEngine:
             return 'High confidence fast opportunity. Prioritize this week.'
         if ds > 0.6:
             return 'Strong opportunity. Plan execution within 2 weeks.'
-        if mon == 'saas' or mon == 'tool':
+        if mon in ('saas', 'tool'):
             return 'Long-term asset potential. Build for recurring income.'
         return 'Evaluate resources before committing. Medium priority.'
 

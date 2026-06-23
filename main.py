@@ -12,6 +12,8 @@ from src.scheduler.distillation import DistillationEngine
 from src.scheduler.integrity import IntegrityChecker
 from src.security.safety import SafetyGuard
 from src.api.decision_engine import DecisionEngine
+from src.opp_generator import OppGenerator
+from src.user_feedback import UserFeedback
 from src.dashboard import update_dashboard
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(name)s] %(levelname)s: %(message)s')
@@ -20,7 +22,7 @@ logger = logging.getLogger('pemis.main')
 
 class PEMISCore:
     def __init__(self):
-        logger.info('PEMIS v5.2 initializing...')
+        logger.info('PEMIS v6 initializing...')
         self.settings = settings
         self.indexer = PEMISIndex(settings.vault_path, settings.storage_path)
         self.embedder = Embedder(settings.ollama_base_url, settings.embed_model, settings.fallback_embed_model, settings.cache_max)
@@ -28,11 +30,15 @@ class PEMISCore:
         self.safety = SafetyGuard(settings)
         self.distiller = DistillationEngine(settings)
         self.integrity = IntegrityChecker(settings)
+        self.feedback = UserFeedback(settings)
+        self.generator = OppGenerator(settings, self.indexer)
         self.decision = DecisionEngine(
             self.indexer,
             settings.storage_path,
             settings.decision_history_days,
-            vault_path=settings.vault_path
+            vault_path=settings.vault_path,
+            opp_generator=self.generator,
+            user_feedback=self.feedback,
         )
         self._running = False
         self._start_time = None
@@ -42,17 +48,17 @@ class PEMISCore:
         self._running = True
         self._start_time = time.time()
 
-        # Build index
+        # Startup: build index + decide (no qwen auto-gen)
         self.indexer.build_index()
-
-        # Run decision
         self.decision.decide(count=6)
+        self._update_control_center()
 
         # Start watchdog if enabled
         if settings.watchdog_enabled:
             self.indexer.start_watchdog(callback=self._on_file_change)
 
         # Setup scheduler
+        # daily_cycle runs once per startup; full_check handles periodic
         self.scheduler.add_job('distill', 24, 'NORMAL')
         self.scheduler.add_job('integrity', 24, 'MAINTENANCE')
         self.scheduler.add_job('full_check', 24, 'MAINTENANCE')
@@ -61,13 +67,29 @@ class PEMISCore:
         # Generate control center
         self._update_control_center()
 
-        logger.info('PEMIS v5.2 started. Mode: ' + str(self.safety.get_mode()))
+        logger.info('PEMIS v6 started. Mode: %s', self.safety.get_mode())
+
+    def _run_cycle(self):
+        """Full cycle: index -> generate opps -> decide -> dashboard"""
+        logger.info('Running daily cycle...')
+        # Build index
+        self.indexer.build_index()
+        # Generate new opportunities (calls qwen)
+        try:
+            self.generator.scan_and_generate()
+        except Exception as e:
+            logger.error('Opp generation failed: %s', e)
+        # Rebuild index with new opps
+        self.indexer.build_index()
+        # Run decision
+        self.decision.decide(count=6)
+        logger.info('Daily cycle complete')
 
     def stop(self):
         self._running = False
         self.indexer.stop_watchdog()
         self.scheduler.stop()
-        logger.info('PEMIS v5.2 stopped')
+        logger.info('PEMIS v6 stopped')
 
     def _run_job(self, name):
         try:
@@ -86,8 +108,6 @@ class PEMISCore:
             self._error_log.append({'time': datetime.now().isoformat(), 'job': name, 'error': str(e)[:200]})
 
     def _full_check(self):
-        self.indexer.build_index()
-        self.integrity.check(self.indexer)
         self._update_control_center()
 
     def _update_control_center(self):
@@ -105,6 +125,7 @@ class PEMISCore:
                 self.indexer.incremental_update(Path(file_path))
             elif action == 'created':
                 self.indexer.incremental_add(Path(file_path))
+            # Re-run decision on file changes
             self.decision.decide(count=6)
             self._update_dashboard()
         except Exception as e:
@@ -127,7 +148,7 @@ class PEMISCore:
         all_entries = self.indexer.get_all()
 
         return {
-            'service': 'LingJi - PEMIS v5.2',
+            'service': 'LingJi - PEMIS v6',
             'mode': self.safety.get_mode(),
             'uptime': uptime,
             'uptime_seconds': elapsed,
@@ -149,7 +170,7 @@ if __name__ == '__main__':
     core = PEMISCore()
     try:
         core.start()
-        logger.info('PEMIS v5.2 running. Ctrl+C to stop.')
+        logger.info('PEMIS v6 running. Ctrl+C to stop.')
         while True:
             time.sleep(10)
     except KeyboardInterrupt:
