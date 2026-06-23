@@ -37,4 +37,10 @@ ehthumbs.db
 *.docx
 *.zip
 *.7z
-*.exe
+*.exe.env
+storage/decision_history/
+storage/opportunities/
+storage/pemis_index.json
+_D:*
+test_*
+_tmp_*
