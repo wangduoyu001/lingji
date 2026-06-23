@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "plugin": "tag-wrangler",
+    "version": "1.0.0",
+    "title": "Tag Wrangler",
+    "description": "Tag Wrangler Localization & Tweaks",
+    "language": "zh-cn",
+    "supportedVersions": "0.6.4",
+    "author": ""
+  },
+  "dict": {
+    "main.js": {
+      "ast": [
+        {
+          "type": "CallExpression",
+          "name": "createEl",
+          "source": "style",
+          "target": "样式"
+        },
+        {
+          "type": "CallExpression",
+          "name": "createEl",
+          "source": "button",
+          "target": "按钮"
+        },
+        {
+          "type": "CallExpression",
+          "name": "createEl",
+          "source": "input",
+          "target": "输入框"
+        },
+        {
+          "type": "CallExpression",
+          "name": "createEl",
+          "source": "progress",
+          "target": "进度条"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setContent",
+          "source": "Enter new name (must be a valid Obsidian tag name):\n",
+          "target": "输入新名称（必须是有效的 Obsidian 标签名）："
+        },
+        {
+          "type": "CallExpression",
+          "name": "setTitle",
+          "source": "WARNING: No Undo!",
+          "target": "警告：无法撤销！"
+        },
+        {
+          "type": "CallExpression",
+          "name": "setTitle",
+          "source": "Create Tag Page",
+          "target": "创建标签页面"
+        },
+        {
+          "type": "NewExpression",
+          "name": "Notice",
+          "source": "Unchanged or empty tag: No changes made.",
+          "target": "标签未更改或为空：未做任何修改。"
+        },
+        {
+          "type": "ObjectProperty",
+          "name": "type",
+          "source": "text",
+          "target": "文本"
+        }
+      ],
+      "regex": [
+        {
+          "source": "Notice(\"Unchanged or empty tag: No changes made.\")",
+          "target": "Notice(\"标签未更改或为空：未做任何修改。\")"
+        },
+        {
+          "source": "Notice(`Operation ${u.aborted?\"cancelled\":\"complete\"}: ${f} file(s) updated`)",
+          "target": "Notice(`操作${u.aborted?\"已取消\":\"已完成\"}：已更新 ${f} 个文件`)"
+        },
+        {
+          "source": "setTitle(`Renaming #${s} (and any sub-tags)`)",
+          "target": "setTitle(`重命名 #${s}（及其所有子标签）`)"
+        },
+        {
+          "source": "Notice(`\"${t}\" is not a valid Obsidian tag name`)",
+          "target": "Notice(`\"${t}\" 不是有效的 Obsidian 标签名`)"
+        },
+        {
+          "source": "setTitle(\"WARNING: No Undo!\")",
+          "target": "setTitle(\"警告：无法撤销！\")"
+        }
+      ]
+    }
+  }
+}

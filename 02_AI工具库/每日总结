@@ -1,0 +1,91 @@
+# GitHub 高分 AI 项目每日总结 - 2026-06-14
+
+> [!note] 本文档由 WorkBuddy 自动生成，记录当日新发现或更新的高分 AI 项目
+
+## 📊 本日概况
+
+| 指标 | 数值 |
+|------|------|
+| 搜索时间范围 | 2026-06-11 ~ 2026-06-14（最近3天）|
+| 搜索关键词 | Claude, codex, WorkBuddy, LLM, AI agent |
+| Stars 阈值 | > 1000 |
+| 新发现项目 | 0（首次运行，建立基线）|
+| 更新项目 | 0 |
+
+## 🆕 新发现项目
+
+> [!info] 首次运行，建立项目基线。以下是当前高分 AI 项目快照。
+
+### 1. [anthropics/claude-code](https://github.com/anthropics/claude-code)
+**Stars**: 132,286 | **最后更新**: 2026-06-13
+
+Claude Code 是 Anthropic 官方的 AI 编程助手，通过命令行/IDE 与 Claude 对话来完成编程任务。
+
+**核心价值**：
+- 自然语言控制整个 coding 工作流
+- Claude 直接读取和理解你的代码库
+- 处理 git 工作流（commit、PR、code review）
+
+**适合人群**：开发者、编程学习者
+
+**使用条件**：需要 Anthropic API key，Node.js 18+
+
+**支持平台**：Linux/macOS/Windows、终端/VS Code/任何 IDE
+
+---
+
+### 2. [significant-gravitas/AutoGPT](https://github.com/significant-gravitas/AutoGPT)
+**Stars**: 184,930 | **最后更新**: 2026-06-12
+
+AutoGPT 是一个 AI 代理平台，帮助开发者低代码构建和部署 AI 代理。
+
+**核心价值**：
+- 自动化重复任务和日常工作流
+- 构建自定义 AI 代理来处理特定业务
+- 监控代理在生产环境中的表现
+
+**适合人群**：开发者、产品经理、运营团队
+
+**使用条件**：Docker 20.10+、CPU 4+核、RAM 8GB+
+
+**支持平台**：Linux/macOS/Windows(WSL2)、Web 前端
+
+---
+
+### 3. [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)
+**Stars**: 193,028 | **最后更新**: 2026-06-13
+
+Hermes Agent 是一个自我改进型 AI 智能体，内置学习循环，可以随使用而进化。
+
+**核心价值**：
+- 通过消息平台（Telegram/Discord/Slack）与 AI 交互
+- 智能体有长期记忆，随时间了解你
+- 完全本地运行选项，数据不离开你的机器
+
+**适合人群**：开发者、AI 研究人员、隐私意识强的用户
+
+**使用条件**：LLM API（OpenAI/Anthropic/本地）、Python 3.11+、Node.js 20+
+
+**支持平台**：Linux/macOS/Windows、Telegram/Discord/Slack
+
+---
+
+## 🔄 已更新项目
+
+> [!note] 今日无更新项目
+
+## 📈 趋势观察
+
+1. **AI 编程助手持续火热** - Claude Code、Cursor、Copilot 类工具 stars 持续增长
+2. **本地/自托管 AI 工具受关注** - 数据安全需求推动本地部署方案
+3. **AI Agent 框架多样化** - 从简单 chatbot 到复杂 workflow orchestration
+
+## 📁 相关文件
+
+- [[GitHub高分AI项目/项目/anthropics_claude-code]] - Claude Code 详细分析
+- [[GitHub高分AI项目/项目/significant-gravitas_AutoGPT]] - AutoGPT 详细分析  
+- [[GitHub高分AI项目/项目/NousResearch_hermes-agent]] - Hermes Agent 详细分析
+
+---
+
+*本总结由 WorkBuddy 自动生成 | 数据来源: GitHub API | 生成时间: 2026-06-14 18:20*
