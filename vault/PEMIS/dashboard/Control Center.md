@@ -1,68 +1,68 @@
 ---
-type: dashboard
-updated: 2026-06-23T17:39:01.340377
+类型: 看板
+更新时间: 2026-06-23T18:24:12.966335
 ---
 
-# LingJi Control Center
+# 灵机控制中心
 
-> *Last updated: 2026-06-23 17:39:01*
-
----
-
-## System Status
-
-- **Status**: Green NORMAL
-- **Uptime**: 0m 0s
-- **Primary Model**: qwen2.5:7b
-- **Fallback Model**: qwen3:8b
-- **Embed Model**: bge-m3
-- **Fallback Active**: No
-- **Cache Size**: 0 entries
+> *更新时间: 2026-06-23 18:24:12*
 
 ---
 
-## Data Stats
+## 系统状态
 
-- **Total Opportunities**: 48
-- **Errors**: 0
+- **状态**: Green NORMAL
+- **运行时长**: 0m 0s
+- **主模型**: qwen2.5:7b
+- **备用模型**: qwen3:8b
+- **嵌入模型**: bge-m3
+- **备用激活**: 否
+- **缓存**: 0 entries
 
 ---
 
-## Top 3 Money Opportunities
+## 数据统计
+
+- **机会总数**: 48
+- **错误数**: 0
+
+---
+
+## 今日 TOP3 赚钱机会
 
 ### 1. AI Research Automation
 
-- **MoneyScore**: 0.665
+- **得分**: 0.665
 - **Score**: 0.81
-- **Speed**: fast
-- **Monetization**: tool
-- **Difficulty**: 2
-- **Recommendation**: Quick win: low difficulty + fast execution. Start immediately.
-- **Summary**: 
+- **速度**: fast
+- **变现方式**: tool
+- **难度**: 2
+- **建议**: Quick win: low difficulty + fast execution. Start immediately.
+- **摘要**: 
 
 ### 2. Charge Robotics Hiring Software and Hardware Engineers
 
-- **MoneyScore**: 0.66
+- **得分**: 0.66
 - **Score**: 0.8
-- **Speed**: fast
-- **Monetization**: service
-- **Difficulty**: 2
-- **Recommendation**: Quick win: low difficulty + fast execution. Start immediately.
-- **Summary**: 
+- **速度**: fast
+- **变现方式**: service
+- **难度**: 2
+- **建议**: Quick win: low difficulty + fast execution. Start immediately.
+- **摘要**: 
 
 ### 3. Real-Engineer Skill Repository
 
-- **MoneyScore**: 0.66
+- **得分**: 0.66
 - **Score**: 0.8
-- **Speed**: fast
-- **Monetization**: tool
-- **Difficulty**: 2
-- **Recommendation**: Quick win: low difficulty + fast execution. Start immediately.
-- **Summary**: 
+- **速度**: fast
+- **变现方式**: tool
+- **难度**: 2
+- **建议**: Quick win: low difficulty + fast execution. Start immediately.
+- **摘要**: 
 
 ---
 
-## Recent Logs
+## 最近日志
 
 - [2026-06-23T17:23:50] search -> allowed
 - [2026-06-23T17:23:50] rebuild -> denied
@@ -75,8 +75,8 @@ updated: 2026-06-23T17:39:01.340377
 
 ---
 
-## Backup
+## 备份与恢复
 
-- **Snapshot dir**: D:\codex\backups\pemis
-- **Decision history**: 90 days
-- **Git**: wangduoyu001/pemis-lingji
+- **快照目录**: D:\codex\backups\pemis
+- **决策历史**: 90 days
+- **代码仓库**: wangduoyu001/pemis-lingji

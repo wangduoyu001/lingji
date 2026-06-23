@@ -1,10 +1,11 @@
 ---
-type: status
-state: NORMAL
-updated: 2026-06-22 18:39
+类型: 状态
+状态: 正常
+更新时间: 2026-06-23
 ---
-# System Status
 
-**State**: NORMAL
-**Updated**: 2026-06-22 18:39 UTC
-**Engine**: Qwen-powered v2.0
+# 系统状态
+
+**状态**: NORMAL
+**更新时间**: 2026-06-23
+**引擎**: 灵机 PEMIS v5.2
