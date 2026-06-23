@@ -1,4 +1,4 @@
-import json, hashlib, logging, threading, time
+﻿import json, hashlib, logging, threading, time
 from pathlib import Path
 from datetime import datetime
 
@@ -14,6 +14,8 @@ class PEMISIndex:
         self._lock = threading.Lock()
         self._watchdog_running = False
         self._callback = None
+        self._seen = set()
+        self._dash_dir = self.vault_dir / 'PEMIS' / 'dashboard'
 
     def _parse_frontmatter(self, text):
         meta = {}
@@ -29,7 +31,7 @@ class PEMISIndex:
                 continue
             key, _, val = line.partition(':')
             key = key.strip().lower()
-            val = val.strip().strip(chr(34)).strip(chr(39))
+            val = val.strip().strip('"').strip("'")
             if key in ('score', 'confidence', 'difficulty'):
                 try:
                     meta[key] = float(val)
@@ -42,6 +44,21 @@ class PEMISIndex:
             elif key == 'summary':
                 meta['summary'] = val
         return meta
+
+    def _is_dashboard_file(self, path):
+        try:
+            return self._dash_dir in path.parents
+        except Exception:
+            return False
+
+    def _infer_type(self, path, meta):
+        t = meta.get('type', '')
+        if t and t != 'note':
+            return t
+        name = path.stem.lower()
+        if name.startswith('opp_'):
+            return 'opportunity'
+        return 'note'
 
     def _parse_md_file(self, path):
         try:
@@ -56,9 +73,10 @@ class PEMISIndex:
             if line.startswith('# '):
                 title = line[2:].strip()
                 break
+        dtype = self._infer_type(path, meta)
         return {
             'id': file_id,
-            'type': meta.get('type', 'note'),
+            'type': dtype,
             'score': meta.get('score', 0.0),
             'tags': meta.get('tags', []),
             'title': title or path.stem,
@@ -73,15 +91,6 @@ class PEMISIndex:
             'confidence': meta.get('confidence', 0.0),
         }
 
-    def _get_file_id(self, path):
-        text = ''
-        try:
-            text = path.read_text(encoding='utf-8')
-        except Exception:
-            return path.stem
-        meta = self._parse_frontmatter(text)
-        return meta.get('id', path.stem)
-
     def build_index(self):
         entries = {}
         md_files = list(self.vault_dir.rglob('*.md'))
@@ -90,18 +99,26 @@ class PEMISIndex:
             if entry:
                 entries[entry['id']] = entry
         idx = {
-            'meta': {'version': '1.0', 'total': len(entries), 'last_build': datetime.now().timestamp(),
-                     'updated_at': datetime.now().isoformat()},
+            'meta': {
+                'version': '1.0',
+                'total': len(entries),
+                'last_build': datetime.now().timestamp(),
+                'updated_at': datetime.now().isoformat()
+            },
             'entries': entries,
         }
         with self._lock:
             self._index = idx
             self.save_index(idx)
-        logger.info(f'Index built: {len(entries)} entries from {len(md_files)} md files')
+        opp_count = sum(1 for e in entries.values() if e.get('type') == 'opportunity')
+        logger.info('Index built: %d entries (%d opportunities) from %d md files', len(entries), opp_count, len(md_files))
         return idx
 
     def incremental_add(self, file_path):
-        entry = self._parse_md_file(file_path)
+        path = Path(file_path)
+        if self._is_dashboard_file(path):
+            return False
+        entry = self._parse_md_file(path)
         if not entry:
             return False
         with self._lock:
@@ -110,11 +127,14 @@ class PEMISIndex:
             idx['meta']['total'] = len(idx['entries'])
             idx['meta']['updated_at'] = datetime.now().isoformat()
             self.save_index(idx)
-        logger.info(f'Incremental add: {entry["id"]} ({file_path.name})')
+        logger.info('Incremental add: %s (%s)', entry['type'], entry['id'])
         return True
 
     def incremental_update(self, file_path):
-        return self.incremental_add(file_path)
+        path = Path(file_path)
+        if self._is_dashboard_file(path):
+            return False
+        return self.incremental_add(path)
 
     def incremental_remove(self, file_id):
         with self._lock:
@@ -124,7 +144,7 @@ class PEMISIndex:
                 idx['meta']['total'] = len(idx['entries'])
                 idx['meta']['updated_at'] = datetime.now().isoformat()
                 self.save_index(idx)
-                logger.info(f'Incremental remove: {file_id}')
+                logger.info('Incremental remove: %s', file_id)
                 return True
         return False
 
@@ -143,28 +163,24 @@ class PEMISIndex:
             try:
                 current = {}
                 for mf in self.vault_dir.rglob('*.md'):
+                    if self._is_dashboard_file(mf):
+                        continue
                     current[str(mf)] = (mf.stat().st_mtime, mf.stat().st_size)
                 for path_str, (mtime, size) in current.items():
                     if path_str not in known:
                         self.incremental_add(Path(path_str))
-                        if self._callback:
-                            self._callback('created', path_str)
                     else:
                         old_mtime, old_size = known[path_str]
                         if mtime != old_mtime or size != old_size:
                             self.incremental_update(Path(path_str))
-                            if self._callback:
-                                self._callback('modified', path_str)
                 for path_str in list(known.keys()):
                     if path_str not in current:
                         file_id = Path(path_str).stem
                         self.incremental_remove(file_id)
-                        if self._callback:
-                            self._callback('deleted', path_str)
                 known = current
                 time.sleep(10)
             except Exception as e:
-                logger.error(f'Watchdog error: {e}')
+                logger.error('Watchdog error: %s', e)
                 time.sleep(30)
 
     def stop_watchdog(self):

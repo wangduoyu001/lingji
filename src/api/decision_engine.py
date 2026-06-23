@@ -1,4 +1,4 @@
-import json, logging, time
+﻿import json, logging, time
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -6,22 +6,46 @@ logger = logging.getLogger('pemis.decision')
 
 
 class DecisionEngine:
-    def __init__(self, index, storage_dir, history_days=90):
+    def __init__(self, index, storage_dir, history_days=90, vault_path=None):
+        self.profile = None
         self.index = index
         self.storage_dir = Path(storage_dir)
         self.output_path = self.storage_dir / 'decision_output.json'
         self.history_dir = self.storage_dir / 'decision_history'
         self.history_dir.mkdir(parents=True, exist_ok=True)
         self.history_days = history_days
+        self.vault_path = vault_path
+
+    def _load_profile(self):
+        if self.vault_path:
+            try:
+                from src.user_profile import load_profile
+                self.profile = load_profile(self.vault_path)
+                if self.profile:
+                    logger.info('User profile loaded: %d keys', len(self.profile))
+            except Exception as e:
+                logger.warning('Failed to load profile: %s', e)
 
     def compute_decision_score(self, entry):
         score = entry.get('score', 0)
         speed_map = {'fast': 0.3, 'mid': 0.2, 'slow': 0.1}
         speed_bonus = speed_map.get(entry.get('speed', ''), 0)
         difficulty_factor = max(0, 1 - (entry.get('difficulty', 3) - 1) * 0.15)
-        return round(score * 0.5 + speed_bonus * 0.3 + difficulty_factor * 0.2, 4)
+        cap_match = 0.5
+        if self.profile is None and self.vault_path:
+            self._load_profile()
+        if self.profile:
+            diff = entry.get('difficulty', 3)
+            if diff <= 2:
+                cap_match = 0.85
+            elif diff <= 3:
+                cap_match = 0.65
+            else:
+                cap_match = 0.35
+        return round(score * 0.35 + speed_bonus * 0.25 + difficulty_factor * 0.15 + cap_match * 0.25, 4)
 
     def decide(self, count=3):
+        self._load_profile()
         entries = self.index.get_all()
         scored = []
         for e in entries:
@@ -31,7 +55,6 @@ class DecisionEngine:
             scored.append((ds, e))
         scored.sort(key=lambda x: -x[0])
         top = scored[:count]
-
         output = []
         for ds, e in top:
             output.append({
@@ -46,7 +69,6 @@ class DecisionEngine:
                 'difficulty': e.get('difficulty', 0),
                 'recommendation': self._build_recommendation(ds, e),
             })
-
         now = datetime.now()
         result = {
             'timestamp': now.isoformat(),
@@ -54,21 +76,14 @@ class DecisionEngine:
             'total_evaluated': len(scored),
             'decisions': output,
         }
-
-        # Save latest
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         with open(self.output_path, 'w', encoding='utf-8') as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
-
-        # Save history (one file per day)
-        history_file = self.history_dir / f'decisions_{now.strftime("%Y%m%d")}.json'
-        with open(history_file, 'w', encoding='utf-8') as f:
+        fname = 'decisions_' + now.strftime('%Y%m%d') + '.json'
+        with open(self.history_dir / fname, 'w', encoding='utf-8') as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
-
-        # Cleanup old history
         self._cleanup_old()
-
-        logger.info(f'Decision: {len(scored)} evaluated, top {count} saved')
+        logger.info('Decision: %d evaluated, top %d saved', len(scored), count)
         return result
 
     def _build_recommendation(self, ds, entry):
@@ -96,7 +111,8 @@ class DecisionEngine:
         now = datetime.now()
         for i in range(days):
             d = now - timedelta(days=i)
-            f = self.history_dir / f'decisions_{d.strftime("%Y%m%d")}.json'
+            fname = 'decisions_' + d.strftime('%Y%m%d') + '.json'
+            f = self.history_dir / fname
             if f.exists():
                 with open(f, 'r', encoding='utf-8') as fh:
                     results.append(json.load(fh))
@@ -110,6 +126,6 @@ class DecisionEngine:
                 fd = datetime.strptime(parts, '%Y%m%d')
                 if fd < cutoff:
                     f.unlink()
-                    logger.info(f'Removed old decision history: {f.name}')
+                    logger.info('Removed old decision history: %s', f.name)
             except Exception:
                 pass

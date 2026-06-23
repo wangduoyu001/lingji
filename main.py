@@ -1,4 +1,4 @@
-import sys, os, json, logging, time, threading
+﻿import sys, os, json, logging, time, threading
 from pathlib import Path
 from datetime import datetime
 
@@ -28,7 +28,12 @@ class PEMISCore:
         self.safety = SafetyGuard(settings)
         self.distiller = DistillationEngine(settings)
         self.integrity = IntegrityChecker(settings)
-        self.decision = DecisionEngine(self.indexer, settings.storage_path, settings.decision_history_days)
+        self.decision = DecisionEngine(
+            self.indexer,
+            settings.storage_path,
+            settings.decision_history_days,
+            vault_path=settings.vault_path
+        )
         self._running = False
         self._start_time = None
         self._error_log = []
@@ -45,7 +50,7 @@ class PEMISCore:
 
         # Start watchdog if enabled
         if settings.watchdog_enabled:
-            self.indexer.start_watchdog()
+            self.indexer.start_watchdog(callback=self._on_file_change)
 
         # Setup scheduler
         self.scheduler.add_job('distill', 24, 'NORMAL')
@@ -56,7 +61,7 @@ class PEMISCore:
         # Generate control center
         self._update_control_center()
 
-        logger.info(f'PEMIS v5.2 started. Mode: {self.safety.get_mode()}')
+        logger.info('PEMIS v5.2 started. Mode: ' + str(self.safety.get_mode()))
 
     def stop(self):
         self._running = False
@@ -75,9 +80,9 @@ class PEMISCore:
             fn = job_map.get(name)
             if fn:
                 fn()
-                logger.info(f'Job completed: {name}')
+                logger.info('Job completed: %s', name)
         except Exception as e:
-            logger.error(f'Job failed: {name} - {e}')
+            logger.error('Job failed: %s - %s', name, e)
             self._error_log.append({'time': datetime.now().isoformat(), 'job': name, 'error': str(e)[:200]})
 
     def _full_check(self):
@@ -115,10 +120,11 @@ class PEMISCore:
         elapsed = int(time.time() - self._start_time) if self._start_time else 0
         h, r = divmod(elapsed, 3600)
         m, s = divmod(r, 60)
-        uptime = f'{h}h {m}m {s}s' if h else f'{m}m {s}s'
+        uptime = str(h) + 'h ' + str(m) + 'm ' + str(s) + 's' if h else str(m) + 'm ' + str(s) + 's'
 
         decisions = self.decision.get_latest()
         embed_status = self.embedder.get_status()
+        all_entries = self.indexer.get_all()
 
         return {
             'service': 'LingJi - PEMIS v5.2',
@@ -130,23 +136,17 @@ class PEMISCore:
             'fallback_model': settings.fallback_llm,
             'embed_model': embed_status['current_model'],
             'fallback_embed_active': embed_status['fallback_active'],
-            'recent_errors': [],
-            'persistent_errors': [],
-            'embed_switches': embed_status['switches'],
-            'index_entries': len(self.indexer.get_all()),
             'cache_size': embed_status['cache_size'],
+            'index_entries': len(all_entries),
             'jobs': self.scheduler.get_status(),
             'total_decisions': len(decisions.get('decisions', [])),
             'errors': len(self._error_log),
             'last_error': self._error_log[-1] if self._error_log else None,
-            'embed_switches': embed_status['switches'],
         }
 
 
-core = PEMISCore()
-
-
 if __name__ == '__main__':
+    core = PEMISCore()
     try:
         core.start()
         logger.info('PEMIS v5.2 running. Ctrl+C to stop.')

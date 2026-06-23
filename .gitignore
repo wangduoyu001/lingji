@@ -1,15 +1,10 @@
-<<<<<<< HEAD
-# Python
+﻿# Python
 __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
 dist/
 build/
-
-# Windows
-Thumbs.db
-desktop.ini
 
 # PEMIS data (rebuildable, not source code)
 storage/
@@ -21,30 +16,25 @@ backup/
 .env
 .env.local
 
+# Windows
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-=======
-﻿# Obsidian 缓存和布局（不同机器的布局不同）
+
+# Obsidian cache (different per machine)
 .obsidian/workspace.json
 .obsidian/cache/
 .obsidian/workspace-data.json
 
-# 操作系统
-Thumbs.db
-.DS_Store
-desktop.ini
-ehthumbs.db
-
-# 大型二进制文件（归档素材）
+# Large binaries
 *.doc
 *.docx
 *.zip
 *.7z
 *.exe
-
-# 日志
-*.log
->>>>>>> 9368ef4234bfc68eaf0b6ee44be226fa6d4065d8

@@ -1,8 +1,10 @@
-import json, logging
+﻿import json, logging
 from pathlib import Path
 from datetime import datetime
 
 logger = logging.getLogger('pemis.dashboard')
+
+DASH_DIR_NAME = 'dashboard'
 
 
 def update_dashboard(core):
@@ -25,23 +27,19 @@ def update_dashboard(core):
     lines.append('')
     lines.append('## 系统状态')
     lines.append('')
-    mode_icon = {'NORMAL': 'Green', 'DEGRADED': 'Yellow', 'SAFE': 'Red'}
-    icon = mode_icon.get(status['mode'], 'White')
-    lines.append('- **状态**: ' + icon + ' ' + status['mode'])
+    lines.append('- **状态**: ' + status['mode'])
     lines.append('- **运行时长**: ' + status['uptime'])
     lines.append('- **主模型**: ' + status['primary_model'])
     lines.append('- **备用模型**: ' + status['fallback_model'])
     lines.append('- **嵌入模型**: ' + status['embed_model'])
-    fa = '是' if status.get('fallback_embed_active',False) else '否'
-    lines.append('- **备用激活**: ' + fa)
-    lines.append('- **缓存**: ' + str(status.get('cache_size',0)) + ' entries')
     lines.append('')
     lines.append('---')
     lines.append('')
     lines.append('## 数据统计')
     lines.append('')
-    lines.append('- **机会总数**: ' + str(status['index_entries']))
-    lines.append('- **错误数**: ' + str(status.get('error_count',0)))
+    lines.append('- **文件总数**: ' + str(status['index_entries']))
+    lines.append('- **机会数**: ' + str(status.get('total_decisions', 0)))
+    lines.append('- **错误数**: ' + str(status.get('errors', 0)))
     lines.append('')
     lines.append('---')
     lines.append('')
@@ -53,7 +51,6 @@ def update_dashboard(core):
             lines.append('### ' + str(i) + '. ' + d['title'][:60])
             lines.append('')
             lines.append('- **得分**: ' + str(d['decision_score']))
-            lines.append('- **Score**: ' + str(d['score']))
             lines.append('- **速度**: ' + d['speed'])
             lines.append('- **变现方式**: ' + d['monetization'])
             lines.append('- **难度**: ' + str(d.get('difficulty', '?')))
@@ -61,7 +58,7 @@ def update_dashboard(core):
             lines.append('- **摘要**: ' + d.get('summary', '')[:200])
             lines.append('')
     else:
-        lines.append('*否 decision data yet.*')
+        lines.append('*暂无决策数据*')
         lines.append('')
 
     lines.append('---')
@@ -87,16 +84,14 @@ def update_dashboard(core):
     lines.append('')
     lines.append('---')
     lines.append('')
-    lines.append('## 备份与恢复')
+    lines.append('## 备份')
     lines.append('')
-    lines.append('- **快照目录**: ' + str(core.settings.backup_path) + '')
+    lines.append('- **备份目录**: ' + str(core.settings.backup_path))
     lines.append('- **决策历史**: 90 days')
-    lines.append('- **代码仓库**: wangduoyu001/pemis-lingji')
-    lines.append('')
 
-    dash_dir = core.settings.vault_path / 'PEMIS' / 'dashboard'
+    dash_dir = core.settings.vault_path / 'PEMIS' / DASH_DIR_NAME
     dash_dir.mkdir(parents=True, exist_ok=True)
     dash_file = dash_dir / 'Control Center.md'
     with open(dash_file, 'w', encoding='utf-8') as f:
-        f.write(chr(10).join(lines))
+        f.write('\n'.join(lines))
     logger.info('Control Center updated')
