@@ -90,6 +90,9 @@ class DecisionEngine:
         speed = entry.get('speed', 'mid')
         mon = entry.get('monetization', '')
         diff = entry.get('difficulty', 3)
+        summary = entry.get('summary', '')[:150]
+        if summary:
+            return summary
         if speed == 'fast' and diff <= 2:
             return 'Quick win: low difficulty + fast execution. Start immediately.'
         if ds > 0.6 and speed == 'fast':

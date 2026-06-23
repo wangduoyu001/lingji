@@ -45,6 +45,31 @@ class PEMISIndex:
                 meta['summary'] = val
         return meta
 
+    def _extract_summary(self, text):
+        """Extract a useful summary from the body text after frontmatter"""
+        # Remove frontmatter
+        body = text.strip()
+        if body.startswith('---'):
+            end = body.find('---', 3)
+            if end != -1:
+                body = body[end + 3:].strip()
+        # Take first meaningful paragraph (skip title lines)
+        for line in body.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith('# '):
+                continue
+            if line.startswith('**'):
+                continue
+            if line.startswith('---'):
+                continue
+            # Remove markdown formatting for clean summary
+            clean = line.replace('**', '').replace('[', '').replace(']', '')
+            if len(clean) > 20:
+                return clean[:300]
+        return ''
+
     def _is_dashboard_file(self, path):
         try:
             return self._dash_dir in path.parents
@@ -74,13 +99,17 @@ class PEMISIndex:
                 title = line[2:].strip()
                 break
         dtype = self._infer_type(path, meta)
+        # Use frontmatter summary if available, otherwise extract from body
+        summary = meta.get('summary', '')
+        if not summary:
+            summary = self._extract_summary(text)
         return {
             'id': file_id,
             'type': dtype,
             'score': meta.get('score', 0.0),
             'tags': meta.get('tags', []),
             'title': title or path.stem,
-            'summary': meta.get('summary', ''),
+            'summary': summary,
             'content_hash': content_hash,
             'created': meta.get('created', ''),
             'updated': datetime.now().isoformat(),
@@ -93,13 +122,11 @@ class PEMISIndex:
 
     def build_index(self):
         entries = {}
-        # Scan vault
         md_files = list(self.vault_dir.rglob('*.md'))
         for mf in md_files:
             entry = self._parse_md_file(mf)
             if entry:
                 entries[entry['id']] = entry
-        # Scan storage/opportunities (invisible to Obsidian)
         if self.opp_dir.exists():
             for mf in self.opp_dir.glob('*.md'):
                 entry = self._parse_md_file(mf)
