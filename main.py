@@ -46,7 +46,7 @@ class PEMISCore:
         self.indexer.build_index()
 
         # Run decision
-        self.decision.decide(count=3)
+        self.decision.decide(count=6)
 
         # Start watchdog if enabled
         if settings.watchdog_enabled:
@@ -105,7 +105,7 @@ class PEMISCore:
                 self.indexer.incremental_update(Path(file_path))
             elif action == 'created':
                 self.indexer.incremental_add(Path(file_path))
-            self.decision.decide(count=3)
+            self.decision.decide(count=6)
             self._update_dashboard()
         except Exception as e:
             self.safety.log_error('watchdog_cb', str(e))

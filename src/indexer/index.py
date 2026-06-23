@@ -9,12 +9,12 @@ class PEMISIndex:
     def __init__(self, vault_dir, storage_dir):
         self.vault_dir = Path(vault_dir)
         self.storage_dir = Path(storage_dir)
+        self.opp_dir = self.storage_dir / 'opportunities'
         self.index_path = self.storage_dir / 'pemis_index.json'
         self._index = None
         self._lock = threading.Lock()
         self._watchdog_running = False
         self._callback = None
-        self._seen = set()
         self._dash_dir = self.vault_dir / 'PEMIS' / 'dashboard'
 
     def _parse_frontmatter(self, text):
@@ -93,11 +93,18 @@ class PEMISIndex:
 
     def build_index(self):
         entries = {}
+        # Scan vault
         md_files = list(self.vault_dir.rglob('*.md'))
         for mf in md_files:
             entry = self._parse_md_file(mf)
             if entry:
                 entries[entry['id']] = entry
+        # Scan storage/opportunities (invisible to Obsidian)
+        if self.opp_dir.exists():
+            for mf in self.opp_dir.glob('*.md'):
+                entry = self._parse_md_file(mf)
+                if entry:
+                    entries[entry['id']] = entry
         idx = {
             'meta': {
                 'version': '1.0',
@@ -111,7 +118,9 @@ class PEMISIndex:
             self._index = idx
             self.save_index(idx)
         opp_count = sum(1 for e in entries.values() if e.get('type') == 'opportunity')
-        logger.info('Index built: %d entries (%d opportunities) from %d md files', len(entries), opp_count, len(md_files))
+        logger.info('Index built: %d entries (%d opportunities) from %d vault + %d opp files',
+                     len(entries), opp_count, len(md_files),
+                     len(list(self.opp_dir.glob('*.md'))) if self.opp_dir.exists() else 0)
         return idx
 
     def incremental_add(self, file_path):
@@ -127,7 +136,6 @@ class PEMISIndex:
             idx['meta']['total'] = len(idx['entries'])
             idx['meta']['updated_at'] = datetime.now().isoformat()
             self.save_index(idx)
-        logger.info('Incremental add: %s (%s)', entry['type'], entry['id'])
         return True
 
     def incremental_update(self, file_path):

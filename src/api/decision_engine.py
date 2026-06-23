@@ -44,7 +44,7 @@ class DecisionEngine:
                 cap_match = 0.35
         return round(score * 0.35 + speed_bonus * 0.25 + difficulty_factor * 0.15 + cap_match * 0.25, 4)
 
-    def decide(self, count=3):
+    def decide(self, count=6):
         self._load_profile()
         entries = self.index.get_all()
         scored = []
