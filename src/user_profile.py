@@ -1,4 +1,4 @@
-﻿# User Capability Profile
+# User Capability Profile
 PROFILE_PATH = None  # will be loaded from vault on startup
 
 def load_profile(vault_path):

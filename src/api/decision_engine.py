@@ -1,4 +1,4 @@
-﻿import json, logging, time
+import json, logging, time
 from pathlib import Path
 from datetime import datetime, timedelta
 

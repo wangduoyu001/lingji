@@ -1,30 +1,47 @@
-﻿import json, logging, shutil
+import json, logging, shutil
 from pathlib import Path
 from datetime import datetime
 
 logger = logging.getLogger('pemis.dashboard')
 
+# === Vector Store Interface (reserved for future Qdrant) ===
+# When Qdrant is enabled, this module will also:
+# 1. Send opportunity cards to vector store
+# 2. Provide semantic search over vault content
+# 3. Sync content_hash changes to vector index
+# === End Vector Store Interface ===
+
 OPP_VAULT_DIR = 'PEMIS/opportunities'
+DASH_VAULT_DIR = 'PEMIS/dashboard'
 
 
 def sync_opps_to_vault(core):
+    """Sync opportunities from storage to the Obsidian vault."""
     src = core.settings.storage_path / 'opportunities'
     dst = core.settings.vault_path / OPP_VAULT_DIR
     if not src.exists():
+        logger.warning('Source opp dir not found: %s', src)
         return
     dst.mkdir(parents=True, exist_ok=True)
     copied = 0
+    removed = 0
     for f in src.glob('*.md'):
         try:
             shutil.copy2(f, dst / f.name)
             copied += 1
+        except Exception as e:
+            logger.error('Copy error %s: %s', f.name, e)
+    # Remove files in dst that no longer exist in src
+    dst_files = {f.name for f in dst.glob('*.md')}
+    src_files = {f.name for f in src.glob('*.md')}
+    for name in dst_files - src_files:
+        try:
+            (dst / name).unlink()
+            removed += 1
         except Exception:
             pass
-    for f in dst.glob('*.md'):
-        if not (src / f.name).exists():
-            f.unlink()
-    if copied:
-        logger.info('Synced %d opportunities to vault', copied)
+    if copied or removed:
+        logger.info('Synced opportunities: %d copied, %d removed', copied, removed)
 
 
 def load_opp_summary(core, file_id):
@@ -77,6 +94,8 @@ def get_opp_filename(core, opp_id):
 
 
 def update_dashboard(core):
+    """Update the Control Center dashboard in the Obsidian vault."""
+    # First sync opportunities
     sync_opps_to_vault(core)
 
     decisions = core.decision.get_latest()
@@ -98,9 +117,15 @@ def update_dashboard(core):
     lines.append('')
     lines.append('## 系统状态')
     lines.append('')
-    lines.append('- **状态**: NORMAL')
+    status = core.status() if hasattr(core, 'status') else {}
+    lines.append('- **状态**: ' + status.get('mode', core.safety.get_mode() if hasattr(core, 'safety') else 'NORMAL'))
     lines.append('- **模型**: ' + core.settings.llm_model)
     lines.append('- **备用模型**: ' + core.settings.fallback_llm)
+    uptime = status.get('uptime', '刚刚启动')
+    lines.append('- **运行时长**: ' + uptime)
+    lines.append('- **索引条目**: ' + str(status.get('index_entries', 0)))
+    lines.append('- **决策总数**: ' + str(status.get('total_decisions', 0)))
+    lines.append('- **错误数**: ' + str(status.get('errors', 0)))
     lines.append('')
     lines.append('---')
     lines.append('')
@@ -125,11 +150,9 @@ def update_dashboard(core):
 
             if opp_filename:
                 target = OPP_VAULT_DIR + '/' + opp_filename
-                link_text = target.replace('.md', '')
-                lines.append('📄 **查看完整分析**: [[' + link_text + '|' + (opp_title or d['title'][:40]) + ']]')
+                lines.append('📄 **查看完整分析**: [[' + target.replace('.md', '') + '|' + (opp_title or d['title'][:40]) + ']]')
                 lines.append('')
 
-            # Per-opportunity feedback
             lines.append('**我的反馈**:')
             lines.append('- 感兴趣程度（1-5）: ')
             lines.append('- 我能做吗: ')
@@ -144,64 +167,6 @@ def update_dashboard(core):
         lines.append('---')
         lines.append('')
 
-    # All opportunities table
-    lines.append('## 全部机会列表')
-    lines.append('')
-    lines.append('| 文件名 | 评分 | 速度 | 变现 |')
-    lines.append('|--------|------|------|------|')
-    opp_dir_storage = core.settings.storage_path / 'opportunities'
-    if opp_dir_storage.exists():
-        for f in sorted(opp_dir_storage.glob('*.md')):
-            try:
-                txt = f.read_text(encoding='utf-8')
-                score = '0'
-                speed = '-'
-                mon = '-'
-                for l in txt.splitlines():
-                    if l.startswith('score:'):
-                        score = l.split(':')[1].strip().strip("'").strip('"')
-                    elif l.startswith('speed:'):
-                        speed = l.split(':')[1].strip()
-                    elif l.startswith('monetization:'):
-                        mon = l.split(':')[1].strip().strip("'").strip('"')
-                target = OPP_VAULT_DIR + '/' + f.name
-                link_text = target.replace('.md', '')
-                lines.append('| [[' + link_text + '|' + f.name.replace('.md', '') + ']] | ' + score + ' | ' + speed + ' | ' + mon + ' |')
-            except Exception:
-                pass
-    lines.append('')
-    lines.append('---')
-    lines.append('')
-
-    # Feedback already recorded indicator
-    prefs = {}
-    prefs_path = core.settings.storage_path / 'user_preferences.json'
-    if prefs_path.exists():
-        try:
-            prefs = json.loads(prefs_path.read_text(encoding='utf-8'))
-        except Exception:
-            pass
-
-    if prefs:
-        lines.append('## 我已记录的反馈')
-        lines.append('')
-        if prefs.get('liked'):
-            for item in prefs['liked']:
-                lines.append('- 👍 **喜欢**: ' + item.get('content', '')[:100])
-        if prefs.get('disliked'):
-            for item in prefs['disliked']:
-                lines.append('- 👎 **不感兴趣**: ' + item.get('content', '')[:100])
-        if prefs.get('executed'):
-            for item in prefs['executed']:
-                lines.append('- ✅ **已执行**: ' + item.get('content', '')[:100])
-        if prefs.get('failed'):
-            for item in prefs['failed']:
-                lines.append('- ❌ **失败**: ' + item.get('content', '')[:100])
-        lines.append('')
-        lines.append('---')
-        lines.append('')
-
-    # Feedback writing area
     lines.append('## 写反馈')
     lines.append('')
     lines.append('把下面填写好后保存文件，灵机会自动读取：')
@@ -215,7 +180,6 @@ def update_dashboard(core):
     lines.append('---')
     lines.append('')
 
-    # Recent logs
     log_path = Path(core.settings.log_dir) / 'journal' / ('journal_' + now.strftime('%Y%m%d') + '.jsonl')
     if log_path.exists():
         lines.append('## 最近日志')
@@ -237,9 +201,9 @@ def update_dashboard(core):
     lines.append('')
     lines.append('**备份目录**: ' + str(core.settings.backup_path))
 
-    dash_dir = vp / 'PEMIS' / 'dashboard'
+    dash_dir = vp / DASH_VAULT_DIR
     dash_dir.mkdir(parents=True, exist_ok=True)
     dash_file = dash_dir / 'Control Center.md'
     with open(dash_file, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines))
-    logger.info('Control Center updated with full opp links and feedback section')
+    logger.info('Control Center updated at %s', dash_file)

@@ -1,4 +1,4 @@
-﻿import sys, os, json, logging, time, threading
+import sys, os, json, logging, time, threading
 from pathlib import Path
 from datetime import datetime
 
@@ -62,6 +62,7 @@ class PEMISCore:
         self.scheduler.add_job('distill', 24, 'NORMAL')
         self.scheduler.add_job('integrity', 24, 'MAINTENANCE')
         self.scheduler.add_job('full_check', 24, 'MAINTENANCE')
+        self.scheduler.add_job('auto_scan', 24, 'NORMAL')
         self.scheduler.start(runner_callback=self._run_job)
 
         # Generate control center
@@ -98,6 +99,7 @@ class PEMISCore:
                 'distill': lambda: self.distiller.run(mode),
                 'integrity': lambda: self.integrity.check(self.indexer),
                 'full_check': lambda: self._full_check(),
+                'auto_scan': lambda: self._auto_scan_job(),
             }
             fn = job_map.get(name)
             if fn:
@@ -106,6 +108,52 @@ class PEMISCore:
         except Exception as e:
             logger.error('Job failed: %s - %s', name, e)
             self._error_log.append({'time': datetime.now().isoformat(), 'job': name, 'error': str(e)[:200]})
+
+    def _auto_scan_job(self):
+        """Scheduled auto-scan (called by scheduler every 24h).
+        Only analyzes files whose content_hash changed since last index build."""
+        logger.info('Auto scan: checking for new/modified files...')
+        try:
+            idx = self.indexer.get_all()
+            known_hashes = {e['id']: e.get('content_hash', '') for e in idx}
+            count = 0
+            for mf in self.settings.vault_path.rglob('*.md'):
+                if 'PEMIS' in str(mf):
+                    continue
+                try:
+                    import hashlib
+                    current_hash = hashlib.md5(mf.read_text(encoding='utf-8').encode()).hexdigest()
+                    old_hash = known_hashes.get(mf.stem, '')
+                    if current_hash == old_hash:
+                        continue
+                    # New or modified file
+                    stem = mf.stem.lower()
+                    already = any(stem in oppf.stem.lower() for oppf in self.generator.opp_dir.glob('*.md'))
+                    analysis = self.generator.analyze_file(mf)
+                    if analysis:
+                        self.generator.generate_card(mf, analysis)
+                        count += 1
+                        logger.info('Auto scan generated: %s', mf.name)
+                except Exception as e:
+                    logger.error('Auto scan file error %s: %s', mf.name, e)
+            if count:
+                self.indexer.build_index()
+                from src.dashboard import sync_opps_to_vault
+                sync_opps_to_vault(self)
+                self.decision.decide(count=6)
+                self._update_control_center()
+                logger.info('Auto scan complete: %d new opportunities', count)
+            else:
+                logger.info('Auto scan complete: no changes')
+        except Exception as e:
+            logger.error('Auto scan failed: %s', e)
+
+    def manual_scan(self):
+        """Manual scan trigger: hash-based incremental, callable from outside.
+        Prepares vector store interface for future Qdrant use."""
+        logger.info('Manual scan triggered by user...')
+        # Delegate to the core incremental logic
+        return self._auto_scan_job()
 
     def _full_check(self):
         self._update_control_center()
@@ -127,7 +175,7 @@ class PEMISCore:
                 self.indexer.incremental_add(Path(file_path))
             # Re-run decision on file changes
             self.decision.decide(count=6)
-            self._update_dashboard()
+            self._update_control_center()
         except Exception as e:
             self.safety.log_error('watchdog_cb', str(e))
 

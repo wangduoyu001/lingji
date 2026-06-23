@@ -1,4 +1,4 @@
-﻿import sys, os, time, logging
+import sys, os, time, logging
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent

@@ -1,4 +1,4 @@
-﻿"""UserFeedback: reads user feedback from Control Center and adjusts scoring weights."""
+"""UserFeedback: reads user feedback from Control Center and adjusts scoring weights."""
 import json, logging, re
 from pathlib import Path
 from datetime import datetime

@@ -1,4 +1,4 @@
-﻿import json, hashlib, logging, threading, time
+import json, hashlib, logging, threading, time
 from pathlib import Path
 from datetime import datetime
 
