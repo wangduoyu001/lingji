@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# PEMIS data (rebuildable, not source code)
+storage/
+logs/
+snapshot/
+backup/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
