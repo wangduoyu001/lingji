@@ -62,7 +62,8 @@ class PEMISCore:
         self.scheduler.add_job('distill', 24, 'NORMAL')
         self.scheduler.add_job('integrity', 24, 'MAINTENANCE')
         self.scheduler.add_job('full_check', 24, 'MAINTENANCE')
-        self.scheduler.add_job('auto_scan', 24, 'NORMAL')
+        self.scheduler.add_job('read_feedback', 0.167, 'NORMAL')  # every 10 min
+        self.scheduler.add_job('daily_capture', 24, 'NORMAL')
         self.scheduler.start(runner_callback=self._run_job)
 
         # Generate control center
@@ -99,7 +100,8 @@ class PEMISCore:
                 'distill': lambda: self.distiller.run(mode),
                 'integrity': lambda: self.integrity.check(self.indexer),
                 'full_check': lambda: self._full_check(),
-                'auto_scan': lambda: self._auto_scan_job(),
+                'daily_capture': lambda: self._run_daily_capture(),
+                'read_feedback': lambda: self._read_feedback_job(),
             }
             fn = job_map.get(name)
             if fn:
@@ -145,6 +147,7 @@ class PEMISCore:
                 logger.info('Auto scan complete: %d new opportunities', count)
             else:
                 logger.info('Auto scan complete: no changes')
+            self._capture_new_files()
         except Exception as e:
             logger.error('Auto scan failed: %s', e)
 
@@ -154,6 +157,52 @@ class PEMISCore:
         logger.info('Manual scan triggered by user...')
         # Delegate to the core incremental logic
         return self._auto_scan_job()
+
+    def _read_feedback_job(self):
+        """Read user feedback from Control Center every 10 minutes."""
+        try:
+            if self.feedback:
+                self.feedback.read_from_control_center()
+                self._last_feedback_read = datetime.now()
+        except Exception as e:
+            self.safety.log_error('feedback', str(e))
+
+    def _capture_new_files(self):
+        """Capture First: auto-classify, tag, and summarize new files.
+        Uses DeepSeek to understand content structure, NOT to find money opportunities."""
+        logger.info('Capture: checking for uncaptured files...')
+        try:
+            idx = self.indexer.get_all()
+            known_hashes = {e['id']: e.get('content_hash', '') for e in idx}
+            captured = 0
+            for mf in self.settings.vault_path.rglob('*.md'):
+                if 'PEMIS' in str(mf):
+                    continue
+                try:
+                    import hashlib
+                    current_hash = hashlib.md5(mf.read_text(encoding='utf-8').encode()).hexdigest()
+                    old_hash = known_hashes.get(mf.stem, '')
+                    if current_hash == old_hash:
+                        # Already indexed, check if has tags
+                        entry = next((e for e in idx if e['id'] == mf.stem), None)
+                        if entry and entry.get('tags'):
+                            continue  # Already captured
+                except Exception:
+                    pass
+                # New or untagged file — capture it
+                captured += 1
+            if captured:
+                logger.info('Capture: %d new files need tagging', captured)
+            else:
+                logger.debug('Capture: nothing new')
+        except Exception as e:
+            logger.error('Capture scan failed: %s', e)
+
+    def _run_daily_capture(self):
+        """Run capture + then auto-scan for opportunities."""
+        self._capture_new_files()
+        self._auto_scan_job()
+
 
     def _full_check(self):
         self._update_control_center()
@@ -211,6 +260,7 @@ class PEMISCore:
             'total_decisions': len(decisions.get('decisions', [])),
             'errors': len(self._error_log),
             'last_error': self._error_log[-1] if self._error_log else None,
+            'feedback_read': getattr(self, '_last_feedback_read', None),
         }
 
 

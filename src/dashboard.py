@@ -126,6 +126,8 @@ def update_dashboard(core):
     lines.append('- **索引条目**: ' + str(status.get('index_entries', 0)))
     lines.append('- **决策总数**: ' + str(status.get('total_decisions', 0)))
     lines.append('- **错误数**: ' + str(status.get('errors', 0)))
+    lines.append('- **今日新增**: ' + str(status.get('index_entries', 0)) + ' 条')
+    lines.append('- **反馈读取**: ' + (status['feedback_read'].strftime('%H:%M') if status.get('feedback_read') else '尚未读取'))
     lines.append('')
     lines.append('---')
     lines.append('')
