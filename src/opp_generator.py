@@ -128,23 +128,30 @@ class OppGenerator:
             return None
 
         prompt = (
-            "你是一个专业的赚钱机会分析师。分析以下内容，判断是否存在可执行的赚钱机会。\n"
-            "输出**只有**一个合法的JSON对象，不要包含markdown代码块标记或其他文字：\n"
+            "你是一个编导思维的分析师。分析以下内容，用编导视角输出JSON。\n"
+            "输出**只有**一个合法的JSON对象：\n"
             "{\n"
             '  "can_make_money": true/false,\n'
             '  "direction": "带货|信息差|服务|工具|SaaS|流量套利|知识付费|内容变现",\n'
             '  "title": "中文标题（15字以内）",\n'
             '  "summary": "详细分析摘要（300-500字，说明为什么能赚钱、目标用户画像、核心痛点、市场规模判断）",\n'
-            '  "how": "具体操作步骤（300-500字，分步骤说明：1.准备工作 2.执行流程 3.推广方式 4.变现闭环。需要什么资源、预期成本和时间、第一个订单怎么来）",\n'
+            '  "how": "具体操作步骤（300-500字，分步骤：1.准备工作 2.执行流程 3.推广方式 4.变现闭环。需要什么资源、预期成本和时间、第一个订单怎么来）",\n'
+            '  "content_structure": "内容结构分析（100字以内：这个内容按什么逻辑组织的，适合什么形式）",\n'
+            '  "operation_structure": "运营结构分析（100字以内：适合什么运营节奏、发布频率、平台选择）",\n'
+            '  "business_structure": "商业结构分析（100字以内：变现路径怎么串联、利润点在哪、可扩展性）",\n'
+            '  "risk_analysis": "风险分析（100字以内：平台政策风险、竞争风险、执行风险）",\n'
+            '  "ai_replace_rate": "AI替代率0-100（数字，AI能完成这个工作的百分比。比如脚本撰写80%、剪辑50%、运营20%）",\n'
+            '  "mvp": "最小可行产品（50字以内：最低成本起步方案，1-3天内能验证什么）",\n'
+            '  "next_action": "下一步行动（50字以内：看完这个分析后马上该做的事）",\n'
             '  "reference": "真实的参考案例名称",\n'
-            '  "reference_url": "参考案例的链接（必须是真实可访问的网址，如github.com/xxx、douyin.com/xxx、xiaohongshu.com/xxx等。如果确实不知道就写空字符串）",\n'
+            '  "reference_url": "案例链接（必须是真实可访问的网址。确实不知道就写空字符串）",\n'
             '  "difficulty": "1-5整数（1最简单、5最难）",\n'
             '  "speed": "fast|mid|slow",\n'
-            '  "feasibility": "200字以内分析可行性：需要什么技能、容不容易复制",\n'
-            '  "bottleneck": "100字以内说明最大执行卡点是什么"\n'
+            '  "feasibility": "200字以内可行性分析",\n'
+            '  "bottleneck": "100字以内执行卡点"\n'
             "}\n"
             "如果完全无法赚钱，can_make_money为false。\n"
-            "注意：分析必须有深度，不能泛泛而谈。参考案例必须是真实存在的，不能编造。\n"
+            "注意：分析必须有深度，不能编造。参考案例必须真实。\n"
             "内容如下：\n" + content[:4000]
         )
         resp = self._call_llm(prompt)
@@ -160,6 +167,13 @@ class OppGenerator:
             "reference_url": str(data.get("reference_url", "")),
             "feasibility": str(data.get("feasibility", "")),
             "bottleneck": str(data.get("bottleneck", "")),
+            "content_structure": str(data.get("content_structure", "")),
+            "operation_structure": str(data.get("operation_structure", "")),
+            "business_structure": str(data.get("business_structure", "")),
+            "risk_analysis": str(data.get("risk_analysis", "")),
+            "ai_replace_rate": str(data.get("ai_replace_rate", "0")),
+            "mvp": str(data.get("mvp", "")),
+            "next_action": str(data.get("next_action", "")),
             "difficulty": int(data.get("difficulty", 3)),
             "speed": str(data.get("speed", "mid")),
         }
@@ -174,6 +188,13 @@ class OppGenerator:
         ref_url = analysis.get("reference_url", "").strip()
         feasibility = analysis.get("feasibility", "").strip()
         bottleneck = analysis.get("bottleneck", "").strip()
+        content_structure = analysis.get("content_structure", "").strip()
+        operation_structure = analysis.get("operation_structure", "").strip()
+        business_structure = analysis.get("business_structure", "").strip()
+        risk_analysis = analysis.get("risk_analysis", "").strip()
+        ai_replace_rate = analysis.get("ai_replace_rate", "0")
+        mvp = analysis.get("mvp", "").strip()
+        next_action = analysis.get("next_action", "").strip()
         difficulty = analysis.get("difficulty", 3)
         speed = analysis.get("speed", "mid")
         score = 0.5
@@ -235,6 +256,21 @@ class OppGenerator:
             body_parts += ["## 可行性分析", "", feasibility, "", "---", ""]
         if bottleneck:
             body_parts += ["## 执行卡点", "", bottleneck, "", "---", ""]
+        # Director thinking sections
+        if content_structure:
+            body_parts += ["## 内容结构", "", content_structure, "", "---", ""]
+        if operation_structure:
+            body_parts += ["## 运营结构", "", operation_structure, "", "---", ""]
+        if business_structure:
+            body_parts += ["## 商业结构", "", business_structure, "", "---", ""]
+        if risk_analysis:
+            body_parts += ["## 风险分析", "", risk_analysis, "", "---", ""]
+        if ai_replace_rate and ai_replace_rate != "0":
+            body_parts += ["## AI替代率", "", str(ai_replace_rate) + "%", "", "---", ""]
+        if mvp:
+            body_parts += ["## MVP最小方案", "", mvp, "", "---", ""]
+        if next_action:
+            body_parts += ["## 下一步行动", "", next_action, "", "---", ""]
         body_parts += [
             "## 参考案例",
             "",
