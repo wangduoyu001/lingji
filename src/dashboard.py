@@ -94,14 +94,13 @@ def get_opp_filename(core, opp_id):
 
 
 def update_dashboard(core):
-    """Update the Control Center dashboard in the Obsidian vault."""
-    # First sync opportunities
+    """Compact Control Center: one screen, no scrolling needed."""
     sync_opps_to_vault(core)
-
     decisions = core.decision.get_latest()
     now = datetime.now()
-    fmt = '%Y-%m-%d %H:%M:%S'
+    fmt = '%Y-%m-%d %H:%M'
     vp = core.settings.vault_path
+    status = core.status() if hasattr(core, 'status') else {}
 
     lines = []
     lines.append('---')
@@ -111,101 +110,80 @@ def update_dashboard(core):
     lines.append('')
     lines.append('# 灵机控制中心')
     lines.append('')
-    lines.append('> *更新时间: ' + now.strftime(fmt) + '*')
+    lines.append('> 更新时间: ' + now.strftime(fmt))
     lines.append('')
     lines.append('---')
     lines.append('')
-    lines.append('## 系统状态')
-    lines.append('')
-    status = core.status() if hasattr(core, 'status') else {}
-    lines.append('- **状态**: ' + status.get('mode', core.safety.get_mode() if hasattr(core, 'safety') else 'NORMAL'))
-    lines.append('- **模型**: ' + core.settings.llm_model)
-    lines.append('- **备用模型**: ' + core.settings.fallback_llm)
+
+    # Line 1: System status (one line)
+    mode = status.get('mode', 'NORMAL')
     uptime = status.get('uptime', '刚刚启动')
-    lines.append('- **运行时长**: ' + uptime)
-    lines.append('- **索引条目**: ' + str(status.get('index_entries', 0)))
-    lines.append('- **决策总数**: ' + str(status.get('total_decisions', 0)))
-    lines.append('- **错误数**: ' + str(status.get('errors', 0)))
-    lines.append('- **今日新增**: ' + str(status.get('index_entries', 0)) + ' 条')
-    lines.append('- **反馈读取**: ' + (status['feedback_read'].strftime('%H:%M') if status.get('feedback_read') else '尚未读取'))
-    lines.append('')
-    lines.append('---')
+    entries = status.get('index_entries', 0)
+    fb_time = status.get('feedback_read')
+    fb_str = fb_time.strftime('%H:%M') if fb_time else '-'
+    lines.append('🟢 **' + str(mode) + '** | 运行 ' + str(uptime) + ' | ' + str(entries) + ' 条 | 反馈读取: ' + fb_str)
     lines.append('')
 
-    if decisions.get('decisions'):
-        lines.append('## 今日 TOP' + str(len(decisions['decisions'])) + ' 赚钱机会')
+    # Line 2: Today's top 3 (one line each, compact)
+    output = decisions.get('decisions', [])
+    if output:
+        lines.append('**💰 今天最值得做的3件事**')
         lines.append('')
-
-        for i, d in enumerate(decisions['decisions'], 1):
-            opp_title, opp_summary = load_opp_summary(core, d['id'])
+        for i, d in enumerate(output[:3], 1):
+            title = d['title'][:25]
+            score = str(d['decision_score'])
+            speed_icon = '⚡' if d.get('speed') == 'fast' else '🐢' if d.get('speed') == 'slow' else '➡️'
+            lines.append(str(i) + '. ' + speed_icon + ' **' + title + '**  (评分 ' + score + ')')
             opp_filename = get_opp_filename(core, d['id'])
-
-            lines.append('### ' + str(i) + '. ' + (opp_title or d['title'][:60]))
-            lines.append('')
-            lines.append('**评分**: ' + str(d['score']) + '  |  **决策分**: ' + str(d['decision_score']))
-            lines.append('**速度**: ' + d['speed'] + '  |  **变现**: ' + d['monetization'] + '  |  **难度**: ' + str(d.get('difficulty', '?')))
-            lines.append('')
-
-            if opp_summary:
-                lines.append('> ' + opp_summary)
-                lines.append('')
-
             if opp_filename:
                 target = OPP_VAULT_DIR + '/' + opp_filename
-                lines.append('📄 **查看完整分析**: [[' + target.replace('.md', '') + '|' + (opp_title or d['title'][:40]) + ']]')
-                lines.append('')
-
-            lines.append('**我的反馈**:')
-            lines.append('- 感兴趣程度（1-5）: ')
-            lines.append('- 我能做吗: ')
-            lines.append('- 打算什么时候执行: ')
-            lines.append('- 备注: ')
-            lines.append('')
-            lines.append('---')
+                lines.append('   [[' + target.replace('.md', '') + '|查看详情 →]]')
             lines.append('')
     else:
-        lines.append('*暂无决策数据*')
+        lines.append('*暂无决策*')
         lines.append('')
-        lines.append('---')
-        lines.append('')
+    lines.append('---')
+    lines.append('')
 
-    lines.append('## 写反馈')
+    # Line 3: Quick feedback
+    lines.append('**📝 反馈与备注**')
     lines.append('')
-    lines.append('把下面填写好后保存文件，灵机会自动读取：')
+    lines.append('- 喜欢/感兴趣: ')
+    lines.append('- 不感兴趣/放弃: ')
+    lines.append('- 已开始执行: ')
+    lines.append('- 我想到的新方向: ')
     lines.append('')
-    lines.append('- **喜欢的机会**: ')
-    lines.append('- **不感兴趣的**: ')
-    lines.append('- **已执行的**: ')
-    lines.append('- **失败的**: ')
-    lines.append('- **新想法**: ')
+    lines.append('*(填好后保存，灵机自动读取)*')
     lines.append('')
     lines.append('---')
     lines.append('')
 
-    log_path = Path(core.settings.log_dir) / 'journal' / ('journal_' + now.strftime('%Y%m%d') + '.jsonl')
-    if log_path.exists():
-        lines.append('## 最近日志')
-        lines.append('')
-        entries = []
-        with open(log_path, 'r', encoding='utf-8') as f:
-            for l in f:
-                l = l.strip()
-                if l:
-                    try:
-                        entries.append(json.loads(l))
-                    except Exception:
-                        pass
-        for entry in entries[-5:]:
-            lines.append('- ' + entry.get('timestamp', '')[:19] + ' ' + entry.get('action', ''))
-        lines.append('')
+    # Line 4: Last feedback record (compact)
+    prefs_path = Path(core.settings.storage_path) / 'user_preferences.json'
+    if prefs_path.exists():
+        try:
+            prefs = json.loads(prefs_path.read_text(encoding='utf-8'))
+            records = []
+            for key in ('liked', 'disliked', 'executed', 'failed'):
+                items = prefs.get(key, [])
+                if items:
+                    label_map = {'liked':'👍','disliked':'👎','executed':'✅','failed':'❌'}
+                    records.append(label_map.get(key, key) + ' ' + items[-1].get('content','')[:50])
+            if records:
+                lines.append('**最近反馈:**')
+                lines.append('')
+                for r in records[-3:]:
+                    lines.append('- ' + r)
+                lines.append('')
+                lines.append('---')
+                lines.append('')
+        except Exception:
+            pass
 
-    lines.append('---')
-    lines.append('')
-    lines.append('**备份目录**: ' + str(core.settings.backup_path))
-
+    # Write file
     dash_dir = vp / DASH_VAULT_DIR
     dash_dir.mkdir(parents=True, exist_ok=True)
     dash_file = dash_dir / 'Control Center.md'
     with open(dash_file, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines))
-    logger.info('Control Center updated at %s', dash_file)
+    logger.info('Control Center updated (compact)')
