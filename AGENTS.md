@@ -54,3 +54,10 @@
 - 手动扫描新内容: core.manual_scan() 或通过我触发
 - 反馈写在: PEMIS/dashboard/Control Center.md 底部的反馈区
 - 控制中心: PEMIS/dashboard/Control Center.md (极简版，一屏看完)
+
+## 磁盘规则
+- 禁止在C盘创建任何项目文件或文件夹
+- 所有下载、缓存、临时文件必须放在D盘
+- D盘项目目录: D:/codex/
+- 备份目录: D:/codex/backups/pemis
+- 日志目录: logs/ (项目内)
