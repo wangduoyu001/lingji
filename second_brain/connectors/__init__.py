@@ -1,0 +1,1 @@
+"""Explicit, bounded input connectors."""

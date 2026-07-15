@@ -15,6 +15,16 @@ backup/
 # Environment
 .env
 .env.local
+.env.second-brain
+
+# Isolated second-brain runtime data
+data/second_brain.sqlite3*
+data/qdrant/
+data/runtime/
+data/raw/ai_chat/*.json
+data/inbox/ai_chat/*.json
+data/inbox/codex_tasks/*.json
+logs/second_brain/
 
 # Windows
 Thumbs.db

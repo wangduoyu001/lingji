@@ -61,3 +61,13 @@
 - D盘项目目录: D:/codex/
 - 备份目录: D:/codex/backups/pemis
 - 日志目录: logs/ (项目内)
+# Second-brain branch isolation rules
+
+- This worktree is the isolated `feature/second-brain-memory` upgrade. Never modify or write runtime data into `C:\Users\Administrator\Documents\New project-ai`.
+- Before a Codex task, read `.codex/context/PROJECT_SUMMARY.md`, `ACTIVE_RULES.md`, `ARCHITECTURE.md`, `RECENT_DECISIONS.md`, and `KNOWN_ISSUES.md`.
+- If the API is available, call `POST http://127.0.0.1:8765/memory/context` before planning implementation work.
+- AI chats are the only automatic memory source. Obsidian is user-authored formal knowledge and must never be automatically distilled into memories.
+- The watcher may only scan the three configured roots: AI-chat inbox, Codex-task inbox, and the explicit Obsidian knowledge directory.
+- Do not add the second-brain service to `start_lingji.bat`, `start_lingji.py`, or `run_service.py`.
+- After a task, write a JSON result to `data/inbox/codex_tasks/` or call `POST /memory/codex-task`. Suggestions are not long-term decisions until the user approves them.
+- Keep all downloads, caches, models, databases, vector data, logs, and temporary files on D:.
