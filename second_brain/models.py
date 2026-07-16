@@ -77,3 +77,9 @@ class CodexTaskRequest(BaseModel):
 
 class KnowledgeIndexRequest(BaseModel):
     path: str
+
+
+class ConflictResolveRequest(BaseModel):
+    action: Literal["keep_old", "use_new", "keep_both", "resolved"]
+    target_project: str | None = None
+    reason: str = "resolved from desktop"

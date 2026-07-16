@@ -11,7 +11,8 @@ if (Test-Path $PidFile) {
         exit 0
     }
 }
-$Python = (Get-Command python).Source
+$VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
+$Python = if (Test-Path $VenvPython) { $VenvPython } else { (Get-Command python).Source }
 $Process = Start-Process -FilePath $Python -WorkingDirectory $Root -WindowStyle Hidden -PassThru `
     -ArgumentList "-m", "uvicorn", "second_brain.api:app", "--host", "127.0.0.1", "--port", "8765" `
     -RedirectStandardOutput (Join-Path $Logs "api.stdout.log") `

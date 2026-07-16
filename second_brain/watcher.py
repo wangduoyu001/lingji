@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import time
@@ -7,16 +8,18 @@ from pathlib import Path
 
 import requests
 
-from second_brain.config import settings
+from second_brain.config import Settings, settings
 
 
 logger = logging.getLogger("second_brain.watcher")
 
 
 class BoundedWatcher:
-    def __init__(self, api_url: str):
+    def __init__(self, api_url: str, config: Settings = settings, workspace: str = "production"):
         self.api_url = api_url.rstrip("/")
-        self.state_path = settings.runtime_dir / "watcher_state.json"
+        self.settings = config
+        self.workspace = workspace
+        self.state_path = config.runtime_dir / "watcher_state.json"
         self.state = self._load_state()
 
     def _load_state(self) -> dict[str, int]:
@@ -33,11 +36,11 @@ class BoundedWatcher:
     def scan_once(self) -> dict:
         counts = {"ai_chat": 0, "codex_tasks": 0, "obsidian": 0, "failed": 0}
         roots: list[tuple[str, Path, str, str]] = [
-            ("ai_chat", settings.ai_inbox_dir, "*.json", "/memory/import"),
-            ("codex_tasks", settings.codex_inbox_dir, "*.json", "/memory/codex-task"),
+            ("ai_chat", self.settings.ai_inbox_dir, "*.json", "/memory/import"),
+            ("codex_tasks", self.settings.codex_inbox_dir, "*.json", "/memory/codex-task"),
         ]
-        if settings.obsidian_knowledge_dir:
-            roots.append(("obsidian", settings.obsidian_knowledge_dir, "*.md", "/knowledge/index"))
+        if self.settings.obsidian_knowledge_dir:
+            roots.append(("obsidian", self.settings.obsidian_knowledge_dir, "*.md", "/knowledge/index"))
         for kind, root, pattern, endpoint in roots:
             if not root.exists():
                 continue
@@ -65,34 +68,51 @@ class BoundedWatcher:
             payload = json.loads(path.read_text(encoding="utf-8-sig"))
         else:
             payload = {"path": str(path)}
-        response = requests.post(f"{self.api_url}{endpoint}", json=payload, timeout=120)
+        response = requests.post(
+            f"{self.api_url}{endpoint}",
+            json=payload,
+            headers={"X-LingJi-Workspace": self.workspace},
+            timeout=120,
+        )
         response.raise_for_status()
 
     def run(self) -> None:
         logger.info(
             "Watching only ai=%s codex=%s obsidian=%s",
-            settings.ai_inbox_dir,
-            settings.codex_inbox_dir,
-            settings.obsidian_knowledge_dir,
+            self.settings.ai_inbox_dir,
+            self.settings.codex_inbox_dir,
+            self.settings.obsidian_knowledge_dir,
         )
         while True:
             counts = self.scan_once()
             if any(counts.values()):
                 logger.info("Watcher scan: %s", counts)
-            time.sleep(settings.poll_seconds)
+            time.sleep(self.settings.poll_seconds)
 
 
 def main() -> None:
-    settings.ensure_directories()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--workspace", choices=("production", "acceptance"), default="production")
+    args = parser.parse_args()
+    config = settings
+    if args.workspace == "acceptance":
+        from second_brain.runtime_registry import acceptance_settings
+
+        config = acceptance_settings(settings)
+    config.ensure_directories()
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
         handlers=[
-            logging.FileHandler(settings.log_dir / "watcher.log", encoding="utf-8"),
+            logging.FileHandler(config.log_dir / "watcher.log", encoding="utf-8"),
             logging.StreamHandler(),
         ],
     )
-    BoundedWatcher(f"http://{settings.host}:{settings.port}").run()
+    BoundedWatcher(
+        f"http://{config.host}:{config.port}",
+        config=config,
+        workspace=args.workspace,
+    ).run()
 
 
 if __name__ == "__main__":

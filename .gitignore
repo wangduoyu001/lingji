@@ -5,6 +5,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.venv/
 
 # PEMIS data (rebuildable, not source code)
 storage/
@@ -25,6 +26,8 @@ data/raw/ai_chat/*.json
 data/inbox/ai_chat/*.json
 data/inbox/codex_tasks/*.json
 logs/second_brain/
+data/acceptance/
+output/desktop-validation/
 
 # Windows
 Thumbs.db
@@ -54,3 +57,4 @@ storage/pemis_index.json
 _D:*
 test_*
 _tmp_*
+!tests/test_*.py

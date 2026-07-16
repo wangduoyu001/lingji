@@ -85,9 +85,11 @@ class SecondBrainTests(unittest.TestCase):
 
     def test_qdrant_rebuild_from_sqlite(self) -> None:
         memory, _ = self.runtime.memories.create("DECISION", "Vector store", "Use isolated Qdrant", "lingji", "active")
-        self.runtime.vectors.client.delete_collection(self.runtime.vectors.collection)
+        stale, _ = self.runtime.memories.create("RULE", "Stale rule", "Do not retain", "lingji", "active")
+        self.runtime.memories.set_status(stale["id"], "conflicted", "test conflict")
         rebuilt = self.runtime.memories.rebuild_vectors()
         self.assertEqual(rebuilt, 1)
+        self.assertEqual(self.runtime.vectors.status()["vectors"], 1)
         hits = self.runtime.vectors.search(self.runtime.embedder.embed(memory["content"]), limit=3)
         self.assertEqual(hits[0]["id"], memory["id"])
 
@@ -134,6 +136,15 @@ class SecondBrainTests(unittest.TestCase):
             ("GET", "/memory/status"), ("GET", "/memory/conflicts"),
             ("GET", "/memory/pending"), ("GET", "/memory/projects"),
             ("GET", "/memory/timeline"), ("GET", "/memory/source/{source_id}"),
+            ("GET", "/system/status"), ("GET", "/system/watcher/status"),
+            ("POST", "/system/watcher/start"), ("POST", "/system/watcher/stop"),
+            ("POST", "/system/watcher/scan-once"), ("GET", "/system/logs"),
+            ("GET", "/memory/list"), ("GET", "/memory/{memory_id}"),
+            ("GET", "/memory/tasks"), ("POST", "/memory/conflicts/{conflict_id}/resolve"),
+            ("GET", "/knowledge/documents"), ("GET", "/knowledge/documents/{document_id}"),
+            ("POST", "/acceptance/reset"), ("POST", "/acceptance/seed"),
+            ("POST", "/acceptance/run-all"), ("POST", "/acceptance/run/{scenario}"),
+            ("GET", "/acceptance/results/latest"),
         }
         actual = {(method, route.path) for route in app.routes for method in getattr(route, "methods", set())}
         self.assertTrue(required.issubset(actual))

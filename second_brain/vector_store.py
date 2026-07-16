@@ -58,11 +58,16 @@ class VectorStore:
     def delete(self, item_id: str) -> None:
         if not self.client.collection_exists(self.collection):
             return
-        self.client.delete(
-            collection_name=self.collection,
-            points_selector=models.PointIdsList(points=[item_id]),
-            wait=True,
-        )
+        try:
+            self.client.delete(
+                collection_name=self.collection,
+                points_selector=models.PointIdsList(points=[item_id]),
+                wait=True,
+            )
+        except KeyError:
+            # Embedded Qdrant raises KeyError when deleting a point that was
+            # never indexed (for example, rejecting a pending memory).
+            return
 
     def delete_document(self, document_id: str) -> None:
         if not self.client.collection_exists(self.collection):
@@ -91,9 +96,42 @@ class VectorStore:
             for point in result.points
         ]
 
+    def document_chunks(self, document_id: str, limit: int = 200) -> list[dict]:
+        if not self.client.collection_exists(self.collection):
+            return []
+        points, _ = self.client.scroll(
+            collection_name=self.collection,
+            scroll_filter=models.Filter(
+                must=[models.FieldCondition(key="document_id", match=models.MatchValue(value=document_id))]
+            ),
+            limit=limit,
+            with_payload=True,
+            with_vectors=False,
+        )
+        chunks = [{"id": str(point.id), **(point.payload or {})} for point in points]
+        return sorted(chunks, key=lambda item: int(item.get("chunk_index", 0)))
+
     def recreate(self, items: list[tuple[str, list[float], dict]]) -> int:
         if self.client.collection_exists(self.collection):
-            self.client.delete_collection(self.collection)
+            point_ids: list[str] = []
+            offset = None
+            while True:
+                points, offset = self.client.scroll(
+                    collection_name=self.collection,
+                    limit=256,
+                    offset=offset,
+                    with_payload=False,
+                    with_vectors=False,
+                )
+                point_ids.extend(str(point.id) for point in points)
+                if offset is None:
+                    break
+            if point_ids:
+                self.client.delete(
+                    collection_name=self.collection,
+                    points_selector=models.PointIdsList(points=point_ids),
+                    wait=True,
+                )
         if not items:
             return 0
         self.ensure_collection(len(items[0][1]))
@@ -109,11 +147,11 @@ class VectorStore:
         try:
             if not self.client.collection_exists(self.collection):
                 return {"mode": mode, "collection": self.collection, "vectors": 0, "ready": True}
-            info = self.client.get_collection(self.collection)
+            count = self.client.count(collection_name=self.collection, exact=True).count
             return {
                 "mode": mode,
                 "collection": self.collection,
-                "vectors": info.points_count or 0,
+                "vectors": count,
                 "ready": True,
             }
         except Exception as exc:
