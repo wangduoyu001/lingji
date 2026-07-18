@@ -304,5 +304,23 @@ class VaultLayout:
             reverse = {value.split("/", 1)[1]: key for key, value in SOURCE_TO_INBOX.items()}
             return reverse.get(values[1], values[1].lower().replace("-", "_"))
         if values[0] == "02-Sources":
-            return values[-3].lower().replace("-", "_") if len(values) >= 4 else values[-1].lower()
+            if values[1] == "Conversations" and len(values) >= 3:
+                return values[2].lower().replace("-", "_")
+            if values[1] == "Web" and len(values) >= 3:
+                web_sources = {
+                    "Douyin": "douyin",
+                    "Xiaohongshu": "xiaohongshu",
+                    "WeChat-Articles": "wechat_article",
+                    "Video-Channels": "video_channel",
+                    "Websites": "web",
+                }
+                return web_sources.get(values[2], values[2].lower().replace("-", "_"))
+            source_folders = {
+                "Documents": "document",
+                "Videos": "video",
+                "Audios": "audio",
+                "Images": "image",
+                "GitHub": "github",
+            }
+            return source_folders.get(values[1], values[1].lower().replace("-", "_"))
         return ""
