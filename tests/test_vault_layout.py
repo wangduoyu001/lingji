@@ -28,6 +28,11 @@ class VaultLayoutTests(unittest.TestCase):
         self.assertTrue(classification.is_inbox)
         self.assertEqual(classification.source_type, "chatgpt")
 
+    def test_archive_source_type_ignores_date_folders(self):
+        path = self.layout.archive_path("chatgpt", "对话.md")
+        classification = self.layout.classify(path)
+        self.assertEqual(classification.source_type, "chatgpt")
+
     def test_private_is_not_indexed_by_default(self):
         private_note = self.root / "08-Private" / "Personal" / "秘密.md"
         private_note.parent.mkdir(parents=True, exist_ok=True)
