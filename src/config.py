@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     decision_history_days: int = 90
     watchdog_enabled: bool = True
 
+    # Single Obsidian Vault foundation
+    vault_auto_init: bool = True
+    vault_layout_version: str = "1"
+    index_private: bool = False
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -28,23 +33,23 @@ class Settings(BaseSettings):
 
     @property
     def vault_path(self) -> Path:
-        return Path(self.vault_dir)
+        return Path(self.vault_dir).expanduser()
 
     @property
     def storage_path(self) -> Path:
-        return Path(self.storage_dir)
+        return Path(self.storage_dir).expanduser()
 
     @property
     def snapshot_path(self) -> Path:
-        return Path(self.snapshot_dir)
+        return Path(self.snapshot_dir).expanduser()
 
     @property
     def backup_path(self) -> Path:
-        return Path(self.backup_dir)
+        return Path(self.backup_dir).expanduser()
 
     @property
     def log_path(self) -> Path:
-        return Path(self.log_dir)
+        return Path(self.log_dir).expanduser()
 
 
 settings = Settings()
