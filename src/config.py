@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     vault_auto_init: bool = True
     vault_layout_version: str = "1"
     index_private: bool = False
+    obsidian_interaction_auto_init: bool = True
+
+    # Persistent runtime state
+    state_db_name: str = "lingji_state.db"
+    scheduler_poll_seconds: float = 60.0
+    scheduler_workers: int = 2
+    manual_command_interval_minutes: int = 2
 
     class Config:
         env_file = ".env"
@@ -50,6 +57,10 @@ class Settings(BaseSettings):
     @property
     def log_path(self) -> Path:
         return Path(self.log_dir).expanduser()
+
+    @property
+    def state_db_path(self) -> Path:
+        return self.storage_path / self.state_db_name
 
 
 settings = Settings()
