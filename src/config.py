@@ -1,4 +1,6 @@
 from pathlib import Path
+
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -29,6 +31,7 @@ class Settings(BaseSettings):
 
     # Persistent runtime state
     state_db_name: str = "lingji_state.db"
+    runtime_settings_file: str = "runtime_settings.json"
     scheduler_poll_seconds: float = 60.0
     scheduler_workers: int = 2
     manual_command_interval_minutes: int = 2
@@ -46,6 +49,31 @@ class Settings(BaseSettings):
     web_network_fetch_enabled: bool = False
     web_network_timeout_seconds: float = 15.0
     web_max_response_bytes: int = 8 * 1024 * 1024
+
+    # Owner-editable media defaults. The local control UI persists overrides in
+    # storage/runtime_settings.json; task options can still override one execution.
+    media_keyframe_interval_seconds: float = Field(default=30.0, ge=1.0, le=86400.0)
+    media_max_keyframes: int = Field(default=500, ge=1, le=100000)
+    media_keyframe_max_dimension: int = Field(default=1280, ge=64, le=16384)
+    media_ffmpeg_max_concurrency: int = Field(default=1, ge=1, le=32)
+    media_ffmpeg_threads: int = Field(default=2, ge=1, le=128)
+    media_max_input_gb: float = Field(default=20.0, ge=0.0, le=102400.0)
+    media_max_duration_minutes: float = Field(default=360.0, ge=0.0, le=5256000.0)
+    media_default_priority: int = Field(default=100, ge=0, le=10000)
+    media_probe_timeout_seconds: float = Field(default=60.0, ge=1.0, le=3600.0)
+    media_ffmpeg_timeout_seconds: float = Field(default=1800.0, ge=1.0, le=604800.0)
+
+    # Startup health checks are visible in the future independent local UI.
+    startup_health_check_enabled: bool = True
+    startup_health_fail_on_error: bool = True
+    startup_require_ollama: bool = False
+    startup_min_free_gb: float = Field(default=2.0, ge=0.0)
+    startup_health_timeout_seconds: float = Field(default=3.0, ge=0.2, le=60.0)
+
+    # Local control API for the independent Tauri UI. Keep loopback-only by default.
+    control_api_host: str = "127.0.0.1"
+    control_api_port: int = Field(default=8766, ge=1024, le=65535)
+    control_api_token_file: str = "control_api_token"
 
     # Skill registry. Comma-separated roots are optional and never copied into the Vault.
     skill_auto_sync_roots: str = ""
@@ -98,6 +126,10 @@ class Settings(BaseSettings):
     @property
     def memory_db_path(self) -> Path:
         return self.storage_path / self.memory_db_name
+
+    @property
+    def runtime_settings_path(self) -> Path:
+        return self.storage_path / self.runtime_settings_file
 
     @property
     def skill_sync_paths(self) -> list[Path]:
