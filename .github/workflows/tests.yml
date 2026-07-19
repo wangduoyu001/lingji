@@ -35,7 +35,7 @@ jobs:
           set +e
           python -m unittest discover -s tests -v > test-output-${{ matrix.python-version }}.log 2>&1
           status=$?
-          tail -n 220 test-output-${{ matrix.python-version }}.log
+          tail -n 260 test-output-${{ matrix.python-version }}.log
           exit $status
       - name: Upload test log
         if: always()
@@ -63,7 +63,7 @@ jobs:
         run: |
           python -m unittest discover -s tests -v *> test-output-windows-3.12.log
           $status = $LASTEXITCODE
-          Get-Content test-output-windows-3.12.log -Tail 240
+          Get-Content test-output-windows-3.12.log -Tail 280
           exit $status
       - name: Upload Windows test log
         if: always()
@@ -72,6 +72,43 @@ jobs:
           name: test-output-windows-3.12
           path: test-output-windows-3.12.log
           retention-days: 3
+
+  desktop-ui-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: desktop/lingji-control
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/lingji-control/package.json
+      - name: Install desktop UI dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build React control center
+        run: npm run build
+      - name: Validate Tauri configuration
+        run: |
+          node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8')); if(!c.identifier||!c.build||!c.app) process.exit(1)"
+          node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('src-tauri/capabilities/default.json','utf8')); if(!c.identifier||!Array.isArray(c.permissions)) process.exit(1)"
+
+  browser-capture-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate browser extension
+        run: |
+          node --check browser-extension/lingji-capture/background.js
+          node --check browser-extension/lingji-capture/popup.js
+          node --check browser-extension/lingji-capture/options.js
+          node -e "const m=require('./browser-extension/lingji-capture/manifest.json'); if(m.manifest_version!==3||!m.background||!m.options_page) process.exit(1)"
 
   obsidian-plugin-smoke:
     runs-on: ubuntu-latest
