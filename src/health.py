@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import sqlite3
 from pathlib import Path
@@ -9,10 +10,11 @@ import requests
 
 
 class StartupHealthChecker:
-    """Run bounded startup checks without turning optional tools into hard dependencies."""
+    """Run bounded checks without turning optional tools into hard dependencies."""
 
-    def __init__(self, settings: Any):
+    def __init__(self, settings: Any, *, read_only: bool = False):
         self.settings = settings
+        self.read_only = bool(read_only)
 
     def run(self) -> dict[str, Any]:
         checks: list[dict[str, Any]] = []
@@ -31,6 +33,7 @@ class StartupHealthChecker:
         status = "error" if errors else "degraded" if warnings else "healthy"
         return {
             "status": status,
+            "read_only": self.read_only,
             "checks": checks,
             "error_count": len(errors),
             "warning_count": len(warnings),
@@ -64,6 +67,24 @@ class StartupHealthChecker:
         create: bool,
     ) -> None:
         try:
+            if self.read_only:
+                if not path.exists():
+                    self._append(checks, name, "warning", f"目录不存在：{path}", path=str(path))
+                    return
+                if not path.is_dir():
+                    self._append(checks, name, "error", f"路径不是目录：{path}", path=str(path))
+                    return
+                readable = os.access(path, os.R_OK)
+                self._append(
+                    checks,
+                    name,
+                    "ok" if readable else "error",
+                    f"目录可读取：{path}" if readable else f"目录不可读取：{path}",
+                    path=str(path),
+                    writable=os.access(path, os.W_OK),
+                )
+                return
+
             if create:
                 path.mkdir(parents=True, exist_ok=True)
             if not path.exists():
@@ -77,7 +98,8 @@ class StartupHealthChecker:
             probe.unlink(missing_ok=True)
             self._append(checks, name, "ok", f"目录可写：{path}", path=str(path))
         except OSError as exc:
-            self._append(checks, name, "error", f"目录不可写：{path}（{exc}）", path=str(path))
+            action = "读取" if self.read_only else "写入"
+            self._append(checks, name, "error", f"目录无法{action}：{path}（{exc}）", path=str(path))
 
     def _check_backup(self, checks: list[dict[str, Any]]) -> None:
         path = self.settings.backup_path
@@ -91,7 +113,7 @@ class StartupHealthChecker:
                     checks,
                     "backup",
                     "warning",
-                    f"备份目录尚未创建，将由备份流程创建：{path}",
+                    f"备份目录尚未创建：{path}",
                     path=str(path),
                 )
             else:
@@ -105,9 +127,20 @@ class StartupHealthChecker:
         except OSError as exc:
             self._append(checks, "backup", "warning", f"无法检查备份目录：{exc}", path=str(path))
 
+    @staticmethod
+    def _nearest_existing(path: Path) -> Path | None:
+        current = path
+        while not current.exists() and current != current.parent:
+            current = current.parent
+        return current if current.exists() else None
+
     def _check_disk(self, checks: list[dict[str, Any]]) -> None:
+        target = self._nearest_existing(self.settings.storage_path)
+        if target is None:
+            self._append(checks, "disk", "warning", "无法找到可检查的存储父目录")
+            return
         try:
-            usage = shutil.disk_usage(self.settings.storage_path)
+            usage = shutil.disk_usage(target)
             free_gb = usage.free / 1024**3
             threshold = float(self.settings.startup_min_free_gb)
             status = "warning" if free_gb < threshold else "ok"
@@ -116,6 +149,7 @@ class StartupHealthChecker:
                 "disk",
                 status,
                 f"磁盘剩余 {free_gb:.2f} GB",
+                path=str(target),
                 free_gb=round(free_gb, 3),
                 threshold_gb=threshold,
                 total_gb=round(usage.total / 1024**3, 3),
@@ -123,12 +157,20 @@ class StartupHealthChecker:
         except OSError as exc:
             self._append(checks, "disk", "error", f"无法读取磁盘状态：{exc}")
 
+    @staticmethod
+    def _read_only_sqlite_uri(path: Path) -> str:
+        return f"{path.resolve().as_uri()}?mode=ro"
+
     def _check_sqlite(self, checks: list[dict[str, Any]], name: str, path: Path) -> None:
         if not path.exists():
-            self._append(checks, name, "ok", f"数据库将在首次启动时创建：{path}", path=str(path))
+            message = "数据库尚未创建" if self.read_only else "数据库将在首次启动时创建"
+            self._append(checks, name, "ok", f"{message}：{path}", path=str(path))
             return
         try:
-            connection = sqlite3.connect(path, timeout=3)
+            if self.read_only:
+                connection = sqlite3.connect(self._read_only_sqlite_uri(path), uri=True, timeout=3)
+            else:
+                connection = sqlite3.connect(path, timeout=3)
             try:
                 result = connection.execute("PRAGMA quick_check").fetchone()
             finally:
@@ -154,8 +196,21 @@ class StartupHealthChecker:
         try:
             response = requests.get(url, timeout=float(self.settings.startup_health_timeout_seconds))
             response.raise_for_status()
-            self._append(checks, "ollama", "ok", f"Ollama 可连接：{self.settings.ollama_base_url}")
-        except requests.RequestException as exc:
+            payload = response.json() if response.content else {}
+            models = []
+            for item in payload.get("models") or []:
+                name = item.get("name") or item.get("model")
+                if name:
+                    models.append(str(name))
+            self._append(
+                checks,
+                "ollama",
+                "ok",
+                f"Ollama 可连接，发现 {len(models)} 个模型",
+                url=url,
+                models=sorted(models),
+            )
+        except (requests.RequestException, ValueError, TypeError) as exc:
             status = "error" if self.settings.startup_require_ollama else "warning"
             self._append(
                 checks,
