@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 import zipfile
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -28,8 +29,11 @@ class AcceptanceCheckTests(unittest.TestCase):
         self.settings.storage_path.mkdir(parents=True)
         (self.settings.vault_path / "note.md").write_text("# note\n\ncontent\n", encoding="utf-8")
         for path in (self.settings.state_db_path, self.settings.memory_db_path):
-            with sqlite3.connect(path) as connection:
-                connection.execute("CREATE TABLE sample(value TEXT)")
+            # sqlite3.Connection.__exit__ commits or rolls back but does not close.
+            # Explicit closing is required so Windows can delete TemporaryDirectory files.
+            with closing(sqlite3.connect(path)) as connection:
+                with connection:
+                    connection.execute("CREATE TABLE sample(value TEXT)")
         self.export = root / "chatgpt.zip"
         with zipfile.ZipFile(self.export, "w") as archive:
             archive.writestr("conversations.json", "[]")
