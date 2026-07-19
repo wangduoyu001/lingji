@@ -25,8 +25,14 @@ def main() -> None:
     parser.add_argument("--visual-notes")
     parser.add_argument("--extract-audio", action="store_true")
     parser.add_argument("--extract-keyframes", action="store_true")
-    parser.add_argument("--keyframe-interval", type=float, default=30.0)
-    parser.add_argument("--max-keyframes", type=int, default=120)
+    parser.add_argument("--keyframe-interval", type=float)
+    parser.add_argument("--max-keyframes", type=int)
+    parser.add_argument("--keyframe-max-dimension", type=int)
+    parser.add_argument("--ffmpeg-concurrency", type=int)
+    parser.add_argument("--ffmpeg-threads", type=int)
+    parser.add_argument("--max-input-gb", type=float)
+    parser.add_argument("--max-duration-minutes", type=float)
+    parser.add_argument("--priority", type=int)
     parser.add_argument("--queue", action="store_true")
     args = parser.parse_args()
 
@@ -41,9 +47,21 @@ def main() -> None:
         "visual_notes_path": args.visual_notes or "",
         "extract_audio": args.extract_audio,
         "extract_keyframes": args.extract_keyframes,
+    }
+    overrides = {
         "keyframe_interval_seconds": args.keyframe_interval,
         "max_keyframes": args.max_keyframes,
+        "keyframe_max_dimension": args.keyframe_max_dimension,
+        "ffmpeg_max_concurrency": args.ffmpeg_concurrency,
+        "ffmpeg_threads": args.ffmpeg_threads,
+        "max_input_bytes": int(args.max_input_gb * 1024**3)
+        if args.max_input_gb is not None
+        else None,
+        "max_duration_seconds": args.max_duration_minutes * 60
+        if args.max_duration_minutes is not None
+        else None,
     }
+    options.update({key: value for key, value in overrides.items() if value is not None})
     pipeline = build_extraction_pipeline(settings)
     if args.queue:
         result = pipeline.enqueue(
@@ -52,6 +70,7 @@ def main() -> None:
             payload=payload,
             options=options,
             adapter_name="media_local",
+            priority=args.priority,
         )
     else:
         result = pipeline.execute(
