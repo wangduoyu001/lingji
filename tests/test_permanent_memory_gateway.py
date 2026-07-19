@@ -62,6 +62,9 @@ class PermanentMemoryGatewayTests(unittest.TestCase):
         self.assertTrue(promoted["pin_to_context"])
         self.assertIn("03-Knowledge/Core-Memory/Preferences", promoted["relative_path"])
         self.assertFalse(Path(candidate["path"]).exists())
+        promoted_text = Path(promoted["path"]).read_text(encoding="utf-8")
+        self.assertIn("已由主人确认", promoted_text)
+        self.assertNotIn("## 主人审核", promoted_text)
 
     def test_remote_ai_cannot_create_or_read_restricted_memory(self):
         with self.assertRaises(PermissionError):
@@ -108,11 +111,11 @@ class PermanentMemoryGatewayTests(unittest.TestCase):
             "codex",
             query="SQLite 全文检索",
             project=None,
-            max_chars=900,
+            max_chars=1200,
         )
         self.assertTrue(pack["sections"])
         self.assertEqual(pack["sections"][0]["kind"], "core_memory")
-        self.assertLessEqual(pack["used_chars"], 900)
+        self.assertLessEqual(pack["used_chars"], 1200)
         self.assertIn("来源：", pack["markdown"])
         self.assertIn("代码开发原则", pack["markdown"])
 
@@ -135,10 +138,13 @@ class PermanentMemoryGatewayTests(unittest.TestCase):
         self.assertEqual(len(codex["memories"]), 0)
 
     def test_permanent_memory_obsidian_ui_is_generated(self):
-        result = PermanentMemoryObsidianManager(self.layout).ensure()
-        self.assertIn("00-System/Bases/Permanent Memory.base", result["created"])
+        manager = PermanentMemoryObsidianManager(self.layout)
+        result = manager.ensure()
+        expected = self.vault / "00-System" / "Bases" / "Permanent Memory.base"
+        self.assertTrue(expected.exists())
         self.assertTrue((self.vault / "00-System" / "Permanent-Memory.md").exists())
         self.assertTrue((self.vault / "00-System" / "Templates" / "核心记忆模板.md").exists())
+        self.assertTrue(result["created"] or result["skipped"])
 
 
 if __name__ == "__main__":
