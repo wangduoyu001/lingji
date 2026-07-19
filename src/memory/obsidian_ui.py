@@ -60,6 +60,14 @@ class PermanentMemoryObsidianManager:
                 "      - project",
                 "      - created_at",
                 "  - type: table",
+                f"    name: {json.dumps('手动草稿', ensure_ascii=False)}",
+                "    filters: 'memory_tier == \"core\" && status == \"draft\"'",
+                "    order:",
+                "      - file.name",
+                "      - importance",
+                "      - agent_scope",
+                "      - updated_at",
+                "  - type: table",
                 f"    name: {json.dumps('已失效', ensure_ascii=False)}",
                 "    filters: 'status == \"superseded\" || status == \"rejected\" || valid_to != null'",
                 "    order:",
@@ -89,6 +97,10 @@ privacy: private
 
 ![[00-System/Bases/Permanent Memory.base#AI候选]]
 
+## 手动草稿
+
+![[00-System/Bases/Permanent Memory.base#手动草稿]]
+
 ## 已失效与被替代
 
 ![[00-System/Bases/Permanent Memory.base#已失效]]
@@ -97,10 +109,11 @@ privacy: private
 
 1. AI 只能在 `01-Inbox/AI-Memory` 提议候选。
 2. 主人确认后，程序才能移动到 `03-Knowledge/Core-Memory`。
-3. 变化中的事实必须填写 `valid_from` 和 `valid_to`。
-4. 新事实替代旧事实时，保留 `superseded_by`，不直接删除历史。
-5. `pin_to_context: true` 的核心记忆会优先进入 Context Pack。
-6. 远程 AI 默认不能读取 `privacy: restricted`。
+3. 手动使用“核心记忆模板”创建的内容默认是草稿，确认无误后再把 `status` 改为 `active`、`review_status` 改为 `approved`、`pin_to_context` 改为 `true`。
+4. 变化中的事实必须填写 `valid_from` 和 `valid_to`。
+5. 新事实替代旧事实时，保留 `superseded_by`，不直接删除历史。
+6. `pin_to_context: true` 的核心记忆会优先进入 Context Pack。
+7. 远程 AI 默认不能读取 `privacy: restricted`。
 
 核心记忆应保持短、稳定、可核查。把所有聊天记录都钉进上下文，只会得到一个记得很多但思考时喘不过气的模型。
 """
@@ -110,12 +123,12 @@ privacy: private
             "title": "",
             "memory_type": "knowledge",
             "memory_tier": "core",
-            "status": "active",
-            "review_status": "approved",
+            "status": "draft",
+            "review_status": "needs_review",
             "privacy": "private",
             "importance": "high",
             "confidence": "high",
-            "pin_to_context": True,
+            "pin_to_context": False,
             "agent_scope": ["all"],
             "recall_weight": 1.2,
             "valid_from": "",
@@ -124,7 +137,7 @@ privacy: private
             "superseded_by": "",
             "sources": [],
             "project": [],
-            "tags": ["signal/core-memory"],
+            "tags": ["signal/core-memory", "attention/review"],
             "created_at": "",
             "updated_at": "",
             "lingji_managed": True,
@@ -140,6 +153,8 @@ privacy: private
 ## 来源与依据
 
 ## 失效条件
+
+> 确认后将 status 改为 active、review_status 改为 approved、pin_to_context 改为 true。
 """
         return {
             "00-System/Bases/Permanent Memory.base": base,
