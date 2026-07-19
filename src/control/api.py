@@ -97,7 +97,7 @@ def create_control_app(
         raise RuntimeError("Install requirements-ui.txt to run the local control API") from exc
 
     control = service or LocalControlService(settings)
-    app = FastAPI(title="LingJi Local Control API", version="0.4.0")
+    app = FastAPI(title="LingJi Local Control API", version="0.5.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -177,6 +177,18 @@ def create_control_app(
             return control.update_compute_policy(request.mode, actor="local_ui")
         except Exception as exc:
             raise translate_error(exc) from exc
+
+    @app.get("/api/models/registry", dependencies=secured)
+    def model_registry() -> dict[str, Any]:
+        return control.model_registry()
+
+    @app.get("/api/models", dependencies=secured)
+    def models() -> dict[str, Any]:
+        return control.models()
+
+    @app.post("/api/models/refresh", dependencies=secured)
+    def refresh_models() -> dict[str, Any]:
+        return control.refresh_models()
 
     @app.get("/api/jobs", dependencies=secured)
     def jobs(
