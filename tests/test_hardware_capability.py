@@ -134,20 +134,17 @@ class HardwareCapabilityTests(unittest.TestCase):
             self.assertEqual(policy["fallback_reason"], "gpu_unavailable")
             self.assertTrue(policy["basic_retrieval_available"])
 
-    def test_runtime_settings_expose_compute_defaults_with_owner_help(self):
+    def test_runtime_settings_expose_compute_defaults_and_update_real_cache_policy(self):
         with tempfile.TemporaryDirectory() as directory:
             settings = self.make_settings(Path(directory))
             state_db = StateDatabase(settings.state_db_path)
-            control = LocalControlService(
+            hardware = HardwareCapabilityService(
                 settings,
-                state_db=state_db,
-                hardware=HardwareCapabilityService(
-                    settings,
-                    command_runner=FakeRunner(gpu=False),
-                    url_reader=lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("offline")),
-                    psutil_module=None,
-                ),
+                command_runner=FakeRunner(gpu=False),
+                url_reader=lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("offline")),
+                psutil_module=None,
             )
+            control = LocalControlService(settings, state_db=state_db, hardware=hardware)
             try:
                 snapshot = control.get_settings()
                 definition = snapshot["definitions"]["compute_mode"]
@@ -157,8 +154,46 @@ class HardwareCapabilityTests(unittest.TestCase):
                 self.assertTrue(definition["when_to_change"])
                 self.assertEqual(definition["choices"], ["auto", "gpu_preferred", "cpu_only"])
                 self.assertIn("hardware_foreground_interval_seconds", snapshot["definitions"])
+                self.assertEqual(
+                    hardware.cache_policy(),
+                    {"static_seconds": 30.0, "telemetry_seconds": 2.0, "gpu_probe_seconds": 10.0},
+                )
+
+                control.update_settings(
+                    {
+                        "hardware_static_refresh_seconds": 45,
+                        "hardware_foreground_interval_seconds": 3,
+                        "hardware_nvidia_smi_min_interval_seconds": 12,
+                    }
+                )
+                self.assertEqual(
+                    hardware.cache_policy(),
+                    {"static_seconds": 45.0, "telemetry_seconds": 3.0, "gpu_probe_seconds": 12.0},
+                )
             finally:
                 control.close()
+
+    def test_gpu_probe_respects_minimum_interval_across_capability_and_telemetry_reads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = self.make_settings(Path(directory))
+            runner = FakeRunner(gpu=True)
+            service = HardwareCapabilityService(
+                settings,
+                command_runner=runner,
+                url_reader=fake_url_reader,
+                psutil_module=FakePsutil,
+                cache_seconds=0,
+                telemetry_cache_seconds=0,
+                gpu_cache_seconds=60,
+            )
+
+            service.capabilities()
+            service.telemetry()
+            service.telemetry()
+
+            gpu_calls = [call for call in runner.calls if call and call[0].lower() == "nvidia-smi"]
+            self.assertEqual(len(gpu_calls), 1)
+            self.assertEqual(service.telemetry()["cache_policy"]["gpu_probe_seconds"], 60.0)
 
     def test_control_api_exposes_hardware_telemetry_and_compute_policy(self):
         with tempfile.TemporaryDirectory() as directory:
