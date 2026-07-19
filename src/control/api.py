@@ -16,6 +16,10 @@ class SettingsReset(BaseModel):
     keys: list[str] | None = None
 
 
+class ComputePolicyPatch(BaseModel):
+    mode: str
+
+
 class StoragePlanRequest(BaseModel):
     policy: dict[str, Any] | None = None
 
@@ -93,7 +97,7 @@ def create_control_app(
         raise RuntimeError("Install requirements-ui.txt to run the local control API") from exc
 
     control = service or LocalControlService(settings)
-    app = FastAPI(title="LingJi Local Control API", version="0.3.0")
+    app = FastAPI(title="LingJi Local Control API", version="0.4.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -148,6 +152,29 @@ def create_control_app(
     def reset_settings(request: SettingsReset) -> dict[str, Any]:
         try:
             return control.reset_settings(request.keys, actor="local_ui")
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get("/api/hardware/capabilities", dependencies=secured)
+    def hardware_capabilities() -> dict[str, Any]:
+        return control.hardware_capabilities()
+
+    @app.get("/api/hardware/telemetry", dependencies=secured)
+    def hardware_telemetry() -> dict[str, Any]:
+        return control.hardware_telemetry()
+
+    @app.post("/api/hardware/refresh", dependencies=secured)
+    def refresh_hardware() -> dict[str, Any]:
+        return control.refresh_hardware()
+
+    @app.get("/api/compute/policy", dependencies=secured)
+    def compute_policy() -> dict[str, Any]:
+        return control.compute_policy()
+
+    @app.patch("/api/compute/policy", dependencies=secured)
+    def update_compute_policy(request: ComputePolicyPatch) -> dict[str, Any]:
+        try:
+            return control.update_compute_policy(request.mode, actor="local_ui")
         except Exception as exc:
             raise translate_error(exc) from exc
 
