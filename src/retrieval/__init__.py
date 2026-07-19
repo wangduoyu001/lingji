@@ -1,6 +1,7 @@
 from .chunker import MarkdownChunk, MarkdownChunker
+from .enhanced import HybridRetriever
+from .hybrid import SearchFilters
 from .memory_db import MemoryDatabase
-from .hybrid import HybridRetriever, SearchFilters
 
 __all__ = [
     "MarkdownChunk",
