@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from src.config import Settings
@@ -25,9 +26,11 @@ class BackupManagerTests(unittest.TestCase):
         (self.settings.vault_path / "note.md").write_text("# 记忆\n", encoding="utf-8")
         self.settings.runtime_settings_path.write_text('{"schema_version": 1, "overrides": {}}\n', encoding="utf-8")
         for db_path in (self.settings.state_db_path, self.settings.memory_db_path):
-            with sqlite3.connect(db_path) as connection:
-                connection.execute("CREATE TABLE sample(value TEXT)")
-                connection.execute("INSERT INTO sample(value) VALUES ('ok')")
+            # A sqlite connection context only controls transactions; it does not close.
+            with closing(sqlite3.connect(db_path)) as connection:
+                with connection:
+                    connection.execute("CREATE TABLE sample(value TEXT)")
+                    connection.execute("INSERT INTO sample(value) VALUES ('ok')")
         (self.settings.storage_path / "pemis_index.json").write_text('{"entries": {}}\n', encoding="utf-8")
         self.manager = BackupManager(self.settings)
 
