@@ -69,12 +69,30 @@ class CodexWritebackTests(unittest.TestCase):
         text = report.read_text(encoding="utf-8")
         self.assertIn("完成SQLite队列", text)
         self.assertIn("abc123", text)
+        self.assertIn("执行ID", text)
 
     def test_repeated_write_is_idempotent(self):
         first = self.pipeline.execute("codex", payload=self._report())
         second = self.pipeline.execute("codex", payload=self._report())
         self.assertEqual(len(first["created"]), 4)
         self.assertEqual(len(second["skipped"]), 4)
+
+    def test_new_execution_keeps_previous_report(self):
+        first_report = self._report()
+        first_report["execution_id"] = "run-001"
+        second_report = self._report()
+        second_report["execution_id"] = "run-002"
+        second_report["completed_at"] = "2026-07-19T12:00:00"
+        second_report["summary"] = "第二次执行完成兼容性修复。"
+        first = self.pipeline.execute("codex", payload=first_report)
+        second = self.pipeline.execute("codex", payload=second_report)
+        self.assertEqual(len(first["created"]), 4)
+        self.assertGreaterEqual(len(second["created"]), 1)
+        reports = list((self.vault / "05-Operations/Work-Reports/LingJi").rglob("*.md"))
+        self.assertEqual(len(reports), 2)
+        contents = "\n".join(path.read_text(encoding="utf-8") for path in reports)
+        self.assertIn("run-001", contents)
+        self.assertIn("run-002", contents)
 
 
 if __name__ == "__main__":
