@@ -2,6 +2,7 @@ import type { NavigationItem } from "./types";
 
 export const NAVIGATION: NavigationItem[] = [
   { id: "overview", label: "总览", hint: "状态与预警" },
+  { id: "system_compute", label: "系统与算力", hint: "CPU、GPU、显存与运行模式" },
   { id: "jobs", label: "任务", hint: "采集与处理队列" },
   { id: "capture", label: "主动投喂", hint: "网页、文字和本地文件" },
   { id: "media", label: "媒体分析", hint: "转写、OCR 与镜头" },
