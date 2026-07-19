@@ -8,9 +8,11 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
-from src.config import settings
-from src.extraction import ExtractionWorker, build_extraction_pipeline
 from main import PEMISCore
+from src.config import settings
+from src.extraction import ExtractionRequestInbox, ExtractionWorker, build_extraction_pipeline
+from src.obsidian import LingJiSystemUI
+from src.skills import SkillRegistry
 
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -32,6 +34,9 @@ class LingJiService:
         self.core = None
         self.extraction_pipeline = None
         self.extraction_worker = None
+        self.skill_registry = None
+        self.request_inbox = None
+        self.system_ui = None
         self.running = False
 
     def start(self):
@@ -43,8 +48,30 @@ class LingJiService:
         try:
             self.core = PEMISCore()
             self.core.start()
+            self.extraction_pipeline = build_extraction_pipeline(
+                settings,
+                on_documents_written=self._on_documents_written,
+            )
+            self.skill_registry = SkillRegistry(self.core.vault_layout, self.core.state_db)
+            self.request_inbox = ExtractionRequestInbox(
+                self.core.vault_layout,
+                self.extraction_pipeline,
+                skill_registry=self.skill_registry,
+                state_db=self.core.state_db,
+            )
+            self.system_ui = LingJiSystemUI(
+                self.core.vault_layout,
+                extraction_pipeline=self.extraction_pipeline,
+                skill_registry=self.skill_registry,
+                request_inbox=self.request_inbox,
+            )
+            self.system_ui.ensure()
+            for root in settings.skill_sync_paths:
+                try:
+                    self.skill_registry.sync_directory(root)
+                except Exception:
+                    logger.exception("Skill auto sync failed: %s", root)
             if settings.extraction_worker_enabled:
-                self.extraction_pipeline = build_extraction_pipeline(settings)
                 self.extraction_worker = ExtractionWorker(
                     self.extraction_pipeline,
                     poll_seconds=settings.extraction_poll_seconds,
@@ -61,6 +88,30 @@ class LingJiService:
             self._remove_pid_file()
             raise
 
+    def _on_documents_written(self, result):
+        if not self.core:
+            return
+        indexed = 0
+        for path_text in result.get("paths") or []:
+            path = Path(path_text)
+            if not path.exists():
+                continue
+            if not self.core.vault_layout.should_index(path, include_private=False):
+                continue
+            if self.core.indexer.incremental_add(path):
+                self.core._sync_memory_file(path)
+                indexed += 1
+        if indexed:
+            self.core._update_control_center()
+        if self.system_ui:
+            self.system_ui.refresh_status()
+        self.core.state_db.append_event(
+            "extraction_index_synced",
+            "extraction",
+            str(result.get("execution_id") or ""),
+            {"indexed": indexed, "paths": result.get("paths") or []},
+        )
+
     def stop(self):
         logger.info("LingJi service stopping...")
         if self.extraction_worker:
@@ -75,7 +126,11 @@ class LingJiService:
         self.start()
         try:
             while self.running:
-                time.sleep(10)
+                if self.request_inbox:
+                    result = self.request_inbox.process_pending(limit=20)
+                    if result["processed"] and self.system_ui:
+                        self.system_ui.refresh_status()
+                time.sleep(max(settings.extraction_request_interval_minutes * 60, 5))
         except KeyboardInterrupt:
             self.stop()
 
