@@ -6,6 +6,17 @@
 - 只允许一个 Obsidian Vault，不为不同入口建立额外 Vault
 - 旧 `PEMIS/` 目录迁移期间保持可读，禁止直接删除或批量移动
 
+## 产品与 UI 定位
+1. 灵机主 UI 必须是单独启动的本地桌面控制中心，不是 Obsidian 插件。
+2. 不打开 Obsidian、不安装 Obsidian 插件时，采集、任务、模型、参数、日志、备份、Skill 和系统状态管理仍必须正常工作。
+3. Obsidian 是长期知识正文、人工编辑和关系浏览的权威界面，不是系统运维控制台。
+4. Obsidian 插件只能作为可选快捷入口：打开本地控制中心、提交当前笔记或选中文字、打开关联资料、显示简要状态。
+5. 独立 UI、MCP、CLI 和 Obsidian 快捷入口必须共用同一个 Python Service Layer，禁止复制业务逻辑。
+6. 独立 UI 不直接修改 SQLite 表或任意覆盖 Vault 文件，只能调用本机白名单 API。
+7. 推荐架构：Tauri 2 + React/TypeScript 前端 + FastAPI 本地控制 API + WebSocket 实时状态。
+8. 本地控制中心默认只绑定 `127.0.0.1`，危险操作需要确认、备份和审计。
+9. 详细规划见 `docs/LOCAL_CONTROL_CENTER_ARCHITECTURE.md`。
+
 ## 启动与停止
 - 主服务：`python run_service.py`
 - 独立提取 Worker：`python run_extraction_worker.py`
@@ -68,7 +79,7 @@
 6. 优先级顺序：现有仓库能力 > 成熟开源库 > 本地模型 > 免费额度 API > 付费 API。
 
 ## Skill 管理规则
-1. Obsidian 是 Skill 的管理中枢，保存名称、版本、说明、能力、触发条件、依赖、兼容 Agent、测试证据、状态和关联项目。
+1. 独立本地控制中心是 Skill 的主要管理界面；Obsidian 保存人类可读清单和关联知识。
 2. Skill 源代码、依赖锁文件、测试和发布包仍以 Git 仓库或原安装目录为权威。
 3. 禁止把同一套 Skill 可执行代码复制进多个 Obsidian 目录。
 4. 每个 Skill 使用稳定 `skill_id`，并保存 `source_path`、`source_hash`、`repository` 和 `entrypoint`。
@@ -76,14 +87,13 @@
 6. 未验证 Skill 保持 `review_status: needs_review`，不得默认注入所有 Agent。
 7. 主人禁用或归档 Skill 后，自动同步不得恢复其状态。
 
-## Obsidian UI 规则
-1. 提取中心：`00-System/Extraction-Center.md`。
-2. Skill 中心：`00-System/Skills-Center.md`。
-3. 采集请求：`00-System/Extraction/Requests/`。
-4. 主要视图使用 Obsidian Bases；复杂只读查询才使用 Dataview。
-5. `LingJi Control` 插件只创建请求、打开中心和提供本地操作按钮，不直接绕过审核执行危险操作。
-6. 插件创建的请求默认 `status: draft`；主人确认后改为 `queued`。
-7. 系统只自动更新包含 `lingji_managed: true` 的页面、Base 和模板。
+## Obsidian 辅助入口规则
+1. `00-System/Extraction-Center.md`、`00-System/Skills-Center.md` 和 Bases 是知识库内的辅助视图，不是主控制台。
+2. Obsidian 插件属于可选组件，删除或禁用后不得影响灵机核心功能。
+3. 插件只允许创建请求、打开独立本地控制中心、提交当前内容和跳转关联资料。
+4. 插件创建的请求默认 `status: draft`；主人确认后改为 `queued`。
+5. 系统只自动更新包含 `lingji_managed: true` 的页面、Base 和模板。
+6. 完整参数、任务、日志、模型、备份、恢复、权限和系统状态必须放在独立本地 UI。
 
 ## Obsidian 人工管理规则
 1. 文件夹只表达来源、阶段和生命周期，不承担全部分类。
@@ -159,7 +169,8 @@
 
 ## 常用入口
 - 初始化单仓库：`python scripts/init_single_vault.py`
-- 安装 Obsidian 插件：`python scripts/install_obsidian_plugin.py --vault "E:\obsidian\本地知识库"`
+- 独立本地控制中心：开发阶段使用 `python run_service.py` + 前端开发命令；最终目标为 `LingJi.exe`
+- 可选安装 Obsidian 快捷插件：`python scripts/install_obsidian_plugin.py --vault "E:\obsidian\本地知识库"`
 - 导入 ChatGPT：`python scripts/import_chatgpt_export.py <export.zip|conversations.json|directory>`
 - 提交 Codex 报告：`python scripts/submit_codex_report.py <report.json>`
 - 采集网页或视频号：`python scripts/capture_web_source.py <url> --platform video_channel`
