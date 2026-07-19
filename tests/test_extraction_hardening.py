@@ -8,7 +8,6 @@ from src.extraction.models import ExtractedDocument, ExtractionBatch
 from src.extraction.queue import SQLiteExtractionQueue
 from src.extraction.sink import VaultExtractionSink
 from src.memory import VaultLayout
-from src.obsidian.frontmatter import render_frontmatter
 
 
 class ExtractionHardeningTests(unittest.TestCase):
@@ -30,19 +29,34 @@ class ExtractionHardeningTests(unittest.TestCase):
         second = queue.enqueue("chatgpt", payload={}, options={"project_id": "Drama"})
         self.assertNotEqual(first["job_id"], second["job_id"])
 
-    def test_force_requeue_refreshes_options(self):
+    def test_force_requeue_refreshes_same_job_parameters(self):
         queue = SQLiteExtractionQueue(self.db)
-        job = queue.enqueue("chatgpt", payload={}, options={"project_id": "LingJi"})
+        job = queue.enqueue(
+            "chatgpt",
+            payload={"version": 1},
+            options={"project_id": "LingJi"},
+            idempotency_key="fixed-key",
+            priority=100,
+            max_attempts=2,
+        )
         queue.claim("worker")
         queue.complete(job["job_id"], {"ok": True})
         forced = queue.enqueue(
             "chatgpt",
-            payload={},
-            options={"project_id": "LingJi", "privacy_scan": False},
+            payload={"version": 2},
+            options={"project_id": "Drama", "privacy_scan": False},
+            idempotency_key="fixed-key",
+            priority=10,
+            max_attempts=5,
             force=True,
         )
+        self.assertEqual(forced["job_id"], job["job_id"])
         self.assertEqual(forced["status"], "queued")
+        self.assertEqual(forced["payload"]["version"], 2)
+        self.assertEqual(forced["options"]["project_id"], "Drama")
         self.assertFalse(forced["options"]["privacy_scan"])
+        self.assertEqual(forced["priority"], 10)
+        self.assertEqual(forced["max_attempts"], 5)
 
     def test_lease_token_blocks_stale_worker_completion(self):
         queue = SQLiteExtractionQueue(self.db)
