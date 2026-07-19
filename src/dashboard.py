@@ -6,11 +6,8 @@ from pathlib import Path
 
 logger = logging.getLogger("pemis.dashboard")
 
-# Qdrant remains optional. The single-vault folders and metadata are the stable layer.
 OPP_VAULT_DIR = "04-Projects/Money-Experiments/Opportunities"
 DASH_VAULT_DIR = "00-System/Dashboard"
-LEGACY_OPP_VAULT_DIR = "PEMIS/opportunities"
-LEGACY_DASH_VAULT_DIR = "PEMIS/dashboard"
 
 
 def sync_opps_to_vault(core):
@@ -18,7 +15,7 @@ def sync_opps_to_vault(core):
     source_dir = core.settings.storage_path / "opportunities"
     target_dir = core.settings.vault_path / OPP_VAULT_DIR
     if not source_dir.exists():
-        logger.warning("Source opp dir not found: %s", source_dir)
+        logger.warning("Source opportunity dir not found: %s", source_dir)
         return
     target_dir.mkdir(parents=True, exist_ok=True)
     copied = 0
@@ -41,40 +38,6 @@ def sync_opps_to_vault(core):
         logger.info("Synced opportunities: %d copied, %d removed", copied, removed)
 
 
-def load_opp_summary(core, file_id):
-    opp_dir = core.settings.storage_path / "opportunities"
-    if not opp_dir.exists():
-        return "", ""
-    for source_file in opp_dir.glob("*.md"):
-        try:
-            text = source_file.read_text(encoding="utf-8-sig")
-            if "id: " + repr(file_id) in text or file_id in text[:200]:
-                title = ""
-                for line in text.splitlines():
-                    if line.startswith("# "):
-                        title = line[2:].strip()
-                        break
-                body = text.strip()
-                if body.startswith("---"):
-                    end = body.find("---", 3)
-                    if end != -1:
-                        body = body[end + 3 :].strip()
-                summary_lines = []
-                found_title = False
-                for line in body.splitlines():
-                    if line.startswith("# "):
-                        found_title = True
-                        continue
-                    if found_title and line.strip() and not line.startswith("**Score"):
-                        summary_lines.append(line.strip())
-                        if len("".join(summary_lines)) > 200:
-                            break
-                return title, " ".join(summary_lines)[:300]
-        except Exception:
-            pass
-    return "", ""
-
-
 def get_opp_filename(core, opp_id):
     opp_dir = core.settings.storage_path / "opportunities"
     if not opp_dir.exists():
@@ -82,7 +45,7 @@ def get_opp_filename(core, opp_id):
     for source_file in opp_dir.glob("*.md"):
         try:
             text = source_file.read_text(encoding="utf-8-sig")
-            if "id: " + repr(opp_id) in text or opp_id in text[:200]:
+            if "id: " + repr(opp_id) in text or str(opp_id) in text[:500]:
                 return source_file.name
         except Exception:
             pass
@@ -90,28 +53,11 @@ def get_opp_filename(core, opp_id):
 
 
 def update_dashboard(core):
-    """Write the real control center into 00-System/Dashboard."""
+    """Write a display-only control center; owner input lives in separate notes."""
     sync_opps_to_vault(core)
     decisions = core.decision.get_latest()
     now = datetime.now()
     status = core.status() if hasattr(core, "status") else {}
-
-    lines = [
-        "---",
-        "schema_version: 1",
-        "memory_type: dashboard",
-        "status: active",
-        "privacy: private",
-        "updated_at: " + now.isoformat(),
-        "---",
-        "",
-        "# 灵机控制中心",
-        "",
-        "> 更新时间: " + now.strftime("%Y-%m-%d %H:%M"),
-        "",
-        "---",
-        "",
-    ]
 
     mode = status.get("mode", "NORMAL")
     uptime = status.get("uptime", "刚刚启动")
@@ -120,70 +66,97 @@ def update_dashboard(core):
     feedback_text = feedback_time.strftime("%H:%M") if feedback_time else "-"
     layout = status.get("vault_layout", {})
     layout_text = "完整" if layout.get("complete") else "未完成"
-    lines.append(
-        "🟢 **"
-        + str(mode)
-        + "** | 运行 "
-        + str(uptime)
-        + " | 索引 "
-        + str(entries)
-        + " 条 | 单仓库结构: "
-        + layout_text
-        + " | 反馈读取: "
-        + feedback_text
-    )
-    lines.append("")
+    commands = status.get("manual_commands", {})
+    jobs = status.get("jobs", [])
+    failed_jobs = sum(1 for job in jobs if job.get("status") == "failed")
+
+    lines = [
+        "---",
+        "schema_version: 1",
+        "memory_type: dashboard",
+        "status: active",
+        "privacy: private",
+        "lingji_managed: true",
+        "updated_at: " + now.isoformat(timespec="seconds"),
+        "---",
+        "",
+        "# 灵机控制中心",
+        "",
+        "> 只负责展示。反馈、命令和正式内容分别写入独立文件，不在这里直接编辑。",
+        "",
+        "## 系统状态",
+        "",
+        f"- 模式：**{mode}**",
+        f"- 运行时间：{uptime}",
+        f"- 索引内容：{entries} 条",
+        f"- 单仓库结构：{layout_text}",
+        f"- 调度失败：{failed_jobs}",
+        f"- 反馈最近读取：{feedback_text}",
+        f"- 命令：排队 {commands.get('queued', 0)} / 执行中 {commands.get('running', 0)} / 失败 {commands.get('failed', 0)}",
+        "",
+        "## 手动管理入口",
+        "",
+        "- [[00-System/Home|灵机管理首页]]",
+        "- [[00-System/Feedback/Feedback Inbox|填写反馈]]",
+        "- [[00-System/Bases/Inbox.base|管理收件箱]]",
+        "- [[00-System/Bases/Projects.base|管理项目]]",
+        "- [[00-System/Bases/Tasks.base|管理任务]]",
+        "- [[00-System/Bases/Commands.base|查看命令队列]]",
+        "- [[00-System/Bases/Memory Health.base|检查记忆健康]]",
+        "",
+        "---",
+        "",
+    ]
 
     output = decisions.get("decisions", [])
+    lines.extend(["## 今天最值得关注的3个机会", ""])
     if output:
-        lines.extend(["**💰 今天最值得做的3件事**", ""])
         for index, decision in enumerate(output[:3], 1):
-            title = decision["title"][:25]
-            score = str(decision["decision_score"])
-            speed_icon = "⚡" if decision.get("speed") == "fast" else "🐢" if decision.get("speed") == "slow" else "➡️"
-            lines.append(f"{index}. {speed_icon} **{title}**  (评分 {score})")
+            title = decision["title"][:40]
+            score = decision["decision_score"]
+            speed_icon = (
+                "⚡"
+                if decision.get("speed") == "fast"
+                else "🐢"
+                if decision.get("speed") == "slow"
+                else "➡️"
+            )
+            lines.append(f"{index}. {speed_icon} **{title}**（评分 {score}）")
             opp_filename = get_opp_filename(core, decision["id"])
             if opp_filename:
                 target = OPP_VAULT_DIR + "/" + opp_filename
                 lines.append("   [[" + target.replace(".md", "") + "|查看详情 →]]")
             lines.append("")
     else:
-        lines.extend(["*暂无决策*", ""])
-
-    lines.extend(
-        [
-            "---",
-            "",
-            "**📝 反馈与备注**",
-            "",
-            "- 喜欢/感兴趣: ",
-            "- 不感兴趣/放弃: ",
-            "- 已开始执行: ",
-            "- 我想到的新方向: ",
-            "",
-            "*(填好后保存，灵机自动读取)*",
-            "",
-            "---",
-            "",
-        ]
-    )
+        lines.extend(["*暂无有效机会。*", ""])
 
     preferences_path = Path(core.settings.storage_path) / "user_preferences.json"
+    lines.extend(["---", "", "## 最近反馈", ""])
     if preferences_path.exists():
         try:
             preferences = json.loads(preferences_path.read_text(encoding="utf-8-sig"))
             records = []
-            for key in ("liked", "disliked", "executed", "failed"):
+            label_map = {
+                "liked": "👍",
+                "disliked": "👎",
+                "executed": "✅",
+                "failed": "❌",
+                "new_ideas": "💡",
+            }
+            for key in ("liked", "disliked", "executed", "failed", "new_ideas"):
                 items = preferences.get(key, [])
                 if items:
-                    label_map = {"liked": "👍", "disliked": "👎", "executed": "✅", "failed": "❌"}
-                    records.append(label_map.get(key, key) + " " + items[-1].get("content", "")[:50])
+                    records.append(label_map[key] + " " + items[-1].get("content", "")[:80])
             if records:
-                lines.extend(["**最近反馈:**", ""])
-                lines.extend("- " + record for record in records[-3:])
-                lines.extend(["", "---", ""])
+                lines.extend("- " + record for record in records[-5:])
+            else:
+                lines.append("*暂无反馈。*")
         except Exception:
-            pass
+            lines.append("*反馈状态读取失败，请查看日志。*")
+    else:
+        lines.append("*暂无反馈。*")
+
+    lines.extend(["", "---", "", f"> 更新时间：{now.strftime('%Y-%m-%d %H:%M:%S')}", ""])
 
     dashboard_dir = core.settings.vault_path / DASH_VAULT_DIR
     dashboard_dir.mkdir(parents=True, exist_ok=True)
