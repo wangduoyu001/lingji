@@ -4,6 +4,7 @@ from pathlib import Path
 
 from src.indexer.index import PEMISIndex
 from src.memory import InboxService, VaultLayout
+from src.obsidian.frontmatter import render_frontmatter
 
 
 class SingleVaultIndexTests(unittest.TestCase):
@@ -31,8 +32,37 @@ class SingleVaultIndexTests(unittest.TestCase):
         self.assertIsNotNone(entry)
         self.assertEqual(entry["source_type"], "chatgpt")
         self.assertEqual(entry["project_id"], "LJ-PROJECT-000001")
+        self.assertEqual(entry["project"], ["LJ-PROJECT-000001"])
         self.assertTrue(entry["is_inbox"])
         self.assertEqual(entry["top_level"], "01-Inbox")
+
+    def test_index_keeps_typed_obsidian_relations(self):
+        note = self.vault / "03-Knowledge" / "AI" / "relations.md"
+        note.write_text(
+            render_frontmatter(
+                {
+                    "schema_version": 1,
+                    "id": "LJ-NOTE-REL",
+                    "memory_type": "knowledge",
+                    "project": ["[[04-Projects/LingJi/LingJi]]"],
+                    "people": ["[[06-Entities/People/主人]]"],
+                    "tools": ["[[06-Entities/Tools/Obsidian]]"],
+                    "sources": ["[[02-Sources/Documents/source]]"],
+                    "related": ["[[03-Knowledge/AI/other]]"],
+                    "tags": ["domain/ai", "topic/obsidian"],
+                },
+                "# 关系测试\n\n这是一条用于验证类型化关系索引的知识笔记。\n",
+            ),
+            encoding="utf-8",
+        )
+        indexer = PEMISIndex(self.vault, self.storage)
+        indexer.build_index()
+        entry = indexer.get_entry("LJ-NOTE-REL")
+        self.assertEqual(entry["project"], ["[[04-Projects/LingJi/LingJi]]"])
+        self.assertEqual(entry["people"], ["[[06-Entities/People/主人]]"])
+        self.assertEqual(entry["tools"], ["[[06-Entities/Tools/Obsidian]]"])
+        self.assertEqual(entry["sources"], ["[[02-Sources/Documents/source]]"])
+        self.assertEqual(entry["tags"], ["domain/ai", "topic/obsidian"])
 
     def test_private_folder_is_excluded_from_default_index(self):
         note = self.vault / "08-Private" / "Personal" / "private.md"
