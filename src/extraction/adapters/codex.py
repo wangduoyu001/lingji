@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -322,7 +322,7 @@ class CodexWorkReportAdapter(ExtractionAdapter):
             return ""
         if isinstance(value, (int, float)):
             try:
-                return datetime.fromtimestamp(float(value)).isoformat(timespec="seconds")
+                return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat(timespec="seconds")
             except (ValueError, OSError, OverflowError):
                 return ""
         text = str(value)
