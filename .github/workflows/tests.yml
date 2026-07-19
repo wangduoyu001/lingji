@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
@@ -28,7 +29,10 @@ jobs:
       - name: Compile Python files
         run: python -m compileall -q main.py run_service.py run_mcp_server.py src tests
       - name: Run unit tests
-        run: python -m unittest discover -s tests -v
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m unittest discover -s tests -v 2>&1 | tail -n 180
 
   mcp-smoke-test:
     runs-on: ubuntu-latest
