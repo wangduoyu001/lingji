@@ -16,6 +16,7 @@ from src.media import (
     PaddleOCRProvider,
     PySceneDetectProvider,
 )
+from src.model_center import LocalModelInventoryService
 from src.storage import BackupManager, StateDatabase, StorageLifecycleManager
 
 from .runtime_settings import RuntimeSettingsStore
@@ -31,6 +32,7 @@ class LocalControlService:
         *,
         pipeline: Any | None = None,
         hardware: HardwareCapabilityService | None = None,
+        model_inventory: LocalModelInventoryService | None = None,
     ):
         self.settings = settings
         self.state_db = state_db or StateDatabase(settings.state_db_path)
@@ -43,6 +45,10 @@ class LocalControlService:
         self.media_semantic = MediaSemanticService(settings.storage_path)
         self.acceptance_reports = AcceptanceReportStore(settings.storage_path / "reports" / "acceptance")
         self.hardware = hardware or HardwareCapabilityService(settings)
+        self.model_inventory = model_inventory or LocalModelInventoryService(
+            settings,
+            runtime_settings=self.runtime_settings,
+        )
         self._sync_hardware_settings()
 
     def get_settings(self) -> dict[str, Any]:
@@ -90,6 +96,15 @@ class LocalControlService:
     def update_compute_policy(self, mode: str, *, actor: str = "owner") -> dict[str, Any]:
         self.update_settings({"compute_mode": mode}, actor=actor)
         return self.compute_policy()
+
+    def model_registry(self) -> dict[str, Any]:
+        return self.model_inventory.registry()
+
+    def models(self, *, force: bool = False) -> dict[str, Any]:
+        return self.model_inventory.inventory(force=force)
+
+    def refresh_models(self) -> dict[str, Any]:
+        return self.model_inventory.refresh()
 
     def health(self) -> dict[str, Any]:
         return self.health_checker.run()
@@ -336,6 +351,7 @@ class LocalControlService:
         }
 
     def close(self) -> None:
+        self.model_inventory.close()
         self.hardware.close()
 
     def _sync_hardware_settings(self) -> None:
