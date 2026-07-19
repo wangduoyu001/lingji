@@ -43,6 +43,7 @@ class LocalControlService:
         self.media_semantic = MediaSemanticService(settings.storage_path)
         self.acceptance_reports = AcceptanceReportStore(settings.storage_path / "reports" / "acceptance")
         self.hardware = hardware or HardwareCapabilityService(settings)
+        self._sync_hardware_settings()
 
     def get_settings(self) -> dict[str, Any]:
         return self.runtime_settings.snapshot()
@@ -53,7 +54,9 @@ class LocalControlService:
         *,
         actor: str = "owner",
     ) -> dict[str, Any]:
-        return self.runtime_settings.update(values, actor=actor)
+        snapshot = self.runtime_settings.update(values, actor=actor)
+        self._sync_hardware_settings()
+        return snapshot
 
     def reset_settings(
         self,
@@ -61,7 +64,9 @@ class LocalControlService:
         *,
         actor: str = "owner",
     ) -> dict[str, Any]:
-        return self.runtime_settings.reset(keys, actor=actor)
+        snapshot = self.runtime_settings.reset(keys, actor=actor)
+        self._sync_hardware_settings()
+        return snapshot
 
     def hardware_capabilities(self, *, force: bool = False) -> dict[str, Any]:
         return self.hardware.capabilities(force=force)
@@ -83,7 +88,7 @@ class LocalControlService:
         }
 
     def update_compute_policy(self, mode: str, *, actor: str = "owner") -> dict[str, Any]:
-        self.runtime_settings.update({"compute_mode": mode}, actor=actor)
+        self.update_settings({"compute_mode": mode}, actor=actor)
         return self.compute_policy()
 
     def health(self) -> dict[str, Any]:
@@ -332,6 +337,16 @@ class LocalControlService:
 
     def close(self) -> None:
         self.hardware.close()
+
+    def _sync_hardware_settings(self) -> None:
+        policy = self.runtime_settings.compute_policy()
+        configure = getattr(self.hardware, "configure", None)
+        if callable(configure):
+            configure(
+                cache_seconds=float(policy["static_refresh_seconds"]),
+                telemetry_cache_seconds=float(policy["foreground_interval_seconds"]),
+                gpu_cache_seconds=float(policy["nvidia_smi_min_interval_seconds"]),
+            )
 
     @staticmethod
     def _tail(path: Path, limit: int) -> list[str]:
