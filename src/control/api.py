@@ -45,6 +45,14 @@ class MediaAnalyzeRequest(BaseModel):
     overrides: dict[str, Any] = Field(default_factory=dict)
 
 
+class AcceptanceRunRequest(BaseModel):
+    vault: str | None = None
+    chatgpt_export: str | None = None
+    media: str | None = None
+    deep_zip_check: bool = True
+    hash_inputs: bool = True
+
+
 class ShareRequest(BaseModel):
     source_type: str = "web"
     platform: str = ""
@@ -85,7 +93,7 @@ def create_control_app(
         raise RuntimeError("Install requirements-ui.txt to run the local control API") from exc
 
     control = service or LocalControlService(settings)
-    app = FastAPI(title="LingJi Local Control API", version="0.2.0")
+    app = FastAPI(title="LingJi Local Control API", version="0.3.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -168,6 +176,25 @@ def create_control_app(
     @app.get("/api/providers", dependencies=secured)
     def providers() -> dict[str, Any]:
         return control.provider_status()
+
+    @app.get("/api/acceptance/reports", dependencies=secured)
+    def acceptance_reports(
+        limit: int = Query(default=100, ge=1, le=1000),
+    ) -> list[dict[str, Any]]:
+        return control.list_acceptance_reports(limit=limit)
+
+    @app.post("/api/acceptance/run", dependencies=secured)
+    def run_acceptance(request: AcceptanceRunRequest) -> dict[str, Any]:
+        try:
+            return control.run_acceptance(
+                vault=request.vault,
+                chatgpt_export=request.chatgpt_export,
+                media=request.media,
+                deep_zip_check=request.deep_zip_check,
+                hash_inputs=request.hash_inputs,
+            )
+        except Exception as exc:
+            raise translate_error(exc) from exc
 
     @app.get("/api/storage", dependencies=secured)
     def storage_inventory() -> dict[str, Any]:
