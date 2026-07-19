@@ -1,38 +1,41 @@
 # 灵机后续开发、实施与验收总计划
 
-> 计划版本：`v2.1`  
+> 计划版本：`v2.2`  
 > 更新日期：`2026-07-19`  
 > 仓库：`wangduoyu001/lingji`  
 > 当前基线：`feature/extraction-hardening-web-skills-ui`  
-> 当前修复 PR：`#3 fix/windows-db-lifecycle`  
+> 当前工作分支：`test/real-environment-acceptance`  
+> 当前 Draft PR：`#4`  
 > 计划维护者：ChatGPT，负责需求、架构边界、代码审查、CI 与验收  
 > 长期权威源：Obsidian Markdown  
 > SQLite 定位：索引、任务状态、来源映射、Freshness、审计和可重建派生缓存
 
 ---
 
-## 0. 本文件的使用规则
+# 0. 本文件的权威级别
 
 本文件是灵机后续开发的唯一总计划、状态表和验收入口。
 
-1. 每次代码更新后，必须在本文件追加或更新一次真实状态。
-2. 任何功能只有经过 Diff、测试、CI、Demo、UI 和风险审查后才能标记为 `ACCEPTED`。
-3. 未验收代码只能标记为 `REVIEW_REQUIRED` 或 `CHANGES_REQUIRED`。
-4. 功能报告放在 `docs/<MODULE>_REPORT.md`，本文件只保存权威状态、范围和验收结果。
-5. Obsidian Markdown 始终是长期权威内容；SQLite 数据必须可删除、可重建。
-6. 所有主人需要手动使用的能力必须在独立桌面 UI 中有入口、状态、设置和结果展示。
-7. 不为展示“先进”而引入复杂前端、重复网关、重复队列或大型基础设施。
+1. 每个模块开始前必须先研究官方文档和类似项目。
+2. 代码必须先补失败测试，再做最小实现。
+3. 每次代码更新后，本文件必须更新真实状态。
+4. 未经 Diff、测试、CI、Demo、UI 和风险审查，不得标记 `ACCEPTED`。
+5. 模块报告放在 `docs/<MODULE>_REPORT.md`，本文件保存权威状态和下一动作。
+6. Obsidian Markdown 始终是长期权威内容；SQLite 必须可删除、可重建。
+7. 主人需要手动操作的功能必须在独立桌面 UI 中有入口、状态、设置和结果。
+8. 不因“顺便优化”重写无关代码，不建立平行网关、平行队列或平行数据库。
+9. 不允许使用模拟 SHA、虚构 CI、固定成功输出或无效测试。
 
-### 状态定义
+## 状态定义
 
 | 状态 | 含义 |
 |---|---|
 | `TODO` | 尚未开始 |
 | `RESEARCHING` | 正在研究官方文档和类似项目 |
 | `IN_PROGRESS` | 已开始实现 |
-| `REVIEW_REQUIRED` | 已提交，等待审查 |
+| `REVIEW_REQUIRED` | 代码已提交，仍有验收门槛未完成 |
 | `CHANGES_REQUIRED` | 审查未通过，需要最小修复 |
-| `ACCEPTED` | 代码、测试、CI、Demo、UI 和文档全部通过 |
+| `ACCEPTED` | 代码、测试、CI、Demo、UI 和真实验收全部通过 |
 | `BLOCKED` | 被依赖或外部条件阻塞 |
 | `DEFERRED` | 暂缓，只保留接口和规划 |
 
@@ -40,7 +43,7 @@
 
 # 1. 当前真实状态
 
-## 1.1 已具备的基础
+## 1.1 已具备基础
 
 1. 单 Vault 长期记忆架构。
 2. ChatGPT 导出、Codex 工作报告、网页和社交页面、本地媒体适配器。
@@ -55,34 +58,35 @@
 11. 存储盘点、可恢复清理计划和冷存储计划。
 12. 校验备份、SQLite 在线快照和隔离恢复目录。
 13. Vault 索引和 Memory DB 增量同步。
-14. 真实环境只读验收脚本。
-15. Linux Python 3.11/3.12、Windows Python 3.12、MCP、浏览器扩展、Obsidian 插件和桌面前端 CI。
+14. Windows SQLite 生命周期已修复。
+15. 真实环境严格只读验收代码、CLI、API、报告和 UI 已完成代码验证。
 
 ## 1.2 当前发布阻断
 
-1. 真实 `E:\obsidian\本地知识库` 尚未执行只读验收。
-2. 真实 ChatGPT 导出包和真实媒体尚未执行脱敏验收。
+1. P0-B 尚未在主人电脑对真实 `E:\obsidian\本地知识库` 执行。
+2. 真实 ChatGPT 导出包和真实媒体尚未完成脱敏验收。
 3. Tauri 仍不是完整可安装、可托盘管理、可自动启动后端的正式 `LingJi.exe`。
 4. PR #2 体积过大，禁止继续直接堆叠新功能。
-5. PR #3 必须先合入基线，随后创建 `integration/lingji-v1`。
+5. PR #4 在真实环境验收前保持 Draft。
+6. `integration/lingji-v1` 需要 P0-B 验收后建立。
 
-Windows SQLite 文件锁不再是当前阻断；P0 已通过 CI 验收。
-
-## 1.3 功能完成度判断
+## 1.3 完成度状态表
 
 | 板块 | 状态 | 说明 |
 |---|---|---|
+| P0 Windows 生命周期 | `ACCEPTED` | Windows 文件锁和调度器退出已通过 CI |
+| P0-B 真实环境只读验收 | `REVIEW_REQUIRED` | 代码全绿，等待主人电脑真实运行 |
 | 单 Vault 记忆底座 | 已有基础 | 仍需可信引用和 Freshness |
 | ChatGPT/Codex 导入写回 | 已有基础 | 大型流式导入和附件关系未完成 |
 | 网页主动采集 | 首版 | HTML、截图、离线队列和站点增强未完成 |
 | 媒体处理 | 首版 | Provider 已有，自动编排和高级理解未完成 |
-| 桌面控制中心 | 原型 | 页面、打包、服务生命周期未完成 |
-| 本地文件检索 | TODO | PDF、Office、图片和代码检索未完成 |
-| 项目关系图 | TODO | 类型化关系和项目详情页未完成 |
-| 手机入口 | TODO | 分享、配对、权限和断点上传未完成 |
-| 活动感知 | TODO | 只允许低侵入信号，禁止键盘记录 |
-| 主动推荐 | TODO | 需要项目状态和可信来源作为前置 |
-| 微信聊天 | DEFERRED | 只预留 Provider 接口 |
+| 桌面控制中心 | 原型 | 页面模块化、打包和服务生命周期未完成 |
+| 本地文件检索 | `TODO` | PDF、Office、图片和代码检索未完成 |
+| 项目关系图 | `TODO` | 类型化关系和项目详情页未完成 |
+| 手机入口 | `TODO` | 分享、配对、权限和断点上传未完成 |
+| 活动感知 | `TODO` | 只允许低侵入信号，禁止键盘记录 |
+| 主动推荐 | `TODO` | 需要项目状态和可信来源作为前置 |
+| 微信聊天 | `DEFERRED` | 只预留 Provider 接口 |
 
 ---
 
@@ -93,40 +97,75 @@ Windows SQLite 文件锁不再是当前阻断；P0 已通过 CI 验收。
 状态：`ACCEPTED`
 
 - 分支：`fix/windows-db-lifecycle`
-- Draft PR：`#3`
-- 验收 Head：`78f044fda3149f01cf27fa1bc003873ca8ece69c`
-- GitHub Actions Run：`29690940470`
-- Windows Python 3.12：`108 tests / OK`
+- PR：`#3`
+- 合并提交：`156ee3e1cc5abd4e054028606079a16a12fa29b0`
+- 最终验证：Linux 3.11/3.12、Windows、MCP、浏览器扩展、Obsidian 插件、桌面构建全部成功
+- Windows：`108 tests / OK`
+- 报告：`docs/WINDOWS_DB_LIFECYCLE_REPORT.md`
+
+根因：
+
+1. `with sqlite3.connect(...)` 只控制事务，不关闭连接。
+2. `CronScheduler.stop()` 未等待轮询线程和执行器结束。
+3. FastAPI TestClient 未完整退出生命周期。
+
+结果：
+
+- 显式关闭测试连接。
+- 调度器 stop event、thread join、executor wait。
+- TestClient 在临时目录清理前关闭。
+- 真实数据库文件删除测试和 Demo。
+- 未改 Schema，未引入依赖。
+
+## 2.2 P0-B 真实环境只读验收
+
+状态：`REVIEW_REQUIRED`
+
+- 分支：`test/real-environment-acceptance`
+- Draft PR：`#4`
+- 代码验收 Head：`011142a2ac070c2ab6091f72783bda0c465ac674`
+- 代码验证 Run：`29692373806`
+- Windows：`113 tests / OK`
 - Ubuntu Python 3.11：成功
 - Ubuntu Python 3.12：成功
+- Windows Python 3.12：成功
 - MCP smoke：成功
 - Browser capture smoke：成功
 - Obsidian plugin smoke：成功
-- Desktop UI build：成功
-- 详细报告：`docs/WINDOWS_DB_LIFECYCLE_REPORT.md`
+- Desktop UI smoke、TypeScript、Vite build：成功
+- 报告：`docs/REAL_ENVIRONMENT_ACCEPTANCE_REPORT.md`
 
-### 根因
+已实现：
 
-1. 两个测试使用 `with sqlite3.connect(...)`，只提交或回滚事务，没有关闭连接；Windows 删除临时数据库时产生 `WinError 32`。
-2. `CronScheduler.stop()` 不等待轮询线程和执行器退出，后台任务仍可能访问 `state.db`。
-3. FastAPI 测试未通过 `TestClient` 上下文运行完整生命周期。
+1. Vault、SQLite、设置、ChatGPT 导出和媒体输入验收前后指纹。
+2. Vault 指纹覆盖 Markdown、图片、附件和其他普通文件。
+3. SQLite 数据库、`-wal`、`-shm` 都进入输入指纹。
+4. 数据库和 WAL 复制到系统临时目录，在副本上执行 `quick_check`。
+5. ChatGPT ZIP 结构、加密成员和 CRC 检查。
+6. FFprobe 媒体结构检查。
+7. Ollama 服务和模型列表。
+8. JSON/Markdown 报告历史。
+9. CLI、控制 API 和桌面“环境验收”入口。
+10. 唯一持久写入为验收报告和验收审计事件。
 
-### 已验收修改
+未完成：
 
-- 直接 SQLite 测试连接使用 `contextlib.closing()`。
-- 调度器使用停止事件、线程 join、`executor.shutdown(wait=True)`。
-- TestClient 在临时目录删除前退出生命周期上下文。
-- 新增真实数据库、调度器和 TestClient 文件删除测试。
-- Demo 调用真实 LingJi 类，失败时返回非零退出码。
-- 未修改 Schema，未引入新依赖，未重构检索。
+1. 主人电脑真实 Vault 验收。
+2. 真实 ChatGPT 导出包验收。
+3. 真实样例媒体验收。
+4. 真实报告内容审查。
 
-### 下一动作
+P0-B 只有在真实报告满足以下条件后才能标记 `ACCEPTED`：
 
-1. 将 PR #3 合入 `feature/extraction-hardening-web-skills-ui`。
-2. 在最新基线再次确认 PR #2 CI 全绿。
-3. 执行真实环境只读验收。
-4. 创建 `integration/lingji-v1`。
-5. 开始 P1-0 UI 模块化基础。
+```text
+error_count = 0
+inputs_unchanged = true
+Vault 路径正确
+SQLite 检查无错误
+ChatGPT 导出被识别
+样例媒体 FFprobe 成功
+报告未包含敏感正文
+```
 
 ---
 
@@ -134,11 +173,11 @@ Windows SQLite 文件锁不再是当前阻断；P0 已通过 CI 验收。
 
 ## 3.1 开发前研究
 
-每个模块编码前至少完成：
+每个模块至少研究：
 
 1. 一个官方标准或官方文档。
 2. 三个仍在维护的类似开源项目或公开产品。
-3. 检查许可证、维护状态、Windows、离线能力、数据格式、资源占用和安全边界。
+3. 许可证、维护状态、Windows 支持、离线能力、数据格式、资源和安全边界。
 4. 写明采用什么、拒绝什么、为什么。
 5. 不得只抄 README 宣传词。
 
@@ -160,7 +199,7 @@ Windows SQLite 文件锁不再是当前阻断；P0 已通过 CI 验收。
 研究
 → 明确接口与非目标
 → 写失败测试
-→ 证明测试在实现前失败
+→ 证明实现前失败
 → 最小实现
 → 专项测试
 → 全量测试
@@ -176,7 +215,7 @@ Windows SQLite 文件锁不再是当前阻断；P0 已通过 CI 验收。
 - 固定打印成功的 Demo。
 - 只测 Mock，不验证真实文件和真实写入结果。
 - 跳过 Windows。
-- 伪造 CI、截图或运行结果。
+- 伪造 CI、截图、SHA 或运行结果。
 
 ## 3.3 最小修改
 
@@ -202,12 +241,13 @@ Windows SQLite 文件锁不再是当前阻断；P0 已通过 CI 验收。
 ## 3.4 数据安全
 
 1. Vault、Raw 和 Backup 默认永不自动删除。
-2. 危险操作必须先生成预览，再确认，再执行，并可恢复。
+2. 危险操作先预览，再确认，再执行，并可恢复。
 3. UI 不直接写 SQLite。
 4. AI 不允许整文件覆盖主人维护的 Markdown。
 5. AI 不允许直接批准正式决策。
-6. SQLite 表必须属于索引、状态、映射、审计或可重建派生数据。
+6. SQLite 只保存索引、状态、映射、审计或可重建派生数据。
 7. 不保存浏览器 Cookie、密码、验证码或全局键盘输入。
+8. 真实环境验收不得创建、修改或迁移被检查输入。
 
 ---
 
@@ -217,7 +257,7 @@ Windows SQLite 文件锁不再是当前阻断；P0 已通过 CI 验收。
 
 每个功能至少具备：
 
-1. 可发现的导航入口或现有页面区块。
+1. 可发现的导航入口或页面模式。
 2. Loading、Empty、Error、Success、Disabled/Unavailable 状态。
 3. 当前状态和最近更新时间。
 4. 默认设置与用户覆盖值。
@@ -242,7 +282,7 @@ UI PR 必须提供：
 
 - 页面路径。
 - 操作步骤。
-- 成功与失败状态截图。
+- 成功与失败状态截图或可复现证据。
 - `npm run build` 结果。
 - 至少一个组件测试或 smoke test。
 
@@ -250,9 +290,14 @@ UI PR 必须提供：
 
 # 5. Git 与并行开发规则
 
-## 5.1 集成分支
+## 5.1 当前阶段
 
-P0 合入并完成真实环境只读验收后创建：
+1. PR #4 保持 Draft，直到真实环境验收完成。
+2. P0-B 不得混入 P1 新功能。
+3. P0-B 验收通过后，PR #4 才允许合入基线。
+4. 随后创建 `integration/lingji-v1`。
+
+## 5.2 集成分支
 
 ```powershell
 git fetch origin
@@ -262,9 +307,7 @@ git switch -c integration/lingji-v1
 git push -u origin integration/lingji-v1
 ```
 
-后续所有新功能从 `integration/lingji-v1` 创建。
-
-## 5.2 Worktree
+## 5.3 Worktree
 
 ```powershell
 git fetch origin
@@ -273,14 +316,14 @@ git worktree add ..\lingji-<module> `
   origin/integration/lingji-v1
 ```
 
-同步基线：
+同步：
 
 ```powershell
 git fetch origin
 git rebase origin/integration/lingji-v1
 ```
 
-## 5.3 PR
+## 5.4 PR
 
 - 一个模块一个 Draft PR。
 - Base 为 `integration/lingji-v1`。
@@ -289,7 +332,7 @@ git rebase origin/integration/lingji-v1
 - PR 写明研究、目标、非目标、修改文件、接口、测试、Demo、UI、风险和回滚。
 - CI 全绿不代表自动通过，仍需验收。
 
-## 5.4 共享热点
+## 5.5 共享热点
 
 以下文件原则上由集成负责人统一修改：
 
@@ -303,7 +346,7 @@ git rebase origin/integration/lingji-v1
 - 数据库 Schema 和迁移版本
 - 桌面全局路由、导航和共享类型
 
-## 5.5 推荐并行度
+## 5.6 推荐并行度
 
 基础稳定前：
 
@@ -357,39 +400,6 @@ npm run build
 
 # 7. 后续模块计划
 
-## P0-B：真实环境只读验收
-
-状态：`TODO`
-
-分支：`test/real-environment-acceptance`
-
-目标：
-
-- 对真实 Vault、ChatGPT 导出、Ollama、FFmpeg 和样例媒体执行只读检查。
-- 不移动、不删除、不覆盖真实数据。
-- 输出 JSON 和 Markdown 报告。
-
-UI：
-
-- 系统诊断页显示验收项、状态、警告、失败原因和报告路径。
-- 提供“开始只读验收”和“打开报告目录”。
-
-验收：
-
-1. `E:\obsidian\本地知识库` 快照或只读副本通过。
-2. 真实 ChatGPT 导出识别成功。
-3. 真实媒体信息和资源边界可测。
-4. 不产生 Vault 内容变化。
-5. 报告包含环境版本、路径、容量和风险。
-
-非目标：
-
-- 不自动迁移。
-- 不自动修复真实数据。
-- 不上传任何内容。
-
----
-
 ## P1-0：桌面 UI 最小模块化
 
 状态：`TODO`
@@ -399,18 +409,23 @@ UI：
 目标：
 
 - 将巨型 `App.tsx` 拆为 app、pages、components、hooks、types、api。
+- 把临时顶层“环境验收”模式并入正式侧栏路由。
 - 保持现有视觉和行为不变。
 - 为后续页面并行开发建立稳定边界。
 
-UI 验收：
+非目标：
 
-1. 原有八个页面全部可渲染。
+- 不重新设计界面。
+- 不改变 API。
+- 不引入大型状态管理或 UI 框架。
+
+验收：
+
+1. 原有八个页面和环境验收页全部可渲染。
 2. `App.tsx` 只保留应用壳和路由。
 3. Loading、Empty、Error 状态不丢失。
-4. 不引入大型状态管理或 UI 框架。
+4. 连接配置只保留一份，不重复管理 Token。
 5. `npm run build` 和页面 smoke test 通过。
-
----
 
 ## P1-A：可信引用、Freshness 与冲突
 
@@ -450,12 +465,12 @@ UI 验收：
 - 无来源内容只能作为建议或推测，不能写成确定事实。
 - 冲突来源必须并列返回。
 - 行号变化时通过 heading 和 chunk hash 重新定位。
-- `freshness_status` 与 `consistency_status` 内部分开保存。
+- `freshness_status` 与 `consistency_status` 分开保存。
 
 UI：
 
-- 记忆搜索结果引用卡片。
-- 打开来源文件和定位。
+- 搜索结果引用卡片。
+- 打开来源和定位。
 - Fresh/Stale/Deprecated/Conflict 筛选。
 - 待更新资料清单。
 - Freshness 规则设置。
@@ -471,8 +486,6 @@ UI：
 5. Context Packet 使用同一契约。
 6. 删除 SQLite 后可从 Markdown 重建。
 7. 不重复实现已有 citation 逻辑。
-
----
 
 ## P1-B：区块级 Markdown 写入与 Agent Task
 
@@ -536,8 +549,6 @@ UI：
 5. 系统回写不形成循环。
 6. 主人修改任务后不自动勾选。
 
----
-
 ## P1-C：MCP 项目工作流与 Context Packet v2
 
 状态：`TODO`
@@ -593,8 +604,6 @@ UI：
 5. 过期和冲突进入警告区。
 6. 超出预算时按优先级截断。
 
----
-
 ## P2-A：电脑本地文件检索
 
 状态：`TODO`
@@ -639,8 +648,6 @@ UI：
 5. 防止目录逃逸和未授权软链接。
 6. 10,000 文件目录扫描不崩溃。
 7. 不复制大文件进 Vault。
-
----
 
 ## P2-B：项目中心、类型化关系和局部关系图
 
@@ -693,8 +700,6 @@ UI：
 4. AI 推断和主人确认明确区分。
 5. 5,000 节点按项目局部加载。
 
----
-
 ## P2-C：媒体语义自动编排
 
 状态：`TODO`
@@ -729,8 +734,6 @@ UI 显示队列、资源、Provider、转写、OCR、镜头、时间线、失败
 3. 未安装可选依赖时核心服务仍可运行。
 4. 所有参数可修改、恢复默认和校验。
 
----
-
 ## P2-D：Windows 桌面打包和服务生命周期
 
 状态：`TODO`
@@ -756,8 +759,6 @@ UI 显示后端路径、版本、服务状态、端口、开机启动、日志�
 4. 升级不覆盖设置。
 5. Vault 哈希不变。
 
----
-
 ## P3-A：浏览器采集增强
 
 状态：`TODO`
@@ -776,8 +777,6 @@ UI 显示后端路径、版本、服务状态、端口、开机启动、日志�
 
 UI 显示扩展连接、最近投喂、待补正文、重复来源、失败原因和项目/隐私归属。
 
----
-
 ## P3-B：手机分享和设备配对
 
 状态：`TODO`
@@ -795,8 +794,6 @@ UI 显示扩展连接、最近投喂、待补正文、重复来源、失败原�
 
 UI 显示设备、最后活动、权限、撤销、配对码和上传任务。
 
----
-
 ## P3-C：大型 ChatGPT/Codex 导入和附件
 
 状态：`TODO`
@@ -809,13 +806,11 @@ UI 显示设备、最后活动、权限、撤销、配对码和上传任务。
 - 进度、取消、断点和重试。
 - 图片、附件、文件和会话关系。
 - 重复导入幂等。
-- 继续阻止压缩炸弹、路径穿越和损坏包。
+- 阻止压缩炸弹、路径穿越和损坏包。
 
 UI 显示文件、大小、进度、峰值内存、会话、附件、错误、恢复和项目归属。
 
 验收目标：5GB 级导出包不因内存耗尽崩溃。
-
----
 
 ## P3-D：存储调度、恢复、加密与权限
 
@@ -835,8 +830,6 @@ UI 显示文件、大小、进度、峰值内存、会话、附件、错误、�
 - 密钥使用系统安全存储，不进入 Git、日志和 Frontmatter。
 
 UI 显示容量趋势、保留时间、阈值、冷存储、清理预览、恢复演练、加密、密钥和权限审计。
-
----
 
 ## P4-A：工作活动感知
 
@@ -862,8 +855,6 @@ UI 显示容量趋势、保留时间、阈值、冷存储、清理预览、恢�
 - 浏览器密码和 Cookie。
 
 UI 显示今日/本周活动、项目归属、软件清单、Git/文件变化、隐私模式和保留设置。
-
----
 
 ## P4-B：主动推荐和视野扩展
 
@@ -911,15 +902,15 @@ UI 支持接受、忽略、不再推荐、关联项目、来源和频率控制�
 
 # 9. 开发顺序与并行安排
 
-## 阶段一：基线收口
+## 当前阶段
 
-1. P0 Windows 生命周期：`ACCEPTED`。
-2. 合入 PR #3。
-3. P0-B 真实环境只读验收。
+1. P0 已 `ACCEPTED`。
+2. P0-B 代码已通过，等待主人真实环境运行。
+3. P0-B 通过后合入 PR #4。
 4. 创建 `integration/lingji-v1`。
-5. P1-0 UI 模块化。
+5. 开始 P1-0 UI 模块化。
 
-## 阶段二：最多四条并行线
+## 第二阶段：最多四条并行线
 
 1. P1-A 可信引用与 Freshness。
 2. P1-B 区块写入与 Agent Task。
@@ -928,21 +919,21 @@ UI 支持接受、忽略、不再推荐、关联项目、来源和频率控制�
 
 共享 Schema 和全局 API 由集成负责人先合入最小契约。
 
-## 阶段三
+## 第三阶段
 
 1. P1-C MCP 与 Context Packet v2。
 2. P2-A 本地文件检索。
 3. P2-B 项目和类型化关系。
 4. P3-A 浏览器采集增强。
 
-## 阶段四
+## 第四阶段
 
 1. P3-B 手机分享。
 2. P3-C 大型导入。
 3. P3-D 存储、安全和完整恢复。
 4. 媒体高级理解。
 
-## 阶段五
+## 第五阶段
 
 1. P4-A 活动感知。
 2. P4-B 主动推荐。
@@ -950,7 +941,43 @@ UI 支持接受、忽略、不再推荐、关联项目、来源和频率控制�
 
 ---
 
-# 10. 每次交付格式
+# 10. P0-B 主人电脑验收命令
+
+在仓库目录执行：
+
+```powershell
+git fetch origin
+git switch test/real-environment-acceptance
+git pull --ff-only origin test/real-environment-acceptance
+
+python scripts/acceptance_check.py `
+  --vault "E:\obsidian\本地知识库" `
+  --storage "<当前灵机storage目录>" `
+  --backup "<当前灵机backup目录>" `
+  --chatgpt-export "<真实ChatGPT导出ZIP或JSON>" `
+  --media "<真实样例视频或音频>"
+```
+
+验收前：
+
+1. 不运行导入、索引重建和清理任务。
+2. 建议暂停正在写入灵机数据库的后台 Worker。
+3. 不需要关闭 Obsidian，但验收期间不要编辑 Vault。
+4. 保留默认 SHA-256 和 ZIP CRC 检查。
+
+验收后需要提供：
+
+- JSON 报告路径。
+- Markdown 报告路径。
+- `status`。
+- `error_count`。
+- `warning_count`。
+- `inputs_unchanged`。
+- 不需要发送 ChatGPT 正文、Vault 正文或媒体内容。
+
+---
+
+# 11. 每次交付格式
 
 ```text
 模块：
@@ -960,62 +987,30 @@ Draft PR：
 Actions Run：
 
 研究：
-- 官方文档：
-- 类似项目：
-- 采用：
-- 拒绝：
-
 修改文件：
-- path：修改原因
-
 未修改但复用的文件：
-- path：复用方式
-
 测试优先证据：
-- 实现前失败测试：
-- 实现前失败输出：
-- 实现后成功输出：
-
 测试命令：
-- command
-
 测试结果：
-- Ubuntu 3.11：
-- Ubuntu 3.12：
-- Windows 3.12：
-- UI build：
-
 Demo：
-- 命令：
-- 输入：
-- 输出：
-
 UI：
-- 页面：
-- 操作步骤：
-- 成功截图：
-- 失败截图：
-
 风险：
 已知限制：
 回滚方式：
-
 自检：
-- 是否只修改本模块：
-- 是否有无关格式化：
-- 是否重复实现已有能力：
-- 是否增加不必要依赖：
-- 是否满足 UI 要求：
 ```
 
 不得使用 `simulated`、`XXXX`、假 SHA、固定成功输出或占位测试文件名。
 
 ---
 
-# 11. 下一项允许执行的工作
+# 12. 当前下一动作
 
-当前下一项：`P0-B 真实环境只读验收`。
+当前唯一阻断动作：运行第 10 节的真实环境只读验收。
 
-在 PR #3 合入前，可先准备验收命令、脱敏样例和 UI 诊断入口；不得把 P1 新功能继续塞进 PR #3。
+在真实报告通过前：
 
-P0-B 完成后，创建 `integration/lingji-v1`，再进入 P1-0 UI 模块化和第二阶段并行开发。
+- PR #4 保持 Draft。
+- 不合并 P0-B。
+- 不创建正式 `integration/lingji-v1`。
+- P1 模块只允许研究和接口设计，不允许合入生产代码。
