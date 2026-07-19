@@ -30,6 +30,11 @@ module.exports = class LingJiControlPlugin extends Plugin {
       callback: () => this.createWebRequest(),
     });
     this.addCommand({
+      id: 'new-media-extraction-request',
+      name: '新建本地音视频提取请求',
+      callback: () => this.createMediaRequest(),
+    });
+    this.addCommand({
       id: 'new-skill-sync-request',
       name: '新建 Skill 同步请求',
       callback: () => this.createSkillRequest(),
@@ -108,6 +113,41 @@ ${capturedText}
 - 确认后将 \`status\` 改为 \`queued\`。
 `;
     await this.createRequest('Web-Capture', body);
+  }
+
+  async createMediaRequest() {
+    const body = `---
+schema_version: 1
+id: ""
+title: 本地音视频提取请求
+memory_type: extraction_request
+request_type: media_extract
+status: draft
+privacy: private
+source_type: media
+input_path: "D:/media/example.mp4"
+project: []
+extract_audio: true
+extract_keyframes: true
+keyframe_interval_seconds: 30
+max_keyframes: 120
+transcript_path: ""
+ocr_path: ""
+visual_notes_path: ""
+force: false
+created_at: ${now()}
+updated_at: ${now()}
+---
+
+# 本地音视频提取请求
+
+1. 修改 \`input_path\`。
+2. 可填写已有转写、OCR 或视觉描述文件。
+3. FFmpeg 可用时可提取单声道 16k 音轨和限量关键帧。
+4. 元数据提取不等于自动理解；没有转写或视觉分析时会进入待补充状态。
+5. 确认后将 \`status\` 改为 \`queued\`。
+`;
+    await this.createRequest('Media-Extract', body);
   }
 
   async createSkillRequest() {
