@@ -3,7 +3,9 @@
 > 模块：P1-0 桌面 UI 最小模块化  
 > 分支：`refactor/desktop-ui-modular-foundation`  
 > 堆叠基线：`test/real-environment-acceptance`  
+> Draft PR：`#6`  
 > 状态：`REVIEW_REQUIRED`  
+> 代码验证 Run：`29696562955`  
 > 目标：拆分前端结构、统一连接状态、正式接入环境验收、建立默认值可学习设置基础  
 > 非目标：不修改后端 API、不新增业务模块、不重新设计视觉、不引入大型依赖
 
@@ -188,20 +190,54 @@ P2-P7 必须从后端 Setting Registry 返回完整定义，前端禁止手写�
 
 ---
 
-## 测试
+## 测试优先证据
 
-### Smoke
+### 实现前会失败的约束
 
-`ui-modular-smoke.mjs` 检查：
+新增 Smoke 要求：
 
-1. 所有模块文件存在；
-2. `App.tsx` 使用中央导航、连接 Hook 和页面组件；
-3. 设置页包含搜索、已修改筛选、分组恢复和取消；
-4. 设置字段显示默认状态、推荐解释和单项恢复；
-5. 环境验收仍有真实 API 入口；
+1. 页面、Hook、共享组件和类型文件真实存在；
+2. `App.tsx` 使用中央导航和连接 Hook；
+3. 环境验收进入正式导航；
+4. 设置页面包含搜索、已修改筛选、恢复和取消；
+5. 设置字段显示默认状态、推荐解释和单项恢复；
 6. `App.tsx` 不得超过 100 行。
 
-### 命令
+原结构无法满足这些断言。
+
+### 首轮真实失败
+
+Run `29696505774` 的桌面构建失败。原因不是业务页面错误，而是旧验收 Smoke 仍要求“环境验收”文字硬编码在 `App.tsx`，与中央导航 Registry 冲突。
+
+修复：验收 Smoke 改为分别检查：
+
+- `App.tsx` 的页面组合；
+- `navigation.ts` 的中文入口和 `acceptance` ID；
+- `pages/AcceptancePage.tsx` 的真实 API；
+- `main.tsx` 的 Root 挂载。
+
+没有为了通过测试把导航文字重新硬编码回 `App.tsx`。
+
+---
+
+## 最终测试结果
+
+GitHub Actions Run：`29696562955`
+
+| 检查 | 结果 |
+|---|---|
+| Desktop UI Smoke | success |
+| TypeScript Build | success |
+| Vite Build | success |
+| Tauri Configuration | success |
+| Ubuntu Python 3.11 | success |
+| Ubuntu Python 3.12 | success |
+| Windows Python 3.12 | `113 tests / OK` |
+| MCP Smoke | success |
+| Browser Capture Smoke | success |
+| Obsidian Plugin Smoke | success |
+
+命令：
 
 ```powershell
 cd desktop/lingji-control
@@ -210,17 +246,35 @@ npm run test:smoke
 npm run build
 ```
 
-CI 结果在 Draft PR 创建后补充，未完成前保持 `REVIEW_REQUIRED`。
+---
+
+## UI 验收路径
+
+1. 启动 `python run_control_api.py`。
+2. 启动桌面前端。
+3. 左侧导航应显示原有页面和“环境验收”。
+4. 切换页面，确认连接状态不重新创建。
+5. 打开“设置”。
+6. 搜索设置名称或参数键。
+7. 勾选“只显示已修改”。
+8. 修改一个值，应显示“等待保存”。
+9. 取消未保存修改。
+10. 再次修改并保存，应显示“主人已修改”。
+11. 使用单项恢复默认。
+12. 使用恢复本组默认。
+
+当前 CI 无法代替主人对页面排版和交互的人工截图验收。
 
 ---
 
 ## 风险
 
-1. 页面移动可能产生导入路径或类型错误，由 TypeScript 和 Vite 构建检查。
+1. 页面移动可能产生导入路径或类型错误，已由 TypeScript 和 Vite 构建验证。
 2. 现有 CSS 是全局样式，本阶段不拆 CSS，避免视觉回归扩大。
 3. 当前连接轮询仍为 10 秒，P5 WebSocket 前不在 P1 改变。
 4. SettingDefinition 新字段为可选，旧后端返回仍兼容。
 5. P1 分支堆叠在 PR #4 上，P0-B 验收前不得直接合入最终基线。
+6. 推荐值和影响说明只有在后端 Setting Registry 返回对应字段后才显示真实内容；P1 不伪造这些值。
 
 ---
 
@@ -232,11 +286,9 @@ CI 结果在 Draft PR 创建后补充，未完成前保持 `REVIEW_REQUIRED`。
 
 ## 当前结论
 
-代码结构已拆分，等待：
+P1-0 代码和自动 CI 已通过，状态保持 `REVIEW_REQUIRED`，原因：
 
-- 前端 Smoke；
-- TypeScript；
-- Vite Build；
-- Windows 全量 CI；
-- 页面人工截图和操作验收；
-- P0-B 完成后重新基于稳定集成分支整理提交历史。
+1. 需要主人对页面排版、导航和设置交互做一次桌面人工验收；
+2. P0-B 主人电脑真实环境验收尚未完成；
+3. PR #6 仍堆叠在 PR #4 上，不能直接合入最终稳定基线；
+4. 完成 P0-B 后需要重新基于 `integration/lingji-v1` 整理并验证。
