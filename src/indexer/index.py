@@ -8,8 +8,22 @@ from pathlib import Path
 from typing import Any
 
 from src.memory.vault_layout import VaultLayout
+from src.obsidian.frontmatter import FrontmatterError, split_frontmatter
 
 logger = logging.getLogger("pemis.indexer")
+
+RELATION_FIELDS = (
+    "project",
+    "people",
+    "organizations",
+    "tools",
+    "models",
+    "sources",
+    "tasks",
+    "decisions",
+    "related",
+    "related_ids",
+)
 
 
 class PEMISIndex:
@@ -29,67 +43,21 @@ class PEMISIndex:
         self._legacy_dash_dir = self.vault_dir / "PEMIS" / "dashboard"
 
     def _parse_frontmatter(self, text):
-        meta: dict[str, Any] = {}
-        lines = text.lstrip("\ufeff").splitlines()
-        if not lines or lines[0].strip() != "---":
-            return meta
-
-        current_list_key = None
-        for raw_line in lines[1:]:
-            line = raw_line.rstrip()
-            if line.strip() == "---":
-                break
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            if current_list_key and stripped.startswith("-"):
-                meta[current_list_key].append(self._parse_scalar(stripped[1:].strip()))
-                continue
-            if ":" not in line:
-                current_list_key = None
-                continue
-            key, _, raw_value = line.partition(":")
-            key = key.strip().lower()
-            raw_value = raw_value.strip()
-            if not key:
-                continue
-            if raw_value == "":
-                meta[key] = []
-                current_list_key = key
-                continue
-            current_list_key = None
-            if raw_value.startswith("[") and raw_value.endswith("]"):
-                values = raw_value[1:-1].strip()
-                meta[key] = [self._parse_scalar(value.strip()) for value in values.split(",") if value.strip()]
-            else:
-                meta[key] = self._parse_scalar(raw_value)
-        return meta
-
-    @staticmethod
-    def _parse_scalar(value):
-        value = value.strip().strip('"').strip("'")
-        lowered = value.lower()
-        if lowered in {"true", "false"}:
-            return lowered == "true"
-        if lowered in {"null", "none", "~"}:
-            return None
         try:
-            if "." in value:
-                return float(value)
-            return int(value)
-        except ValueError:
-            return value
+            metadata, _ = split_frontmatter(text)
+            return metadata
+        except FrontmatterError as exc:
+            logger.warning("Invalid frontmatter: %s", exc)
+            return {}
 
     def _extract_summary(self, text):
-        """Extract a useful summary from the body text after frontmatter."""
-        body = text.lstrip("\ufeff").strip()
-        if body.startswith("---"):
-            end = body.find("---", 3)
-            if end != -1:
-                body = body[end + 3 :].strip()
+        try:
+            _, body = split_frontmatter(text)
+        except FrontmatterError:
+            body = text
         for line in body.splitlines():
             line = line.strip()
-            if not line or line.startswith(("# ", "**", "---")):
+            if not line or line.startswith(("# ", "**", "---", ">")):
                 continue
             clean = line.replace("**", "").replace("[", "").replace("]", "")
             if len(clean) > 20:
@@ -106,13 +74,27 @@ class PEMISIndex:
         value = meta.get("memory_type") or meta.get("type") or ""
         if value and value != "note":
             return str(value)
-        name = path.stem.lower()
-        if name.startswith("opp_"):
+        if path.stem.lower().startswith("opp_"):
             return "opportunity"
         classification = self.layout.classify(path)
-        if classification.is_inbox:
-            return "source"
-        return "note"
+        return "source" if classification.is_inbox else "note"
+
+    @staticmethod
+    def _list(value: Any) -> list[Any]:
+        if value in (None, ""):
+            return []
+        if isinstance(value, list):
+            return value
+        if isinstance(value, (tuple, set)):
+            return list(value)
+        return [value]
+
+    @staticmethod
+    def _number(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
 
     def _parse_md_file(self, path):
         path = Path(path)
@@ -120,37 +102,32 @@ class PEMISIndex:
             return None
         try:
             text = path.read_text(encoding="utf-8-sig")
+            stat = path.stat()
         except Exception as exc:
             logger.warning("Read failed %s: %s", path, exc)
             return None
 
         meta = self._parse_frontmatter(text)
         classification = self.layout.classify(path)
-        file_id = str(meta.get("id") or path.stem)
-        content_hash = hashlib.md5(text.encode("utf-8")).hexdigest()
+        file_id = str(meta.get("id") or classification.relative_path)
         title = str(meta.get("title") or path.stem)
         for line in text.splitlines():
             if line.startswith("# "):
                 title = line[2:].strip()
                 break
         dtype = self._infer_type(path, meta)
-        summary = str(meta.get("summary") or self._extract_summary(text))
-        try:
-            difficulty = int(meta.get("difficulty", 0) or 0)
-        except (TypeError, ValueError):
-            difficulty = 0
+        relations = {field: self._list(meta.get(field)) for field in RELATION_FIELDS}
+        project_links = relations["project"] or self._list(meta.get("project_id"))
 
-        stat = path.stat()
-        return {
+        entry = {
             "id": file_id,
             "schema_version": meta.get("schema_version", 1),
             "type": dtype,
             "memory_type": str(meta.get("memory_type") or dtype),
-            "score": meta.get("score", 0.0),
-            "tags": meta.get("tags", []),
             "title": title or path.stem,
-            "summary": summary,
-            "content_hash": content_hash,
+            "aliases": self._list(meta.get("aliases")),
+            "summary": str(meta.get("summary") or self._extract_summary(text)),
+            "content_hash": hashlib.md5(text.encode("utf-8")).hexdigest(),
             "created": meta.get("created_at") or meta.get("created", ""),
             "updated": meta.get("updated_at") or datetime.now().isoformat(),
             "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
@@ -160,17 +137,19 @@ class PEMISIndex:
             "source_id": meta.get("source_id", ""),
             "source_path": meta.get("source_path", ""),
             "source_url": meta.get("source_url", ""),
+            "project": project_links,
             "project_id": meta.get("project_id", ""),
             "status": meta.get("status", "active"),
             "privacy": meta.get("privacy") or classification.privacy,
             "importance": meta.get("importance", ""),
             "review_status": meta.get("review_status", ""),
-            "related_ids": meta.get("related_ids", []),
-            "supersedes": meta.get("supersedes", ""),
-            "superseded_by": meta.get("superseded_by", ""),
+            "tags": self._list(meta.get("tags")),
+            "supersedes": self._list(meta.get("supersedes")),
+            "superseded_by": self._list(meta.get("superseded_by")),
+            "score": self._number(meta.get("score"), 0.0),
             "speed": meta.get("speed", ""),
             "monetization": meta.get("monetization", ""),
-            "difficulty": difficulty,
+            "difficulty": int(self._number(meta.get("difficulty"), 0)),
             "confidence": meta.get("confidence", 0.0),
             "relative_path": classification.relative_path,
             "top_level": classification.top_level,
@@ -178,7 +157,11 @@ class PEMISIndex:
             "is_private": classification.is_private,
             "is_inbox": classification.is_inbox,
             "is_archive": classification.is_archive,
+            "properties": meta,
         }
+        entry.update(relations)
+        entry["project"] = project_links
+        return entry
 
     def build_index(self):
         entries = {}
@@ -191,6 +174,8 @@ class PEMISIndex:
         for markdown_file in md_files:
             entry = self._parse_md_file(markdown_file)
             if entry:
+                if entry["id"] in entries:
+                    logger.warning("Duplicate memory id: %s (%s)", entry["id"], markdown_file)
                 entries[entry["id"]] = entry
 
         if self.opp_dir.exists():
@@ -201,7 +186,7 @@ class PEMISIndex:
 
         idx = {
             "meta": {
-                "version": "2.0",
+                "version": "2.1",
                 "layout_version": "1",
                 "total": len(entries),
                 "last_build": datetime.now().timestamp(),
@@ -223,7 +208,6 @@ class PEMISIndex:
         return idx
 
     def _parse_external_opp_file(self, path):
-        """Parse legacy storage/opportunities files without pretending they live in the vault."""
         try:
             text = Path(path).read_text(encoding="utf-8-sig")
         except Exception:
@@ -234,26 +218,35 @@ class PEMISIndex:
             "schema_version": meta.get("schema_version", 1),
             "type": "opportunity",
             "memory_type": "opportunity",
-            "score": meta.get("score", 0.0),
-            "tags": meta.get("tags", []),
-            "title": Path(path).stem,
-            "summary": meta.get("summary") or self._extract_summary(text),
+            "score": self._number(meta.get("score"), 0.0),
+            "tags": self._list(meta.get("tags")),
+            "title": str(meta.get("title") or Path(path).stem),
+            "summary": str(meta.get("summary") or self._extract_summary(text)),
             "content_hash": hashlib.md5(text.encode("utf-8")).hexdigest(),
-            "created": meta.get("created", ""),
-            "updated": datetime.now().isoformat(),
+            "created": meta.get("generated_at") or meta.get("created", ""),
+            "updated": meta.get("updated_at") or datetime.now().isoformat(),
             "source": "storage/opportunities",
-            "source_type": "legacy_opportunity",
+            "source_type": meta.get("source_type", "derived_opportunity"),
+            "source_id": meta.get("source_id", ""),
+            "source_path": meta.get("source_path", ""),
+            "source_content_hash": meta.get("source_content_hash", ""),
+            "project": self._list(meta.get("project")),
+            "sources": self._list(meta.get("sources")),
+            "related": self._list(meta.get("related")),
             "relative_path": "",
             "top_level": "",
             "category": "opportunity",
-            "privacy": "private",
+            "privacy": meta.get("privacy", "private"),
+            "status": meta.get("status", "needs_review"),
+            "review_status": meta.get("review_status", "needs_review"),
             "is_private": False,
             "is_inbox": False,
             "is_archive": False,
             "speed": meta.get("speed", ""),
             "monetization": meta.get("monetization", ""),
-            "difficulty": meta.get("difficulty", 0),
+            "difficulty": int(self._number(meta.get("difficulty"), 0)),
             "confidence": meta.get("confidence", 0.0),
+            "properties": meta,
         }
 
     def incremental_add(self, file_path):
@@ -265,6 +258,13 @@ class PEMISIndex:
             return False
         with self._lock:
             idx = self._load()
+            old_ids = [
+                file_id
+                for file_id, existing in idx.get("entries", {}).items()
+                if existing.get("relative_path") == entry.get("relative_path") and file_id != entry["id"]
+            ]
+            for old_id in old_ids:
+                del idx["entries"][old_id]
             idx["entries"][entry["id"]] = entry
             self._touch_meta(idx)
             self.save_index(idx)
@@ -318,7 +318,10 @@ class PEMISIndex:
             if not self.layout.should_index(markdown_file, include_private=self.include_private):
                 continue
             try:
-                snapshot[str(markdown_file)] = (markdown_file.stat().st_mtime, markdown_file.stat().st_size)
+                snapshot[str(markdown_file)] = (
+                    markdown_file.stat().st_mtime,
+                    markdown_file.stat().st_size,
+                )
             except OSError:
                 continue
         return snapshot
@@ -370,7 +373,10 @@ class PEMISIndex:
             relative = self.layout.relative(path).as_posix()
         except ValueError:
             return None
-        return next((entry for entry in self.get_all() if entry.get("relative_path") == relative), None)
+        return next(
+            (entry for entry in self.get_all() if entry.get("relative_path") == relative),
+            None,
+        )
 
     def save_index(self, index):
         self.storage_dir.mkdir(parents=True, exist_ok=True)
@@ -386,7 +392,7 @@ class PEMISIndex:
             with open(self.index_path, "r", encoding="utf-8-sig") as handle:
                 self._index = json.load(handle)
         else:
-            self._index = {"meta": {"version": "2.0", "total": 0}, "entries": {}}
+            self._index = {"meta": {"version": "2.1", "total": 0}, "entries": {}}
         return self._index
 
     @staticmethod
