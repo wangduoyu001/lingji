@@ -11,7 +11,7 @@ from src.obsidian.frontmatter import atomic_write, render_frontmatter, split_fro
 class ExtractionRequestInbox:
     """Process owner-created extraction request notes from Obsidian."""
 
-    ALLOWED_TYPES = {"chatgpt_import", "web_capture", "skill_sync"}
+    ALLOWED_TYPES = {"chatgpt_import", "web_capture", "media_extract", "skill_sync"}
 
     def __init__(self, layout, pipeline, skill_registry=None, state_db=None):
         self.layout = layout
@@ -77,6 +77,34 @@ class ExtractionRequestInbox:
                     "privacy_scan": metadata.get("privacy_scan", True),
                 },
                 adapter_name="chatgpt_export",
+                force=bool(metadata.get("force", False)),
+            )
+            return {"job": job}
+        if request_type == "media_extract":
+            input_path = str(metadata.get("input_path") or metadata.get("media_path") or "")
+            if not input_path:
+                raise ValueError("input_path is required")
+            source_type = str(metadata.get("source_type") or metadata.get("media_type") or "media")
+            job = self.pipeline.enqueue(
+                source_type,
+                input_path=input_path,
+                payload={
+                    "title": metadata.get("title") or Path(input_path).stem,
+                    "transcript": metadata.get("transcript") or "",
+                    "ocr_text": metadata.get("ocr_text") or "",
+                    "visual_notes": metadata.get("visual_notes") or "",
+                },
+                options={
+                    "project_id": metadata.get("project") or metadata.get("project_id") or [],
+                    "extract_audio": bool(metadata.get("extract_audio", False)),
+                    "extract_keyframes": bool(metadata.get("extract_keyframes", False)),
+                    "keyframe_interval_seconds": metadata.get("keyframe_interval_seconds") or 30,
+                    "max_keyframes": metadata.get("max_keyframes") or 120,
+                    "transcript_path": metadata.get("transcript_path") or "",
+                    "ocr_path": metadata.get("ocr_path") or "",
+                    "visual_notes_path": metadata.get("visual_notes_path") or "",
+                },
+                adapter_name="media_local",
                 force=bool(metadata.get("force", False)),
             )
             return {"job": job}
