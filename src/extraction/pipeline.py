@@ -65,6 +65,7 @@ class ExtractionPipeline:
             input_path = Path(input_path).expanduser()
             if not input_path.exists():
                 raise FileNotFoundError(input_path)
+            self._validate_input_limits(input_path, normalized_options)
         adapter = self.registry.resolve(
             source_type,
             input_path,
@@ -111,6 +112,8 @@ class ExtractionPipeline:
             payload=payload or {},
             options=self._effective_options(source_type, options),
         )
+        if request.input_path:
+            self._validate_input_limits(request.input_path, request.options)
         adapter = self.registry.resolve(
             source_type,
             request.input_path,
@@ -256,6 +259,17 @@ class ExtractionPipeline:
         if outcome is None:
             return {"job": self.queue.get(job_id), "result": {}}
         return outcome
+
+    @staticmethod
+    def _validate_input_limits(input_path: Path, options: Mapping[str, Any]) -> None:
+        if not input_path.is_file():
+            return
+        maximum = max(int(options.get("max_input_bytes") or 0), 0)
+        size = input_path.stat().st_size
+        if maximum and size > maximum:
+            raise ValueError(
+                f"输入文件大小 {size} bytes 超过当前限制 {maximum} bytes；可在本地 UI 调整"
+            )
 
     def _effective_options(
         self,
