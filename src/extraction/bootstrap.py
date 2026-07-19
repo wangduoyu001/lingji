@@ -5,6 +5,7 @@ from src.storage import StateDatabase
 
 from .adapters.chatgpt import ChatGPTExportAdapter
 from .adapters.codex import CodexWorkReportAdapter
+from .adapters.media import MediaExtractionAdapter
 from .adapters.web import WebCaptureAdapter
 from .pipeline import DocumentsWrittenCallback, ExtractionPipeline
 from .queue import SQLiteExtractionQueue
@@ -25,6 +26,7 @@ def build_extraction_pipeline(
     registry.register(ChatGPTExportAdapter())
     registry.register(CodexWorkReportAdapter())
     registry.register(WebCaptureAdapter())
+    registry.register(MediaExtractionAdapter(settings.storage_path))
     sink = VaultExtractionSink(layout, settings.storage_path, state_db=state_db)
     return ExtractionPipeline(
         queue,
