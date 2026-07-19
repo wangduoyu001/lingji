@@ -12,7 +12,7 @@ from ..models import ExtractedDocument, ExtractionBatch, ExtractionRequest
 
 class CodexWorkReportAdapter(ExtractionAdapter):
     name = "codex_work_report"
-    version = "1.0.0"
+    version = "1.1.0"
     source_types = ("codex", "codex_report")
 
     def can_handle(
@@ -31,7 +31,23 @@ class CodexWorkReportAdapter(ExtractionAdapter):
         report = self._load_report(request)
         normalized = self._normalize(report)
         task_token = self._stable_token(normalized["task_id"])
-        main_id = "LJ-CODEX-" + task_token
+        execution_token = self._stable_token(normalized["execution_id"])
+        main_id = f"LJ-CODEX-{task_token}-{execution_token}"
+
+        errors = [
+            (self._child_id("ERROR", task_token, item), item)
+            for item in normalized["errors"]
+        ]
+        decisions = [
+            (self._child_id("DECISION", task_token, item), item)
+            for item in normalized["decisions"]
+        ]
+        remaining_tasks = [
+            (self._child_id("TASK", task_token, item), item)
+            for item in normalized["remaining_tasks"]
+        ]
+        related_ids = [item_id for item_id, _ in [*errors, *decisions, *remaining_tasks]]
+
         documents = [
             ExtractedDocument(
                 stable_id=main_id,
@@ -43,6 +59,9 @@ class CodexWorkReportAdapter(ExtractionAdapter):
                 created_at=normalized["started_at"] or normalized["completed_at"],
                 updated_at=normalized["completed_at"],
                 metadata={
+                    "task_id": normalized["task_id"],
+                    "execution_id": normalized["execution_id"],
+                    "run_number": normalized["run_number"],
                     "project_id": normalized["project_id"],
                     "repository": normalized["repository"],
                     "branch": normalized["branch"],
@@ -51,35 +70,18 @@ class CodexWorkReportAdapter(ExtractionAdapter):
                     "test_result": normalized["test_result"],
                     "commits": normalized["commits"],
                     "pull_requests": normalized["pull_requests"],
-                    "related_ids": [
-                        *[
-                            f"LJ-ERROR-{task_token}-{index:02d}"
-                            for index, _ in enumerate(normalized["errors"], 1)
-                        ],
-                        *[
-                            f"LJ-DECISION-{task_token}-{index:02d}"
-                            for index, _ in enumerate(normalized["decisions"], 1)
-                        ],
-                        *[
-                            f"LJ-TASK-{task_token}-{index:02d}"
-                            for index, _ in enumerate(normalized["remaining_tasks"], 1)
-                        ],
-                    ],
-                    "tags": ["codex", "work-report", normalized["project_id"]],
+                    "related_ids": related_ids,
+                    "tags": ["source/codex", "topic/work-report", normalized["project_id"]],
                 },
             )
         ]
-        for index, error in enumerate(normalized["errors"], 1):
+        for item_id, error in errors:
             documents.append(
                 ExtractedDocument(
-                    stable_id=f"LJ-ERROR-{task_token}-{index:02d}",
-                    title=self._item_title(error, f"Codex错误 {index}"),
+                    stable_id=item_id,
+                    title=self._item_title(error, "Codex错误"),
                     body=self._render_item(
-                        "错误记录",
-                        error,
-                        main_id,
-                        normalized["repository"],
-                        normalized["branch"],
+                        "错误记录", error, main_id, normalized["repository"], normalized["branch"]
                     ),
                     source_type="codex",
                     destination="error",
@@ -87,25 +89,23 @@ class CodexWorkReportAdapter(ExtractionAdapter):
                     created_at=normalized["completed_at"],
                     updated_at=normalized["completed_at"],
                     metadata={
+                        "task_id": normalized["task_id"],
+                        "execution_id": normalized["execution_id"],
                         "project_id": normalized["project_id"],
                         "status": "open",
                         "severity": self._item_value(error, "severity", "medium"),
                         "related_ids": [main_id],
-                        "tags": ["codex", "error"],
+                        "tags": ["source/codex", "signal/error"],
                     },
                 )
             )
-        for index, decision in enumerate(normalized["decisions"], 1):
+        for item_id, decision in decisions:
             documents.append(
                 ExtractedDocument(
-                    stable_id=f"LJ-DECISION-{task_token}-{index:02d}",
-                    title=self._item_title(decision, f"Codex决策候选 {index}"),
+                    stable_id=item_id,
+                    title=self._item_title(decision, "Codex决策候选"),
                     body=self._render_item(
-                        "决策候选",
-                        decision,
-                        main_id,
-                        normalized["repository"],
-                        normalized["branch"],
+                        "决策候选", decision, main_id, normalized["repository"], normalized["branch"]
                     ),
                     source_type="codex",
                     destination="decision",
@@ -113,25 +113,24 @@ class CodexWorkReportAdapter(ExtractionAdapter):
                     created_at=normalized["completed_at"],
                     updated_at=normalized["completed_at"],
                     metadata={
+                        "task_id": normalized["task_id"],
+                        "execution_id": normalized["execution_id"],
                         "project_id": normalized["project_id"],
                         "status": "needs_review",
+                        "review_status": "needs_review",
                         "owner_confirmed": False,
                         "related_ids": [main_id],
-                        "tags": ["codex", "decision-candidate"],
+                        "tags": ["source/codex", "signal/decision-candidate"],
                     },
                 )
             )
-        for index, task in enumerate(normalized["remaining_tasks"], 1):
+        for item_id, task in remaining_tasks:
             documents.append(
                 ExtractedDocument(
-                    stable_id=f"LJ-TASK-{task_token}-{index:02d}",
-                    title=self._item_title(task, f"后续任务 {index}"),
+                    stable_id=item_id,
+                    title=self._item_title(task, "后续任务"),
                     body=self._render_item(
-                        "待办候选",
-                        task,
-                        main_id,
-                        normalized["repository"],
-                        normalized["branch"],
+                        "待办候选", task, main_id, normalized["repository"], normalized["branch"]
                     ),
                     source_type="codex",
                     destination="task",
@@ -139,11 +138,14 @@ class CodexWorkReportAdapter(ExtractionAdapter):
                     created_at=normalized["completed_at"],
                     updated_at=normalized["completed_at"],
                     metadata={
+                        "task_id": normalized["task_id"],
+                        "execution_id": normalized["execution_id"],
                         "project_id": normalized["project_id"],
                         "status": "needs_review",
+                        "review_status": "needs_review",
                         "owner_confirmed": False,
                         "related_ids": [main_id],
-                        "tags": ["codex", "task-candidate"],
+                        "tags": ["source/codex", "attention/review"],
                     },
                 )
             )
@@ -151,11 +153,12 @@ class CodexWorkReportAdapter(ExtractionAdapter):
             documents=tuple(documents),
             summary={
                 "task_id": normalized["task_id"],
+                "execution_id": normalized["execution_id"],
                 "project_id": normalized["project_id"],
                 "reports": 1,
-                "errors": len(normalized["errors"]),
-                "decisions": len(normalized["decisions"]),
-                "remaining_tasks": len(normalized["remaining_tasks"]),
+                "errors": len(errors),
+                "decisions": len(decisions),
+                "remaining_tasks": len(remaining_tasks),
             },
         )
 
@@ -174,21 +177,31 @@ class CodexWorkReportAdapter(ExtractionAdapter):
         summary = str(report.get("summary") or report.get("result") or "").strip()
         if not summary:
             raise ValueError("Codex work report summary is required")
-        project_id = str(
-            report.get("project_id") or report.get("project") or "General"
-        ).strip()
+        project_id = str(report.get("project_id") or report.get("project") or "General").strip()
         task_id = str(report.get("task_id") or report.get("id") or "").strip()
         if not task_id:
-            task_id = hashlib.sha256(
-                json.dumps(report, ensure_ascii=False, sort_keys=True).encode("utf-8")
-            ).hexdigest()[:16]
+            task_id = self._hash(report)[:16]
         completed_at = self._iso(report.get("completed_at")) or datetime.now().isoformat(
             timespec="seconds"
         )
         started_at = self._iso(report.get("started_at"))
+        commits = self._list(report.get("commits"))
+        execution_id = str(report.get("execution_id") or report.get("run_id") or "").strip()
+        if not execution_id:
+            execution_id = self._hash(
+                {
+                    "task_id": task_id,
+                    "completed_at": completed_at,
+                    "branch": report.get("branch") or "",
+                    "commits": commits,
+                    "summary": summary,
+                }
+            )[:16]
         title = str(report.get("title") or f"Codex工作报告：{summary[:40]}").strip()
         return {
             "task_id": task_id,
+            "execution_id": execution_id,
+            "run_number": report.get("run_number") or "",
             "project_id": project_id,
             "title": title,
             "repository": str(report.get("repository") or report.get("repo") or ""),
@@ -201,13 +214,11 @@ class CodexWorkReportAdapter(ExtractionAdapter):
             "changed_files": self._list(report.get("changed_files") or report.get("files")),
             "tests": self._list(report.get("tests")),
             "test_result": str(report.get("test_result") or report.get("tests_status") or ""),
-            "commits": self._list(report.get("commits")),
+            "commits": commits,
             "pull_requests": self._list(report.get("pull_requests") or report.get("prs")),
             "errors": self._list(report.get("errors")),
             "decisions": self._list(report.get("decisions")),
-            "remaining_tasks": self._list(
-                report.get("remaining_tasks") or report.get("next_steps")
-            ),
+            "remaining_tasks": self._list(report.get("remaining_tasks") or report.get("next_steps")),
             "artifacts": self._list(report.get("artifacts")),
             "notes": str(report.get("notes") or ""),
         }
@@ -226,6 +237,8 @@ class CodexWorkReportAdapter(ExtractionAdapter):
             f"- 仓库：`{report['repository'] or '-'}`",
             f"- 分支：`{report['branch'] or '-'}`",
             f"- 任务ID：`{report['task_id']}`",
+            f"- 执行ID：`{report['execution_id']}`",
+            f"- 执行序号：`{report['run_number'] or '-'}`",
             f"- Agent：`{report['agent']}`",
             f"- 状态：`{report['status']}`",
             f"- 开始：`{report['started_at'] or '-'}`",
@@ -327,9 +340,7 @@ class CodexWorkReportAdapter(ExtractionAdapter):
                 return ""
         text = str(value)
         try:
-            return datetime.fromisoformat(text.replace("Z", "+00:00")).isoformat(
-                timespec="seconds"
-            )
+            return datetime.fromisoformat(text.replace("Z", "+00:00")).isoformat(timespec="seconds")
         except ValueError:
             return text
 
@@ -339,3 +350,13 @@ class CodexWorkReportAdapter(ExtractionAdapter):
             char if char.isalnum() or char in "-_" else "-" for char in str(value)
         ).strip("-")
         return cleaned[:80] or "UNKNOWN"
+
+    @classmethod
+    def _child_id(cls, prefix: str, task_token: str, item: Any) -> str:
+        token = cls._hash(item)[:12].upper()
+        return f"LJ-{prefix}-{task_token}-{token}"
+
+    @staticmethod
+    def _hash(value: Any) -> str:
+        encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
