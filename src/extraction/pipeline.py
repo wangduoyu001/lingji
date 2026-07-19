@@ -18,6 +18,8 @@ from .sink import VaultExtractionSink
 logger = logging.getLogger("lingji.extraction")
 
 DocumentsWrittenCallback = Callable[[dict[str, Any]], None]
+DefaultOptionsProvider = Callable[[str], Mapping[str, Any]]
+DefaultPriorityProvider = Callable[[str], int]
 
 
 class ExtractionPipeline:
@@ -31,6 +33,8 @@ class ExtractionPipeline:
         lease_heartbeat_seconds: float = 30.0,
         stale_after_seconds: int = 1800,
         on_documents_written: DocumentsWrittenCallback | None = None,
+        default_options_provider: DefaultOptionsProvider | None = None,
+        default_priority_provider: DefaultPriorityProvider | None = None,
     ):
         self.queue = queue
         self.registry = registry
@@ -39,6 +43,8 @@ class ExtractionPipeline:
         self.lease_heartbeat_seconds = max(float(lease_heartbeat_seconds), 2.0)
         self.stale_after_seconds = max(int(stale_after_seconds), 30)
         self.on_documents_written = on_documents_written
+        self.default_options_provider = default_options_provider
+        self.default_priority_provider = default_priority_provider
 
     def enqueue(
         self,
@@ -49,11 +55,11 @@ class ExtractionPipeline:
         options: Mapping[str, Any] | None = None,
         adapter_name: str | None = None,
         idempotency_key: str | None = None,
-        priority: int = 100,
+        priority: int | None = None,
         max_attempts: int | None = None,
         force: bool = False,
     ) -> dict[str, Any]:
-        normalized_options = dict(options or {})
+        normalized_options = self._effective_options(source_type, options)
         normalized_payload = dict(payload or {})
         if input_path:
             input_path = Path(input_path).expanduser()
@@ -73,6 +79,7 @@ class ExtractionPipeline:
             adapter_name=adapter.name,
             adapter_version=adapter.version,
         )
+        effective_priority = int(priority) if priority is not None else self._default_priority(source_type)
         return self.queue.enqueue(
             source_type,
             input_path=input_path,
@@ -81,7 +88,7 @@ class ExtractionPipeline:
             adapter_name=adapter.name,
             adapter_version=adapter.version,
             idempotency_key=key,
-            priority=priority,
+            priority=effective_priority,
             max_attempts=max_attempts or self.default_max_attempts,
             force=force,
         )
@@ -102,7 +109,7 @@ class ExtractionPipeline:
             adapter_name=adapter_name,
             input_path=Path(input_path).expanduser() if input_path else None,
             payload=payload or {},
-            options=options or {},
+            options=self._effective_options(source_type, options),
         )
         adapter = self.registry.resolve(
             source_type,
@@ -249,6 +256,24 @@ class ExtractionPipeline:
         if outcome is None:
             return {"job": self.queue.get(job_id), "result": {}}
         return outcome
+
+    def _effective_options(
+        self,
+        source_type: str,
+        options: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        defaults: dict[str, Any] = {}
+        if self.default_options_provider:
+            provided = self.default_options_provider(source_type)
+            if provided:
+                defaults.update(dict(provided))
+        defaults.update(dict(options or {}))
+        return defaults
+
+    def _default_priority(self, source_type: str) -> int:
+        if self.default_priority_provider:
+            return int(self.default_priority_provider(source_type))
+        return 100
 
     def _idempotency_key(
         self,
