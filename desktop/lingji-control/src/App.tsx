@@ -8,6 +8,7 @@ import CapturePage from "./pages/CapturePage";
 import JobsPage from "./pages/JobsPage";
 import LogsPage from "./pages/LogsPage";
 import MediaPage from "./pages/MediaPage";
+import ModelsPage from "./pages/ModelsPage";
 import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
 import StoragePage from "./pages/StoragePage";
@@ -40,6 +41,7 @@ export default function App() {
         <section className="page-content">
           {page === "overview" && <OverviewPage data={connection.overview} refresh={connection.connect} />}
           {page === "system_compute" && <SystemComputePage api={connection.api} active={connection.connected} />}
+          {page === "models" && <ModelsPage api={connection.api} active={connection.connected} />}
           {page === "jobs" && <JobsPage api={connection.api} active={connection.connected} />}
           {page === "capture" && <CapturePage api={connection.api} active={connection.connected} />}
           {page === "media" && <MediaPage api={connection.api} active={connection.connected} />}
