@@ -114,6 +114,43 @@ class ChatGPTImporterTests(unittest.TestCase):
         outcome = self.pipeline.process_job(first["job_id"])
         self.assertEqual(outcome["result"]["summary"]["documents_created"], 1)
 
+    def test_same_export_with_different_project_is_distinct(self):
+        export = Path(self.temp_dir.name) / "conversations.json"
+        export.write_text(json.dumps([self._conversation()], ensure_ascii=False), encoding="utf-8")
+        first = self.pipeline.enqueue(
+            "chatgpt",
+            input_path=export,
+            options={"project_id": "LingJi"},
+        )
+        second = self.pipeline.enqueue(
+            "chatgpt",
+            input_path=export,
+            options={"project_id": "Drama"},
+        )
+        self.assertNotEqual(first["job_id"], second["job_id"])
+
+    def test_sensitive_conversation_goes_to_private_imports(self):
+        conversation = self._conversation()
+        conversation["mapping"]["u1"]["message"]["content"]["parts"] = [
+            "api_key = sk-example-secret-1234567890"
+        ]
+        export = Path(self.temp_dir.name) / "conversations.json"
+        export.write_text(json.dumps([conversation], ensure_ascii=False), encoding="utf-8")
+        result = self.pipeline.execute("chatgpt", input_path=export)
+        note = Path(result["created"][0]["path"])
+        self.assertIn("08-Private/Imports/chatgpt", note.as_posix())
+        self.assertEqual(result["summary"]["restricted_documents"], 1)
+
+    def test_conversation_limit_is_enforced(self):
+        export = Path(self.temp_dir.name) / "conversations.json"
+        export.write_text(json.dumps([self._conversation()], ensure_ascii=False), encoding="utf-8")
+        with self.assertRaises(ValueError):
+            self.pipeline.execute(
+                "chatgpt",
+                input_path=export,
+                options={"max_conversations": 0},
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
