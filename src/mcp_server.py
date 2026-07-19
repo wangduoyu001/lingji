@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from src.config import settings
 from src.extraction import build_extraction_pipeline
 from src.gateway.bootstrap import build_memory_gateway
+from src.indexer.index import PEMISIndex
+from src.retrieval import MarkdownChunker
+from src.skills import SkillRegistry
 
 
 def create_mcp_server(gateway=None, default_agent_id: str | None = None):
@@ -18,7 +22,37 @@ def create_mcp_server(gateway=None, default_agent_id: str | None = None):
         ) from exc
 
     memory_gateway = gateway or build_memory_gateway(settings)
-    extraction_pipeline = build_extraction_pipeline(settings)
+    indexer = PEMISIndex(
+        settings.vault_path,
+        settings.storage_path,
+        include_private=settings.index_private,
+    )
+    chunker = MarkdownChunker(
+        settings.memory_chunk_max_chars,
+        settings.memory_chunk_overlap_chars,
+    )
+
+    def sync_written(result: dict[str, Any]) -> None:
+        indexed = 0
+        for path_text in result.get("paths") or []:
+            path = Path(path_text)
+            if not path.exists() or not indexer.layout.should_index(path, include_private=False):
+                continue
+            if not indexer.incremental_add(path):
+                continue
+            entry = indexer.find_by_path(path)
+            if not entry or entry.get("is_private"):
+                continue
+            memory_gateway.database.upsert_from_entry(entry, path, chunker)
+            indexed += 1
+        if indexed:
+            memory_gateway.retriever.clear_cache()
+
+    extraction_pipeline = build_extraction_pipeline(
+        settings,
+        on_documents_written=sync_written,
+    )
+    skill_registry = SkillRegistry(indexer.layout, memory_gateway.state_db)
     default_agent = default_agent_id or settings.mcp_default_agent_id
     mcp = FastMCP(settings.mcp_server_name)
 
@@ -116,10 +150,7 @@ def create_mcp_server(gateway=None, default_agent_id: str | None = None):
         return memory_gateway.propose_memory(agent(agent_id), title, content, metadata)
 
     @mcp.tool()
-    def recent_changes(
-        agent_id: str | None = None,
-        limit: int = 30,
-    ) -> dict[str, Any]:
+    def recent_changes(agent_id: str | None = None, limit: int = 30) -> dict[str, Any]:
         """Return recently changed memories and auditable memory events."""
         return memory_gateway.recent_changes(agent(agent_id), limit=limit)
 
@@ -134,12 +165,13 @@ def create_mcp_server(gateway=None, default_agent_id: str | None = None):
         project_id: str | None = None,
         force: bool = False,
         process_now: bool = False,
+        privacy_scan: bool = True,
     ) -> dict[str, Any]:
         """Queue an official ChatGPT ZIP/JSON export for local extraction."""
         job = extraction_pipeline.enqueue(
             "chatgpt",
             input_path=path,
-            options={"project_id": project_id or []},
+            options={"project_id": project_id or [], "privacy_scan": privacy_scan},
             adapter_name="chatgpt_export",
             force=force,
         )
@@ -149,12 +181,78 @@ def create_mcp_server(gateway=None, default_agent_id: str | None = None):
 
     @mcp.tool()
     def submit_codex_work_report(report: dict[str, Any]) -> dict[str, Any]:
-        """Write a structured Codex report and reviewable error, decision and task candidates."""
+        """Write a versioned Codex report and reviewable error, decision and task candidates."""
         return extraction_pipeline.execute(
             "codex",
             payload=report,
             adapter_name="codex_work_report",
         )
+
+    @mcp.tool()
+    def capture_web_source(
+        url: str,
+        title: str = "",
+        text: str = "",
+        html: str = "",
+        platform: str = "web",
+        author: str = "",
+        account_name: str = "",
+        description: str = "",
+        published_at: str = "",
+        duration_seconds: str = "",
+        cover_url: str = "",
+        media_url: str = "",
+        transcript: str = "",
+        ocr_text: str = "",
+        project_id: str | None = None,
+        allow_network_fetch: bool = False,
+    ) -> dict[str, Any]:
+        """Capture a webpage or social/video share using owner-provided content or a safe public fetch."""
+        source_type = platform if platform in {
+            "wechat_article", "video_channel", "douyin", "xiaohongshu"
+        } else "web"
+        return extraction_pipeline.execute(
+            source_type,
+            payload={
+                "url": url,
+                "title": title,
+                "text": text,
+                "html": html,
+                "platform": platform,
+                "author": author,
+                "account_name": account_name,
+                "description": description,
+                "published_at": published_at,
+                "duration_seconds": duration_seconds,
+                "cover_url": cover_url,
+                "media_url": media_url,
+                "transcript": transcript,
+                "ocr_text": ocr_text,
+                "capture_method": "mcp",
+            },
+            options={
+                "project_id": project_id or [],
+                "allow_network_fetch": bool(allow_network_fetch and settings.web_network_fetch_enabled),
+                "network_timeout_seconds": settings.web_network_timeout_seconds,
+                "max_response_bytes": settings.web_max_response_bytes,
+            },
+            adapter_name="web_capture",
+        )
+
+    @mcp.tool()
+    def register_skill(manifest: dict[str, Any]) -> dict[str, Any]:
+        """Register or update a Skill manifest in Obsidian without copying executable code."""
+        return skill_registry.register(manifest)
+
+    @mcp.tool()
+    def sync_skill_directory(path: str, limit: int = 500) -> dict[str, Any]:
+        """Scan SKILL.md files and update the Obsidian Skill registry."""
+        return skill_registry.sync_directory(path, limit=limit)
+
+    @mcp.tool()
+    def list_skills(status: str | None = None, limit: int = 200) -> dict[str, Any]:
+        """List registered Skills and their verification state."""
+        return {"status": skill_registry.status(), "skills": skill_registry.list(status=status, limit=limit)}
 
     @mcp.tool()
     def extraction_job_status(job_id: str) -> dict[str, Any]:
@@ -163,10 +261,11 @@ def create_mcp_server(gateway=None, default_agent_id: str | None = None):
 
     @mcp.tool()
     def extraction_queue_status() -> dict[str, Any]:
-        """Return queue counters and registered adapters."""
+        """Return queue counters, registered adapters and Skill status."""
         return {
             "queue": extraction_pipeline.queue.stats(),
             "adapters": extraction_pipeline.registry.list(),
+            "skills": skill_registry.status(),
         }
 
     @mcp.tool()
@@ -192,6 +291,7 @@ def create_mcp_server(gateway=None, default_agent_id: str | None = None):
             {
                 "queue": extraction_pipeline.queue.stats(),
                 "adapters": extraction_pipeline.registry.list(),
+                "skills": skill_registry.status(),
             },
             ensure_ascii=False,
             indent=2,
