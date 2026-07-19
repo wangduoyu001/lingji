@@ -8,6 +8,8 @@ from typing import Any
 
 import requests
 
+from src.sqlite_snapshot import quick_check_snapshot
+
 
 class StartupHealthChecker:
     """Run bounded checks without turning optional tools into hard dependencies."""
@@ -157,10 +159,6 @@ class StartupHealthChecker:
         except OSError as exc:
             self._append(checks, "disk", "error", f"无法读取磁盘状态：{exc}")
 
-    @staticmethod
-    def _read_only_sqlite_uri(path: Path) -> str:
-        return f"{path.resolve().as_uri()}?mode=ro"
-
     def _check_sqlite(self, checks: list[dict[str, Any]], name: str, path: Path) -> None:
         if not path.exists():
             message = "数据库尚未创建" if self.read_only else "数据库将在首次启动时创建"
@@ -168,20 +166,36 @@ class StartupHealthChecker:
             return
         try:
             if self.read_only:
-                connection = sqlite3.connect(self._read_only_sqlite_uri(path), uri=True, timeout=3)
+                value = quick_check_snapshot(path, timeout=3)
+                mode = "temporary_snapshot"
             else:
                 connection = sqlite3.connect(path, timeout=3)
-            try:
-                result = connection.execute("PRAGMA quick_check").fetchone()
-            finally:
-                connection.close()
-            value = str(result[0]) if result else ""
+                try:
+                    result = connection.execute("PRAGMA quick_check").fetchone()
+                finally:
+                    connection.close()
+                value = str(result[0]) if result else ""
+                mode = "direct"
             if value.lower() == "ok":
-                self._append(checks, name, "ok", f"SQLite quick_check 通过：{path}", path=str(path))
+                self._append(
+                    checks,
+                    name,
+                    "ok",
+                    f"SQLite quick_check 通过：{path}",
+                    path=str(path),
+                    check_mode=mode,
+                )
             else:
-                self._append(checks, name, "error", f"SQLite quick_check 异常：{value}", path=str(path))
-        except sqlite3.Error as exc:
-            self._append(checks, name, "error", f"SQLite 无法打开：{exc}", path=str(path))
+                self._append(
+                    checks,
+                    name,
+                    "error",
+                    f"SQLite quick_check 异常：{value}",
+                    path=str(path),
+                    check_mode=mode,
+                )
+        except (sqlite3.Error, OSError) as exc:
+            self._append(checks, name, "error", f"SQLite 无法检查：{exc}", path=str(path))
 
     def _check_executable(self, checks: list[dict[str, Any]], executable: str, *, required: bool) -> None:
         resolved = shutil.which(executable)
