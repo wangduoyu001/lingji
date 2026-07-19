@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import platform
 import time
 from datetime import datetime, timezone
@@ -25,6 +24,7 @@ class HardwareCapabilityService:
         psutil_module: Any = _AUTO,
         cache_seconds: float = 30.0,
         telemetry_cache_seconds: float = 1.0,
+        gpu_cache_seconds: float = 10.0,
     ):
         self.settings = settings
         self.psutil = self._load_psutil() if psutil_module is _AUTO else psutil_module
@@ -36,10 +36,38 @@ class HardwareCapabilityService:
         )
         self.cache_seconds = max(float(cache_seconds), 0.0)
         self.telemetry_cache_seconds = max(float(telemetry_cache_seconds), 0.0)
+        self.gpu_cache_seconds = max(float(gpu_cache_seconds), 0.0)
         self._capabilities: dict[str, Any] | None = None
         self._capabilities_at = 0.0
         self._telemetry: dict[str, Any] | None = None
         self._telemetry_at = 0.0
+        self._gpus: list[dict[str, Any]] | None = None
+        self._gpus_at = 0.0
+
+    def configure(
+        self,
+        *,
+        cache_seconds: float | None = None,
+        telemetry_cache_seconds: float | None = None,
+        gpu_cache_seconds: float | None = None,
+    ) -> None:
+        """Apply owner settings without recreating the service."""
+
+        if cache_seconds is not None:
+            self.cache_seconds = max(float(cache_seconds), 0.0)
+        if telemetry_cache_seconds is not None:
+            self.telemetry_cache_seconds = max(float(telemetry_cache_seconds), 0.0)
+        if gpu_cache_seconds is not None:
+            self.gpu_cache_seconds = max(float(gpu_cache_seconds), 0.0)
+        self._capabilities = None
+        self._telemetry = None
+
+    def cache_policy(self) -> dict[str, float]:
+        return {
+            "static_seconds": self.cache_seconds,
+            "telemetry_seconds": self.telemetry_cache_seconds,
+            "gpu_probe_seconds": self.gpu_cache_seconds,
+        }
 
     def capabilities(self, *, force: bool = False) -> dict[str, Any]:
         now = time.monotonic()
@@ -59,10 +87,11 @@ class HardwareCapabilityService:
             },
             "cpu": self.detectors.cpu(),
             "memory": memory,
-            "gpus": self.detectors.gpus(),
+            "gpus": self._gpu_snapshot(force=force),
             "disks": self.detectors.disks(),
             "physical_disks": self.detectors.physical_disks(),
             "toolchains": self.detectors.toolchains(),
+            "cache_policy": self.cache_policy(),
             "warnings": [] if memory["status"] == "available" else ["memory_telemetry_unavailable"],
             "compatibility_requires_load_test": True,
             "compatibility_process": [
@@ -103,7 +132,8 @@ class HardwareCapabilityService:
             "cpu_percent": cpu_percent,
             "memory_percent": memory_percent,
             "memory_available_bytes": available_bytes,
-            "gpus": self.detectors.gpus(),
+            "gpus": self._gpu_snapshot(force=force),
+            "cache_policy": self.cache_policy(),
             "source": source,
             "errors": errors,
             "stale": False,
@@ -114,6 +144,7 @@ class HardwareCapabilityService:
     def refresh(self) -> dict[str, Any]:
         self._capabilities = None
         self._telemetry = None
+        self._gpus = None
         return self.capabilities(force=True)
 
     def resolve_compute_policy(self, requested_mode: str, *, gpu_id: str | None = None) -> dict[str, Any]:
@@ -151,6 +182,15 @@ class HardwareCapabilityService:
     def close(self) -> None:
         self._capabilities = None
         self._telemetry = None
+        self._gpus = None
+
+    def _gpu_snapshot(self, *, force: bool = False) -> list[dict[str, Any]]:
+        now = time.monotonic()
+        if not force and self._gpus is not None and now - self._gpus_at < self.gpu_cache_seconds:
+            return self._gpus
+        self._gpus = self.detectors.gpus()
+        self._gpus_at = now
+        return self._gpus
 
     @staticmethod
     def _load_psutil() -> Any | None:
