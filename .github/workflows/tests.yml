@@ -13,7 +13,7 @@ permissions:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: Compile Python files
-        run: python -m compileall -q main.py run_service.py run_mcp_server.py src tests
+        run: python -m compileall -q main.py run_service.py run_mcp_server.py run_extraction_worker.py src tests scripts
       - name: Run unit tests
         id: tests
         shell: bash
@@ -35,7 +35,7 @@ jobs:
           set +e
           python -m unittest discover -s tests -v > test-output-${{ matrix.python-version }}.log 2>&1
           status=$?
-          tail -n 180 test-output-${{ matrix.python-version }}.log
+          tail -n 220 test-output-${{ matrix.python-version }}.log
           exit $status
       - name: Upload test log
         if: always()
@@ -44,6 +44,35 @@ jobs:
           name: test-output-${{ matrix.python-version }}
           path: test-output-${{ matrix.python-version }}.log
           retention-days: 3
+
+  windows-tests:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile on Windows
+        run: python -m compileall -q main.py run_service.py run_mcp_server.py run_extraction_worker.py src tests scripts
+      - name: Run unit tests on Windows
+        run: python -m unittest discover -s tests -v
+
+  obsidian-plugin-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate plugin JavaScript and manifest
+        run: |
+          node --check obsidian-plugin/lingji-control/main.js
+          node -e "const m=require('./obsidian-plugin/lingji-control/manifest.json'); if(!m.id||!m.version) process.exit(1)"
 
   mcp-smoke-test:
     runs-on: ubuntu-latest
