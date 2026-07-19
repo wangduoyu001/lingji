@@ -40,7 +40,7 @@ class SkillRegistryTests(unittest.TestCase):
         self.assertIn("07-Assets/Skills", path.as_posix())
         text = path.read_text(encoding="utf-8")
         self.assertIn(str(source), text)
-        self.assertIn("代码仍保留在 Git", text)
+        self.assertIn("源代码和可执行实现保留在 Git", text)
         self.assertFalse((path.parent / "SKILL.md").exists())
 
     def test_sync_directory_reads_skill_frontmatter(self):
