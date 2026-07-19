@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 import zipfile
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -46,6 +47,7 @@ class ReadOnlyAcceptanceTests(unittest.TestCase):
     @patch("src.health.requests.get")
     def test_checker_does_not_create_runtime_directories_or_change_inputs(self, request_get):
         request_get.return_value.raise_for_status.return_value = None
+        request_get.return_value.content = b'{"models": [{"name": "qwen3:8b"}]}'
         request_get.return_value.json.return_value = {"models": [{"name": "qwen3:8b"}]}
         before_hash = sha256(self.note)
         before_stat = self.note.stat()
@@ -66,9 +68,10 @@ class ReadOnlyAcceptanceTests(unittest.TestCase):
     def test_existing_sqlite_is_opened_without_modifying_it(self, _request_get):
         self.settings.storage_path.mkdir(parents=True)
         database = self.settings.memory_db_path
-        with sqlite3.connect(database) as connection:
-            connection.execute("CREATE TABLE sample(value TEXT)")
-            connection.execute("INSERT INTO sample(value) VALUES ('ok')")
+        with closing(sqlite3.connect(database)) as connection:
+            with connection:
+                connection.execute("CREATE TABLE sample(value TEXT)")
+                connection.execute("INSERT INTO sample(value) VALUES ('ok')")
         before_hash = sha256(database)
         before_mtime = database.stat().st_mtime_ns
 
