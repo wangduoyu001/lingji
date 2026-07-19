@@ -83,19 +83,21 @@ class FakeOllamaTransport:
 
 
 class ModelInventoryTests(unittest.TestCase):
-    def make_settings(self, root: Path) -> Settings:
-        return Settings(
-            _env_file=None,
-            vault_dir=str(root / "vault"),
-            storage_dir=str(root / "storage"),
-            backup_dir=str(root / "backups"),
-            log_dir=str(root / "logs"),
-            llm_model="qwen3:8b",
-            fallback_llm="missing-chat:latest",
-            embed_model="nomic-embed-text",
-            fallback_embed_model="nomic-embed-text",
-            startup_min_free_gb=0,
-        )
+    def make_settings(self, root: Path, **overrides) -> Settings:
+        values = {
+            "_env_file": None,
+            "vault_dir": str(root / "vault"),
+            "storage_dir": str(root / "storage"),
+            "backup_dir": str(root / "backups"),
+            "log_dir": str(root / "logs"),
+            "llm_model": "qwen3:8b",
+            "fallback_llm": "missing-chat:latest",
+            "embed_model": "nomic-embed-text",
+            "fallback_embed_model": "nomic-embed-text",
+            "startup_min_free_gb": 0,
+        }
+        values.update(overrides)
+        return Settings(**values)
 
     def test_ollama_inventory_uses_official_capabilities_and_separates_install_running_and_compatibility(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -150,8 +152,7 @@ class ModelInventoryTests(unittest.TestCase):
             root = Path(directory)
             local_asr = root / "whisper-small"
             local_asr.mkdir()
-            settings = self.make_settings(root)
-            settings.media_asr_model = str(local_asr)
+            settings = self.make_settings(root, media_asr_model=str(local_asr))
             service = LocalModelInventoryService(
                 settings,
                 transport=FakeOllamaTransport(),
