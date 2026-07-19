@@ -1,92 +1,85 @@
-# 灵机 (LingJi) - PEMIS 项目配置
+# 灵机 (LingJi) - 项目执行规则
 
-## 项目路径
-- 灵机项目根目录: C:\Users\Administrator\Documents\New project-ai
-- 启动命令: cd "C:\Users\Administrator\Documents\New project-ai" && python run_service.py
-- 停止命令: Get-Process -Name "python" | Stop-Process -Force
-
-## Git 仓库
-- 灵机代码: https://github.com/wangduoyu001/lingji.git (origin)
-- 知识库: https://github.com/wangduoyu001/obsidian.git (origin-obsidian)
-
-## 本地知识库
-- 路径: E:\obsidian\本地知识库
-- 只允许一个 Obsidian Vault，不得为不同入口创建额外 Vault
-- Git拉取: cd "E:\obsidian\本地知识库" && git pull
-- 新目录结构由 `src/memory/vault_layout.py` 统一定义
+## 项目与仓库
+- 灵机代码仓库：`wangduoyu001/lingji`
+- Obsidian 知识库：`E:\obsidian\本地知识库`
+- 只允许一个 Obsidian Vault，不为不同入口建立额外 Vault
 - 旧 `PEMIS/` 目录迁移期间保持可读，禁止直接删除或批量移动
 
-## 单仓库目录规则
-- `00-System/`: 模板、规则、控制中心、日志和索引状态
-- `01-Inbox/`: 手机、浏览器、微信、ChatGPT、Codex 等入口
-- `02-Sources/`: 原始对话、网页、文档和音视频资料
-- `03-Knowledge/`: 已蒸馏的长期知识
-- `04-Projects/`: 项目资料与机会卡
-- `05-Operations/`: 任务、决策、工作报告和错误
-- `06-Entities/`: 人物、机构、工具、模型和平台
-- `07-Assets/`: 角色、场景、提示词、工作流和媒体索引
-- `08-Private/`: 高隐私内容，默认禁止普通索引和云端模型读取
-- `09-Archive/`: 失效、完成和冷归档内容
-- `Attachments/`: Obsidian附件
+## 启动与停止
+- 启动：在项目根目录执行 `python run_service.py`
+- 服务 PID：`storage/lingji.pid`
+- 停止：优先在服务窗口按 `Ctrl+C`，或执行 `python scripts/stop_lingji.py`
+- 禁止使用 `Get-Process -Name python | Stop-Process -Force`，不得误杀 ComfyUI、Ollama 或其他 Python 服务
 
-## API配置
-- DeepSeek API Key 在 .env 文件中
-- 主模型: deepseek-chat (通过 DeepSeek API)
-- 备用模型: qwen3:8b-q4_K_M (本地Ollama)
-- Embedding模型: nomic-embed-text (本地Ollama，当前未启用)
+## 单仓库目录
+- `00-System/`：Home、Bases、模板、规则、命令、反馈、看板和健康状态
+- `01-Inbox/`：所有入口的待处理内容
+- `02-Sources/`：保留原貌的对话、网页、文档和音视频来源
+- `03-Knowledge/`：已蒸馏的长期知识
+- `04-Projects/`：项目资料、状态与机会卡
+- `05-Operations/`：任务、决策、工作报告、错误和复盘
+- `06-Entities/`：人物、机构、工具、模型和平台
+- `07-Assets/`：角色、场景、提示词、工作流和媒体索引
+- `08-Private/`：高隐私内容，默认禁止普通索引、命令队列和云模型读取
+- `09-Archive/`：失效、完成和冷归档内容
+- `Attachments/`：Obsidian附件
 
-## 核心规则
-1. Obsidian 单一 Vault 是人类可读的权威记忆，禁止开发独立 WebUI/Electron 取代它
-2. 所有查询不依赖固定文件路径，只依赖 ID、metadata 和索引中的相对路径
-3. 交互体验 > Agent能力 > 自动化能力
-4. 用户在Obsidian内完成核心操作不超过3次点击
-5. Capture First：新文件先进入 `01-Inbox`，自动分类/标签/总结，不直接写入正式知识
-6. AI必须主动工作：自动分类、打标签、关联、总结
-7. 灵机定位：AI编导 / AI运营 / AI研究员 / AI商业策划 / AI第二大脑
-8. 向量数据库(Qdrant)保留代码但默认不启动
-9. 原始资料只追加，不覆盖；AI草稿不得直接覆盖正式记忆
-10. `08-Private` 默认不进入普通索引，除非主人明确授权并修改配置
-11. 删除、覆盖、发布、付款和账号操作必须人工确认
+## Obsidian 人工管理规则
+1. 文件夹只表达来源、阶段和生命周期，不承担全部分类。
+2. `memory_type`、`status`、`privacy`、`importance`、`review_status` 使用属性，不使用标签代替。
+3. 项目、人物、工具、来源、任务和决策使用内部链接属性互联。
+4. 标签只负责跨文件夹发现，允许一级：`domain/`、`topic/`、`source/`、`signal/`、`attention/`。
+5. 每条笔记建议 3—7 个标签，最多 12 个；禁止同义标签和随意增加一级标签。
+6. 手动管理优先使用 `00-System/Bases/`，复杂只读查询才允许使用 Dataview。
+7. 反馈写入 `00-System/Feedback/Feedback Inbox.md`，控制中心只展示，不接收重要输入。
+8. 批量修改和双向建链使用 `00-System/Commands/Queue/` 中的命令笔记。
+9. 命令队列只允许：`set_properties`、`add_tags`、`link_note`、`mark_status`。
+10. 系统生成文件只有包含 `lingji_managed: true` 时才能自动更新；主人自己的文件默认不覆盖。
 
-## 文件驱动执行
-- PowerShell 不支持 && 和 << heredoc
-- 写文件用 scripts/_exec.py: python scripts/_exec.py <target_file>
-- 或通过 Node.js MCP 的 fs.writeFileSync 写文件
-- 所有Python文件必须用 encoding="utf-8" (无BOM)
-- 读文件用 encoding="utf-8-sig" 兼容旧BOM文件
-- 文件写入优先采用临时文件 + 原子替换，避免中途损坏
+## 记忆与安全规则
+1. Obsidian 单一 Vault 是人类可读的权威记忆。
+2. SQLite 保存调度、处理状态和审计事件，不与 Obsidian 争夺正式知识的权威。
+3. 索引、全文搜索和向量库必须可从原始资料重建。
+4. 原始资料只追加，不覆盖；AI草稿不得直接覆盖正式记忆。
+5. `08-Private` 默认不进入普通索引，除非主人明确临时授权。
+6. 删除、覆盖、对外发布、付款、账号和私密资料操作必须人工确认。
+7. AI 建议关系先标记 `review_status: needs_review`，主人确认后才视为正式关系。
+8. 所有派生结论必须保存 `source_id`、`source_path` 或 `sources`。
 
-## 系统架构
-- L1 Source Layer: 单一 Obsidian Vault + 原始文件（权威资料）
-- L2 State Layer: SQLite/JSON 状态、任务、同步与审计记录
-- L3 Index Layer: FTS/metadata/vector，可从原始资料重建
-- L4 Logic Layer: Memory Gateway + Router + Safety Guard + Scheduler
-- L5 Ops Layer: backup + journal + integrity + metrics
+## 增量处理规则
+- 文件索引哈希与处理哈希必须分开保存。
+- 每个处理器使用：`source_id + processor + processor_version + content_hash` 判断是否需要重跑。
+- 调度状态保存在 `storage/lingji_state.db`，重启后不得把所有定时任务立即重跑。
+- 长任务不得阻塞反馈读取、命令处理和健康检查。
+- 机会卡使用稳定来源 ID，禁止按 AI 标题作为唯一文件名。
 
-## 调度任务
-- read_feedback: 每10分钟读取Control Center反馈
-- daily_capture: 每24小时自动扫描新文件+打标签
-- distill/distillation: 每24小时
-- integrity: 每24小时
-- full_check: 每24小时更新看板
+## 开发规则
+- 代码保持简洁、模块化，优先扩展现有服务，不重复建第二套架构。
+- Python 写文件使用 UTF-8 无 BOM，读取兼容 `utf-8-sig`。
+- 正式文件写入优先使用临时文件加原子替换。
+- 不得在 C 盘新增项目数据、下载、缓存或临时文件。
+- 现有历史项目路径未经确认不得移动。
+- 每个新增功能必须有对应测试和 Markdown 报告。
 
-## 交互接口
-- 初始化单仓库目录: `python scripts/init_single_vault.py`
-- 创建入口内容: `core.create_inbox_item(source_type, title, content, metadata)`
-- 手动扫描新内容: `core.manual_scan()` 或通过我触发
-- 反馈写在: `00-System/Dashboard/Control Center.md` 底部的反馈区
-- 控制中心: `00-System/Dashboard/Control Center.md`
+## 常用入口
+- 初始化单仓库：`python scripts/init_single_vault.py`
+- 创建入口内容：`core.create_inbox_item(source_type, title, content, metadata)`
+- 手动扫描：`core.manual_scan()`
+- 手动处理命令：`core.process_manual_commands()`
+- 管理首页：`00-System/Home.md`
+- 控制中心：`00-System/Dashboard/Control Center.md`
+- 标签字典：`00-System/Tag-Dictionary.md`
+- 属性字典：`00-System/Property-Dictionary.md`
+- 关系规则：`00-System/Relationship-Rules.md`
 
 ## 测试
-- 单仓库结构测试: `python -m unittest tests.test_vault_layout -v`
-- 索引测试: `python -m unittest tests.test_single_vault_index -v`
-- 全部测试: `python -m unittest discover -s tests -v`
-- 修改索引、路由或隐私规则后必须运行上述测试
+- 全部测试：`python -m unittest discover -s tests -v`
+- 编译检查：`python -m compileall -q main.py run_service.py src tests`
+- 修改索引、调度、路由、标签、关系或隐私规则后必须运行全部测试
+- GitHub Actions 必须在 Python 3.11 和 3.12 通过后才能将 PR 标记为可合并
 
 ## 磁盘规则
-- 禁止在C盘创建任何新的项目数据、下载、缓存或临时文件
-- 现有历史项目路径不得未经确认直接移动
-- 所有下载、缓存、临时文件必须放在D盘
-- D盘项目目录: D:/codex/
-- 备份目录: D:/codex/backups/pemis
-- 日志目录: logs/ (项目内)
+- D盘项目目录：`D:/codex/`
+- 备份目录：`D:/codex/backups/pemis`
+- 日志目录：项目内 `logs/`
