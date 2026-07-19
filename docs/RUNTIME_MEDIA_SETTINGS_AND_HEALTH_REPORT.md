@@ -106,6 +106,7 @@ python run_control_api.py
 - 默认值参与幂等键，设置变化后不会错误复用旧配置任务。
 - 单次任务 options 始终高于全局默认值。
 - 未明确传入任务优先级时使用 UI 中保存的媒体默认优先级。
+- 输入体积在计算哈希和复制 Raw Snapshot 前校验，避免超大文件先被复制一份再拒绝。
 
 ### 5.4 MediaExtractionAdapter 1.1.0
 
@@ -171,6 +172,21 @@ tests/test_media_extraction.py
 - 非法 Vault 阻止严格启动。
 - Embedding 备用模型回退。
 - 本地 API 令牌、读取、更新和恢复默认值。
+
+最终 CI：
+
+```text
+Ran 85 tests in 1.583s
+OK
+```
+
+全部通过：
+
+- Ubuntu Python 3.11。
+- Ubuntu Python 3.12。
+- Windows Python 3.12。
+- MCP smoke test。
+- Obsidian 插件语法与 manifest 检查。
 
 ## 8. 后续工作
 
