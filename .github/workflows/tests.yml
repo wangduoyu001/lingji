@@ -89,11 +89,24 @@ jobs:
       - name: Install desktop UI dependencies
         run: npm install --no-audit --no-fund
       - name: Build React control center
-        run: npm run build
+        shell: bash
+        run: |
+          set +e
+          npm run build > desktop-ui-build.log 2>&1
+          status=$?
+          cat desktop-ui-build.log
+          exit $status
       - name: Validate Tauri configuration
         run: |
           node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8')); if(!c.identifier||!c.build||!c.app) process.exit(1)"
           node -e "const fs=require('fs'); const c=JSON.parse(fs.readFileSync('src-tauri/capabilities/default.json','utf8')); if(!c.identifier||!Array.isArray(c.permissions)) process.exit(1)"
+      - name: Upload desktop UI build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-ui-build-log
+          path: desktop/lingji-control/desktop-ui-build.log
+          retention-days: 3
 
   browser-capture-smoke:
     runs-on: ubuntu-latest
