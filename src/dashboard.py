@@ -69,6 +69,9 @@ def update_dashboard(core):
     commands = status.get("manual_commands", {})
     jobs = status.get("jobs", [])
     failed_jobs = sum(1 for job in jobs if job.get("status") == "failed")
+    memory_index = status.get("memory_index", {})
+    memory_integrity = status.get("memory_integrity", {})
+    memory_health = "正常" if memory_integrity.get("healthy") else "异常"
 
     lines = [
         "---",
@@ -88,7 +91,12 @@ def update_dashboard(core):
         "",
         f"- 模式：**{mode}**",
         f"- 运行时间：{uptime}",
-        f"- 索引内容：{entries} 条",
+        f"- 元数据索引：{entries} 条",
+        f"- 召回库：{memory_index.get('documents', 0)} 份文档 / {memory_index.get('chunks', 0)} 个分块",
+        f"- 核心记忆：{memory_index.get('core_memories', 0)} 条",
+        f"- 召回版本：{memory_index.get('revision', 0)}",
+        f"- FTS 分词：{memory_index.get('fts_tokenizer', '-')}",
+        f"- 召回健康：**{memory_health}**",
         f"- 单仓库结构：{layout_text}",
         f"- 调度失败：{failed_jobs}",
         f"- 反馈最近读取：{feedback_text}",
@@ -97,6 +105,7 @@ def update_dashboard(core):
         "## 手动管理入口",
         "",
         "- [[00-System/Home|灵机管理首页]]",
+        "- [[00-System/Permanent-Memory|永久记忆中心]]",
         "- [[00-System/Feedback/Feedback Inbox|填写反馈]]",
         "- [[00-System/Bases/Inbox.base|管理收件箱]]",
         "- [[00-System/Bases/Projects.base|管理项目]]",
@@ -107,6 +116,23 @@ def update_dashboard(core):
         "---",
         "",
     ]
+
+    if not memory_integrity.get("healthy", True):
+        lines.extend(
+            [
+                "## 召回异常",
+                "",
+                f"- SQLite 检查：{memory_integrity.get('quick_check', '-')}",
+                f"- 孤立分块：{memory_integrity.get('orphan_chunks', 0)}",
+                f"- FTS 行数：{memory_integrity.get('fts_rows', 0)}",
+                f"- 分块行数：{memory_integrity.get('chunk_rows', 0)}",
+                "",
+                "> 后台完整性任务会尝试自动重建召回库。正式记忆仍保存在 Obsidian，不会因索引损坏而丢失。",
+                "",
+                "---",
+                "",
+            ]
+        )
 
     output = decisions.get("decisions", [])
     lines.extend(["## 今天最值得关注的3个机会", ""])
