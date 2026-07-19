@@ -8,6 +8,7 @@ from src.acceptance import AcceptanceChecker
 from src.acceptance_reports import AcceptanceReportStore
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.extraction.queue import SQLiteExtractionQueue
+from src.hardware import HardwareCapabilityService
 from src.health import StartupHealthChecker
 from src.media import (
     FasterWhisperProvider,
@@ -29,6 +30,7 @@ class LocalControlService:
         state_db: Any | None = None,
         *,
         pipeline: Any | None = None,
+        hardware: HardwareCapabilityService | None = None,
     ):
         self.settings = settings
         self.state_db = state_db or StateDatabase(settings.state_db_path)
@@ -40,6 +42,7 @@ class LocalControlService:
         self.backups = BackupManager(settings, state_db=self.state_db)
         self.media_semantic = MediaSemanticService(settings.storage_path)
         self.acceptance_reports = AcceptanceReportStore(settings.storage_path / "reports" / "acceptance")
+        self.hardware = hardware or HardwareCapabilityService(settings)
 
     def get_settings(self) -> dict[str, Any]:
         return self.runtime_settings.snapshot()
@@ -60,6 +63,29 @@ class LocalControlService:
     ) -> dict[str, Any]:
         return self.runtime_settings.reset(keys, actor=actor)
 
+    def hardware_capabilities(self, *, force: bool = False) -> dict[str, Any]:
+        return self.hardware.capabilities(force=force)
+
+    def hardware_telemetry(self, *, force: bool = False) -> dict[str, Any]:
+        return self.hardware.telemetry(force=force)
+
+    def refresh_hardware(self) -> dict[str, Any]:
+        return self.hardware.refresh()
+
+    def compute_policy(self) -> dict[str, Any]:
+        configured = self.runtime_settings.compute_policy()
+        return {
+            **configured,
+            **self.hardware.resolve_compute_policy(
+                configured["mode"],
+                gpu_id=configured["preferred_gpu_id"],
+            ),
+        }
+
+    def update_compute_policy(self, mode: str, *, actor: str = "owner") -> dict[str, Any]:
+        self.runtime_settings.update({"compute_mode": mode}, actor=actor)
+        return self.compute_policy()
+
     def health(self) -> dict[str, Any]:
         return self.health_checker.run()
 
@@ -71,6 +97,7 @@ class LocalControlService:
         max_bytes = int(float(values["storage_max_gb"]) * 1024**3)
         free_bytes = int(inventory["totals"]["disk_free_bytes"])
         minimum_free = int(float(values["storage_min_free_gb"]) * 1024**3)
+        capabilities = self.hardware_capabilities()
         return {
             "health": self.health(),
             "queue": {
@@ -88,6 +115,14 @@ class LocalControlService:
             "events": self.recent_events(limit=30),
             "providers": self.provider_status(),
             "acceptance": self.list_acceptance_reports(limit=1),
+            "hardware": {
+                "cpu": capabilities["cpu"],
+                "memory": capabilities["memory"],
+                "gpus": capabilities["gpus"],
+                "cuda": capabilities["cuda"],
+                "toolchains": capabilities["toolchains"],
+                "compute_policy": self.compute_policy(),
+            },
             "settings_summary": {
                 "overrides": settings_snapshot["overrides"],
                 "groups": sorted({item["group"] for item in settings_snapshot["definitions"].values()}),
@@ -294,6 +329,9 @@ class LocalControlService:
                 adapter_name="web_capture",
             ),
         }
+
+    def close(self) -> None:
+        self.hardware.close()
 
     @staticmethod
     def _tail(path: Path, limit: int) -> list[str]:
