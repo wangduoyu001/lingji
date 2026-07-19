@@ -5,7 +5,9 @@ import type { PageProps, SettingsSnapshot } from "../types";
 
 const GROUP_LABELS: Record<string, string> = {
   media_processing: "媒体处理",
+  media_ai: "媒体 AI",
   extraction: "采集与提取",
+  hardware_compute: "系统与算力",
   storage: "存储与生命周期",
   backup: "备份与恢复",
   memory: "记忆与检索",
