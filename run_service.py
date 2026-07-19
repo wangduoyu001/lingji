@@ -9,6 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
 from src.config import settings
+from src.extraction import ExtractionWorker, build_extraction_pipeline
 from main import PEMISCore
 
 LOG_DIR = BASE_DIR / "logs"
@@ -29,6 +30,8 @@ logger = logging.getLogger("lingji.service")
 class LingJiService:
     def __init__(self):
         self.core = None
+        self.extraction_pipeline = None
+        self.extraction_worker = None
         self.running = False
 
     def start(self):
@@ -40,14 +43,28 @@ class LingJiService:
         try:
             self.core = PEMISCore()
             self.core.start()
+            if settings.extraction_worker_enabled:
+                self.extraction_pipeline = build_extraction_pipeline(settings)
+                self.extraction_worker = ExtractionWorker(
+                    self.extraction_pipeline,
+                    poll_seconds=settings.extraction_poll_seconds,
+                    batch_size=settings.extraction_batch_size,
+                )
+                self.extraction_worker.start()
             self.running = True
             logger.info("LingJi service started successfully")
         except Exception:
+            if self.extraction_worker:
+                self.extraction_worker.stop()
+            if self.core:
+                self.core.stop()
             self._remove_pid_file()
             raise
 
     def stop(self):
         logger.info("LingJi service stopping...")
+        if self.extraction_worker:
+            self.extraction_worker.stop()
         if self.core:
             self.core.stop()
         self.running = False
