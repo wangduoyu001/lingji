@@ -33,6 +33,22 @@ class Settings(BaseSettings):
     scheduler_workers: int = 2
     manual_command_interval_minutes: int = 2
 
+    # Rebuildable permanent-memory retrieval index
+    memory_db_name: str = "lingji_memory.db"
+    memory_chunk_max_chars: int = 1400
+    memory_chunk_overlap_chars: int = 180
+    memory_search_cache_size: int = 256
+    memory_search_cache_ttl_seconds: float = 120.0
+    memory_default_context_chars: int = 12000
+    memory_index_check_hours: float = 6.0
+
+    # MCP server; localhost is the safe default
+    mcp_server_name: str = "LingJi Memory Gateway"
+    mcp_host: str = "127.0.0.1"
+    mcp_port: int = 8765
+    mcp_transport: str = "stdio"
+    mcp_default_agent_id: str = "lingji-local"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -61,6 +77,10 @@ class Settings(BaseSettings):
     @property
     def state_db_path(self) -> Path:
         return self.storage_path / self.state_db_name
+
+    @property
+    def memory_db_path(self) -> Path:
+        return self.storage_path / self.memory_db_name
 
 
 settings = Settings()
