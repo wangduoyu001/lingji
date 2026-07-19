@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -333,7 +333,7 @@ class ChatGPTExportAdapter(ExtractionAdapter):
             return ""
         if isinstance(value, (int, float)):
             try:
-                return datetime.fromtimestamp(float(value)).isoformat(timespec="seconds")
+                return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat(timespec="seconds")
             except (ValueError, OSError, OverflowError):
                 return ""
         text = str(value)
