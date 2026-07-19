@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from src.health import StartupHealthChecker
+from src.sqlite_snapshot import quick_check_snapshot
 
 
 class AcceptanceChecker:
@@ -153,23 +154,18 @@ class AcceptanceChecker:
                 self._add(name, "warning", "数据库尚未创建", path=str(path))
                 continue
             try:
-                uri = f"{path.resolve().as_uri()}?mode=ro"
-                connection = sqlite3.connect(uri, uri=True, timeout=10)
-                try:
-                    result = connection.execute("PRAGMA quick_check").fetchone()
-                finally:
-                    connection.close()
-                healthy = bool(result and str(result[0]).lower() == "ok")
+                value = quick_check_snapshot(path, timeout=10)
+                healthy = value.lower() == "ok"
                 self._add(
                     name,
                     "ok" if healthy else "error",
-                    "SQLite 只读 quick_check 通过" if healthy else f"SQLite quick_check 失败：{result}",
+                    "SQLite 临时快照 quick_check 通过" if healthy else f"SQLite quick_check 失败：{value}",
                     path=str(path),
                     bytes=path.stat().st_size,
-                    open_mode="ro",
+                    check_mode="temporary_snapshot",
                 )
             except (sqlite3.Error, OSError) as exc:
-                self._add(name, "error", f"SQLite 只读检查失败：{exc}", path=str(path))
+                self._add(name, "error", f"SQLite 快照检查失败：{exc}", path=str(path))
 
     def _check_runtime_settings(self) -> None:
         path = self.settings.runtime_settings_path
