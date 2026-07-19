@@ -97,6 +97,60 @@ class MediaExtractionTests(unittest.TestCase):
         self.assertIn("08-Private/Imports/video", path.as_posix())
         self.assertTrue(result["summary"]["restricted"])
 
+    def test_ffmpeg_command_uses_owner_configured_threads_and_dimension(self):
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append(command)
+            if "-show_format" in command:
+                return _ProcessResult(json.dumps(self.probe))
+            return _ProcessResult("")
+
+        with patch("src.extraction.adapters.media.shutil.which", return_value="ffmpeg"), patch(
+            "src.extraction.adapters.media.subprocess.run",
+            side_effect=fake_run,
+        ):
+            self.pipeline.execute(
+                "media",
+                input_path=self.video,
+                options={
+                    "extract_keyframes": True,
+                    "max_keyframes": 9,
+                    "keyframe_max_dimension": 2048,
+                    "ffmpeg_threads": 3,
+                    "ffmpeg_max_concurrency": 2,
+                },
+                adapter_name="media_local",
+            )
+        ffmpeg_call = next(command for command in calls if "-frames:v" in command)
+        self.assertIn("-threads", ffmpeg_call)
+        self.assertEqual(ffmpeg_call[ffmpeg_call.index("-threads") + 1], "3")
+        self.assertEqual(ffmpeg_call[ffmpeg_call.index("-frames:v") + 1], "9")
+        filter_value = ffmpeg_call[ffmpeg_call.index("-vf") + 1]
+        self.assertIn("scale=2048:2048", filter_value)
+
+    def test_input_size_limit_rejects_before_processing(self):
+        with self.assertRaisesRegex(ValueError, "超过当前限制"):
+            self.pipeline.execute(
+                "media",
+                input_path=self.video,
+                options={"max_input_bytes": 1},
+                adapter_name="media_local",
+            )
+
+    def test_duration_limit_rejects_after_probe(self):
+        with patch("src.extraction.adapters.media.shutil.which", return_value="ffprobe"), patch(
+            "src.extraction.adapters.media.subprocess.run",
+            return_value=_ProcessResult(json.dumps(self.probe)),
+        ):
+            with self.assertRaisesRegex(ValueError, "媒体时长"):
+                self.pipeline.execute(
+                    "media",
+                    input_path=self.video,
+                    options={"max_duration_seconds": 10},
+                    adapter_name="media_local",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
