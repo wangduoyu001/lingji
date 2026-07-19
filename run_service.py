@@ -10,11 +10,13 @@ sys.path.insert(0, str(BASE_DIR))
 
 from main import PEMISCore
 from src.config import settings
+from src.control import LocalControlService
 from src.extraction import ExtractionRequestInbox, ExtractionWorker, build_extraction_pipeline
+from src.health import StartupHealthChecker
 from src.obsidian import LingJiSystemUI
 from src.skills import SkillRegistry
 
-LOG_DIR = BASE_DIR / "logs"
+LOG_DIR = settings.log_path if settings.log_path.is_absolute() else BASE_DIR / settings.log_path
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 PID_FILE = settings.storage_path / "lingji.pid"
 
@@ -37,6 +39,8 @@ class LingJiService:
         self.skill_registry = None
         self.request_inbox = None
         self.system_ui = None
+        self.local_control = None
+        self.health_report = None
         self.running = False
 
     def start(self):
@@ -46,11 +50,21 @@ class LingJiService:
         PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
         logger.info("LingJi service starting, pid=%s...", os.getpid())
         try:
+            if settings.startup_health_check_enabled:
+                checker = StartupHealthChecker(settings)
+                self.health_report = checker.run()
+                for item in self.health_report["checks"]:
+                    level = logging.ERROR if item["status"] == "error" else logging.WARNING if item["status"] == "warning" else logging.INFO
+                    logger.log(level, "Health[%s] %s", item["name"], item["message"])
+                checker.ensure_startable(self.health_report)
+
             self.core = PEMISCore()
             self.core.start()
+            self.local_control = LocalControlService(settings, state_db=self.core.state_db)
             self.extraction_pipeline = build_extraction_pipeline(
                 settings,
                 on_documents_written=self._on_documents_written,
+                runtime_settings=self.local_control.runtime_settings,
             )
             self.skill_registry = SkillRegistry(self.core.vault_layout, self.core.state_db)
             self.request_inbox = ExtractionRequestInbox(
@@ -79,6 +93,13 @@ class LingJiService:
                 )
                 self.extraction_worker.start()
             self.running = True
+            if self.health_report:
+                self.core.state_db.append_event(
+                    "startup_health_check",
+                    "service",
+                    "lingji",
+                    self.health_report,
+                )
             logger.info("LingJi service started successfully")
         except Exception:
             if self.extraction_worker:
