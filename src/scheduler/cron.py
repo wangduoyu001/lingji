@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
@@ -24,11 +23,12 @@ class CronScheduler:
         self.poll_seconds = max(float(poll_seconds), 0.05)
         self.max_workers = max(int(max_workers), 1)
         self.running = False
-        self._thread = None
+        self._thread: threading.Thread | None = None
         self._runner = None
-        self._executor = None
+        self._executor: ThreadPoolExecutor | None = None
         self._running_jobs: set[str] = set()
         self._lock = threading.RLock()
+        self._stop_event = threading.Event()
 
     def add_job(
         self,
@@ -49,13 +49,18 @@ class CronScheduler:
     def start(self, runner_callback=None):
         if self.running:
             return
+        self._stop_event.clear()
         self.running = True
         self._runner = runner_callback
         self._executor = ThreadPoolExecutor(
             max_workers=self.max_workers,
             thread_name_prefix="lingji-job",
         )
-        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread = threading.Thread(
+            target=self._loop,
+            name="lingji-scheduler",
+            daemon=True,
+        )
         self._thread.start()
         logger.info("Scheduler started: %d jobs", len(self.state_db.list_scheduler_jobs()))
 
@@ -64,6 +69,8 @@ class CronScheduler:
             try:
                 current_mode = str(self.mode_provider() or "NORMAL").upper()
                 for job in self.state_db.due_scheduler_jobs():
+                    if not self.running:
+                        break
                     name = job["name"]
                     if not self._mode_allows(current_mode, job.get("min_mode", "NORMAL")):
                         continue
@@ -71,11 +78,18 @@ class CronScheduler:
                         if name in self._running_jobs:
                             continue
                         self._running_jobs.add(name)
-                    self._executor.submit(self._run_job, job)
-                time.sleep(self.poll_seconds)
+                    executor = self._executor
+                    if executor is None:
+                        with self._lock:
+                            self._running_jobs.discard(name)
+                        break
+                    executor.submit(self._run_job, job)
+                if self._stop_event.wait(self.poll_seconds):
+                    break
             except Exception as exc:
                 logger.exception("Scheduler loop failed: %s", exc)
-                time.sleep(self.poll_seconds)
+                if self._stop_event.wait(self.poll_seconds):
+                    break
 
     def _run_job(self, job):
         name = job["name"]
@@ -105,10 +119,28 @@ class CronScheduler:
         return required_mode == "NORMAL"
 
     def stop(self):
+        """Stop scheduling and wait until all in-flight jobs release resources."""
         self.running = False
-        if self._executor:
-            self._executor.shutdown(wait=False, cancel_futures=False)
+        self._stop_event.set()
+
+        thread = self._thread
+        if thread and thread is not threading.current_thread():
+            thread.join(timeout=max(self.poll_seconds * 2, 1.0))
+            if thread.is_alive():
+                raise RuntimeError("Scheduler thread did not stop cleanly")
+        self._thread = None
+
+        executor = self._executor
         self._executor = None
+        if executor:
+            executor.shutdown(wait=True, cancel_futures=False)
+
+        self._runner = None
+        with self._lock:
+            if self._running_jobs:
+                raise RuntimeError(
+                    f"Scheduler stopped with active jobs: {sorted(self._running_jobs)}"
+                )
 
     def get_status(self):
         return self.state_db.list_scheduler_jobs()

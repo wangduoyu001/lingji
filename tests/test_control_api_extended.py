@@ -16,6 +16,7 @@ from src.control.api import create_control_app
 class ExtendedControlApiTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
         root = Path(self.temp_dir.name)
         self.settings = Settings(
             _env_file=None,
@@ -35,11 +36,10 @@ class ExtendedControlApiTests(unittest.TestCase):
         self.old_derived = derived / "old.txt"
         self.old_derived.write_text("old", encoding="utf-8")
         os.utime(self.old_derived, (1_600_000_000, 1_600_000_000))
-        self.client = TestClient(create_control_app(self.settings, token="secret"))
+        self.client_context = TestClient(create_control_app(self.settings, token="secret"))
+        self.client = self.client_context.__enter__()
+        self.addCleanup(self.client_context.__exit__, None, None, None)
         self.headers = {"X-LingJi-Token": "secret"}
-
-    def tearDown(self):
-        self.temp_dir.cleanup()
 
     @patch("src.health.requests.get", side_effect=requests.ConnectionError("offline"))
     def test_overview_jobs_logs_and_providers(self, _mock_get):
