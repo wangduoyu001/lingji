@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     scheduler_workers: int = 2
     manual_command_interval_minutes: int = 2
 
+    # Unified extraction framework and SQLite queue
+    extraction_worker_enabled: bool = True
+    extraction_poll_seconds: float = 5.0
+    extraction_batch_size: int = 5
+    extraction_max_attempts: int = 3
+
     # Rebuildable permanent-memory retrieval index
     memory_db_name: str = "lingji_memory.db"
     memory_chunk_max_chars: int = 1400
