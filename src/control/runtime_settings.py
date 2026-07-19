@@ -136,6 +136,88 @@ class RuntimeSettingsStore:
             "storage_archive_logs": self._boolean(
                 "storage", "日志迁移冷存储", "启用冷存储时可迁移旧日志。", False
             ),
+            # Hardware and compute mode. These values are visible and editable in the desktop UI.
+            "compute_mode": self._annotate(
+                self._choice(
+                    "hardware_compute",
+                    "全局算力模式",
+                    "控制本地任务优先使用自动选择、GPU 或仅 CPU。GPU 只是加速器。",
+                    "auto",
+                    ["auto", "gpu_preferred", "cpu_only"],
+                ),
+                recommended="auto",
+                recommendation_reason="自动模式会根据真实硬件和任务能力选择候选设备，同时保留 CPU 降级。",
+                when_to_change="需要强制节能、排查 CUDA 问题时选择仅 CPU；明确需要本地加速时选择 GPU 优先。",
+                performance_impact="GPU 优先可能提高 ASR、Embedding 和模型推理速度；仅 CPU 速度较慢但基础检索仍可用。",
+                risk_level="low",
+            ),
+            "compute_preferred_gpu_id": self._annotate(
+                self._string(
+                    "hardware_compute",
+                    "首选 GPU ID",
+                    "多显卡时选择首选设备；留空时使用空闲显存最多的可用 GPU。",
+                    "",
+                    64,
+                ),
+                recommended="",
+                recommendation_reason="单显卡电脑无需填写，多显卡时再根据硬件页面显示的 GPU ID 选择。",
+                when_to_change="只有安装多块 GPU 且需要固定任务设备时修改。",
+                risk_level="medium",
+            ),
+            "hardware_static_refresh_seconds": self._annotate(
+                self._number("hardware_compute", "硬件静态信息刷新间隔", "重新检测 CPU、磁盘、工具链和驱动状态的间隔。", 30.0, 5.0, 3600.0),
+                recommended=30.0,
+                recommendation_reason="静态规格变化很少，30 秒可以避免频繁启动系统检测命令。",
+                when_to_change="刚安装驱动、Ollama 或 FFmpeg 时可临时缩短；低功耗环境可增加。",
+                unit="秒",
+                performance_impact="间隔越短，系统命令调用越频繁。",
+                risk_level="low",
+            ),
+            "hardware_foreground_interval_seconds": self._annotate(
+                self._number("hardware_compute", "前台任务监控频率", "活动中心可见且有任务时的资源采样间隔。", 2.0, 1.0, 60.0),
+                recommended=2.0,
+                recommendation_reason="2 秒能显示明显变化，又不会制造毫无意义的高频采样。",
+                when_to_change="需要更平滑图表时降低；电脑负载紧张时提高。",
+                unit="秒",
+                performance_impact="间隔越短，监控自身占用越高。",
+                risk_level="low",
+            ),
+            "hardware_background_interval_seconds": self._annotate(
+                self._number("hardware_compute", "后台任务监控频率", "页面不可见但仍有计算任务时的资源采样间隔。", 5.0, 2.0, 300.0),
+                recommended=5.0,
+                recommendation_reason="后台无需和前台一样频繁，5 秒足够发现资源变化。",
+                when_to_change="长时间批处理且不需要细粒度图表时可以提高。",
+                unit="秒",
+                performance_impact="间隔越短，监控自身占用越高。",
+                risk_level="low",
+            ),
+            "hardware_idle_interval_seconds": self._annotate(
+                self._number("hardware_compute", "空闲监控频率", "没有活动任务但桌面程序打开时的资源采样间隔。", 30.0, 5.0, 600.0),
+                recommended=30.0,
+                recommendation_reason="空闲时不需要持续高频查询显卡和磁盘。",
+                when_to_change="希望更省电时提高；希望更快发现外部 Ollama 状态变化时降低。",
+                unit="秒",
+                performance_impact="较长间隔更省电，但状态变化显示稍慢。",
+                risk_level="low",
+            ),
+            "hardware_minimized_interval_seconds": self._annotate(
+                self._number("hardware_compute", "最小化监控频率", "桌面程序最小化时的资源采样间隔。", 60.0, 10.0, 3600.0),
+                recommended=60.0,
+                recommendation_reason="最小化时以节能为主，任务进度仍由任务系统记录。",
+                when_to_change="后台运行重要长任务并需要较密资源记录时降低。",
+                unit="秒",
+                performance_impact="较长间隔更省电。",
+                risk_level="low",
+            ),
+            "hardware_nvidia_smi_min_interval_seconds": self._annotate(
+                self._number("hardware_compute", "nvidia-smi 最小调用间隔", "使用外部命令回退采集 GPU 时允许的最短间隔。", 10.0, 5.0, 300.0),
+                recommended=10.0,
+                recommendation_reason="启动外部进程比 NVML 读取更重，不应每两秒反复调用。",
+                when_to_change="以后启用 NVML 后该值只影响命令回退；排查 GPU 状态时可以临时降低但不得低于 5 秒。",
+                unit="秒",
+                performance_impact="间隔过短会增加进程启动和系统查询开销。",
+                risk_level="medium",
+            ),
             # Backup defaults.
             "backup_default_profile": self._choice(
                 "backup", "默认备份范围", "metadata 不含 Raw/Derived；full 包含全部。", "metadata", ["metadata", "full"]
@@ -263,6 +345,19 @@ class RuntimeSettingsStore:
             "min_free_gb": values["storage_min_free_gb"],
         }
 
+    def compute_policy(self) -> dict[str, Any]:
+        values = self.snapshot()["values"]
+        return {
+            "mode": values["compute_mode"],
+            "preferred_gpu_id": values["compute_preferred_gpu_id"] or None,
+            "static_refresh_seconds": values["hardware_static_refresh_seconds"],
+            "foreground_interval_seconds": values["hardware_foreground_interval_seconds"],
+            "background_interval_seconds": values["hardware_background_interval_seconds"],
+            "idle_interval_seconds": values["hardware_idle_interval_seconds"],
+            "minimized_interval_seconds": values["hardware_minimized_interval_seconds"],
+            "nvidia_smi_min_interval_seconds": values["hardware_nvidia_smi_min_interval_seconds"],
+        }
+
     def _load_overrides(self) -> dict[str, Any]:
         with self._lock:
             if not self.path.exists():
@@ -346,6 +441,10 @@ class RuntimeSettingsStore:
             "default": default,
             "restart_required": False,
         }
+
+    @staticmethod
+    def _annotate(definition: dict[str, Any], **metadata: Any) -> dict[str, Any]:
+        return {**definition, **metadata}
 
     @classmethod
     def _integer(cls, group: str, label: str, description: str, default: int, minimum: int, maximum: int) -> dict[str, Any]:
