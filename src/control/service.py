@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
-from src.extraction import SQLiteExtractionQueue, build_extraction_pipeline
+from src.extraction.bootstrap import build_extraction_pipeline
+from src.extraction.queue import SQLiteExtractionQueue
 from src.health import StartupHealthChecker
 from src.media import (
     FasterWhisperProvider,
