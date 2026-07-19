@@ -7,6 +7,7 @@ from src.gateway.profiles import AIProfileRegistry
 from src.memory.lifecycle import MemoryLifecycleService
 from src.retrieval.context_pack import ContextPackBuilder, ContextPackRequest
 from src.retrieval.hybrid import HybridRetriever, SearchFilters
+from src.retrieval.incremental_sync import IncrementalMemorySynchronizer
 from src.retrieval.memory_db import MemoryDatabase
 
 
@@ -181,10 +182,20 @@ class MemoryGateway:
         entries: list[dict[str, Any]],
         vault_root: Path | str,
         chunker=None,
-    ) -> dict[str, int]:
-        result = self.database.rebuild_from_index(entries, vault_root, chunker)
-        self.retriever.clear_cache()
-        self._event("memory_index_rebuilt", "lingji", result)
+        *,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        integrity = self.database.integrity_check()
+        if force or not integrity.get("healthy", False):
+            result: dict[str, Any] = self.database.rebuild_from_index(entries, vault_root, chunker)
+            result["full_rebuild"] = True
+            event_type = "memory_index_rebuilt"
+        else:
+            result = IncrementalMemorySynchronizer(self.database).sync(entries, vault_root, chunker)
+            event_type = "memory_index_synced"
+        if result.get("added") or result.get("updated") or result.get("removed") or result.get("full_rebuild"):
+            self.retriever.clear_cache()
+        self._event(event_type, "lingji", result)
         return result
 
     def _event(self, event_type: str, entity_id: str, payload: dict[str, Any]) -> None:
