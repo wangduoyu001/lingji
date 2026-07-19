@@ -4,11 +4,12 @@ import json
 from typing import Any
 
 from src.config import settings
+from src.extraction import build_extraction_pipeline
 from src.gateway.bootstrap import build_memory_gateway
 
 
 def create_mcp_server(gateway=None, default_agent_id: str | None = None):
-    """Create a local LingJi MCP server using the stable MCP Python SDK."""
+    """Create the local LingJi MCP server."""
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:
@@ -17,6 +18,7 @@ def create_mcp_server(gateway=None, default_agent_id: str | None = None):
         ) from exc
 
     memory_gateway = gateway or build_memory_gateway(settings)
+    extraction_pipeline = build_extraction_pipeline(settings)
     default_agent = default_agent_id or settings.mcp_default_agent_id
     mcp = FastMCP(settings.mcp_server_name)
 
@@ -126,6 +128,52 @@ def create_mcp_server(gateway=None, default_agent_id: str | None = None):
         """Check retrieval database integrity, revision and AI profiles."""
         return memory_gateway.memory_health(agent(agent_id))
 
+    @mcp.tool()
+    def enqueue_chatgpt_export(
+        path: str,
+        project_id: str | None = None,
+        force: bool = False,
+        process_now: bool = False,
+    ) -> dict[str, Any]:
+        """Queue an official ChatGPT ZIP/JSON export for local extraction."""
+        job = extraction_pipeline.enqueue(
+            "chatgpt",
+            input_path=path,
+            options={"project_id": project_id or []},
+            adapter_name="chatgpt_export",
+            force=force,
+        )
+        if process_now:
+            return extraction_pipeline.process_job(job["job_id"])
+        return job
+
+    @mcp.tool()
+    def submit_codex_work_report(report: dict[str, Any]) -> dict[str, Any]:
+        """Write a structured Codex report and reviewable error, decision and task candidates."""
+        return extraction_pipeline.execute(
+            "codex",
+            payload=report,
+            adapter_name="codex_work_report",
+        )
+
+    @mcp.tool()
+    def extraction_job_status(job_id: str) -> dict[str, Any]:
+        """Return one durable extraction job."""
+        return extraction_pipeline.queue.get(job_id)
+
+    @mcp.tool()
+    def extraction_queue_status() -> dict[str, Any]:
+        """Return queue counters and registered adapters."""
+        return {
+            "queue": extraction_pipeline.queue.stats(),
+            "adapters": extraction_pipeline.registry.list(),
+        }
+
+    @mcp.tool()
+    def process_extraction_jobs(limit: int = 5) -> dict[str, Any]:
+        """Process pending extraction jobs immediately on this local machine."""
+        return extraction_pipeline.process_pending(limit=limit)
+
     @mcp.resource("lingji://memory/health")
     def health_resource() -> str:
         return json.dumps(
@@ -137,6 +185,17 @@ def create_mcp_server(gateway=None, default_agent_id: str | None = None):
     @mcp.resource("lingji://ai/profiles")
     def profile_resource() -> str:
         return json.dumps(memory_gateway.profiles.list(), ensure_ascii=False, indent=2)
+
+    @mcp.resource("lingji://extraction/queue")
+    def extraction_queue_resource() -> str:
+        return json.dumps(
+            {
+                "queue": extraction_pipeline.queue.stats(),
+                "adapters": extraction_pipeline.registry.list(),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
 
     @mcp.prompt()
     def lingji_project_context(
