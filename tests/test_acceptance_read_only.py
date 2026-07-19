@@ -33,6 +33,8 @@ class ReadOnlyAcceptanceTests(unittest.TestCase):
         self.vault.mkdir()
         self.note = self.vault / "note.md"
         self.note.write_text("# note\n\nowner content\n", encoding="utf-8")
+        self.attachment = self.vault / "image.bin"
+        self.attachment.write_bytes(b"owner attachment")
         self.settings = Settings(
             _env_file=None,
             vault_dir=str(self.vault),
@@ -49,20 +51,24 @@ class ReadOnlyAcceptanceTests(unittest.TestCase):
         request_get.return_value.raise_for_status.return_value = None
         request_get.return_value.content = b'{"models": [{"name": "qwen3:8b"}]}'
         request_get.return_value.json.return_value = {"models": [{"name": "qwen3:8b"}]}
-        before_hash = sha256(self.note)
+        before_note = sha256(self.note)
+        before_attachment = sha256(self.attachment)
         before_stat = self.note.stat()
 
         report = AcceptanceChecker(self.settings, hash_inputs=True).run()
 
         self.assertTrue(report["read_only"])
         self.assertTrue(report["inputs_unchanged"])
-        self.assertEqual(sha256(self.note), before_hash)
+        self.assertEqual(sha256(self.note), before_note)
+        self.assertEqual(sha256(self.attachment), before_attachment)
         self.assertEqual(self.note.stat().st_mtime_ns, before_stat.st_mtime_ns)
         self.assertFalse(self.settings.storage_path.exists())
         self.assertFalse(self.settings.log_path.exists())
         self.assertFalse(self.settings.backup_path.exists())
         ollama = next(item for item in report["checks"] if item["name"] == "health:ollama")
         self.assertEqual(ollama["details"]["models"], ["qwen3:8b"])
+        immutability = next(item for item in report["checks"] if item["name"] == "input_immutability")
+        self.assertEqual(immutability["details"]["before"]["vault"]["files"], 2)
 
     @patch("src.health.requests.get", side_effect=requests.ConnectionError("offline"))
     def test_existing_sqlite_is_opened_without_modifying_it(self, _request_get):
@@ -82,6 +88,9 @@ class ReadOnlyAcceptanceTests(unittest.TestCase):
         self.assertEqual(sha256(database), before_hash)
         self.assertEqual(database.stat().st_mtime_ns, before_mtime)
         self.assertTrue(report["inputs_unchanged"])
+        immutability = next(item for item in report["checks"] if item["name"] == "input_immutability")
+        memory_fingerprint = immutability["details"]["before"]["memory_db"]
+        self.assertEqual(set(memory_fingerprint), {"database", "wal", "shm"})
 
     @patch("src.health.requests.get", side_effect=requests.ConnectionError("offline"))
     def test_deep_zip_check_reports_crc_corruption(self, _request_get):
