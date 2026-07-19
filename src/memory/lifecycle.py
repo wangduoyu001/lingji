@@ -14,6 +14,10 @@ class MemoryLifecycleService:
     def __init__(self, layout, state_db=None):
         self.layout = layout
         self.state_db = state_db
+        from src.memory.obsidian_ui import PermanentMemoryObsidianManager
+
+        self.ui = PermanentMemoryObsidianManager(layout)
+        self.ui.ensure()
 
     def propose_memory(
         self,
@@ -53,7 +57,10 @@ class MemoryLifecycleService:
                 "proposed_by": agent_id,
                 "created_at": now.isoformat(timespec="seconds"),
                 "updated_at": now.isoformat(timespec="seconds"),
-                "tags": self._merge_tags(values.get("tags"), ["signal/memory-candidate", "attention/review"]),
+                "tags": self._merge_tags(
+                    values.get("tags"),
+                    ["signal/memory-candidate", "attention/review"],
+                ),
             }
         )
         body = "\n".join(
@@ -129,7 +136,8 @@ class MemoryLifecycleService:
                 ),
             }
         )
-        atomic_write(target, render_frontmatter(metadata, body))
+        promoted_body = self._promoted_body(body)
+        atomic_write(target, render_frontmatter(metadata, promoted_body))
         if source.resolve() != target.resolve():
             source.unlink()
             self._remove_empty_parents(source.parent, self.layout.root / "01-Inbox" / "AI-Memory")
@@ -187,8 +195,8 @@ class MemoryLifecycleService:
     ) -> dict[str, Any]:
         if not owner_confirmed:
             raise PermissionError("Rejecting a memory candidate requires owner confirmation")
-        target = self._resolve_candidate(candidate_path)
-        metadata, body = split_frontmatter(target.read_text(encoding="utf-8-sig"))
+        source = self._resolve_candidate(candidate_path)
+        metadata, body = split_frontmatter(source.read_text(encoding="utf-8-sig"))
         now = datetime.now().isoformat(timespec="seconds")
         metadata.update(
             {
@@ -201,7 +209,14 @@ class MemoryLifecycleService:
         )
         if reason:
             metadata["rejection_reason"] = reason
+        archive_dir = self.layout.root / "09-Archive" / "Rejected-Memory-Candidates"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        target = archive_dir / source.name
+        if target.exists():
+            target = archive_dir / f"{source.stem}-{str(metadata.get('id') or '')[-8:]}.md"
         atomic_write(target, render_frontmatter(metadata, body))
+        source.unlink()
+        self._remove_empty_parents(source.parent, self.layout.root / "01-Inbox" / "AI-Memory")
         result = {
             "id": str(metadata.get("id")),
             "relative_path": self.layout.relative(target).as_posix(),
@@ -218,6 +233,17 @@ class MemoryLifecycleService:
         if not target.exists():
             raise FileNotFoundError(target)
         return target
+
+    @staticmethod
+    def _promoted_body(body: str) -> str:
+        clean = body.replace(
+            "> 这是 AI 提议的永久记忆候选，未经主人确认不会进入核心记忆。",
+            "> 已由主人确认并晋升为核心记忆。",
+        )
+        if "\n## 主人审核" in clean:
+            clean = clean.split("\n## 主人审核", 1)[0].rstrip()
+        clean = clean.replace("## 候选记忆", "## 核心记忆")
+        return clean.rstrip() + "\n"
 
     @staticmethod
     def _merge_tags(
