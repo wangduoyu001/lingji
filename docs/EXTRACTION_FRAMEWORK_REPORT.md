@@ -381,13 +381,20 @@ tests/test_extraction_worker.py
 - 重复写回不产生重复文件。
 - Worker 启停和任务消费。
 
-本阶段隔离测试：
+完整 GitHub Actions 验证：
 
 ```text
-10 tests passed
+Ran 51 tests
+OK
 ```
 
-合并前仍需在完整仓库和真实本机 Vault 上执行：
+同时通过：
+
+- Python 3.11 单元测试与编译检查。
+- Python 3.12 单元测试与编译检查。
+- MCP Server 创建 smoke test。
+
+本机真实 Vault 合并前仍应执行：
 
 ```powershell
 python -m unittest discover -s tests -v
