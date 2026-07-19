@@ -15,6 +15,7 @@ from src.indexer.index import PEMISIndex
 from src.memory import InboxService, VaultLayout
 from src.obsidian import DocumentManager, ManualCommandService, ObsidianInteractionManager
 from src.opp_generator import OppGenerator
+from src.opportunities import OpportunityCardWriter
 from src.scheduler.cron import CronScheduler
 from src.scheduler.distillation import DistillationEngine
 from src.scheduler.integrity import IntegrityChecker
@@ -65,6 +66,10 @@ class PEMISCore:
         self.integrity = IntegrityChecker(settings)
         self.feedback = UserFeedback(settings)
         self.generator = OppGenerator(settings, self.indexer)
+        self.opportunity_writer = OpportunityCardWriter(
+            settings.storage_path / "opportunities",
+            settings.vault_path,
+        )
         self.decision = DecisionEngine(
             self.indexer,
             settings.storage_path,
@@ -174,6 +179,8 @@ class PEMISCore:
         for markdown_file in self.settings.vault_path.rglob("*.md"):
             if not self.vault_layout.should_analyze(markdown_file):
                 continue
+            source_id = self.vault_layout.relative(markdown_file).as_posix()
+            current_hash = ""
             try:
                 text = markdown_file.read_text(encoding="utf-8-sig")
                 current_hash = hashlib.md5(text.encode("utf-8")).hexdigest()
@@ -181,7 +188,7 @@ class PEMISCore:
                 source_id = (
                     str(existing.get("id"))
                     if existing and existing.get("id")
-                    else self.vault_layout.relative(markdown_file).as_posix()
+                    else source_id
                 )
                 if not self.state_db.needs_processing(
                     source_id,
@@ -200,7 +207,15 @@ class PEMISCore:
                 analysis = self.generator.analyze_file(markdown_file)
                 result = {"generated": False, "source_path": str(markdown_file)}
                 if analysis:
-                    result.update(self.generator.generate_card(markdown_file, analysis))
+                    result.update(
+                        self.opportunity_writer.write(
+                            markdown_file,
+                            source_id=source_id,
+                            source_hash=current_hash,
+                            analysis=analysis,
+                            model=settings.llm_model,
+                        )
+                    )
                     result["generated"] = True
                     generated += 1
                 processed += 1
@@ -215,7 +230,7 @@ class PEMISCore:
             except Exception as exc:
                 failed += 1
                 logger.exception("Auto scan file failed: %s", markdown_file)
-                try:
+                if current_hash:
                     self.state_db.mark_processing_finished(
                         source_id,
                         OPPORTUNITY_PROCESSOR,
@@ -224,8 +239,6 @@ class PEMISCore:
                         success=False,
                         error=str(exc),
                     )
-                except Exception:
-                    pass
 
         if generated:
             from src.dashboard import sync_opps_to_vault
@@ -264,10 +277,12 @@ class PEMISCore:
         return result
 
     def _read_feedback_job(self):
-        if self.feedback:
-            self.feedback.read_from_control_center()
-            self._last_feedback_read = datetime.now()
-        return {"feedback_read_at": self._last_feedback_read.isoformat()}
+        feedback_result = self.feedback.read_feedback_inbox() if self.feedback else {"changed": False}
+        self._last_feedback_read = datetime.now()
+        return {
+            "feedback_read_at": self._last_feedback_read.isoformat(),
+            **feedback_result,
+        }
 
     def _capture_new_files(self):
         """Report uncaptured notes without entering restricted folders."""
