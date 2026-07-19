@@ -41,6 +41,7 @@ class PEMISIndex:
         self._watchdog_snapshot = {}
         self._callback = None
         self._legacy_dash_dir = self.vault_dir / "PEMIS" / "dashboard"
+        self._last_sync_result = None
 
     def _parse_frontmatter(self, text):
         try:
@@ -163,49 +164,146 @@ class PEMISIndex:
         entry["project"] = project_links
         return entry
 
-    def build_index(self):
+    def build_index(self, force=False):
+        """Build the first index, then synchronize incrementally on later calls."""
+        if force or not self.index_path.exists():
+            return self.rebuild_index()
+        try:
+            return self.sync_index()["index"]
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            logger.warning("Existing index cannot be synchronized; rebuilding: %s", exc)
+            return self.rebuild_index()
+
+    def rebuild_index(self):
         entries = {}
-        md_files = [
-            path
-            for path in self.vault_dir.rglob("*.md")
-            if not self._is_dashboard_file(path)
-            and self.layout.should_index(path, include_private=self.include_private)
-        ]
+        md_files = self._vault_markdown_files()
         for markdown_file in md_files:
             entry = self._parse_md_file(markdown_file)
             if entry:
                 if entry["id"] in entries:
                     logger.warning("Duplicate memory id: %s (%s)", entry["id"], markdown_file)
                 entries[entry["id"]] = entry
+        self._add_external_opportunities(entries)
+        idx = self._new_index(entries, full_rebuild=True)
+        with self._lock:
+            self._index = idx
+            self.save_index(idx)
+        self._last_sync_result = {
+            "full_rebuild": True,
+            "added": len(entries),
+            "updated": 0,
+            "removed": 0,
+            "unchanged": 0,
+            "changed_paths": [entry.get("relative_path") for entry in entries.values() if entry.get("relative_path")],
+            "removed_paths": [],
+            "index": idx,
+        }
+        logger.info("Index rebuilt: %d entries from %d vault files", len(entries), len(md_files))
+        return idx
 
-        if self.opp_dir.exists():
-            for markdown_file in self.opp_dir.glob("*.md"):
-                entry = self._parse_external_opp_file(markdown_file)
-                if entry:
-                    entries.setdefault(entry["id"], entry)
+    def sync_index(self):
+        with self._lock:
+            old = self._load()
+            old_entries = dict(old.get("entries") or {})
+        old_by_path = {
+            str(entry.get("relative_path")): (file_id, entry)
+            for file_id, entry in old_entries.items()
+            if entry.get("relative_path")
+        }
+        entries = {}
+        current_paths = set()
+        changed_paths = []
+        added = 0
+        updated = 0
+        unchanged = 0
 
-        idx = {
-            "meta": {
-                "version": "2.1",
-                "layout_version": "1",
-                "total": len(entries),
-                "last_build": datetime.now().timestamp(),
-                "updated_at": datetime.now().isoformat(),
-                "include_private": self.include_private,
-            },
-            "entries": entries,
+        for path in self._vault_markdown_files():
+            relative = self.layout.relative(path).as_posix()
+            current_paths.add(relative)
+            previous_pair = old_by_path.get(relative)
+            previous = previous_pair[1] if previous_pair else None
+            stat = path.stat()
+            modified_at = datetime.fromtimestamp(stat.st_mtime).isoformat()
+            if previous and int(previous.get("size") or -1) == stat.st_size and previous.get("modified_at") == modified_at:
+                entries[str(previous_pair[0])] = previous
+                unchanged += 1
+                continue
+            parsed = self._parse_md_file(path)
+            if not parsed:
+                continue
+            entries[parsed["id"]] = parsed
+            changed_paths.append(relative)
+            if previous:
+                updated += 1
+            else:
+                added += 1
+
+        removed_paths = sorted(set(old_by_path) - current_paths)
+        self._add_external_opportunities(entries)
+        idx = self._new_index(entries, full_rebuild=False)
+        idx["meta"]["sync"] = {
+            "added": added,
+            "updated": updated,
+            "removed": len(removed_paths),
+            "unchanged": unchanged,
         }
         with self._lock:
             self._index = idx
             self.save_index(idx)
-        opp_count = sum(1 for entry in entries.values() if entry.get("type") == "opportunity")
+        result = {
+            "full_rebuild": False,
+            "added": added,
+            "updated": updated,
+            "removed": len(removed_paths),
+            "unchanged": unchanged,
+            "changed_paths": changed_paths,
+            "removed_paths": removed_paths,
+            "index": idx,
+        }
+        self._last_sync_result = result
         logger.info(
-            "Index built: %d entries (%d opportunities) from %d vault files",
-            len(entries),
-            opp_count,
-            len(md_files),
+            "Index synchronized: %d added, %d updated, %d removed, %d unchanged",
+            added,
+            updated,
+            len(removed_paths),
+            unchanged,
         )
-        return idx
+        return result
+
+    def _vault_markdown_files(self):
+        return [
+            path
+            for path in self.vault_dir.rglob("*.md")
+            if not self._is_dashboard_file(path)
+            and self.layout.should_index(path, include_private=self.include_private)
+        ]
+
+    def _add_external_opportunities(self, entries):
+        if not self.opp_dir.exists():
+            return
+        for markdown_file in self.opp_dir.glob("*.md"):
+            entry = self._parse_external_opp_file(markdown_file)
+            if entry:
+                entries.setdefault(entry["id"], entry)
+
+    def _new_index(self, entries, full_rebuild):
+        now = datetime.now()
+        return {
+            "meta": {
+                "version": "2.2",
+                "layout_version": "1",
+                "total": len(entries),
+                "last_build": now.timestamp(),
+                "updated_at": now.isoformat(),
+                "include_private": self.include_private,
+                "full_rebuild": bool(full_rebuild),
+            },
+            "entries": entries,
+        }
+
+    @property
+    def last_sync_result(self):
+        return self._last_sync_result
 
     def _parse_external_opp_file(self, path):
         try:
@@ -281,7 +379,6 @@ class PEMISIndex:
             relative_candidate = self.layout.relative(reference).as_posix()
         except ValueError:
             pass
-
         with self._lock:
             idx = self._load()
             target_id = None
@@ -392,7 +489,7 @@ class PEMISIndex:
             with open(self.index_path, "r", encoding="utf-8-sig") as handle:
                 self._index = json.load(handle)
         else:
-            self._index = {"meta": {"version": "2.1", "total": 0}, "entries": {}}
+            self._index = {"meta": {"version": "2.2", "total": 0}, "entries": {}}
         return self._index
 
     @staticmethod
