@@ -141,14 +141,28 @@ class ChatGPTImporterTests(unittest.TestCase):
         self.assertIn("08-Private/Imports/chatgpt", note.as_posix())
         self.assertEqual(result["summary"]["restricted_documents"], 1)
 
-    def test_conversation_limit_is_enforced(self):
+    def test_conversation_limit_is_enforced_for_zip_exports(self):
+        archive = Path(self.temp_dir.name) / "limited.zip"
+        with zipfile.ZipFile(archive, "w") as zip_file:
+            zip_file.writestr(
+                "conversations.json",
+                json.dumps([self._conversation()], ensure_ascii=False),
+            )
+        with self.assertRaises(ValueError):
+            self.pipeline.execute(
+                "chatgpt",
+                input_path=archive,
+                options={"max_conversations": 0},
+            )
+
+    def test_single_json_size_limit_is_enforced(self):
         export = Path(self.temp_dir.name) / "conversations.json"
         export.write_text(json.dumps([self._conversation()], ensure_ascii=False), encoding="utf-8")
         with self.assertRaises(ValueError):
             self.pipeline.execute(
                 "chatgpt",
                 input_path=export,
-                options={"max_conversations": 0},
+                options={"max_zip_member_bytes": 1},
             )
 
 
