@@ -9,12 +9,19 @@ from typing import Any, Iterable, Mapping
 
 from ..base import ExtractionAdapter
 from ..models import ExtractedDocument, ExtractionBatch, ExtractionRequest
+from ..privacy import PrivacyClassifier
 
 
 class ChatGPTExportAdapter(ExtractionAdapter):
     name = "chatgpt_export"
-    version = "1.0.0"
+    version = "1.1.0"
     source_types = ("chatgpt", "chatgpt_export")
+
+    DEFAULT_MAX_ZIP_TOTAL = 2 * 1024 * 1024 * 1024
+    DEFAULT_MAX_MEMBER = 512 * 1024 * 1024
+    DEFAULT_MAX_JSON_FILES = 500
+    DEFAULT_MAX_CONVERSATIONS = 100_000
+    DEFAULT_MAX_COMPRESSION_RATIO = 200
 
     def can_handle(
         self,
@@ -31,13 +38,48 @@ class ChatGPTExportAdapter(ExtractionAdapter):
     def extract(self, request: ExtractionRequest) -> ExtractionBatch:
         if not request.input_path:
             raise ValueError("ChatGPT export path is required")
-        conversations, source_files = self._load_export(request.input_path)
+        conversations, source_files = self._load_export(request.input_path, request.options)
         project = request.options.get("project_id") or request.options.get("project") or []
+        privacy_scan = bool(request.options.get("privacy_scan", True))
+        sensitive_terms = request.options.get("sensitive_terms") or []
+        classifier = PrivacyClassifier()
         documents = []
         warnings = []
+        restricted = 0
         for conversation in conversations:
             try:
-                documents.append(self._conversation_document(conversation, source_files, project))
+                document = self._conversation_document(conversation, source_files, project)
+                if privacy_scan:
+                    assessment = classifier.assess(document.body, sensitive_terms)
+                    metadata = dict(document.metadata)
+                    metadata["privacy"] = assessment.privacy
+                    metadata["sensitivity_findings"] = assessment.kinds()
+                    if assessment.restricted:
+                        restricted += 1
+                        document = ExtractedDocument(
+                            stable_id=document.stable_id,
+                            title=document.title,
+                            body=document.body,
+                            source_type=document.source_type,
+                            destination="private_source",
+                            external_id=document.external_id,
+                            created_at=document.created_at,
+                            updated_at=document.updated_at,
+                            metadata=metadata,
+                        )
+                    else:
+                        document = ExtractedDocument(
+                            stable_id=document.stable_id,
+                            title=document.title,
+                            body=document.body,
+                            source_type=document.source_type,
+                            destination=document.destination,
+                            external_id=document.external_id,
+                            created_at=document.created_at,
+                            updated_at=document.updated_at,
+                            metadata=metadata,
+                        )
+                documents.append(document)
             except Exception as exc:
                 conversation_id = conversation.get("id") or conversation.get("conversation_id") or "unknown"
                 warnings.append(f"{conversation_id}: {exc}")
@@ -46,39 +88,79 @@ class ChatGPTExportAdapter(ExtractionAdapter):
             summary={
                 "conversations_found": len(conversations),
                 "documents_created": len(documents),
+                "restricted_documents": restricted,
+                "failed_documents": len(warnings),
                 "source_files": source_files,
             },
             warnings=tuple(warnings),
         )
 
-    def _load_export(self, path: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    def _load_export(
+        self,
+        path: Path,
+        options: Mapping[str, Any],
+    ) -> tuple[list[dict[str, Any]], list[str]]:
         loaded: list[dict[str, Any]] = []
         source_files: list[str] = []
+        max_member = int(options.get("max_zip_member_bytes", self.DEFAULT_MAX_MEMBER))
+        max_total = int(options.get("max_zip_uncompressed_bytes", self.DEFAULT_MAX_ZIP_TOTAL))
+        max_json_files = int(options.get("max_zip_json_files", self.DEFAULT_MAX_JSON_FILES))
+        max_conversations = int(options.get("max_conversations", self.DEFAULT_MAX_CONVERSATIONS))
+        max_ratio = float(options.get("max_zip_compression_ratio", self.DEFAULT_MAX_COMPRESSION_RATIO))
+
         if path.is_dir():
             files = sorted(
                 file_path
                 for pattern in ("conversations*.json", "conversation*.json")
                 for file_path in path.glob(pattern)
             )
-            for file_path in self._dedupe_paths(files):
+            files = self._dedupe_paths(files)
+            if len(files) > max_json_files:
+                raise ValueError(f"Too many ChatGPT JSON files: {len(files)} > {max_json_files}")
+            total = 0
+            for file_path in files:
+                size = file_path.stat().st_size
+                total += size
+                if size > max_member or total > max_total:
+                    raise ValueError("ChatGPT export exceeds configured safety limits")
                 loaded.extend(self._decode_conversation_payload(file_path.read_text(encoding="utf-8-sig")))
                 source_files.append(file_path.name)
+                if len(loaded) > max_conversations:
+                    raise ValueError(f"Too many conversations: {len(loaded)} > {max_conversations}")
         elif path.suffix.lower() == ".zip":
             with zipfile.ZipFile(path) as archive:
-                names = sorted(
-                    name
-                    for name in archive.namelist()
-                    if not name.endswith("/")
-                    and Path(name).name.lower().startswith("conversation")
-                    and Path(name).suffix.lower() == ".json"
+                infos = sorted(
+                    (
+                        info
+                        for info in archive.infolist()
+                        if not info.is_dir()
+                        and Path(info.filename).name.lower().startswith("conversation")
+                        and Path(info.filename).suffix.lower() == ".json"
+                    ),
+                    key=lambda item: item.filename,
                 )
-                if not names:
+                if not infos:
                     raise ValueError("No conversations.json or numbered conversation JSON files found")
-                for name in names:
-                    raw = archive.read(name).decode("utf-8-sig")
+                if len(infos) > max_json_files:
+                    raise ValueError(f"Too many ChatGPT JSON files: {len(infos)} > {max_json_files}")
+                total = 0
+                for info in infos:
+                    total += int(info.file_size)
+                    ratio = info.file_size / max(info.compress_size, 1)
+                    if info.file_size > max_member:
+                        raise ValueError(f"ZIP member too large: {info.filename}")
+                    if total > max_total:
+                        raise ValueError("ChatGPT ZIP uncompressed size exceeds safety limit")
+                    if ratio > max_ratio:
+                        raise ValueError(f"Suspicious ZIP compression ratio: {info.filename}")
+                    raw = self._read_zip_member(archive, info, max_member).decode("utf-8-sig")
                     loaded.extend(self._decode_conversation_payload(raw))
-                    source_files.append(name)
+                    source_files.append(info.filename)
+                    if len(loaded) > max_conversations:
+                        raise ValueError(f"Too many conversations: {len(loaded)} > {max_conversations}")
         else:
+            if path.stat().st_size > max_member:
+                raise ValueError("ChatGPT JSON exceeds configured size limit")
             loaded.extend(self._decode_conversation_payload(path.read_text(encoding="utf-8-sig")))
             source_files.append(path.name)
 
@@ -97,6 +179,18 @@ class ChatGPTExportAdapter(ExtractionAdapter):
             ):
                 by_id[conversation_id] = conversation
         return list(by_id.values()), source_files
+
+    @staticmethod
+    def _read_zip_member(
+        archive: zipfile.ZipFile,
+        info: zipfile.ZipInfo,
+        max_bytes: int,
+    ) -> bytes:
+        with archive.open(info, "r") as handle:
+            data = handle.read(max_bytes + 1)
+        if len(data) > max_bytes:
+            raise ValueError(f"ZIP member exceeds read limit: {info.filename}")
+        return data
 
     @staticmethod
     def _decode_conversation_payload(raw: str) -> list[dict[str, Any]]:
@@ -198,7 +292,7 @@ class ChatGPTExportAdapter(ExtractionAdapter):
                 "attachments": attachments,
                 "source_export_files": source_files,
                 "project": project,
-                "tags": ["chatgpt", "conversation"],
+                "tags": ["source/chatgpt", "topic/conversation"],
                 "status": "active",
             },
         )
@@ -210,12 +304,7 @@ class ChatGPTExportAdapter(ExtractionAdapter):
         messages: list[dict[str, Any]],
         attachments: list[dict[str, Any]],
     ) -> str:
-        lines = [
-            f"# {title}",
-            "",
-            f"> ChatGPT conversation ID: `{conversation_id}`",
-            "",
-        ]
+        lines = [f"# {title}", "", f"> ChatGPT conversation ID: `{conversation_id}`", ""]
         for index, message in enumerate(messages, 1):
             role_label = {
                 "user": "用户",
