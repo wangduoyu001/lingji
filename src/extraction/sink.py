@@ -203,9 +203,9 @@ class VaultExtractionSink:
         return target_dir / filename
 
     def _filename(self, stable_id: str, title: str) -> str:
-        safe_id = self._safe_segment(stable_id)[:80]
-        safe_title = self.layout.sanitize_filename(title).removesuffix(".md")[:80]
-        return f"{safe_id}-{safe_title}.md" if safe_title else f"{safe_id}.md"
+        del title
+        safe_id = self._safe_segment(stable_id)[:120]
+        return f"{safe_id}.md"
 
     def _project_segment(self, metadata: Any) -> str:
         if not isinstance(metadata, dict):
