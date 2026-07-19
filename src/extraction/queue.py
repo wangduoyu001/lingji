@@ -15,7 +15,7 @@ TERMINAL_STATUSES = ("completed", "failed", "cancelled")
 
 
 class SQLiteExtractionQueue:
-    """Durable queue stored in LingJi's existing SQLite runtime database."""
+    """Durable extraction queue with idempotency and lease ownership."""
 
     def __init__(self, path: Path | str):
         self.path = Path(path)
@@ -46,6 +46,7 @@ class SQLiteExtractionQueue:
                     job_id TEXT PRIMARY KEY,
                     source_type TEXT NOT NULL,
                     adapter_name TEXT,
+                    adapter_version TEXT NOT NULL DEFAULT '',
                     input_path TEXT,
                     payload_json TEXT NOT NULL DEFAULT '{}',
                     options_json TEXT NOT NULL DEFAULT '{}',
@@ -57,6 +58,11 @@ class SQLiteExtractionQueue:
                     next_run_at TEXT NOT NULL,
                     locked_at TEXT,
                     locked_by TEXT,
+                    lease_token TEXT,
+                    heartbeat_at TEXT,
+                    progress_current INTEGER NOT NULL DEFAULT 0,
+                    progress_total INTEGER NOT NULL DEFAULT 0,
+                    progress_message TEXT,
                     last_error TEXT,
                     result_json TEXT,
                     created_at TEXT NOT NULL,
@@ -68,8 +74,29 @@ class SQLiteExtractionQueue:
                     ON extraction_jobs(status, next_run_at, priority, created_at);
                 CREATE INDEX IF NOT EXISTS idx_extraction_jobs_source
                     ON extraction_jobs(source_type, created_at);
+                CREATE INDEX IF NOT EXISTS idx_extraction_jobs_lease
+                    ON extraction_jobs(status, heartbeat_at, locked_at);
                 """
             )
+            self._ensure_columns(connection)
+
+    @staticmethod
+    def _ensure_columns(connection: sqlite3.Connection) -> None:
+        existing = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(extraction_jobs)").fetchall()
+        }
+        columns = {
+            "adapter_version": "TEXT NOT NULL DEFAULT ''",
+            "lease_token": "TEXT",
+            "heartbeat_at": "TEXT",
+            "progress_current": "INTEGER NOT NULL DEFAULT 0",
+            "progress_total": "INTEGER NOT NULL DEFAULT 0",
+            "progress_message": "TEXT",
+        }
+        for name, definition in columns.items():
+            if name not in existing:
+                connection.execute(f"ALTER TABLE extraction_jobs ADD COLUMN {name} {definition}")
 
     @staticmethod
     def _iso(value: datetime) -> str:
@@ -101,13 +128,17 @@ class SQLiteExtractionQueue:
         source_type: str,
         input_path: str | None,
         payload: Any,
+        options: Any = None,
         adapter_name: str | None = None,
+        adapter_version: str = "",
     ) -> str:
         material = {
             "source_type": source_type,
             "adapter_name": adapter_name or "",
+            "adapter_version": adapter_version,
             "input_path": str(input_path or ""),
             "payload": payload or {},
+            "options": options or {},
         }
         encoded = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -120,6 +151,7 @@ class SQLiteExtractionQueue:
         payload: Any = None,
         options: Any = None,
         adapter_name: str | None = None,
+        adapter_version: str = "",
         idempotency_key: str | None = None,
         priority: int = 100,
         max_attempts: int = 3,
@@ -129,43 +161,65 @@ class SQLiteExtractionQueue:
         now = now or datetime.now()
         normalized_path = str(Path(input_path).expanduser()) if input_path else None
         key = idempotency_key or self.build_idempotency_key(
-            source_type, normalized_path, payload, adapter_name
+            source_type,
+            normalized_path,
+            payload,
+            options,
+            adapter_name,
+            adapter_version,
         )
         job_id = f"LJ-JOB-{uuid4().hex[:12].upper()}"
-        forced_job_id = None
+        selected_job_id = job_id
         with self._lock, self._connection() as connection:
             existing = connection.execute(
                 "SELECT * FROM extraction_jobs WHERE idempotency_key = ?", (key,)
             ).fetchone()
             if existing:
                 parsed = self._parse_row(existing)
-                if force and parsed and parsed["status"] in TERMINAL_STATUSES:
-                    connection.execute(
-                        """
-                        UPDATE extraction_jobs
-                        SET status = 'queued', attempts = 0, next_run_at = ?,
-                            locked_at = NULL, locked_by = NULL, last_error = NULL,
-                            result_json = NULL, completed_at = NULL, updated_at = ?
-                        WHERE job_id = ?
-                        """,
-                        (self._iso(now), self._iso(now), parsed["job_id"]),
-                    )
-                    forced_job_id = parsed["job_id"]
-                else:
+                if not parsed:
+                    raise RuntimeError("Unable to parse existing extraction job")
+                selected_job_id = parsed["job_id"]
+                if not force or parsed["status"] not in TERMINAL_STATUSES:
                     return parsed
+                connection.execute(
+                    """
+                    UPDATE extraction_jobs
+                    SET source_type = ?, adapter_name = ?, adapter_version = ?, input_path = ?,
+                        payload_json = ?, options_json = ?, status = 'queued', priority = ?,
+                        attempts = 0, max_attempts = ?, next_run_at = ?, locked_at = NULL,
+                        locked_by = NULL, lease_token = NULL, heartbeat_at = NULL,
+                        progress_current = 0, progress_total = 0, progress_message = NULL,
+                        last_error = NULL, result_json = NULL, completed_at = NULL, updated_at = ?
+                    WHERE job_id = ?
+                    """,
+                    (
+                        source_type,
+                        adapter_name,
+                        adapter_version,
+                        normalized_path,
+                        self._json(payload),
+                        self._json(options),
+                        int(priority),
+                        max(int(max_attempts), 1),
+                        self._iso(now),
+                        self._iso(now),
+                        selected_job_id,
+                    ),
+                )
             else:
                 connection.execute(
                     """
                     INSERT INTO extraction_jobs (
-                        job_id, source_type, adapter_name, input_path, payload_json,
-                        options_json, idempotency_key, status, priority, max_attempts,
-                        next_run_at, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)
+                        job_id, source_type, adapter_name, adapter_version, input_path,
+                        payload_json, options_json, idempotency_key, status, priority,
+                        max_attempts, next_run_at, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)
                     """,
                     (
                         job_id,
                         source_type,
                         adapter_name,
+                        adapter_version,
                         normalized_path,
                         self._json(payload),
                         self._json(options),
@@ -177,7 +231,7 @@ class SQLiteExtractionQueue:
                         self._iso(now),
                     ),
                 )
-        return self.get(forced_job_id or job_id)
+        return self.get(selected_job_id)
 
     def claim(
         self,
@@ -187,6 +241,7 @@ class SQLiteExtractionQueue:
         now: datetime | None = None,
     ) -> dict[str, Any] | None:
         now = now or datetime.now()
+        lease_token = uuid4().hex
         with self._lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             if job_id:
@@ -212,11 +267,18 @@ class SQLiteExtractionQueue:
             updated = connection.execute(
                 """
                 UPDATE extraction_jobs
-                SET status = 'running', attempts = attempts + 1,
-                    locked_at = ?, locked_by = ?, updated_at = ?
+                SET status = 'running', attempts = attempts + 1, locked_at = ?, locked_by = ?,
+                    lease_token = ?, heartbeat_at = ?, progress_message = 'started', updated_at = ?
                 WHERE job_id = ? AND status IN ('queued', 'retrying')
                 """,
-                (self._iso(now), worker_id, self._iso(now), row["job_id"]),
+                (
+                    self._iso(now),
+                    worker_id,
+                    lease_token,
+                    self._iso(now),
+                    self._iso(now),
+                    row["job_id"],
+                ),
             )
             if updated.rowcount != 1:
                 return None
@@ -225,24 +287,69 @@ class SQLiteExtractionQueue:
             ).fetchone()
             return self._parse_row(claimed)
 
+    def heartbeat(
+        self,
+        job_id: str,
+        worker_id: str,
+        lease_token: str,
+        *,
+        progress_current: int | None = None,
+        progress_total: int | None = None,
+        progress_message: str | None = None,
+        now: datetime | None = None,
+    ) -> bool:
+        now = now or datetime.now()
+        assignments = ["heartbeat_at = ?", "updated_at = ?"]
+        values: list[Any] = [self._iso(now), self._iso(now)]
+        if progress_current is not None:
+            assignments.append("progress_current = ?")
+            values.append(max(int(progress_current), 0))
+        if progress_total is not None:
+            assignments.append("progress_total = ?")
+            values.append(max(int(progress_total), 0))
+        if progress_message is not None:
+            assignments.append("progress_message = ?")
+            values.append(str(progress_message)[:500])
+        values.extend([job_id, worker_id, lease_token])
+        with self._lock, self._connection() as connection:
+            cursor = connection.execute(
+                f"""
+                UPDATE extraction_jobs SET {', '.join(assignments)}
+                WHERE job_id = ? AND status = 'running' AND locked_by = ? AND lease_token = ?
+                """,
+                tuple(values),
+            )
+            return cursor.rowcount == 1
+
     def complete(
         self,
         job_id: str,
         result: Any = None,
         *,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         now = now or datetime.now()
+        where = "job_id = ? AND status = 'running'"
+        params: list[Any] = [self._json(result), self._iso(now), self._iso(now)]
+        identity: list[Any] = [job_id]
+        if worker_id is not None or lease_token is not None:
+            where += " AND locked_by = ? AND lease_token = ?"
+            identity.extend([worker_id or "", lease_token or ""])
         with self._lock, self._connection() as connection:
-            connection.execute(
-                """
+            cursor = connection.execute(
+                f"""
                 UPDATE extraction_jobs
-                SET status = 'completed', result_json = ?, completed_at = ?,
-                    locked_at = NULL, locked_by = NULL, last_error = NULL, updated_at = ?
-                WHERE job_id = ?
+                SET status = 'completed', result_json = ?, completed_at = ?, progress_message = 'completed',
+                    locked_at = NULL, locked_by = NULL, lease_token = NULL, heartbeat_at = NULL,
+                    last_error = NULL, updated_at = ?
+                WHERE {where}
                 """,
-                (self._json(result), self._iso(now), self._iso(now), job_id),
+                tuple(params + identity),
             )
+            if cursor.rowcount != 1:
+                raise RuntimeError(f"Extraction lease lost before completion: {job_id}")
         return self.get(job_id)
 
     def fail(
@@ -250,17 +357,26 @@ class SQLiteExtractionQueue:
         job_id: str,
         error: str,
         *,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
         retry_delay_seconds: int | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         now = now or datetime.now()
         with self._lock, self._connection() as connection:
             row = connection.execute(
-                "SELECT attempts, max_attempts FROM extraction_jobs WHERE job_id = ?",
+                "SELECT attempts, max_attempts, locked_by, lease_token, status FROM extraction_jobs WHERE job_id = ?",
                 (job_id,),
             ).fetchone()
             if not row:
                 raise LookupError(f"Unknown extraction job: {job_id}")
+            if row["status"] != "running":
+                raise RuntimeError(f"Extraction job is not running: {job_id}")
+            if worker_id is not None and (
+                str(row["locked_by"] or "") != worker_id
+                or str(row["lease_token"] or "") != str(lease_token or "")
+            ):
+                raise RuntimeError(f"Extraction lease lost before failure handling: {job_id}")
             attempts = int(row["attempts"])
             max_attempts = int(row["max_attempts"])
             should_retry = attempts < max_attempts
@@ -271,14 +387,16 @@ class SQLiteExtractionQueue:
             connection.execute(
                 """
                 UPDATE extraction_jobs
-                SET status = ?, next_run_at = ?, last_error = ?,
-                    locked_at = NULL, locked_by = NULL, updated_at = ?
+                SET status = ?, next_run_at = ?, last_error = ?, progress_message = ?,
+                    locked_at = NULL, locked_by = NULL, lease_token = NULL, heartbeat_at = NULL,
+                    updated_at = ?
                 WHERE job_id = ?
                 """,
                 (
                     "retrying" if should_retry else "failed",
                     self._iso(next_run if should_retry else now),
                     str(error)[:2000],
+                    "retrying" if should_retry else "failed",
                     self._iso(now),
                     job_id,
                 ),
@@ -297,9 +415,10 @@ class SQLiteExtractionQueue:
             cursor = connection.execute(
                 """
                 UPDATE extraction_jobs
-                SET status = 'retrying', next_run_at = ?, locked_at = NULL,
-                    locked_by = NULL, last_error = 'worker lock expired', updated_at = ?
-                WHERE status = 'running' AND locked_at < ?
+                SET status = 'retrying', next_run_at = ?, locked_at = NULL, locked_by = NULL,
+                    lease_token = NULL, heartbeat_at = NULL, last_error = 'worker lease expired',
+                    progress_message = 'lease expired; retrying', updated_at = ?
+                WHERE status = 'running' AND COALESCE(heartbeat_at, locked_at) < ?
                 """,
                 (self._iso(now), self._iso(now), self._iso(cutoff)),
             )
@@ -315,20 +434,11 @@ class SQLiteExtractionQueue:
             raise LookupError(f"Unknown extraction job: {job_id}")
         return parsed
 
-    def list(
-        self,
-        *,
-        status: str | None = None,
-        limit: int = 100,
-    ) -> list[dict[str, Any]]:
+    def list(self, *, status: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         with self._connection() as connection:
             if status:
                 rows = connection.execute(
-                    """
-                    SELECT * FROM extraction_jobs
-                    WHERE status = ?
-                    ORDER BY created_at DESC LIMIT ?
-                    """,
+                    "SELECT * FROM extraction_jobs WHERE status = ? ORDER BY created_at DESC LIMIT ?",
                     (status, max(int(limit), 1)),
                 ).fetchall()
             else:
