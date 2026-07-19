@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.control import RuntimeSettingsStore
+from src.control.runtime_settings import RuntimeSettingsStore
 from src.memory import VaultLayout
 from src.storage import StateDatabase
 
