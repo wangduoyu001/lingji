@@ -8,7 +8,10 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from src.acceptance import AcceptanceChecker, AcceptanceReportStore
+import requests
+
+from src.acceptance import AcceptanceChecker
+from src.acceptance_reports import AcceptanceReportStore
 from src.config import Settings
 
 
@@ -59,7 +62,7 @@ class ReadOnlyAcceptanceTests(unittest.TestCase):
         ollama = next(item for item in report["checks"] if item["name"] == "health:ollama")
         self.assertEqual(ollama["details"]["models"], ["qwen3:8b"])
 
-    @patch("src.health.requests.get", side_effect=Exception("offline"))
+    @patch("src.health.requests.get", side_effect=requests.ConnectionError("offline"))
     def test_existing_sqlite_is_opened_without_modifying_it(self, _request_get):
         self.settings.storage_path.mkdir(parents=True)
         database = self.settings.memory_db_path
@@ -77,7 +80,7 @@ class ReadOnlyAcceptanceTests(unittest.TestCase):
         self.assertEqual(database.stat().st_mtime_ns, before_mtime)
         self.assertTrue(report["inputs_unchanged"])
 
-    @patch("src.health.requests.get", side_effect=Exception("offline"))
+    @patch("src.health.requests.get", side_effect=requests.ConnectionError("offline"))
     def test_deep_zip_check_reports_crc_corruption(self, _request_get):
         archive_path = self.root / "chatgpt.zip"
         payload = b"hello acceptance crc"
