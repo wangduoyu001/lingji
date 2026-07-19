@@ -30,6 +30,7 @@ REQUIRED_FOLDERS: tuple[str, ...] = (
     "00-System/Logs",
     "00-System/Index-Status",
     "00-System/Backups",
+    "00-System/Context-Packs",
     "01-Inbox/Mobile-Share",
     "01-Inbox/Browser",
     "01-Inbox/Local-Files",
@@ -41,6 +42,7 @@ REQUIRED_FOLDERS: tuple[str, ...] = (
     "01-Inbox/Audio",
     "01-Inbox/Images",
     "01-Inbox/Manual",
+    "01-Inbox/AI-Memory",
     "02-Sources/Conversations/ChatGPT",
     "02-Sources/Conversations/Codex",
     "02-Sources/Conversations/Kimi",
@@ -55,6 +57,12 @@ REQUIRED_FOLDERS: tuple[str, ...] = (
     "02-Sources/Audios",
     "02-Sources/Images",
     "02-Sources/GitHub",
+    "03-Knowledge/Core-Memory/Identity",
+    "03-Knowledge/Core-Memory/Preferences",
+    "03-Knowledge/Core-Memory/Goals",
+    "03-Knowledge/Core-Memory/Constraints",
+    "03-Knowledge/Core-Memory/Working-Rules",
+    "03-Knowledge/Core-Memory/General",
     "03-Knowledge/AI",
     "03-Knowledge/Self-Media",
     "03-Knowledge/Business",
@@ -91,6 +99,7 @@ REQUIRED_FOLDERS: tuple[str, ...] = (
     "08-Private/Identity",
     "08-Private/Private-Chats",
     "09-Archive/Superseded",
+    "09-Archive/Rejected-Memory-Candidates",
     "09-Archive/Completed-Projects",
     "09-Archive/Cold-Sources",
 )
@@ -160,11 +169,7 @@ class VaultClassification:
 
 
 class VaultLayout:
-    """Single-Vault folder layout and routing rules.
-
-    The folder tree is the human-facing organization layer. Metadata and IDs remain
-    the stable machine-facing layer, so notes can move without losing identity.
-    """
+    """Single-Vault folder layout and routing rules."""
 
     def __init__(self, root: Path | str):
         self.root = Path(root).expanduser()
@@ -176,6 +181,14 @@ class VaultLayout:
     @property
     def opportunities_dir(self) -> Path:
         return self.root / "04-Projects" / "Money-Experiments" / "Opportunities"
+
+    @property
+    def core_memory_dir(self) -> Path:
+        return self.root / "03-Knowledge" / "Core-Memory"
+
+    @property
+    def memory_candidates_dir(self) -> Path:
+        return self.root / "01-Inbox" / "AI-Memory"
 
     def ensure(self) -> list[Path]:
         self.root.mkdir(parents=True, exist_ok=True)
@@ -257,6 +270,7 @@ class VaultLayout:
             ("00-System", "Logs"),
             ("00-System", "Index-Status"),
             ("00-System", "Backups"),
+            ("00-System", "Context-Packs"),
         )
         return not any(parts[: len(prefix)] == prefix for prefix in excluded_prefixes)
 
@@ -265,6 +279,8 @@ class VaultLayout:
             return False
         relative = self.relative(path)
         if not relative.parts:
+            return False
+        if relative.parts[:2] == ("01-Inbox", "AI-Memory"):
             return False
         return relative.parts[0] not in {
             "00-System",
@@ -301,6 +317,8 @@ class VaultLayout:
         if len(values) < 2:
             return ""
         if values[0] == "01-Inbox":
+            if values[1] == "AI-Memory":
+                return "ai_memory_candidate"
             reverse = {value.split("/", 1)[1]: key for key, value in SOURCE_TO_INBOX.items()}
             return reverse.get(values[1], values[1].lower().replace("-", "_"))
         if values[0] == "02-Sources":
