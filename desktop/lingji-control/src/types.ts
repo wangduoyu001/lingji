@@ -5,6 +5,7 @@ export type Row = Record<string, any>;
 export type PageId =
   | "overview"
   | "system_compute"
+  | "models"
   | "jobs"
   | "capture"
   | "media"
