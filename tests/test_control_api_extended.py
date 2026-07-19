@@ -49,12 +49,43 @@ class ExtendedControlApiTests(unittest.TestCase):
         self.assertIn("queue", payload)
         self.assertIn("storage", payload)
         self.assertIn("providers", payload)
+        self.assertIn("acceptance", payload)
         jobs = self.client.get("/api/jobs", headers=self.headers)
         self.assertEqual(jobs.status_code, 200)
         self.assertIn("stats", jobs.json())
         logs = self.client.get("/api/logs?lines=1", headers=self.headers)
         self.assertEqual(logs.status_code, 200)
         self.assertEqual(logs.json()["lines"], ["line two"])
+
+    @patch("src.health.requests.get")
+    def test_acceptance_run_is_read_only_and_listed(self, request_get):
+        request_get.return_value.raise_for_status.return_value = None
+        request_get.return_value.content = b'{"models": []}'
+        request_get.return_value.json.return_value = {"models": []}
+        note = self.settings.vault_path / "note.md"
+        before = note.read_bytes()
+
+        response = self.client.post(
+            "/api/acceptance/run",
+            headers=self.headers,
+            json={
+                "vault": str(self.settings.vault_path),
+                "deep_zip_check": True,
+                "hash_inputs": True,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["report"]["read_only"])
+        self.assertTrue(payload["report"]["inputs_unchanged"])
+        self.assertEqual(note.read_bytes(), before)
+        self.assertTrue(Path(payload["json_path"]).is_file())
+        self.assertTrue(Path(payload["markdown_path"]).is_file())
+        history = self.client.get("/api/acceptance/reports", headers=self.headers)
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(len(history.json()), 1)
+        self.assertEqual(history.json()[0]["status"], payload["report"]["status"])
 
     def test_storage_plan_execute_and_restore_requires_confirmation(self):
         self.client.patch(
