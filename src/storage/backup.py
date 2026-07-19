@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import sqlite3
+import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +15,7 @@ from uuid import uuid4
 class BackupManager:
     """Create verified ZIP backups and restore only into an isolated staging area."""
 
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def __init__(self, settings: Any, state_db: Any | None = None):
         self.settings = settings
@@ -40,37 +42,48 @@ class BackupManager:
         target = self.backup_root / f"{backup_id}.zip"
         temporary = target.with_suffix(".zip.partial")
 
-        sources = self._sources(include_raw=include_raw, include_derived=include_derived)
-        manifest_files: list[dict[str, Any]] = []
-        with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
-            for label, root in sources:
-                if not root.exists():
-                    continue
-                if root.is_file():
-                    arcname = f"data/{label}/{root.name}"
-                    archive.write(root, arcname)
-                    manifest_files.append(self._manifest_row(root, arcname))
-                    continue
-                for path in self._iter_files(root):
-                    relative = path.relative_to(root).as_posix()
-                    arcname = f"data/{label}/{relative}"
-                    archive.write(path, arcname)
-                    manifest_files.append(self._manifest_row(path, arcname))
+        with tempfile.TemporaryDirectory(prefix="lingji-backup-", dir=self.backup_root) as snapshot_text:
+            snapshot_root = Path(snapshot_text)
+            sqlite_snapshots = self._snapshot_databases(snapshot_root)
+            sources = self._sources(
+                include_raw=include_raw,
+                include_derived=include_derived,
+                sqlite_snapshots=sqlite_snapshots,
+            )
+            manifest_files: list[dict[str, Any]] = []
+            with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+                for label, root in sources:
+                    if not root.exists():
+                        continue
+                    if root.is_file():
+                        arcname = f"data/{label}/{root.name}"
+                        archive.write(root, arcname)
+                        manifest_files.append(self._manifest_row(root, arcname))
+                        continue
+                    for path in self._iter_files(root):
+                        relative = path.relative_to(root).as_posix()
+                        arcname = f"data/{label}/{relative}"
+                        archive.write(path, arcname)
+                        manifest_files.append(self._manifest_row(path, arcname))
 
-            manifest = {
-                "schema_version": self.SCHEMA_VERSION,
-                "backup_id": backup_id,
-                "created_at": datetime.now().isoformat(timespec="seconds"),
-                "profile": profile,
-                "include_raw": include_raw,
-                "include_derived": include_derived,
-                "files": manifest_files,
-                "summary": {
-                    "files": len(manifest_files),
-                    "bytes": sum(int(row["size"]) for row in manifest_files),
-                },
-            }
-            archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+                manifest = {
+                    "schema_version": self.SCHEMA_VERSION,
+                    "backup_id": backup_id,
+                    "created_at": datetime.now().isoformat(timespec="seconds"),
+                    "profile": profile,
+                    "include_raw": include_raw,
+                    "include_derived": include_derived,
+                    "sqlite_snapshot_method": "sqlite_backup_api",
+                    "files": manifest_files,
+                    "summary": {
+                        "files": len(manifest_files),
+                        "bytes": sum(int(row["size"]) for row in manifest_files),
+                    },
+                }
+                archive.writestr(
+                    "manifest.json",
+                    json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                )
 
         temporary.replace(target)
         verification = self.verify_backup(target)
@@ -132,6 +145,10 @@ class BackupManager:
                         errors.append(f"Size mismatch: {arcname}")
                     if hashlib.sha256(data).hexdigest() != str(row.get("sha256") or ""):
                         errors.append(f"Hash mismatch: {arcname}")
+                    if arcname.startswith(("data/state_db/", "data/memory_db/")):
+                        sqlite_error = self._verify_sqlite_bytes(data)
+                        if sqlite_error:
+                            errors.append(f"SQLite invalid {arcname}: {sqlite_error}")
         except (OSError, zipfile.BadZipFile, KeyError, json.JSONDecodeError, UnicodeDecodeError) as exc:
             errors.append(str(exc))
         return {"valid": not errors, "path": str(path), "checked_files": checked, "errors": errors}
@@ -169,16 +186,49 @@ class BackupManager:
         self._event("backup_restore_staged", backup_id, {"staging_path": str(target)})
         return result
 
-    def _sources(self, *, include_raw: bool, include_derived: bool) -> list[tuple[str, Path]]:
+    def _snapshot_databases(self, snapshot_root: Path) -> dict[str, Path]:
+        result: dict[str, Path] = {}
+        for label, source in (
+            ("state_db", self.settings.state_db_path),
+            ("memory_db", self.settings.memory_db_path),
+        ):
+            if not source.exists():
+                continue
+            destination = snapshot_root / label / source.name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            source_connection = sqlite3.connect(source, timeout=30)
+            target_connection = sqlite3.connect(destination)
+            try:
+                source_connection.execute("PRAGMA busy_timeout = 30000")
+                source_connection.backup(target_connection)
+                target_connection.commit()
+                row = target_connection.execute("PRAGMA quick_check").fetchone()
+                if not row or str(row[0]).lower() != "ok":
+                    raise sqlite3.DatabaseError(f"SQLite snapshot quick_check failed: {row}")
+            finally:
+                target_connection.close()
+                source_connection.close()
+            result[label] = destination
+        return result
+
+    def _sources(
+        self,
+        *,
+        include_raw: bool,
+        include_derived: bool,
+        sqlite_snapshots: Mapping[str, Path],
+    ) -> list[tuple[str, Path]]:
         storage = self.settings.storage_path
         rows = [
             ("vault", self.settings.vault_path),
             ("runtime_settings", self.settings.runtime_settings_path),
-            ("state_db", self.settings.state_db_path),
-            ("memory_db", self.settings.memory_db_path),
             ("index", storage / "pemis_index.json"),
             ("versions", storage / "versions"),
         ]
+        for label in ("state_db", "memory_db"):
+            snapshot = sqlite_snapshots.get(label)
+            if snapshot:
+                rows.append((label, snapshot))
         if include_raw:
             rows.append(("raw", storage / "raw"))
         if include_derived:
@@ -224,6 +274,21 @@ class BackupManager:
         except ValueError as exc:
             raise PermissionError(f"Unsafe backup member: {member_name}") from exc
         return destination
+
+    @staticmethod
+    def _verify_sqlite_bytes(data: bytes) -> str:
+        with tempfile.TemporaryDirectory(prefix="lingji-sqlite-verify-") as directory:
+            path = Path(directory) / "database.db"
+            path.write_bytes(data)
+            try:
+                connection = sqlite3.connect(path)
+                try:
+                    row = connection.execute("PRAGMA quick_check").fetchone()
+                finally:
+                    connection.close()
+                return "" if row and str(row[0]).lower() == "ok" else str(row)
+            except sqlite3.Error as exc:
+                return str(exc)
 
     @staticmethod
     def _sha256(path: Path) -> str:
