@@ -1,10 +1,10 @@
 # 灵机后续开发、实施与验收总计划
 
-> 版本：`v2.4`  
+> 版本：`v2.5`  
 > 日期：`2026-07-20`  
 > 仓库：`wangduoyu001/lingji`  
 > 稳定基线：`feature/extraction-hardening-web-skills-ui`  
-> 当前堆叠：`PR #4 → PR #6 → PR #7`  
+> 当前堆叠：`PR #4 → PR #6 → PR #7 → PR #8`  
 > 架构增补：`PR #5`  
 > 长期权威源：Obsidian Markdown
 
@@ -35,8 +35,9 @@
 | P0-B 真实环境只读验收 | `REVIEW_REQUIRED` | PR #4 | 自动 CI 全绿，等待主人真实资料 |
 | v1.1 架构与默认值 UI 政策 | `REVIEW_REQUIRED` | PR #5 | 只改文档，不覆盖 v1.0 |
 | P1 桌面 UI 模块化 | `REVIEW_REQUIRED` | PR #6 | 代码 CI 全绿，等待主人 UI 和正式集成 |
-| P2 硬件与算力模式 | `REVIEW_REQUIRED` | PR #7 | 自动 CI 全绿，等待 RTX 4060 真机和正式集成 |
-| P3 本地模型中心 | `TODO` | 待建立 | 允许先做 Research、契约和只读 Inventory |
+| P2 硬件与算力模式 | `REVIEW_REQUIRED` | PR #7 | 最终 CI 全绿，等待 RTX 4060 真机和正式集成 |
+| P3 本地模型中心第一增量 | `REVIEW_REQUIRED` | PR #8 | 只读 Registry/Inventory 与 UI 全绿，等待真机清单 |
+| P3 模型兼容与安全操作 | `TODO` | 后续独立 PR | 加载测试、短基准、下载和删除保护尚未开始 |
 | P4 向量记忆与混合检索 | `TODO` | 待建立 | 依赖 P2/P3 稳定契约 |
 | P5 语义记忆与活动中心 | `TODO` | 待建立 | 依赖 P1/P4 |
 | P6 云端 Provider 与密钥安全 | `TODO` | 待建立 | 本地优先，默认关闭 |
@@ -48,9 +49,10 @@
 - 主人 Vault、ChatGPT 导出和媒体尚未真机验收；
 - P1 尚未主人桌面验收；
 - P2 尚未核对 RTX 4060、CUDA、磁盘和 Ollama 真值；
+- P3 尚未核对主人真实 Ollama 清单，未实现加载和基准；
 - HybridRetriever 仍以 `semantic_provider=None` 启动；
 - Qdrant、双层向量索引、真正批量 Embedding 未实现；
-- 模型中心、WebSocket 活动流、云端 Provider、本地 Office/PDF/代码检索未实现。
+- WebSocket 活动流、云端 Provider、本地 Office/PDF/代码检索未实现。
 
 ---
 
@@ -70,7 +72,6 @@
 - Run `29696837874` 全绿；
 - Windows `113 tests / OK`；
 - App Shell、pages、components、hooks、types、正式导航和设置基础已拆分；
-- 环境验收已进入正式导航；
 - 报告：`docs/DESKTOP_UI_MODULARIZATION_REPORT.md`。
 
 剩余：主人检查导航、排版和设置交互；P0-B 后重新基于正式集成分支。
@@ -78,17 +79,40 @@
 ## P2
 
 - PR #7；
-- 初始全绿 Run `29698784423`；
-- Windows初始 `117 tests / OK`；
-- 新增 `HardwareCapabilityService`、FastAPI 接口、算力模式、设置和“系统与算力”页面；
+- 最终 Head `c2590a9d5af9decf1a69aadc310867eaaca80bd0`；
+- 最终 Run `29699277515` 全绿；
+- Windows `118 tests / OK`；
 - 检测系统、CPU、内存、磁盘、NVIDIA GPU、显存、驱动、CUDA、Ollama、FFmpeg、FFprobe 和 Qdrant Client/目录；
 - 无 GPU、无 psutil、Ollama 离线时降级；
-- GPU 只作为候选设备，具体模型仍需加载测试和短基准；
-- 所有算力默认值进入 RuntimeSettingsStore 和设置 UI；
-- 静态缓存、遥测缓存和 GPU 检测最短间隔会随主人设置生效；
+- 算力模式、设置和“系统与算力”页面完成；
+- 静态缓存、遥测缓存和 GPU 检测最短间隔随主人设置生效；
 - 报告：`docs/HARDWARE_COMPUTE_MODE_REPORT.md`。
 
-剩余：最新缓存策略提交全量 CI、RTX 4060 真机核对、主人操作算力模式、正式集成复验。
+剩余：RTX 4060/CUDA/磁盘/Ollama 真机核对、主人操作算力模式、正式集成复验。
+
+## P3 第一增量
+
+- PR #8；
+- 验证 Head `00d57747136868044cc70414420ec8f29b990f2e`；
+- Run `29699695259` 全绿；
+- Windows `123 tests / OK`；
+- 新增模型专项测试 5 项；
+- Linux、Windows、Desktop UI、TypeScript、Vite、Tauri、MCP、浏览器扩展和 Obsidian 插件全部成功；
+- 报告：`docs/LOCAL_MODEL_CENTER_REPORT.md`。
+
+已完成：
+
+1. 六类模型用途和 Provider Registry；
+2. Ollama 安装清单、运行状态、显存证据和官方能力；
+3. 参数规模、量化、Embedding 维度和上下文；
+4. 配置中缺失模型明确显示；
+5. faster-whisper/PaddleOCR 包、配置和路径状态；
+6. 所有兼容性保持 `unverified`；
+7. FastAPI Registry、Inventory 和只读刷新；
+8. “AI 与模型”一级页面；
+9. 下载、删除、测速和正式切换未伪装成可用。
+
+剩余：主人真实 Ollama 清单、静态资源估算、实际加载、短基准、Model Assignment、空间检查、下载/删除保护和正式集成复验。
 
 ---
 
@@ -130,6 +154,7 @@ feature/extraction-hardening-web-skills-ui
 └── PR #4 test/real-environment-acceptance
     └── PR #6 refactor/desktop-ui-modular-foundation
         └── PR #7 feature/hardware-capability-service
+            └── PR #8 feature/local-model-registry-inventory
 ```
 
 PR #5 独立基于稳定基线。
@@ -139,9 +164,9 @@ P0-B 通过后：
 ```text
 合并 PR #4 和 PR #5
 → 创建 integration/lingji-v1
-→ 重新整理 PR #6 和 PR #7
+→ 重新整理 PR #6、#7、#8
 → 全量 CI
-→ 主人 P1/P2 UI 与真机验收
+→ 主人 P1/P2/P3 UI 与真机验收
 ```
 
 同时编码分支最多 3 个；同时修改共享热点的分支最多 1 个。
@@ -168,17 +193,26 @@ P0-B 通过后：
 
 状态：`REVIEW_REQUIRED`。
 
-代码已完成。剩余最新 CI、RTX 4060/CUDA/磁盘/Ollama 真机核对、CPU_ONLY/GPU 优先操作验收和正式集成复验。
+代码和最终自动 CI 已完成。剩余 RTX 4060/CUDA/磁盘/Ollama 真机核对、CPU_ONLY/GPU 优先操作验收和正式集成复验。
 
 ## P3 本地模型中心
 
-状态：`TODO`。
+第一增量状态：`REVIEW_REQUIRED`。
 
-等待真机期间允许：Research Notes、Model Registry、数据契约、失败测试、只读模型 Inventory、UI 页面骨架和设置定义。
+下一增量在等待真机期间允许：
 
-暂不允许：自动下载或删除模型、正式加载基准、宣布模型兼容、修改向量索引。
+- Model Assignment 数据契约；
+- 静态 RAM/显存估算，必须标记低置信度；
+- 加载测试和基准结果的数据模型与失败测试；
+- 下载、删除、路径迁移的影响预览契约；
+- 所有相关默认值的设置定义和 UI 说明。
 
-最终需要模型分类、安装状态、兼容性五阶段、短基准、下载暂停恢复、删除影响预览和“AI 与模型”页面。
+暂不允许：
+
+- 真正下载或删除模型；
+- 自动加载大型模型；
+- 输出正式兼容结论；
+- 修改 Embedding 正式索引。
 
 ## P4 向量记忆与混合检索
 
@@ -211,7 +245,7 @@ Qdrant Local Mode、Source/Canonical 双层版本化 Collection、Embedding Prof
 模块标记 `ACCEPTED` 必须满足：
 
 - Research、边界、失败测试、最小实现完整；
-- Linux、Windows、CPU_ONLY 或无 GPU通过；
+- Linux、Windows、CPU_ONLY 或无 GPU 通过；
 - 桌面 Build、Smoke 和人工 UI 通过；
 - 所有默认值有 UI 和真实生效路径；
 - 高风险操作有预览、确认和回滚；
@@ -227,9 +261,9 @@ Qdrant Local Mode、Source/Canonical 双层版本化 Collection、Embedding Prof
 # 8. 当前下一动作
 
 ```text
-等待最新 P2 CI
-→ 并行开始 P3 Research、契约、失败测试和只读 Inventory
-→ 不启动模型下载、正式基准或 P4/P5 生产编码
+等待 PR #8 文档收尾 CI
+→ 可继续 P3 下一增量的数据契约和失败测试
+→ 不执行真实下载、删除、大模型加载或正式兼容判定
 → 主人方便时完成 P0-B
-→ 建立正式集成基线并重新验证 P1/P2
+→ 建立正式集成基线并重新验证 P1/P2/P3
 ```
