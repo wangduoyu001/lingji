@@ -11,6 +11,7 @@ import MediaPage from "./pages/MediaPage";
 import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
 import StoragePage from "./pages/StoragePage";
+import SystemComputePage from "./pages/SystemComputePage";
 import type { PageId } from "./types";
 
 export default function App() {
@@ -38,6 +39,7 @@ export default function App() {
         {!connection.connected && <Notice kind="warning">先启动 <code>python run_control_api.py</code>。浏览器开发模式需填写 <code>storage/control_api_token</code>。</Notice>}
         <section className="page-content">
           {page === "overview" && <OverviewPage data={connection.overview} refresh={connection.connect} />}
+          {page === "system_compute" && <SystemComputePage api={connection.api} active={connection.connected} />}
           {page === "jobs" && <JobsPage api={connection.api} active={connection.connected} />}
           {page === "capture" && <CapturePage api={connection.api} active={connection.connected} />}
           {page === "media" && <MediaPage api={connection.api} active={connection.connected} />}
