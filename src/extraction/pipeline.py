@@ -5,8 +5,9 @@ import json
 import logging
 import os
 import socket
+import threading
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 from uuid import uuid4
 
 from .models import ExtractionRequest
@@ -15,6 +16,8 @@ from .registry import AdapterRegistry
 from .sink import VaultExtractionSink
 
 logger = logging.getLogger("lingji.extraction")
+
+DocumentsWrittenCallback = Callable[[dict[str, Any]], None]
 
 
 class ExtractionPipeline:
@@ -25,11 +28,17 @@ class ExtractionPipeline:
         sink: VaultExtractionSink,
         *,
         default_max_attempts: int = 3,
+        lease_heartbeat_seconds: float = 30.0,
+        stale_after_seconds: int = 1800,
+        on_documents_written: DocumentsWrittenCallback | None = None,
     ):
         self.queue = queue
         self.registry = registry
         self.sink = sink
         self.default_max_attempts = max(int(default_max_attempts), 1)
+        self.lease_heartbeat_seconds = max(float(lease_heartbeat_seconds), 2.0)
+        self.stale_after_seconds = max(int(stale_after_seconds), 30)
+        self.on_documents_written = on_documents_written
 
     def enqueue(
         self,
@@ -44,6 +53,8 @@ class ExtractionPipeline:
         max_attempts: int | None = None,
         force: bool = False,
     ) -> dict[str, Any]:
+        normalized_options = dict(options or {})
+        normalized_payload = dict(payload or {})
         if input_path:
             input_path = Path(input_path).expanduser()
             if not input_path.exists():
@@ -51,22 +62,24 @@ class ExtractionPipeline:
         adapter = self.registry.resolve(
             source_type,
             input_path,
-            payload or {},
+            normalized_payload,
             preferred=adapter_name,
         )
         key = idempotency_key or self._idempotency_key(
             source_type,
             input_path=input_path,
-            payload=payload,
+            payload=normalized_payload,
+            options=normalized_options,
             adapter_name=adapter.name,
             adapter_version=adapter.version,
         )
         return self.queue.enqueue(
             source_type,
             input_path=input_path,
-            payload=payload or {},
-            options=options or {},
+            payload=normalized_payload,
+            options=normalized_options,
             adapter_name=adapter.name,
+            adapter_version=adapter.version,
             idempotency_key=key,
             priority=priority,
             max_attempts=max_attempts or self.default_max_attempts,
@@ -105,13 +118,22 @@ class ExtractionPipeline:
             adapter_version=adapter.version,
             raw_snapshot=raw_snapshot,
         )
-        return {
+        response = {
             "execution_id": request.job_id,
             "source_type": source_type,
             "adapter": adapter.name,
             "adapter_version": adapter.version,
             **result,
         }
+        if self.on_documents_written:
+            try:
+                self.on_documents_written(response)
+                response["indexed"] = True
+            except Exception as exc:
+                logger.exception("Post-extraction index synchronization failed")
+                response["indexed"] = False
+                response["index_error"] = str(exc)[:1000]
+        return response
 
     def process_next(
         self,
@@ -123,6 +145,15 @@ class ExtractionPipeline:
         job = self.queue.claim(worker_id, job_id=job_id)
         if not job:
             return None
+        lease_token = str(job.get("lease_token") or "")
+        stop_heartbeat = threading.Event()
+        heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            args=(stop_heartbeat, job["job_id"], worker_id, lease_token),
+            name=f"lingji-extraction-heartbeat-{job['job_id']}",
+            daemon=True,
+        )
+        heartbeat_thread.start()
         try:
             result = self.execute(
                 job["source_type"],
@@ -132,12 +163,50 @@ class ExtractionPipeline:
                 adapter_name=job.get("adapter_name"),
                 execution_id=job["job_id"],
             )
-            completed = self.queue.complete(job["job_id"], result)
+            completed = self.queue.complete(
+                job["job_id"],
+                result,
+                worker_id=worker_id,
+                lease_token=lease_token,
+            )
             return {"job": completed, "result": result}
         except Exception as exc:
             logger.exception("Extraction job failed: %s", job["job_id"])
-            failed = self.queue.fail(job["job_id"], str(exc))
+            try:
+                failed = self.queue.fail(
+                    job["job_id"],
+                    str(exc),
+                    worker_id=worker_id,
+                    lease_token=lease_token,
+                )
+            except RuntimeError as lease_error:
+                failed = self.queue.get(job["job_id"])
+                return {
+                    "job": failed,
+                    "error": str(exc),
+                    "lease_error": str(lease_error),
+                }
             return {"job": failed, "error": str(exc)}
+        finally:
+            stop_heartbeat.set()
+            heartbeat_thread.join(timeout=max(self.lease_heartbeat_seconds, 2.0))
+
+    def _heartbeat_loop(
+        self,
+        stop_event: threading.Event,
+        job_id: str,
+        worker_id: str,
+        lease_token: str,
+    ) -> None:
+        while not stop_event.wait(self.lease_heartbeat_seconds):
+            if not self.queue.heartbeat(
+                job_id,
+                worker_id,
+                lease_token,
+                progress_message="processing",
+            ):
+                logger.warning("Extraction lease heartbeat rejected: %s", job_id)
+                return
 
     def process_pending(
         self,
@@ -146,7 +215,7 @@ class ExtractionPipeline:
         worker_id: str | None = None,
     ) -> dict[str, Any]:
         worker_id = worker_id or self._worker_id()
-        self.queue.release_stale()
+        self.queue.release_stale(self.stale_after_seconds)
         summary = {
             "processed": 0,
             "completed": 0,
@@ -187,6 +256,7 @@ class ExtractionPipeline:
         *,
         input_path: Path | None,
         payload: Mapping[str, Any] | None,
+        options: Mapping[str, Any] | None,
         adapter_name: str | None,
         adapter_version: str = "",
     ) -> str:
@@ -206,6 +276,7 @@ class ExtractionPipeline:
             "adapter_version": adapter_version,
             "input": file_identity,
             "payload": payload or {},
+            "options": options or {},
         }
         encoded = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -222,7 +293,7 @@ class ExtractionPipeline:
     def _directory_manifest(path: Path) -> list[dict[str, Any]]:
         result = []
         for file_path in sorted(path.rglob("*")):
-            if file_path.is_file():
+            if file_path.is_file() and not file_path.is_symlink():
                 stat = file_path.stat()
                 result.append(
                     {
