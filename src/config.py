@@ -32,12 +32,23 @@ class Settings(BaseSettings):
     scheduler_poll_seconds: float = 60.0
     scheduler_workers: int = 2
     manual_command_interval_minutes: int = 2
+    extraction_request_interval_minutes: int = 1
 
     # Unified extraction framework and SQLite queue
     extraction_worker_enabled: bool = True
     extraction_poll_seconds: float = 5.0
     extraction_batch_size: int = 5
     extraction_max_attempts: int = 3
+    extraction_lease_heartbeat_seconds: float = 30.0
+    extraction_stale_after_seconds: int = 1800
+
+    # Safe web and social capture
+    web_network_fetch_enabled: bool = False
+    web_network_timeout_seconds: float = 15.0
+    web_max_response_bytes: int = 8 * 1024 * 1024
+
+    # Skill registry. Comma-separated roots are optional and never copied into the Vault.
+    skill_auto_sync_roots: str = ""
 
     # Rebuildable permanent-memory retrieval index
     memory_db_name: str = "lingji_memory.db"
@@ -87,6 +98,14 @@ class Settings(BaseSettings):
     @property
     def memory_db_path(self) -> Path:
         return self.storage_path / self.memory_db_name
+
+    @property
+    def skill_sync_paths(self) -> list[Path]:
+        return [
+            Path(value.strip()).expanduser()
+            for value in self.skill_auto_sync_roots.split(",")
+            if value.strip()
+        ]
 
 
 settings = Settings()
