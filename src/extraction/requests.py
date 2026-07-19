@@ -85,6 +85,29 @@ class ExtractionRequestInbox:
             if not input_path:
                 raise ValueError("input_path is required")
             source_type = str(metadata.get("source_type") or metadata.get("media_type") or "media")
+            options = {
+                "project_id": metadata.get("project") or metadata.get("project_id") or [],
+                "extract_audio": bool(metadata.get("extract_audio", False)),
+                "extract_keyframes": bool(metadata.get("extract_keyframes", False)),
+                "transcript_path": metadata.get("transcript_path") or "",
+                "ocr_path": metadata.get("ocr_path") or "",
+                "visual_notes_path": metadata.get("visual_notes_path") or "",
+            }
+            optional_overrides = {
+                "keyframe_interval_seconds": metadata.get("keyframe_interval_seconds"),
+                "max_keyframes": metadata.get("max_keyframes"),
+                "keyframe_max_dimension": metadata.get("keyframe_max_dimension"),
+                "ffmpeg_max_concurrency": metadata.get("ffmpeg_max_concurrency"),
+                "ffmpeg_threads": metadata.get("ffmpeg_threads"),
+                "max_input_bytes": metadata.get("max_input_bytes"),
+                "max_duration_seconds": metadata.get("max_duration_seconds"),
+                "probe_timeout_seconds": metadata.get("probe_timeout_seconds"),
+                "ffmpeg_timeout_seconds": metadata.get("ffmpeg_timeout_seconds"),
+            }
+            options.update(
+                {key: value for key, value in optional_overrides.items() if value not in (None, "")}
+            )
+            priority_value = metadata.get("priority")
             job = self.pipeline.enqueue(
                 source_type,
                 input_path=input_path,
@@ -94,17 +117,9 @@ class ExtractionRequestInbox:
                     "ocr_text": metadata.get("ocr_text") or "",
                     "visual_notes": metadata.get("visual_notes") or "",
                 },
-                options={
-                    "project_id": metadata.get("project") or metadata.get("project_id") or [],
-                    "extract_audio": bool(metadata.get("extract_audio", False)),
-                    "extract_keyframes": bool(metadata.get("extract_keyframes", False)),
-                    "keyframe_interval_seconds": metadata.get("keyframe_interval_seconds") or 30,
-                    "max_keyframes": metadata.get("max_keyframes") or 120,
-                    "transcript_path": metadata.get("transcript_path") or "",
-                    "ocr_path": metadata.get("ocr_path") or "",
-                    "visual_notes_path": metadata.get("visual_notes_path") or "",
-                },
+                options=options,
                 adapter_name="media_local",
+                priority=int(priority_value) if priority_value not in (None, "") else None,
                 force=bool(metadata.get("force", False)),
             )
             return {"job": job}
