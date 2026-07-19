@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import requests
 from fastapi.testclient import TestClient
 
 from src.config import Settings
@@ -40,7 +41,7 @@ class ExtendedControlApiTests(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    @patch("src.health.requests.get", side_effect=RuntimeError("offline"))
+    @patch("src.health.requests.get", side_effect=requests.ConnectionError("offline"))
     def test_overview_jobs_logs_and_providers(self, _mock_get):
         overview = self.client.get("/api/overview", headers=self.headers)
         self.assertEqual(overview.status_code, 200)
