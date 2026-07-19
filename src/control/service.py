@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from src.acceptance import AcceptanceChecker
+from src.acceptance_reports import AcceptanceReportStore
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.extraction.queue import SQLiteExtractionQueue
 from src.health import StartupHealthChecker
@@ -37,6 +39,7 @@ class LocalControlService:
         self.storage = StorageLifecycleManager(settings, state_db=self.state_db)
         self.backups = BackupManager(settings, state_db=self.state_db)
         self.media_semantic = MediaSemanticService(settings.storage_path)
+        self.acceptance_reports = AcceptanceReportStore(settings.storage_path / "reports" / "acceptance")
 
     def get_settings(self) -> dict[str, Any]:
         return self.runtime_settings.snapshot()
@@ -84,6 +87,7 @@ class LocalControlService:
             "scheduler": self.state_db.list_scheduler_jobs(),
             "events": self.recent_events(limit=30),
             "providers": self.provider_status(),
+            "acceptance": self.list_acceptance_reports(limit=1),
             "settings_summary": {
                 "overrides": settings_snapshot["overrides"],
                 "groups": sorted({item["group"] for item in settings_snapshot["definitions"].values()}),
@@ -124,6 +128,46 @@ class LocalControlService:
             "lines": self._tail(path, limit),
             "size": path.stat().st_size,
         }
+
+    def run_acceptance(
+        self,
+        *,
+        vault: str | None = None,
+        chatgpt_export: str | None = None,
+        media: str | None = None,
+        deep_zip_check: bool = True,
+        hash_inputs: bool = True,
+    ) -> dict[str, Any]:
+        checked_settings = self.settings.model_copy(
+            update={
+                "vault_dir": vault or self.settings.vault_dir,
+                "vault_auto_init": False,
+            }
+        )
+        report = AcceptanceChecker(
+            checked_settings,
+            chatgpt_export=Path(chatgpt_export).expanduser() if chatgpt_export else None,
+            media_path=Path(media).expanduser() if media else None,
+            deep_zip_check=deep_zip_check,
+            hash_inputs=hash_inputs,
+        ).run()
+        saved = self.acceptance_reports.save(report)
+        self.state_db.append_event(
+            "real_environment_acceptance",
+            "acceptance_report",
+            Path(saved["json_path"]).stem,
+            {
+                "status": report["status"],
+                "errors": report["error_count"],
+                "warnings": report["warning_count"],
+                "inputs_unchanged": report["inputs_unchanged"],
+                "json_path": saved["json_path"],
+            },
+        )
+        return saved
+
+    def list_acceptance_reports(self, limit: int = 100) -> list[dict[str, Any]]:
+        return self.acceptance_reports.list_reports(limit=limit)
 
     def storage_inventory(self) -> dict[str, Any]:
         return self.storage.inventory()
