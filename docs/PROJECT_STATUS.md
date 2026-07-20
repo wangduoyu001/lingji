@@ -68,9 +68,9 @@ Qdrant
 
 No new formal product capability should be added there.
 
-## 5. P0-02 Port Contract
+## 5. P0 Runtime Contracts
 
-Repository implementation has landed:
+### P0-02 Port Contract
 
 ```text
 second_brain compatibility API = 8765
@@ -79,138 +79,135 @@ src MCP Streamable HTTP        = 8767
 src MCP default transport      = stdio
 ```
 
-Implemented:
-
-- `src/runtime/ports.py` validates the three-service contract
-- `run_mcp_server.py` checks HTTP port availability before startup
-- authenticated `GET /api/mcp/status` exposes configuration truth
-- Tauri remains on `8766` only
-
-Still pending:
-
-- real Windows simultaneous binding
-- full repository pytest
-- Tauri real runtime smoke
+Repository implementation has landed. Real Windows simultaneous binding, full pytest and Tauri runtime smoke remain pending.
 
 Report: `docs/TEST_REPORTS/P0_02_PORT_CONTRACT_TEST_REPORT.md`
 
-## 6. P0-03 Workspace And Capability Contract
-
-Repository implementation has landed.
+### P0-03 Workspace And Capability Contract
 
 Implemented:
 
 - one frozen `WorkspaceContext`
 - one `WorkspaceResolver`
 - production and acceptance physical path contracts
-- isolated Vault, raw, state DB, memory DB, Qdrant path/collection, logs, cache, settings, queue DB, backups, derived files, temp and reports
-- explicit rejection of unknown workspaces, path aliases, containment and Windows `C:` paths
-- explicit `WorkspaceContext` seam in `build_memory_gateway()`
-- directory-independent lexical Memory Capability Contract adapter
-
-Validation state:
-
-- isolated workspace contract suite: `8 passed`
-- Python syntax validation: passed
-- lexical capability contract against a full checkout: pending
-- related memory regressions and full pytest: pending
-
-Report: `docs/TEST_REPORTS/P0_03_WORKSPACE_CAPABILITY_CONTRACT_TEST_REPORT.md`
-
-## 7. P1-01 Unified Embedding Provider
-
-Repository implementation has landed in `src/model_center/embedding.py`.
-
-Implemented:
-
-- `EmbeddingProvider` and transport contracts
-- Ollama `/api/embed` and older `/api/embeddings` compatibility
-- primary/fallback model behavior
-- batch embedding
-- verified active-model and dimension state
-- failure counters, timestamps and reset
-- Settings/runtime override factory
-- explicit configuration validation
-
-Important status rule:
-
-```text
-configured model != verified active model
-```
-
-The provider reports `available=false` until a real embedding call succeeds.
-
-Validation state:
-
-- dependency-light fake-transport suite: `13 passed`
-- real Ollama call: pending
-- full repository pytest: pending
-
-Report: `docs/TEST_REPORTS/P1_01_EMBEDDING_PROVIDER_TEST_REPORT.md`
-
-## 8. P1-02 Qdrant SemanticProvider
-
-Repository implementation has landed in the mainline.
-
-Implemented:
-
-- semantic search/index/diagnostic contracts
-- `QdrantSemanticProvider`
-- embedded, remote and in-memory modes
-- WorkspaceContext collection/path isolation
-- deterministic UUIDv5 point IDs
-- batch upsert, chunk delete and memory delete
-- search candidates without replacing HybridRetriever RRF
-- count, kind count, exists, coverage and status
-- dimension mismatch and `rebuild_required`
-- payload text/body exclusion
-- optional-dependency unavailable status
-- real in-memory integration test suite
+- isolated Vault, raw, SQLite, Qdrant, logs, cache, settings, queue, backups, derived, temp and reports
+- lexical Memory Capability Contract
 
 Validation evidence:
 
-- Qdrant 1.12 direct in-memory API smoke passed for collection creation, upsert, filtered query, count, retrieve, ID delete and filter delete
-- committed provider integration pytest: pending complete checkout execution
-- full repository pytest: pending
+- workspace contract: `8 passed`
+- Python syntax validation: passed
+- complete-checkout lexical contract and full pytest: pending
+
+Report: `docs/TEST_REPORTS/P0_03_WORKSPACE_CAPABILITY_CONTRACT_TEST_REPORT.md`
+
+## 6. P1-01 Unified Embedding Provider
+
+Implemented in `src/model_center/embedding.py`:
+
+- Provider and transport contracts
+- Ollama modern and compatibility endpoints
+- primary/fallback model behavior
+- batch embedding
+- verified active model and dimension
+- failure state and reset
+- Settings/runtime factory
+- configuration validation
+
+A configured model is not reported as active before a successful call.
+
+Validation evidence:
+
+- fake-transport suite: `13 passed`
+- real Ollama and full pytest: pending
+
+Report: `docs/TEST_REPORTS/P1_01_EMBEDDING_PROVIDER_TEST_REPORT.md`
+
+## 7. P1-02 Qdrant SemanticProvider
+
+Implemented in `src/retrieval/qdrant_provider.py`:
+
+- search/index/diagnostic contracts
+- embedded, remote and in-memory modes
+- Workspace collection/path isolation
+- deterministic UUIDv5 point IDs
+- upsert, delete, count, exists, coverage and status
+- dimension mismatch and rebuild-required state
+- payload body exclusion
+- optional-dependency unavailable state
+
+Validation evidence:
+
+- Qdrant 1.12 direct in-memory API smoke passed
+- committed provider pytest and full pytest: pending
 
 Report: `docs/TEST_REPORTS/P1_02_QDRANT_SEMANTIC_PROVIDER_TEST_REPORT.md`
 
-## 9. P1-03 MemoryIndexCoordinator
+## 8. P1-03 MemoryIndexCoordinator
 
-Repository implementation has landed in the P1-03 integration branch and is not connected to runtime startup yet.
+Implemented in `src/retrieval/index_coordinator.py` and merged into the mainline:
 
-Implemented:
-
-- `MemoryIndexCoordinator`
-- canonical chunk snapshots before and after lexical synchronization
-- semantic added, updated and removed delta calculation
+- canonical before/after chunk snapshots
+- added, updated and removed semantic delta
 - metadata-aware semantic fingerprints
-- bounded semantic upsert batches
-- semantic delete for removed chunks
-- full rebuild re-upsert of all current chunks
-- lexical-only mode when no semantic provider exists
-- structured `healthy`, `degraded` and `disabled` semantic status
-- lexical success preserved when embedding or Qdrant fails
-- optional state events for coordinated or degraded sync
+- bounded upsert batches
+- semantic delete
+- force rebuild re-upsert
+- lexical-only mode
+- structured healthy/degraded/disabled result
+- lexical commit preserved after semantic failure
 
 Validation state:
 
 - focused coordinator suite committed with 8 scenarios
-- complete-checkout coordinator pytest: pending
-- incremental retrieval regressions and full pytest: pending
+- complete-checkout coordinator pytest and full regression: pending
 
 Report: `docs/TEST_REPORTS/P1_03_MEMORY_INDEX_COORDINATOR_TEST_REPORT.md`
 
+## 9. P1-04 Semantic Runtime Wiring
+
+Repository implementation has landed in the P1-04 integration branch.
+
+The formal runtime now builds one semantic chain:
+
+```text
+EmbeddingProvider
+  -> QdrantSemanticProvider
+  -> HybridRetriever
+  -> MemoryIndexCoordinator
+  -> MemoryGateway
+```
+
+Implemented:
+
+- `build_memory_gateway()` constructs Workspace-aware providers
+- the same Qdrant provider is injected into retrieval and synchronization
+- `MemoryGateway.rebuild()` routes through MemoryIndexCoordinator
+- semantic runtime can be explicitly disabled
+- provider/configuration failure returns a lexical-only gateway
+- existing production Vault and SQLite paths remain the transition mapping
+- explicit acceptance Workspace remains physically isolated
+- runtime warnings are available from memory health
+- Gateway owns and closes created providers
+- lexical capability tests explicitly disable semantic requirements
+
+Validation state:
+
+- runtime wiring suite committed with 6 focused scenarios
+- complete-checkout P1-04 pytest: pending
+- real Ollama + Qdrant runtime: pending
+- full pytest: pending
+
+Report: `docs/TEST_REPORTS/P1_04_SEMANTIC_RUNTIME_WIRING_TEST_REPORT.md`
+
 ## 10. Current Critical Gaps
 
-1. `src/gateway/bootstrap.py` still passes `semantic_provider=None`.
-2. `MemoryGateway.rebuild()` still calls the lexical synchronizer directly instead of `MemoryIndexCoordinator`.
-3. Full staged collection rebuild and validated collection switching are not implemented.
-4. Semantic failure warnings are still suppressed by `HybridRetriever` rather than surfaced structurally.
-5. Runtime Settings does not yet expose editable vector/workspace/MCP groups.
-6. Local Control API does not expose unified vector status or coverage.
-7. Brain Status may still report false zero memory/vector counts.
-8. P0 and Phase 1 full local regression validation remains pending.
+1. Local Control API does not yet expose truthful vector status or coverage.
+2. Brain Status may still report false zero memory/vector counts.
+3. Runtime Settings does not yet expose editable vector/workspace/MCP groups.
+4. Search-time semantic failures are not yet returned as structured query warnings.
+5. Full staged collection rebuild and validated collection switching are not implemented.
+6. Phase 1 complete-checkout regression and real local runtime validation remain pending.
 
 ## 11. Development Freeze Rules
 
@@ -226,27 +223,20 @@ Report: `docs/TEST_REPORTS/P1_03_MEMORY_INDEX_COORDINATOR_TEST_REPORT.md`
 Current next task:
 
 ```text
-P1-04 build_memory_gateway runtime wiring
+P1-05 vector status, coverage and Phase 1 validation
 ```
 
 Required work:
 
-- resolve the selected WorkspaceContext
-- construct the EmbeddingProvider from Settings/runtime values
-- construct QdrantSemanticProvider only when semantic indexing is enabled
-- inject the semantic provider into HybridRetriever
-- inject MemoryIndexCoordinator into MemoryGateway
-- preserve lexical-only startup when Qdrant, Ollama, a model or the dependency is unavailable
-- close owned providers safely
-- add integration tests proving lexical fallback and semantic activation
+- add one shared MemoryStatisticsService
+- expose real memory, embedding and Qdrant state
+- expose vector coverage through Local Control API on 8766
+- fix Brain Status false-zero behavior
+- keep Tauri away from direct Qdrant access
+- run focused and full local validation
+- publish the final Phase 1 report
 
-Then:
-
-```text
-P1-05 vector status, coverage, tests and final Phase 1 report
-```
-
-Do not start Memory Inspector before semantic runtime wiring and shared statistics exist.
+Do not start the full Memory Inspector before shared statistics and Phase 1 validation exist.
 
 ## 13. Required Local Validation
 
@@ -255,6 +245,7 @@ python -m pip install -r requirements.txt
 python -m pytest tests/test_embedding_provider.py -v
 python -m pytest tests/test_qdrant_semantic_provider.py -v
 python -m pytest tests/test_memory_index_coordinator.py -v
+python -m pytest tests/test_semantic_runtime_wiring.py -v
 python -m pytest tests/test_workspace_contract.py tests/test_memory_capability_contract.py -v
 python -m pytest tests/test_incremental_index_sync.py tests/test_memory_retrieval.py -v
 python -m pytest tests/ -v
