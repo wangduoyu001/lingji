@@ -75,6 +75,6 @@ class StructuredSource:
 @dataclass(frozen=True)
 class ExtractionBatch:
     documents: tuple[ExtractedDocument, ...]
-    structured_sources: tuple[StructuredSource, ...] = ()
     summary: Mapping[str, Any] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
+    structured_sources: tuple[StructuredSource, ...] = ()
