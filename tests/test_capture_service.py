@@ -5,6 +5,8 @@ import pytest
 from src.capture.models import CaptureEnvelope, CaptureStatus
 from src.capture.policy import CaptureMode, CapturePolicy
 from src.capture.service import CaptureService
+from src.extraction.models import ExtractionBatch, StructuredConversation, StructuredMessage, StructuredSource
+from src.extraction.structured_sink import StructuredReadModelSink
 
 
 class FakePipeline:
@@ -27,6 +29,26 @@ class FakePipeline:
             self.fail_execute_once = False
             raise RuntimeError("execute failed")
         return {"execution_id": kwargs.get("execution_id", "exec-1")}
+
+
+class FakeStructuredReadModel:
+    def __init__(self):
+        self.bundles = []
+
+    def upsert_bundle(self, bundle):
+        self.bundles.append(bundle)
+        messages = bundle["conversations"][0]["messages"]
+        links = [link for message in messages for link in message.get("memory_links", [])]
+        return {"sources": 1, "conversations": 1, "messages": len(messages), "links": len(links)}
+
+
+class FakeMemoryDatabase:
+    def __init__(self, existing):
+        self.existing = set(existing)
+
+    def fetch_memory(self, memory_id, include_chunks=False):
+        del include_chunks
+        return {"memory_id": memory_id} if memory_id in self.existing else None
 
 
 def test_low_power_queues_web_and_media():
@@ -161,3 +183,51 @@ def test_explicit_share_fields_are_forwarded_without_metadata_shadowing():
     assert payload["description"] == "saved from phone"
     assert payload["external_id"] == "note-42"
     assert payload["metadata"] == {"labels": ["idea"]}
+
+
+def test_codex_messages_link_to_their_own_memories_and_skip_only_missing(tmp_path):
+    read_model = FakeStructuredReadModel()
+    sink = StructuredReadModelSink(
+        read_model,
+        storage_path=tmp_path,
+        memory_database=FakeMemoryDatabase({"mem-report", "mem-task"}),
+    )
+    messages = (
+        StructuredMessage("report", "assistant", "report", 0, metadata={"document_stable_id": "mem-report"}),
+        StructuredMessage("error", "error", "error", 1, metadata={"document_stable_id": "mem-error"}),
+        StructuredMessage("task", "task", "task", 2, metadata={"document_stable_id": "mem-task"}),
+    )
+    batch = ExtractionBatch(
+        documents=(),
+        structured_sources=(
+            StructuredSource(
+                "codex",
+                "repo",
+                "Codex",
+                (
+                    StructuredConversation(
+                        "task-1",
+                        "Codex batch",
+                        messages,
+                        metadata={"document_stable_id": "conversation-fallback"},
+                    ),
+                ),
+            ),
+        ),
+    )
+    for execution_id in ("exec-1", "exec-2"):
+        result = sink.write_batch(
+            batch,
+            raw_snapshot=None,
+            vault_results={},
+            execution_id=execution_id,
+            adapter_name="codex_work_report",
+            adapter_version="1",
+            indexing_succeeded=True,
+        )
+        assert result["links"] == 2
+    records = read_model.bundles[0]["conversations"][0]["messages"]
+    assert records[0]["memory_links"][0]["memory_id"] == "mem-report"
+    assert "memory_links" not in records[1]
+    assert records[2]["memory_links"][0]["memory_id"] == "mem-task"
+    assert read_model.bundles[0] == read_model.bundles[1]
