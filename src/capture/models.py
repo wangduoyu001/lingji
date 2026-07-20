@@ -43,6 +43,10 @@ class CaptureEnvelope:
     cover_url: str = ""
     transcript: str = ""
     ocr_text: str = ""
+    platform: str = ""
+    description: str = ""
+    external_id: str = ""
+    process_later: bool = False
     project_ids: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
     privacy: str = "private"
