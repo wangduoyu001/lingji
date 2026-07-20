@@ -130,12 +130,13 @@ class MemoryInspectorApiTests(unittest.TestCase):
         self.addCleanup(context.__exit__, None, None, None)
         return client
 
+    def test_factory_is_direct_api_implementation_without_monkey_patch_marker(self):
+        self.assertEqual(create_control_app.__module__, "src.control.api")
+        self.assertFalse(hasattr(create_control_app, "_lingji_read_model_contract"))
+
     def test_token_is_required(self):
         client = self.client()
-        self.assertEqual(
-            client.get("/api/memory/inspector/status").status_code,
-            401,
-        )
+        self.assertEqual(client.get("/api/memory/inspector/status").status_code, 401)
         self.assertEqual(
             client.get(
                 "/api/memory/inspector/status",
