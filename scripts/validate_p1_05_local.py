@@ -48,7 +48,13 @@ def check_ollama(base_url: str, model: str, timeout: float) -> dict[str, Any]:
     return result
 
 
-def write_memory(path: Path, memory_id: str, title: str, body: str) -> dict[str, Any]:
+def write_memory(
+    vault_root: Path,
+    path: Path,
+    memory_id: str,
+    title: str,
+    body: str,
+) -> dict[str, Any]:
     import hashlib
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -70,7 +76,7 @@ def write_memory(path: Path, memory_id: str, title: str, body: str) -> dict[str,
     path.write_text(text, encoding="utf-8")
     return {
         "id": memory_id,
-        "relative_path": path.as_posix().split("/vault/", 1)[-1],
+        "relative_path": path.relative_to(vault_root).as_posix(),
         "title": title,
         "memory_type": "knowledge",
         "memory_tier": "archival",
@@ -118,6 +124,10 @@ def run_acceptance(model: str, ollama_url: str, timeout: float) -> dict[str, Any
         root = Path(temporary)
         settings = Settings(
             _env_file=None,
+            vault_dir=str(root / "legacy-vault"),
+            storage_dir=str(root / "legacy-storage"),
+            log_dir=str(root / "legacy-logs"),
+            backup_dir=str(root / "legacy-backups"),
             workspace_root=str(root / "workspaces"),
             workspace_name="acceptance",
             acceptance_qdrant_mode="memory",
@@ -145,12 +155,14 @@ def run_acceptance(model: str, ollama_url: str, timeout: float) -> dict[str, Any
 
         entries = [
             write_memory(
+                workspace.vault_path,
                 workspace.vault_path / "03-Knowledge" / "vector-cn.md",
                 "MEM-P1-05-CN",
                 "中文语义检索",
                 "# 中文语义\n\n灵机需要准确理解中文项目记忆与第二大脑检索。",
             ),
             write_memory(
+                workspace.vault_path,
                 workspace.vault_path / "03-Knowledge" / "vector-en.md",
                 "MEM-P1-05-EN",
                 "English semantic retrieval",
@@ -353,7 +365,16 @@ def main() -> int:
         if report["pytest"]["returncode"] != 0:
             report["status"] = "failed"
     json_path, markdown_path = write_report(report, Path(args.output))
-    print(json.dumps({"status": report["status"], "json": str(json_path), "markdown": str(markdown_path)}, ensure_ascii=False))
+    print(
+        json.dumps(
+            {
+                "status": report["status"],
+                "json": str(json_path),
+                "markdown": str(markdown_path),
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0 if report["status"] == "passed" else 1
 
 
