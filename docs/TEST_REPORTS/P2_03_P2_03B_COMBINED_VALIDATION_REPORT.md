@@ -3,300 +3,291 @@
 > Updated（更新时间）: 2026-07-21  
 > Branch（分支）: `work/p2-03b-validation`  
 > Base Commit（基础提交）: `432ae059454cc7db8ab0ba4aaa63d24f5c9173e9`  
-> Tested Commit（计划验证的代码提交）: `432ae059454cc7db8ab0ba4aaa63d24f5c9173e9`  
-> Final HEAD（本报告验证的代码 HEAD）: `432ae059454cc7db8ab0ba4aaa63d24f5c9173e9`  
-> Report Commit（报告提交）: 由本文件提交生成，以远程分支最终 HEAD 为准  
+> Validation Start Commit（验证起始提交）: `491002a67b2d3ed08c01d852c3c033ebf61c2630`  
+> Security Fix Commit（安全修复代码与测试提交）: `27cdb55953d8537376116e221ea877fb544cba32`  
+> Final HEAD（本报告对应代码 HEAD）: `27cdb55953d8537376116e221ea877fb544cba32`  
+> Report Commit（报告提交）: 由本文件更新生成，以远程分支最终 HEAD 为准  
 > P2-03 Status（状态）: `IMPLEMENTED_NOT_TESTED`  
 > P2-03B Status（状态）: `IMPLEMENTED_NOT_TESTED`  
-> Validation State（验证状态）: `VERIFICATION_NOT_EXECUTED`  
-> Merge Recommendation（合并建议）: `DO_NOT_MERGE`
+> Security Fix State（安全修复状态）: `SECURITY_FIX_IMPLEMENTED_NOT_TESTED`  
+> Merge State（合并状态）: `NOT_MERGED`
 
-## 1. 验证目标
+## 1. 本轮目标
 
-本轮只负责 P2-03 Structured Read Model（结构化读取模型）与 P2-03B Structured Ingestion Wiring（结构化采集接线）的集中测试和合并门禁。
+本轮只修复 Memory Inspector Vector Response（记忆检查器向量响应）的本机路径与异常原文泄漏，并补充 Facade（门面层）与 HTTP API（HTTP 接口）测试代码。
 
-本轮没有：
+没有开始新功能，没有修改数据库 Schema（数据库结构），没有修改 SourceReadModel（来源读取模型），没有进入 `src/extraction/`、`src/capture/` 或 `desktop/lingji-control/`。
 
-- 开始 P2-04。
-- 扩展信息入口。
-- 修改 Tauri。
-- 修改生产实现代码。
-- 合并 `feature/second-brain-memory`。
-
-## 2. 验证环境
+## 2. 修改文件
 
 ```text
-Python Version: 3.13.5
-Operating System: Linux-4.4.0-x86_64-with-glibc2.41
-Architecture: linux/amd64
-CI Environment: true
-pytest Version: 9.0.2
-```
-
-环境限制：
-
-```text
-GitHub 普通网络访问失败：Could not resolve host: github.com
-GitHub Connector 可以读取和写入远程仓库
-当前执行容器没有完整的 LingJi 工作树
-发现的 /tmp/lingji_p203 仅包含旧任务留下的 P2-03 部分文件
-该目录不是 Git 仓库，且缺少 P2-03B 与大量依赖模块
-qdrant-client 未安装
-```
-
-因此不能在真实 `432ae059...` 完整工作树中执行要求的 `compileall` 和两组 pytest。
-
-## 3. 分支准备
-
-验证分支已从指定提交创建：
-
-```text
-work/p2-03b-validation
-<- 432ae059454cc7db8ab0ba4aaa63d24f5c9173e9
-```
-
-创建后与基础提交比较：
-
-```text
-ahead: 0
-behind: 0
-status: identical
-```
-
-报告提交会使验证分支相对基础提交增加一个纯文档提交。
-
-## 4. 要求执行的命令
-
-### 4.1 低成本检查
-
-```bash
-python -m compileall src tests
-```
-
-结果：
-
-```text
-NOT EXECUTED
-```
-
-原因：当前容器不存在目标提交的完整 `src/` 与 `tests/` 工作树。对部分缓存目录运行不能代表目标分支。
-
-### 4.2 第一组核心测试
-
-```bash
-python -m pytest \
-  tests/test_structured_ingestion.py \
-  tests/test_source_read_model.py \
-  tests/test_source_service.py \
-  tests/test_memory_inspector_facade.py \
-  tests/test_memory_inspector_api.py \
-  -v --tb=short
-```
-
-结果：
-
-```text
-NOT EXECUTED on the authoritative full branch worktree
-```
-
-### 4.3 第二组历史回归
-
-```bash
-python -m pytest \
-  tests/test_memory_retrieval.py \
-  tests/test_permanent_memory_gateway.py \
-  tests/test_workspace_contract.py \
-  tests/test_control_api.py \
-  -v --tb=short
-```
-
-结果：
-
-```text
-NOT EXECUTED
-```
-
-按照门禁规则，第一组没有完成并通过，因此第二组不得被描述为已执行或通过。
-
-## 5. 非权威环境诊断
-
-为了确认缓存目录是否可用于验证，曾在 `/tmp/lingji_p203` 的部分文件副本上执行：
-
-```bash
-python -m pytest \
-  tests/test_source_read_model.py \
-  tests/test_source_service.py \
-  tests/test_memory_inspector_facade.py \
-  tests/test_memory_inspector_api.py \
-  -v --tb=short
-```
-
-结果：
-
-```text
-collected: 0
-collection errors: 4
-duration: 0.74s
-```
-
-错误包括缺少：
-
-```text
-src.retrieval
-src.gateway.adapters
-src.control.runtime_settings
-```
-
-这些是“不完整缓存目录”的环境错误，不是目标分支测试失败，不能计入正式 passed/failed 数字，也不能用于 `VALIDATION_FAILED` 判定。
-
-## 6. 正式测试数字
-
-```text
-Passed: NOT EXECUTED
-Failed: NOT EXECUTED
-Skipped: NOT EXECUTED
-Xfailed: NOT EXECUTED
-Duration: NOT AVAILABLE
-py_compile / compileall: NOT EXECUTED
-```
-
-不得把文件读取、静态代码审查、blob SHA 一致或部分目录的导入错误描述成 pytest 通过。
-
-## 7. 文件与提交一致性检查
-
-缓存目录中存在的 P2-03 文件通过 `git hash-object` 与远程 blob SHA 对比，确认以下文件内容与远程目标提交一致：
-
-```text
-src/control/api.py
 src/gateway/memory_inspector.py
-src/sources/read_model.py
-src/sources/service.py
-tests/test_source_read_model.py
-tests/test_source_service.py
 tests/test_memory_inspector_facade.py
 tests/test_memory_inspector_api.py
+docs/TEST_REPORTS/P2_03_P2_03B_COMBINED_VALIDATION_REPORT.md
 ```
 
-该检查只能证明这些单独文件内容一致，不能证明完整依赖树、导入行为或测试运行结果。
+未修改其他生产实现文件。
 
-## 8. 十八项合同审查
+## 3. 安全问题
 
-| # | 合同 | 静态证据 | 运行验证状态 |
-|---|---|---|---|
-| 1 | `SourceReadModel` 包导出与直接模块导出为同一对象 | `src/sources/__init__.py` 直接导出；测试已编写 | `NOT EXECUTED` |
-| 2 | `MemoryInspectorFacade` 包导出与直接模块导出为同一对象 | `src/gateway/__init__.py` 直接导出；测试已编写 | `NOT EXECUTED` |
-| 3 | 三个旧包装文件不存在 | 三个路径远程读取均为 404 | 静态确认，pytest 未执行 |
-| 4 | 未知 Schema Version 拒绝启动 | 正式实现抛出 `SourceReadModelError`；测试已编写 | `NOT EXECUTED` |
-| 5 | Source 权限同步继承型 Conversation | SQL 同步逻辑和测试存在 | `NOT EXECUTED` |
-| 6 | Conversation 权限同步继承型 Message | SQL 同步逻辑存在 | `NOT EXECUTED` |
-| 7 | 显式子级覆盖不被父级覆盖 | inherited 标记逻辑和测试存在 | `NOT EXECUTED` |
-| 8 | `rebuild_required` 保持 true/false/null | Facade 未强制转 bool；null 测试存在 | `NOT EXECUTED` |
-| 9 | 503 不泄漏 SQLite 路径 | API 固定返回稳定 503；测试存在 | `NOT EXECUTED` |
-| 10 | URL 用户名、密码、敏感参数和 fragment 删除 | `_safe_http_url()` 实现和测试存在 | `NOT EXECUTED` |
-| 11 | ChatGPT 同时生成 Markdown 和结构化数据 | Adapter 共用标准化结果；测试存在 | `NOT EXECUTED` |
-| 12 | Source/Conversation/Message 幂等写入 | 稳定 ID、Upsert 与真实临时 SQLite 测试存在 | `NOT EXECUTED` |
-| 13 | Memory Link 缺失时不丢 Message | Structured Sink 降级逻辑和测试存在 | `NOT EXECUTED` |
-| 14 | 索引失败不回滚 Vault 与结构化数据 | Pipeline 降级逻辑和测试存在 | `NOT EXECUTED` |
-| 15 | Audit Event 写入 StateDatabase | `append_event()` 接线及真实临时 DB 测试存在 | `NOT EXECUTED` |
-| 16 | Audit Event 失败不影响主流程 | `_event()` 捕获异常；测试存在 | `NOT EXECUTED` |
-| 17 | 外部响应不泄漏 Windows 路径 | Extraction 与 503 路径有覆盖；发现 Vector 200 响应静态风险 | `STATIC BLOCKER / NOT EXECUTED` |
-| 18 | Production 与 Acceptance 数据库隔离 | 临时目录隔离测试和 Workspace 测试存在 | `NOT EXECUTED` |
-
-## 9. 静态阻塞风险：Vector 错误原文可能泄漏
-
-发现一个可达的外部响应风险：
+修复前，`MemoryInspectorFacade.memory_vector()` 会把以下内容直接放入 HTTP 200 响应：
 
 ```text
-src/gateway/memory_inspector.py
-MemoryInspectorFacade.memory_vector()
+semantic.exists() 抛出的异常原文
+snapshot.last_error 原文
 ```
 
-当 live Semantic Provider（实时语义提供器）的 `exists()` 抛出异常时，代码执行：
-
-```python
-last_error = self._safe_error(exc)
-```
-
-当前 `_safe_error()` 返回：
-
-```python
-f"{type(exc).__name__}: {exc}"[:500]
-```
-
-随后该文本被放入每个 Chunk（文本分块）的：
+例如：
 
 ```text
+D:\Users\Secret\qdrant.db contains private provider details
+```
+
+可能进入：
+
+```text
+vector.last_error
 vector.chunks[].last_error
 ```
 
-并通过 Memory Inspector Vector API（记忆检查器向量接口）以 HTTP 200 返回。
+## 4. 正式修复
 
-如果 Provider 异常包含：
+新增模块 logger（日志记录器）：
 
-```text
-D:\Users\Secret\qdrant.db
+```python
+logger = logging.getLogger("lingji.gateway.memory_inspector")
 ```
 
-该本机路径可能原样进入外部响应。顶层 `snapshot.last_error` 也被直接透传，存在同类风险。
-
-这是对合同 17 的静态合并阻塞风险。现有测试覆盖了：
-
-- Inspector 503 SQLite 路径脱敏。
-- Extraction Pipeline 索引错误脱敏。
-- ChatGPT warning 脱敏。
-
-但没有覆盖 `memory_vector()` 的 live provider 异常路径。
-
-### 最小修复建议
-
-涉及文件：
-
-```text
-src/gateway/memory_inspector.py
-tests/test_memory_inspector_facade.py
-tests/test_memory_inspector_api.py
-```
-
-建议：
-
-1. 完整 Provider 异常只写入 logger。
-2. 对外 `last_error` 使用稳定摘要，例如：
+新增唯一稳定外部摘要：
 
 ```text
 Vector status unavailable; see local logs
 ```
 
-3. 对 `snapshot.last_error` 进入外部响应前采用同一安全合同。
-4. 增加包含 Windows 路径的 Fake Semantic Provider 回归测试。
-5. 验证 HTTP 200 vector response 不包含 `C:\`、`D:\`、`Users`、数据库文件名或异常原文。
+正式常量：
 
-根据本轮文件所有权规则，未直接修改 `src/gateway/memory_inspector.py`。
-
-## 10. 失败根因分类
-
-```text
-Authoritative pytest failure: NONE RECORDED
-Validation environment failure: YES
-Static production contract risk: YES
+```python
+VECTOR_ERROR_MESSAGE = "Vector status unavailable; see local logs"
 ```
 
-环境根因：
+### 4.1 Semantic Provider 失败
+
+当 `semantic.exists(chunk_id)` 抛出异常时：
 
 ```text
-无法通过普通 Git 网络取得完整仓库
-当前容器没有目标提交的完整工作树
-缓存目录只是部分旧任务文件，依赖不完整
+完整异常 -> logger.exception()
+外部 exists -> null
+外部 source -> unavailable
+外部 last_error -> Vector status unavailable; see local logs
 ```
 
-静态风险根因：
+不使用正则，也不尝试保留异常中的“安全部分”。
+
+### 4.2 Snapshot 错误
+
+`snapshot.last_error` 不再直接进入外部响应。
+
+规则：
 
 ```text
-MemoryInspectorFacade._safe_error() 保留异常原文
-memory_vector() 将该原文写入 HTTP 200 响应的 last_error
-相关路径缺少脱敏回归测试
+snapshot.last_error 为空 -> null
+snapshot.last_error 非空 -> Vector status unavailable; see local logs
 ```
 
-## 11. Production Data Access（生产数据访问）
+该规则同时应用于：
+
+```text
+vector.last_error
+vector.chunks[].last_error
+```
+
+## 5. 保持不变的合同
+
+本轮没有改变：
+
+```text
+exists = true
+exists = false
+exists = null
+rebuild_required = true / false / null
+collection
+dimension
+chunk_id
+```
+
+Live Provider（实时提供器）正常返回时，`exists` 仍转换为布尔值，Chunk 的 `source` 仍为 `live`。
+
+没有 Provider 或 Provider 失败时，`exists` 仍为 `null`。
+
+## 6. 新增 Facade 测试代码
+
+`tests/test_memory_inspector_facade.py` 新增：
+
+```text
+test_vector_errors_are_sanitized_without_changing_tristate_contract
+```
+
+覆盖：
+
+1. `semantic.exists()` 抛出包含 Windows 绝对路径的异常。
+2. `snapshot.last_error` 包含 Windows 绝对路径。
+3. 顶层与 Chunk 错误均等于固定摘要。
+4. `exists is None`。
+5. `rebuild_required` 分别为 `True`、`False`、`None` 时保持原值。
+6. `chunk_id`、`collection`、`dimension` 保持不变。
+7. 序列化响应不包含：
+
+```text
+D:\
+Users
+qdrant.db
+private provider details
+```
+
+## 7. 新增 HTTP 200 测试代码
+
+`tests/test_memory_inspector_api.py` 新增：
+
+```text
+test_vector_200_response_sanitizes_provider_and_snapshot_errors
+```
+
+该测试通过真实 `MemoryInspectorFacade.memory_vector()` 生成响应，再由 Control API（控制接口）返回 HTTP 200。
+
+验证：
+
+```text
+status_code == 200
+vector.last_error == Vector status unavailable; see local logs
+vector.chunks[0].last_error == Vector status unavailable; see local logs
+exists is None
+rebuild_required is None
+```
+
+响应正文不得包含：
+
+```text
+D:\
+Users
+qdrant.db
+private provider details
+snapshot failure
+```
+
+不连接真实 Qdrant。
+
+## 8. 实际执行命令
+
+### 8.1 定向 compileall
+
+执行：
+
+```bash
+python -m compileall \
+  /tmp/lingji_p203/src/gateway \
+  /tmp/lingji_p203/tests/test_memory_inspector_facade.py \
+  /tmp/lingji_p203/tests/test_memory_inspector_api.py
+```
+
+结果：
+
+```text
+PASS
+syntax failures: 0
+```
+
+说明：缓存目录中的三个修改前文件 blob SHA 与远程起始版本一致；修改后内容被推送到当前验证分支。该检查只证明目标文件语法可编译，不等于正式 pytest 通过。
+
+### 8.2 指定 pytest
+
+要求命令：
+
+```bash
+python -m pytest \
+  tests/test_memory_inspector_facade.py \
+  tests/test_memory_inspector_api.py \
+  -v --tb=short
+```
+
+当前容器在不完整缓存目录 `/tmp/lingji_p203` 中尝试执行，结果：
+
+```text
+collected: 0
+collection errors: 2
+duration: 0.71s
+exit status: 2
+```
+
+收集错误：
+
+```text
+ModuleNotFoundError: No module named 'src.gateway.adapters'
+ModuleNotFoundError: No module named 'src.control.runtime_settings'
+```
+
+原因是当前容器没有完整 LingJi 工作树，缓存目录仅保存 P2-03 的部分文件。这是 Environment Limitation（环境限制），不是修复代码的权威测试失败。
+
+正式 pytest 状态：
+
+```text
+NOT EXECUTED ON AUTHORITATIVE FULL WORKTREE
+```
+
+## 9. 辅助烟雾测试
+
+使用精确修改后的 `memory_inspector.py`，通过隔离 import stub（导入桩）执行三种 `rebuild_required` 情况：
+
+```text
+True
+False
+None
+```
+
+结果：
+
+```text
+auxiliary vector sanitization smoke: PASS
+cases: 3
+```
+
+验证了：
+
+```text
+Provider 异常只进入日志
+顶层错误摘要稳定
+Chunk 错误摘要稳定
+exists 保持 null
+三态保持原值
+响应不包含 Windows 路径和异常原文
+```
+
+该辅助检查不是正式 pytest，不能用于升级为 `IMPLEMENTED_FOCUSED_TESTED`。
+
+## 10. 正式测试数字
+
+```text
+passed: NOT EXECUTED
+failed: NOT EXECUTED
+skipped: NOT EXECUTED
+xfailed: NOT EXECUTED
+duration: NOT AVAILABLE
+```
+
+不把缓存目录的两个 collection error 计入正式失败数，因为目标完整工作树根本不存在。
+
+## 11. Environment Limitations（环境限制）
+
+```text
+普通 Git 网络无法解析 github.com
+GitHub Connector 可以读写远程仓库
+当前容器没有完整 LingJi 工作树
+缓存目录缺少 gateway/control/retrieval 等依赖模块
+```
+
+因此无法完成权威的两文件 pytest。
+
+## 12. Production Data Access（生产数据访问）
 
 ```text
 Production ChatGPT Export: NO
@@ -304,64 +295,55 @@ Production Vault: NO
 Production SQLite: NO
 Production Qdrant: NO
 Production Ollama: NO
-Production Model: NO
 Real User Content: NO
 Production Configuration Modified: NO
 ```
 
-## 12. 代码修改范围
+所有测试数据都是 Fake Provider（伪提供器）和固定测试字符串。
+
+## 13. Git 与边界状态
 
 ```text
-Production source code modified: NO
-Tests modified: NO
-Tauri modified: NO
-New validation report: YES
+New branch created: NO
+Rebase: NO
+Force push: NO
 Formal branch merged: NO
+Tauri modified: NO
+Extraction modified: NO
+Capture modified: NO
+Database Schema modified: NO
+SourceReadModel modified: NO
 ```
-
-本轮仅新增该验证报告。
-
-## 13. Known Risks（已知风险）
-
-1. 正式 `compileall` 未执行。
-2. 第一组核心 pytest 未执行。
-3. 第二组历史回归未执行。
-4. `memory_vector()` 存在 live provider 异常原文及 Windows 路径泄漏风险。
-5. `snapshot.last_error` 进入 Vector API 前缺少统一外部脱敏合同。
-6. 没有完整运行证据，不能确认 Python 3.13 下的导入、SQLite、FastAPI TestClient 和 Pydantic 兼容性。
 
 ## 14. Merge Recommendation（合并建议）
 
 ```text
-DO_NOT_MERGE
+DO_NOT_MERGE_YET
 ```
 
-原因：
-
-1. 指定的 `compileall` 和两组 pytest 没有在完整目标提交上执行。
-2. 合同 17 存在静态可达的 Vector HTTP 200 响应路径泄漏风险。
-3. 缺少针对该风险的回归测试。
+安全修复方向和测试代码已经完成，定向语法检查及辅助烟雾测试通过，但指定 pytest 尚未在完整工作树执行。
 
 解除门禁条件：
 
 ```text
-1. 在完整 work/p2-03b-validation 工作树执行 python -m compileall src tests
-2. 第一组核心测试全部通过
-3. 修复并覆盖 memory_vector() / snapshot.last_error 脱敏
-4. 重新执行第一组核心测试并全部通过
-5. 执行第二组历史回归并全部通过
-6. 记录真实 passed / failed / skipped / xfailed / duration
-7. 状态更新为 PASSED_AWAITING_COORDINATED_MERGE
+1. 在完整 work/p2-03b-validation 工作树执行指定 compileall
+2. 执行 tests/test_memory_inspector_facade.py
+3. 执行 tests/test_memory_inspector_api.py
+4. 两个测试文件全部通过
+5. 记录真实 passed / failed / skipped / xfailed / duration
 ```
 
 ## 15. 最终状态
 
 ```text
-P2-03: IMPLEMENTED_NOT_TESTED
-P2-03B: IMPLEMENTED_NOT_TESTED
-Validation State: VERIFICATION_NOT_EXECUTED
-Merge Recommendation: DO_NOT_MERGE
-Formal Merge State: NOT_MERGED
+P2-03 / P2-03B:
+IMPLEMENTED_NOT_TESTED
+
+Security Fix:
+SECURITY_FIX_IMPLEMENTED_NOT_TESTED
+
+Merge State:
+NOT_MERGED
 ```
 
-本轮到此停止，不开始 P2-04，不领取新功能任务。
+本轮完成后停止，不开始 P2-04，不领取新功能。
