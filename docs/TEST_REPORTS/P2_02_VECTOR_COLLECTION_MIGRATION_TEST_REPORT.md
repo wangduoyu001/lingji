@@ -102,7 +102,7 @@ The manifest contains rollback settings for the previous model, fallback model a
 
 The service does not apply either patch.
 
-## 6. CLI
+## 6. Production Preparation CLI
 
 Added:
 
@@ -139,7 +139,45 @@ python scripts/prepare_vector_collection_migration.py `
 
 Before embedded execution, all other LingJi processes that own the embedded Qdrant directory must be stopped. The flag records explicit operator confirmation; file locking remains the final runtime guard.
 
-## 7. Manifest
+## 7. Isolated Real Acceptance
+
+Added:
+
+```text
+scripts/validate_p2_02_local.py
+```
+
+The script uses:
+
+```text
+temporary Acceptance Workspace
+temporary Vault
+temporary lingji_memory.db
+real Ollama Embedding model
+Qdrant in-memory target collection
+real VectorCollectionMigrationService
+atomic temporary migration manifest
+```
+
+Command:
+
+```powershell
+python scripts/validate_p2_02_local.py --model bge-m3
+```
+
+It verifies:
+
+- candidate validation succeeds
+- coverage is exactly `1.0`
+- missing count is zero
+- target vector count exactly matches canonical Chunk count
+- actual vector dimension is detected
+- actual active model is reported
+- manifest exists
+- source collection metadata remains unchanged
+- production data is never opened or modified
+
+## 8. Manifest
 
 Default location:
 
@@ -162,7 +200,7 @@ It does not contain Chunk text, memory body text or vectors.
 
 Writes use a temporary file followed by atomic replacement.
 
-## 8. Tests
+## 9. Tests
 
 Added:
 
@@ -188,7 +226,7 @@ Coverage:
 
 The tests use the real `MemoryDatabase` and real canonical SemanticPoint generation. Qdrant and Ollama are represented by a focused fake target Provider so failure states remain deterministic.
 
-## 9. Required Local Validation
+## 10. Required Local Validation
 
 ```powershell
 python -m pytest tests/test_vector_collection_migration.py -v --tb=short
@@ -196,7 +234,9 @@ python -m pytest tests/test_memory_index_coordinator.py tests/test_qdrant_semant
 python -m py_compile `
   src/retrieval/collection_migration.py `
   src/retrieval/index_coordinator.py `
-  scripts/prepare_vector_collection_migration.py
+  scripts/prepare_vector_collection_migration.py `
+  scripts/validate_p2_02_local.py
+python scripts/validate_p2_02_local.py --model bge-m3
 ```
 
 Plan-only production inspection:
@@ -209,7 +249,7 @@ python scripts/prepare_vector_collection_migration.py `
 
 Do not execute the production candidate build until the plan output has been reviewed and embedded Qdrant has exclusive ownership.
 
-## 10. Validation State
+## 11. Validation State
 
 The GitHub connector can inspect and commit repository files but cannot run the user's Windows checkout.
 
@@ -217,23 +257,25 @@ Therefore:
 
 ```text
 committed migration tests: not executed here
+isolated real bge-m3 migration acceptance: not executed here
 production plan-only command: not executed here
-real bge-m3 candidate build: not executed here
+real production candidate build: not executed here
 production model/collection switch: intentionally not executed
 ```
 
-## 11. Files
+## 12. Files
 
 ```text
 src/retrieval/collection_migration.py
 src/retrieval/index_coordinator.py
 src/retrieval/__init__.py
 scripts/prepare_vector_collection_migration.py
+scripts/validate_p2_02_local.py
 tests/test_vector_collection_migration.py
 docs/TEST_REPORTS/P2_02_VECTOR_COLLECTION_MIGRATION_TEST_REPORT.md
 ```
 
-## 12. Known Limitations
+## 13. Known Limitations
 
 - Runtime Settings does not yet own the vector model and collection switch as one atomic operation.
 - The CLI requires operator confirmation but cannot identify every external process that may own embedded Qdrant.
@@ -242,7 +284,7 @@ docs/TEST_REPORTS/P2_02_VECTOR_COLLECTION_MIGRATION_TEST_REPORT.md
 - Remote Qdrant aliases are not introduced in this task.
 - The Tauri Vector Center is developed separately and is not modified here.
 
-## 13. Rollback
+## 14. Rollback
 
 Repository rollback:
 
@@ -254,7 +296,7 @@ Runtime rollback after a future activation uses the manifest's `rollback_setting
 
 The source collection is never deleted by this task, so rollback remains possible.
 
-## 14. Next Priority
+## 15. Next Priority
 
 After the local P2-02 tests pass:
 
