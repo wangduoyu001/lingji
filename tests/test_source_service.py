@@ -111,6 +111,152 @@ class SourceQueryServiceTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.service.get_source(source_id, viewer=chatgpt)
 
+    def test_source_permission_tightening_updates_inherited_children(self):
+        chatgpt = self.service.agent_viewer("chatgpt")
+        ollama = self.service.agent_viewer("ollama")
+        conversation_id = self.service.list_conversations(
+            viewer=chatgpt, q="Visible conversation"
+        )["items"][0]["conversation_id"]
+        message_id = self.service.list_messages(viewer=chatgpt, q="visible message")["items"][0][
+            "message_id"
+        ]
+
+        self.read_model.upsert_source(
+            {
+                "source_type": "chatgpt",
+                "external_id": "public-export",
+                "display_name": "Public source",
+                "privacy": "restricted",
+                "agent_scope": ["ollama"],
+            }
+        )
+
+        self.assertEqual(
+            self.service.list_conversations(viewer=chatgpt, q="Visible conversation")[
+                "pagination"
+            ]["total"],
+            0,
+        )
+        self.assertEqual(
+            self.service.list_messages(viewer=chatgpt, q="visible message")["pagination"][
+                "total"
+            ],
+            0,
+        )
+        with self.assertRaises(PermissionError):
+            self.service.get_conversation(conversation_id, viewer=chatgpt)
+        with self.assertRaises(PermissionError):
+            self.service.get_message(message_id, viewer=chatgpt)
+        self.assertEqual(
+            self.service.list_messages(viewer=ollama, q="visible message")["pagination"][
+                "total"
+            ],
+            1,
+        )
+
+    def test_explicit_child_permissions_are_not_overwritten(self):
+        result = self.read_model.upsert_bundle(
+            {
+                "source": {
+                    "source_type": "chatgpt",
+                    "external_id": "explicit-export",
+                    "display_name": "Explicit source",
+                    "privacy": "private",
+                    "agent_scope": ["chatgpt"],
+                },
+                "conversations": [
+                    {
+                        "external_id": "explicit-conversation",
+                        "title": "Explicit conversation",
+                        "privacy": "private",
+                        "agent_scope": ["chatgpt"],
+                        "messages": [
+                            {
+                                "external_id": "explicit-message",
+                                "role": "user",
+                                "sequence": 1,
+                                "content": "explicit child body",
+                                "privacy": "private",
+                                "agent_scope": ["chatgpt"],
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        self.read_model.upsert_source(
+            {
+                "source_type": "chatgpt",
+                "external_id": "explicit-export",
+                "display_name": "Explicit source",
+                "privacy": "restricted",
+                "agent_scope": ["ollama"],
+            }
+        )
+
+        chatgpt = self.service.agent_viewer("chatgpt")
+        conversation = self.service.list_conversations(
+            viewer=chatgpt, q="Explicit conversation"
+        )
+        message = self.service.list_messages(viewer=chatgpt, q="explicit child")
+        self.assertEqual(conversation["pagination"]["total"], 1)
+        self.assertEqual(message["pagination"]["total"], 1)
+        self.assertEqual(conversation["items"][0]["privacy"], "private")
+        self.assertEqual(message["items"][0]["privacy"], "private")
+        self.assertEqual(result["sources"], 1)
+
+    def test_agent_scope_update_is_immediate_for_inherited_children(self):
+        self.read_model.upsert_bundle(
+            {
+                "source": {
+                    "source_type": "chatgpt",
+                    "external_id": "scope-export",
+                    "display_name": "Scope source",
+                    "privacy": "private",
+                    "agent_scope": ["chatgpt"],
+                },
+                "conversations": [
+                    {
+                        "external_id": "scope-conversation",
+                        "title": "Scope conversation",
+                        "messages": [
+                            {
+                                "external_id": "scope-message",
+                                "role": "user",
+                                "sequence": 1,
+                                "content": "scope body",
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        chatgpt = self.service.agent_viewer("chatgpt")
+        ollama = self.service.agent_viewer("ollama")
+        self.assertEqual(
+            self.service.list_messages(viewer=chatgpt, q="scope body")["pagination"]["total"],
+            1,
+        )
+
+        self.read_model.upsert_source(
+            {
+                "source_type": "chatgpt",
+                "external_id": "scope-export",
+                "display_name": "Scope source",
+                "privacy": "private",
+                "agent_scope": ["ollama"],
+            }
+        )
+
+        self.assertEqual(
+            self.service.list_messages(viewer=chatgpt, q="scope body")["pagination"]["total"],
+            0,
+        )
+        self.assertEqual(
+            self.service.list_messages(viewer=ollama, q="scope body")["pagination"]["total"],
+            1,
+        )
+
     def test_filters_and_safe_references(self):
         result = self.service.list_sources(
             source_type="chatgpt", project="LingJi", q="Public"
