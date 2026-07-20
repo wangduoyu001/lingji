@@ -7,8 +7,6 @@
 
 ## 1. Current Product Direction
 
-LingJi is converging into one private second brain and one shared memory system for all approved AI clients.
-
 ```text
 src/
 = long-term platform mainline
@@ -20,7 +18,7 @@ desktop/lingji-control/
 = only primary desktop UI
 ```
 
-The repository must not continue as two independently expanding memory products.
+LingJi must converge into one private second brain and one shared memory system for all approved AI clients.
 
 ## 2. Data Authority
 
@@ -28,7 +26,7 @@ The repository must not continue as two independently expanding memory products.
 Obsidian Vault + Git
 = permanent memory and formal knowledge text
 
-configurable raw archive
+storage/raw
 = original imported material
 
 lingji_state.db
@@ -59,15 +57,14 @@ Qdrant
 - Local Control API and Tauri UI
 - hardware/GPU, model, media, backup, storage, skills, scheduler and opportunity services
 
-## 4. Verified Compatibility Capabilities
+## 4. Compatibility Capabilities Still To Migrate
 
-`second_brain/` still provides capabilities that must be migrated before retirement:
+`second_brain/` still contains migration evidence and capabilities that must be covered before retirement:
 
-- working Qdrant vector search
-- Ollama embedding primary/fallback behavior
 - structured sources, conversations and messages
 - memory versions, relations and conflicts
 - compatibility API and PySide6 acceptance flows
+- existing Qdrant/embedding implementation used as migration reference
 
 No new formal product capability should be added there.
 
@@ -89,7 +86,7 @@ Implemented:
 - authenticated `GET /api/mcp/status` exposes configuration truth
 - Tauri remains on `8766` only
 
-Validation still pending:
+Still pending:
 
 - real Windows simultaneous binding
 - full repository pytest
@@ -106,40 +103,90 @@ Implemented:
 - one frozen `WorkspaceContext`
 - one `WorkspaceResolver`
 - production and acceptance physical path contracts
-- explicit override, environment, Settings and safe-default precedence
-- isolated Vault, raw, state DB, memory DB, Qdrant path/collection, logs, cache, runtime settings, queue DB, backups, derived files, temp and reports
+- isolated Vault, raw, state DB, memory DB, Qdrant path/collection, logs, cache, settings, queue DB, backups, derived files, temp and reports
 - explicit rejection of unknown workspaces, path aliases, containment and Windows `C:` paths
-- remote Qdrant URL sharing with mandatory collection isolation
 - explicit `WorkspaceContext` seam in `build_memory_gateway()`
 - directory-independent lexical Memory Capability Contract adapter
-- lexical contracts for stable IDs, retrieval, citations, filters, Core Memory, Context Pack and workspace isolation
 
 Validation state:
 
 - isolated workspace contract suite: `8 passed`
 - Python syntax validation: passed
-- lexical Memory Capability Contract against full repository checkout: pending
-- related memory regressions: pending
-- full repository pytest: pending
-
-No database schema, dependency, Qdrant client, collection, real Vault or user data was changed.
+- lexical capability contract against a full checkout: pending
+- related memory regressions and full pytest: pending
 
 Report: `docs/TEST_REPORTS/P0_03_WORKSPACE_CAPABILITY_CONTRACT_TEST_REPORT.md`
 
-## 7. Current Critical Gaps
+## 7. P1-01 Unified Embedding Provider
+
+Repository implementation has landed in `src/model_center/embedding.py`.
+
+Implemented:
+
+- `EmbeddingProvider` and transport contracts
+- Ollama `/api/embed` and older `/api/embeddings` compatibility
+- primary/fallback model behavior
+- batch embedding
+- verified active-model and dimension state
+- failure counters, timestamps and reset
+- Settings/runtime override factory
+- explicit configuration validation
+
+Important status rule:
+
+```text
+configured model != verified active model
+```
+
+The provider reports `available=false` until a real embedding call succeeds.
+
+Validation state:
+
+- dependency-light fake-transport suite: `13 passed`
+- real Ollama call: pending
+- full repository pytest: pending
+
+Report: `docs/TEST_REPORTS/P1_01_EMBEDDING_PROVIDER_TEST_REPORT.md`
+
+## 8. P1-02 Qdrant SemanticProvider
+
+Repository implementation has landed in the P1-02 integration branch and is safe to merge because it is not connected to runtime startup yet.
+
+Implemented:
+
+- semantic search/index/diagnostic contracts
+- `QdrantSemanticProvider`
+- embedded, remote and in-memory modes
+- WorkspaceContext collection/path isolation
+- deterministic UUIDv5 point IDs
+- batch upsert, chunk delete and memory delete
+- search candidates without replacing HybridRetriever RRF
+- count, kind count, exists, coverage and status
+- dimension mismatch and `rebuild_required`
+- payload text/body exclusion
+- optional-dependency unavailable status
+- real in-memory integration test suite
+
+Validation evidence:
+
+- Qdrant 1.12 direct in-memory API smoke passed for collection creation, upsert, filtered query, count, retrieve, ID delete and filter delete
+- committed provider integration pytest: pending complete checkout execution
+- full repository pytest: pending
+
+Report: `docs/TEST_REPORTS/P1_02_QDRANT_SEMANTIC_PROVIDER_TEST_REPORT.md`
+
+## 9. Current Critical Gaps
 
 1. `src/gateway/bootstrap.py` still passes `semantic_provider=None`.
-2. The new workspace contract is not yet mandatory for every runtime service.
-3. Runtime Settings does not yet expose editable memory, vector, workspace or MCP groups.
-4. Two memory authorities and two ingestion paths still exist during migration.
-5. Tauri Brain Status is not yet guaranteed to use the same real memory/vector statistics as MCP and the future Inspector.
-6. `LocalControlService.brain_status()` may still report false zero memory/vector counts.
-7. The inherited `src/config.py` backup default remains developer-specific and requires a separate safe migration task.
-8. P0-02 and P0-03 full local validation remain pending.
+2. There is no `MemoryIndexCoordinator` synchronizing lexical and semantic deltas.
+3. Full collection rebuild and validated collection switching are not implemented.
+4. Semantic failure warnings are still suppressed by `HybridRetriever` rather than surfaced structurally.
+5. Runtime Settings does not yet expose editable vector/workspace/MCP groups.
+6. Local Control API does not expose unified vector status or coverage.
+7. Brain Status may still report false zero memory/vector counts.
+8. P0 and Phase 1 full local regression validation remains pending.
 
-## 8. Development Freeze Rules
-
-Effective immediately:
+## 10. Development Freeze Rules
 
 - new memory features only in `src/`
 - new ingestion only in `src/extraction/`
@@ -148,64 +195,40 @@ Effective immediately:
 - no direct Tauri calls to `8765` or `8767`
 - no deletion of compatibility data before export, parity and rollback validation
 
-## 9. Next Development Sequence
+## 11. Next Development Sequence
 
-### Current gate
-
-P0-03 repository code exists, but Phase 1 is not fully cleared until:
-
-1. P0-02 real-machine port validation passes.
-2. `tests/test_memory_capability_contract.py` runs against a complete checkout.
-3. related memory regressions run.
-4. failures, if any, are recorded without weakening tests.
-
-### Phase 1: Unified semantic provider
-
-After the gate:
-
-- add a unified Embedding Provider under Model Center
-- adapt Qdrant behavior into `src` SemanticProvider contracts
-- add incremental upsert/delete, rebuild, health and counts
-- preserve lexical fallback and the existing RRF pipeline
-- consume `WorkspaceContext` for collection/path isolation
-- expose real vector/model state to Local Control API
-
-Do not start Memory Inspector before the semantic and statistics foundations exist.
-
-### Later phases
-
-- Phase 2: structured source/conversation/message read model
-- Phase 3: shared statistics, retrieval trace, Memory Inspector and Vector Center
-- Phase 4: revisions, relations, conflicts and UI parity
-- Phase 5: dual-read verification, stop legacy writes, read-only window and retirement
-
-## 10. Current Test Status
-
-P0-03 execution evidence available in this repository-edit task:
+Current next task:
 
 ```text
-python -m pytest tests/test_workspace_contract.py -q
-8 passed, 1 inherited Pydantic warning
+P1-03 MemoryIndexCoordinator
 ```
 
-The new Python files also passed `py_compile`.
+Required work:
 
-Not executed here:
+- transform canonical lexical chunks into `SemanticPoint`
+- synchronize added/updated/removed chunks to both indexes
+- coordinate rebuild without making `MemoryDatabase` depend on Qdrant
+- preserve lexical success when embedding or Qdrant fails
+- record structured progress and warnings
+- use a new collection for dimension/model changes and validate before switching
 
-- `tests/test_memory_capability_contract.py`
-- related memory regressions
-- full `tests/` suite
-- real Windows path/symlink behavior
-- real process and Tauri validation
-
-The GitHub branch had no workflow run available, and the connector does not provide a complete local worktree. These items remain pending rather than being mislabeled as passed.
-
-## 11. Implementation Commits
+Then:
 
 ```text
-7242e6a7d105b8fe7ba35a7020ab735d7798a4b5
-feat(runtime): add isolated workspace context
-
-337203032c575f2f8a4654bcae530cc97711b25e
-test(memory): add lexical capability contract
+P1-04 build_memory_gateway runtime wiring
+P1-05 vector status, tests and final Phase 1 report
 ```
+
+Do not start Memory Inspector before semantic synchronization, runtime wiring and shared statistics exist.
+
+## 12. Required Local Validation
+
+```text
+python -m pip install -r requirements.txt
+python -m pytest tests/test_embedding_provider.py -v
+python -m pytest tests/test_qdrant_semantic_provider.py -v
+python -m pytest tests/test_workspace_contract.py tests/test_memory_capability_contract.py -v
+python -m pytest tests/ -v
+```
+
+No CI result currently proves these complete-checkout commands passed. Missing CI is not success.
