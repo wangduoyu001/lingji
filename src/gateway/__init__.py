@@ -1,5 +1,6 @@
 from .adapters import AIContextAdapter, ContextEnvelope
 from .memory_gateway import MemoryGateway
+from .memory_statistics import MemoryStatisticsService
 from .profiles import AIClientProfile, AIProfileRegistry
 
 __all__ = [
@@ -8,4 +9,5 @@ __all__ = [
     "AIClientProfile",
     "AIProfileRegistry",
     "MemoryGateway",
+    "MemoryStatisticsService",
 ]
