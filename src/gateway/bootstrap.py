@@ -35,9 +35,8 @@ def build_memory_gateway(
     """Build the unified memory gateway without starting background services.
 
     Existing production Vault and SQLite paths remain the transition mapping when
-    no explicit WorkspaceContext is supplied. Semantic construction is optional:
-    any configuration failure leaves a lexical-only gateway with a structured
-    runtime warning instead of failing startup.
+    no explicit WorkspaceContext is supplied. Any semantic configuration or
+    dependency failure leaves a lexical-only gateway with a structured warning.
     """
 
     values = dict(runtime_values or {})
@@ -60,14 +59,21 @@ def build_memory_gateway(
     closeables: list[Any] = []
     semantic_provider = None
     semantic_workspace = workspace
+    semantic_batch_size = int(settings.semantic_batch_size)
+    embedding_provider = None
 
-    if _as_bool(values.get("semantic_enabled", getattr(settings, "semantic_enabled", True))):
-        try:
+    try:
+        semantic_enabled = _as_bool(
+            values.get("semantic_enabled", getattr(settings, "semantic_enabled", True))
+        )
+        semantic_batch_size = int(
+            values.get("semantic_batch_size", settings.semantic_batch_size)
+        )
+        if semantic_batch_size <= 0:
+            raise ValueError("semantic_batch_size must be greater than zero")
+        if semantic_enabled:
             semantic_workspace = _resolve_semantic_workspace(settings, workspace)
-            embedding_provider = build_embedding_provider(
-                settings,
-                values,
-            )
+            embedding_provider = build_embedding_provider(settings, values)
             if embedding_provider is not None:
                 semantic_provider = QdrantSemanticProvider(
                     semantic_workspace,
@@ -81,21 +87,19 @@ def build_memory_gateway(
                     ),
                 )
                 closeables.extend([semantic_provider, embedding_provider])
-        except Exception as exc:
-            warning = {
-                "code": "semantic_runtime_initialization_failed",
-                "stage": "bootstrap",
-                "message": _safe_error(exc),
-                "workspace": _workspace_name(workspace, settings),
-            }
-            runtime_warnings.append(warning)
-            state_db.append_event(
-                "semantic_runtime_degraded",
-                "memory_gateway",
-                "bootstrap",
-                warning,
-            )
-            semantic_provider = None
+    except Exception as exc:
+        if embedding_provider is not None:
+            _safe_close(embedding_provider)
+        warning = {
+            "code": "semantic_runtime_initialization_failed",
+            "stage": "bootstrap",
+            "message": _safe_error(exc),
+            "workspace": _workspace_name(workspace, settings),
+        }
+        runtime_warnings.append(warning)
+        _record_warning(state_db, warning)
+        semantic_provider = None
+        semantic_batch_size = int(settings.semantic_batch_size)
 
     retriever = HybridRetriever(
         memory_db,
@@ -107,9 +111,7 @@ def build_memory_gateway(
         memory_db,
         semantic_provider,
         state_db=state_db,
-        semantic_batch_size=int(
-            values.get("semantic_batch_size", settings.semantic_batch_size)
-        ),
+        semantic_batch_size=semantic_batch_size,
     )
     lifecycle = MemoryLifecycleService(layout, state_db)
     gateway = MemoryGateway(
@@ -178,6 +180,27 @@ def _resolve_semantic_workspace(
     )
     transition.validate()
     return transition
+
+
+def _record_warning(state_db: Any, warning: dict[str, Any]) -> None:
+    try:
+        state_db.append_event(
+            "semantic_runtime_degraded",
+            "memory_gateway",
+            "bootstrap",
+            warning,
+        )
+    except Exception:
+        return
+
+
+def _safe_close(resource: Any) -> None:
+    close = getattr(resource, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:
+            return
 
 
 def _workspace_name(workspace: WorkspaceContext | None, settings: Any) -> str:
