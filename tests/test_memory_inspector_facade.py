@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from src.gateway import MemoryInspectorFacade
+from src.gateway import MemoryInspectorFacade as ExportedMemoryInspectorFacade
+from src.gateway.memory_inspector import MemoryInspectorFacade
 from src.gateway.profiles import AIProfileRegistry
 from src.retrieval import MemoryDatabase
 from src.sources import SourceQueryService, SourceReadModel
@@ -136,6 +137,9 @@ class MemoryInspectorFacadeTests(unittest.TestCase):
             gateway=gateway,
             workspace="acceptance",
         )
+
+    def test_single_memory_inspector_facade_implementation(self):
+        self.assertIs(ExportedMemoryInspectorFacade, MemoryInspectorFacade)
 
     def test_memory_list_reuses_canonical_database_and_filters(self):
         response = self.facade.list_memories(
