@@ -31,6 +31,19 @@ class FakeTransport:
 
 
 class EmbeddingProviderTests(unittest.TestCase):
+    def test_initial_status_is_configured_but_not_verified(self):
+        provider = OllamaEmbeddingProvider(
+            "http://ollama",
+            "primary",
+            "fallback",
+            transport=FakeTransport({}),
+        )
+
+        status = provider.status()
+        self.assertIsNone(status["active_model"])
+        self.assertFalse(status["verified"])
+        self.assertFalse(status["available"])
+
     def test_primary_model_success_records_dimension(self):
         transport = FakeTransport({("embed", "primary"): {"embeddings": [[1, 2, 3]]}})
         provider = OllamaEmbeddingProvider("http://ollama", "primary", "fallback", transport=transport)
@@ -40,6 +53,7 @@ class EmbeddingProviderTests(unittest.TestCase):
         self.assertEqual(status["active_model"], "primary")
         self.assertEqual(status["dimension"], 3)
         self.assertEqual(status["request_count"], 1)
+        self.assertTrue(status["verified"])
         self.assertTrue(status["available"])
 
     def test_primary_failure_uses_fallback(self):
@@ -77,6 +91,9 @@ class EmbeddingProviderTests(unittest.TestCase):
 
         self.assertEqual(provider.embed("first"), [1.0, 1.0])
         provider.reset_failures()
+        reset_status = provider.status()
+        self.assertIsNone(reset_status["active_model"])
+        self.assertFalse(reset_status["available"])
         self.assertEqual(provider.embed("second"), [9.0, 8.0])
         self.assertEqual(provider.status()["active_model"], "primary")
 
@@ -138,6 +155,16 @@ class EmbeddingProviderTests(unittest.TestCase):
             provider.embed(" ")
         with self.assertRaisesRegex(RuntimeError, "No embedding model available"):
             provider.embed("hello")
+
+    def test_invalid_provider_configuration_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "base_url"):
+            OllamaEmbeddingProvider("", "primary")
+        with self.assertRaisesRegex(ValueError, "primary_model"):
+            OllamaEmbeddingProvider("http://ollama", "")
+        with self.assertRaisesRegex(ValueError, "timeout_seconds"):
+            OllamaEmbeddingProvider("http://ollama", "primary", timeout_seconds=0)
+        with self.assertRaisesRegex(ValueError, "batch_size"):
+            OllamaEmbeddingProvider("http://ollama", "primary", batch_size=0)
 
     def test_close_releases_transport(self):
         transport = FakeTransport({("embed", "primary"): {"embeddings": [[1.0]]}})
