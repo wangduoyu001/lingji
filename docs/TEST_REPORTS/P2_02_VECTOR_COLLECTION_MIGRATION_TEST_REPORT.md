@@ -1,116 +1,145 @@
 # P2-02 Vector Collection Migration Test Report
 
-Updated: 2026-07-20
-Branch: `work/p2-02-vector-collection-migration`
-Base: `a076b4f42b530077e7cff7dd3745cf2250293bae`
-Status: repository implementation complete; complete-checkout local validation pending
+> Updated（更新时间）: 2026-07-20  
+> Formal Branch（正式分支）: `feature/second-brain-memory`  
+> Validated Code Commit（已验证代码提交）: `8a4860553edfbb698665c7dcb1f8bfaf3f556eba`  
+> Original Development Branch（原开发分支）: `work/p2-02-vector-collection-migration`  
+> Status（状态）: `MERGED_AND_VALIDATED`  
+> Evidence（证据来源）: 本机 Codex 验收汇总、真实 `bge-m3` 隔离验收和正式分支代码
 
-## 1. Goal
+## 1. 任务目标
 
-Prepare a new Embedding/Qdrant collection without changing the active production model or collection.
+实现一个安全的 Vector Collection Migration（向量集合迁移）工具，用于在不改变当前生产模型和生产 Collection（向量集合）的前提下，创建并验证替代候选 Collection。
 
-The migration flow must prove that the candidate contains exactly the canonical chunks from `lingji_memory.db`, uses the requested model, has a valid dimension, and reaches complete coverage before it produces activation and rollback settings.
+迁移工具必须证明：
 
-## 2. Safety Boundary
+- 候选 Collection 包含 `lingji_memory.db` 中全部 Canonical Chunk（标准文本分块）。
+- 使用请求的 Embedding Model（向量嵌入模型）。
+- 实际向量维度有效。
+- 向量数量精确匹配 Chunk 数。
+- Coverage（覆盖率）为 100%。
+- 激活和回滚参数完整。
 
-This task implements:
-
-```text
-plan
-  -> build target collection
-  -> validate exact vector count
-  -> validate 100% coverage
-  -> validate active model and dimension
-  -> write atomic manifest
-  -> produce activation and rollback settings
-```
-
-It does not:
+## 2. 开发与合并信息
 
 ```text
-change active runtime settings
-delete the source collection
-delete a failed target collection
-restart MCP or Local Control
-modify Vault or SQLite content
-switch the production model
+Repository: wangduoyu001/lingji
+Original baseline: a076b4f42b530077e7cff7dd3745cf2250293bae
+Validated formal commit: 8a4860553edfbb698665c7dcb1f8bfaf3f556eba
+Merge state: merged into feature/second-brain-memory
 ```
 
-## 3. Canonical Data Source
+P2-02 已完成本机隔离验证并进入正式分支。
 
-`MemoryIndexCoordinator.semantic_points()` is the only source of candidate points.
+未执行 Force Push（强制推送）。
+
+## 3. 修改文件
+
+```text
+docs/TEST_REPORTS/P2_02_VECTOR_COLLECTION_MIGRATION_TEST_REPORT.md
+scripts/prepare_vector_collection_migration.py
+scripts/validate_p2_02_local.py
+src/retrieval/__init__.py
+src/retrieval/collection_migration.py
+src/retrieval/index_coordinator.py
+tests/test_vector_collection_migration.py
+```
+
+最终汇总：
+
+```text
+7 files
+1329 insertions
+```
+
+## 4. 数据权威
+
+迁移点只来自：
 
 ```text
 Obsidian Vault + Git
   -> lingji_memory.db
-  -> canonical SemanticPoint list
-  -> target Qdrant collection
+  -> MemoryIndexCoordinator.semantic_points()
+  -> target Qdrant Collection
 ```
 
-The migration service does not read memory text from the source Qdrant collection and does not treat Qdrant as permanent memory authority.
+Qdrant（向量数据库）不是永久记忆权威。
 
-## 4. Implemented Contracts
+工具不会从旧 Collection 读取正文来构建新 Collection。
 
-Added:
+## 5. 安全边界
+
+本任务实现：
+
+```text
+plan（计划）
+  -> build candidate（构建候选集合）
+  -> validate exact vector count（验证精确向量数量）
+  -> validate 100% coverage（验证完整覆盖率）
+  -> validate active model and dimension（验证实际模型与维度）
+  -> write atomic manifest（写入原子迁移清单）
+  -> produce activation and rollback settings（生成激活和回滚参数）
+```
+
+本任务不执行：
+
+```text
+修改当前 Runtime Settings（运行时设置）
+删除源 Collection
+自动删除失败候选 Collection
+重启 MCP 或 Local Control
+修改 Vault 或正式 SQLite
+切换生产 Embedding Model
+```
+
+## 6. 核心实现
+
+新增：
 
 ```text
 src/retrieval/collection_migration.py
 ```
 
-Core objects:
+核心对象：
 
 - `VectorCollectionMigrationService`
 - `VectorCollectionMigrationPlan`
 - `VectorCollectionMigrationResult`
 - `VectorCollectionMigrationError`
 
-The service validates:
+安全检查包括：
 
-1. source and target collection names differ
-2. collection names use a bounded safe character set
-3. target model is non-empty
-4. canonical index contains at least one chunk
-5. every canonical point is submitted
-6. Provider returns one ID for each submitted point
-7. coverage is exactly `1.0`
-8. missing count is exactly `0`
-9. target Collection exists and is ready
-10. target Provider does not report `rebuild_required`
-11. target vector count exactly equals canonical Chunk count
-12. target vector dimension is positive
-13. Embedding Provider is verified and available
-14. actual active model matches the requested target model
-15. Provider status refers to the target collection
+1. 源和目标 Collection 名不同。
+2. Collection 名符合安全字符范围。
+3. 目标模型名称有效。
+4. Canonical Index（标准索引）至少包含一个 Chunk。
+5. 每个 Canonical Point（标准向量点）都被提交。
+6. Provider（提供器）为每个 Point 返回一个 ID。
+7. Coverage 精确等于 `1.0`。
+8. Missing 精确等于 `0`。
+9. 目标 Collection 存在且 Ready（就绪）。
+10. Provider 不报告 `rebuild_required`。
+11. 目标向量数精确等于 Chunk 数。
+12. 实际维度大于零。
+13. Embedding Provider 已验证可用。
+14. 实际激活模型与目标模型一致。
+15. Provider 状态指向正确 Collection 和 Workspace（工作区）。
 
-A failed validation writes a failed manifest without activation settings.
+任意检查失败：
 
-## 5. Switch Contract
+- 生成失败 Manifest（迁移清单）。
+- 不生成 Activation Settings（激活设置）。
+- 保留 Rollback Settings（回滚设置）。
 
-A validated bge-m3 candidate produces an explicit activation patch:
+## 7. Production Preparation CLI（生产准备命令行工具）
 
-```json
-{
-  "embed_model": "bge-m3",
-  "fallback_embed_model": "bge-m3",
-  "production_qdrant_collection": "<target collection>"
-}
-```
-
-The target model is also used as the initial fallback to avoid mixing different vector dimensions in one collection.
-
-The manifest contains rollback settings for the previous model, fallback model and collection.
-
-The service does not apply either patch.
-
-## 6. Production Preparation CLI
-
-Added:
+新增：
 
 ```text
 scripts/prepare_vector_collection_migration.py
 ```
 
-Plan-only usage:
+Plan-only（仅计划）模式：
 
 ```powershell
 python scripts/prepare_vector_collection_migration.py `
@@ -118,196 +147,146 @@ python scripts/prepare_vector_collection_migration.py `
   --collection lingji_memory_production_bge_m3_1024_v1
 ```
 
-Plan-only mode does not create a collection.
+Plan-only 不创建 Collection。
 
-Execution for embedded Qdrant requires both:
+真正执行 Embedded Qdrant（嵌入式向量数据库）候选构建时，必须同时使用：
 
 ```text
 --execute
 --confirm-exclusive-qdrant
 ```
 
-Example:
+P2 验收没有执行正式生产候选构建。
 
-```powershell
-python scripts/prepare_vector_collection_migration.py `
-  --model bge-m3 `
-  --collection lingji_memory_production_bge_m3_1024_v1 `
-  --execute `
-  --confirm-exclusive-qdrant
-```
+## 8. Isolated Real Acceptance（真实隔离验收）
 
-Before embedded execution, all other LingJi processes that own the embedded Qdrant directory must be stopped. The flag records explicit operator confirmation; file locking remains the final runtime guard.
-
-## 7. Isolated Real Acceptance
-
-Added:
+新增：
 
 ```text
 scripts/validate_p2_02_local.py
 ```
 
-The script uses:
+验收环境：
 
 ```text
-temporary Acceptance Workspace
-temporary Vault
+temporary Acceptance Workspace（临时验收工作区）
+temporary Vault（临时知识库）
 temporary lingji_memory.db
-real Ollama Embedding model
-Qdrant in-memory target collection
+real Ollama bge-m3
+Qdrant in-memory candidate Collection
 real VectorCollectionMigrationService
-atomic temporary migration manifest
+atomic temporary migration Manifest
 ```
 
-Command:
+执行命令：
 
 ```powershell
 python scripts/validate_p2_02_local.py --model bge-m3
 ```
 
-It verifies:
+本机 Codex 最终汇总：
 
-- candidate validation succeeds
-- coverage is exactly `1.0`
-- missing count is zero
-- target vector count exactly matches canonical Chunk count
-- actual vector dimension is detected
-- actual active model is reported
-- manifest exists
-- source collection metadata remains unchanged
-- production data is never opened or modified
+```text
+8/8 focused unit tests passed
+real bge-m3 isolated acceptance passed
+candidate coverage = 100%
+missing = 0
+production data modified = false
+```
 
-## 8. Manifest
+实际 `bge-m3` 密集向量维度在 P1/P2 验收链路中验证为 1024。
 
-Default location:
+## 9. Manifest（迁移清单）
+
+默认位置：
 
 ```text
 <workspace reports>/vector-migrations/
 ```
 
-The JSON manifest includes:
+Manifest 包含：
 
-- source and target collection
-- source and target model
-- expected and upserted counts
-- vector and Embedding status
-- coverage
-- activation settings
-- rollback settings
-- validation status
+- 源和目标 Collection
+- 源和目标模型
+- Expected 和 Upserted 数量
+- Vector Status（向量状态）
+- Embedding Status（向量模型状态）
+- Coverage
+- Activation Settings
+- Rollback Settings
+- Validation Status（验证状态）
 
-It does not contain Chunk text, memory body text or vectors.
+Manifest 不包含：
 
-Writes use a temporary file followed by atomic replacement.
+- Chunk 正文
+- Memory 正文
+- 原始向量
+- Token（令牌）
 
-## 9. Tests
+写入使用临时文件后 Atomic Replace（原子替换）。
 
-Added:
+## 10. 测试范围
 
-```text
-tests/test_vector_collection_migration.py
-```
+`tests/test_vector_collection_migration.py` 覆盖：
 
-Coverage:
+- 禁止复用当前活动 Collection
+- 拒绝空 Canonical Index
+- 完整候选验证和 Manifest
+- `bge-m3` 激活参数
+- 旧模型和旧 Collection 回滚参数
+- Manifest 不包含正文
+- 拒绝部分覆盖
+- 失败候选没有激活参数
+- 拒绝额外向量
+- 拒绝错误实际模型
+- 拒绝不完整 Upsert（写入）返回
+- 支持 Ollama `:latest` 标签比较
+- 成功和失败 Audit Event（审计事件）
 
-1. active collection cannot be reused as target
-2. empty canonical index is rejected
-3. complete candidate writes a validated manifest
-4. activation settings target bge-m3 and the new collection
-5. rollback settings preserve the old model and collection
-6. manifest does not contain memory body text
-7. partial coverage is rejected
-8. failed candidate has no activation settings
-9. extra vectors are rejected
-10. wrong active model is rejected
-11. short Provider upsert result is rejected
-12. Ollama `:latest` model tags compare correctly
-13. success and failure events are recorded
+重点单元测试与真实隔离验收均已完成。
 
-The tests use the real `MemoryDatabase` and real canonical SemanticPoint generation. Qdrant and Ollama are represented by a focused fake target Provider so failure states remain deterministic.
-
-## 10. Required Local Validation
-
-```powershell
-python -m pytest tests/test_vector_collection_migration.py -v --tb=short
-python -m pytest tests/test_memory_index_coordinator.py tests/test_qdrant_semantic_provider.py -v --tb=short
-python -m py_compile `
-  src/retrieval/collection_migration.py `
-  src/retrieval/index_coordinator.py `
-  scripts/prepare_vector_collection_migration.py `
-  scripts/validate_p2_02_local.py
-python scripts/validate_p2_02_local.py --model bge-m3
-```
-
-Plan-only production inspection:
-
-```powershell
-python scripts/prepare_vector_collection_migration.py `
-  --model bge-m3 `
-  --collection lingji_memory_production_bge_m3_1024_v1
-```
-
-Do not execute the production candidate build until the plan output has been reviewed and embedded Qdrant has exclusive ownership.
-
-## 11. Validation State
-
-The GitHub connector can inspect and commit repository files but cannot run the user's Windows checkout.
-
-Therefore:
+## 11. 当前生产状态
 
 ```text
-committed migration tests: not executed here
-isolated real bge-m3 migration acceptance: not executed here
-production plan-only command: not executed here
-real production candidate build: not executed here
-production model/collection switch: intentionally not executed
+Migration tool merged             YES
+Real bge-m3 isolated validation    PASS
+Production candidate built         NO
+Production model switched          NO
+Source collection deleted          NO
+Production Vault modified          NO
+Production SQLite modified         NO
 ```
 
-## 12. Files
+## 12. 已知限制
+
+1. Runtime Settings 尚未把模型和 Collection 切换实现为一个 Atomic Transaction（原子事务）。
+2. CLI 需要人工确认 Embedded Qdrant 的独占访问，不能自动识别所有外部进程。
+3. 失败候选 Collection 保留用于诊断，不自动删除。
+4. Retrieval Quality A/B Test（检索质量对比测试）尚未执行。
+5. Remote Qdrant Alias（远程 Qdrant 别名）未实现。
+6. Vector Center 当前只读。
+
+## 13. 后续生产迁移顺序
+
+生产迁移必须独立立项：
 
 ```text
-src/retrieval/collection_migration.py
-src/retrieval/index_coordinator.py
-src/retrieval/__init__.py
-scripts/prepare_vector_collection_migration.py
-scripts/validate_p2_02_local.py
-tests/test_vector_collection_migration.py
-docs/TEST_REPORTS/P2_02_VECTOR_COLLECTION_MIGRATION_TEST_REPORT.md
+review plan-only output
+-> stop competing embedded Qdrant owners
+-> build new production candidate Collection
+-> verify exact count and 100% coverage
+-> run retrieval quality comparison
+-> apply controlled activation transaction
+-> restart Gateway/MCP/8766
+-> retain previous Collection for rollback
 ```
 
-## 13. Known Limitations
-
-- Runtime Settings does not yet own the vector model and collection switch as one atomic operation.
-- The CLI requires operator confirmation but cannot identify every external process that may own embedded Qdrant.
-- A failed candidate is preserved for diagnosis and is not automatically deleted.
-- Retrieval-quality A/B comparison between the old and candidate collections remains a later validation step.
-- Remote Qdrant aliases are not introduced in this task.
-- The Tauri Vector Center is developed separately and is not modified here.
-
-## 14. Rollback
-
-Repository rollback:
+## 14. 最终结论
 
 ```text
-revert P2-02 commits
+P2_02_MERGED_AND_VALIDATED
 ```
 
-Runtime rollback after a future activation uses the manifest's `rollback_settings`.
+P2-02 已合并正式分支，无需重复运行同一套本机隔离验收，除非迁移服务、Embedding Provider、Qdrant Provider 或 Workspace 合同发生相关变化。
 
-The source collection is never deleted by this task, so rollback remains possible.
-
-## 15. Next Priority
-
-After the local P2-02 tests pass:
-
-```text
-1. review the production plan-only output
-2. build the bge-m3 target collection with exclusive embedded Qdrant access
-3. verify exact vector count and 100% coverage
-4. run retrieval-quality comparison
-5. implement one controlled activation transaction
-6. restart and verify Gateway, MCP and 8766 status
-7. retain the previous collection for rollback
-```
-
-Non-critical cleanup, failed-candidate deletion and collection history UI remain documented backlog items rather than blockers.
+下一步：P2-03 Structured Read Model（结构化读取模型）。
