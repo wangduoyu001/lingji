@@ -1,126 +1,217 @@
 # DEVELOPMENT_RULES.md — LingJi Development Rules
 
-> Generated: 2026-07-20
+> Updated: 2026-07-20
+> Architecture authority: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
 
-## Branch Isolation
+## 1. Branch and Environment Isolation
 
-1. This worktree is on `feature/second-brain-memory`. Never modify or write runtime data into `C:\Users\Administrator\Documents\New project-ai`.
-2. Before each Codex task, read `.codex/context/PROJECT_SUMMARY.md`, `ACTIVE_RULES.md`, `ARCHITECTURE.md`, `RECENT_DECISIONS.md`, and `KNOWN_ISSUES.md`.
-3. If the API is available, call `POST http://127.0.0.1:8765/memory/context` before planning.
-4. Do not add the second-brain service to `start_lingji.bat`, `start_lingji.py`, or `run_service.py`.
+1. Current development branch: `feature/second-brain-memory`.
+2. Never modify or write runtime data into `C:\Users\Administrator\Documents\New project-ai`.
+3. Runtime data must never be silently written to the C: drive.
+4. Databases, vectors, logs, cache, uploads, generated assets and models must use configurable locations, preferably D: or a user-selected path.
+5. Never hardcode developer-specific absolute paths.
+6. Production and acceptance must physically isolate Vault, raw data, databases, Qdrant, logs, settings and generated assets.
 
-## Development Understanding Requirement
+## 2. Mandatory Architecture Direction
 
-1. Before developing any new feature, first understand the existing project structure and related modules.
-2. Do not create new files based only on feature names or assumptions.
-3. Before code changes, record or confirm:
-   - target module path
-   - existing service/class/function entry points
-   - data flow
-   - API registration location
-   - test location
-4. Prefer existing project documentation and code maps over repeated repository scanning.
-5. If the required code path is already documented, do not require Codex or local tools unless execution/testing is needed.
+1. `src/` is the only long-term platform mainline.
+2. `second_brain/` is a compatibility, migration and acceptance runtime.
+3. New memory features must be implemented in `src/`.
+4. New production ingestion must use `src/extraction/`.
+5. New primary desktop features must use `desktop/lingji-control/`.
+6. `second_brain/` may receive only:
+   - migration-blocking fixes
+   - compatibility reads
+   - export/migration utilities
+   - parity and acceptance tests
+7. Do not build equivalent production databases, retrieval algorithms, APIs or UI pages in both paths.
+8. Do not delete `second_brain/` or its database before migration parity, export and rollback requirements pass.
 
-## Task Routing Requirement
+## 3. Data Authority
 
-1. Use the simplest capable method for every task.
-2. Tasks that can be completed directly through repository documents, Markdown, planning, review, or small non-runtime changes should be completed directly without using Codex.
-3. Do not use Codex for simple documentation edits, architecture notes, requirement整理, or other tasks that do not require a local environment.
-4. If multiple simple tasks are known, complete them together instead of repeatedly creating separate execution tasks.
-5. Use Codex only when local environment access is required, including:
-   - running tests
-   - checking real hardware
-   - building applications
-   - debugging runtime issues
-   - validating local services
-6. Use independent development agents for isolated coding tasks when they can modify code without blocking the main workflow.
+```text
+Permanent memory and formal knowledge text
+= Obsidian Vault + Git
 
-## Path and Environment Safety Requirement
+Original imported material
+= configurable raw archive
 
-1. Runtime data must never be written to the C: drive. This is a mandatory rule.
-2. Do not create:
-   - databases
-   - vectors
-   - logs
-   - cache
-   - uploaded files
-   - generated assets
-   - model data
-   on C: drive.
-3. User data and runtime storage must use configurable locations, preferably D: drive or user-selected storage.
-4. Never hardcode developer-specific absolute paths.
-5. Paths must be resolved through:
-   - configuration files
-   - environment variables
-   - project root detection
-   - user data directory settings
-6. Development machine paths are temporary test environments, not application assumptions.
+Runtime task and audit state
+= lingji_state.db
 
-## Unified Desktop UI and Visibility Requirement
+Rebuildable lexical/metadata index
+= lingji_memory.db
+
+Rebuildable semantic index
+= Qdrant
+
+Structured source/conversation/message data
+= rebuildable derived read model
+```
+
+Rules:
+
+1. Do not introduce another permanent-memory authority.
+2. AI-generated permanent-memory candidates require owner approval.
+3. AI may not silently modify Core Memory.
+4. Qdrant and `lingji_memory.db` must remain rebuildable.
+5. Compatibility SQLite data may be read during migration but must not become the final truth source.
+
+## 4. Development Understanding Requirement
+
+Before code changes:
+
+1. confirm branch, remote HEAD and workspace state
+2. read `AGENTS.md`, `AI_CONTEXT.md`, `PROJECT_STATUS.md`, `ARCHITECTURE.md` and the relevant module plan
+3. locate the real class/function entry point
+4. identify the data authority and whether the target is mainline or compatibility code
+5. confirm API registration and Tauri gateway
+6. confirm storage/workspace boundaries
+7. confirm test files and the required Markdown report
+
+Do not create files based only on feature names or assumptions.
+
+Prefer current code maps and verified analysis over repeated full-repository scanning, but re-check code when documents conflict.
+
+## 5. Research Before Development
+
+For design and development work:
+
+1. understand the user requirement and current code
+2. review relevant official documentation and reliable implementations when the technology is external or may have changed
+3. produce a detailed implementation plan
+4. implement with minimal, maintainable code
+5. avoid repeated broad refactors
+6. create or update a Markdown report after each completed feature or substantial tested code section
+
+## 6. Task Routing
+
+Use the simplest capable execution method.
+
+Use direct repository/document actions for:
+
+- documentation corrections
+- architecture decisions
+- code review
+- small non-runtime changes
+
+Use Codex or local execution when required for:
+
+- running tests
+- checking hardware and local models
+- building desktop applications
+- debugging runtime services
+- validating filesystem, Qdrant or Ollama behavior
+
+Independent agents may handle isolated tasks only when their file ownership and contracts do not overlap.
+
+## 7. Retrieval and Vector Rules
+
+1. Preserve the mature `src` HybridRetriever pipeline.
+2. Qdrant must be adapted through `src.retrieval.hybrid.SemanticProvider`.
+3. Normal search and traced search must share one internal ranking pipeline.
+4. Metadata, privacy, time and Agent Scope filters must apply to semantic results.
+5. Qdrant failure must preserve lexical retrieval and report degraded state.
+6. Do not expose raw vectors by default.
+7. Model or dimension changes must trigger an explicit rebuild-required state.
+8. Vector counts and per-item existence must come from backend-confirmed data.
+9. Do not claim unified semantic retrieval is implemented while `build_memory_gateway()` still passes `semantic_provider=None`.
+
+## 8. Port and API Rules
+
+Target port map:
+
+```text
+8766 = authenticated Local Control API and Tauri gateway
+8767 = optional MCP Streamable HTTP
+stdio = default local MCP transport
+```
+
+Current transition warning:
+
+- `second_brain` FastAPI currently uses `8765`
+- `src` MCP HTTP currently defaults to `8765`
+- the conflict is unresolved until code and tests change it
+
+Rules:
+
+1. Tauri must call only the Local Control API on `8766`.
+2. Do not add direct Tauri calls to `8765`.
+3. Do not assume an HTTP memory-context endpoint is available merely because the legacy API is running.
+4. Prefer stdio MCP for local Codex integration until the HTTP port change is implemented and tested.
+
+## 9. Unified Desktop UI and Visibility
 
 1. `desktop/lingji-control/` is the only primary desktop UI.
-2. Previous local UI implementations and `second_brain/desktop/` are migration, acceptance, compatibility, or diagnostic sources. Do not develop them as competing primary products.
-3. Useful functionality from previous local UI implementations must be audited and migrated into the current Tauri UI before duplicate UI paths are retired.
-4. The Tauri UI must use the authenticated Local Control API on `127.0.0.1:8766` as its single backend gateway. It must not call the Second Brain API on port `8765` directly.
-5. Every major user-facing capability and supported setting must have a discoverable location in the primary UI or a clearly labeled advanced view.
-6. Long-running operations must expose structured task progress, including stage, processed count, failures, elapsed time and current activity when available.
-7. The UI must visibly expose memory, knowledge, model, watcher, scheduler, storage, backup and service health.
-8. Vector visibility is mandatory. The UI must show Qdrant mode, collection, readiness, active embedding model, vector counts, failures and per-item vector existence where supported.
-9. The UI must never fabricate success, zero counts, GPU use or vector readiness when the backend has not confirmed those states.
-10. New UI work must follow `docs/MODULES/UNIFIED_DESKTOP_UI_PLAN.md` and must update the migration matrix, tests and code map when applicable.
+2. `second_brain/desktop/` and previous local UI implementations are migration, acceptance and diagnostic sources.
+3. Audit and migrate useful capabilities before retiring duplicate UI paths.
+4. Every major user-facing capability and supported setting must be discoverable in the primary UI or a labeled advanced view.
+5. Long tasks must expose structured progress: stage, processed/total, failures, elapsed time and current activity when available.
+6. The UI must expose memory, knowledge, sources, vectors, models, GPU/CPU, tasks, watcher, scheduler, storage, backup and service health.
+7. Vector visibility is mandatory: mode, collection, readiness, model, dimension, counts, failures and per-item existence.
+8. The UI must never fabricate success, zero counts, GPU use, vector readiness or task completion.
+9. Brain Status, Memory Inspector, Vector Center and MCP must use shared statistics providers.
 
-## Data Boundaries
+## 10. Data and Ingestion Boundaries
 
-1. AI chat records are the **only** automatic memory source.
-2. Obsidian content is manual formal knowledge — index it, but never auto-distill into memories.
-3. The watcher may only scan the three configured roots: AI-chat inbox, Codex-task inbox, and Obsidian knowledge directory.
-4. No drive-wide scanning.
-5. All new runtime data stays on D: drive.
+1. All new automatic inputs enter through `src/extraction/`.
+2. Inputs require an approved adapter, explicit source scope and privacy handling.
+3. No drive-wide scanning.
+4. Raw source snapshots must retain provenance.
+5. Input hashes, adapter versions and idempotency keys must prevent duplicate ingestion.
+6. Obsidian formal knowledge is indexed but not silently distilled into personal memory.
+7. AI chats and other approved inputs may generate memory candidates, not automatic permanent facts.
+8. No automatic publishing.
 
-## Obsidian CLI Safety Rules
+## 11. Obsidian and Git Safety
 
-1. No deleting, overwriting, or batch-moving vault files without explicit approval.
-2. Read existing notes before modifying them.
+1. Read notes before modifying them.
+2. No delete, overwrite or batch move without explicit approval.
 3. Batch operations must support dry-run.
-4. Stop and output preview only if affecting >20 notes.
-5. Create a Git checkpoint before modifying formal notes.
-6. Use official Obsidian CLI (`Obsidian.com`) for daily single-note operations.
-7. Allow direct Markdown read in vectorization, backup, Git, and offline scans.
-8. Do not commit `.obsidian` cache, secrets, tokens, database files, or personal paths.
-9. Do not auto-publish any content.
-10. Re-read and verify after writing.
-11. All auto-generated content must record source, generation time, and task ID.
+4. Operations affecting more than 20 notes must stop for preview unless already explicitly approved.
+5. Create a Git checkpoint before modifying formal knowledge in bulk.
+6. Re-read and verify after writing.
+7. Generated content records source, generation time and task ID.
+8. Do not commit `.obsidian` cache, secrets, tokens, personal chats, databases or personal absolute paths.
 
-## File Conventions
+## 12. File and Code Conventions
 
-1. All Python files must use `encoding="utf-8"` (no BOM).
-2. Read files with `encoding="utf-8-sig"` to handle legacy BOM.
-3. Write files via `scripts/_exec.py` or Node.js MCP `fs.writeFileSync`.
-4. PowerShell does not support `&&` piping or `<< heredoc`.
+1. Python files use UTF-8 without BOM.
+2. Legacy text may be read with `utf-8-sig`.
+3. Use type hints for public Python APIs.
+4. Public tool responses use the project result contract where applicable.
+5. Keep layers clear: source/data, derived indexes, services/gateway, control/operations, UI.
+6. Avoid embedding business logic in API route handlers or React components.
+7. Do not duplicate SQL, ranking or status calculations across endpoints.
 
-## Memory Management
+## 13. Testing
 
-1. Important memories remain `pending` until explicit approval.
-2. Active memories are embedded in Qdrant for semantic search.
-3. SQLite and raw archives are the sources of truth; Qdrant is rebuildable.
-4. Superseded memories retain version history.
+After code changes:
 
-## Testing
+1. run relevant focused tests first
+2. run the existing Python suite when feasible
+3. run migration/provider contract tests for memory changes
+4. run Playwright/Tauri smoke or E2E tests for UI work
+5. test Qdrant available and unavailable modes
+6. test production/acceptance isolation
+7. test with compatibility runtime disabled before retirement claims
 
-1. After code changes, run existing tests: `python -m pytest tests/ -v`
-2. Web UI projects must use Playwright for end-to-end verification.
-3. Do not delete tests, skip tests, lower assertions, or fake results to pass.
+Never delete tests, reduce assertions, hide failures or report unexecuted tests as passed.
 
-## Knowledge Management
+## 14. Documentation and Delivery
 
-1. Capture First: new files get classified/tagged/summarized before opportunity analysis.
-2. Only **knowledge_entry / ai_news / opportunity_entry** types get Frontmatter tags.
-3. All generated content records source, generation time, and task_id.
+Each substantial task must update the relevant documents:
 
-## Python Conventions
+- architecture or module plan
+- code map when entry points change
+- project status
+- changelog or test report
+- migration matrix when compatibility behavior changes
 
-1. Use type hints (`from __future__ import annotations`).
-2. All public-facing tools must wrap results in `tool_result()` format.
-3. Return `{ok, data, error, meta}` from all tool calls.
-4. Keep logic layers light: Data → Index → Logic → Ops
+Final task output must distinguish:
+
+- implemented and tested
+- implemented but not locally tested
+- planned only
+- compatibility-only behavior
+- known blockers
