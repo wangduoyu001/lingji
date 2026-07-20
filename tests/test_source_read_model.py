@@ -6,7 +6,9 @@ import unittest
 from pathlib import Path
 
 from src.retrieval import MemoryDatabase
-from src.sources import SourceReadModel, SourceReadModelError
+from src.sources import SourceReadModel as ExportedSourceReadModel
+from src.sources import SourceReadModelError
+from src.sources.read_model import SourceReadModel
 
 
 class SourceReadModelTests(unittest.TestCase):
@@ -50,6 +52,13 @@ class SourceReadModelTests(unittest.TestCase):
                 }
             ],
         }
+
+    def test_single_source_read_model_implementation_and_no_contract_files(self):
+        self.assertIs(ExportedSourceReadModel, SourceReadModel)
+        root = Path(__file__).resolve().parents[1]
+        self.assertFalse((root / "src/sources/read_model_contract.py").exists())
+        self.assertFalse((root / "src/gateway/memory_inspector_contract.py").exists())
+        self.assertFalse((root / "src/control/api_contract.py").exists())
 
     def test_schema_migration_is_idempotent_and_indexes_exist(self):
         SourceReadModel(self.database)
