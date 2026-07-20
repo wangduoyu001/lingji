@@ -2,11 +2,13 @@
 
 > Updated（更新时间）: 2026-07-21  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Development Branch（开发分支）: `work/p2-03-structured-read-model`  
-> Implementation Commit（实现提交）: `d17d0bbca3d079c763b584df87578a5a8d312953`  
+> Combined Development Branch（联合开发分支）: `work/p2-03b-ingestion-wiring`  
+> P2-03 Base Commit（基础提交）: `9f5f444e389cd549db653471c3a34ef27a109e15`  
+> Combined Implementation Commit（联合实现提交）: `82a13334d475584869e92801b60e65bbc654937d`  
 > Verified Commit（已验证提交）: `NOT_EXECUTED`  
-> Status（状态）: P2-03 `IMPLEMENTED_NOT_TESTED`  
-> Merge State（合并状态）: `NOT_MERGED_AWAITING_REVIEW`
+> P2-03 Status（P2-03 状态）: `IMPLEMENTED_NOT_TESTED`  
+> P2-03B Status（P2-03B 状态）: `IMPLEMENTED_NOT_TESTED`  
+> Combined Merge State（联合合并状态）: `NOT_MERGED_AWAITING_COORDINATED_REVIEW`
 
 ## 1. 产品与代码主线
 
@@ -21,7 +23,7 @@ second_brain/
 = Compatibility/Migration Runtime（兼容与迁移运行层）
 ```
 
-本轮没有创建新分支，没有修改 Tauri，没有开始 P2-03B，也没有合并正式分支。
+本轮没有创建新分支，没有 rebase，没有 force push，没有修改 Tauri，没有开始 P2-04，也没有合并正式分支。
 
 ## 2. 数据权威
 
@@ -54,23 +56,32 @@ P2-01 Vector Center（向量中心）                 MERGED_AND_VALIDATED
 P2-02 Collection Migration（向量集合迁移）      MERGED_AND_VALIDATED
 ```
 
-Production bge-m3 Switch（生产 bge-m3 切换）和生产 Collection（向量集合）重建仍未执行。
+Production bge-m3 Switch（生产模型切换）和生产 Collection（向量集合）重建仍未执行。
 
-## 4. P2-03 当前实现
+## 4. P2-03 Structured Read Model
 
-P2-03 已在独立开发分支实现：
+状态：
+
+```text
+IMPLEMENTED_NOT_TESTED
+```
+
+已实现：
 
 - Source/Conversation/Message（来源、对话、消息）派生表。
-- Message→Memory、Memory→Chunk、Chunk→Vector 只读关系。
-- Stable ID（稳定标识符）与 Idempotent Upsert（幂等更新或插入）。
-- 分页、稳定排序、来源/项目/关键词筛选。
-- Privacy Filter（隐私过滤）与 Agent Scope（智能体范围）。
-- Workspace（工作区）隔离与 8766 Token Authentication（令牌认证）。
-- 只读 `/api/memory/inspector/*` GET 路由。
+- Stable ID（稳定标识符）和 Idempotent Upsert（幂等更新或插入）。
+- Privacy Filter（隐私过滤）和 Agent Scope（智能体范围）。
+- `privacy_inherited`、`projects_inherited`、`agent_scope_inherited`。
+- Source→Conversation 与 Conversation→Message 权限同步。
+- 显式子级权限保护。
+- Schema Version（数据库结构版本）验证。
+- Message→Memory→Chunk→Vector 只读关联。
+- `rebuild_required` true/false/null 三态。
+- Inspector 503 稳定错误和路径脱敏。
+- HTTP/HTTPS URL（统一资源定位符）认证信息和敏感查询参数脱敏。
+- 只读 `/api/memory/inspector/*` GET API（接口）。
 
-## 5. 单一正式实现收口
-
-当前唯一正式入口：
+正式单一实现：
 
 ```text
 src/sources/read_model.py::SourceReadModel
@@ -78,126 +89,128 @@ src/gateway/memory_inspector.py::MemoryInspectorFacade
 src/control/api.py::create_control_app
 ```
 
-已删除：
+## 5. P2-03B Structured Ingestion Wiring
+
+状态：
 
 ```text
-src/sources/read_model_contract.py
-src/gateway/memory_inspector_contract.py
-src/control/api_contract.py
+IMPLEMENTED_NOT_TESTED
 ```
 
-Package Export（包导出）直接引用正式类，`src/control/__init__.py` 不再通过 import side effect（导入副作用）或 Monkey Patch（猴子补丁）替换 `create_control_app()`。
-
-## 6. 本轮合同修复
-
-### 6.1 权限继承
-
-正式 Schema（数据库结构）包含：
+当前正式数据流：
 
 ```text
-privacy_inherited
-projects_inherited
-agent_scope_inherited
+Raw Snapshot（原始快照）
+-> Adapter（适配器）
+-> Vault write（知识库写入）
+-> on_documents_written
+-> StructuredReadModelSink
+-> SourceReadModel.upsert_bundle()
+-> Audit Event（审计事件）
 ```
 
-Source 更新只同步继承型 Conversation；Conversation 更新只同步继承型 Message；显式子级权限不被父级覆盖。
+已实现：
 
-### 6.2 Schema Version
+- `StructuredMessage`、`StructuredConversation`、`StructuredSource`。
+- ChatGPT Adapter 同时生成 Markdown 和结构化消息。
+- Raw/Vault 安全相对引用。
+- Structured Sink 幂等写入 Read Model。
+- Memory Link 仅在索引成功且 Memory 可见时写入。
+- Structured Sink 失败不回滚 Raw/Vault。
+- `StateDatabase.append_event()` 正式审计事件接线。
+- `entity_type = structured_ingestion`。
+- `entity_id = execution_id`。
+- Audit Event 写入失败不影响采集主流程。
+
+## 6. 统一异常脱敏
+
+唯一正式工具：
 
 ```text
-不存在 schema_version -> 写入 1
-schema_version == 1   -> 正常
-schema_version != 1   -> SourceReadModelError
+src/extraction/errors.py::safe_extraction_error
 ```
 
-未知或更高版本不得被自动降级。
-
-### 6.3 Vector Tri-state（向量三态）
+使用位置：
 
 ```text
-True  -> true
-False -> false
-None  -> null
+src/extraction/pipeline.py
+src/extraction/adapters/chatgpt.py
+src/extraction/structured_sink.py
 ```
 
-Memory Vector（记忆向量）顶层和每个 Chunk（文本分块）保持一致。
-
-### 6.4 503 脱敏
-
-Inspector（检查器）故障对外固定返回：
+对外稳定摘要：
 
 ```text
-READ_MODEL_UNAVAILABLE
-Structured read model is unavailable
+Post-extraction index synchronization failed; see local logs
+<conversation_id>: conversation extraction failed; see local logs
+structured read model write failed; see local logs
 ```
 
-SQLite 原文、数据库路径和用户目录不进入 HTTP Response（HTTP 响应）。
+完整异常只进入本地 logger（日志记录器），不得进入 API response（接口响应）、`batch.warnings` 或 `index_error`。
 
-### 6.5 URL 脱敏
+## 7. 最小集成测试代码
 
-HTTP/HTTPS URL（统一资源定位符）现在会：
+`tests/test_structured_ingestion.py` 已增加：
 
-- 删除 username/password（用户名和密码）。
-- 删除 fragment（片段）。
-- 删除 token、access_token、api_key、apikey、key、secret、signature、sig、credential、authorization、session、cookie 等敏感 query parameter（查询参数）。
-- 保留协议、主机、端口、安全路径和非敏感参数。
+- `TemporaryDirectory` + 真实 `MemoryDatabase`。
+- 真实 `SourceReadModel`。
+- 真实 `StructuredReadModelSink`。
+- 真实 `StateDatabase`。
+- Source/Conversation/Message 写入和正文读取。
+- 重复写入幂等验证。
+- Vault→index callback→Structured Sink 顺序验证。
+- 索引异常包含 Windows 路径时的降级验证。
+- `structured_ingestion_completed` 审计事件验证。
+- Audit payload 绝对路径泄漏检查。
+- ChatGPT warning 脱敏验证。
+- Audit Event 写入失败不影响主流程验证。
 
-## 7. 当前测试状态
+## 8. 当前测试状态
 
-已编写或更新：
+计划执行：
 
-```text
-tests/test_source_read_model.py
-tests/test_source_service.py
-tests/test_memory_inspector_facade.py
-tests/test_memory_inspector_api.py
+```powershell
+python -m pytest `
+  tests/test_structured_ingestion.py `
+  tests/test_source_read_model.py `
+  tests/test_source_service.py `
+  tests/test_memory_inspector_facade.py `
+  tests/test_memory_inspector_api.py `
+  -v --tb=short
 ```
 
-已执行辅助检查：
+当前环境无法解析 `github.com`，无法物化完整仓库测试环境。
 
 ```text
-Python py_compile（静态编译）       PASS
-临时 SQLite 继承同步冒烟            PASS
-schema_version=2 拒绝且不降级       PASS
-URL 示例脱敏                         PASS
-平行包装引用静态扫描                 PASS
-```
-
-两组指定 pytest 尚未执行：
-
-```text
+pytest: NOT EXECUTED
+py_compile: NOT EXECUTED
 passed: NOT EXECUTED
 failed: NOT EXECUTED
 skipped: NOT EXECUTED
 xfailed: NOT EXECUTED
 ```
 
-当前准确状态：
+不得将代码已提交、测试文件存在或没有 CI 红灯解释为测试通过。
 
-```text
-IMPLEMENTED_NOT_TESTED
-NOT_MERGED_AWAITING_REVIEW
-```
-
-不得描述为测试通过，不得合并正式分支。
-
-## 8. 本轮未执行
+## 9. 未执行范围
 
 ```text
 完整 pytest
+第二批历史回归
 npm
 Tauri
 Ollama
 真实 Qdrant
-P2-01 重复验收
-P2-02 重复验收
+生产 ChatGPT Export
+生产 Vault
+生产 SQLite
 本机 Codex
 ```
 
-## 9. 数据安全
+## 10. 数据安全
 
 ```text
-读取生产聊天正文: NO
+读取 Production ChatGPT 正文: NO
 修改 Production Vault: NO
 修改 Production SQLite: NO
 访问 Production Qdrant: NO
@@ -206,58 +219,26 @@ P2-02 重复验收
 修改 Tauri: NO
 ```
 
-## 10. 集中测试门槛
-
-重点测试：
-
-```powershell
-python -m pytest `
-  tests/test_source_read_model.py `
-  tests/test_source_service.py `
-  tests/test_memory_inspector_facade.py `
-  tests/test_memory_inspector_api.py `
-  -v --tb=short
-```
-
-直接相关 Regression Test（回归测试）：
-
-```powershell
-python -m pytest `
-  tests/test_memory_retrieval.py `
-  tests/test_permanent_memory_gateway.py `
-  tests/test_workspace_contract.py `
-  tests/test_control_api.py `
-  -v --tb=short
-```
-
-两组全部通过后才更新为：
+## 11. 当前联合状态
 
 ```text
-IMPLEMENTED_FOCUSED_TESTED
-NOT_MERGED_AWAITING_REVIEW
+P2-03:  IMPLEMENTED_NOT_TESTED
+P2-03B: IMPLEMENTED_NOT_TESTED
+Combined Merge State: NOT_MERGED_AWAITING_COORDINATED_REVIEW
 ```
 
-## 11. 下一阶段
+当前不能合并正式分支。
 
-下一步不是 P2-04。
+## 12. 下一步
 
-正式顺序：
+停止开发，等待联合代码审查和一次集中本机测试。
+
+指定测试全部通过后，才允许更新为：
 
 ```text
-P2-03 集中 pytest 与代码审查
--> P2-03B Structured Ingestion Wiring（结构化采集接线）
--> P2-04 Memory Inspector（记忆检查器）
--> 集中 Regression Test 与 Startup Contract（启动合同）修复
--> Production bge-m3 candidate Collection（生产候选向量集合）与受控切换
+P2-03:  IMPLEMENTED_FOCUSED_TESTED
+P2-03B: IMPLEMENTED_FOCUSED_TESTED
+Combined Merge State: NOT_MERGED_AWAITING_COORDINATED_REVIEW
 ```
 
-P2-03B 目标是把 ChatGPT Adapter（ChatGPT 适配器）等采集结果显式、幂等地写入 `SourceReadModel`，使 Source、Conversation 和 Message 页面拥有真实派生数据。
-
-## 12. 开发冻结规则
-
-- 新记忆能力只进入 `src/`。
-- 新采集能力只进入 `src/extraction/`。
-- 正式桌面能力只进入 `desktop/lingji-control/`。
-- Tauri 不得直连 8765、8767、SQLite、Qdrant 或 Ollama。
-- P2-03 未完成集中测试和审查前不得合并。
-- 不 force push。
+不要开始 P2-04 Memory Inspector（记忆检查器）。
