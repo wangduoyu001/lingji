@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import logging
 import sqlite3
 from typing import Any
 
@@ -11,6 +12,10 @@ from src.runtime import mcp_runtime_status
 
 from .memory_inspector import build_memory_inspector
 from .service import LocalControlService
+
+logger = logging.getLogger("lingji.control.read_model")
+READ_MODEL_ERROR_CODE = "READ_MODEL_UNAVAILABLE"
+READ_MODEL_ERROR_MESSAGE = "Structured read model is unavailable"
 
 
 class SettingsPatch(BaseModel):
@@ -124,7 +129,17 @@ def create_control_app(
 
     def translate_error(exc: Exception) -> HTTPException:
         if isinstance(exc, (ReadModelUnavailableError, sqlite3.Error)):
-            return HTTPException(status_code=503, detail=str(exc))
+            logger.error(
+                "Structured read model request failed",
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+            return HTTPException(
+                status_code=503,
+                detail={
+                    "code": READ_MODEL_ERROR_CODE,
+                    "message": READ_MODEL_ERROR_MESSAGE,
+                },
+            )
         if isinstance(exc, LookupError):
             return HTTPException(status_code=404, detail=str(exc))
         if isinstance(exc, PermissionError):
@@ -141,7 +156,7 @@ def create_control_app(
             try:
                 inspector = build_memory_inspector(settings, control)
             except Exception as exc:
-                raise ReadModelUnavailableError(str(exc)) from exc
+                raise ReadModelUnavailableError(READ_MODEL_ERROR_MESSAGE) from exc
         return inspector
 
     secured = [Depends(authorize)]
