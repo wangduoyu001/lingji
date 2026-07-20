@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 
-from src.capture.deduplication import CaptureDeduplicator
 from src.capture.models import CaptureEnvelope, CaptureStatus
 from src.capture.policy import CaptureMode, CapturePolicy
 from src.capture.service import CaptureService
@@ -12,13 +11,21 @@ class FakePipeline:
     def __init__(self):
         self.enqueued = []
         self.executed = []
+        self.fail_enqueue_once = False
+        self.fail_execute_once = False
 
     def enqueue(self, source_type, **kwargs):
         self.enqueued.append((source_type, kwargs))
+        if self.fail_enqueue_once:
+            self.fail_enqueue_once = False
+            raise RuntimeError("enqueue failed")
         return {"job_id": "job-1"}
 
     def execute(self, source_type, **kwargs):
         self.executed.append((source_type, kwargs))
+        if self.fail_execute_once:
+            self.fail_execute_once = False
+            raise RuntimeError("execute failed")
         return {"execution_id": kwargs.get("execution_id", "exec-1")}
 
 
@@ -39,6 +46,14 @@ def test_normal_policy_executes_light_capture_but_queues_media(tmp_path):
     media.write_bytes(b"media")
     result = service.submit_media(media)
     assert result.status is CaptureStatus.QUEUED
+
+
+def test_process_later_forces_enqueue_under_normal_policy():
+    pipeline = FakePipeline()
+    service = CaptureService(pipeline, policy=CapturePolicy.for_mode(CaptureMode.NORMAL))
+    result = service.submit_text("later", process_later=True)
+    assert result.status is CaptureStatus.QUEUED
+    assert pipeline.enqueued and not pipeline.executed
 
 
 def test_paused_service_rejects_processing():
@@ -75,14 +90,74 @@ def test_file_hash_changes_allow_new_capture(tmp_path):
     assert third.status is CaptureStatus.QUEUED
 
 
-def test_sensitive_metadata_is_rejected():
+def test_enqueue_failure_does_not_poison_deduplication():
+    pipeline = FakePipeline()
+    pipeline.fail_enqueue_once = True
+    service = CaptureService(pipeline)
+    with pytest.raises(RuntimeError):
+        service.submit_text("retry enqueue")
+    retry = service.submit_text("retry enqueue")
+    assert retry.status is CaptureStatus.QUEUED
+
+
+def test_execute_failure_does_not_poison_deduplication():
+    pipeline = FakePipeline()
+    pipeline.fail_execute_once = True
+    service = CaptureService(pipeline, policy=CapturePolicy.for_mode(CaptureMode.NORMAL))
+    with pytest.raises(RuntimeError):
+        service.submit_text("retry execute")
+    retry = service.submit_text("retry execute")
+    assert retry.status is CaptureStatus.EXECUTED
+
+
+def test_successful_submit_is_remembered_only_after_pipeline_success():
+    service = CaptureService(FakePipeline())
+    assert service.submit_text("committed").status is CaptureStatus.QUEUED
+    assert service.submit_text("committed").status is CaptureStatus.DUPLICATE
+
+
+@pytest.mark.parametrize("key", ["token", "cookie", "api_key", "apikey"])
+def test_nested_sensitive_metadata_is_rejected(key):
     service = CaptureService(FakePipeline())
     envelope = CaptureEnvelope(
-        capture_id="cap-sensitive",
+        capture_id=f"cap-{key}",
         source_type="web",
         capture_method="mobile_share",
         text="hello",
-        metadata={"token": "secret"},
+        metadata={"outer": [{"inner": {key: "secret"}}]},
     )
     with pytest.raises(ValueError):
         service.submit(envelope)
+
+
+def test_metadata_cannot_override_reserved_payload_fields():
+    service = CaptureService(FakePipeline())
+    envelope = CaptureEnvelope(
+        capture_id="cap-reserved",
+        source_type="web",
+        capture_method="mobile_share",
+        text="hello",
+        title="real title",
+        metadata={"title": "spoofed"},
+    )
+    with pytest.raises(ValueError):
+        service.submit(envelope)
+
+
+def test_explicit_share_fields_are_forwarded_without_metadata_shadowing():
+    pipeline = FakePipeline()
+    service = CaptureService(pipeline)
+    result = service.submit_web(
+        "https://example.com/item",
+        platform="xiaohongshu",
+        description="saved from phone",
+        external_id="note-42",
+        process_later=True,
+        metadata={"labels": ["idea"]},
+    )
+    assert result.status is CaptureStatus.QUEUED
+    payload = pipeline.enqueued[0][1]["payload"]
+    assert payload["platform"] == "xiaohongshu"
+    assert payload["description"] == "saved from phone"
+    assert payload["external_id"] == "note-42"
+    assert payload["metadata"] == {"labels": ["idea"]}
