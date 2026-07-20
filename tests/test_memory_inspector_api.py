@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import sqlite3
 import unittest
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 from src.control.api import create_control_app
-from src.gateway.memory_inspector import ReadModelUnavailableError
+from src.gateway.memory_inspector import MemoryInspectorFacade, ReadModelUnavailableError
 
 
 class FakeInspector:
@@ -112,6 +113,49 @@ class SqliteUnavailableInspector(FakeInspector):
         )
 
 
+class VectorErrorStatistics:
+    def vector_status(self):
+        return {
+            "state": "degraded",
+            "source": "live",
+            "collection": "acceptance_vectors",
+            "dimension": 1024,
+            "rebuild_required": None,
+            "last_error": r"D:\Users\Secret\qdrant.db snapshot failure",
+        }
+
+
+class VectorErrorSemantic:
+    def exists(self, chunk_id):
+        del chunk_id
+        raise RuntimeError(
+            r"D:\Users\Secret\qdrant.db contains private provider details"
+        )
+
+
+class VectorErrorInspector:
+    def __init__(self):
+        gateway = SimpleNamespace(
+            retriever=SimpleNamespace(semantic_provider=VectorErrorSemantic())
+        )
+        self.facade = MemoryInspectorFacade(
+            object(),
+            object(),
+            VectorErrorStatistics(),
+            gateway=gateway,
+            workspace="acceptance",
+        )
+        self.facade.get_memory = lambda memory_id, viewer=None: {
+            "item": {
+                "memory_id": memory_id,
+                "chunks": [{"chunk_id": "CHUNK-1"}],
+            }
+        }
+
+    def memory_vector(self, memory_id):
+        return self.facade.memory_vector(memory_id)
+
+
 class FakeControl:
     def __init__(self, inspector):
         self.memory_inspector = inspector
@@ -209,6 +253,37 @@ class MemoryInspectorApiTests(unittest.TestCase):
             "Structured read model is unavailable",
         )
         for forbidden in ("C:\\", "D:\\", "Users", "lingji_memory.db", "memory.db"):
+            self.assertNotIn(forbidden, response.text)
+
+    def test_vector_200_response_sanitizes_provider_and_snapshot_errors(self):
+        client = self.client(VectorErrorInspector())
+        response = client.get(
+            "/api/memory/inspector/memories/MEM-1/vector",
+            headers={"X-LingJi-Token": "secret"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        vector = payload["vector"]
+        chunk = vector["chunks"][0]
+        self.assertEqual(
+            vector["last_error"],
+            "Vector status unavailable; see local logs",
+        )
+        self.assertEqual(
+            chunk["last_error"],
+            "Vector status unavailable; see local logs",
+        )
+        self.assertIsNone(chunk["exists"])
+        self.assertIsNone(vector["rebuild_required"])
+        self.assertIsNone(chunk["rebuild_required"])
+        for forbidden in (
+            "D:\\",
+            "Users",
+            "qdrant.db",
+            "private provider details",
+            "snapshot failure",
+        ):
             self.assertNotIn(forbidden, response.text)
 
     def test_all_inspector_routes_are_read_only(self):
