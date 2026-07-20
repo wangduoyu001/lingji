@@ -1,294 +1,155 @@
-# P2-03 Structured Read Model（结构化读取模型）测试报告
+# P2-03 Structured Read Model 测试报告
 
-> Updated（更新时间）: 2026-07-20  
+> Updated（更新时间）: 2026-07-21  
 > Branch（分支）: `work/p2-03-structured-read-model`  
-> Verified Commit（已验证提交）: `b9950b4066fbb0b602c2ffba5109da2fa8371cf3`  
+> Implementation Commit（实现提交）: `0ce11ab56630d0d31c4828a0d63f0ea6e875729f`  
+> Verified Commit（已验证提交）: `NOT_EXECUTED`  
 > Status（状态）: `IMPLEMENTED_NOT_TESTED`  
-> Evidence（证据来源）: 真实代码与 Schema 审计、`py_compile` 静态编译、临时 SQLite 隔离冒烟；重点 pytest 待完整本机仓库执行
+> Merge State（合并状态）: `NOT_MERGED_AWAITING_REVIEW`
 
-## 1. 任务目标
+## 1. 本轮目标
 
-为 P2-04 Memory Inspector（记忆检查器）建立可重建、只读、权限感知、Workspace（工作区）隔离的 Source/Conversation/Message/Memory/Chunk/Vector 读取合同。
+本轮只修复 P2-03 后端读取合同，不开发 P2-04，不修改 Tauri，不访问生产 Vault、生产 SQLite、Ollama 或 Qdrant。
 
-## 2. 开始基线
+修复范围：
+
+1. Source/Conversation/Message 权限继承漂移。
+2. `rebuild_required` 的 `true/false/null` 三态。
+3. 503 错误脱敏。
+4. Source Read Model Schema Version 合同。
+
+## 2. 权限继承修复
+
+采用方案 A：显式继承标记。
+
+Conversation 和 Message 增加：
 
 ```text
-Repository: wangduoyu001/lingji
-Formal branch: feature/second-brain-memory
-Baseline: 098a062ca3e3fd50fdf7029716bc18ba2a1c4008
-Development branch: work/p2-03-structured-read-model
+privacy_inherited
+projects_inherited
+agent_scope_inherited
 ```
 
-开始前正式分支与预期提交一致。只执行了一次远程基线确认。
+规则：
 
-## 3. 真实代码分析
+- 子级未显式提供字段时，标记为 inherited。
+- Source 更新后，只同步 inherited Conversation 字段。
+- Conversation 更新后，只同步 inherited Message 字段。
+- 显式子级权限、项目和 Agent Scope 不被父级无条件覆盖。
+- 同步与父级 Upsert 在同一 SQLite 事务中完成，查询立即生效。
 
-### Canonical Memory
-
-`src/retrieval/memory_db.py`：
-
-- `memory_documents`
-- `memory_chunks`
-- `memory_meta`
-- `memory_fts`
-- WAL、foreign_keys、busy_timeout 和事务 context manager
-
-### Compatibility Schema
-
-`second_brain/db.py`：
-
-- sources
-- conversations
-- messages
-- memories
-- memory_versions
-- memory_relations
-- conflicts
-
-兼容表只作为迁移证据，不作为长期查询权威。
-
-### Extraction Gap
-
-ChatGPT Adapter 在解析阶段拥有逐条 message 的 node ID、角色、正文、时间、模型和顺序，但现有 Sink 最终仅保存整段对话 Markdown。P2-03 因此建立派生表和显式导入接口，不自动执行生产历史导入。
-
-## 4. 实现文件
+实现入口：
 
 ```text
+src/sources/read_model_contract.py
 src/sources/__init__.py
-src/sources/read_model.py
-src/sources/service.py
-src/gateway/memory_inspector.py
-src/gateway/__init__.py
-src/control/memory_inspector.py
-src/control/api.py
-
-tests/test_source_read_model.py
-tests/test_source_service.py
-tests/test_memory_inspector_facade.py
-tests/test_memory_inspector_api.py
 ```
 
-## 5. Schema（数据库结构）
+新增测试覆盖：
 
-新增：
+- Source 从 `private` 收紧为 `restricted` 后，旧继承型 Conversation/Message 不再对 ChatGPT 可见。
+- 显式子级权限不被 Source 更新覆盖。
+- Agent Scope 从 ChatGPT 改为 Ollama 后立即生效。
 
-```text
-source_read_model_meta
-source_records
-conversation_records
-message_records
-message_memory_links
-```
+## 3. Vector 三态修复
 
-Schema migration（结构迁移）使用 `CREATE TABLE/INDEX IF NOT EXISTS`，独立版本号为 `1`。
-
-## 6. Stable ID（稳定 ID）
-
-实现：
-
-- Source stable ID
-- Conversation stable ID
-- Message stable ID
-- existing external identity 优先复用
-- repeated upsert 不新增重复记录
-
-## 7. Pagination（分页）
+禁止把未知状态转换为 `False`。
 
 合同：
 
 ```text
-limit default 50
-limit range 1..200
-offset >= 0
+True  -> true
+False -> false
+None  -> null
 ```
 
-响应：
+Memory Vector 顶层与每个 Chunk 使用同一个原始 `snapshot.get("rebuild_required")` 值。
+
+实现入口：
+
+```text
+src/gateway/memory_inspector_contract.py
+src/gateway/__init__.py
+src/control/memory_inspector.py
+```
+
+新增测试：
+
+```text
+snapshot rebuild_required=None
+-> vector.rebuild_required is None
+-> vector.chunks[0].rebuild_required is None
+```
+
+## 4. 503 脱敏修复
+
+Inspector 503 对外只返回：
 
 ```json
 {
-  "items": [],
-  "pagination": {
-    "limit": 50,
-    "offset": 0,
-    "total": 0,
-    "has_more": false
+  "detail": {
+    "code": "READ_MODEL_UNAVAILABLE",
+    "message": "Structured read model is unavailable"
   }
 }
 ```
 
-排序增加稳定 ID tie-breaker（并列排序补充键），相同时间不会随机跳动。
+SQLite 原始异常、数据库路径和本机绝对路径不进入响应体。完整异常仅写入内部 logger。
 
-## 8. Privacy（隐私）与 Agent Scope（智能体范围）
-
-已实现：
-
-- Source privacy/project/scope 继承到 Conversation
-- Conversation privacy/project/scope 继承到 Message
-- Owner 显式返回 `viewer_scope=owner`
-- Agent 查询复用 `AIProfileRegistry`
-- restricted 对远程 Profile 不可见
-- 无权限 privacy 请求返回空集
-- 列表不返回完整 Message content
-
-## 9. Filters（筛选）
-
-支持：
-
-### Source
-
-- source_type
-- privacy
-- project
-- status
-- q
-
-### Conversation
-
-- source_id
-- source_type
-- privacy
-- project
-- from_time
-- to_time
-- q
-
-### Message
-
-- conversation_id
-- source_id
-- role
-- from_time
-- to_time
-- q
-
-### Memory
-
-- memory_type
-- status
-- privacy
-- project
-- q
-
-Memory 查询直接使用 `memory_documents`，不复制 HybridRetriever 排名。
-
-## 10. Linkage（关联）
-
-支持：
+实现入口：
 
 ```text
-Source -> Conversation
-Conversation -> Message
-Message -> Memory
-Memory -> Chunk
-Chunk -> Vector diagnostics
+src/control/api_contract.py
+src/control/__init__.py
 ```
 
-MessageMemoryLink 使用参数化 SQL、外键和唯一主键。
-
-## 11. Vector Degraded State（向量降级状态）
-
-有 live Semantic Provider 时：
+新增测试构造包含以下内容的 SQLite 异常：
 
 ```text
-exists = true/false
-source = live
+D:\Users\Secret\lingji_memory.db
+C:\Users\Owner\memory.db
 ```
 
-只有 snapshot 或 provider 不可用时：
+并验证响应不包含：
 
 ```text
-exists = null
-source = unavailable
+C:\
+D:\
+Users
+lingji_memory.db
+memory.db
 ```
 
-未创建第二个 Embedded Qdrant Client，未返回 vector array 或完整 Qdrant payload。
+## 5. Schema Version 合同
 
-## 12. API
-
-新增 authenticated read-only GET routes（带认证的只读 GET 路由）：
+初始化规则：
 
 ```text
-GET /api/memory/inspector/status
-GET /api/memory/inspector/sources
-GET /api/memory/inspector/sources/{source_id}
-GET /api/memory/inspector/conversations
-GET /api/memory/inspector/conversations/{conversation_id}
-GET /api/memory/inspector/conversations/{conversation_id}/messages
-GET /api/memory/inspector/messages
-GET /api/memory/inspector/messages/{message_id}
-GET /api/memory/inspector/memories
-GET /api/memory/inspector/memories/{memory_id}
-GET /api/memory/inspector/memories/{memory_id}/source
-GET /api/memory/inspector/memories/{memory_id}/vector
+schema_version 不存在 -> 写入 1
+schema_version == 1   -> 正常初始化
+schema_version != 1   -> 抛出 SourceReadModelError
 ```
 
-无 POST/PATCH/DELETE Inspector route。
+未知或更高版本不得被自动覆盖为 1。
 
-## 13. 已执行检查
-
-### 13.1 Python 静态编译
-
-执行范围：
+新增测试：
 
 ```text
-src/sources/*.py
-src/gateway/memory_inspector.py
-src/control/memory_inspector.py
-src/control/api.py
+预置 schema_version=2
+-> SourceReadModel 初始化失败
+-> 数据库中版本仍为 2
+```
+
+## 6. 本次测试文件
+
+```text
 tests/test_source_read_model.py
 tests/test_source_service.py
 tests/test_memory_inspector_facade.py
 tests/test_memory_inspector_api.py
 ```
 
-结果：
-
-```text
-py_compile: PASS
-syntax failures: 0
-```
-
-这不是 pytest，不得解释为功能测试通过。
-
-### 13.2 临时 SQLite 隔离冒烟
-
-执行内容：
-
-- 创建临时 SQLite
-- 创建临时 canonical memory/chunk
-- 初始化 Structured Read Model
-- repeated bundle upsert
-- Source/Conversation/Message 查询
-- Message→Memory 查询
-- Owner 列表不返回正文
-- snapshot-only vector 返回 unknown/null
-- Acceptance 与 Production 数据库路径隔离
-
-结果：
-
-```text
-isolated smoke: PASS
-production data touched: NO
-```
-
-该冒烟是当前对话内的辅助证据，不代替仓库重点 pytest。
-
-### 13.3 禁止项静态扫描
-
-结果：
-
-```text
-8765 reference in new implementation: 0
-8767 reference in new implementation: 0
-QdrantClient construction: 0
-qdrant_client direct import: 0
-raw vector response: 0
-Inspector write route: 0
-```
-
-## 14. 未执行测试
-
-未执行：
+## 7. 要求执行的重点测试
 
 ```powershell
 python -m pytest `
@@ -299,7 +160,7 @@ python -m pytest `
   -v --tb=short
 ```
 
-未执行直接相关回归：
+## 8. 要求执行的直接相关回归
 
 ```powershell
 python -m pytest `
@@ -310,11 +171,15 @@ python -m pytest `
   -v --tb=short
 ```
 
-未运行完整 pytest，符合低积分任务要求。
+## 9. 实际执行结果
 
-## 15. Passed / Failed / Skipped
+当前执行环境尝试拉取同一远程分支时失败：
 
-针对要求的 pytest：
+```text
+Could not resolve host: github.com
+```
+
+因此无法取得完整仓库和依赖环境，未执行上述 pytest。
 
 ```text
 passed: NOT EXECUTED
@@ -323,61 +188,64 @@ skipped: NOT EXECUTED
 xfailed: NOT EXECUTED
 ```
 
-针对已执行辅助检查：
+已执行辅助检查：
 
 ```text
-py_compile checks: passed
-isolated SQLite smoke: passed
-static forbidden scan: passed
+新修复模块 py_compile: PASS
+远程文件与分支写入: PASS
+真实 pytest: NOT EXECUTED
 ```
 
-## 16. 已知限制
+不得将本状态描述为测试通过。
 
-1. P2-03 不自动把生产 ChatGPT 导出写入 Read Model。
-2. `second_brain.sqlite3` 导入器未实现，因为本阶段没有必要自动迁移兼容数据。
-3. Read Model 首次初始化只创建派生表，不产生 Source/Conversation/Message 数据。
-4. 完整正文仅来自显式 Message Detail API，但仍属于派生副本，权威仍是 Vault/raw provenance。
-5. snapshot 无法证明单个 chunk 是否存在于 Qdrant，因此返回 null。
-6. 当前测试数量差异仍为 `UNRECONCILED_TEST_COUNT_DELTA`，本任务未运行完整 pytest 核对。
+## 10. 未执行项目
 
-## 17. 数据安全
+```text
+完整 pytest
+npm
+Tauri
+Ollama
+Qdrant 真实验收
+P2-01 验收
+P2-02 验收
+本机 Codex
+```
+
+## 11. 数据安全
 
 ```text
 读取生产聊天正文: NO
 修改 Production Vault: NO
-修改 Production SQLite runtime data: NO
+修改 Production SQLite: NO
 访问 Production Qdrant: NO
 切换生产模型: NO
-创建生产 bge-m3 Collection: NO
-删除旧 Collection: NO
-暴露原始向量: NO
-调用本机 Codex: NO
+创建或删除生产 Collection: NO
+修改 Tauri: NO
 ```
 
-开发与辅助冒烟只使用临时目录和临时 SQLite。
-
-## 18. 回滚
-
-回滚本分支提交即可。
-
-派生表可以显式删除并重新建立，不影响：
-
-- Vault
-- Git history
-- raw archive
-- canonical memory text
-- Qdrant collection
-
-## 19. 合并状态
+## 12. 当前结论
 
 ```text
+IMPLEMENTED_NOT_TESTED
 NOT_MERGED_AWAITING_REVIEW
 ```
 
-## 20. 下一步
+P2-03 仍不允许合并。
 
-仅在 P2-03 代码审查和重点测试通过后：
+## 13. 下一阶段
+
+下一步不是 P2-04。
 
 ```text
-P2-04 Memory Inspector
+P2-03B Structured Ingestion Wiring
+```
+
+目标：把 ChatGPT Adapter 等采集结果显式、幂等地写入 `SourceReadModel`，让 Source、Conversation 和 Message 查询拥有真实派生数据。
+
+顺序：
+
+```text
+P2-03 重点测试与审查
+-> P2-03B Structured Ingestion Wiring
+-> P2-04 Memory Inspector
 ```
