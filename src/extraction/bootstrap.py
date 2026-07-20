@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from src.control.runtime_settings import RuntimeSettingsStore
 from src.memory import VaultLayout
+from src.retrieval.memory_db import MemoryDatabase
+from src.sources import SourceReadModel
 from src.storage import StateDatabase
 
 from .adapters.chatgpt import ChatGPTExportAdapter
@@ -12,6 +14,7 @@ from .pipeline import DocumentsWrittenCallback, ExtractionPipeline
 from .queue import SQLiteExtractionQueue
 from .registry import AdapterRegistry
 from .sink import VaultExtractionSink
+from .structured_sink import StructuredReadModelSink
 
 
 def build_extraction_pipeline(
@@ -24,6 +27,14 @@ def build_extraction_pipeline(
     layout.ensure()
     state_db = StateDatabase(settings.state_db_path)
     runtime_settings = runtime_settings or RuntimeSettingsStore(settings, state_db=state_db)
+    memory_database = MemoryDatabase(settings.memory_db_path)
+    source_read_model = SourceReadModel(memory_database)
+    structured_sink = StructuredReadModelSink(
+        source_read_model,
+        storage_path=settings.storage_path,
+        state_db=state_db,
+        memory_database=memory_database,
+    )
     queue = SQLiteExtractionQueue(settings.state_db_path)
     registry = AdapterRegistry()
     registry.register(ChatGPTExportAdapter())
@@ -35,6 +46,7 @@ def build_extraction_pipeline(
         queue,
         registry,
         sink,
+        structured_sink=structured_sink,
         default_max_attempts=settings.extraction_max_attempts,
         lease_heartbeat_seconds=settings.extraction_lease_heartbeat_seconds,
         stale_after_seconds=settings.extraction_stale_after_seconds,
