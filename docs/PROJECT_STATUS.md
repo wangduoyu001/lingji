@@ -1,9 +1,9 @@
 # PROJECT_STATUS.md — LingJi 项目实时状态
 
 > Updated（更新时间）: 2026-07-20  
-> Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Validated Code Commit（已验证代码提交）: `8a4860553edfbb698665c7dcb1f8bfaf3f556eba`  
-> Status（状态）: P2 MERGED（P2 已合并）  
+> Branch（分支）: `work/p2-03-structured-read-model`  
+> Verified Commit（已验证提交）: `b9950b4066fbb0b602c2ffba5109da2fa8371cf3`  
+> Status（状态）: P2-03 `IMPLEMENTED_NOT_TESTED`  
 > Documentation Contract（文档维护合同）: `docs/DOCUMENTATION_MAINTENANCE.md`
 
 ## 1. 产品方向
@@ -35,15 +35,13 @@ lingji_state.db
 
 lingji_memory.db
 = 可重建 Lexical/Metadata Index（词法与元数据索引）
+  + Structured Read Model（结构化读取模型）
 
 Qdrant
 = 可重建 Semantic Index（语义向量索引）
-
-Structured Read Model
-= 面向 Memory Inspector 的可重建结构化读取模型
 ```
 
-`second_brain.sqlite3` 仍是迁移期 Compatibility Data（兼容数据），不是长期数据权威。
+`second_brain.sqlite3` 仍是迁移期 Compatibility Data（兼容数据），不是长期数据权威。P2-03 不会自动读取或迁移生产兼容数据库。
 
 ## 3. 端口与运行合同
 
@@ -56,7 +54,7 @@ stdio = default local MCP transport（默认本地 MCP 传输方式）
 
 Tauri（跨平台桌面应用框架）只能通过 8766 访问正式控制接口，不得直接连接 8765、8767、Qdrant、Ollama 或 SQLite。
 
-## 4. 已完成阶段
+## 4. 已完成并合并阶段
 
 ### P0 Workspace 与端口合同
 
@@ -158,9 +156,59 @@ candidate coverage = 100%
 
 报告：`docs/TEST_REPORTS/P2_02_VECTOR_COLLECTION_MIGRATION_TEST_REPORT.md`
 
-## 5. 当前测试状态
+## 5. P2-03 Structured Read Model
 
-最新本机 Codex 汇总：
+当前开发分支已实现：
+
+```text
+src/sources/read_model.py
+src/sources/service.py
+src/gateway/memory_inspector.py
+src/control/memory_inspector.py
+```
+
+新增可重建派生表：
+
+```text
+source_read_model_meta
+source_records
+conversation_records
+message_records
+message_memory_links
+```
+
+已实现合同：
+
+- Stable ID（稳定 ID）
+- Idempotent Upsert（幂等更新或插入）
+- Source/Conversation/Message 列表与详情
+- Message 列表只返回 preview，不返回完整正文
+- `limit/offset` 分页，范围 1..200
+- 稳定时间排序和 ID tie-breaker（并列排序补充键）
+- source/project/privacy/status/role/time/q 筛选
+- Privacy Filter（隐私过滤）
+- Agent Scope（智能体读取范围）
+- Workspace 响应与数据库隔离合同
+- Message→Memory、Memory→Chunk、Chunk→Vector 诊断
+- 只读 `/api/memory/inspector/*` 8766 GET 路由
+- 401/404/422/503 错误合同
+- 绝对路径和敏感 metadata 清理
+- Qdrant 无法安全确认时 `exists=null`
+
+当前没有执行：
+
+- 生产聊天历史导入
+- `second_brain.sqlite3` 自动迁移
+- Production Vault/SQLite/Qdrant 访问
+- Production bge-m3 Collection 构建
+- Tauri Memory Inspector 页面
+
+计划：`docs/MODULES/P2_03_STRUCTURED_READ_MODEL_PLAN.md`  
+报告：`docs/TEST_REPORTS/P2_03_STRUCTURED_READ_MODEL_TEST_REPORT.md`
+
+## 6. 当前测试状态
+
+最近一次已记录全量本机汇总仍为：
 
 ```text
 223 passed
@@ -168,26 +216,29 @@ candidate coverage = 100%
 8 skipped
 ```
 
-该结果证明本次执行范围没有失败，但存在 Test Quality Debt（测试质量债务）：
+该结果不是 P2-03 测试结果。测试数量相对 P1-05 仍存在：
 
-1. `tests/test_desktop.py`
-   - 未安装 PySide6 时跳过旧桌面测试。
-   - 正式桌面主线已经转向 Tauri。
+```text
+UNRECONCILED_TEST_COUNT_DELTA
+```
 
-2. `test_original_startup_files_are_unchanged`
-   - 当前只比较工作区文件与 `HEAD`。
-   - 只能发现未提交修改，不能保护端口、入口和 Workspace 合同。
-   - 后续必须改为 Semantic Startup Contract Test（语义启动合同测试）。
+P2-03 当前已执行辅助检查：
 
-3. Test Count Delta（测试数量差异）
-   - P1-05：244 passed、2 failed、9 skipped。
-   - P2 汇总：223 passed、0 failed、8 skipped。
-   - 当前缺少完整日志解释总数下降。
-   - 状态：`UNRECONCILED_TEST_COUNT_DELTA`。
+```text
+Python py_compile                    PASS
+临时 SQLite 隔离冒烟                 PASS
+禁止端口/Qdrant/raw vector 静态扫描 PASS
+```
 
-上述问题不阻塞 P2-03，但下一次全量 Regression Test（回归测试）必须解释测试收集数量变化。
+P2-03 重点 pytest 和直接相关回归尚未执行，因此准确状态是：
 
-## 6. 当前准确状态
+```text
+IMPLEMENTED_NOT_TESTED
+```
+
+不得把代码提交、静态编译或无 CI 红灯解释为功能测试通过。
+
+## 7. 当前准确状态
 
 ```text
 Embedding migration                  已实现并本机验证
@@ -198,19 +249,18 @@ MemoryGateway runtime wiring         已实现并本机验证
 8766 status API                      已实现并本机验证
 Tauri Vector Center                  已合并并验证
 Collection Migration Tool            已合并并验证
+Structured Read Model                已实现，重点测试待执行
+Memory Inspector Facade/API          已实现，重点测试待执行
 Production bge-m3 switch             未执行
 Production vector rebuild            未执行
-Structured Read Model                未实现
-Memory Inspector                     未实现
+Tauri Memory Inspector               未实现
 ```
 
-## 7. bge-m3 当前定位
+## 8. bge-m3 当前定位
 
 `bge-m3` 是已经通过 Acceptance Validation（验收验证）的中英混合文本向量模型，实际向量维度为 1024。
 
-它尚未成为正式生产默认模型。
-
-生产切换仍必须遵循：
+它尚未成为正式生产默认模型。生产切换仍必须遵循：
 
 ```text
 创建新生产候选 Collection
@@ -223,39 +273,37 @@ Memory Inspector                     未实现
 
 禁止把不同维度模型的向量写进同一 Collection。
 
-## 8. 当前最高优先级
+## 9. 当前最高优先级
 
-### P2-03 Structured Read Model（结构化读取模型）
+### P2-03 审查与重点验证
 
-目标是为 Memory Inspector 提供稳定的只读数据合同：
+需要在完整本机仓库执行：
 
-- Source（来源）
-- Conversation（对话）
-- Message（消息）
-- Memory（记忆）
-- Chunk（文本分块）
-- Vector Linkage（向量关联）
+```powershell
+python -m pytest `
+  tests/test_source_read_model.py `
+  tests/test_source_service.py `
+  tests/test_memory_inspector_facade.py `
+  tests/test_memory_inspector_api.py `
+  -v --tb=short
+```
 
-必须支持：
+然后执行直接相关回归：
 
-- 分页
-- 时间排序
-- 来源筛选
-- 项目筛选
-- 关键词搜索
-- Conversation/Message 关联
-- Message/Memory 关联
-- Memory/Chunk 关联
-- Chunk/Vector 状态关联
-- Privacy Filter（隐私过滤）
-- Workspace 隔离
-- 8766 Token Authentication（令牌认证）
+```powershell
+python -m pytest `
+  tests/test_memory_retrieval.py `
+  tests/test_permanent_memory_gateway.py `
+  tests/test_workspace_contract.py `
+  tests/test_control_api.py `
+  -v --tb=short
+```
 
-P2-03 只开发后端读取合同，不开发 Memory Inspector 页面。
+审查和测试通过后才能合并正式分支。
 
 ### P2-04 Memory Inspector（记忆检查器）
 
-P2-03 稳定后开发 Tauri 页面，包括：
+P2-03 合同稳定后开发 Tauri 页面，包括：
 
 - 来源列表
 - 对话时间线
@@ -266,9 +314,9 @@ P2-03 稳定后开发 Tauri 页面，包括：
 - 搜索和筛选
 - 来源追踪
 
-## 9. 暂缓任务
+## 10. 暂缓任务
 
-以下任务不阻塞 P2-03：
+以下任务不阻塞 P2-03 审查：
 
 - 历史远程分支删除
 - 依赖统一重构
@@ -277,23 +325,31 @@ P2-03 稳定后开发 Tauri 页面，包括：
 - Collection 历史管理 UI
 - 旧 PySide6 桌面完全退役
 
-## 10. 开发冻结规则
+## 11. 开发冻结规则
 
 - 新记忆功能只进入 `src/`
 - 新数据导入只进入 `src/extraction/`
 - 新正式桌面功能只进入 `desktop/lingji-control/`
 - `second_brain/` 仅用于兼容、导出、迁移和验收阻塞修复
 - Tauri 不得直接访问 8765、8767、Qdrant、Ollama 或 SQLite
+- Control Process 不得为了诊断重新打开 Embedded Qdrant
 - 不得删除兼容数据，直到导出、等价验证和回滚要求通过
 - 不得为了文档修改重复运行本机完整验证
 
-## 11. 下一开发顺序
+## 12. 下一开发顺序
 
 ```text
-P2-03 Structured Read Model
+P2-03 重点测试与代码审查
+-> 合并 feature/second-brain-memory
 -> P2-04 Memory Inspector
 -> 集中 Regression Test 与 Startup Contract 修复
 -> 正式 bge-m3 候选 Collection 与受控切换
+```
+
+当前合并状态：
+
+```text
+NOT_MERGED_AWAITING_REVIEW
 ```
 
 里程碑报告：`docs/FINAL_P2_MERGE_REPORT.md`

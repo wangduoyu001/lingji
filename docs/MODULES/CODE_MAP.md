@@ -1,9 +1,9 @@
 # CODE_MAP.md — LingJi 代码地图
 
 > Updated（更新时间）: 2026-07-20  
-> Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Validated Code Commit（已验证代码提交）: `8a4860553edfbb698665c7dcb1f8bfaf3f556eba`  
-> Current Development（当前开发）: P2-03 Structured Read Model（结构化读取模型）
+> Branch（分支）: `work/p2-03-structured-read-model`  
+> Verified Commit（已验证提交）: `b9950b4066fbb0b602c2ffba5109da2fa8371cf3`  
+> Current Development（当前开发）: P2-03 Structured Read Model（结构化读取模型）`IMPLEMENTED_NOT_TESTED`
 
 ## 1. 仓库职责
 
@@ -28,19 +28,23 @@ second_brain/desktop/
 ```text
 src/extraction/
   -> Raw Snapshot（原始快照）和 Vault 文档
+  -> lingji_memory.db Structured Read Model
+       -> Source / Conversation / Message / MessageMemoryLink
   -> MemoryIndexCoordinator
-       -> lingji_memory.db
+       -> lingji_memory.db lexical index
        -> QdrantSemanticProvider
   -> HybridRetriever
   -> ContextPackBuilder
   -> MemoryGateway
        -> MemoryStatisticsService
        -> memory_status.json
+  -> MemoryInspectorFacade
+       -> authenticated 8766 GET API
   -> MCP / Local Control API
   -> Tauri UI
 ```
 
-Provider（提供器）、Coordinator（协调器）和 Gateway（网关）由 `build_memory_gateway()` 统一装配。
+Provider（提供器）、Coordinator（协调器）和 Gateway（网关）由 `build_memory_gateway()` 统一装配。P2-03 的 Read Model 是可重建查询层，不取代采集管线、MemoryGateway 或 HybridRetriever。
 
 ## 3. 数据权威与索引
 
@@ -57,6 +61,9 @@ src/storage/state_db.py
 src/retrieval/memory_db.py
 = 可重建 Lexical/Metadata Index（词法与元数据索引）
 
+src/sources/read_model.py
+= 可重建 Structured Read Model（结构化读取模型）
+
 src/retrieval/qdrant_provider.py
 = 可重建 Semantic Index Provider（语义向量索引提供器）
 
@@ -66,7 +73,7 @@ src/retrieval/qdrant_provider.py
 
 `second_brain/db.py` 仍是迁移期 Compatibility Data（兼容数据），不是最终数据权威。
 
-Source/Conversation/Message（来源、对话、消息）数据必须迁移为可重建 Read Model（读取模型），不能让兼容数据库成为长期事实源。
+Source/Conversation/Message（来源、对话、消息）正式查询入口已经迁入 `src/sources/`，但本任务没有自动导入生产历史数据。
 
 ## 4. Workspace（工作区）入口
 
@@ -79,6 +86,7 @@ Source/Conversation/Message（来源、对话、消息）数据必须迁移为�
 | 端口合同 | `src/runtime/ports.py` | 已实现并验证 |
 | P1 本机验收 | `scripts/validate_p1_05_local.py` | 已通过 |
 | P2-02 隔离验收 | `scripts/validate_p2_02_local.py` | 已通过 |
+| P2-03 Read Model 隔离测试 | `tests/test_memory_inspector_facade.py` | 已编写，待 pytest |
 
 每个 Workspace 隔离：
 
@@ -116,8 +124,9 @@ Production 与 Acceptance 路径不得重叠。
 | Memory Lifecycle（记忆生命周期） | `src/memory/lifecycle.py::MemoryLifecycleService` | 已实现 |
 | State/Audit（状态与审计） | `src/storage/state_db.py::StateDatabase` | 已实现 |
 | MCP | `src/mcp_server.py` | 已接入协调索引和状态发布 |
+| Memory Inspector Facade | `src/gateway/memory_inspector.py::MemoryInspectorFacade` | 已实现，待重点测试 |
 
-当前正式链路：
+当前正式检索链路：
 
 ```text
 build_memory_gateway()
@@ -130,9 +139,37 @@ build_memory_gateway()
   -> atomic memory_status.json
 ```
 
+P2-03 不修改该排名链路。Memory 列表和详情复用 canonical `MemoryDatabase`，搜索召回仍由 `MemoryGateway`/`HybridRetriever` 负责。
+
 语义初始化失败时，Gateway 降级为 Lexical-only（仅词法检索），不得伪造向量成功状态。
 
-## 6. Provider 与状态边界
+## 6. Structured Read Model（结构化读取模型）入口
+
+| 能力 | 正式入口 | 状态 |
+|---|---|---|
+| Schema 与稳定 ID | `src/sources/read_model.py::SourceReadModel` | 已实现，待重点测试 |
+| Source Upsert/查询 | `SourceReadModel.upsert_source/list_sources/get_source` | 已实现，待重点测试 |
+| Conversation Upsert/查询 | `SourceReadModel.upsert_conversation/list_conversations/get_conversation` | 已实现，待重点测试 |
+| Message Upsert/查询 | `SourceReadModel.upsert_message/list_messages/get_message` | 已实现，待重点测试 |
+| Message→Memory Link | `SourceReadModel.link_message_memory` | 已实现，待重点测试 |
+| Explicit Rebuild（显式重建） | `SourceReadModel.rebuild` | 已实现，未用于生产数据 |
+| Permission-aware Query（权限感知查询） | `src/sources/service.py::SourceQueryService` | 已实现，待重点测试 |
+| Viewer Contract（查看者合同） | `src/sources/service.py::ViewerContext` | 已实现 |
+| Control Builder | `src/control/memory_inspector.py::build_memory_inspector` | 已实现，避免第二个 Qdrant Client |
+
+派生表：
+
+```text
+source_read_model_meta
+source_records
+conversation_records
+message_records
+message_memory_links
+```
+
+列表 Message 只返回 `content_preview`、`content_length`、`content_hash`；完整正文只由明确的 Message Detail API 返回。
+
+## 7. Provider 与状态边界
 
 ```text
 src/model_center/embedding.py
@@ -158,11 +195,16 @@ src/gateway/memory_statistics.py
   -> memory/vector/embedding 统计与健康状态
   -> 不包含正文和原始向量
   -> 为 Control Process（控制进程）提供快照
+
+src/gateway/memory_inspector.py
+  -> 只有已注入 live provider 时才查询 per-chunk exists
+  -> snapshot-only 时返回 exists=null
+  -> 不返回 raw vector 或完整 Qdrant payload
 ```
 
 Control Process 不得为了显示状态再次打开 Embedded Qdrant（嵌入式 Qdrant）。
 
-## 7. Collection Migration（向量集合迁移）
+## 8. Collection Migration（向量集合迁移）
 
 | 能力 | 入口 | 状态 |
 |---|---|---|
@@ -173,7 +215,7 @@ Control Process 不得为了显示状态再次打开 Embedded Qdrant（嵌入式
 
 正式生产候选 Collection 尚未构建，生产模型尚未切换。
 
-## 8. 统一采集入口
+## 9. 统一采集入口
 
 | 能力 | 正式入口 |
 |---|---|
@@ -189,9 +231,11 @@ Control Process 不得为了显示状态再次打开 Embedded Qdrant（嵌入式
 | Web/Social Capture | `src/extraction/adapters/web.py::WebCaptureAdapter` |
 | Media Extraction | `src/extraction/adapters/media.py::MediaExtractionAdapter` |
 
+ChatGPT Adapter 已能解析逐条消息，但当前正式采集链路尚未自动写入 Structured Read Model。P2-03 只提供幂等接口和显式重建能力，不自动导入生产历史。
+
 所有新采集必须进入 `src/extraction/`，不得扩展旧 Watcher 成为正式链路。
 
-## 9. Control API 与 Tauri
+## 10. Control API 与 Tauri
 
 | 能力 | 入口 | 状态 |
 |---|---|---|
@@ -201,6 +245,9 @@ Control Process 不得为了显示状态再次打开 Embedded Qdrant（嵌入式
 | Vector Status | `GET /api/vector/status` | 已实现并验证 |
 | Vector Coverage | `GET /api/vector/coverage` | 已实现并验证 |
 | Brain Status | `GET /api/brain/status` | 已实现并验证 |
+| Memory Inspector Status | `GET /api/memory/inspector/status` | 已实现，待重点测试 |
+| Source/Conversation/Message API | `GET /api/memory/inspector/*` | 已实现，待重点测试 |
+| Memory/Source/Vector Linkage API | `GET /api/memory/inspector/memories/*` | 已实现，待重点测试 |
 | MCP Status | `GET /api/mcp/status` | 已实现 |
 | Runtime Settings | `src/control/runtime_settings.py::RuntimeSettingsStore` | 已实现基础框架 |
 | Control Startup | `run_control_api.py` | 已实现 |
@@ -209,38 +256,19 @@ Control Process 不得为了显示状态再次打开 Embedded Qdrant（嵌入式
 | Vector Center Page | `desktop/lingji-control/src/pages/VectorCenterPage.tsx` | 已合并并验证 |
 | UI Smoke | `desktop/lingji-control/scripts/ui-modular-smoke.mjs` | 已包含 Vector Center |
 
+Inspector API 只增加 GET，不增加写入、编辑或删除记忆的路由。
+
 当前 UI 缺口：
 
-- Memory Inspector 尚未实现
+- P2-04 Tauri Memory Inspector 尚未实现
 - Runtime Settings 缺少完整 memory/vector/workspace/MCP 可编辑分组
 - 知识中心、来源会话和 AI 权限可视化仍待完善
-
-## 10. P2-03 计划入口
-
-Code Map 中为 P2-03 保留的正式路径：
-
-| 能力 | 目标路径 |
-|---|---|
-| Source/Conversation/Message Read Model（来源、对话、消息读取模型） | `src/sources/read_model.py` |
-| Permission-aware Source Query（权限感知来源查询） | `src/sources/service.py` |
-| Memory Inspector Facade（记忆检查器门面） | `src/gateway/memory_inspector.py` |
-| Retrieval Trace（检索追踪） | `src/retrieval/trace.py` |
-| Revision Read Model（修订读取模型） | `src/memory/revisions.py` |
-| Relation Read Model（关系读取模型） | `src/memory/relations.py` |
-| Conflict Candidate（冲突候选） | `src/memory/conflicts.py` |
-| Legacy Export/Parity（旧数据导出与等价验证） | `src/migration/` |
-
-P2-03 当前只负责 Structured Read Model（结构化读取模型）和只读 8766 API 合同。
-
-P2-04 再开发 Tauri Memory Inspector 页面。
-
-创建目标文件前必须先检查现有实现；如果真实代码已有更合适入口，应复用而不是重复创建。
 
 ## 11. Compatibility（兼容层）待迁移能力
 
 | 能力 | 兼容入口 | 正式目标 |
 |---|---|---|
-| Structured Source/Conversation/Message | `second_brain/db.py` | `src/sources/` 可重建 Read Model |
+| Structured Source/Conversation/Message | `second_brain/db.py` | `src/sources/` 可重建 Read Model；生产导入未执行 |
 | Memory Versions（记忆版本） | `second_brain/db.py` | Revision Read Model |
 | Relations/Conflicts（关系与冲突） | `second_brain/conflict/` 与 DB 表 | 统一只读模型 |
 | Acceptance Scenario（验收场景） | `second_brain/acceptance.py` | 正式 Capability Contract（能力合同） |
@@ -278,7 +306,18 @@ tests/test_control_api.py
 tests/test_vector_collection_migration.py
 ```
 
-最新本机汇总：
+P2-03 新增：
+
+```text
+tests/test_source_read_model.py
+tests/test_source_service.py
+tests/test_memory_inspector_facade.py
+tests/test_memory_inspector_api.py
+```
+
+P2-03 当前只完成静态编译、临时 SQLite 冒烟和禁止项扫描，重点 pytest 尚未执行。
+
+最近一次已记录全量本机汇总仍为：
 
 ```text
 223 passed
@@ -286,7 +325,7 @@ tests/test_vector_collection_migration.py
 8 skipped
 ```
 
-测试数量相对 P1-05 有未核对差异，下一次全量 Regression Test（回归测试）必须解释。
+该数字不是 P2-03 测试结果。测试数量相对 P1-05 有未核对差异：`UNRECONCILED_TEST_COUNT_DELTA`。
 
 ## 14. 开发前检查
 
@@ -299,3 +338,13 @@ tests/test_vector_collection_migration.py
 7. Tauri 和 Control Process 不得直接访问 Embedded Qdrant。
 8. 每项重大能力必须包含测试和 Markdown 报告。
 9. 已验证且未受影响的 P1/P2 测试不重复执行。
+
+## 15. 下一步
+
+```text
+P2-03 重点 pytest 与代码审查
+-> 合并正式分支
+-> P2-04 Memory Inspector
+```
+
+当前合并状态：`NOT_MERGED_AWAITING_REVIEW`。
