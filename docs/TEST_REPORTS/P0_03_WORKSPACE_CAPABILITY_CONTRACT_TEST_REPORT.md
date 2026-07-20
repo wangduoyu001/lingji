@@ -1,8 +1,8 @@
 # P0-03 Workspace and Memory Capability Contract Test Report
 
-Updated: 2026-07-20  
-Branch: `feature/second-brain-memory`  
-Baseline: `39b754d940658fc6ae3bf7af29be2b1596335b2b`  
+Updated: 2026-07-20
+Branch: `feature/second-brain-memory`
+Baseline: `39b754d940658fc6ae3bf7af29be2b1596335b2b`
 Status: repository implementation complete; full local regression validation pending
 
 ## 1. Task Goal

@@ -1,8 +1,8 @@
 # LingJi Code Map
 
-> Updated: 2026-07-20  
-> Purpose: identify real long-term entry points before development.  
-> Architecture: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`  
+> Updated: 2026-07-20
+> Purpose: identify real long-term entry points before development.
+> Architecture: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
 > Execution roadmap: `docs/MODULES/UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md`
 
 ## 1. Repository Roles

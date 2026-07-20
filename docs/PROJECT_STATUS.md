@@ -1,8 +1,8 @@
 # PROJECT_STATUS.md — LingJi Project Status
 
-> Updated: 2026-07-20  
-> Branch: `feature/second-brain-memory`  
-> Architecture authority: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`  
+> Updated: 2026-07-20
+> Branch: `feature/second-brain-memory`
+> Architecture authority: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
 > Execution roadmap: `docs/MODULES/UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md`
 
 ## 1. Current Product Direction
