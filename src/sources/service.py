@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from src.gateway.profiles import AIProfileRegistry
@@ -243,10 +243,14 @@ class SourceQueryService:
         text = str(value or "").strip()
         if not text:
             return None
-        if "://" in text or text.startswith(("raw:", "vault:")):
+        if text.startswith(("raw:", "vault:")):
             return text
+        if text.startswith(("http://", "https://")):
+            return text
+        if "://" in text:
+            return None
         path = Path(text).expanduser()
-        if not path.is_absolute():
+        if not path.is_absolute() and not PureWindowsPath(text).is_absolute():
             return path.as_posix()
         resolved = path.resolve(strict=False)
         for label, root in (("raw", self.raw_path), ("vault", self.vault_path)):
@@ -264,7 +268,9 @@ class SourceQueryService:
                 if any(token in lowered for token in ("token", "api_key", "apikey", "password", "cookie", "secret")):
                     continue
                 if isinstance(item, str) and (
-                    lowered.endswith(("path", "reference", "_ref")) or Path(item).is_absolute()
+                    lowered.endswith(("path", "reference", "_ref"))
+                    or Path(item).is_absolute()
+                    or PureWindowsPath(item).is_absolute()
                 ):
                     output[key] = self._safe_reference(item)
                 else:

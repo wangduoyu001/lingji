@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import unittest
 
 from fastapi.testclient import TestClient
@@ -86,6 +87,11 @@ class UnavailableInspector(FakeInspector):
         raise ReadModelUnavailableError("read model unavailable")
 
 
+class SqliteUnavailableInspector(FakeInspector):
+    def status(self):
+        raise sqlite3.OperationalError("database unavailable")
+
+
 class FakeControl:
     def __init__(self, inspector):
         self.memory_inspector = inspector
@@ -158,6 +164,14 @@ class MemoryInspectorApiTests(unittest.TestCase):
 
     def test_read_model_unavailable_returns_503(self):
         client = self.client(UnavailableInspector())
+        response = client.get(
+            "/api/memory/inspector/status",
+            headers={"X-LingJi-Token": "secret"},
+        )
+        self.assertEqual(response.status_code, 503)
+
+    def test_sqlite_read_failure_returns_503(self):
+        client = self.client(SqliteUnavailableInspector())
         response = client.get(
             "/api/memory/inspector/status",
             headers={"X-LingJi-Token": "secret"},

@@ -43,6 +43,8 @@ class SourceQueryServiceTests(unittest.TestCase):
                     "metadata": {
                         "api_key": "must-not-leak",
                         "source_path": str(self.raw / "chatgpt" / "export.json"),
+                        "file_reference": "file:///C:/Users/Developer/private.txt",
+                        "windows_path": r"C:\Users\Developer\private.txt",
                     },
                 },
                 "conversations": [
@@ -119,6 +121,8 @@ class SourceQueryServiceTests(unittest.TestCase):
         self.assertTrue(item["vault_reference"].startswith("vault:"))
         self.assertNotIn("api_key", item["metadata"])
         self.assertTrue(item["metadata"]["source_path"].startswith("raw:"))
+        self.assertIsNone(item["metadata"]["file_reference"])
+        self.assertIsNone(item["metadata"]["windows_path"])
 
     def test_disallowed_requested_privacy_returns_empty_page(self):
         chatgpt = self.service.agent_viewer("chatgpt")

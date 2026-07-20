@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import sqlite3
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -122,7 +123,7 @@ def create_control_app(
             raise HTTPException(status_code=401, detail="Invalid local control token")
 
     def translate_error(exc: Exception) -> HTTPException:
-        if isinstance(exc, ReadModelUnavailableError):
+        if isinstance(exc, (ReadModelUnavailableError, sqlite3.Error)):
             return HTTPException(status_code=503, detail=str(exc))
         if isinstance(exc, LookupError):
             return HTTPException(status_code=404, detail=str(exc))
