@@ -35,7 +35,12 @@ class FakeInspector:
         return {
             "workspace": "acceptance",
             "items": [],
-            "pagination": {"limit": kwargs["limit"], "offset": kwargs["offset"], "total": 0, "has_more": False},
+            "pagination": {
+                "limit": kwargs["limit"],
+                "offset": kwargs["offset"],
+                "total": 0,
+                "has_more": False,
+            },
         }
 
     def get_conversation(self, conversation_id):
@@ -45,17 +50,30 @@ class FakeInspector:
         return {
             "workspace": "acceptance",
             "items": [],
-            "pagination": {"limit": kwargs["limit"], "offset": kwargs["offset"], "total": 0, "has_more": False},
+            "pagination": {
+                "limit": kwargs["limit"],
+                "offset": kwargs["offset"],
+                "total": 0,
+                "has_more": False,
+            },
         }
 
     def get_message(self, message_id):
-        return {"workspace": "acceptance", "item": {"message_id": message_id, "content": "detail"}}
+        return {
+            "workspace": "acceptance",
+            "item": {"message_id": message_id, "content": "detail"},
+        }
 
     def list_memories(self, **kwargs):
         return {
             "workspace": "acceptance",
             "items": [],
-            "pagination": {"limit": kwargs["limit"], "offset": kwargs["offset"], "total": 0, "has_more": False},
+            "pagination": {
+                "limit": kwargs["limit"],
+                "offset": kwargs["offset"],
+                "total": 0,
+                "has_more": False,
+            },
         }
 
     def get_memory(self, memory_id):
@@ -84,12 +102,14 @@ class FakeInspector:
 
 class UnavailableInspector(FakeInspector):
     def status(self):
-        raise ReadModelUnavailableError("read model unavailable")
+        raise ReadModelUnavailableError("internal read model failure")
 
 
 class SqliteUnavailableInspector(FakeInspector):
     def status(self):
-        raise sqlite3.OperationalError("database unavailable")
+        raise sqlite3.OperationalError(
+            r"unable to open D:\Users\Secret\lingji_memory.db; fallback C:\Users\Owner\memory.db"
+        )
 
 
 class FakeControl:
@@ -162,21 +182,33 @@ class MemoryInspectorApiTests(unittest.TestCase):
             422,
         )
 
-    def test_read_model_unavailable_returns_503(self):
+    def test_read_model_unavailable_returns_stable_503(self):
         client = self.client(UnavailableInspector())
         response = client.get(
             "/api/memory/inspector/status",
             headers={"X-LingJi-Token": "secret"},
         )
         self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"]["code"], "READ_MODEL_UNAVAILABLE")
+        self.assertEqual(
+            response.json()["detail"]["message"],
+            "Structured read model is unavailable",
+        )
 
-    def test_sqlite_read_failure_returns_503(self):
+    def test_sqlite_read_failure_does_not_leak_local_paths(self):
         client = self.client(SqliteUnavailableInspector())
         response = client.get(
             "/api/memory/inspector/status",
             headers={"X-LingJi-Token": "secret"},
         )
         self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"]["code"], "READ_MODEL_UNAVAILABLE")
+        self.assertEqual(
+            response.json()["detail"]["message"],
+            "Structured read model is unavailable",
+        )
+        for forbidden in ("C:\\", "D:\\", "Users", "lingji_memory.db", "memory.db"):
+            self.assertNotIn(forbidden, response.text)
 
     def test_all_inspector_routes_are_read_only(self):
         app = create_control_app(
