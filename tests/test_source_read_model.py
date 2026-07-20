@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from src.retrieval import MemoryDatabase
-from src.sources import SourceReadModel
+from src.sources import SourceReadModel, SourceReadModelError
 
 
 class SourceReadModelTests(unittest.TestCase):
@@ -66,6 +66,14 @@ class SourceReadModelTests(unittest.TestCase):
                     "SELECT name FROM sqlite_master WHERE type='index'"
                 ).fetchall()
             }
+            conversation_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(conversation_records)").fetchall()
+            }
+            message_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(message_records)").fetchall()
+            }
         self.assertTrue(
             {
                 "source_records",
@@ -76,7 +84,40 @@ class SourceReadModelTests(unittest.TestCase):
             }.issubset(tables)
         )
         self.assertIn("idx_message_conversation_time", indexes)
+        self.assertTrue(
+            {"privacy_inherited", "projects_inherited", "agent_scope_inherited"}.issubset(
+                conversation_columns
+            )
+        )
+        self.assertTrue(
+            {"privacy_inherited", "projects_inherited", "agent_scope_inherited"}.issubset(
+                message_columns
+            )
+        )
         self.assertEqual(self.read_model.schema_version(), "1")
+
+    def test_unknown_schema_version_is_rejected_without_downgrade(self):
+        path = Path(self.temp_dir.name) / "future-schema.db"
+        database = MemoryDatabase(path)
+        with database._connection() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS source_read_model_meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                "INSERT INTO source_read_model_meta(key, value) VALUES ('schema_version', '2')"
+            )
+        with self.assertRaises(SourceReadModelError):
+            SourceReadModel(database)
+        with database._connection() as connection:
+            version = connection.execute(
+                "SELECT value FROM source_read_model_meta WHERE key = 'schema_version'"
+            ).fetchone()["value"]
+        self.assertEqual(version, "2")
 
     def test_stable_ids_and_repeated_upsert_do_not_duplicate(self):
         first = self.read_model.upsert_bundle(self._bundle())
