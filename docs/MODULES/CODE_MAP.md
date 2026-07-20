@@ -71,7 +71,6 @@ Qdrant provider under src/retrieval
 | Context Pack | `src/retrieval/context_pack.py::ContextPackBuilder` |
 | Incremental synchronization | `src/retrieval/incremental_sync.py` |
 | Permanent-memory lifecycle | `src/memory/lifecycle.py::MemoryLifecycleService` |
-| Vault layout | `src/memory/layout.py::VaultLayout` or package export |
 | State and events | `src/storage/state_db.py::StateDatabase` |
 | MCP | `src/mcp_server.py` and `run_mcp_server.py` |
 
@@ -84,9 +83,9 @@ Current semantic gap:
 | Capability | Entry |
 |---|---|
 | Adapter framework | `src/extraction/` |
-| Persistent queue | `src/extraction/queue.py` or real queue module confirmed in task analysis |
-| Worker and leases | `src/extraction/` worker modules |
-| ChatGPT import | `src/extraction/` and existing ChatGPT importer modules |
+| Persistent queue | real queue module under `src/extraction/`, confirm exact path before changes |
+| Worker and leases | worker modules under `src/extraction/` |
+| ChatGPT import | existing ChatGPT importer and `src/extraction/` integration |
 | Codex capture | `src/extraction/` adapters |
 | Web/social capture | `src/extraction/` adapters |
 | Media extraction | `src/media/` |
@@ -187,4 +186,4 @@ Migration must add provider and capability-contract tests rather than relying on
 5. Confirm API registration and UI gateway.
 6. Confirm storage and workspace isolation.
 7. Confirm tests and Markdown report location.
-8. Do not create a new module merely because the feature name sounds new. Humanity has enough duplicate abstractions already.
+8. Do not create a new module based only on a feature name.
