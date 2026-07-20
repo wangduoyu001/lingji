@@ -75,7 +75,9 @@ Qdrant provider under src/retrieval
 | Incremental synchronization | `src/retrieval/incremental_sync.py::IncrementalMemorySynchronizer` |
 | Permanent-memory lifecycle | `src/memory/lifecycle.py::MemoryLifecycleService` |
 | State and events | `src/storage/state_db.py::StateDatabase` |
-| MCP | `src/mcp_server.py` and `run_mcp_server.py` |
+| MCP tools/resources/prompts | `src/mcp_server.py` |
+| MCP CLI startup | `run_mcp_server.py` |
+| MCP/Control/compatibility port contract | `src/runtime/ports.py` |
 
 Current semantic gap:
 
@@ -116,6 +118,7 @@ New data sources must enter this framework. Do not add new production ingestion 
 |---|---|
 | Control service | `src/control/service.py::LocalControlService` |
 | Control API | `src/control/api.py::create_control_app()` |
+| Read-only MCP contract API | `GET /api/mcp/status` in `src/control/api.py` |
 | Runtime settings | `src/control/runtime_settings.py::RuntimeSettingsStore` |
 | Control startup | `run_control_api.py` |
 | Model inventory | `src/model_center/inventory.py::LocalModelInventoryService` |
@@ -135,7 +138,7 @@ Current control gaps:
 
 - `LocalControlService` does not construct or receive the unified MemoryGateway.
 - `brain_status()` reads missing `overview["memory_stats"]` and may report false zero counts.
-- Runtime Settings lacks memory, vector, workspace and MCP groups.
+- Runtime Settings still lacks editable memory, vector, workspace and MCP groups; P0-02 exposes the MCP contract read-only.
 - Tauri lacks the final Inspector/Vector/Knowledge/AI-MCP pages and global service status bar.
 
 ## 7. Compatibility Capabilities To Migrate
@@ -171,23 +174,24 @@ The following paths are roadmap targets and must not be described as implemented
 
 ## 9. Port Map
 
-Current conflict:
+Repository contract after P0-02:
 
 ```text
-second_brain FastAPI = 8765
-src MCP HTTP default = 8765
-Local Control API = 8766
+second_brain compatibility API = 8765
+Local Control API              = 8766
+src MCP Streamable HTTP        = 8767
+src MCP default transport      = stdio
 ```
 
-Target:
+Implementation entries:
 
-```text
-8766 = Local Control API
-8767 = optional MCP Streamable HTTP
-stdio = default local MCP
-```
+- defaults: `src/config.py`
+- validation/status: `src/runtime/ports.py`
+- supported MCP startup: `run_mcp_server.py`
+- read-only status: `GET /api/mcp/status`
+- Tauri default gateway: `desktop/lingji-control/src/api.ts` and `src-tauri/src/main.rs`
 
-The target is documentation until code and tests implement it.
+The repository implementation is complete. Real Windows three-process binding and full regression validation remain pending and are tracked in `docs/TEST_REPORTS/P0_02_PORT_CONTRACT_TEST_REPORT.md`.
 
 ## 10. Memory Inspector Entry
 
@@ -217,9 +221,14 @@ Relevant existing suites include:
 - `tests/test_control_api.py`
 - `tests/test_control_api_extended.py`
 - `tests/test_brain_status_e2e.py`
+- `tests/test_mcp_server.py`
 - `tests/test_second_brain.py`
 - `tests/test_desktop.py`
 - `desktop/lingji-control/scripts/ui-modular-smoke.mjs`
+
+P0-02 report:
+
+- `docs/TEST_REPORTS/P0_02_PORT_CONTRACT_TEST_REPORT.md`
 
 Roadmap-required new suites include provider, capability contract, source read model, statistics, Inspector API, workspace isolation, dual-read and no-legacy regression tests.
 
