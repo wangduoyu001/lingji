@@ -36,9 +36,11 @@ def build_memory_gateway(
 
     Existing production Vault and SQLite paths remain the transition mapping when
     no explicit WorkspaceContext is supplied. Any semantic configuration or
-    dependency failure leaves a lexical-only gateway with a structured warning.
+    dependency failure leaves a lexical-only gateway with structured warnings.
     """
 
+    if workspace is not None:
+        workspace.validate()
     values = dict(runtime_values or {})
     vault_path = workspace.vault_path if workspace else settings.vault_path
     storage_path = workspace.storage_path if workspace else settings.storage_path
@@ -58,9 +60,22 @@ def build_memory_gateway(
     runtime_warnings: list[dict[str, Any]] = []
     closeables: list[Any] = []
     semantic_provider = None
-    semantic_workspace = workspace
+    runtime_workspace = workspace
     semantic_batch_size = int(settings.semantic_batch_size)
     embedding_provider = None
+
+    if runtime_workspace is None:
+        try:
+            runtime_workspace = _resolve_semantic_workspace(settings, None)
+        except Exception as exc:
+            warning = {
+                "code": "workspace_runtime_resolution_failed",
+                "stage": "bootstrap",
+                "message": _safe_error(exc),
+                "workspace": _workspace_name(None, settings),
+            }
+            runtime_warnings.append(warning)
+            _record_warning(state_db, warning)
 
     try:
         semantic_enabled = _as_bool(
@@ -72,11 +87,12 @@ def build_memory_gateway(
         if semantic_batch_size <= 0:
             raise ValueError("semantic_batch_size must be greater than zero")
         if semantic_enabled:
-            semantic_workspace = _resolve_semantic_workspace(settings, workspace)
+            if runtime_workspace is None:
+                raise RuntimeError("Workspace context is unavailable for semantic runtime")
             embedding_provider = build_embedding_provider(settings, values)
             if embedding_provider is not None:
                 semantic_provider = QdrantSemanticProvider(
-                    semantic_workspace,
+                    runtime_workspace,
                     embedding_provider,
                     distance=str(values.get("qdrant_distance", settings.qdrant_distance)),
                     timeout_seconds=float(
@@ -86,7 +102,7 @@ def build_memory_gateway(
                         values.get("qdrant_collection_schema", settings.qdrant_collection_schema)
                     ),
                 )
-                closeables.extend([semantic_provider, embedding_provider])
+                closeables.extend([embedding_provider, semantic_provider])
     except Exception as exc:
         if embedding_provider is not None:
             _safe_close(embedding_provider)
@@ -94,7 +110,7 @@ def build_memory_gateway(
             "code": "semantic_runtime_initialization_failed",
             "stage": "bootstrap",
             "message": _safe_error(exc),
-            "workspace": _workspace_name(workspace, settings),
+            "workspace": _workspace_name(runtime_workspace, settings),
         }
         runtime_warnings.append(warning)
         _record_warning(state_db, warning)
@@ -122,10 +138,10 @@ def build_memory_gateway(
         profiles=AIProfileRegistry(),
         state_db=state_db,
         index_coordinator=coordinator,
+        workspace=runtime_workspace,
         runtime_warnings=runtime_warnings,
         closeables=closeables,
     )
-    gateway.workspace = semantic_workspace
 
     if rebuild_if_empty and memory_db.stats()["documents"] == 0:
         indexer = PEMISIndex(
