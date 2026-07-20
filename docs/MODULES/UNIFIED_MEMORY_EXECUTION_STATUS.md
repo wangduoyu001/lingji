@@ -2,10 +2,11 @@
 
 > Updated（更新时间）: 2026-07-21  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Development Branch（开发分支）: `work/p2-03-structured-read-model`  
-> Implementation Commit（实现提交）: `d17d0bbca3d079c763b584df87578a5a8d312953`  
+> Combined Development Branch（联合开发分支）: `work/p2-03b-ingestion-wiring`  
+> P2-03 Base Commit（基础提交）: `9f5f444e389cd549db653471c3a34ef27a109e15`  
+> Combined Implementation Commit（联合实现提交）: `82a13334d475584869e92801b60e65bbc654937d`  
 > Verified Commit（已验证提交）: `NOT_EXECUTED`  
-> Status（状态）: ACTIVE EXECUTION TRACKER（生效中的执行状态表）
+> Combined Merge State（联合合并状态）: `NOT_MERGED_AWAITING_COORDINATED_REVIEW`
 
 ## 1. 权威顺序
 
@@ -27,87 +28,104 @@
 | P2-01 | Vector Center（向量中心） | `MERGED_AND_VALIDATED` | P2-01 报告 |
 | P2-02 | Collection Migration（向量集合迁移） | `MERGED_AND_VALIDATED` | P2-02 报告 |
 | P2-03 | Structured Read Model（结构化读取模型） | `IMPLEMENTED_NOT_TESTED` | P2-03 测试报告 |
-| P2-03B | Structured Ingestion Wiring（结构化采集接线） | `BLOCKED_BY_P2_03_REVIEW` | 等待 P2-03 集中测试与审查 |
-| P2-04 | Memory Inspector（记忆检查器） | `BLOCKED_BY_P2_03B` | 不得提前开始 |
+| P2-03B | Structured Ingestion Wiring（结构化采集接线） | `IMPLEMENTED_NOT_TESTED` | P2-03B 测试报告 |
+| P2-04 | Memory Inspector（记忆检查器） | `BLOCKED_BY_COORDINATED_REVIEW` | 不得提前开始 |
 | P2-05 | Startup Contract/Test Quality（启动合同与测试质量） | `DEFERRED` | 后续集中回归 |
 | P2-06 | Production bge-m3 Switch（生产模型切换） | `DEFERRED` | 等待质量对比和受控切换 |
 
-## 3. P2-03 单一正式实现
-
-仓库当前只保留以下正式入口：
+## 3. 联合开发分支
 
 ```text
-src/sources/read_model.py::SourceReadModel
-src/gateway/memory_inspector.py::MemoryInspectorFacade
-src/control/api.py::create_control_app
+work/p2-03b-ingestion-wiring
 ```
 
-Package Export（包导出）直接引用同一类对象。
-
-已删除平行包装层：
+该分支包含：
 
 ```text
-src/sources/read_model_contract.py
-src/gateway/memory_inspector_contract.py
-src/control/api_contract.py
+P2-03 Structured Read Model
++
+P2-03B Structured Ingestion Wiring
 ```
 
-`src/control/__init__.py` 不再通过 import side effect（导入副作用）或 Monkey Patch（猴子补丁）修改 API Factory（接口工厂）。
+当前不合并 `feature/second-brain-memory`。
 
-## 4. P2-03 已实现合同
+## 4. P2-03 当前合同
 
 - Source/Conversation/Message（来源、对话、消息）派生 Schema（数据库结构）。
-- 稳定 ID 与 Idempotent Upsert（幂等更新或插入）。
-- 分页、稳定时间排序、来源/项目/关键词筛选。
-- Message→Memory、Memory→Chunk、Chunk→Vector 只读关联。
-- Privacy Filter（隐私过滤）与 Agent Scope（智能体范围）。
-- Workspace（工作区）隔离和 8766 Token Authentication（令牌认证）。
-- 只读 `/api/memory/inspector/*` GET 路由。
-- `privacy_inherited`、`projects_inherited`、`agent_scope_inherited`。
-- Source→Conversation 与 Conversation→Message 继承同步。
-- 显式子级权限覆盖保护。
-- Schema Version（数据库结构版本）不兼容时拒绝初始化且不降级。
+- Stable ID（稳定标识符）和 Idempotent Upsert（幂等更新或插入）。
+- Privacy Filter（隐私过滤）和 Agent Scope（智能体范围）。
+- 父子权限继承同步和显式子级保护。
+- Schema Version（数据库结构版本）验证。
+- Message→Memory→Chunk→Vector 只读关联。
 - `rebuild_required` true/false/null 三态。
-- Inspector 503 稳定错误和本机路径脱敏。
-- HTTP/HTTPS URL（统一资源定位符）用户名、密码、敏感查询参数和 fragment（片段）脱敏。
-- 单一类对象与包装文件不存在测试。
+- Inspector 503 稳定错误和路径脱敏。
+- HTTP/HTTPS URL（统一资源定位符）认证信息与敏感参数脱敏。
+- 8766 只读 Inspector API（检查器接口）。
 
-## 5. 当前测试状态
-
-已执行辅助检查：
-
-```text
-Python py_compile（静态编译）       PASS
-临时 SQLite 继承同步冒烟            PASS
-schema_version=2 拒绝且不降级       PASS
-URL 示例脱敏                         PASS
-平行包装引用静态扫描                 PASS
-```
-
-尚未执行指定 pytest：
-
-```text
-passed: NOT EXECUTED
-failed: NOT EXECUTED
-skipped: NOT EXECUTED
-xfailed: NOT EXECUTED
-```
-
-当前准确状态：
+状态：
 
 ```text
 IMPLEMENTED_NOT_TESTED
-NOT_MERGED_AWAITING_REVIEW
 ```
 
-不得把辅助检查、代码提交或没有 CI 红灯解释为重点测试通过。
+## 5. P2-03B 当前合同
 
-## 6. 集中测试门槛
+正式数据流：
 
-重点测试：
+```text
+Raw Snapshot（原始快照）
+-> Adapter（适配器）
+-> Vault write（知识库写入）
+-> on_documents_written
+-> StructuredReadModelSink
+-> SourceReadModel.upsert_bundle()
+-> StateDatabase.append_event()
+```
+
+已实现：
+
+- ChatGPT Markdown 与结构化消息一次标准化生成。
+- Raw/Vault 相对引用。
+- Structured Sink 幂等写入。
+- Memory Link 安全条件。
+- 索引失败不回滚 Vault 或结构化来源。
+- `structured_ingestion_completed` Audit Event（审计事件）。
+- `entity_type=structured_ingestion`。
+- `entity_id=execution_id`。
+- Audit Event 写入失败不影响主流程。
+- Pipeline、ChatGPT 和 Structured Sink 统一稳定错误摘要。
+
+状态：
+
+```text
+IMPLEMENTED_NOT_TESTED
+```
+
+## 6. 唯一安全错误摘要
+
+正式入口：
+
+```text
+src/extraction/errors.py::safe_extraction_error
+```
+
+使用位置：
+
+```text
+src/extraction/pipeline.py
+src/extraction/adapters/chatgpt.py
+src/extraction/structured_sink.py
+```
+
+外部只返回稳定摘要，完整异常只进入 logger（日志记录器）。
+
+## 7. 联合最小测试
+
+指定测试：
 
 ```powershell
 python -m pytest `
+  tests/test_structured_ingestion.py `
   tests/test_source_read_model.py `
   tests/test_source_service.py `
   tests/test_memory_inspector_facade.py `
@@ -115,47 +133,84 @@ python -m pytest `
   -v --tb=short
 ```
 
-直接相关 Regression Test（回归测试）：
-
-```powershell
-python -m pytest `
-  tests/test_memory_retrieval.py `
-  tests/test_permanent_memory_gateway.py `
-  tests/test_workspace_contract.py `
-  tests/test_control_api.py `
-  -v --tb=short
-```
-
-两组全部通过后才允许更新为：
+新增集成测试代码使用：
 
 ```text
-IMPLEMENTED_FOCUSED_TESTED
-NOT_MERGED_AWAITING_REVIEW
+TemporaryDirectory
+MemoryDatabase
+SourceReadModel
+StructuredReadModelSink
+StateDatabase
+Fake Adapter
+Fake Vault Sink
 ```
 
-## 7. 禁止范围
+验证：
+
+- 真实临时 SQLite 写入。
+- 幂等 Source/Conversation/Message。
+- 正文详情。
+- Pipeline 顺序。
+- 索引失败降级。
+- Windows 路径不进入 `index_error`。
+- Audit Event 可查询。
+- ChatGPT warning 脱敏。
+
+## 8. 当前测试结果
+
+当前环境无法解析 `github.com`，未能物化完整仓库运行环境。
+
+```text
+pytest: NOT EXECUTED
+py_compile: NOT EXECUTED
+passed: NOT EXECUTED
+failed: NOT EXECUTED
+skipped: NOT EXECUTED
+xfailed: NOT EXECUTED
+```
+
+辅助代码审查不能替代 pytest。
+
+## 9. 禁止范围
 
 ```text
 不创建新分支
-不开始 P2-03B
+不 rebase
+不 force push
 不修改 Tauri
 不运行完整 pytest
+不运行第二批历史回归
 不运行 npm
-不运行 Ollama 或真实 Qdrant
-不重复 P2-01/P2-02 验收
+不运行 Ollama
+不运行真实 Qdrant
+不读取生产 ChatGPT Export
+不访问生产 Vault/SQLite
 不调用本机 Codex
 不合并正式分支
-不 force push
+不开始 P2-04
 ```
 
-## 8. 下一开发顺序
+## 10. 当前联合状态
 
 ```text
-P2-03 集中 pytest 与代码审查
--> P2-03B Structured Ingestion Wiring
--> P2-04 Memory Inspector
--> 集中 Regression Test 与 Startup Contract（启动合同）修复
--> Production bge-m3 candidate Collection（生产候选向量集合）与受控切换
+P2-03:  IMPLEMENTED_NOT_TESTED
+P2-03B: IMPLEMENTED_NOT_TESTED
+Combined Development Branch: work/p2-03b-ingestion-wiring
+Combined Merge State: NOT_MERGED_AWAITING_COORDINATED_REVIEW
 ```
 
-P2-03B 的目标是把 ChatGPT Adapter（ChatGPT 适配器）等采集结果显式、幂等地写入 `SourceReadModel`，使查询拥有真实派生数据。
+## 11. 测试通过后的状态
+
+仅当指定测试全部通过时更新为：
+
+```text
+P2-03:  IMPLEMENTED_FOCUSED_TESTED
+P2-03B: IMPLEMENTED_FOCUSED_TESTED
+Combined Merge State: NOT_MERGED_AWAITING_COORDINATED_REVIEW
+```
+
+## 12. 下一步
+
+停止开发，等待联合代码审查和一次集中测试。
+
+不要开始 P2-04 Memory Inspector（记忆检查器），等待统一审查后再安排3号开发工程师。
