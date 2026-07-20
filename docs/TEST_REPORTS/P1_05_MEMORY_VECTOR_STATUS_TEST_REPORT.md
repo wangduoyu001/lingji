@@ -1,9 +1,9 @@
 # P1-05 Memory And Vector Status Test Report
 
 Updated: 2026-07-20
-Branch: `work/p1-05-memory-vector-status`
-Base: `dcc23d282af5a9bd9b99e11e5bdfbcaf3f864aef`
-Status: repository implementation complete; real Windows/Ollama/Qdrant acceptance pending
+Branch: `feature/second-brain-memory`
+Validated commit: `9ab3c55074b0e56dac9ac8adccba934627bedd90`
+Status: `PASS WITH KNOWN PRE-EXISTING FULL-SUITE FAILURES`
 
 ## 1. Goal
 
@@ -13,24 +13,18 @@ Fix Brain Status so unknown or unavailable values remain `null` or an explicit s
 
 ## 2. Implemented API
 
-Authenticated Local Control API on port `8766` now exposes:
+Authenticated Local Control API on port `8766` exposes:
 
 ```text
 GET /api/memory/status
 GET /api/vector/status
 GET /api/vector/coverage
-```
-
-Existing endpoints now include the same shared contract:
-
-```text
 GET /api/brain/status
-GET /api/overview
-GET /api/settings
-GET /api/providers
 ```
 
-Tauri still does not access Qdrant directly.
+The same shared contract is also available from Overview, Settings and Provider Status.
+
+Tauri does not access Qdrant directly.
 
 ## 3. Shared Statistics Contract
 
@@ -71,6 +65,23 @@ last_rebuild_at
 integrity
 ```
 
+Embedding fields include:
+
+```text
+provider_id
+configured_model
+fallback_model
+active_model
+dimension
+verified
+available
+request_count
+failure_count
+last_success_at
+last_failure_at
+last_error
+```
+
 Vector fields include:
 
 ```text
@@ -83,7 +94,6 @@ vectors
 dimension
 rebuild_required
 last_error
-embedding
 ```
 
 Coverage fields include:
@@ -101,8 +111,6 @@ missing_chunk_ids_truncated
 Missing chunk IDs are capped at 100 in the status payload.
 
 ## 4. State Values
-
-The service uses the common runtime states:
 
 ```text
 healthy
@@ -153,7 +161,7 @@ Snapshots older than five minutes are marked stale and degraded.
 
 `MemoryGateway.rebuild()` publishes again after coordinated lexical/vector synchronization.
 
-The MCP extraction callback now routes written documents through:
+The MCP extraction callback routes written documents through:
 
 ```text
 MemoryGateway.rebuild()
@@ -167,9 +175,7 @@ It no longer writes only to SQLite through a private indexing side path.
 
 ## 7. Brain Status Fix
 
-`LocalControlService.brain_status()` now reads the shared status contract.
-
-It reports:
+`LocalControlService.brain_status()` reads the shared status contract and reports:
 
 ```text
 memory_count
@@ -193,7 +199,7 @@ warnings
 
 When the runtime snapshot is absent, memory and vector counts are `null`, not `0`.
 
-## 8. Tests
+## 8. Automated Tests
 
 Added:
 
@@ -208,7 +214,7 @@ Updated:
 tests/test_control_api.py
 ```
 
-Coverage includes:
+Focused coverage includes:
 
 1. live memory/vector counters
 2. atomic snapshot persistence
@@ -225,110 +231,134 @@ Coverage includes:
 13. Brain Status uses shared counts
 14. Settings runtime contract includes memory/vector state
 
-The previously added Phase 1 suites remain required:
+The following focused suites passed locally:
 
 ```text
+tests/test_memory_statistics.py
+tests/test_status_snapshot_wiring.py
 tests/test_embedding_provider.py
 tests/test_qdrant_semantic_provider.py
 tests/test_memory_index_coordinator.py
 tests/test_semantic_runtime_wiring.py
+tests/test_workspace_contract.py
+tests/test_control_api.py
 ```
 
-## 9. Isolated Local Acceptance Script
+## 9. Real Local Acceptance
 
-Added:
+Local environment:
 
 ```text
-scripts/validate_p1_05_local.py
+Path: D:\codex\lingji-second-brain
+Python: 3.13.2
+qdrant-client: 1.18.0
+Ollama: 0.32.0
+Model: bge-m3:latest, F16, 566.70M
+Actual vector dimension: 1024
 ```
 
-The script:
-
-- checks the Ollama endpoint
-- checks whether the selected embedding model is installed
-- creates a temporary acceptance workspace
-- uses in-memory Qdrant
-- writes temporary Chinese and English memories
-- performs a coordinated rebuild
-- verifies Embedding and vector dimension
-- verifies vector coverage
-- verifies multilingual retrieval
-- verifies the three Local Control API endpoints
-- verifies Brain Status does not show fake zero
-- optionally runs focused pytest suites
-- writes JSON and Markdown reports
-- does not read or write the production Vault, production SQLite databases or production Qdrant collection
-
-Recommended command:
+Official isolated P1-05 validator result:
 
 ```text
-ollama pull bge-m3
-python scripts/validate_p1_05_local.py --model bge-m3 --run-pytest
+semantic_provider_active             PASS
+embedding_verified                   PASS
+vector_dimension_detected            PASS
+coordinated_rebuild_not_degraded     PASS
+vector_coverage_complete             PASS
+multilingual_search_returns_results  PASS
+control_memory_status_200            PASS
+control_vector_status_200            PASS
+control_vector_coverage_200           PASS
+brain_status_not_fake_zero           PASS
+acceptance_workspace_isolated        PASS
 ```
 
-Reports are written under:
+Observed runtime values:
 
 ```text
-storage/reports/p1-05-local-acceptance/
+documents = 2
+chunks = 2
+vectors = 2
+coverage = 1.0
+embedding model = bge-m3
+embedding dimension = 1024
+semantic state = healthy
+workspace = acceptance
 ```
 
-## 10. bge-m3 Decision
+Both in-memory Qdrant and temporary embedded disk Qdrant passed.
 
-The acceptance script defaults to `bge-m3` because LingJi needs Chinese, English and mixed-language retrieval.
+The validation used isolated temporary paths and did not touch production data.
 
-The repository production default is not silently changed in this task. Switching an existing collection from another embedding model may change vector dimension and requires an explicit rebuild decision.
-
-The local acceptance report must record the actual returned dimension. For the official BGE-M3 model, the expected dense vector dimension is 1024.
-
-References:
-
-- https://huggingface.co/BAAI/bge-m3
-- https://ollama.com/library/bge-m3
-
-## 11. Validation State
-
-Executed before this report:
+Detailed summary:
 
 ```text
-Embedding fake-transport tests: 13 passed
-Qdrant 1.12 direct in-memory API smoke: passed
+docs/TEST_REPORTS/P1_05_LOCAL_ACCEPTANCE_SUMMARY.md
 ```
 
-Not executed in the assistant environment:
+## 10. Full Repository Test Result
 
 ```text
-P1-05 committed pytest
-complete repository pytest
-real Windows Ollama call
-real bge-m3 embedding
-production embedded Qdrant
-real Local Control API process on 8766
-real MCP process on stdio or 8767
-Tauri runtime smoke
+244 passed
+2 failed
+9 skipped
+146.50 seconds
 ```
 
-The GitHub connector does not provide the user's local checkout or Windows runtime. These items remain pending until the local acceptance command runs.
+Known pre-existing failures:
 
-## 12. Required Local Commands
+1. `test_brain_status_endpoint`
+   - requires a separately running service in the full-suite context
+   - the official P1-05 validator independently verified the endpoint successfully
+
+2. `test_original_startup_files_are_unchanged`
+   - compares the feature branch with master-era startup files
+   - the feature branch intentionally differs from master
+
+The nine skipped tests require the real Obsidian CLI.
+
+Accurate classification:
 
 ```text
-python -m pip install -r requirements.txt
-ollama pull bge-m3
-python scripts/validate_p1_05_local.py --model bge-m3 --run-pytest
-python -m pytest tests/ -v
+Phase 1 runtime acceptance = PASS
+Focused Phase 1 tests      = PASS
+Full suite completely green = NO
+Full suite result           = PASS WITH 2 KNOWN PRE-EXISTING FAILURES AND 9 OPTIONAL SKIPS
 ```
 
-Also verify the normal runtime after the isolated acceptance passes:
+## 11. bge-m3 Decision
+
+`bge-m3` is validated for Chinese, English and mixed-language LingJi retrieval.
+
+The detected dense vector dimension is 1024.
+
+The repository production default is not silently changed. Switching an existing production collection requires:
 
 ```text
-GET http://127.0.0.1:8766/api/memory/status
-GET http://127.0.0.1:8766/api/vector/status
-GET http://127.0.0.1:8766/api/vector/coverage
+new collection
+-> full rebuild
+-> coverage validation
+-> search parity validation
+-> controlled switch
+-> rollback retention
 ```
 
-All requests require the existing `X-LingJi-Token` header.
+Do not mix vectors from embedding models with different dimensions in one collection.
 
-## 13. Files
+## 12. Local Evidence
+
+Generated local files:
+
+```text
+storage/reports/p1-05-local-acceptance/P1_05_LOCAL_ACCEPTANCE_20260720-212719.md
+storage/reports/p1-05-local-acceptance/P1_05_LOCAL_ACCEPTANCE_20260720-212719.json
+p1-05-full-pytest.log
+p1-05-official-validation.log
+```
+
+The two log files remained untracked. No source code or configuration was modified during local validation.
+
+## 13. Files Implemented By P1-05
 
 ```text
 src/gateway/memory_statistics.py
@@ -347,16 +377,17 @@ docs/TEST_REPORTS/P1_05_MEMORY_VECTOR_STATUS_TEST_REPORT.md
 
 ## 14. Known Limitations
 
-- Production model migration to bge-m3 is not automatic.
-- Staged replacement-collection build and validated switch remain pending.
-- Search-time semantic failure warnings are not yet included in every search response.
-- Runtime Settings UI does not yet expose every vector/workspace setting.
-- Tauri does not yet have the final Vector Center page.
-- Snapshot freshness depends on Gateway startup and rebuild events; a future heartbeat may refresh idle-runtime timestamps.
+- production model migration to bge-m3 is not automatic
+- staged replacement-collection build and validated switch remain pending
+- search-time semantic failure warnings are not yet included in every search response
+- Runtime Settings UI does not yet expose every vector/workspace setting
+- Tauri Vector Center is being developed separately
+- snapshot freshness depends on Gateway startup and rebuild events; a future heartbeat may refresh idle-runtime timestamps
+- two pre-existing full-suite failures still need cleanup or reclassification
 
 ## 15. Data Safety
 
-This task does not:
+This task and its local acceptance did not:
 
 - modify permanent Vault content
 - migrate production data
@@ -366,30 +397,17 @@ This task does not:
 - allow Tauri to access Qdrant directly
 - expand `second_brain`
 
-## 16. Rollback
+## 16. Phase Decision
 
-Revert the P1-05 commits.
+Phase 1 is accepted for continued development.
 
-Delete generated local acceptance reports if desired:
-
-```text
-storage/reports/p1-05-local-acceptance/
-```
-
-The status snapshot is rebuildable runtime data and may be deleted safely:
-
-```text
-<workspace storage>/memory_status.json
-```
-
-No permanent-memory rollback is required.
+This does not authorize an automatic production bge-m3 switch or production vector rebuild.
 
 ## 17. Next Step
 
-After local acceptance passes:
-
 ```text
-P2 structured source/conversation/message read model
+P2-01 Tauri Vector Center
+-> staged production bge-m3 collection migration
+-> structured source/conversation/message read models
+-> Memory Inspector
 ```
-
-A minimal Tauri status card may be added before the full Memory Inspector, but it must consume the 8766 endpoints created here.
