@@ -22,6 +22,20 @@
 4. Prefer existing project documentation and code maps over repeated repository scanning.
 5. If the required code path is already documented, do not require Codex or local tools unless execution/testing is needed.
 
+## Task Routing Requirement
+
+1. Use the simplest capable method for every task.
+2. Tasks that can be completed directly through repository documents, Markdown, planning, review, or small non-runtime changes should be completed directly without using Codex.
+3. Do not use Codex for simple documentation edits, architecture notes, requirement整理, or other tasks that do not require a local environment.
+4. If multiple simple tasks are known, complete them together instead of repeatedly creating separate execution tasks.
+5. Use Codex only when local environment access is required, including:
+   - running tests
+   - checking real hardware
+   - building applications
+   - debugging runtime issues
+   - validating local services
+6. Use independent development agents for isolated coding tasks when they can modify code without blocking the main workflow.
+
 ## Data Boundaries
 
 1. AI chat records are the **only** automatic memory source.
