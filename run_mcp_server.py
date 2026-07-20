@@ -3,9 +3,10 @@ import argparse
 
 from src.config import settings
 from src.mcp_server import run_mcp_server
+from src.runtime import ensure_tcp_port_available, resolve_mcp_runtime_config
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Run the LingJi Memory Gateway MCP server")
     parser.add_argument(
         "--transport",
@@ -18,7 +19,10 @@ def main():
         help="Default AI profile when a tool call omits agent_id",
     )
     args = parser.parse_args()
-    run_mcp_server(args.transport, args.agent)
+    runtime = resolve_mcp_runtime_config(settings, transport=args.transport)
+    if runtime.transport == "streamable-http":
+        ensure_tcp_port_available(runtime.host, runtime.port, service_name="LingJi MCP HTTP")
+    run_mcp_server(runtime.transport, args.agent)
 
 
 if __name__ == "__main__":
