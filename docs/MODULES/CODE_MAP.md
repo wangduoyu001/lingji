@@ -23,7 +23,7 @@ second_brain/desktop/
 
 Do not infer product ownership from directory names. Confirm the real service and data flow before changing code.
 
-## 2. Unified Target Flow
+## 2. Unified Runtime Flow
 
 ```text
 src/extraction
@@ -38,7 +38,7 @@ src/extraction
   -> Tauri UI
 ```
 
-The coordinator exists but is not yet wired into `MemoryGateway` startup.
+The Provider and Coordinator chain is now wired by `build_memory_gateway()`. Complete-checkout and real local validation remain pending.
 
 ## 3. Canonical Data And Indexes
 
@@ -56,7 +56,7 @@ src/retrieval/memory_db.py
 = rebuildable lexical and metadata index
 
 src/retrieval/qdrant_provider.py
-= rebuildable semantic index provider, not yet connected to gateway startup
+= rebuildable semantic index provider
 ```
 
 `second_brain/db.py` remains a compatibility database during migration. It is not the final authority.
@@ -71,10 +71,11 @@ src/retrieval/qdrant_provider.py
 | Workspace validation error | `src/runtime/workspace.py::WorkspaceValidationError` | implemented |
 | Port/process contract | `src/runtime/ports.py` | implemented, local validation pending |
 | Runtime exports | `src/runtime/__init__.py` | implemented |
+| Semantic runtime assembly | `src/gateway/bootstrap.py::build_memory_gateway()` | implemented, local validation pending |
 
 The workspace resolver is side-effect free. It does not create paths, read databases, start services or import Qdrant.
 
-`build_memory_gateway(..., workspace=...)` is the first explicit wiring seam. Existing callers retain the Settings transition mapping until later phases migrate them deliberately.
+Without an explicit workspace, production retains the existing Vault and SQLite transition paths. Explicit acceptance contexts continue to use the isolated P0-03 paths and collection.
 
 ## 5. Workspace Resource Contract
 
@@ -103,39 +104,40 @@ Production and acceptance paths must not be equal, aliases, or parent/child path
 
 | Capability | Current long-term entry | Status |
 |---|---|---|
-| Memory gateway | `src/gateway/memory_gateway.py::MemoryGateway` | implemented |
-| Runtime assembly | `src/gateway/bootstrap.py::build_memory_gateway()` | lexical only; semantic wiring pending |
+| Memory gateway | `src/gateway/memory_gateway.py::MemoryGateway` | implemented; semantic-aware |
+| Runtime assembly | `src/gateway/bootstrap.py::build_memory_gateway()` | semantic wired; local validation pending |
 | AI profiles | `src/gateway/profiles.py::AIProfileRegistry` | implemented |
 | Lexical/semantic fusion | `src/retrieval/hybrid.py::HybridRetriever` | implemented |
 | Search semantic Protocol | `src/retrieval/hybrid.py::SemanticProvider` | implemented |
-| Combined semantic contracts | `src/retrieval/semantic.py` | implemented; local validation pending |
-| Qdrant provider | `src/retrieval/qdrant_provider.py::QdrantSemanticProvider` | implemented; local validation pending |
-| Embedding provider | `src/model_center/embedding.py::OllamaEmbeddingProvider` | implemented; real Ollama validation pending |
+| Combined semantic contracts | `src/retrieval/semantic.py` | implemented |
+| Qdrant provider | `src/retrieval/qdrant_provider.py::QdrantSemanticProvider` | implemented and wired; local validation pending |
+| Embedding provider | `src/model_center/embedding.py::OllamaEmbeddingProvider` | implemented and wired; real Ollama validation pending |
 | Embedding factory | `src/model_center/embedding.py::build_embedding_provider()` | implemented |
 | Enhanced Chinese fallback | `src/retrieval/enhanced.py` | implemented |
 | Rebuildable memory index | `src/retrieval/memory_db.py::MemoryDatabase` | implemented |
 | Chunking | `src/retrieval/chunker.py::MarkdownChunker` | implemented |
 | Context Pack | `src/retrieval/context_pack.py::ContextPackBuilder` | implemented |
-| Incremental lexical sync | `src/retrieval/incremental_sync.py::IncrementalMemorySynchronizer` | implemented |
-| Lexical/vector coordinator | `src/retrieval/index_coordinator.py::MemoryIndexCoordinator` | implemented; runtime wiring and local validation pending |
+| Incremental lexical sync | `src/retrieval/incremental_sync.py::IncrementalMemorySynchronizer` | retained as coordinator implementation detail |
+| Lexical/vector coordinator | `src/retrieval/index_coordinator.py::MemoryIndexCoordinator` | implemented and wired; local validation pending |
 | Coordinator warning/result contracts | `src/retrieval/index_coordinator.py` | implemented |
-| Unified memory statistics | `src/gateway/memory_statistics.py` | planned |
+| Unified memory statistics | `src/gateway/memory_statistics.py` | planned, next task |
 | Permanent-memory lifecycle | `src/memory/lifecycle.py::MemoryLifecycleService` | implemented |
 | State and events | `src/storage/state_db.py::StateDatabase` | implemented |
 | MCP tools/resources/prompts | `src/mcp_server.py` | implemented |
 | MCP CLI startup | `run_mcp_server.py` | implemented |
 
-Current semantic runtime gap:
+Current semantic state:
 
 ```text
-src/gateway/bootstrap.py
-  -> semantic_provider=None
-
-src/gateway/memory_gateway.py
-  -> IncrementalMemorySynchronizer directly
+build_memory_gateway()
+  -> EmbeddingProvider
+  -> QdrantSemanticProvider
+  -> HybridRetriever.semantic_provider
+  -> MemoryIndexCoordinator.semantic_provider
+  -> MemoryGateway
 ```
 
-Do not describe Qdrant as connected to MemoryGateway until P1-04 wiring and integration tests pass.
+A semantic initialization error returns a lexical-only gateway and a structured runtime warning. It does not fail gateway startup.
 
 ## 7. Semantic Provider And Coordinator Boundaries
 
@@ -203,7 +205,7 @@ Tauri uses only the authenticated Local Control API on `127.0.0.1:8766`.
 
 Current control gaps:
 
-- `LocalControlService` does not construct or receive the unified MemoryGateway
+- `LocalControlService` does not yet construct or receive the unified MemoryGateway
 - `brain_status()` may report false zero counts
 - Runtime Settings lacks editable memory, vector, workspace and MCP groups
 - no vector status or coverage API exists
@@ -213,8 +215,8 @@ Current control gaps:
 
 | Capability | Current compatibility entry | Mainline status/target |
 |---|---|---|
-| Qdrant | `second_brain/vector_store.py::VectorStore` | provider adapted under `src`; runtime wiring pending |
-| Ollama embedding fallback | `second_brain/embedding.py::OllamaEmbedder` | provider adapted under Model Center |
+| Qdrant | `second_brain/vector_store.py::VectorStore` | adapted and runtime-wired under `src`; local validation pending |
+| Ollama embedding fallback | `second_brain/embedding.py::OllamaEmbedder` | adapted and runtime-wired under Model Center |
 | Structured sources/conversations/messages | `second_brain/db.py` | rebuildable source read model planned |
 | Memory versions | `second_brain/db.py` | revision read model planned |
 | Relations and conflicts | `second_brain/conflict/`, DB tables | unified read models planned |
@@ -227,6 +229,7 @@ The compatibility runtime remains migration evidence. Do not extend it as a form
 
 | Planned capability | Planned path |
 |---|---|
+| Shared memory/vector statistics | `src/gateway/memory_statistics.py` |
 | Source/conversation/message index | `src/sources/read_model.py` |
 | Permission-aware source queries | `src/sources/service.py` |
 | Retrieval trace | `src/retrieval/trace.py` |
@@ -245,7 +248,7 @@ src MCP Streamable HTTP        = 8767
 src MCP default transport      = stdio
 ```
 
-Phase 1 provider/coordinator work does not modify this contract.
+Semantic runtime wiring does not modify this contract.
 
 ## 13. Testing Map
 
@@ -264,6 +267,7 @@ Phase 1 suites:
 - `tests/test_embedding_provider.py`
 - `tests/test_qdrant_semantic_provider.py`
 - `tests/test_memory_index_coordinator.py`
+- `tests/test_semantic_runtime_wiring.py`
 
 Reports:
 
@@ -272,14 +276,15 @@ Reports:
 - `docs/TEST_REPORTS/P1_01_EMBEDDING_PROVIDER_TEST_REPORT.md`
 - `docs/TEST_REPORTS/P1_02_QDRANT_SEMANTIC_PROVIDER_TEST_REPORT.md`
 - `docs/TEST_REPORTS/P1_03_MEMORY_INDEX_COORDINATOR_TEST_REPORT.md`
+- `docs/TEST_REPORTS/P1_04_SEMANTIC_RUNTIME_WIRING_TEST_REPORT.md`
 
 Current evidence:
 
 - workspace contract: 8 passed in isolated environment
 - embedding fake-transport suite: 13 passed
 - Qdrant 1.12 direct in-memory API smoke: passed
-- committed Qdrant provider pytest in a complete checkout: pending
-- committed coordinator pytest in a complete checkout: pending
+- committed provider/coordinator/runtime pytest in a complete checkout: pending
+- real Ollama + Qdrant runtime: pending
 - full repository regression: pending
 
 ## 14. Before Coding Checklist
@@ -293,4 +298,4 @@ Current evidence:
 7. Preserve lexical success when semantic providers fail.
 8. Confirm tests and Markdown report location.
 9. Do not create another workspace, retrieval, ranking or settings concept.
-10. Do not call Qdrant connected until gateway wiring and integration tests pass.
+10. Do not call Phase 1 validated until complete-checkout and real local runtime tests pass.
