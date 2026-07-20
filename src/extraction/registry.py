@@ -14,7 +14,7 @@ from .models import (
 
 
 class _StructuredOutputAdapter(ExtractionAdapter):
-    """Decorate legacy adapters without re-parsing their input or changing Markdown output."""
+    """Decorate explicitly opted-in legacy adapters without re-parsing input."""
 
     def __init__(self, adapter: ExtractionAdapter):
         self._adapter = adapter
@@ -146,13 +146,13 @@ class AdapterRegistry:
     def __init__(self):
         self._adapters: dict[str, ExtractionAdapter] = {}
 
-    def register(self, adapter: ExtractionAdapter) -> None:
+    def register(self, adapter: ExtractionAdapter, structured_fallback: bool = False) -> None:
         name = str(adapter.name).strip().lower()
         if not name:
             raise ValueError("Adapter name is required")
         if name in self._adapters:
             raise ValueError(f"Adapter already registered: {name}")
-        self._adapters[name] = _StructuredOutputAdapter(adapter)
+        self._adapters[name] = _StructuredOutputAdapter(adapter) if structured_fallback else adapter
 
     def get(self, name: str) -> ExtractionAdapter:
         key = str(name).strip().lower()
