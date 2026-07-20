@@ -14,6 +14,7 @@ from .models import ExtractionRequest
 from .queue import SQLiteExtractionQueue
 from .registry import AdapterRegistry
 from .sink import VaultExtractionSink
+from .structured_sink import StructuredReadModelSink
 
 logger = logging.getLogger("lingji.extraction")
 
@@ -29,6 +30,7 @@ class ExtractionPipeline:
         registry: AdapterRegistry,
         sink: VaultExtractionSink,
         *,
+        structured_sink: StructuredReadModelSink | None = None,
         default_max_attempts: int = 3,
         lease_heartbeat_seconds: float = 30.0,
         stale_after_seconds: int = 1800,
@@ -39,6 +41,7 @@ class ExtractionPipeline:
         self.queue = queue
         self.registry = registry
         self.sink = sink
+        self.structured_sink = structured_sink
         self.default_max_attempts = max(int(default_max_attempts), 1)
         self.lease_heartbeat_seconds = max(float(lease_heartbeat_seconds), 2.0)
         self.stale_after_seconds = max(int(stale_after_seconds), 30)
@@ -135,15 +138,57 @@ class ExtractionPipeline:
             "adapter_version": adapter.version,
             **result,
         }
+        indexing_succeeded = self.on_documents_written is None
         if self.on_documents_written:
             try:
                 self.on_documents_written(response)
                 response["indexed"] = True
+                indexing_succeeded = True
             except Exception as exc:
                 logger.exception("Post-extraction index synchronization failed")
                 response["indexed"] = False
                 response["index_error"] = str(exc)[:1000]
+                indexing_succeeded = False
+        response["structured_read_model"] = self._write_structured(
+            batch=batch,
+            raw_snapshot=raw_snapshot,
+            vault_results=result,
+            execution_id=request.job_id,
+            adapter_name=adapter.name,
+            adapter_version=adapter.version,
+            indexing_succeeded=indexing_succeeded,
+        )
         return response
+
+    def _write_structured(
+        self,
+        *,
+        batch,
+        raw_snapshot: Mapping[str, Any],
+        vault_results: Mapping[str, Any],
+        execution_id: str,
+        adapter_name: str,
+        adapter_version: str,
+        indexing_succeeded: bool,
+    ) -> dict[str, Any]:
+        if self.structured_sink is None or not batch.structured_sources:
+            return {
+                "state": "not_applicable",
+                "sources": 0,
+                "conversations": 0,
+                "messages": 0,
+                "links": 0,
+                "warnings": [],
+            }
+        return self.structured_sink.write_batch(
+            batch,
+            raw_snapshot=raw_snapshot,
+            vault_results=vault_results,
+            execution_id=execution_id,
+            adapter_name=adapter_name,
+            adapter_version=adapter_version,
+            indexing_succeeded=indexing_succeeded,
+        )
 
     def process_next(
         self,
