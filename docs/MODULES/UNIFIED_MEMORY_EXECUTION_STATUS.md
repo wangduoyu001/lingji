@@ -1,159 +1,91 @@
 # UNIFIED_MEMORY_EXECUTION_STATUS.md — 统一记忆系统实时执行状态
 
-> Updated（更新时间）: 2026-07-20  
-> Branch（分支）: `work/p2-03-structured-read-model`  
-> Verified Commit（已验证提交）: `b9950b4066fbb0b602c2ffba5109da2fa8371cf3`  
-> Status（状态）: ACTIVE EXECUTION TRACKER（生效中的执行状态表）
+> Updated（更新时间）: 2026-07-21  
+> Formal Branch（正式分支）: `feature/second-brain-memory`  
+> Development Branch（开发分支）: `work/p2-03-structured-read-model`  
+> Implementation Commit（实现提交）: `0ce11ab56630d0d31c4828a0d63f0ea6e875729f`  
+> Status（状态）: ACTIVE EXECUTION TRACKER
 
-## 1. 本文定位
-
-`UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md` 是 Roadmap（路线图：完整任务分解和长期规划）。
-
-本文是 Execution Tracker（执行状态表：记录哪些任务已经实现、验证、合并，以及下一任务是什么）。
-
-当路线图中的“未开始”描述与本文冲突时：
+## 1. 权威顺序
 
 ```text
 真实代码
 -> 最新测试报告
 -> PROJECT_STATUS.md
 -> 本执行状态表
--> 原始路线图规划文字
+-> Roadmap 原始规划
 ```
 
 ## 2. 阶段状态
 
 | 阶段 | 任务 | 状态 | 证据 |
 |---|---|---|---|
-| P0-02 | Port Contract（端口合同） | `MERGED_AND_VALIDATED` | `docs/TEST_REPORTS/P0_02_PORT_CONTRACT_TEST_REPORT.md` |
-| P0-03 | Workspace Contract（工作区合同） | `MERGED_AND_VALIDATED` | `docs/TEST_REPORTS/P0_03_WORKSPACE_CAPABILITY_CONTRACT_TEST_REPORT.md` |
-| P1-01 | EmbeddingProvider（向量嵌入提供器） | `MERGED_AND_VALIDATED` | P1-05 本机验收 |
-| P1-02 | QdrantSemanticProvider（Qdrant 语义提供器） | `MERGED_AND_VALIDATED` | P1-05 本机验收 |
-| P1-03 | MemoryIndexCoordinator（记忆索引协调器） | `MERGED_AND_VALIDATED` | P1-05 本机验收 |
-| P1-04 | Runtime Wiring（运行时接线） | `MERGED_AND_VALIDATED` | P1-05 本机验收 |
-| P1-05 | Memory/Vector Status（记忆与向量状态） | `MERGED_AND_VALIDATED` | `P1_05_LOCAL_ACCEPTANCE_SUMMARY.md` |
-| P2-01 | Vector Center（向量中心） | `MERGED_AND_VALIDATED` | `P2_01_VECTOR_CENTER_UI_TEST_REPORT.md` |
-| P2-02 | Collection Migration（向量集合迁移工具） | `MERGED_AND_VALIDATED` | `P2_02_VECTOR_COLLECTION_MIGRATION_TEST_REPORT.md` |
-| P2-03 | Structured Read Model（结构化读取模型） | `IMPLEMENTED_NOT_TESTED` | `P2_03_STRUCTURED_READ_MODEL_TEST_REPORT.md` |
-| P2-04 | Memory Inspector（记忆检查器） | `BLOCKED_BY_P2_03_REVIEW` | 等待重点测试、代码审查和正式合并 |
-| P2-05 | Startup Contract/Test Quality（启动合同与测试质量） | `DEFERRED` | 下次集中回归处理 |
-| P2-06 | Production bge-m3 Switch（生产模型切换） | `DEFERRED` | 等待检索质量对比和原子切换 |
+| P0-02 | Port Contract | `MERGED_AND_VALIDATED` | P0-02 报告 |
+| P0-03 | Workspace Contract | `MERGED_AND_VALIDATED` | P0-03 报告 |
+| P1-01 ~ P1-05 | Unified Semantic Memory | `MERGED_AND_VALIDATED` | P1-05 本机验收 |
+| P2-01 | Vector Center | `MERGED_AND_VALIDATED` | P2-01 报告 |
+| P2-02 | Collection Migration | `MERGED_AND_VALIDATED` | P2-02 报告 |
+| P2-03 | Structured Read Model | `IMPLEMENTED_NOT_TESTED` | `P2_03_STRUCTURED_READ_MODEL_TEST_REPORT.md` |
+| P2-03B | Structured Ingestion Wiring | `BLOCKED_BY_P2_03_REVIEW` | 等待 P2-03 重点测试与审查 |
+| P2-04 | Memory Inspector | `BLOCKED_BY_P2_03B` | 不得提前开始 |
+| P2-05 | Startup Contract/Test Quality | `DEFERRED` | 后续集中回归 |
+| P2-06 | Production bge-m3 Switch | `DEFERRED` | 等待质量对比与受控切换 |
 
-## 3. 当前任务 P2-03
+## 3. P2-03 当前实现
 
-P2-03 已在独立分支实现可重建、只读、Workspace（工作区）隔离的 Structured Read Model（结构化读取模型），供后续 Memory Inspector 使用。
+已实现：
 
-实现实体：
+- Source/Conversation/Message 派生 Schema。
+- 稳定 ID 与幂等 Upsert。
+- 分页、时间排序、来源/项目/关键词筛选。
+- Message→Memory、Memory→Chunk、Chunk→Vector 只读关联。
+- Owner/Agent Privacy 与 Agent Scope 过滤。
+- Production/Acceptance Workspace 隔离。
+- 8766 Token Authentication。
+- 只读 Inspector API。
+- 权限 inherited 标记与父子同步。
+- `rebuild_required` true/false/null 三态。
+- 503 稳定错误与本机路径脱敏。
+- 未知 Schema Version 拒绝初始化且不降级。
 
-```text
-Source（来源）
-Conversation（对话）
-Message（消息）
-MessageMemoryLink（消息与记忆关联）
-Memory（记忆）
-Chunk（文本分块）
-Vector Linkage（向量关联诊断）
-```
+## 4. P2-03 当前限制
 
-已实现能力：
+- 指定 pytest 尚未执行。
+- 当前环境无法解析 `github.com`，不能获得完整远程仓库运行环境。
+- 没有自动把 ChatGPT Adapter 结构化结果写入 Read Model。
+- 生产 Source/Conversation/Message 派生数据仍为空或依赖显式写入。
+- 本分支不得合并。
 
-- 独立派生 Schema（数据库结构版本）
-- 稳定 ID 与幂等 Upsert（更新或插入）
-- 列表和详情读取
-- `limit/offset` 分页
-- 稳定时间排序
-- 来源、项目、角色、时间和关键词筛选
-- Conversation/Message 关联
-- Message/Memory 关联
-- Memory/Chunk 关联
-- Chunk/Vector 状态关联
-- Privacy Filter（隐私过滤）
-- Agent Scope（智能体读取范围）
-- Production/Acceptance Workspace 隔离合同
-- 8766 Token Authentication（令牌认证）
-- 只读 `/api/memory/inspector/*` GET 路由
-
-## 4. P2-03 范围边界
-
-本阶段没有开发：
-
-- Tauri Memory Inspector 页面
-- 生产 `bge-m3` Collection
-- 正式模型切换
-- 生产 ChatGPT 历史导入
-- `second_brain.sqlite3` 自动迁移
-- 历史分支删除
-- 依赖管理重构
-- 自动记忆蒸馏
-- 自动修改 Core Memory
-
-本阶段没有让 Local Control Process（本地控制进程）重新打开 Embedded Qdrant（嵌入式 Qdrant）。单个 Chunk 无法安全确认向量存在时，返回 `exists=null`。
-
-## 5. 当前验证状态
-
-已执行辅助检查：
-
-```text
-Python py_compile                    PASS
-临时 SQLite 隔离冒烟                 PASS
-禁止端口/Qdrant/raw vector 静态扫描 PASS
-```
-
-尚未执行：
-
-```text
-P2-03 四个重点 pytest
-Memory/Gateway/Workspace/Control API 直接回归
-完整 pytest
-```
-
-因此当前状态必须保持：
+当前准确状态：
 
 ```text
 IMPLEMENTED_NOT_TESTED
+NOT_MERGED_AWAITING_REVIEW
 ```
 
-现有全量测试数字差异仍为：
+## 5. 禁止范围
 
 ```text
-UNRECONCILED_TEST_COUNT_DELTA
+不开发 Tauri
+不开始 P2-04
+不运行完整 pytest
+不运行 npm
+不运行 Ollama/Qdrant 真实验收
+不重复 P2-01/P2-02 验收
+不调用本机 Codex
+不合并正式分支
+不 force push
 ```
 
-## 6. P2-03 完成条件
-
-已完成：
+## 6. 下一开发顺序
 
 ```text
-真实代码路径分析
-数据权威说明
-Read Model schema
-Service/Repository 读取层
-8766 只读 API
-分页与筛选合同
-隐私与 Workspace 测试代码
-API Integration Test 代码
-Markdown 计划和测试报告
-PROJECT_STATUS 更新
-```
-
-待完成：
-
-```text
-重点 pytest 执行
-直接相关回归执行
-代码审查
-正式分支合并
-CHANGELOG 更新（仅合并后）
-```
-
-## 7. 后续顺序
-
-```text
-P2-03 重点测试与代码审查
--> 合并 feature/second-brain-memory
+P2-03 重点 pytest 与直接相关回归
+-> P2-03 代码审查
+-> P2-03B Structured Ingestion Wiring
 -> P2-04 Memory Inspector
--> 集中 Regression Test（回归测试）与 Startup Contract 修复
--> Production bge-m3 candidate Collection（生产候选向量集合）
--> Retrieval Quality A/B Test（检索质量对比测试）
--> Controlled Activation（受控激活）
+-> 集中 Regression Test 与 Startup Contract 修复
+-> Production bge-m3 candidate 与受控切换
 ```
+
+P2-03B 目标：把 ChatGPT Adapter 等采集结果显式、幂等地写入 `SourceReadModel`，让 Source、Conversation 和 Message 查询拥有真实派生数据。
