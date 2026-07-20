@@ -4,6 +4,11 @@
 
 ## 2026-07-20
 
+- Add unified immutable `WorkspaceContext` and `WorkspaceResolver` for production/acceptance resources.
+- Add physical path and Qdrant collection isolation validation, including Windows `C:` drive rejection.
+- Add explicit workspace wiring seam to the formal `src` MemoryGateway bootstrap without migrating existing callers.
+- Add directory-independent lexical Memory Capability Contract adapter and tests.
+- Add P0-03 implementation and test report; full local memory regression remains pending.
 - Fix conftest.py environment variable escapes (OBSIDIAN_VAULT_PATH, SECOND_BRAIN_OBSIDIAN_DIR)
 - Update test results: 175 passed, 9 skipped for new tool modules
 - Update PROJECT_STATUS.md with latest commit and test metrics
@@ -27,7 +32,7 @@
 - Add acceptance automation for desktop validation
 - Add fixed-script watcher controls (independent API/watcher start/stop)
 - Desktop defaults to acceptance workspace; headerless API remains production
-- Pre-upgrade backup created at D:\\codex\ackups\\lingji-second-brain\60715-225503
+- Pre-upgrade backup created before second-brain development
 
 ## 2026-07-15
 

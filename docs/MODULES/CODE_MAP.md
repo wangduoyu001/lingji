@@ -1,8 +1,8 @@
 # LingJi Code Map
 
-> Updated: 2026-07-20
-> Purpose: identify real long-term entry points before development.
-> Architecture: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
+> Updated: 2026-07-20  
+> Purpose: identify real long-term entry points before development.  
+> Architecture: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`  
 > Execution roadmap: `docs/MODULES/UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md`
 
 ## 1. Repository Roles
@@ -38,17 +38,17 @@ src/extraction
   -> Tauri UI
 ```
 
-## 3. Canonical Data and Indexes
+## 3. Canonical Data And Indexes
 
 ```text
 Obsidian Vault + Git
 = permanent memory and formal knowledge text
 
-storage/raw
+workspace raw path
 = original imported material
 
 src/storage/state_db.py
-= jobs, processing state and audit events
+= jobs, processing state, queue and audit events
 
 src/retrieval/memory_db.py
 = rebuildable lexical and metadata index
@@ -59,7 +59,45 @@ Qdrant provider under src/retrieval
 
 `second_brain/db.py` remains a compatibility database during migration. It is not the final authority.
 
-## 4. Long-Term Memory Entry Points
+## 4. Runtime Contracts
+
+| Capability | Current long-term entry | Status |
+|---|---|---|
+| Workspace names | `src/runtime/workspace.py::WorkspaceName` | implemented |
+| Workspace data object | `src/runtime/workspace.py::WorkspaceContext` | implemented |
+| Workspace resolution | `src/runtime/workspace.py::WorkspaceResolver` | implemented |
+| Workspace validation error | `src/runtime/workspace.py::WorkspaceValidationError` | implemented |
+| Port/process contract | `src/runtime/ports.py` | implemented, local validation pending |
+| Runtime exports | `src/runtime/__init__.py` | implemented |
+
+The workspace resolver is side-effect free. It does not create paths, read databases, start services or import Qdrant.
+
+`build_memory_gateway(..., workspace=...)` is the first explicit wiring seam. Existing callers retain the Settings transition mapping until later phases migrate them deliberately.
+
+## 5. Workspace Resource Contract
+
+Each `WorkspaceContext` resolves:
+
+- Vault
+- raw archive
+- storage root
+- `lingji_state.db`
+- `lingji_memory.db`
+- Qdrant mode
+- Qdrant path or URL
+- Qdrant collection
+- logs
+- cache
+- runtime settings
+- task queue database
+- backups
+- derived files
+- temporary files
+- reports
+
+Production and acceptance paths must not be equal, aliases, or parent/child paths. Qdrant collection names must differ even when a remote URL is shared.
+
+## 6. Long-Term Memory Entry Points
 
 | Capability | Current long-term entry |
 |---|---|
@@ -77,11 +115,10 @@ Qdrant provider under src/retrieval
 | State and events | `src/storage/state_db.py::StateDatabase` |
 | MCP tools/resources/prompts | `src/mcp_server.py` |
 | MCP CLI startup | `run_mcp_server.py` |
-| MCP/Control/compatibility port contract | `src/runtime/ports.py` |
 
 Current semantic gap:
 
-`src/gateway/bootstrap.py` passes `semantic_provider=None`. Do not describe Qdrant as connected to the unified gateway until this changes and tests pass.
+`src/gateway/bootstrap.py` still passes `semantic_provider=None`. Do not describe Qdrant as connected until Phase 1 code and tests pass.
 
 Planned Phase 1 entry points, not yet implemented:
 
@@ -93,7 +130,7 @@ Planned Phase 1 entry points, not yet implemented:
 | Lexical/vector coordinator | `src/retrieval/index_coordinator.py` |
 | Unified memory statistics | `src/gateway/memory_statistics.py` |
 
-## 5. Unified Ingestion Entry Points
+## 7. Unified Ingestion Entry Points
 
 | Capability | Real entry |
 |---|---|
@@ -108,17 +145,16 @@ Planned Phase 1 entry points, not yet implemented:
 | Codex capture | `src/extraction/adapters/codex.py::CodexWorkReportAdapter` |
 | Web/social capture | `src/extraction/adapters/web.py::WebCaptureAdapter` |
 | Media extraction | `src/extraction/adapters/media.py::MediaExtractionAdapter` |
-| Media semantic derivatives | `src/media/semantic.py::MediaSemanticService` |
 
 New data sources must enter this framework. Do not add new production ingestion to `second_brain` connectors.
 
-## 6. Control, Settings, Models and UI Entry Points
+## 8. Control, Settings, Models And UI Entry Points
 
 | Capability | Entry |
 |---|---|
 | Control service | `src/control/service.py::LocalControlService` |
 | Control API | `src/control/api.py::create_control_app()` |
-| Read-only MCP contract API | `GET /api/mcp/status` in `src/control/api.py` |
+| Read-only MCP contract API | `GET /api/mcp/status` |
 | Runtime settings | `src/control/runtime_settings.py::RuntimeSettingsStore` |
 | Control startup | `run_control_api.py` |
 | Model inventory | `src/model_center/inventory.py::LocalModelInventoryService` |
@@ -128,8 +164,6 @@ New data sources must enter this framework. Do not add new production ingestion 
 | React composition | `desktop/lingji-control/src/App.tsx` |
 | Navigation | `desktop/lingji-control/src/navigation.ts` |
 | API client | `desktop/lingji-control/src/api.ts` |
-| Types | `desktop/lingji-control/src/types.ts` |
-| Pages | `desktop/lingji-control/src/pages/` |
 | UI smoke | `desktop/lingji-control/scripts/ui-modular-smoke.mjs` |
 
 Tauri uses only the authenticated Local Control API on `127.0.0.1:8766`.
@@ -137,28 +171,27 @@ Tauri uses only the authenticated Local Control API on `127.0.0.1:8766`.
 Current control gaps:
 
 - `LocalControlService` does not construct or receive the unified MemoryGateway.
-- `brain_status()` reads missing `overview["memory_stats"]` and may report false zero counts.
-- Runtime Settings still lacks editable memory, vector, workspace and MCP groups; P0-02 exposes the MCP contract read-only.
-- Tauri lacks the final Inspector/Vector/Knowledge/AI-MCP pages and global service status bar.
+- `brain_status()` may report false zero counts.
+- Runtime Settings lacks editable memory, vector, workspace and MCP groups.
+- Tauri lacks final Inspector, Vector, Knowledge, source and AI/MCP pages.
 
-## 7. Compatibility Capabilities To Migrate
+## 9. Compatibility Capabilities To Migrate
 
 | Capability | Current compatibility entry | Target |
 |---|---|---|
-| Qdrant | `second_brain/vector_store.py::VectorStore` | `src/retrieval` SemanticProvider adapter |
-| Ollama embedding fallback | `second_brain/embedding.py::OllamaEmbedder` | unified provider + Model Center |
-| Structured sources/conversations/messages | `second_brain/db.py`, `second_brain/connectors/chat.py` | rebuildable source read model |
-| Memory versions | `second_brain/db.py` | Git/events/derived revision read model |
-| Relations and conflicts | `second_brain/conflict/`, DB tables | `src` relation/conflict read model |
-| Production/acceptance isolation | `second_brain/runtime_registry.py` | unified workspace runtime |
-| Acceptance scenarios | `second_brain/acceptance.py` | unified capability contract |
-| PySide6 flows | `second_brain/desktop/` | migration and regression reference |
+| Qdrant | `second_brain/vector_store.py::VectorStore` | `src/retrieval` Provider |
+| Ollama embedding fallback | `second_brain/embedding.py::OllamaEmbedder` | Model Center Provider |
+| Structured sources/conversations/messages | `second_brain/db.py` | rebuildable source read model |
+| Memory versions | `second_brain/db.py` | revision read model |
+| Relations and conflicts | `second_brain/conflict/`, DB tables | unified read models |
+| Acceptance scenarios | `second_brain/acceptance.py` | capability contracts |
+| PySide6 flows | `second_brain/desktop/` | Tauri capability migration |
 
-Do not continue building duplicate production functionality in these compatibility paths.
+The workspace contract is now implemented in `src`; compatibility runtime path behavior remains migration evidence only.
 
-## 8. Planned Unified Read Models
+## 10. Planned Unified Read Models
 
-The following paths are roadmap targets and must not be described as implemented before code and tests exist:
+The following paths remain roadmap targets:
 
 | Planned capability | Planned path |
 |---|---|
@@ -170,11 +203,8 @@ The following paths are roadmap targets and must not be described as implemented
 | Relation model | `src/memory/relations.py` |
 | Conflict candidates | `src/memory/conflicts.py` |
 | Legacy export/parity | `src/migration/` |
-| Workspace runtime | `src/runtime/workspace.py` |
 
-## 9. Port Map
-
-Repository contract after P0-02:
+## 11. Port Map
 
 ```text
 second_brain compatibility API = 8765
@@ -183,33 +213,11 @@ src MCP Streamable HTTP        = 8767
 src MCP default transport      = stdio
 ```
 
-Implementation entries:
+P0-03 did not modify this contract.
 
-- defaults: `src/config.py`
-- validation/status: `src/runtime/ports.py`
-- supported MCP startup: `run_mcp_server.py`
-- read-only status: `GET /api/mcp/status`
-- Tauri default gateway: `desktop/lingji-control/src/api.ts` and `src-tauri/src/main.rs`
+## 12. Testing Map
 
-The repository implementation is complete. Real Windows three-process binding and full regression validation remain pending and are tracked in `docs/TEST_REPORTS/P0_02_PORT_CONTRACT_TEST_REPORT.md`.
-
-## 10. Memory Inspector Entry
-
-Final Memory Inspector path:
-
-```text
-Tauri page
-  -> Local Control API :8766
-  -> src MemoryInspectorFacade / MemoryGateway / shared statistics
-  -> lingji_memory.db + Qdrant + rebuildable read models
-  -> Obsidian/Git authority
-```
-
-It must not treat `second_brain.sqlite3` as the final memory source.
-
-## 11. Testing Map
-
-Relevant existing suites include:
+Existing suites:
 
 - `tests/test_memory_retrieval.py`
 - `tests/test_memory_lifecycle.py`
@@ -219,28 +227,33 @@ Relevant existing suites include:
 - `tests/test_extraction_queue.py`
 - `tests/test_extraction_worker.py`
 - `tests/test_control_api.py`
-- `tests/test_control_api_extended.py`
-- `tests/test_brain_status_e2e.py`
 - `tests/test_mcp_server.py`
-- `tests/test_second_brain.py`
-- `tests/test_desktop.py`
-- `desktop/lingji-control/scripts/ui-modular-smoke.mjs`
 
-P0-02 report:
+P0-03 suites:
+
+- `tests/test_workspace_contract.py`
+- `tests/fixtures/memory_capability.py`
+- `tests/test_memory_capability_contract.py`
+
+Reports:
 
 - `docs/TEST_REPORTS/P0_02_PORT_CONTRACT_TEST_REPORT.md`
+- `docs/TEST_REPORTS/P0_03_WORKSPACE_CAPABILITY_CONTRACT_TEST_REPORT.md`
 
-Roadmap-required new suites include provider, capability contract, source read model, statistics, Inspector API, workspace isolation, dual-read and no-legacy regression tests.
+Current evidence:
 
-## 12. Before Coding Checklist
+- workspace contract: 8 passed in isolated assistant environment
+- memory capability contract: repository code present, full-checkout execution pending
+- full repository regression: pending
+
+## 13. Before Coding Checklist
 
 1. Confirm branch and remote HEAD.
-2. Read the unified architecture plan, execution roadmap and current status.
-3. Locate existing class/function and data authority.
-4. Confirm whether the target is long-term `src` or compatibility `second_brain`.
-5. Confirm API registration and UI gateway.
-6. Confirm storage and workspace isolation.
+2. Read the architecture plan, roadmap and current status.
+3. Locate the existing class/function and data authority.
+4. Resolve the target workspace through `WorkspaceResolver` when adding new runtime resources.
+5. Confirm whether the target belongs to `src`, Tauri or compatibility-only code.
+6. Confirm API registration and Tauri gateway boundaries.
 7. Confirm tests and Markdown report location.
-8. Split work into Provider, synchronization, API, Tauri UI, tests and docs when multiple layers are involved.
-9. Do not create a new module based only on a feature name.
-10. Do not call a planned path implemented until its code and tests exist.
+8. Do not create another workspace, retrieval, ranking or settings concept.
+9. Do not call a planned path implemented until its code and tests exist.
