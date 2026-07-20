@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,9 +14,12 @@ from src.sources import SourceQueryService, SourceReadModel
 
 
 class FakeStatistics:
-    def __init__(self, workspace="acceptance", rebuild_required=False):
+    def __init__(
+        self, workspace="acceptance", rebuild_required=False, last_error=None
+    ):
         self.workspace = workspace
         self.rebuild_required = rebuild_required
+        self.last_error = last_error
 
     def memory_status(self):
         return {
@@ -34,7 +38,7 @@ class FakeStatistics:
             "collection": "acceptance_vectors",
             "dimension": 1024,
             "rebuild_required": self.rebuild_required,
-            "last_error": None,
+            "last_error": self.last_error,
         }
 
 
@@ -193,6 +197,53 @@ class MemoryInspectorFacadeTests(unittest.TestCase):
         response = facade.memory_vector("MEM-1")
         self.assertIsNone(response["vector"]["rebuild_required"])
         self.assertIsNone(response["vector"]["chunks"][0]["rebuild_required"])
+
+    def test_vector_errors_are_sanitized_without_changing_tristate_contract(self):
+        raw_error = r"D:\Users\Secret\qdrant.db contains private provider details"
+        for rebuild_required in (True, False, None):
+            with self.subTest(rebuild_required=rebuild_required):
+                gateway = SimpleNamespace(
+                    retriever=SimpleNamespace(
+                        semantic_provider=FakeSemantic(error=raw_error)
+                    )
+                )
+                facade = MemoryInspectorFacade(
+                    self.database,
+                    self.facade.source_service,
+                    FakeStatistics(
+                        rebuild_required=rebuild_required,
+                        last_error=raw_error,
+                    ),
+                    gateway=gateway,
+                    workspace="acceptance",
+                )
+
+                response = facade.memory_vector("MEM-1")
+                vector = response["vector"]
+                chunk = vector["chunks"][0]
+                serialized = json.dumps(response)
+
+                self.assertEqual(
+                    vector["last_error"],
+                    "Vector status unavailable; see local logs",
+                )
+                self.assertEqual(
+                    chunk["last_error"],
+                    "Vector status unavailable; see local logs",
+                )
+                self.assertIsNone(chunk["exists"])
+                self.assertEqual(vector["rebuild_required"], rebuild_required)
+                self.assertEqual(chunk["rebuild_required"], rebuild_required)
+                self.assertEqual(chunk["chunk_id"], "CHUNK-1")
+                self.assertEqual(chunk["collection"], "acceptance_vectors")
+                self.assertEqual(chunk["dimension"], 1024)
+                for forbidden in (
+                    "D:\\",
+                    "Users",
+                    "qdrant.db",
+                    "private provider details",
+                ):
+                    self.assertNotIn(forbidden, serialized)
 
     def test_production_and_acceptance_database_are_isolated(self):
         root = Path(self.temp_dir.name)
