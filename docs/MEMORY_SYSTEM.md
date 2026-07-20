@@ -1,62 +1,198 @@
-﻿# MEMORY_SYSTEM.md — LingJi Memory System
+# MEMORY_SYSTEM.md — LingJi Unified Memory System
 
-> Generated: 2026-07-20
-> Version: 0.2.0 (second brain)
+> Updated: 2026-07-20
+> Status: Target memory contract with migration notes
+> Authoritative plan: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
 
-## Overview
+## 1. Goal
 
-The second brain maintains an isolated memory system separate from PEMIS v6. It stores
-traceable AI-chat archives and reviewable structured memories. Obsidian Markdown is
-indexed as formal knowledge but never auto-distilled into memories.
+LingJi maintains one owner-controlled permanent memory for the user and one permission-aware memory gateway for all approved AI clients.
 
-## Data Flow
+The system must not keep two independent permanent-memory databases.
 
+## 2. Authority Model
+
+```text
+Permanent memory and formal knowledge text
+= Obsidian Vault + Git
+
+Original imported material
+= configurable raw archive
+
+Runtime tasks, processing state and audit events
+= lingji_state.db
+
+Rebuildable lexical and metadata index
+= lingji_memory.db
+
+Rebuildable semantic index
+= Qdrant
+
+Structured conversation/message query model
+= rebuildable derived index
 ```
-AI Chat JSON → Raw Archive → ChatConnector → SQLite (conversations/messages)
-                                    → MemoryService (extract → pending memories)
-                                    → DistillationService (review → active memories)
 
-Codex Task JSON → CodexConnector → SQLite (memories)
+Obsidian remains human-readable and owner-editable. Git records formal changes. Indexes accelerate retrieval but do not own permanent truth.
 
-Obsidian Markdown → ObsidianConnector → SQLite (knowledge_documents, no distill)
+## 3. Current Transition State
 
-Active Memories + Knowledge → Embedding → Qdrant Vector Store (rebuildable cache)
+`src/` is the long-term memory platform and already provides:
+
+- owner-reviewed memory lifecycle
+- Core Memory and context pinning
+- FTS5/BM25/trigram retrieval
+- privacy, project, tag, time and Agent Scope filters
+- citations and Context Pack
+- multi-AI MemoryGateway and MCP
+
+`second_brain/` remains a compatibility runtime because it still provides:
+
+- live Qdrant and Ollama embedding
+- structured sources, conversations and messages
+- memory versions, relations and conflicts
+- production/acceptance isolation patterns
+
+These capabilities must be migrated into `src` without preserving a second authority.
+
+## 4. Unified Data Flow
+
+```text
+AI chats / Codex / web / files / media / manual feeding
+  -> src/extraction adapter
+  -> input hash, idempotency and privacy scan
+  -> raw snapshot
+  -> source Markdown or derived assets
+  -> memory candidate when appropriate
+  -> owner review
+  -> permanent memory in Obsidian/Git
+  -> incremental lexical and semantic indexing
+  -> MemoryGateway
+  -> approved AI clients
 ```
 
-## Memory Lifecycle
+Obsidian formal knowledge is indexed but is not automatically converted into personal memory without an explicit rule and owner review.
 
-1. **Import** — Raw JSON files placed in inbox directories are detected by the watcher or ingested via API
-2. **Extract** — Memory candidates are generated from conversations by distillation
-3. **Pending** — Important memories start as `pending` and require explicit approval
-4. **Active** — Approved memories become `active` and are embedded in Qdrant
-5. **Superseded** — Newer knowledge can supersede old memories (version history retained)
-6. **Conflicted** — Contradictory memories are flagged for review
-7. **Rejected / Archived / Deleted** — Terminal states for irrelevant or removed memories
+## 5. Memory Lifecycle
 
-## Memory Types
+```text
+captured
+-> candidate
+-> pending owner review
+-> promoted permanent memory
+-> active or core
+-> superseded / archived with history retained
+```
 
-| Type | Description | Auto-Approved |
-|------|-------------|---------------|
-| RULE | Directives and guidelines | No |
-| FACT | Verifiable facts | No |
-| DECISION | Past decisions and rationale | No |
-| PREFERENCE | User preferences | No |
-| INSIGHT | Derived insights | No |
-| KNOWLEDGE | Knowledge documents (from Obsidian) | Yes (indexed, not distilled) |
+Rules:
 
-## SQLite Schema
+1. AI may propose permanent memory when its profile allows it.
+2. AI may not silently promote or rewrite Core Memory.
+3. Superseded memory remains traceable but must not appear as current context.
+4. Conflict detection creates review candidates, not automatic rewrites.
+5. Deletion and destructive batch actions require explicit owner confirmation and rollback protection.
 
-Core tables: `sources`, `projects`, `conversations`, `messages`, `memories`,
-`memory_versions`, `knowledge_documents`, `knowledge_chunks`, `distillation_log`.
+## 6. Memory Metadata
 
-SQLite is the source of truth. Qdrant is a rebuildable cache.
+The canonical Markdown metadata contract should cover:
 
-## Vector Store
+- stable memory ID
+- title and aliases
+- memory type and tier
+- status and review status
+- privacy
+- project and tags
+- relationships
+- valid-from and valid-to
+- superseded-by
+- pin-to-context
+- Agent Scope
+- importance, confidence and recall weight
+- source and generation provenance
+- content hash and revision information
 
-Embedded Qdrant (no Docker required). Collection: `lingji_memories_v1`.
-Can use `:memory:` for testing, local path for production, or remote URL.
+The UI must not invent a separate enum when a backend contract exists.
 
-## Chunking
+## 7. Retrieval
 
-Text is split into overlapping chunks (default 1500 chars, 150 overlap) for embedding.
-Knowledge documents and memories are chunked independently.
+The final retrieval pipeline is:
+
+```text
+FTS5 / BM25 / Chinese fallback
++
+Qdrant semantic channel
++
+metadata, privacy, time and Agent Scope filtering
++
+RRF and existing boosts
+```
+
+Current verified limitation: `src` has the semantic provider interface but does not yet connect it in `build_memory_gateway()`.
+
+Qdrant failure must preserve lexical retrieval and return an explicit degraded status.
+
+## 8. Context Pack and AI Access
+
+All AI clients must use the unified MemoryGateway.
+
+Context Pack must provide:
+
+- Core Memory priority
+- project scope
+- privacy and Agent Scope enforcement
+- type and tag filters
+- strict context budget
+- citations and line ranges
+- memory revision
+- generation time and warnings
+
+Different AI clients may receive different views of the same canonical memory according to permissions. They must not maintain separate authoritative copies.
+
+## 9. Structured Conversations
+
+Source, conversation and message records are useful for audit and source expansion.
+
+They must be:
+
+- rebuildable from raw snapshots or Vault source documents
+- linked to stable source IDs
+- privacy filtered
+- expandable only on explicit request for full content
+- treated as source evidence, not automatically as permanent personal memory
+
+## 10. Versions, Relations and Conflicts
+
+The final query model may combine:
+
+- Git history
+- file and state events
+- Markdown relationships
+- deterministic derived tables
+
+The useful query patterns from `second_brain` may be migrated, but the final read model must reference the canonical Vault memory rather than maintain a second memory body.
+
+## 11. Production and Acceptance
+
+Production and acceptance must physically isolate all mutable resources:
+
+- Vault or fixture Vault
+- raw archive
+- state database
+- memory index
+- Qdrant collection/path
+- logs and runtime settings
+
+## 12. Migration Safety
+
+`second_brain.sqlite3` must remain available during dual-read verification and export.
+
+Retirement order:
+
+1. migrate missing capability
+2. verify against common fixtures and read-only real samples
+3. stop legacy auto-start
+4. stop legacy writes
+5. preserve read-only compatibility
+6. export and verify data
+7. archive or remove old runtime
+
+Direct deletion before parity and rollback validation is forbidden.
