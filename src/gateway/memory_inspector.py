@@ -224,6 +224,7 @@ class MemoryInspectorFacade:
         chunks = list(memory.get("chunks") or [])
         snapshot = self.statistics.vector_status()
         semantic = getattr(getattr(self.gateway, "retriever", None), "semantic_provider", None)
+        rebuild_required = snapshot.get("rebuild_required")
         output = []
         for chunk in chunks:
             chunk_id = str(chunk.get("chunk_id") or "")
@@ -248,7 +249,7 @@ class MemoryInspectorFacade:
                     "source": source,
                     "collection": snapshot.get("collection"),
                     "dimension": snapshot.get("dimension"),
-                    "rebuild_required": bool(snapshot.get("rebuild_required")),
+                    "rebuild_required": rebuild_required,
                     "last_error": last_error,
                 }
             )
@@ -260,7 +261,7 @@ class MemoryInspectorFacade:
                     "source": snapshot.get("source"),
                     "collection": snapshot.get("collection"),
                     "dimension": snapshot.get("dimension"),
-                    "rebuild_required": bool(snapshot.get("rebuild_required")),
+                    "rebuild_required": rebuild_required,
                     "last_error": snapshot.get("last_error"),
                     "chunks": output,
                 },
