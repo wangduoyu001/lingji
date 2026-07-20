@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     control_api_port: int = Field(default=8766, ge=1024, le=65535)
     control_api_token_file: str = "control_api_token"
 
+    # Compatibility API remains isolated during migration and is never a Tauri backend.
+    compatibility_api_host: str = "127.0.0.1"
+    compatibility_api_port: int = Field(default=8765, ge=1024, le=65535)
+
     # Skill registry. Comma-separated roots are optional and never copied into the Vault.
     skill_auto_sync_roots: str = ""
 
@@ -87,10 +91,10 @@ class Settings(BaseSettings):
     memory_default_context_chars: int = 12000
     memory_index_check_hours: float = 6.0
 
-    # MCP server; localhost is the safe default
+    # MCP server. stdio is the default; optional HTTP uses a dedicated port.
     mcp_server_name: str = "LingJi Memory Gateway"
     mcp_host: str = "127.0.0.1"
-    mcp_port: int = 8765
+    mcp_port: int = Field(default=8767, ge=1024, le=65535)
     mcp_transport: str = "stdio"
     mcp_default_agent_id: str = "lingji-local"
 
