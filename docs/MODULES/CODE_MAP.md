@@ -28,7 +28,7 @@ Do not infer product ownership from directory names. Confirm the real service an
 ```text
 src/extraction
   -> raw snapshot and Vault documents
-  -> MemoryIndexCoordinator (next task)
+  -> MemoryIndexCoordinator
        -> lingji_memory.db
        -> QdrantSemanticProvider
   -> HybridRetriever
@@ -37,6 +37,8 @@ src/extraction
   -> MCP / Local Control API
   -> Tauri UI
 ```
+
+The coordinator exists but is not yet wired into `MemoryGateway` startup.
 
 ## 3. Canonical Data And Indexes
 
@@ -115,23 +117,27 @@ Production and acceptance paths must not be equal, aliases, or parent/child path
 | Chunking | `src/retrieval/chunker.py::MarkdownChunker` | implemented |
 | Context Pack | `src/retrieval/context_pack.py::ContextPackBuilder` | implemented |
 | Incremental lexical sync | `src/retrieval/incremental_sync.py::IncrementalMemorySynchronizer` | implemented |
-| Lexical/vector coordinator | `src/retrieval/index_coordinator.py` | planned, next task |
+| Lexical/vector coordinator | `src/retrieval/index_coordinator.py::MemoryIndexCoordinator` | implemented; runtime wiring and local validation pending |
+| Coordinator warning/result contracts | `src/retrieval/index_coordinator.py` | implemented |
 | Unified memory statistics | `src/gateway/memory_statistics.py` | planned |
 | Permanent-memory lifecycle | `src/memory/lifecycle.py::MemoryLifecycleService` | implemented |
 | State and events | `src/storage/state_db.py::StateDatabase` | implemented |
 | MCP tools/resources/prompts | `src/mcp_server.py` | implemented |
 | MCP CLI startup | `run_mcp_server.py` | implemented |
 
-Current semantic gap:
+Current semantic runtime gap:
 
 ```text
 src/gateway/bootstrap.py
   -> semantic_provider=None
+
+src/gateway/memory_gateway.py
+  -> IncrementalMemorySynchronizer directly
 ```
 
-Do not describe Qdrant as connected to MemoryGateway until coordinator, runtime wiring and integration tests pass.
+Do not describe Qdrant as connected to MemoryGateway until P1-04 wiring and integration tests pass.
 
-## 7. Semantic Provider Boundaries
+## 7. Semantic Provider And Coordinator Boundaries
 
 ```text
 src/model_center/embedding.py
@@ -142,13 +148,19 @@ src/retrieval/qdrant_provider.py
   -> upsert/delete
   -> count/exists/coverage/status
 
+src/retrieval/index_coordinator.py
+  -> lexical commit first
+  -> canonical before/after snapshots
+  -> semantic delta
+  -> structured degraded warnings
+
 src/retrieval/hybrid.py
   -> canonical resolve
   -> privacy and Agent Scope checks
   -> RRF and metadata boosts
 ```
 
-Qdrant must not become a permanent memory authority or a second ranking pipeline.
+Qdrant must not become a permanent memory authority or a second ranking pipeline. Semantic failure must not roll back a successful lexical update.
 
 ## 8. Unified Ingestion Entry Points
 
@@ -233,7 +245,7 @@ src MCP Streamable HTTP        = 8767
 src MCP default transport      = stdio
 ```
 
-P1 Provider work does not modify this contract.
+Phase 1 provider/coordinator work does not modify this contract.
 
 ## 13. Testing Map
 
@@ -251,6 +263,7 @@ Phase 1 suites:
 
 - `tests/test_embedding_provider.py`
 - `tests/test_qdrant_semantic_provider.py`
+- `tests/test_memory_index_coordinator.py`
 
 Reports:
 
@@ -258,6 +271,7 @@ Reports:
 - `docs/TEST_REPORTS/P0_03_WORKSPACE_CAPABILITY_CONTRACT_TEST_REPORT.md`
 - `docs/TEST_REPORTS/P1_01_EMBEDDING_PROVIDER_TEST_REPORT.md`
 - `docs/TEST_REPORTS/P1_02_QDRANT_SEMANTIC_PROVIDER_TEST_REPORT.md`
+- `docs/TEST_REPORTS/P1_03_MEMORY_INDEX_COORDINATOR_TEST_REPORT.md`
 
 Current evidence:
 
@@ -265,6 +279,7 @@ Current evidence:
 - embedding fake-transport suite: 13 passed
 - Qdrant 1.12 direct in-memory API smoke: passed
 - committed Qdrant provider pytest in a complete checkout: pending
+- committed coordinator pytest in a complete checkout: pending
 - full repository regression: pending
 
 ## 14. Before Coding Checklist
@@ -275,6 +290,7 @@ Current evidence:
 4. Resolve the target workspace through `WorkspaceResolver` when adding runtime resources.
 5. Confirm whether the target belongs to `src`, Tauri or compatibility-only code.
 6. Preserve `HybridRetriever` as the only final ranking path.
-7. Confirm tests and Markdown report location.
-8. Do not create another workspace, retrieval, ranking or settings concept.
-9. Do not call Qdrant connected until gateway wiring and integration tests pass.
+7. Preserve lexical success when semantic providers fail.
+8. Confirm tests and Markdown report location.
+9. Do not create another workspace, retrieval, ranking or settings concept.
+10. Do not call Qdrant connected until gateway wiring and integration tests pass.
