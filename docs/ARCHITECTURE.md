@@ -1,97 +1,183 @@
-# ARCHITECTURE.md — LingJi (灵机) System Architecture
+# ARCHITECTURE.md — LingJi Unified Architecture
 
-> Generated: 2026-07-20
-> Version: 0.2.0 (second brain)
+> Updated: 2026-07-20
+> Status: Target architecture with explicit transition state
+> Authoritative plan: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
 
-## Overview
+## 1. Product Definition
 
-LingJi uses a four-layer architecture (Data → Index → Logic → Ops), with the second-brain service running in parallel as an isolated memory and knowledge management layer.
+LingJi is one local-first private second brain, one shared memory system for approved AI clients, and one desktop control center.
 
-## High-Level Diagram
+The repository currently contains overlapping implementations, but they are not separate long-term products.
 
-`	ext
-┌─────────────────────────────────────────────────────────────────┐
-│                    L4: Operations Layer                         │
-│   backup.py   journal   integrity check   metrics   dashboard   │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-┌───────────────────────────▼─────────────────────────────────────┐
-│                    L3: Logic Layer (Lightweight)                 │
-│   PEMISCore  CronScheduler  SafetyGuard  DecisionEngine         │
-│   OppGenerator  UserFeedback  LingJiTools  ObsidianCli           │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-┌───────────────────────────▼─────────────────────────────────────┐
-│                    L2: Index Layer (Rebuildable)                 │
-│   PEMISIndex (pemis_index.json)                                 │
-│   Qdrant Vector DB (memory + knowledge embeddings)             │
-│   SQLite (conversations, memories, knowledge_documents)         │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-┌───────────────────────────▼─────────────────────────────────────┐
-│                    L1: Data Layer (Immutable Source of Truth)    │
-│   Obsidian Vault (Markdown)   AI Chat JSON   Codex Task JSON    │
-│   Second Brain Raw Archive (data/raw/ai_chat)                   │
-└─────────────────────────────────────────────────────────────────┘
-`
+## 2. Long-Term Ownership
 
-## Second Brain Architecture
+```text
+src/
+= long-term platform mainline
+= ingestion, memory gateway, retrieval, MCP, control API, tasks and operations
 
-`	ext
-  ┌──────────────────────────────┐
-  │   Bounded Watcher            │
-  │   ─ Polls 3 roots ───────────│
-  │                              │
-  │   data/inbox/ai_chat/*.json  ￫  ChatConnector → SQLite
-  │   data/inbox/codex_tasks/*.json ￫  CodexConnector → SQLite
-  │   Obsidian knowledge dir     ￫  ObsidianConnector → SQLite
-  └──────────────────────────────┘
-                │
-  ┌─────────────▼──────────────┐
-  │   FastAPI (127.0.0.1:8765) │
-  │   Runtime                  │
-  │   ┌──────────────────────┐ │
-  │   │ MemoryService        │ │  CRUD + versioning + supersede
-  │   │ RetrievalService     │ │  Semantic + exact search
-  │   │ DistillationService  │ │  Extract memories from chats
-  │   │ ConflictService      │ │  Resolve memory conflicts
-  │   │ ChatConnector        │ │  Import AI conversations
-  │   │ CodexConnector       │ │  Import Codex task records
-  │   │ ObsidianConnector    │ │  Index knowledge (no distill)
-  │   └──────────────────────┘ │
-  └─────────────┬──────────────┘
-                │
-  ┌─────────────▼──────────────┐
-  │   SQLite (structured truth) │
-  │   Embedded Qdrant (vectors) │
-  └────────────────────────────┘
-                │
-  ┌─────────────▼──────────────┐
-  │   PySide6 Desktop App     │
-  │   (灵机第二大脑)           │
-  │   Acceptance workspace    │
-  └────────────────────────────┘
-`
+second_brain/
+= compatibility and migration runtime
+= source of working Qdrant, embedding, structured conversation and acceptance patterns
 
-## PEMIS v6 Architecture
+desktop/lingji-control/
+= only primary desktop UI
 
-`	ext
-  PEMISCore(main.py)
-    ├─ PEMISIndex — hash-based incremental file indexing
-    ├─ Embedder — Ollama embeddings with primary/fallback
-    ├─ CronScheduler — jobs: distill / integrity / full_check / read_feedback / daily_capture
-    ├─ SafetyGuard — NORMAL / DEGRADED / SAFE_MODE / RECOVERY_MODE
-    ├─ DecisionEngine — generate top-6 opportunities
-    ├─ OppGenerator — scan vault, produce opportunity Markdown
-    ├─ UserFeedback — read Control Center feedback
-    ├─ Dashboard — sync opportunities to vault
-    └─ Watchdog — file change → incremental reindex + re-decide
-`
+second_brain/desktop/
+= acceptance, compatibility and emergency diagnosis only
+```
 
-## Key Design Decisions
+New memory features, ingestion adapters and primary UI pages must not be developed in parallel implementations.
 
-- **Dual workspace**: Production and acceptance are physically separated directories
-- **SQLite as truth**: Qdrant can be wiped and rebuilt from SQLite
-- **No WebUI**: Obsidian is the primary user interface; PySide6 desktop for second brain
-- **Isolation**: Second brain does not modify PEMIS v6 files or startup chain
-- **File-driven execution**: PowerShell scripts for management, not interactive shells
+## 3. Data Authority
+
+```text
+Permanent memory and formal knowledge text
+= Obsidian Vault + Git history
+
+Original imported material
+= configurable storage/raw archive
+
+Runtime jobs, processing state and audit events
+= lingji_state.db
+
+Rebuildable lexical and metadata index
+= lingji_memory.db
+
+Rebuildable semantic index
+= Qdrant
+
+Structured source/conversation/message queries
+= rebuildable derived read model
+```
+
+`lingji_memory.db` and Qdrant are indexes, not independent permanent-memory authorities.
+
+`second_brain.sqlite3` remains a compatibility database during migration. It must not become a second long-term source of truth.
+
+## 4. Target Runtime
+
+```text
+Input Sources
+  -> src/extraction adapters
+  -> persistent queue, idempotency, retries and privacy scan
+  -> raw snapshot
+  -> Vault source documents and memory candidates
+  -> owner review
+  -> permanent memory in Obsidian/Git
+  -> incremental index synchronization
+
+Obsidian Vault
+  -> lingji_memory.db
+       -> FTS5 / BM25 / trigram / metadata
+  -> Qdrant SemanticProvider
+       -> semantic chunks
+  -> HybridRetriever
+       -> RRF and metadata weighting
+       -> privacy, project, tag, time and Agent Scope
+  -> ContextPackBuilder
+  -> Unified MemoryGateway
+       -> MCP
+       -> Local Control API
+       -> internal jobs
+
+Tauri Desktop
+  -> authenticated Local Control API :8766
+```
+
+## 5. Current Verified Gap
+
+`src/retrieval/hybrid.py` already supports an optional `SemanticProvider`, but `src/gateway/bootstrap.py` currently passes `semantic_provider=None`.
+
+Therefore the current `src` retrieval path is primarily lexical and metadata based. Real Qdrant semantic retrieval still exists in `second_brain/` and must be adapted into `src`, not preserved as a second search stack.
+
+## 6. Retrieval Target
+
+```text
+FTS5 / BM25 / Chinese substring fallback
++
+Qdrant semantic search
++
+metadata, privacy, time and Agent Scope filters
++
+RRF and existing boosts
+=
+One retrieval pipeline
+```
+
+Qdrant failure must not disable lexical retrieval.
+
+## 7. Port Contract
+
+Target port map:
+
+```text
+8766 = Local Control API and Tauri gateway
+8767 = optional MCP Streamable HTTP
+stdio = default local MCP transport
+```
+
+Transition warning:
+
+- `second_brain` FastAPI currently uses `8765`
+- `src` currently defaults MCP HTTP to `8765`
+- these services conflict when both use HTTP
+- the conflict is not resolved until code and tests are updated
+- Tauri must never call `8765` directly
+
+## 8. UI Architecture
+
+The final primary UI is `desktop/lingji-control/`.
+
+It must expose truthful read models for:
+
+- overview and service health
+- memory inspector
+- knowledge and Obsidian indexing
+- sources and conversations
+- tasks and structured progress
+- vector center
+- models, CPU and GPU
+- AI clients, permissions and MCP
+- opportunity system
+- storage, backup and recovery
+- settings
+- logs and diagnostics
+
+PySide6 may remain during migration for acceptance and diagnosis, but it must not receive new competing product features.
+
+## 9. Workspace Isolation
+
+Production and acceptance must physically isolate:
+
+- Vault or fixture Vault
+- raw archive
+- state database
+- memory index database
+- Qdrant collection or path
+- logs
+- generated assets
+- runtime settings
+
+A request header alone does not provide physical isolation.
+
+## 10. Migration Rules
+
+1. Freeze new duplicate development in `second_brain/`.
+2. Adapt Qdrant and embedding into `src` first.
+3. Migrate structured source/conversation/message read models.
+4. Migrate version, relation and conflict query capability.
+5. Build Memory Inspector on the unified `src` MemoryGateway.
+6. Run dual-read capability and data verification.
+7. Stop legacy writes, preserve read-only compatibility, then retire the old runtime.
+
+Direct deletion of `second_brain/` or its database is forbidden before parity, export and rollback checks pass.
+
+## 11. References
+
+- `docs/TECH_RESEARCH/SRC_SECOND_BRAIN_CAPABILITY_AUDIT.md`
+- `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
+- `docs/MODULES/UNIFIED_DESKTOP_UI_PLAN.md`
+- `docs/MEMORY_SYSTEM.md`
+- `docs/VECTOR_DATABASE.md`
