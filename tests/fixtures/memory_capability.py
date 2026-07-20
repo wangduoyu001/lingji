@@ -138,6 +138,7 @@ def build_workspace_memory_fixtures(
         workspace_root=str(root / "workspace-data"),
         production_qdrant_collection="lingji_memory_production_test",
         acceptance_qdrant_collection="lingji_memory_acceptance_test",
+        semantic_enabled=False,
         vault_auto_init=False,
         index_private=False,
         memory_chunk_max_chars=500,
