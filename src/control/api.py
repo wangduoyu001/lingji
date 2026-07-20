@@ -5,8 +5,10 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from src.gateway.memory_inspector import ReadModelUnavailableError
 from src.runtime import mcp_runtime_status
 
+from .memory_inspector import build_memory_inspector
 from .service import LocalControlService
 
 
@@ -99,7 +101,8 @@ def create_control_app(
         raise RuntimeError("Install requirements-ui.txt to run the local control API") from exc
 
     control = service or LocalControlService(settings)
-    app = FastAPI(title="LingJi Local Control API", version="0.6.0")
+    inspector = None
+    app = FastAPI(title="LingJi Local Control API", version="0.7.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -119,6 +122,8 @@ def create_control_app(
             raise HTTPException(status_code=401, detail="Invalid local control token")
 
     def translate_error(exc: Exception) -> HTTPException:
+        if isinstance(exc, ReadModelUnavailableError):
+            return HTTPException(status_code=503, detail=str(exc))
         if isinstance(exc, LookupError):
             return HTTPException(status_code=404, detail=str(exc))
         if isinstance(exc, PermissionError):
@@ -128,6 +133,15 @@ def create_control_app(
         if isinstance(exc, FileNotFoundError):
             return HTTPException(status_code=404, detail=str(exc))
         return HTTPException(status_code=422, detail=str(exc))
+
+    def memory_inspector():
+        nonlocal inspector
+        if inspector is None:
+            try:
+                inspector = build_memory_inspector(settings, control)
+            except Exception as exc:
+                raise ReadModelUnavailableError(str(exc)) from exc
+        return inspector
 
     secured = [Depends(authorize)]
 
@@ -154,6 +168,188 @@ def create_control_app(
     @app.get("/api/vector/coverage", dependencies=secured)
     def vector_coverage() -> dict[str, Any]:
         return control.vector_coverage()
+
+    @app.get("/api/memory/inspector/status", dependencies=secured)
+    def inspector_status() -> dict[str, Any]:
+        try:
+            return memory_inspector().status()
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get("/api/memory/inspector/sources", dependencies=secured)
+    def inspector_sources(
+        source_type: str | None = Query(default=None),
+        privacy: str | None = Query(default=None),
+        project: str | None = Query(default=None),
+        status: str | None = Query(default=None),
+        q: str | None = Query(default=None),
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
+        try:
+            return memory_inspector().list_sources(
+                source_type=source_type,
+                privacy=privacy,
+                project=project,
+                status=status,
+                q=q,
+                limit=limit,
+                offset=offset,
+            )
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get("/api/memory/inspector/sources/{source_id}", dependencies=secured)
+    def inspector_source(source_id: str) -> dict[str, Any]:
+        try:
+            return memory_inspector().get_source(source_id)
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get("/api/memory/inspector/conversations", dependencies=secured)
+    def inspector_conversations(
+        source_id: str | None = Query(default=None),
+        source_type: str | None = Query(default=None),
+        privacy: str | None = Query(default=None),
+        project: str | None = Query(default=None),
+        from_time: str | None = Query(default=None),
+        to_time: str | None = Query(default=None),
+        q: str | None = Query(default=None),
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
+        try:
+            return memory_inspector().list_conversations(
+                source_id=source_id,
+                source_type=source_type,
+                privacy=privacy,
+                project=project,
+                from_time=from_time,
+                to_time=to_time,
+                q=q,
+                limit=limit,
+                offset=offset,
+            )
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get(
+        "/api/memory/inspector/conversations/{conversation_id}/messages",
+        dependencies=secured,
+    )
+    def inspector_conversation_messages(
+        conversation_id: str,
+        role: str | None = Query(default=None),
+        from_time: str | None = Query(default=None),
+        to_time: str | None = Query(default=None),
+        q: str | None = Query(default=None),
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
+        try:
+            return memory_inspector().list_messages(
+                conversation_id=conversation_id,
+                role=role,
+                from_time=from_time,
+                to_time=to_time,
+                q=q,
+                limit=limit,
+                offset=offset,
+            )
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get(
+        "/api/memory/inspector/conversations/{conversation_id}",
+        dependencies=secured,
+    )
+    def inspector_conversation(conversation_id: str) -> dict[str, Any]:
+        try:
+            return memory_inspector().get_conversation(conversation_id)
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get("/api/memory/inspector/messages", dependencies=secured)
+    def inspector_messages(
+        conversation_id: str | None = Query(default=None),
+        source_id: str | None = Query(default=None),
+        role: str | None = Query(default=None),
+        from_time: str | None = Query(default=None),
+        to_time: str | None = Query(default=None),
+        q: str | None = Query(default=None),
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
+        try:
+            return memory_inspector().list_messages(
+                conversation_id=conversation_id,
+                source_id=source_id,
+                role=role,
+                from_time=from_time,
+                to_time=to_time,
+                q=q,
+                limit=limit,
+                offset=offset,
+            )
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get("/api/memory/inspector/messages/{message_id}", dependencies=secured)
+    def inspector_message(message_id: str) -> dict[str, Any]:
+        try:
+            return memory_inspector().get_message(message_id)
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get("/api/memory/inspector/memories", dependencies=secured)
+    def inspector_memories(
+        memory_type: str | None = Query(default=None),
+        status: str | None = Query(default=None),
+        privacy: str | None = Query(default=None),
+        project: str | None = Query(default=None),
+        q: str | None = Query(default=None),
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
+        try:
+            return memory_inspector().list_memories(
+                memory_type=memory_type,
+                status=status,
+                privacy=privacy,
+                project=project,
+                q=q,
+                limit=limit,
+                offset=offset,
+            )
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get(
+        "/api/memory/inspector/memories/{memory_id}/source",
+        dependencies=secured,
+    )
+    def inspector_memory_source(memory_id: str) -> dict[str, Any]:
+        try:
+            return memory_inspector().memory_source(memory_id)
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get(
+        "/api/memory/inspector/memories/{memory_id}/vector",
+        dependencies=secured,
+    )
+    def inspector_memory_vector(memory_id: str) -> dict[str, Any]:
+        try:
+            return memory_inspector().memory_vector(memory_id)
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get("/api/memory/inspector/memories/{memory_id}", dependencies=secured)
+    def inspector_memory(memory_id: str) -> dict[str, Any]:
+        try:
+            return memory_inspector().get_memory(memory_id)
+        except Exception as exc:
+            raise translate_error(exc) from exc
 
     @app.get("/api/mcp/status", dependencies=secured)
     def mcp_status() -> dict[str, Any]:
