@@ -1,0 +1,14 @@
+body { margin: 0; color: #e7edf5; background: #101722; font: 14px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif; }
+.popup { width: 290px; padding: 16px; }
+.options main { width: min(620px, calc(100% - 40px)); margin: 40px auto; padding: 24px; border: 1px solid #2c3a4f; border-radius: 14px; background: #151e2a; }
+h1 { margin: 0 0 8px; font-size: 20px; }
+p { color: #94a5ba; }
+label { display: grid; gap: 6px; margin: 16px 0; color: #bdc8d6; }
+input { padding: 10px; color: #e7edf5; border: 1px solid #34465f; border-radius: 8px; background: #0b111a; }
+button { width: 100%; margin: 6px 0; padding: 10px 12px; color: #07110e; border: 0; border-radius: 8px; background: #79d0b0; font-weight: 700; cursor: pointer; }
+button.secondary { color: #e7edf5; border: 1px solid #34465f; background: #202c3d; }
+.actions { display: flex; gap: 10px; }
+#status { min-height: 22px; margin-top: 10px; color: #9faec1; }
+#status.success { color: #8ee0bc; }
+#status.error { color: #ff9a9a; }
+#status.warning { color: #f0c77f; }

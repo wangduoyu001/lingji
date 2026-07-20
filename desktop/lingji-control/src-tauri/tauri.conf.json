@@ -1,0 +1,44 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "灵机控制中心",
+  "version": "0.1.0",
+  "identifier": "com.lingji.controlcenter",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "灵机控制中心",
+        "width": 1440,
+        "height": 920,
+        "minWidth": 1050,
+        "minHeight": 700,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8766 http://localhost:8766; img-src 'self' asset: data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "shortDescription": "灵机独立本地管理与数据控制中心",
+    "longDescription": "管理灵机任务、采集、媒体、存储、备份、参数和日志。",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.png",
+      "icons/Square150x150Logo.png",
+      "icons/Square310x310Logo.png",
+      "icons/StoreLogo.png"
+    ]
+  }
+}

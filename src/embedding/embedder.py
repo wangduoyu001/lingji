@@ -1,7 +1,11 @@
-import hashlib, logging, requests, time
+import hashlib
+import logging
+import time
 from collections import OrderedDict
 
-logger = logging.getLogger('pemis.embedder')
+import requests
+
+logger = logging.getLogger("pemis.embedder")
 
 
 class Embedder:
@@ -31,32 +35,36 @@ class Embedder:
         return [self.embed(t) for t in texts]
 
     def _call_ollama(self, text):
-        for attempt in range(2):
-            model = self.current_model
+        candidates = [self.current_model]
+        if self.fallback_model and self.fallback_model not in candidates:
+            candidates.append(self.fallback_model)
+        for attempt, model in enumerate(candidates, 1):
             try:
                 resp = requests.post(
-                    f'{self.base_url}/api/embeddings',
-                    json={'model': model, 'prompt': text},
-                    timeout=15
+                    f"{self.base_url}/api/embeddings",
+                    json={"model": model, "prompt": text},
+                    timeout=15,
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                embedding = data.get('embedding', [])
-                if embedding and self._fallback_active:
-                    logger.info(f'Embedder recovered on primary: {self.primary_model}')
-                    self._fallback_active = False
-                    self.current_model = self.primary_model
-                    self._switch_log.append({'time': time.time(), 'from': self.fallback_model, 'to': self.primary_model})
-                return embedding
-            except requests.RequestException as e:
-                logger.warning(f'Embedding attempt {attempt + 1} failed with {model}: {e}')
-                if not self._fallback_model or model == self.fallback_model:
+                embedding = data.get("embedding", [])
+                if not embedding:
                     continue
-                logger.info(f'Falling back to {self.fallback_model}')
-                self._fallback_active = True
-                self.current_model = self.fallback_model
-                self._switch_log.append({'time': time.time(), 'from': model, 'to': self.fallback_model, 'reason': str(e)[:100]})
-        logger.error(f'All embedding models failed for: {text[:50]}...')
+                if model != self.current_model:
+                    self._switch_log.append(
+                        {
+                            "time": time.time(),
+                            "from": self.current_model,
+                            "to": model,
+                            "reason": "request_failed",
+                        }
+                    )
+                self.current_model = model
+                self._fallback_active = model == self.fallback_model and model != self.primary_model
+                return embedding
+            except requests.RequestException as exc:
+                logger.warning("Embedding attempt %s failed with %s: %s", attempt, model, exc)
+        logger.error("All embedding models failed for: %s...", text[:50])
         return None
 
     def clear_cache(self):
@@ -64,10 +72,10 @@ class Embedder:
 
     def get_status(self):
         return {
-            'current_model': self.current_model,
-            'primary': self.primary_model,
-            'fallback': self.fallback_model,
-            'fallback_active': self._fallback_active,
-            'cache_size': len(self._cache),
-            'switches': self._switch_log[-5:] if self._switch_log else []
+            "current_model": self.current_model,
+            "primary": self.primary_model,
+            "fallback": self.fallback_model,
+            "fallback_active": self._fallback_active,
+            "cache_size": len(self._cache),
+            "switches": self._switch_log[-5:] if self._switch_log else [],
         }

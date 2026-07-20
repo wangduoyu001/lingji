@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -58,3 +58,16 @@ _D:*
 test_*
 _tmp_*
 !tests/test_*.py
+# Tauri / Desktop UI (regeneratable artifacts)
+node_modules/
+desktop/lingji-control/node_modules/
+desktop/lingji-control/src-tauri/target/
+desktop/lingji-control/src-tauri/gen/
+desktop/lingji-control/tsconfig.*.tsbuildinfo
+
+# E2E test runtimes
+_e2e_*/
+vault/
+scripts/_*.py
+
+!docs/TEST_REPORTS/

@@ -1,0 +1,382 @@
+from __future__ import annotations
+
+import json
+import math
+import re
+import threading
+import time
+from collections import OrderedDict
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from typing import Any, Protocol
+
+from src.retrieval.memory_db import MemoryDatabase
+
+
+class SemanticProvider(Protocol):
+    def search(
+        self,
+        query: str,
+        limit: int,
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]: ...
+
+
+@dataclass(frozen=True)
+class SearchFilters:
+    project: str | None = None
+    memory_types: tuple[str, ...] = ()
+    statuses: tuple[str, ...] = ("active", "needs_review", "received")
+    privacy: tuple[str, ...] = ("public", "private")
+    agent_id: str | None = None
+    tags: tuple[str, ...] = ()
+    as_of: str | None = None
+    include_archived: bool = False
+
+    def normalized(self) -> "SearchFilters":
+        statuses = self.statuses
+        if self.include_archived and "archived" not in statuses:
+            statuses = (*statuses, "archived")
+        as_of = self.as_of or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        return SearchFilters(
+            project=self.project,
+            memory_types=tuple(sorted(set(self.memory_types))),
+            statuses=tuple(sorted(set(statuses))),
+            privacy=tuple(sorted(set(self.privacy))),
+            agent_id=self.agent_id,
+            tags=tuple(sorted(set(self.tags))),
+            as_of=as_of,
+            include_archived=self.include_archived,
+        )
+
+
+class HybridRetriever:
+    """Fuse lexical, optional semantic and metadata signals using RRF."""
+
+    def __init__(
+        self,
+        database: MemoryDatabase,
+        semantic_provider: SemanticProvider | None = None,
+        cache_size: int = 256,
+        cache_ttl_seconds: float = 120.0,
+        rrf_k: int = 60,
+    ):
+        self.database = database
+        self.semantic_provider = semantic_provider
+        self.cache_size = max(int(cache_size), 0)
+        self.cache_ttl_seconds = max(float(cache_ttl_seconds), 0.0)
+        self.rrf_k = max(int(rrf_k), 1)
+        self._cache: OrderedDict[str, tuple[float, list[dict[str, Any]]]] = OrderedDict()
+        self._lock = threading.RLock()
+
+    def search(
+        self,
+        query: str,
+        limit: int = 10,
+        filters: SearchFilters | None = None,
+    ) -> list[dict[str, Any]]:
+        clean_query = " ".join(str(query or "").split())
+        if not clean_query:
+            return []
+        normalized = (filters or SearchFilters()).normalized()
+        limit = max(int(limit), 1)
+        revision = self.database.revision
+        cache_key = self._cache_key(clean_query, limit, normalized, revision)
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
+
+        candidate_limit = max(limit * 6, 30)
+        lexical = self.database.search_fts(
+            clean_query,
+            limit=candidate_limit,
+            memory_types=normalized.memory_types,
+            statuses=normalized.statuses,
+            privacy=normalized.privacy,
+            as_of=normalized.as_of,
+        )
+        semantic = self._semantic_search(clean_query, candidate_limit, normalized)
+        fused = self._fuse(clean_query, lexical, semantic, normalized)
+        output = fused[:limit]
+        self._cache_put(cache_key, output)
+        return output
+
+    def _semantic_search(
+        self,
+        query: str,
+        limit: int,
+        filters: SearchFilters,
+    ) -> list[dict[str, Any]]:
+        if not self.semantic_provider:
+            return []
+        try:
+            results = self.semantic_provider.search(query, limit, asdict(filters))
+        except Exception:
+            return []
+        normalized = []
+        for item in results or []:
+            if not isinstance(item, dict):
+                continue
+            chunk_id = str(item.get("chunk_id") or "")
+            memory_id = str(item.get("memory_id") or "")
+            if not chunk_id and not memory_id:
+                continue
+            normalized.append(
+                {
+                    **item,
+                    "chunk_id": chunk_id,
+                    "memory_id": memory_id,
+                    "semantic_score": self._clamp_score(item.get("score", item.get("semantic_score", 0.0))),
+                }
+            )
+        return normalized
+
+    def _fuse(
+        self,
+        query: str,
+        lexical: list[dict[str, Any]],
+        semantic: list[dict[str, Any]],
+        filters: SearchFilters,
+    ) -> list[dict[str, Any]]:
+        candidates: dict[str, dict[str, Any]] = {}
+        scores: dict[str, float] = {}
+        channels: dict[str, set[str]] = {}
+
+        for rank, item in enumerate(lexical, 1):
+            key = self._candidate_key(item)
+            if not key or not self._passes_post_filters(item, filters):
+                continue
+            candidates[key] = dict(item)
+            scores[key] = scores.get(key, 0.0) + 1.0 / (self.rrf_k + rank)
+            channels.setdefault(key, set()).add("lexical")
+
+        for rank, item in enumerate(semantic, 1):
+            key = self._candidate_key(item)
+            if not key:
+                continue
+            existing = candidates.get(key)
+            if existing is None:
+                memory = self.database.fetch_memory(str(item.get("memory_id") or ""), include_chunks=True)
+                existing = self._resolve_semantic_result(item, memory)
+                if not existing or not self._passes_post_filters(existing, filters):
+                    continue
+                candidates[key] = existing
+            scores[key] = scores.get(key, 0.0) + 1.0 / (self.rrf_k + rank)
+            channels.setdefault(key, set()).add("semantic")
+
+        query_terms = self._terms(query)
+        for key, item in candidates.items():
+            scores[key] += self._metadata_boost(item, query_terms, filters)
+            item["retrieval_channels"] = sorted(channels.get(key, set()))
+            item["retrieval_score"] = round(scores[key], 8)
+            item["citation"] = self._citation(item)
+
+        ordered = sorted(
+            candidates.values(),
+            key=lambda item: (
+                item.get("retrieval_score", 0.0),
+                self._importance_value(item.get("importance")),
+                str(item.get("updated_at") or item.get("updated") or ""),
+            ),
+            reverse=True,
+        )
+        return self._dedupe(ordered)
+
+    @staticmethod
+    def _candidate_key(item: dict[str, Any]) -> str:
+        return str(item.get("chunk_id") or item.get("memory_id") or "")
+
+    def _resolve_semantic_result(
+        self,
+        item: dict[str, Any],
+        memory: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if not memory:
+            return None
+        chunk_id = str(item.get("chunk_id") or "")
+        chunk = None
+        for value in memory.get("chunks", []):
+            if chunk_id and value.get("chunk_id") == chunk_id:
+                chunk = value
+                break
+        if chunk is None and memory.get("chunks"):
+            chunk = memory["chunks"][0]
+        if not chunk:
+            return None
+        return {
+            "chunk_id": chunk.get("chunk_id"),
+            "memory_id": memory.get("memory_id"),
+            "relative_path": memory.get("relative_path"),
+            "title": memory.get("title"),
+            "memory_type": memory.get("memory_type"),
+            "memory_tier": memory.get("memory_tier"),
+            "status": memory.get("status"),
+            "review_status": memory.get("review_status"),
+            "privacy": memory.get("privacy"),
+            "importance": memory.get("importance"),
+            "confidence": memory.get("confidence"),
+            "project": memory.get("project", []),
+            "tags": memory.get("tags", []),
+            "relationships": memory.get("relationships", {}),
+            "valid_from": memory.get("valid_from"),
+            "valid_to": memory.get("valid_to"),
+            "pin_to_context": memory.get("pin_to_context", False),
+            "agent_scope": memory.get("agent_scope", []),
+            "recall_weight": memory.get("recall_weight", 1.0),
+            "updated_at": memory.get("updated_at"),
+            "heading": chunk.get("heading", ""),
+            "text": chunk.get("text", ""),
+            "start_line": chunk.get("start_line"),
+            "end_line": chunk.get("end_line"),
+            "snippet": chunk.get("text", "")[:240],
+            "semantic_score": item.get("semantic_score", 0.0),
+        }
+
+    def _passes_post_filters(self, item: dict[str, Any], filters: SearchFilters) -> bool:
+        scopes = item.get("agent_scope") or []
+        if isinstance(scopes, str):
+            scopes = [scopes]
+        if scopes:
+            if not filters.agent_id:
+                if "all" not in scopes:
+                    return False
+            elif filters.agent_id not in scopes and "all" not in scopes:
+                return False
+        if filters.project:
+            projects = item.get("project") or []
+            if isinstance(projects, str):
+                projects = [projects]
+            project_text = " ".join(str(value) for value in projects).lower()
+            if filters.project.lower() not in project_text:
+                return False
+        if filters.tags:
+            item_tags = {str(value).lower() for value in (item.get("tags") or [])}
+            if not set(tag.lower() for tag in filters.tags).issubset(item_tags):
+                return False
+        return True
+
+    def _metadata_boost(
+        self,
+        item: dict[str, Any],
+        query_terms: set[str],
+        filters: SearchFilters,
+    ) -> float:
+        boost = 0.0
+        title = str(item.get("title") or "").lower()
+        heading = str(item.get("heading") or "").lower()
+        tags = " ".join(str(tag) for tag in (item.get("tags") or [])).lower()
+        if query_terms:
+            title_matches = sum(1 for term in query_terms if term in title)
+            heading_matches = sum(1 for term in query_terms if term in heading)
+            tag_matches = sum(1 for term in query_terms if term in tags)
+            boost += min(title_matches * 0.025, 0.10)
+            boost += min(heading_matches * 0.012, 0.05)
+            boost += min(tag_matches * 0.008, 0.03)
+        if item.get("memory_tier") == "core":
+            boost += 0.035
+        if item.get("pin_to_context"):
+            boost += 0.025
+        boost += self._importance_value(item.get("importance")) * 0.004
+        boost += min(max(float(item.get("recall_weight") or 1.0) - 1.0, -0.5), 2.0) * 0.01
+        if filters.project:
+            boost += 0.025
+        if item.get("status") == "active":
+            boost += 0.008
+        if item.get("review_status") == "approved":
+            boost += 0.008
+        if "semantic" in item.get("retrieval_channels", []):
+            boost += self._clamp_score(item.get("semantic_score")) * 0.01
+        return boost
+
+    @staticmethod
+    def _terms(query: str) -> set[str]:
+        return {
+            term.lower()
+            for term in re.findall(r"[\w\u4e00-\u9fff]{2,}", query, flags=re.UNICODE)
+            if term
+        }
+
+    @staticmethod
+    def _importance_value(value: Any) -> int:
+        mapping = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+        return mapping.get(str(value or "").lower(), 0)
+
+    @staticmethod
+    def _clamp_score(value: Any) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        if math.isnan(number) or math.isinf(number):
+            return 0.0
+        return min(max(number, 0.0), 1.0)
+
+    @staticmethod
+    def _citation(item: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "memory_id": item.get("memory_id"),
+            "path": item.get("relative_path"),
+            "heading": item.get("heading"),
+            "start_line": item.get("start_line"),
+            "end_line": item.get("end_line"),
+        }
+
+    @staticmethod
+    def _dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        output = []
+        seen_chunks = set()
+        per_memory: dict[str, int] = {}
+        for item in items:
+            chunk_id = str(item.get("chunk_id") or "")
+            memory_id = str(item.get("memory_id") or "")
+            if chunk_id and chunk_id in seen_chunks:
+                continue
+            if per_memory.get(memory_id, 0) >= 3:
+                continue
+            seen_chunks.add(chunk_id)
+            per_memory[memory_id] = per_memory.get(memory_id, 0) + 1
+            output.append(item)
+        return output
+
+    def _cache_key(
+        self,
+        query: str,
+        limit: int,
+        filters: SearchFilters,
+        revision: int,
+    ) -> str:
+        payload = {
+            "query": query,
+            "limit": limit,
+            "filters": asdict(filters),
+            "revision": revision,
+        }
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+    def _cache_get(self, key: str) -> list[dict[str, Any]] | None:
+        if not self.cache_size or not self.cache_ttl_seconds:
+            return None
+        now = time.monotonic()
+        with self._lock:
+            value = self._cache.get(key)
+            if not value:
+                return None
+            created_at, result = value
+            if now - created_at > self.cache_ttl_seconds:
+                del self._cache[key]
+                return None
+            self._cache.move_to_end(key)
+            return [dict(item) for item in result]
+
+    def _cache_put(self, key: str, result: list[dict[str, Any]]) -> None:
+        if not self.cache_size or not self.cache_ttl_seconds:
+            return
+        with self._lock:
+            self._cache[key] = (time.monotonic(), [dict(item) for item in result])
+            self._cache.move_to_end(key)
+            while len(self._cache) > self.cache_size:
+                self._cache.popitem(last=False)
+
+    def clear_cache(self) -> None:
+        with self._lock:
+            self._cache.clear()
