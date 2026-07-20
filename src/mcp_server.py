@@ -33,20 +33,19 @@ def create_mcp_server(gateway=None, default_agent_id: str | None = None):
     )
 
     def sync_written(result: dict[str, Any]) -> None:
-        indexed = 0
+        changed = False
         for path_text in result.get("paths") or []:
             path = Path(path_text)
             if not path.exists() or not indexer.layout.should_index(path, include_private=False):
                 continue
-            if not indexer.incremental_add(path):
-                continue
-            entry = indexer.find_by_path(path)
-            if not entry or entry.get("is_private"):
-                continue
-            memory_gateway.database.upsert_from_entry(entry, path, chunker)
-            indexed += 1
-        if indexed:
-            memory_gateway.retriever.clear_cache()
+            if indexer.incremental_add(path):
+                changed = True
+        if changed:
+            memory_gateway.rebuild(
+                indexer.get_all(),
+                settings.vault_path,
+                chunker,
+            )
 
     extraction_pipeline = build_extraction_pipeline(
         settings,
