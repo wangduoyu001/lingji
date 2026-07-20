@@ -23,6 +23,25 @@ class Settings(BaseSettings):
     decision_history_days: int = 90
     watchdog_enabled: bool = True
 
+    # Unified workspace contract. Empty per-workspace paths derive from the
+    # isolated workspace root and do not migrate or replace current runtime data.
+    workspace_name: str = "production"
+    workspace_root: str = ""
+    production_vault_dir: str = ""
+    production_storage_dir: str = ""
+    production_raw_dir: str = ""
+    production_qdrant_mode: str = "embedded"
+    production_qdrant_path: str = ""
+    production_qdrant_url: str = ""
+    production_qdrant_collection: str = "lingji_memory_production"
+    acceptance_vault_dir: str = ""
+    acceptance_storage_dir: str = ""
+    acceptance_raw_dir: str = ""
+    acceptance_qdrant_mode: str = "embedded"
+    acceptance_qdrant_path: str = ""
+    acceptance_qdrant_url: str = ""
+    acceptance_qdrant_collection: str = "lingji_memory_acceptance"
+
     # Single Obsidian Vault foundation
     vault_auto_init: bool = True
     vault_layout_version: str = "1"
