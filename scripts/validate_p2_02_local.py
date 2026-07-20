@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -124,11 +125,9 @@ def run(model: str, ollama_url: str, timeout: float) -> dict[str, Any]:
         if embedding is None:
             raise RuntimeError("Embedding provider is disabled")
 
-        target_workspace = workspace.__class__(
-            **{
-                **workspace.__dict__,
-                "qdrant_collection": "lingji_memory_acceptance_bge_m3_candidate",
-            }
+        target_workspace = replace(
+            workspace,
+            qdrant_collection="lingji_memory_acceptance_bge_m3_candidate",
         )
         provider = QdrantSemanticProvider(
             target_workspace,
