@@ -65,7 +65,7 @@ class _StructuredOutputAdapter(ExtractionAdapter):
                 author=str(document.metadata.get("author") or document.metadata.get("agent") or ""),
                 occurred_at=document.updated_at or document.created_at,
                 sequence=index,
-                content=document.body,
+                content=self._safe_content(document.body, request.input_path),
                 privacy=str(document.metadata.get("privacy") or privacy),
                 projects=self._tuple(document.metadata.get("project") or document.metadata.get("project_id")),
                 metadata={
@@ -80,11 +80,7 @@ class _StructuredOutputAdapter(ExtractionAdapter):
             )
             for index, document in enumerate(documents)
         )
-        conversation_external_id = str(
-            metadata.get("task_id")
-            or first.external_id
-            or first.stable_id
-        )
+        conversation_external_id = str(metadata.get("task_id") or first.external_id or first.stable_id)
         conversation = StructuredConversation(
             external_id=conversation_external_id,
             title=first.title,
@@ -110,6 +106,21 @@ class _StructuredOutputAdapter(ExtractionAdapter):
             projects=projects,
             metadata={"adapter_name": self.name, "adapter_version": self.version},
         )
+
+    @staticmethod
+    def _safe_content(content: str, input_path: Path | None) -> str:
+        if not input_path:
+            return content
+        candidates = {str(input_path), str(input_path.expanduser())}
+        try:
+            candidates.add(str(input_path.resolve()))
+        except OSError:
+            pass
+        result = content
+        for value in sorted((item for item in candidates if item), key=len, reverse=True):
+            result = result.replace(value, "[local file]")
+            result = result.replace(value.replace("\\", "/"), "[local file]")
+        return result
 
     @staticmethod
     def _role(destination: str) -> str:
@@ -161,9 +172,7 @@ class AdapterRegistry:
         if preferred:
             adapter = self.get(preferred)
             if not adapter.can_handle(source_type, input_path, payload):
-                raise ValueError(
-                    f"Adapter {adapter.name} cannot handle source type {source_type}"
-                )
+                raise ValueError(f"Adapter {adapter.name} cannot handle source type {source_type}")
             return adapter
         for adapter in self._adapters.values():
             if adapter.can_handle(source_type, input_path, payload):
@@ -172,10 +181,6 @@ class AdapterRegistry:
 
     def list(self) -> list[dict[str, Any]]:
         return [
-            {
-                "name": adapter.name,
-                "version": adapter.version,
-                "source_types": list(adapter.source_types),
-            }
+            {"name": adapter.name, "version": adapter.version, "source_types": list(adapter.source_types)}
             for adapter in self._adapters.values()
         ]
