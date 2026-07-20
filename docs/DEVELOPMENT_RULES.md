@@ -9,6 +9,19 @@
 3. If the API is available, call `POST http://127.0.0.1:8765/memory/context` before planning.
 4. Do not add the second-brain service to `start_lingji.bat`, `start_lingji.py`, or `run_service.py`.
 
+## Development Understanding Requirement
+
+1. Before developing any new feature, first understand the existing project structure and related modules.
+2. Do not create new files based only on feature names or assumptions.
+3. Before code changes, record or confirm:
+   - target module path
+   - existing service/class/function entry points
+   - data flow
+   - API registration location
+   - test location
+4. Prefer existing project documentation and code maps over repeated repository scanning.
+5. If the required code path is already documented, do not require Codex or local tools unless execution/testing is needed.
+
 ## Data Boundaries
 
 1. AI chat records are the **only** automatic memory source.
