@@ -65,7 +65,10 @@ class EmbeddingStatus:
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["unavailable_models"] = list(self.unavailable_models)
-        payload["available"] = self.active_model is not None and not self.last_error
+        payload["verified"] = self.last_success_at is not None
+        payload["available"] = bool(
+            self.last_success_at and self.active_model and not self.last_error
+        )
         return payload
 
 
@@ -87,19 +90,28 @@ class OllamaEmbeddingProvider:
         primary = str(primary_model or "").strip()
         if not primary:
             raise ValueError("primary_model must not be empty")
-        fallback = str(fallback_model or "").strip() or None
-        self.base_url = str(base_url or "http://127.0.0.1:11434").rstrip("/")
+        endpoint = str(base_url or "").strip().rstrip("/")
+        if not endpoint:
+            raise ValueError("base_url must not be empty")
+        timeout = float(timeout_seconds)
+        if timeout <= 0:
+            raise ValueError("timeout_seconds must be greater than zero")
+        batch = int(batch_size)
+        if batch <= 0:
+            raise ValueError("batch_size must be greater than zero")
+
+        self.base_url = endpoint
         self.primary_model = primary
-        self.fallback_model = fallback
-        self.timeout_seconds = max(float(timeout_seconds), 0.1)
-        self.batch_size = max(int(batch_size), 1)
+        self.fallback_model = str(fallback_model or "").strip() or None
+        self.timeout_seconds = timeout
+        self.batch_size = batch
         self.transport = transport or RequestsEmbeddingTransport()
         self._lock = threading.RLock()
         self._status = EmbeddingStatus(
             provider_id=self.provider_id,
             configured_model=primary,
-            fallback_model=fallback,
-            active_model=primary,
+            fallback_model=self.fallback_model,
+            active_model=None,
             dimension=None,
             unavailable_models=(),
             request_count=0,
@@ -132,7 +144,7 @@ class OllamaEmbeddingProvider:
         with self._lock:
             self._status = replace(
                 self._status,
-                active_model=self.primary_model,
+                active_model=None,
                 unavailable_models=(),
                 last_error=None,
             )
@@ -152,13 +164,19 @@ class OllamaEmbeddingProvider:
             except Exception as exc:
                 last_error = exc
                 self._record_failure(model, exc)
-        raise RuntimeError(f"No embedding model available: {self._safe_error(last_error)}") from last_error
+        raise RuntimeError(
+            f"No embedding model available: {self._safe_error(last_error)}"
+        ) from last_error
 
     def _candidate_models(self) -> list[str]:
         with self._lock:
             unavailable = set(self._status.unavailable_models)
             ordered = (self._status.active_model, self.primary_model, self.fallback_model)
-        return [model for model in dict.fromkeys(ordered) if model and model not in unavailable]
+        return [
+            model
+            for model in dict.fromkeys(ordered)
+            if model and model not in unavailable
+        ]
 
     def _embed_model(self, model: str, texts: list[str]) -> list[list[float]]:
         try:
@@ -180,12 +198,15 @@ class OllamaEmbeddingProvider:
             return vectors
 
     @staticmethod
-    def _parse_vectors(payload: dict[str, Any], *, expected: int) -> list[list[float]]:
+    def _parse_vectors(
+        payload: dict[str, Any], *, expected: int
+    ) -> list[list[float]]:
         raw = payload.get("embeddings")
         if raw is None and payload.get("embedding") is not None:
             raw = [payload["embedding"]]
         if not isinstance(raw, list) or len(raw) != expected:
-            raise ValueError(f"Ollama returned {len(raw) if isinstance(raw, list) else 0} embeddings; expected {expected}")
+            count = len(raw) if isinstance(raw, list) else 0
+            raise ValueError(f"Ollama returned {count} embeddings; expected {expected}")
 
         vectors: list[list[float]] = []
         dimension: int | None = None
@@ -202,7 +223,9 @@ class OllamaEmbeddingProvider:
 
     def _record_success(self, model: str, vectors: list[list[float]]) -> None:
         with self._lock:
-            unavailable = tuple(item for item in self._status.unavailable_models if item != model)
+            unavailable = tuple(
+                item for item in self._status.unavailable_models if item != model
+            )
             self._status = replace(
                 self._status,
                 active_model=model,
@@ -215,10 +238,14 @@ class OllamaEmbeddingProvider:
 
     def _record_failure(self, model: str, exc: Exception) -> None:
         with self._lock:
-            unavailable = tuple(sorted(set(self._status.unavailable_models) | {model}))
+            unavailable = tuple(
+                sorted(set(self._status.unavailable_models) | {model})
+            )
             self._status = replace(
                 self._status,
-                active_model=None if model == self._status.active_model else self._status.active_model,
+                active_model=(
+                    None if model == self._status.active_model else self._status.active_model
+                ),
                 unavailable_models=unavailable,
                 failure_count=self._status.failure_count + 1,
                 last_failure_at=self._timestamp(),
@@ -242,22 +269,58 @@ def build_embedding_provider(
     *,
     transport: EmbeddingTransport | None = None,
 ) -> EmbeddingProvider | None:
-    """Build the configured provider without creating a semantic index or Qdrant client."""
+    """Build configuration only; Qdrant and semantic retrieval are wired separately."""
 
     values = dict(runtime_values or {})
-    enabled = _as_bool(values.get("embedding_enabled", getattr(settings, "embedding_enabled", True)))
-    provider_id = str(values.get("embedding_provider", getattr(settings, "embedding_provider", "ollama"))).strip().lower()
+    enabled = _as_bool(
+        values.get(
+            "embedding_enabled",
+            getattr(settings, "embedding_enabled", True),
+        )
+    )
+    provider_id = str(
+        values.get(
+            "embedding_provider",
+            getattr(settings, "embedding_provider", "ollama"),
+        )
+    ).strip().lower()
     if not enabled or provider_id in {"", "off", "disabled", "none"}:
         return None
     if provider_id != "ollama":
         raise ValueError(f"Unsupported embedding provider: {provider_id}")
 
     return OllamaEmbeddingProvider(
-        base_url=str(values.get("embedding_endpoint", getattr(settings, "ollama_base_url", "http://127.0.0.1:11434"))),
-        primary_model=str(values.get("embedding_primary_model", getattr(settings, "embed_model", ""))),
-        fallback_model=str(values.get("embedding_fallback_model", getattr(settings, "fallback_embed_model", ""))) or None,
-        timeout_seconds=float(values.get("embedding_timeout_seconds", getattr(settings, "embedding_timeout_seconds", 60.0))),
-        batch_size=int(values.get("embedding_batch_size", getattr(settings, "embedding_batch_size", 32))),
+        base_url=str(
+            values.get(
+                "embedding_endpoint",
+                getattr(settings, "ollama_base_url", "http://127.0.0.1:11434"),
+            )
+        ),
+        primary_model=str(
+            values.get(
+                "embedding_primary_model",
+                getattr(settings, "embed_model", ""),
+            )
+        ),
+        fallback_model=str(
+            values.get(
+                "embedding_fallback_model",
+                getattr(settings, "fallback_embed_model", ""),
+            )
+        )
+        or None,
+        timeout_seconds=float(
+            values.get(
+                "embedding_timeout_seconds",
+                getattr(settings, "embedding_timeout_seconds", 60.0),
+            )
+        ),
+        batch_size=int(
+            values.get(
+                "embedding_batch_size",
+                getattr(settings, "embedding_batch_size", 32),
+            )
+        ),
         transport=transport,
     )
 
