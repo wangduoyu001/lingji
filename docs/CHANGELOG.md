@@ -1,6 +1,18 @@
-﻿# CHANGELOG.md — LingJi (灵机) Project Changelog
+# CHANGELOG.md — LingJi (灵机) Project Changelog
 
 > Format: [ISO date] Description (Author/Reference)
+
+## 2026-07-20
+
+- Fix conftest.py environment variable escapes (OBSIDIAN_VAULT_PATH, SECOND_BRAIN_OBSIDIAN_DIR)
+- Update test results: 175 passed, 9 skipped for new tool modules
+- Update PROJECT_STATUS.md with latest commit and test metrics
+- Update second_brain_tools_review.md with actual integration test results
+- Add Obsidian CLI abstraction layer (second_brain/obsidian_cli.py) — wraps official Obsidian.com CLI with subprocess, type-safe config, security guards
+- Add LingJi Tools service layer (second_brain/lingji_tools.py) — unified tool service with frontmatter management and standardized response format
+- Add comprehensive unit tests for both modules (test_lingji_tools.py, test_obsidian_cli.py)
+- Add E2E brain status acceptance test (e2e_brain_status.mjs)
+- Add tools review report (docs/TEST_REPORTS/second_brain_tools_review.md)
 
 ## 2026-07-19
 
@@ -15,7 +27,7 @@
 - Add acceptance automation for desktop validation
 - Add fixed-script watcher controls (independent API/watcher start/stop)
 - Desktop defaults to acceptance workspace; headerless API remains production
-- Pre-upgrade backup created at D:\codex\backups\lingji-second-brain\20260715-225503
+- Pre-upgrade backup created at D:\\codex\ackups\\lingji-second-brain\60715-225503
 
 ## 2026-07-15
 

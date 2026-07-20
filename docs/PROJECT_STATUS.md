@@ -2,7 +2,7 @@
 
 > Generated: 2026-07-20
 > Branch: feature/second-brain-memory
-> Latest commit: 945f054 feat: add native second-brain desktop console
+> Latest commit: 21fe687 docs: add efficient task routing requirement
 
 ## Overall Status
 
@@ -15,7 +15,6 @@ The background scheduler service is fully implemented:
 | Component | Status | Notes |
 |-----------|--------|-------|
 | PEMISCore main loop | ✅ Implemented | In main.py, includes indexer + embedder + scheduler |
-| PEMISIndex (indexer) | ✅ Implemented | Hash-based incremental indexing |
 | Embedder | ✅ Implemented | Ollama-based with fallback chain |
 | Cron scheduler | ✅ Implemented | distill/integrity/full_check/read_feedback/daily_capture |
 | SafetyGuard | ✅ Implemented | NORMAL / DEGRADED / SAFE_MODE / RECOVERY_MODE |
@@ -40,6 +39,8 @@ The background scheduler service is fully implemented:
 | Chat connector | ✅ Implemented | Imports AI chat conversations |
 | Codex connector | ✅ Implemented | Imports Codex task records |
 | Obsidian connector | ✅ Implemented | Indexes Markdown knowledge without auto-distilling |
+| Obsidian CLI tools | ✅ Implemented | Wraps official Obsidian.com CLI via subprocess (obsidian_cli.py) |
+| LingJi Tools | ✅ Implemented | Unified tool service layer with frontmatter (lingji_tools.py) |
 | Bounded watcher | ✅ Implemented | Polls 3 configured roots |
 | PySide6 desktop | ✅ Implemented | Native Windows UI |
 | Acceptance workspace | ✅ Implemented | Isolated test workspace |
@@ -53,15 +54,17 @@ The background scheduler service is fully implemented:
 
 ## Test Report Summary
 
-| Test File | Type | Coverage |
-|-----------|------|----------|
-| tests/test_second_brain.py | Integration | MemoryService, RetrievalService, VectorStore, duel import detection |
-| tests/test_lingji_tools.py | Unit | All 17 LingJiTools methods, tool_result format, dry-run |
-| tests/test_obsidian_cli.py | Unit | CLI invocation, config, encoding, timeout, dry-run |
-| tests/test_desktop.py | Desktop | PySide6 UI acceptance |
+| Test File | Type | Tests | Status |
+|-----------|------|-------|--------|
+| tests/test_lingji_tools.py | Unit | 38 | 38 passed |
+| tests/test_obsidian_cli.py | Unit | 22 | 22 passed |
+| Full suite (excluding env-dep modules) | Integration | 169 | 160 passed, 9 skipped |
+| tests/test_second_brain.py | Integration | — | Requires qdrant_client |
+| tests/test_desktop.py | Desktop | — | Requires PySide6 |
 
 ## Known Issues
 
 - Qdrant Docker service is **not running** on this machine; embedded Qdrant is the default
 - bge-m3 may not be downloaded in Ollama; nomic-embed-text fallback covers this
 - Initial Obsidian indexing can be slow (every MD doc needs an embedding)
+- 6 pre-existing collection errors: 4 tests need PEMISIndex (removed in merge), 1 needs PySide6, 1 needs qdrant_client
