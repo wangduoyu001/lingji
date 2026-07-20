@@ -36,6 +36,27 @@
    - validating local services
 6. Use independent development agents for isolated coding tasks when they can modify code without blocking the main workflow.
 
+## Path and Environment Safety Requirement
+
+1. Runtime data must never be written to the C: drive. This is a mandatory rule.
+2. Do not create:
+   - databases
+   - vectors
+   - logs
+   - cache
+   - uploaded files
+   - generated assets
+   - model data
+   on C: drive.
+3. User data and runtime storage must use configurable locations, preferably D: drive or user-selected storage.
+4. Never hardcode developer-specific absolute paths.
+5. Paths must be resolved through:
+   - configuration files
+   - environment variables
+   - project root detection
+   - user data directory settings
+6. Development machine paths are temporary test environments, not application assumptions.
+
 ## Data Boundaries
 
 1. AI chat records are the **only** automatic memory source.
