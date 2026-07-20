@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     embed_model: str = "nomic-embed-text"
     fallback_embed_model: str = "nomic-embed-text"
     ollama_base_url: str = "http://127.0.0.1:11434"
+    embedding_provider: str = "ollama"
+    embedding_enabled: bool = True
+    embedding_timeout_seconds: float = Field(default=60.0, ge=0.1, le=3600.0)
+    embedding_batch_size: int = Field(default=32, ge=1, le=2048)
     vault_dir: str = "vault"
     storage_dir: str = "storage"
     snapshot_dir: str = "snapshot"
