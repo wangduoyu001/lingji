@@ -3,11 +3,28 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
-from typing import Any
+from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from src.gateway.profiles import AIProfileRegistry
+if TYPE_CHECKING:
+    from src.gateway.profiles import AIProfileRegistry
 
 from .read_model import SourceReadModel
+
+_SENSITIVE_QUERY_KEYS = {
+    "token",
+    "access_token",
+    "api_key",
+    "apikey",
+    "key",
+    "secret",
+    "signature",
+    "sig",
+    "credential",
+    "authorization",
+    "session",
+    "cookie",
+}
 
 
 @dataclass(frozen=True)
@@ -34,7 +51,11 @@ class SourceQueryService:
         self.workspace = str(workspace or "production")
         self.vault_path = Path(vault_path).expanduser().resolve(strict=False)
         self.raw_path = Path(raw_path).expanduser().resolve(strict=False)
-        self.profiles = profiles or AIProfileRegistry()
+        if profiles is None:
+            from src.gateway.profiles import AIProfileRegistry
+
+            profiles = AIProfileRegistry()
+        self.profiles = profiles
 
     def owner_viewer(self) -> ViewerContext:
         return ViewerContext(
@@ -165,7 +186,9 @@ class SourceQueryService:
             limit=limit,
             offset=offset,
         )
-        page["items"] = [self._safe_message(item, include_content=False) for item in page["items"]]
+        page["items"] = [
+            self._safe_message(item, include_content=False) for item in page["items"]
+        ]
         return self._envelope(page, selected)
 
     def get_message(
@@ -245,8 +268,8 @@ class SourceQueryService:
             return None
         if text.startswith(("raw:", "vault:")):
             return text
-        if text.startswith(("http://", "https://")):
-            return text
+        if text.casefold().startswith(("http://", "https://")):
+            return self._safe_http_url(text)
         if "://" in text:
             return None
         path = Path(text).expanduser()
@@ -260,15 +283,46 @@ class SourceQueryService:
                 continue
         return None
 
+    @staticmethod
+    def _safe_http_url(value: str) -> str | None:
+        try:
+            parsed = urlsplit(value)
+            if parsed.scheme.casefold() not in {"http", "https"} or not parsed.hostname:
+                return None
+            host = parsed.hostname
+            if ":" in host and not host.startswith("["):
+                host = f"[{host}]"
+            port = f":{parsed.port}" if parsed.port is not None else ""
+            safe_query = [
+                (key, item)
+                for key, item in parse_qsl(parsed.query, keep_blank_values=True)
+                if key.casefold() not in _SENSITIVE_QUERY_KEYS
+            ]
+            return urlunsplit(
+                (
+                    parsed.scheme.casefold(),
+                    f"{host}{port}",
+                    parsed.path,
+                    urlencode(safe_query, doseq=True),
+                    "",
+                )
+            )
+        except (TypeError, ValueError):
+            return None
+
     def _safe_metadata(self, value: Any) -> Any:
         if isinstance(value, dict):
             output = {}
             for key, item in value.items():
                 lowered = str(key).casefold()
-                if any(token in lowered for token in ("token", "api_key", "apikey", "password", "cookie", "secret")):
+                if any(
+                    token in lowered
+                    for token in ("token", "api_key", "apikey", "password", "cookie", "secret")
+                ):
                     continue
                 if isinstance(item, str) and (
-                    lowered.endswith(("path", "reference", "_ref"))
+                    item.casefold().startswith(("http://", "https://"))
+                    or lowered.endswith(("path", "reference", "_ref"))
                     or Path(item).is_absolute()
                     or PureWindowsPath(item).is_absolute()
                 ):
