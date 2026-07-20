@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.gateway.memory_inspector import MemoryInspectorFacade
+from src.gateway import MemoryInspectorFacade
 from src.gateway.profiles import AIProfileRegistry
 from src.retrieval.memory_db import MemoryDatabase
 from src.sources import SourceQueryService, SourceReadModel
