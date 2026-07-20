@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
 from src.sources.service import SourceQueryService, ViewerContext
+
+
+logger = logging.getLogger("lingji.gateway.memory_inspector")
+VECTOR_ERROR_MESSAGE = "Vector status unavailable; see local logs"
 
 
 class ReadModelUnavailableError(RuntimeError):
@@ -225,21 +230,23 @@ class MemoryInspectorFacade:
         snapshot = self.statistics.vector_status()
         semantic = getattr(getattr(self.gateway, "retriever", None), "semantic_provider", None)
         rebuild_required = snapshot.get("rebuild_required")
+        snapshot_error = self._safe_vector_error(snapshot.get("last_error"))
         output = []
         for chunk in chunks:
             chunk_id = str(chunk.get("chunk_id") or "")
             exists: bool | None = None
             source = "unavailable"
-            last_error = snapshot.get("last_error")
+            last_error = snapshot_error
             if semantic is not None:
                 try:
                     exists = bool(semantic.exists(chunk_id))
                     source = "live"
                     last_error = None
-                except Exception as exc:
+                except Exception:
+                    logger.exception("Vector existence check failed for chunk %s", chunk_id)
                     exists = None
                     source = "unavailable"
-                    last_error = self._safe_error(exc)
+                    last_error = VECTOR_ERROR_MESSAGE
             output.append(
                 {
                     "memory_id": memory_id,
@@ -262,7 +269,7 @@ class MemoryInspectorFacade:
                     "collection": snapshot.get("collection"),
                     "dimension": snapshot.get("dimension"),
                     "rebuild_required": rebuild_required,
-                    "last_error": snapshot.get("last_error"),
+                    "last_error": snapshot_error,
                     "chunks": output,
                 },
             }
@@ -326,6 +333,10 @@ class MemoryInspectorFacade:
             return json.loads(str(value))
         except (TypeError, ValueError, json.JSONDecodeError):
             return fallback
+
+    @staticmethod
+    def _safe_vector_error(value: Any) -> str | None:
+        return VECTOR_ERROR_MESSAGE if value else None
 
     @staticmethod
     def _safe_error(exc: Exception) -> str:
