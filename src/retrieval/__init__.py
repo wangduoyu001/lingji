@@ -1,6 +1,11 @@
 from .chunker import MarkdownChunk, MarkdownChunker
 from .enhanced import HybridRetriever
 from .hybrid import SearchFilters
+from .index_coordinator import (
+    MemoryIndexCoordinator,
+    SemanticSyncResult,
+    SemanticSyncWarning,
+)
 from .memory_db import MemoryDatabase
 from .qdrant_provider import (
     QdrantSemanticProvider,
@@ -20,6 +25,7 @@ __all__ = [
     "MarkdownChunk",
     "MarkdownChunker",
     "MemoryDatabase",
+    "MemoryIndexCoordinator",
     "QdrantSemanticProvider",
     "QdrantUnavailableError",
     "SearchFilters",
@@ -28,5 +34,7 @@ __all__ = [
     "SemanticPoint",
     "SemanticProvider",
     "SemanticSearchProvider",
+    "SemanticSyncResult",
+    "SemanticSyncWarning",
     "VectorDimensionMismatchError",
 ]
