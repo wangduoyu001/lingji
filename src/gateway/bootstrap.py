@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from src.config import settings as default_settings
 from src.gateway.memory_gateway import MemoryGateway
+from src.gateway.memory_statistics import MemoryStatisticsService
 from src.gateway.profiles import AIProfileRegistry
 from src.indexer.index import PEMISIndex
 from src.memory import MemoryLifecycleService, VaultLayout
@@ -142,6 +143,13 @@ def build_memory_gateway(
         runtime_warnings=runtime_warnings,
         closeables=closeables,
     )
+    gateway.statistics = MemoryStatisticsService(
+        gateway,
+        snapshot_path=MemoryStatisticsService.snapshot_path_for(
+            settings,
+            runtime_workspace,
+        ),
+    )
 
     if rebuild_if_empty and memory_db.stats()["documents"] == 0:
         indexer = PEMISIndex(
@@ -151,6 +159,8 @@ def build_memory_gateway(
         )
         indexer.build_index()
         gateway.rebuild(indexer.get_all(), vault_path, chunker)
+    else:
+        gateway.publish_statistics()
     return gateway
 
 
