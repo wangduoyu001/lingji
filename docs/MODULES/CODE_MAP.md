@@ -3,6 +3,7 @@
 > Updated: 2026-07-20
 > Purpose: identify real long-term entry points before development.
 > Architecture: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
+> Execution roadmap: `docs/MODULES/UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md`
 
 ## 1. Repository Roles
 
@@ -27,8 +28,9 @@ Do not infer product ownership from directory names. Confirm the real service an
 ```text
 src/extraction
   -> raw snapshot and Vault documents
-  -> lingji_memory.db
-  -> Qdrant SemanticProvider
+  -> MemoryIndexCoordinator (planned)
+       -> lingji_memory.db
+       -> Qdrant SemanticProvider
   -> HybridRetriever
   -> ContextPackBuilder
   -> MemoryGateway
@@ -65,11 +67,12 @@ Qdrant provider under src/retrieval
 | Runtime assembly | `src/gateway/bootstrap.py::build_memory_gateway()` |
 | AI profiles | `src/gateway/profiles.py::AIProfileRegistry` |
 | Lexical/semantic fusion | `src/retrieval/hybrid.py::HybridRetriever` |
+| Current semantic Protocol | `src/retrieval/hybrid.py::SemanticProvider` |
 | Enhanced Chinese fallback | `src/retrieval/enhanced.py` |
 | Rebuildable memory index | `src/retrieval/memory_db.py::MemoryDatabase` |
 | Chunking | `src/retrieval/chunker.py::MarkdownChunker` |
 | Context Pack | `src/retrieval/context_pack.py::ContextPackBuilder` |
-| Incremental synchronization | `src/retrieval/incremental_sync.py` |
+| Incremental synchronization | `src/retrieval/incremental_sync.py::IncrementalMemorySynchronizer` |
 | Permanent-memory lifecycle | `src/memory/lifecycle.py::MemoryLifecycleService` |
 | State and events | `src/storage/state_db.py::StateDatabase` |
 | MCP | `src/mcp_server.py` and `run_mcp_server.py` |
@@ -78,35 +81,62 @@ Current semantic gap:
 
 `src/gateway/bootstrap.py` passes `semantic_provider=None`. Do not describe Qdrant as connected to the unified gateway until this changes and tests pass.
 
+Planned Phase 1 entry points, not yet implemented:
+
+| Planned capability | Planned path |
+|---|---|
+| Embedding Provider | `src/model_center/embedding.py` |
+| Semantic contracts | `src/retrieval/semantic.py` |
+| Qdrant Provider | `src/retrieval/qdrant_provider.py` |
+| Lexical/vector coordinator | `src/retrieval/index_coordinator.py` |
+| Unified memory statistics | `src/gateway/memory_statistics.py` |
+
 ## 5. Unified Ingestion Entry Points
 
-| Capability | Entry |
+| Capability | Real entry |
 |---|---|
-| Adapter framework | `src/extraction/` |
-| Persistent queue | real queue module under `src/extraction/`, confirm exact path before changes |
-| Worker and leases | worker modules under `src/extraction/` |
-| ChatGPT import | existing ChatGPT importer and `src/extraction/` integration |
-| Codex capture | `src/extraction/` adapters |
-| Web/social capture | `src/extraction/` adapters |
-| Media extraction | `src/media/` |
+| Adapter interface | `src/extraction/base.py::ExtractionAdapter` |
+| Adapter registry | `src/extraction/registry.py::AdapterRegistry` |
+| Pipeline | `src/extraction/pipeline.py::ExtractionPipeline` |
+| Persistent queue | `src/extraction/queue.py::SQLiteExtractionQueue` |
+| Worker | `src/extraction/worker.py::ExtractionWorker` |
+| Vault/raw sink | `src/extraction/sink.py::VaultExtractionSink` |
+| Runtime assembly | `src/extraction/bootstrap.py::build_extraction_pipeline()` |
+| ChatGPT import | `src/extraction/adapters/chatgpt.py::ChatGPTExportAdapter` |
+| Codex capture | `src/extraction/adapters/codex.py::CodexWorkReportAdapter` |
+| Web/social capture | `src/extraction/adapters/web.py::WebCaptureAdapter` |
+| Media extraction | `src/extraction/adapters/media.py::MediaExtractionAdapter` |
+| Media semantic derivatives | `src/media/semantic.py::MediaSemanticService` |
 
 New data sources must enter this framework. Do not add new production ingestion to `second_brain` connectors.
 
-## 6. Control and UI Entry Points
+## 6. Control, Settings, Models and UI Entry Points
 
 | Capability | Entry |
 |---|---|
 | Control service | `src/control/service.py::LocalControlService` |
 | Control API | `src/control/api.py::create_control_app()` |
+| Runtime settings | `src/control/runtime_settings.py::RuntimeSettingsStore` |
 | Control startup | `run_control_api.py` |
+| Model inventory | `src/model_center/inventory.py::LocalModelInventoryService` |
+| Model capabilities | `src/model_center/registry.py` |
+| Backup | `src/storage/backup.py::BackupManager` |
 | Tauri app entry | `desktop/lingji-control/src/main.tsx` |
 | React composition | `desktop/lingji-control/src/App.tsx` |
 | Navigation | `desktop/lingji-control/src/navigation.ts` |
 | API client | `desktop/lingji-control/src/api.ts` |
 | Types | `desktop/lingji-control/src/types.ts` |
 | Pages | `desktop/lingji-control/src/pages/` |
+| UI smoke | `desktop/lingji-control/scripts/ui-modular-smoke.mjs` |
 
 Tauri uses only the authenticated Local Control API on `127.0.0.1:8766`.
+
+Current control gaps:
+
+- `LocalControlService` does not construct or receive the unified MemoryGateway.
+- `brain_status()` reads missing `overview["memory_stats"]` and may report false zero counts.
+- Runtime Settings lacks memory, vector, workspace and MCP groups.
+- Tauri lacks the final Inspector/Vector/Knowledge/AI-MCP pages and global service status bar.
 
 ## 7. Compatibility Capabilities To Migrate
 
@@ -118,12 +148,28 @@ Tauri uses only the authenticated Local Control API on `127.0.0.1:8766`.
 | Memory versions | `second_brain/db.py` | Git/events/derived revision read model |
 | Relations and conflicts | `second_brain/conflict/`, DB tables | `src` relation/conflict read model |
 | Production/acceptance isolation | `second_brain/runtime_registry.py` | unified workspace runtime |
-| Acceptance scenarios | `second_brain/acceptance.py` | unified acceptance tests |
+| Acceptance scenarios | `second_brain/acceptance.py` | unified capability contract |
 | PySide6 flows | `second_brain/desktop/` | migration and regression reference |
 
 Do not continue building duplicate production functionality in these compatibility paths.
 
-## 8. Port Map
+## 8. Planned Unified Read Models
+
+The following paths are roadmap targets and must not be described as implemented before code and tests exist:
+
+| Planned capability | Planned path |
+|---|---|
+| Source/conversation/message index | `src/sources/read_model.py` |
+| Permission-aware source queries | `src/sources/service.py` |
+| Retrieval trace | `src/retrieval/trace.py` |
+| Memory Inspector facade | `src/gateway/memory_inspector.py` |
+| Revision model | `src/memory/revisions.py` |
+| Relation model | `src/memory/relations.py` |
+| Conflict candidates | `src/memory/conflicts.py` |
+| Legacy export/parity | `src/migration/` |
+| Workspace runtime | `src/runtime/workspace.py` |
+
+## 9. Port Map
 
 Current conflict:
 
@@ -143,21 +189,21 @@ stdio = default local MCP
 
 The target is documentation until code and tests implement it.
 
-## 9. Memory Inspector Entry
+## 10. Memory Inspector Entry
 
 Final Memory Inspector path:
 
 ```text
 Tauri page
   -> Local Control API :8766
-  -> src MemoryGateway and unified read models
-  -> lingji_memory.db + Qdrant
+  -> src MemoryInspectorFacade / MemoryGateway / shared statistics
+  -> lingji_memory.db + Qdrant + rebuildable read models
   -> Obsidian/Git authority
 ```
 
 It must not treat `second_brain.sqlite3` as the final memory source.
 
-## 10. Testing Map
+## 11. Testing Map
 
 Relevant existing suites include:
 
@@ -175,15 +221,17 @@ Relevant existing suites include:
 - `tests/test_desktop.py`
 - `desktop/lingji-control/scripts/ui-modular-smoke.mjs`
 
-Migration must add provider and capability-contract tests rather than relying only on directory-specific tests.
+Roadmap-required new suites include provider, capability contract, source read model, statistics, Inspector API, workspace isolation, dual-read and no-legacy regression tests.
 
-## 11. Before Coding Checklist
+## 12. Before Coding Checklist
 
 1. Confirm branch and remote HEAD.
-2. Read the unified architecture plan and current status.
+2. Read the unified architecture plan, execution roadmap and current status.
 3. Locate existing class/function and data authority.
 4. Confirm whether the target is long-term `src` or compatibility `second_brain`.
 5. Confirm API registration and UI gateway.
 6. Confirm storage and workspace isolation.
 7. Confirm tests and Markdown report location.
-8. Do not create a new module based only on a feature name.
+8. Split work into Provider, synchronization, API, Tauri UI, tests and docs when multiple layers are involved.
+9. Do not create a new module based only on a feature name.
+10. Do not call a planned path implemented until its code and tests exist.
