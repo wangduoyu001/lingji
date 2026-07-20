@@ -1,4 +1,4 @@
-﻿# DEVELOPMENT_RULES.md — LingJi Development Rules
+# DEVELOPMENT_RULES.md — LingJi Development Rules
 
 > Generated: 2026-07-20
 
@@ -56,6 +56,19 @@
    - project root detection
    - user data directory settings
 6. Development machine paths are temporary test environments, not application assumptions.
+
+## Unified Desktop UI and Visibility Requirement
+
+1. `desktop/lingji-control/` is the only primary desktop UI.
+2. Previous local UI implementations and `second_brain/desktop/` are migration, acceptance, compatibility, or diagnostic sources. Do not develop them as competing primary products.
+3. Useful functionality from previous local UI implementations must be audited and migrated into the current Tauri UI before duplicate UI paths are retired.
+4. The Tauri UI must use the authenticated Local Control API on `127.0.0.1:8766` as its single backend gateway. It must not call the Second Brain API on port `8765` directly.
+5. Every major user-facing capability and supported setting must have a discoverable location in the primary UI or a clearly labeled advanced view.
+6. Long-running operations must expose structured task progress, including stage, processed count, failures, elapsed time and current activity when available.
+7. The UI must visibly expose memory, knowledge, model, watcher, scheduler, storage, backup and service health.
+8. Vector visibility is mandatory. The UI must show Qdrant mode, collection, readiness, active embedding model, vector counts, failures and per-item vector existence where supported.
+9. The UI must never fabricate success, zero counts, GPU use or vector readiness when the backend has not confirmed those states.
+10. New UI work must follow `docs/MODULES/UNIFIED_DESKTOP_UI_PLAN.md` and must update the migration matrix, tests and code map when applicable.
 
 ## Data Boundaries
 
