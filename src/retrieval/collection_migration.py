@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -108,6 +108,10 @@ class VectorCollectionMigrationService:
                 "target_collection must differ from the active source collection"
             )
         expected_chunks = len(self._catalog.semantic_chunk_ids())
+        if expected_chunks <= 0:
+            raise VectorCollectionMigrationError(
+                "Cannot validate a replacement collection because the canonical memory index has no chunks"
+            )
         return VectorCollectionMigrationPlan(
             workspace=self.workspace_name,
             source_collection=self.source_collection,
@@ -170,8 +174,9 @@ class VectorCollectionMigrationService:
                 manifest_path=None,
             )
             written_path = self._write_manifest(result.to_dict(), manifest_path)
-            result = VectorCollectionMigrationResult(
-                **{**result.__dict__, "manifest_path": str(written_path) if written_path else None}
+            result = replace(
+                result,
+                manifest_path=str(written_path) if written_path else None,
             )
             self._record_event("vector_collection_candidate_validated", result.to_dict())
             return result
@@ -224,11 +229,11 @@ class VectorCollectionMigrationService:
             failures.append("target provider still reports rebuild_required")
         if vectors is None or int(vectors) != expected:
             failures.append(f"target vectors={vectors!r}, expected exactly {expected}")
-        if expected > 0 and (dimension is None or int(dimension) <= 0):
+        if dimension is None or int(dimension) <= 0:
             failures.append(f"invalid target dimension: {dimension!r}")
-        if expected > 0 and not embedding_status.get("available"):
+        if not embedding_status.get("available"):
             failures.append("target embedding provider is not verified available")
-        if expected > 0 and not self._same_model(active_model, plan.target_model):
+        if not self._same_model(active_model, plan.target_model):
             failures.append(
                 f"active embedding model {active_model!r} does not match target {plan.target_model!r}"
             )
