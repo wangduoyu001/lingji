@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from src.sources import SourceReadModel
 
+from .errors import safe_extraction_error
 from .models import ExtractionBatch, StructuredConversation, StructuredMessage, StructuredSource
 
 logger = logging.getLogger("lingji.extraction.structured")
@@ -64,7 +65,12 @@ class StructuredReadModelSink:
             state = "written"
         except Exception as exc:
             logger.exception("Structured read model write failed")
-            warnings.append(self._safe_error(exc))
+            warnings.append(
+                safe_extraction_error(
+                    exc,
+                    message="structured read model write failed; see local logs",
+                )
+            )
             state = "degraded"
             totals = {key: 0 for key in totals}
         result = self._result(state, **totals, warnings=warnings)
@@ -156,10 +162,12 @@ class StructuredReadModelSink:
                 raw_reference=raw_reference,
             )
             if link_allowed:
-                record["memory_links"] = [{
-                    "memory_id": document_stable_id,
-                    "relation_type": "contained_in_source_document",
-                }]
+                record["memory_links"] = [
+                    {
+                        "memory_id": document_stable_id,
+                        "relation_type": "contained_in_source_document",
+                    }
+                ]
             messages.append(record)
         record: dict[str, Any] = {
             "external_id": conversation.external_id,
@@ -293,17 +301,15 @@ class StructuredReadModelSink:
             "warnings": list(warnings or []),
         }
 
-    @staticmethod
-    def _safe_error(exc: Exception) -> str:
-        del exc
-        return "structured read model write failed; see local logs"
-
     def _event(self, event_type: str, entity_id: str, payload: Mapping[str, Any]) -> None:
         if self.state_db is None:
             return
-        recorder = getattr(self.state_db, "record_event", None)
-        if callable(recorder):
-            try:
-                recorder(event_type, entity_id, dict(payload))
-            except Exception:
-                logger.exception("Failed to record structured ingestion event")
+        try:
+            self.state_db.append_event(
+                event_type,
+                "structured_ingestion",
+                entity_id,
+                dict(payload),
+            )
+        except Exception:
+            logger.exception("Failed to append structured ingestion audit event")
