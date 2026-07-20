@@ -43,7 +43,13 @@ class LocalModelInventoryService:
             return self._cache
 
         ollama_models, ollama_status = self._ollama_models()
-        installed_names = {item["name"] for item in ollama_models if item.get("installed")}
+        installed_names: set[str] = set()
+        for item in ollama_models:
+            if item.get("installed"):
+                name = item["name"]
+                installed_names.add(name)
+                if name.endswith(":latest"):
+                    installed_names.add(name[: -len(":latest")])
         providers = [
             self._faster_whisper_provider(),
             self._paddleocr_provider(),

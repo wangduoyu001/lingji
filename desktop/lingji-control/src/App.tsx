@@ -9,6 +9,7 @@ import JobsPage from "./pages/JobsPage";
 import LogsPage from "./pages/LogsPage";
 import MediaPage from "./pages/MediaPage";
 import ModelsPage from "./pages/ModelsPage";
+import BrainStatusPage from "./pages/BrainStatusPage";
 import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
 import StoragePage from "./pages/StoragePage";
@@ -39,6 +40,7 @@ export default function App() {
         {connection.error && <Notice kind="error">{connection.error}</Notice>}
         {!connection.connected && <Notice kind="warning">先启动 <code>python run_control_api.py</code>。浏览器开发模式需填写 <code>storage/control_api_token</code>。</Notice>}
         <section className="page-content">
+                    {page === "brain_status" && <BrainStatusPage api={connection.api} active={connection.connected} />}
           {page === "overview" && <OverviewPage data={connection.overview} refresh={connection.connect} />}
           {page === "system_compute" && <SystemComputePage api={connection.api} active={connection.connected} />}
           {page === "models" && <ModelsPage api={connection.api} active={connection.connected} />}

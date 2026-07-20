@@ -21,7 +21,7 @@ class HardwareDetectors:
         self.runner = SafeRunner(command_runner=command_runner, url_reader=url_reader)
 
     def cpu(self) -> dict[str, Any]:
-        return cpu_snapshot(self.psutil)
+        return cpu_snapshot(self.psutil, runner=self.runner)
 
     def memory(self) -> dict[str, Any]:
         return memory_snapshot(self.psutil)

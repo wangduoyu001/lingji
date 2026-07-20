@@ -11,7 +11,7 @@ from typing import Any
 from .runner import SafeRunner
 
 
-def cpu_snapshot(psutil_module: Any | None) -> dict[str, Any]:
+def cpu_snapshot(psutil_module: Any | None, runner: Any | None = None) -> dict[str, Any]:
     logical = os.cpu_count()
     physical = None
     source = "stdlib"
@@ -23,6 +23,19 @@ def cpu_snapshot(psutil_module: Any | None) -> dict[str, Any]:
         except Exception:
             pass
     model = platform.processor().strip() or os.environ.get("PROCESSOR_IDENTIFIER", "").strip() or "unknown"
+    if platform.system().lower() == "windows" and runner is not None:
+        try:
+            ps_result = runner.command(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name"],
+                timeout=3.0
+            )
+            if ps_result["returncode"] == 0:
+                ps_name = ps_result["stdout"].strip()
+                if ps_name:
+                    model = ps_name
+        except Exception:
+            pass
     return {
         "model": model,
         "physical_cores": int(physical) if physical is not None else None,

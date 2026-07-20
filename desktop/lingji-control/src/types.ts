@@ -13,6 +13,7 @@ export type PageId =
   | "backups"
   | "acceptance"
   | "settings"
+  | "brain_status"
   | "logs";
 
 export type NavigationItem = {

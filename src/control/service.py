@@ -51,6 +51,58 @@ class LocalControlService:
         )
         self._sync_hardware_settings()
 
+    def brain_status(self) -> dict:
+        """Aggregate brain status: memory, vector, model, GPU, recent tasks."""
+        try:
+            overview = self.overview()
+        except Exception:
+            overview = {}
+        try:
+            hw = self.hardware_capabilities(force=False)
+        except Exception:
+            hw = {}
+        try:
+            inv = self.model_inventory.inventory(force=False)
+        except Exception:
+            inv = {}
+        health = overview.get("health", {})
+        mem = overview.get("memory_stats", {})
+        gpus = hw.get("gpus", [])
+        # Enrich GPU data with nvidia-smi utilization
+        for gpu in gpus:
+            gpu["utilization_percent"] = 0
+        import subprocess
+        try:
+            smi_out = subprocess.run(
+                ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5, check=False
+            )
+            if smi_out.returncode == 0:
+                util_lines = [l.strip() for l in smi_out.stdout.strip().split("\n") if l.strip()]
+                for i, gpu in enumerate(gpus):
+                    if i < len(util_lines) and util_lines[i].isdigit():
+                        gpu["utilization_percent"] = int(util_lines[i])
+        except Exception:
+            pass
+        assignments = inv.get("assignments", [])
+        chat_model = next((a["model"] for a in assignments if a["role"] == "chat_primary"), "N/A")
+        embed_model = next((a["model"] for a in assignments if a["role"] == "embedding_primary"), "N/A")
+        return {
+            "memory_count": mem.get("total_entries", 0),
+            "memory_bytes": mem.get("total_bytes", 0),
+            "vector_count": mem.get("vector_count", 0),
+            "chat_model": chat_model,
+            "embed_model": embed_model,
+            "installed_models": inv.get("summary", {}).get("installed_models", 0),
+            "gpus": gpus,
+            "compute_mode": hw.get("compute", {}).get("mode", "unknown"),
+            "cuda_version": hw.get("cuda", {}).get("runtime_version") or hw.get("cuda", {}).get("driver_cuda_version", "N/A"),
+            "recent_tasks": [],
+            "processing_status": "idle",
+            "system_status": health.get("status", "unknown"),
+        }
+
+
     def get_settings(self) -> dict[str, Any]:
         return self.runtime_settings.snapshot()
 

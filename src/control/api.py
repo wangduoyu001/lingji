@@ -137,6 +137,12 @@ def create_control_app(
     def overview() -> dict[str, Any]:
         return control.overview()
 
+    @app.get("/api/brain/status", dependencies=secured)
+    def brain_status() -> dict[str, Any]:
+        return control.brain_status()
+
+
+
     @app.get("/api/settings", dependencies=secured)
     def get_settings() -> dict[str, Any]:
         return control.get_settings()

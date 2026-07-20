@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -41,6 +41,18 @@ ehthumbs.db
 storage/decision_history/
 storage/opportunities/
 storage/pemis_index.json
-_D:*
-test_*
-_tmp_*
+# Tauri / Desktop UI (regeneratable artifacts)
+node_modules/
+desktop/lingji-control/node_modules/
+desktop/lingji-control/src-tauri/target/
+desktop/lingji-control/src-tauri/gen/
+desktop/lingji-control/tsconfig.*.tsbuildinfo
+# E2E test runtimes (regenerated per test run)
+_e2e_*/
+vault/
+scripts/_*.py
+# Test runtime temp files
+_e2e_*/
+vault/
+
+!docs/TEST_REPORTS/

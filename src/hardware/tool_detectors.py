@@ -10,12 +10,26 @@ from .runner import SafeRunner
 
 def cuda_snapshot(runner: SafeRunner, driver_available: bool) -> dict[str, Any]:
     result = runner.command(["nvcc", "--version"])
-    match = re.search(r"release\s+([0-9.]+)", result["stdout"], flags=re.IGNORECASE)
+    nvcc_match = re.search(r"release\s+([0-9.]+)", result["stdout"], flags=re.IGNORECASE)
+    runtime_version = nvcc_match.group(1) if nvcc_match else None
+    runtime_available = result["returncode"] == 0
+    source = "nvcc" if result["returncode"] == 0 else "not_available"
+    # Fallback: try nvidia-smi for driver-level CUDA version when nvcc is absent
+    smi_cuda_version = None
+    if not runtime_available and driver_available:
+        try:
+            smi_result = runner.command(["nvidia-smi"], timeout=3.0)
+            smi_match = re.search(r"CUDA Version:\s+([0-9.]+)", smi_result["stdout"], flags=re.IGNORECASE)
+            if smi_match:
+                smi_cuda_version = smi_match.group(1)
+        except Exception:
+            pass
     return {
         "driver_available": driver_available,
-        "runtime_available": result["returncode"] == 0,
-        "runtime_version": match.group(1) if match else None,
-        "source": "nvcc" if result["returncode"] == 0 else "not_available",
+        "runtime_available": runtime_available,
+        "runtime_version": runtime_version,
+        "source": source,
+        "driver_cuda_version": smi_cuda_version,
     }
 
 
