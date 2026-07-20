@@ -71,39 +71,55 @@ Qdrant
 - production/acceptance isolation patterns
 - compatibility API and PySide6 acceptance flows
 
-## 5. Current Critical Gaps
+## 5. P0-02 Port Contract Status
+
+Repository implementation has landed.
+
+```text
+second_brain compatibility API = 8765
+Local Control API              = 8766
+src MCP Streamable HTTP        = 8767
+src MCP default transport      = stdio
+```
+
+Implemented:
+
+- `src/config.py` now defaults MCP HTTP to `8767`
+- compatibility API port is explicitly represented as `8765`
+- `src/runtime/ports.py` validates the three-service port contract
+- `run_mcp_server.py` checks HTTP port availability before startup
+- authenticated `GET /api/mcp/status` exposes configuration truth
+- `GET /api/settings` includes the read-only MCP runtime contract
+- Tauri remains on `8766` only
+- tests cover defaults, overrides, collisions, occupied ports and Tauri gateway boundaries
+
+Validation state:
+
+- dependency-light isolated port-contract tests: passed
+- full repository pytest: not run in this repository-edit task
+- real Windows MCP/Control/compatibility simultaneous binding: pending
+- Tauri real runtime smoke: pending
+
+Report:
+
+- `docs/TEST_REPORTS/P0_02_PORT_CONTRACT_TEST_REPORT.md`
+
+P0-02 must remain marked `awaiting local validation` until the real-machine tests pass.
+
+## 6. Current Critical Gaps
 
 ### P0 architecture blockers
 
 1. `src/gateway/bootstrap.py` still passes `semantic_provider=None`.
-2. `second_brain` FastAPI and `src` MCP HTTP both default to `8765`.
-3. Two memory authorities and two ingestion paths still exist in current runtime code.
-4. Tauri Brain Status is not yet guaranteed to use the same real memory/vector statistics as MCP and the future Inspector.
-5. Production/acceptance isolation has not yet been unified across Vault, raw data, SQLite, Qdrant, logs and settings.
-6. `src/control/runtime_settings.py` does not yet expose memory, vector, workspace or MCP settings.
-7. `src/config.py` still contains a developer-specific absolute backup default and no Qdrant fields.
+2. WorkspaceContext and physical production/acceptance path resolution are not implemented.
+3. The directory-independent Memory Capability Contract is not implemented.
+4. Two memory authorities and two ingestion paths still exist in current runtime code.
+5. Tauri Brain Status is not yet guaranteed to use the same real memory/vector statistics as MCP and the future Inspector.
+6. Production/acceptance isolation has not yet been unified across Vault, raw data, SQLite, Qdrant, logs and settings.
+7. `src/control/runtime_settings.py` does not yet expose editable memory, vector, workspace or MCP setting definitions.
+8. `src/config.py` still contains a developer-specific absolute backup default and no Qdrant fields.
 
-### Documentation status
-
-The stale dual-system documentation has been corrected. Current documents now distinguish:
-
-- verified implementation
-- target architecture
-- compatibility behavior
-- unresolved migration work
-- executable phase/task dependencies, rollback and retirement gates
-
-The detailed file-level execution order is maintained in `docs/MODULES/UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md`.
-
-## 6. Target Port Map
-
-```text
-8766 = Local Control API and Tauri gateway
-8767 = optional MCP Streamable HTTP
-stdio = default local MCP transport
-```
-
-This is a target contract. The code change and tests are still pending.
+The previous default `8765` MCP/compatibility conflict has been corrected in repository code, subject to local validation.
 
 ## 7. Development Freeze Rules
 
@@ -113,16 +129,27 @@ Effective immediately:
 - new ingestion only in `src/extraction/`
 - new primary UI only in Tauri
 - `second_brain/` only for migration blockers, compatibility reads, export and parity tests
-- no direct Tauri calls to `8765`
+- no direct Tauri calls to `8765` or `8767`
 - no deletion of compatibility data before export, parity and rollback validation
 
 ## 8. Next Development Sequence
 
 ### Phase 0: Runtime contracts
 
-- land the 8766/8767/stdio port contract in code and tests
-- define WorkspaceContext and physical production/acceptance paths
-- establish the directory-independent Memory Capability Contract
+Current next task:
+
+```text
+P0-03 WorkspaceContext and Memory Capability Contract
+```
+
+Required work:
+
+- define production/acceptance physical resource paths
+- add `WorkspaceContext` and resolver contracts
+- create a directory-independent Memory Capability Contract test skeleton
+- keep the contract lexical-only until Phase 1 connects semantic retrieval
+
+Do not start Qdrant integration before P0-03 establishes the workspace boundary.
 
 ### Phase 1: Unified semantic provider
 
@@ -163,30 +190,31 @@ Effective immediately:
 - preserve read-only compatibility window
 - archive or remove only after rollback requirements pass
 
-## 9. Documentation Corrections Completed
+## 9. Test Status
 
-Updated or created:
+P0-02 changed runtime configuration, startup validation, control API, tests and documentation.
 
-- `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
-- `docs/MODULES/UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md`
-- `docs/ARCHITECTURE.md`
-- `docs/AI_CONTEXT.md`
-- `docs/MEMORY_SYSTEM.md`
-- `docs/VECTOR_DATABASE.md`
-- `docs/MODULES/CODE_MAP.md`
-- `docs/MODULES/MEMORY_INSPECTOR_IMPLEMENTATION_PLAN.md`
-- `docs/MODULES/UNIFIED_DESKTOP_UI_PLAN.md`
-- `docs/DEVELOPMENT_RULES.md`
-- `docs/TECH_RESEARCH/MEMORY_INSPECTOR_CODE_ANALYSIS.md`
+Completed in this task:
 
-## 10. Test Status
+- pure Python syntax validation for the new runtime contract and control API source
+- isolated contract suite with five passing tests
+- GitHub remote diff verification
 
-This roadmap task changed documentation only.
+Not completed in this task:
 
-- no functional code was changed
-- no database, schema, dependency, configuration or runtime data was changed
-- no local runtime test was executed for this documentation task
-- existing historical test reports remain historical evidence, not proof of the target architecture
-- the roadmap is a development contract, not a functional completion claim
+- full repository pytest
+- optional MCP dependency integration
+- real Windows port binding
+- real Tauri smoke/Playwright validation
+- CI status, because GitHub has not returned a workflow status for these commits
 
-The first implementation chain is P0 runtime contracts followed by P1 unified Embedding/Qdrant SemanticProvider integration. Each completed feature or substantial code block must produce a dedicated Markdown implementation and test report.
+No database, schema, dependency, Qdrant data or user runtime data was modified.
+
+## 10. Current Development Gate
+
+P0-03 may be planned and implemented at repository level now, but Phase 1 Qdrant work should not begin until:
+
+1. P0-02 real-machine port validation passes.
+2. WorkspaceContext exists.
+3. The lexical-only Memory Capability Contract skeleton runs.
+4. Any local failures are recorded in the P0-02 report instead of being hidden.
