@@ -117,8 +117,8 @@ def main() -> int:
             {
                 "embedding_enabled": True,
                 "embedding_provider": "ollama",
-                "embed_model": plan.target_model,
-                "fallback_embed_model": plan.target_model,
+                "embedding_primary_model": plan.target_model,
+                "embedding_fallback_model": plan.target_model,
                 "embedding_timeout_seconds": args.timeout,
             },
         )
