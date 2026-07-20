@@ -3,14 +3,32 @@ from pathlib import Path
 from src.extraction.adapters.codex import CodexWorkReportAdapter
 from src.extraction.adapters.media import MediaExtractionAdapter
 from src.extraction.adapters.web import WebCaptureAdapter
-from src.extraction.models import ExtractionRequest
+from src.extraction.models import ExtractionBatch, ExtractionRequest, StructuredSource
 from src.extraction.registry import AdapterRegistry
 
 
-def _registered(adapter):
+def _registered(adapter, *, structured_fallback=True):
     registry = AdapterRegistry()
-    registry.register(adapter)
+    registry.register(adapter, structured_fallback=structured_fallback)
     return registry.get(adapter.name)
+
+
+def test_registry_default_does_not_wrap_unknown_adapter():
+    class UnknownAdapter:
+        name = "unknown"
+        version = "1"
+        source_types = ("unknown",)
+
+        def can_handle(self, source_type, input_path, payload):
+            return source_type == "unknown"
+
+        def extract(self, request):
+            return ExtractionBatch(documents=())
+
+    original = UnknownAdapter()
+    registry = AdapterRegistry()
+    registry.register(original)
+    assert registry.get("unknown") is original
 
 
 def test_codex_adapter_emits_structured_source_without_changing_markdown():
@@ -26,6 +44,8 @@ def test_codex_adapter_emits_structured_source_without_changing_markdown():
                 "summary": "implemented capture foundation",
                 "repository": "wangduoyu001/lingji",
                 "errors": ["none"],
+                "decisions": ["keep contracts explicit"],
+                "next_tasks": ["review"],
             },
         )
     )
@@ -34,6 +54,10 @@ def test_codex_adapter_emits_structured_source_without_changing_markdown():
     assert source.source_type == "codex"
     assert source.conversations[0].external_id == "task-1"
     assert len(source.conversations[0].messages) == len(batch.documents)
+    assert {
+        message.metadata["document_stable_id"]
+        for message in source.conversations[0].messages
+    } == {document.stable_id for document in batch.documents}
 
 
 def test_web_adapter_emits_structured_source_and_keeps_document_body():
@@ -75,10 +99,11 @@ def test_media_adapter_emits_structured_source_without_exposing_input_path_in_co
     source = batch.structured_sources[0]
     message = source.conversations[0].messages[0]
     assert source.source_type == "video"
+    assert str(tmp_path) not in message.content
     assert str(tmp_path) not in str(message.metadata)
 
 
-def test_registry_does_not_replace_existing_chatgpt_structured_output():
+def test_existing_structured_output_is_not_replaced_when_fallback_enabled():
     class AlreadyStructured:
         name = "already"
         version = "1"
@@ -88,10 +113,9 @@ def test_registry_does_not_replace_existing_chatgpt_structured_output():
             return source_type == "already"
 
         def extract(self, request):
-            from src.extraction.models import ExtractionBatch, StructuredSource
             source = StructuredSource("already", "id", "Already", ())
             return ExtractionBatch(documents=(), structured_sources=(source,))
 
-    adapter = _registered(AlreadyStructured())
+    adapter = _registered(AlreadyStructured(), structured_fallback=True)
     batch = adapter.extract(ExtractionRequest(job_id="job", source_type="already"))
     assert batch.structured_sources[0].external_id == "id"
