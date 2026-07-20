@@ -41,6 +41,7 @@ class MemoryGateway:
             state_db=state_db,
         )
         self.runtime_warnings = list(runtime_warnings or [])
+        self.statistics = None
         self._closeables = list(closeables or [])
 
     def search_memory(
@@ -183,6 +184,13 @@ class MemoryGateway:
 
     def memory_health(self, agent_id: str) -> dict[str, Any]:
         profile = self.profiles.require_tool(agent_id, "memory_health")
+        if self.statistics is not None:
+            snapshot = self.statistics.snapshot()
+            return {
+                "agent_id": profile.agent_id,
+                **snapshot,
+                "profiles": self.profiles.list(),
+            }
         workspace_name = getattr(getattr(self, "workspace", None), "name", None)
         return {
             "agent_id": profile.agent_id,
@@ -192,6 +200,36 @@ class MemoryGateway:
             "profiles": self.profiles.list(),
             "runtime_warnings": list(self.runtime_warnings),
         }
+
+    def memory_status(self) -> dict[str, Any]:
+        if self.statistics is None:
+            raise RuntimeError("Memory statistics service is not configured")
+        return self.statistics.memory_status()
+
+    def vector_status(self) -> dict[str, Any]:
+        if self.statistics is None:
+            raise RuntimeError("Memory statistics service is not configured")
+        return self.statistics.vector_status()
+
+    def vector_coverage(self) -> dict[str, Any]:
+        if self.statistics is None:
+            raise RuntimeError("Memory statistics service is not configured")
+        return self.statistics.vector_coverage()
+
+    def publish_statistics(self) -> dict[str, Any] | None:
+        if self.statistics is None:
+            return None
+        try:
+            return self.statistics.publish()
+        except Exception as exc:
+            self.runtime_warnings.append(
+                {
+                    "code": "memory_status_publish_failed",
+                    "stage": "statistics",
+                    "message": f"{type(exc).__name__}: {exc}"[:500],
+                }
+            )
+            return None
 
     def rebuild(
         self,
@@ -211,6 +249,7 @@ class MemoryGateway:
             self.retriever.clear_cache()
         event_type = "memory_index_rebuilt" if result.get("full_rebuild") else "memory_index_synced"
         self._event(event_type, "lingji", result)
+        self.publish_statistics()
         return result
 
     def close(self) -> None:
