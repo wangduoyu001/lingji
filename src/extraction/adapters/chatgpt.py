@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import zipfile
 from dataclasses import dataclass
@@ -9,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from ..base import ExtractionAdapter
+from ..errors import safe_extraction_error
 from ..models import (
     ExtractedDocument,
     ExtractionBatch,
@@ -18,6 +20,8 @@ from ..models import (
     StructuredSource,
 )
 from ..privacy import PrivacyClassifier
+
+logger = logging.getLogger("lingji.extraction.chatgpt")
 
 
 @dataclass(frozen=True)
@@ -112,8 +116,22 @@ class ChatGPTExportAdapter(ExtractionAdapter):
                     )
                 )
             except Exception as exc:
-                conversation_id = conversation.get("id") or conversation.get("conversation_id") or "unknown"
-                warnings.append(f"{conversation_id}: {exc}")
+                conversation_id = str(
+                    conversation.get("id")
+                    or conversation.get("conversation_id")
+                    or "unknown"
+                )
+                logger.exception(
+                    "ChatGPT conversation extraction failed: %s",
+                    conversation_id,
+                )
+                warnings.append(
+                    f"{conversation_id}: "
+                    + safe_extraction_error(
+                        exc,
+                        message="conversation extraction failed; see local logs",
+                    )
+                )
 
         source_external_id = str(
             request.options.get("source_external_id")
