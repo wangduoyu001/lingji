@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from src.runtime import mcp_runtime_status
+
 from .service import LocalControlService
 
 
@@ -141,11 +143,18 @@ def create_control_app(
     def brain_status() -> dict[str, Any]:
         return control.brain_status()
 
-
+    @app.get("/api/mcp/status", dependencies=secured)
+    def mcp_status() -> dict[str, Any]:
+        runtime_values = control.get_settings().get("values", {})
+        return mcp_runtime_status(settings, runtime_values)
 
     @app.get("/api/settings", dependencies=secured)
     def get_settings() -> dict[str, Any]:
-        return control.get_settings()
+        payload = control.get_settings()
+        payload["runtime_contracts"] = {
+            "mcp": mcp_runtime_status(settings, payload.get("values", {})),
+        }
+        return payload
 
     @app.patch("/api/settings", dependencies=secured)
     def update_settings(request: SettingsPatch) -> dict[str, Any]:
