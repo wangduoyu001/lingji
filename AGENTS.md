@@ -1,73 +1,89 @@
-# 灵机 (LingJi) - PEMIS 项目配置
+# LingJi（灵机）仓库开发规则
 
-## 项目路径
-- 灵机项目根目录: C:\Users\Administrator\Documents\New project-ai
-- 启动命令: cd "C:\Users\Administrator\Documents\New project-ai" && python run_service.py
-- 停止命令: Get-Process -Name "python" | Stop-Process -Force
+## 项目与分支
 
-## Git 仓库
-- 灵机代码: https://github.com/wangduoyu001/lingji.git (origin)
-- 知识库: https://github.com/wangduoyu001/obsidian.git (origin-obsidian)
+- 仓库：`https://github.com/wangduoyu001/lingji.git`
+- 当前升级分支：`feature/second-brain-memory`
+- 本地工作目录：`D:\codex\lingji-second-brain`
+- 旧版目录：`C:\Users\Administrator\Documents\New project-ai`
+- 本分支不得修改旧版目录，也不得向旧版目录写入运行数据。
 
-## 本地知识库
-- 路径: E:\obsidian\本地知识库 (唯一知识库，不要创建其他文件夹)
-- Git拉取: cd "E:\obsidian\本地知识库" && git pull
-- PEMIS目录: PEMIS/dashboard/ (Control Center.md), PEMIS/opportunities/
+## 开发前必须执行
 
-## API配置
-- DeepSeek API Key 在 .env 文件中
-- 主模型: deepseek-chat (通过 DeepSeek API)
-- 备用模型: qwen3:8b-q4_K_M (本地Ollama)
-- Embedding模型: nomic-embed-text (本地Ollama，当前未启用)
+1. 检查 `git status`、当前分支、最新提交和远程同步状态。
+2. 阅读：
+   - `docs/AI_CONTEXT.md`
+   - `docs/PROJECT_STATUS.md`
+   - `docs/ARCHITECTURE.md`
+   - `docs/DEVELOPMENT_RULES.md`
+3. 阅读本次任务涉及的源代码、测试和模块文档。
+4. 新功能或新依赖必须先查官方文档和可靠开源实现，并把结论写入 `docs/TECH_RESEARCH/`。
+5. 未完整了解现有实现前，禁止直接改代码。
 
-## 核心规则
-1. Obsidian 是唯一 Source of Truth，禁止开发WebUI/Electron
-2. 所有查询不依赖文件路径，只依赖metadata
-3. 交互体验 > Agent能力 > 自动化能力
-4. 用户在Obsidian内完成核心操作不超过3次点击
-5. Capture First：新文件先自动分类/标签/总结，不直接分析赚钱机会
-6. AI必须主动工作：自动分类、打标签、关联、总结
-7. 灵机定位：AI编导 / AI运营 / AI研究员 / AI商业策划 / AI第二大脑
-8. 向量数据库(Qdrant)保留代码但默认不启动
+## 核心原则
 
-## 文件驱动执行
-- PowerShell 不支持 && 和 << heredoc
-- 写文件用 scripts/_exec.py: python scripts/_exec.py <target_file>
-- 或通过 Node.js MCP 的 fs.writeFileSync 写文件
-- 所有Python文件必须用 encoding="utf-8" (无BOM)
-- 读文件用 encoding="utf-8-sig" 兼容旧BOM文件
+1. 使用最少代码完成明确需求，优先复用已有模块。
+2. 不为了“看起来更整齐”进行大规模重构。
+3. SQLite 是结构化事实来源；Qdrant 是可重建的向量检索层。
+4. Obsidian 是用户正式知识入口，不得自动蒸馏为个人记忆。
+5. AI 对话和 Codex 任务可以进入自动记忆流程。
+6. 监听范围只能使用明确配置的白名单目录，禁止全盘扫描。
+7. 所有下载、模型、缓存、数据库、日志和临时文件优先放在 D 盘。
+8. 未经用户确认的建议不得写成长期事实或正式决策。
+9. 禁止自动发布内容。
 
-## 系统架构 (4层)
-- L1 Data Layer: Obsidian Vault (不可变source of truth)
-- L2 Index Layer: pemis_index.json (可重建)
-- L3 Logic Layer: Router + Safety Guard + Scheduler (轻量化)
-- L4 Ops Layer: backup + journal + integrity + metrics
+## 代码标准
 
-## 调度任务
-- read_feedback: 每10分钟读取Control Center反馈
-- daily_capture: 每24小时自动扫描新文件+打标签
-- distill/distillation: 每24小时
-- integrity: 每24小时
-- full_check: 每24小时更新看板
+- Python 文件统一使用 UTF-8；读取旧文件时兼容 UTF-8 BOM。
+- 函数职责清晰，避免重复逻辑和无意义抽象。
+- 新依赖必须有必要性说明，不得为一个小功能引入大型框架。
+- 配置、路径和端口不得散落硬编码，优先使用现有配置层。
+- 修改接口、数据结构或启动链路前必须检查兼容性。
+- 不得把 Second Brain 服务擅自加入旧版 `start_lingji.bat`、`start_lingji.py` 或 `run_service.py`。
 
-## 交互接口
-- 手动扫描新内容: core.manual_scan() 或通过我触发
-- 反馈写在: PEMIS/dashboard/Control Center.md 底部的反馈区
-- 控制中心: PEMIS/dashboard/Control Center.md (极简版，一屏看完)
+## 数据与安全边界
 
-## 磁盘规则
-- 禁止在C盘创建任何项目文件或文件夹
-- 所有下载、缓存、临时文件必须放在D盘
-- D盘项目目录: D:/codex/
-- 备份目录: D:/codex/backups/pemis
-- 日志目录: logs/ (项目内)
-# Second-brain branch isolation rules
+- 禁止提交 `.env`、API Key、Token、Cookie、真实聊天原文、真实数据库和个人隐私数据。
+- 禁止提交 `node_modules`、构建缓存、模型文件、Qdrant 数据、日志和临时文件。
+- 测试优先使用隔离目录、假数据或 acceptance workspace。
+- 不得修改真实 Obsidian Vault，除非任务明确要求且具备可回滚方案。
+- 所有写操作必须说明目标路径和影响范围。
 
-- This worktree is the isolated `feature/second-brain-memory` upgrade. Never modify or write runtime data into `C:\Users\Administrator\Documents\New project-ai`.
-- Before a Codex task, read `.codex/context/PROJECT_SUMMARY.md`, `ACTIVE_RULES.md`, `ARCHITECTURE.md`, `RECENT_DECISIONS.md`, and `KNOWN_ISSUES.md`.
-- If the API is available, call `POST http://127.0.0.1:8765/memory/context` before planning implementation work.
-- AI chats are the only automatic memory source. Obsidian is user-authored formal knowledge and must never be automatically distilled into memories.
-- The watcher may only scan the three configured roots: AI-chat inbox, Codex-task inbox, and the explicit Obsidian knowledge directory.
-- Do not add the second-brain service to `start_lingji.bat`, `start_lingji.py`, or `run_service.py`.
-- After a task, write a JSON result to `data/inbox/codex_tasks/` or call `POST /memory/codex-task`. Suggestions are not long-term decisions until the user approves them.
-- Keep all downloads, caches, models, databases, vector data, logs, and temporary files on D:.
+## 测试与验收
+
+每个功能或较大修改完成后必须：
+
+1. 增加或更新对应测试。
+2. 运行相关单元测试、集成测试、API 测试或 UI 测试。
+3. 运行必要的回归测试，已有测试数量不得无故减少。
+4. 记录测试命令、结果、失败项和已知限制。
+5. 在 `docs/TEST_REPORTS/` 或对应开发报告中留下 Markdown 记录。
+6. 本地真实环境未验证时，只能标记为“代码完成，待真机验收”，不得宣布完全通过。
+
+## 文档同步
+
+完成开发后，按实际影响更新：
+
+- `docs/PROJECT_STATUS.md`
+- `docs/ROADMAP.md`
+- `docs/CHANGELOG.md`
+- `docs/DEVELOPMENT_LOG/`
+- `docs/DECISIONS/`
+- `docs/TEST_REPORTS/`
+
+文档必须基于真实代码、提交和测试结果，禁止编造。
+
+## Git 要求
+
+- 开发前确保工作区状态可解释，不覆盖他人未提交修改。
+- 一个提交只处理一个清晰任务。
+- 提交信息使用：`feat:`、`fix:`、`docs:`、`test:`、`refactor:`、`chore:`。
+- 只提交本任务相关文件。
+- 推送后报告：分支、commit SHA、测试结果、修改文件和未解决问题。
+- 合并前必须完成本地测试与验收。
+
+## PowerShell 与 Windows 注意事项
+
+- Windows PowerShell 5.1 不支持 Bash heredoc，也不要依赖 `&&`。
+- 路径含空格时必须正确引用。
+- 停止服务时优先按 PID 或明确端口定位，禁止粗暴结束全部 Python 进程。
