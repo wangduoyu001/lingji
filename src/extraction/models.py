@@ -31,7 +31,50 @@ class ExtractedDocument:
 
 
 @dataclass(frozen=True)
+class StructuredMessage:
+    external_id: str
+    role: str
+    content: str
+    sequence: int
+    author: str = ""
+    occurred_at: str = ""
+    privacy: str | None = None
+    projects: tuple[str, ...] = ()
+    agent_scope: tuple[str, ...] = ()
+    raw_reference: str = ""
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class StructuredConversation:
+    external_id: str
+    title: str
+    messages: tuple[StructuredMessage, ...]
+    started_at: str = ""
+    ended_at: str = ""
+    participants: tuple[str, ...] = ()
+    privacy: str | None = None
+    projects: tuple[str, ...] = ()
+    agent_scope: tuple[str, ...] = ()
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class StructuredSource:
+    source_type: str
+    external_id: str
+    display_name: str
+    conversations: tuple[StructuredConversation, ...]
+    privacy: str = "private"
+    projects: tuple[str, ...] = ()
+    agent_scope: tuple[str, ...] = ()
+    status: str = "active"
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class ExtractionBatch:
     documents: tuple[ExtractedDocument, ...]
+    structured_sources: tuple[StructuredSource, ...] = ()
     summary: Mapping[str, Any] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
