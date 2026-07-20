@@ -26,13 +26,22 @@ class CaptureDeduplicator:
     def __init__(self):
         self._seen: dict[str, tuple[str, float]] = {}
 
-    def check(self, envelope: CaptureEnvelope, *, now: float, window_seconds: int) -> DeduplicationResult:
+    def probe(self, envelope: CaptureEnvelope, *, now: float, window_seconds: int) -> DeduplicationResult:
         key, reason = self.key_for(envelope)
         matched = self._seen.get(key)
         if matched and now - matched[1] <= max(int(window_seconds), 0):
             return DeduplicationResult(True, key, matched[0], reason)
-        self._seen[key] = (envelope.capture_id, now)
         return DeduplicationResult(False, key, "", reason)
+
+    def check(self, envelope: CaptureEnvelope, *, now: float, window_seconds: int) -> DeduplicationResult:
+        """Backward-compatible non-mutating alias for the probe phase."""
+        return self.probe(envelope, now=now, window_seconds=window_seconds)
+
+    def remember(self, envelope: CaptureEnvelope, *, key: str, now: float) -> None:
+        self._seen[key] = (envelope.capture_id, now)
+
+    def commit(self, envelope: CaptureEnvelope, *, key: str, now: float) -> None:
+        self.remember(envelope, key=key, now=now)
 
     def key_for(self, envelope: CaptureEnvelope) -> tuple[str, str]:
         if envelope.input_path and envelope.input_path.is_file():
@@ -52,7 +61,7 @@ class CaptureDeduplicator:
             envelope.text,
             envelope.transcript,
             envelope.ocr_text,
-            str(envelope.metadata.get("external_id") or ""),
+            envelope.external_id,
         ))
         return self._hash(content), "same source content identity"
 
