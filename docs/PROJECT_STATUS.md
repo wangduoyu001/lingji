@@ -150,7 +150,7 @@ Report: `docs/TEST_REPORTS/P1_01_EMBEDDING_PROVIDER_TEST_REPORT.md`
 
 ## 8. P1-02 Qdrant SemanticProvider
 
-Repository implementation has landed in the P1-02 integration branch and is safe to merge because it is not connected to runtime startup yet.
+Repository implementation has landed in the mainline.
 
 Implemented:
 
@@ -175,18 +175,44 @@ Validation evidence:
 
 Report: `docs/TEST_REPORTS/P1_02_QDRANT_SEMANTIC_PROVIDER_TEST_REPORT.md`
 
-## 9. Current Critical Gaps
+## 9. P1-03 MemoryIndexCoordinator
+
+Repository implementation has landed in the P1-03 integration branch and is not connected to runtime startup yet.
+
+Implemented:
+
+- `MemoryIndexCoordinator`
+- canonical chunk snapshots before and after lexical synchronization
+- semantic added, updated and removed delta calculation
+- metadata-aware semantic fingerprints
+- bounded semantic upsert batches
+- semantic delete for removed chunks
+- full rebuild re-upsert of all current chunks
+- lexical-only mode when no semantic provider exists
+- structured `healthy`, `degraded` and `disabled` semantic status
+- lexical success preserved when embedding or Qdrant fails
+- optional state events for coordinated or degraded sync
+
+Validation state:
+
+- focused coordinator suite committed with 8 scenarios
+- complete-checkout coordinator pytest: pending
+- incremental retrieval regressions and full pytest: pending
+
+Report: `docs/TEST_REPORTS/P1_03_MEMORY_INDEX_COORDINATOR_TEST_REPORT.md`
+
+## 10. Current Critical Gaps
 
 1. `src/gateway/bootstrap.py` still passes `semantic_provider=None`.
-2. There is no `MemoryIndexCoordinator` synchronizing lexical and semantic deltas.
-3. Full collection rebuild and validated collection switching are not implemented.
+2. `MemoryGateway.rebuild()` still calls the lexical synchronizer directly instead of `MemoryIndexCoordinator`.
+3. Full staged collection rebuild and validated collection switching are not implemented.
 4. Semantic failure warnings are still suppressed by `HybridRetriever` rather than surfaced structurally.
 5. Runtime Settings does not yet expose editable vector/workspace/MCP groups.
 6. Local Control API does not expose unified vector status or coverage.
 7. Brain Status may still report false zero memory/vector counts.
 8. P0 and Phase 1 full local regression validation remains pending.
 
-## 10. Development Freeze Rules
+## 11. Development Freeze Rules
 
 - new memory features only in `src/`
 - new ingestion only in `src/extraction/`
@@ -195,39 +221,42 @@ Report: `docs/TEST_REPORTS/P1_02_QDRANT_SEMANTIC_PROVIDER_TEST_REPORT.md`
 - no direct Tauri calls to `8765` or `8767`
 - no deletion of compatibility data before export, parity and rollback validation
 
-## 11. Next Development Sequence
+## 12. Next Development Sequence
 
 Current next task:
 
 ```text
-P1-03 MemoryIndexCoordinator
+P1-04 build_memory_gateway runtime wiring
 ```
 
 Required work:
 
-- transform canonical lexical chunks into `SemanticPoint`
-- synchronize added/updated/removed chunks to both indexes
-- coordinate rebuild without making `MemoryDatabase` depend on Qdrant
-- preserve lexical success when embedding or Qdrant fails
-- record structured progress and warnings
-- use a new collection for dimension/model changes and validate before switching
+- resolve the selected WorkspaceContext
+- construct the EmbeddingProvider from Settings/runtime values
+- construct QdrantSemanticProvider only when semantic indexing is enabled
+- inject the semantic provider into HybridRetriever
+- inject MemoryIndexCoordinator into MemoryGateway
+- preserve lexical-only startup when Qdrant, Ollama, a model or the dependency is unavailable
+- close owned providers safely
+- add integration tests proving lexical fallback and semantic activation
 
 Then:
 
 ```text
-P1-04 build_memory_gateway runtime wiring
-P1-05 vector status, tests and final Phase 1 report
+P1-05 vector status, coverage, tests and final Phase 1 report
 ```
 
-Do not start Memory Inspector before semantic synchronization, runtime wiring and shared statistics exist.
+Do not start Memory Inspector before semantic runtime wiring and shared statistics exist.
 
-## 12. Required Local Validation
+## 13. Required Local Validation
 
 ```text
 python -m pip install -r requirements.txt
 python -m pytest tests/test_embedding_provider.py -v
 python -m pytest tests/test_qdrant_semantic_provider.py -v
+python -m pytest tests/test_memory_index_coordinator.py -v
 python -m pytest tests/test_workspace_contract.py tests/test_memory_capability_contract.py -v
+python -m pytest tests/test_incremental_index_sync.py tests/test_memory_retrieval.py -v
 python -m pytest tests/ -v
 ```
 
