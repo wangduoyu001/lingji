@@ -4,6 +4,16 @@
 
 ## 2026-07-20
 
+- Migrate the compatibility Ollama embedding behavior into `src/model_center/embedding.py` with provider, fallback, batch and verified-state contracts.
+- Migrate Qdrant search/index/diagnostic capabilities into `src/retrieval/qdrant_provider.py` with Workspace isolation.
+- Add `MemoryIndexCoordinator` for lexical-first, semantic-degraded-safe synchronization.
+- Wire Embedding, Qdrant, HybridRetriever and MemoryIndexCoordinator into the formal MemoryGateway runtime.
+- Add truthful `MemoryStatisticsService` and atomic workspace status snapshots.
+- Add authenticated `/api/memory/status`, `/api/vector/status` and `/api/vector/coverage` endpoints on Local Control API port 8766.
+- Fix Brain Status false-zero behavior; unknown memory/vector counts now remain explicit unknown values.
+- Route MCP-written documents through coordinated lexical/vector indexing instead of the former SQLite-only side path.
+- Add isolated P1-05 local acceptance script with temporary acceptance Workspace and in-memory Qdrant.
+- Add Phase 1 provider, coordinator, runtime wiring and status test reports; real local bge-m3 and full regression remain pending.
 - Add unified immutable `WorkspaceContext` and `WorkspaceResolver` for production/acceptance resources.
 - Add physical path and Qdrant collection isolation validation, including Windows `C:` drive rejection.
 - Add explicit workspace wiring seam to the formal `src` MemoryGateway bootstrap without migrating existing callers.
