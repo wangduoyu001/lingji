@@ -4,60 +4,63 @@
 
 ```text
 IMPLEMENTED_NOT_TESTED
-NOT_MERGED_AWAITING_COORDINATED_REVIEW
+COORDINATED_REVIEW_FIXES_IMPLEMENTED
+NOT_MERGED
 ```
 
-## 范围
+## 本轮返工范围
 
-- 正式桌面导航与页面接线。
-- 只读 Inspector API Client。
-- Source / Conversation / Message 三栏视图。
-- Message / Memory / Chunk / Vector 关系抽屉。
-- 后端分页、筛选、搜索防抖、取消请求和竞态保护。
-- 401、503、网络不可用、正常空数据、筛选空数据状态。
-- restricted 内容默认折叠。
-- rebuild_required true / false / null 三态显示。
-- 未知数值显示“未知”，不伪造为 0。
+- 修复 `q/from_time/to_time` Query 参数。
+- 为 Source、Conversation、Message 分别限制允许参数。
+- 修复嵌套 Status 响应映射。
+- 保留 Message detail 顶层 `memory_links`。
+- 优先使用 `display_name/projects/occurred_at/content_preview/metadata.model/metadata.is_branch`。
+- restricted 状态按当前 Message row 判断。
+- Vector 从 `response.vector` 解包。
+- Memory Source 从 `canonical/links` 解包。
+- 为 Message 与 Memory 详情请求增加独立取消和 request id。
+- 恢复 `App.tsx`、`types.ts`、`MemoryInspectorPage.css` 可读格式。
+- 增加不依赖生产后端的纯函数合同测试。
 
-## 代码检查
+## 纯函数合同测试
 
-实现包含以下可审查合同：
+`desktop/lingji-control/scripts/memory-inspector-smoke.mjs` 直接加载并执行 `memoryInspectorContract.ts` 中无 TypeScript 专属语法的纯函数，验证：
 
-- `LIMIT = 30`，后端合同最大值为 200。
-- 关键词防抖 300ms。
-- `AbortController` 中止旧请求。
-- `requestId` 阻止旧请求覆盖新结果。
-- `ApiError` 保留 HTTP status 与稳定 code。
-- 503 `READ_MODEL_UNAVAILABLE` 不显示后端路径或堆栈。
-- Memory 子关系请求使用 `Promise.allSettled`，允许部分数据。
+1. Source Query 只包含 `source_type/privacy/project/status/q/limit/offset`。
+2. Conversation Query 只包含 `source_id/source_type/privacy/project/from_time/to_time/q/limit/offset`。
+3. Message Query 只包含 `conversation_id/source_id/role/from_time/to_time/q/limit/offset`。
+4. Message Query 不携带 `project/privacy/status/source_type`。
+5. Status 从 `sources/memory/vector` 嵌套结构映射。
+6. 缺失计数保持 `null` 并显示“未知”。
+7. Message detail 同时保留 `item` 与 `memory_links`。
+8. `occurred_at/content_preview/metadata.model/metadata.is_branch` 合同。
+9. 数组字段格式化。
+10. restricted 按当前 row 判断。
+11. Vector 从 `response.vector` 解包。
+12. Memory Source 从 `canonical/links` 解包。
+13. `rebuild_required` true/false/null 三态。
+14. 页面具备列表、Message、Memory 三组独立竞态保护。
 
-## 计划测试用例
+## 计划执行命令
 
-1. API Client 错误转换、Token、超时和取消。
-2. limit/offset 与筛选 Query 参数。
-3. 300ms 搜索防抖。
-4. Loading 与刷新状态。
-5. 正常空数据与筛选空数据。
-6. 401 授权状态。
-7. 503 结构化读取模型不可用。
-8. Source、Conversation、Message 选择链路。
-9. Message 时间线与详情读取。
-10. Memory 关系与 Vector 三态。
-11. restricted 正文默认折叠。
-12. 旧请求返回晚于新请求时不覆盖新状态。
+```text
+cd desktop/lingji-control
+npm run test:inspector
+npm run test:smoke
+npm run build
+```
 
 ## 实际执行
 
-当前执行环境无法解析 `github.com`，无法把仓库物化到本地，也无法运行 Node/npm/Tauri 命令。没有使用“代码看起来没问题”冒充测试通过。
+当前工具只能修改远程 GitHub 分支，不能在仓库工作树中运行 Node/npm/Tauri。没有把源码审查冒充测试通过。
 
 ```text
-npm run typecheck: NOT AVAILABLE IN package.json / NOT EXECUTED
-npm run test:      NOT AVAILABLE IN package.json / NOT EXECUTED
-npm run build:     NOT EXECUTED
-npm run test:smoke: NOT EXECUTED
-passed:  NOT EXECUTED
-failed:  NOT EXECUTED
-skipped: NOT EXECUTED
+npm run test:inspector: NOT EXECUTED
+npm run test:smoke:     NOT EXECUTED
+npm run build:          NOT EXECUTED
+passed:                  NOT EXECUTED
+failed:                  NOT EXECUTED
+skipped:                 NOT EXECUTED
 ```
 
 ## 环境与数据边界
@@ -68,6 +71,7 @@ skipped: NOT EXECUTED
 Qdrant: NOT STARTED
 Ollama: NOT STARTED
 数据库 Schema: NOT MODIFIED
+Python 后端: NOT MODIFIED
 src/extraction: NOT MODIFIED
 src/sources: NOT MODIFIED
 src/gateway: NOT MODIFIED
@@ -78,14 +82,6 @@ force push: NOT USED
 rebase: NOT USED
 ```
 
-## 审查建议
+## 审查重点
 
-协调者应在可用工作树中运行：
-
-```text
-cd desktop/lingji-control
-npm run test:smoke
-npm run build
-```
-
-package.json 当前没有独立 `typecheck` 和通用 `test` 脚本。若协调者要求自动化组件测试，应在统一审查后决定是否引入 Vitest/jsdom，避免本任务擅自安装大量依赖。
+协调审查应重点运行 `npm run build`，确认 TypeScript 对 `memoryInspectorContract.ts` 的导入和既有页面类型没有回归。若失败，应只修复前端类型或格式问题，不得修改后端合同绕过错误。
