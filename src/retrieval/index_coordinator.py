@@ -123,6 +123,20 @@ class MemoryIndexCoordinator:
         )
         return result
 
+    def semantic_points(self) -> list[SemanticPoint]:
+        """Return canonical semantic points derived from the lexical read model.
+
+        Collection migration and diagnostics use this public read-only seam instead
+        of duplicating the SQLite query or treating Qdrant as memory authority.
+        """
+
+        return [snapshot.point for snapshot in self._snapshot().values()]
+
+    def semantic_chunk_ids(self) -> list[str]:
+        """Return stable canonical chunk IDs in deterministic order."""
+
+        return list(self._snapshot())
+
     def _sync_semantic(
         self,
         before: dict[str, _SemanticSnapshot],
