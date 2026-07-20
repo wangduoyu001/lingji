@@ -24,6 +24,7 @@ class MemoryGateway:
         state_db=None,
         *,
         index_coordinator: MemoryIndexCoordinator | None = None,
+        workspace: Any | None = None,
         runtime_warnings: list[dict[str, Any]] | None = None,
         closeables: Iterable[Any] | None = None,
     ):
@@ -33,6 +34,7 @@ class MemoryGateway:
         self.lifecycle = lifecycle
         self.profiles = profiles or AIProfileRegistry()
         self.state_db = state_db
+        self.workspace = workspace
         self.index_coordinator = index_coordinator or MemoryIndexCoordinator(
             database,
             retriever.semantic_provider,
@@ -181,8 +183,10 @@ class MemoryGateway:
 
     def memory_health(self, agent_id: str) -> dict[str, Any]:
         profile = self.profiles.require_tool(agent_id, "memory_health")
+        workspace_name = getattr(getattr(self, "workspace", None), "name", None)
         return {
             "agent_id": profile.agent_id,
+            "workspace": getattr(workspace_name, "value", workspace_name),
             "database": self.database.stats(),
             "integrity": self.database.integrity_check(),
             "profiles": self.profiles.list(),
