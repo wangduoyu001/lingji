@@ -99,7 +99,7 @@ def create_control_app(
         raise RuntimeError("Install requirements-ui.txt to run the local control API") from exc
 
     control = service or LocalControlService(settings)
-    app = FastAPI(title="LingJi Local Control API", version="0.5.0")
+    app = FastAPI(title="LingJi Local Control API", version="0.6.0")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -143,6 +143,18 @@ def create_control_app(
     def brain_status() -> dict[str, Any]:
         return control.brain_status()
 
+    @app.get("/api/memory/status", dependencies=secured)
+    def memory_status() -> dict[str, Any]:
+        return control.memory_status()
+
+    @app.get("/api/vector/status", dependencies=secured)
+    def vector_status() -> dict[str, Any]:
+        return control.vector_status()
+
+    @app.get("/api/vector/coverage", dependencies=secured)
+    def vector_coverage() -> dict[str, Any]:
+        return control.vector_coverage()
+
     @app.get("/api/mcp/status", dependencies=secured)
     def mcp_status() -> dict[str, Any]:
         runtime_values = control.get_settings().get("values", {})
@@ -153,6 +165,8 @@ def create_control_app(
         payload = control.get_settings()
         payload["runtime_contracts"] = {
             "mcp": mcp_runtime_status(settings, payload.get("values", {})),
+            "memory": control.memory_status(),
+            "vector": control.vector_status(),
         }
         return payload
 
