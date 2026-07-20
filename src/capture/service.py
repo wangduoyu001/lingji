@@ -13,7 +13,14 @@ _ALLOWED_METHODS = {
     "mobile_share", "browser_extension", "clipboard", "folder_watch",
     "manual_upload", "local_control_share", "scheduled_import",
 }
-_SENSITIVE_KEYS = {"token", "cookie", "api_key", "apikey", "authorization", "secret"}
+_SENSITIVE_KEYS = {
+    "token", "access_token", "cookie", "api_key", "apikey", "authorization",
+    "password", "secret", "credential", "session",
+}
+_RESERVED_PAYLOAD_KEYS = {
+    "title", "url", "capture_method", "author", "account_name", "published_at",
+    "media_url", "cover_url", "transcript", "ocr_text",
+}
 
 
 class CaptureService:
@@ -28,9 +35,10 @@ class CaptureService:
         self._validate(envelope)
         if self._paused:
             return CaptureResult(envelope.capture_id, CaptureStatus.PAUSED, reason="capture service paused")
-        duplicate = self.deduplicator.check(
+        now = time.time()
+        duplicate = self.deduplicator.probe(
             envelope,
-            now=time.time(),
+            now=now,
             window_seconds=self.policy.duplicate_window_seconds,
         )
         if duplicate.is_duplicate:
@@ -42,7 +50,7 @@ class CaptureService:
             )
         payload, options = self._pipeline_input(envelope)
         heavy = envelope.source_type in {"media", "video", "audio"}
-        queue = self.policy.queue_only or heavy or not self.policy.allow_realtime
+        queue = envelope.process_later or self.policy.queue_only or heavy or not self.policy.allow_realtime
         if queue:
             outcome = self.pipeline.enqueue(
                 envelope.source_type,
@@ -52,13 +60,11 @@ class CaptureService:
                 priority=envelope.priority,
                 idempotency_key=duplicate.deduplication_key,
             )
-            job_id = str(outcome.get("job_id") or "")
-            status = CaptureStatus.QUEUED
             result = CaptureResult(
                 envelope.capture_id,
-                status,
+                CaptureStatus.QUEUED,
                 deduplication_key=duplicate.deduplication_key,
-                extraction_job_id=job_id,
+                extraction_job_id=str(outcome.get("job_id") or ""),
                 queued=True,
             )
         else:
@@ -76,6 +82,7 @@ class CaptureService:
                 extraction_job_id=str(outcome.get("execution_id") or envelope.capture_id),
                 executed=True,
             )
+        self.deduplicator.commit(envelope, key=duplicate.deduplication_key, now=now)
         self._submitted += 1
         return result
 
@@ -129,11 +136,23 @@ class CaptureService:
                 raise FileNotFoundError(envelope.input_path)
             if envelope.input_path.stat().st_size > self.policy.max_file_bytes:
                 raise ValueError("capture file exceeds policy limit")
-        lowered = {str(key).lower() for key in envelope.metadata}
-        if lowered & _SENSITIVE_KEYS:
-            raise ValueError("capture metadata contains forbidden sensitive fields")
+        self._validate_metadata(envelope.metadata)
+        collisions = {str(key).lower() for key in envelope.metadata} & _RESERVED_PAYLOAD_KEYS
+        if collisions:
+            raise ValueError("capture metadata cannot override reserved payload fields")
         if not any((envelope.url, envelope.text, envelope.html, envelope.input_path, envelope.transcript, envelope.ocr_text, envelope.media_url)):
             raise ValueError("capture has no usable content")
+
+    @classmethod
+    def _validate_metadata(cls, value: Any) -> None:
+        if isinstance(value, Mapping):
+            for key, item in value.items():
+                if str(key).lower() in _SENSITIVE_KEYS:
+                    raise ValueError("capture metadata contains forbidden sensitive fields")
+                cls._validate_metadata(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                cls._validate_metadata(item)
 
     def _pipeline_input(self, envelope: CaptureEnvelope) -> tuple[dict[str, Any], dict[str, Any]]:
         payload = {
@@ -149,7 +168,10 @@ class CaptureService:
             "transcript": envelope.transcript,
             "ocr_text": envelope.ocr_text,
             "capture_method": envelope.capture_method,
-            **dict(envelope.metadata),
+            "platform": envelope.platform,
+            "description": envelope.description,
+            "external_id": envelope.external_id,
+            "metadata": dict(envelope.metadata),
         }
         options = {
             "project": list(envelope.project_ids),
