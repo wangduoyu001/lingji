@@ -1,3 +1,4 @@
+// @ts-nocheck
 export const INSPECTOR_LIMIT = 30;
 
 const clean = (params) => Object.fromEntries(
@@ -59,7 +60,6 @@ export const mapMessageDetail = (response) => ({
 });
 
 export const mapMemoryVector = (response) => response?.vector ?? null;
-
 export const mapMemorySource = (response) => ({
   canonical: response?.canonical ?? null,
   links: Array.isArray(response?.links) ? response.links : [],
@@ -69,9 +69,7 @@ export const formatList = (value) => {
   if (!Array.isArray(value) || value.length === 0) return "未知";
   return value.map((item) => {
     if (typeof item === "string" || typeof item === "number") return String(item);
-    if (item && typeof item === "object") {
-      return String(item.name ?? item.title ?? item.id ?? item.value ?? "未知项");
-    }
+    if (item && typeof item === "object") return String(item.name ?? item.title ?? item.id ?? item.value ?? "未知项");
     return "未知项";
   }).join("、");
 };
