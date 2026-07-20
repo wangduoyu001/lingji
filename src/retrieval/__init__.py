@@ -1,4 +1,10 @@
 from .chunker import MarkdownChunk, MarkdownChunker
+from .collection_migration import (
+    VectorCollectionMigrationError,
+    VectorCollectionMigrationPlan,
+    VectorCollectionMigrationResult,
+    VectorCollectionMigrationService,
+)
 from .enhanced import HybridRetriever
 from .hybrid import SearchFilters
 from .index_coordinator import (
@@ -36,5 +42,9 @@ __all__ = [
     "SemanticSearchProvider",
     "SemanticSyncResult",
     "SemanticSyncWarning",
+    "VectorCollectionMigrationError",
+    "VectorCollectionMigrationPlan",
+    "VectorCollectionMigrationResult",
+    "VectorCollectionMigrationService",
     "VectorDimensionMismatchError",
 ]
