@@ -3,6 +3,7 @@
 > Updated: 2026-07-20
 > Branch: `feature/second-brain-memory`
 > Architecture authority: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
+> Execution roadmap: `docs/MODULES/UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md`
 > Audit: `docs/TECH_RESEARCH/SRC_SECOND_BRAIN_CAPABILITY_AUDIT.md`
 
 ## 1. Current Product Direction
@@ -79,6 +80,8 @@ Qdrant
 3. Two memory authorities and two ingestion paths still exist in current runtime code.
 4. Tauri Brain Status is not yet guaranteed to use the same real memory/vector statistics as MCP and the future Inspector.
 5. Production/acceptance isolation has not yet been unified across Vault, raw data, SQLite, Qdrant, logs and settings.
+6. `src/control/runtime_settings.py` does not yet expose memory, vector, workspace or MCP settings.
+7. `src/config.py` still contains a developer-specific absolute backup default and no Qdrant fields.
 
 ### Documentation status
 
@@ -88,6 +91,9 @@ The stale dual-system documentation has been corrected. Current documents now di
 - target architecture
 - compatibility behavior
 - unresolved migration work
+- executable phase/task dependencies, rollback and retirement gates
+
+The detailed file-level execution order is maintained in `docs/MODULES/UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md`.
 
 ## 6. Target Port Map
 
@@ -112,20 +118,27 @@ Effective immediately:
 
 ## 8. Next Development Sequence
 
+### Phase 0: Runtime contracts
+
+- land the 8766/8767/stdio port contract in code and tests
+- define WorkspaceContext and physical production/acceptance paths
+- establish the directory-independent Memory Capability Contract
+
 ### Phase 1: Unified semantic provider
 
-- adapt `second_brain` Qdrant and embedding behavior into `src.retrieval.hybrid.SemanticProvider`
+- add a unified EmbeddingProvider under Model Center
+- adapt `second_brain` Qdrant behavior into `src` SemanticProvider contracts
 - connect `build_memory_gateway()`
 - add incremental upsert/delete, rebuild, health and counts
-- preserve lexical fallback
+- preserve lexical fallback and the existing RRF pipeline
 - isolate production and acceptance
-- expose vector/model state to Local Control API
+- expose real vector/model state to Local Control API
 
 ### Phase 2: Unified source read model
 
 - migrate rebuildable source/conversation/message queries
 - preserve role, ordinal, timestamp, model, attachments and provenance
-- add privacy filtering
+- add privacy filtering and explicit body expansion
 
 ### Phase 3: Memory Inspector and Vector Center
 
@@ -134,10 +147,11 @@ Effective immediately:
 - show canonical memory, citations, retrieval trace and vector existence
 - make Brain Status, Inspector and MCP statistics agree
 
-### Phase 4: Relations, conflicts and UI migration
+### Phase 4: Relations, conflicts, workspace and UI migration
 
 - migrate revision, relation and conflict read models
-- audit previous local/PySide UI capability parity
+- finish production/acceptance physical isolation
+- migrate previous local/PySide UI capability according to the roadmap matrix
 - keep only Tauri as the primary product
 
 ### Phase 5: Dual-read verification and retirement
@@ -154,6 +168,7 @@ Effective immediately:
 Updated or created:
 
 - `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
+- `docs/MODULES/UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md`
 - `docs/ARCHITECTURE.md`
 - `docs/AI_CONTEXT.md`
 - `docs/MEMORY_SYSTEM.md`
@@ -166,11 +181,12 @@ Updated or created:
 
 ## 10. Test Status
 
-This convergence task changed documentation only.
+This roadmap task changed documentation only.
 
 - no functional code was changed
-- no database or dependency was changed
+- no database, schema, dependency, configuration or runtime data was changed
 - no local runtime test was executed for this documentation task
-- existing historical test reports remain historical evidence, not proof of the new target architecture
+- existing historical test reports remain historical evidence, not proof of the target architecture
+- the roadmap is a development contract, not a functional completion claim
 
-The next code phase must create a dedicated Markdown implementation/test report after Qdrant SemanticProvider integration.
+The first implementation chain is P0 runtime contracts followed by P1 unified Embedding/Qdrant SemanticProvider integration. Each completed feature or substantial code block must produce a dedicated Markdown implementation and test report.
