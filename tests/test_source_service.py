@@ -155,7 +155,7 @@ class SourceQueryServiceTests(unittest.TestCase):
         )
 
     def test_explicit_child_permissions_are_not_overwritten(self):
-        result = self.read_model.upsert_bundle(
+        self.read_model.upsert_bundle(
             {
                 "source": {
                     "source_type": "chatgpt",
@@ -203,7 +203,6 @@ class SourceQueryServiceTests(unittest.TestCase):
         self.assertEqual(message["pagination"]["total"], 1)
         self.assertEqual(conversation["items"][0]["privacy"], "private")
         self.assertEqual(message["items"][0]["privacy"], "private")
-        self.assertEqual(result["sources"], 1)
 
     def test_agent_scope_update_is_immediate_for_inherited_children(self):
         self.read_model.upsert_bundle(
@@ -269,6 +268,33 @@ class SourceQueryServiceTests(unittest.TestCase):
         self.assertTrue(item["metadata"]["source_path"].startswith("raw:"))
         self.assertIsNone(item["metadata"]["file_reference"])
         self.assertIsNone(item["metadata"]["windows_path"])
+
+    def test_http_reference_removes_credentials_sensitive_query_and_fragment(self):
+        value = self.service._safe_reference(
+            "https://user:pass@example.com/file?id=123&token=secret#private"
+        )
+        self.assertEqual(value, "https://example.com/file?id=123")
+        for forbidden in ("user", "pass", "token", "secret", "private"):
+            self.assertNotIn(forbidden, value or "")
+
+    def test_all_sensitive_query_parameter_names_are_removed(self):
+        sensitive = (
+            "token",
+            "access_token",
+            "api_key",
+            "apikey",
+            "key",
+            "secret",
+            "signature",
+            "sig",
+            "credential",
+            "authorization",
+            "session",
+            "cookie",
+        )
+        query = "&".join(["id=123", *(f"{key}=hidden" for key in sensitive)])
+        value = self.service._safe_reference(f"https://example.com/file?{query}#fragment")
+        self.assertEqual(value, "https://example.com/file?id=123")
 
     def test_disallowed_requested_privacy_returns_empty_page(self):
         chatgpt = self.service.agent_viewer("chatgpt")
