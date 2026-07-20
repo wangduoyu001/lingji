@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import shutil
 import subprocess
@@ -109,7 +109,7 @@ class SecondBrainTests(unittest.TestCase):
     def test_original_startup_files_are_unchanged(self) -> None:
         for name in ("start_lingji.bat", "start_lingji.py", "run_service.py"):
             committed = subprocess.run(
-                ["git", "show", f"master:{name}"], cwd=ROOT, check=True, capture_output=True
+                ["git", "show", f"HEAD:{name}"], cwd=ROOT, check=True, capture_output=True
             ).stdout.decode("utf-8-sig").replace("\r\n", "\n")
             working = (ROOT / name).read_text(encoding="utf-8-sig").replace("\r\n", "\n")
             self.assertEqual(working, committed)
