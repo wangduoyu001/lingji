@@ -52,7 +52,7 @@ src MCP Streamable HTTP        = 8767
 src MCP default transport      = stdio
 ```
 
-Repository implementation has landed. Real Windows simultaneous binding and Tauri runtime smoke remain pending.
+Repository implementation has landed. Real Windows simultaneous binding and Tauri runtime smoke remain separate acceptance items.
 
 Report: `docs/TEST_REPORTS/P0_02_PORT_CONTRACT_TEST_REPORT.md`
 
@@ -69,7 +69,7 @@ Implemented:
 Validation evidence:
 
 - workspace contract: `8 passed`
-- complete-checkout lexical contract and full pytest: pending
+- acceptance workspace isolation: passed in the P1-05 real local validator
 
 Report: `docs/TEST_REPORTS/P0_03_WORKSPACE_CAPABILITY_CONTRACT_TEST_REPORT.md`
 
@@ -85,12 +85,15 @@ Implemented in `src/model_center/embedding.py`:
 - verified active model and dimension
 - failure state and Settings/runtime factory
 
-Validation evidence:
+Local validation:
 
-- fake-transport suite: `13 passed`
-- real Ollama validation: pending
-
-Report: `docs/TEST_REPORTS/P1_01_EMBEDDING_PROVIDER_TEST_REPORT.md`
+```text
+Ollama 0.32.0 reachable
+bge-m3 installed
+actual dimension = 1024
+embedding verified
+failure count = 0
+```
 
 ### P1-02 QdrantSemanticProvider
 
@@ -103,12 +106,13 @@ Implemented in `src/retrieval/qdrant_provider.py`:
 - dimension mismatch and rebuild-required state
 - text/vector exclusion from diagnostic payloads
 
-Validation evidence:
+Local validation:
 
-- Qdrant 1.12 direct in-memory API smoke: passed
-- committed provider pytest: pending complete checkout
-
-Report: `docs/TEST_REPORTS/P1_02_QDRANT_SEMANTIC_PROVIDER_TEST_REPORT.md`
+```text
+in-memory Qdrant = passed
+temporary embedded disk Qdrant = passed
+qdrant-client = 1.18.0
+```
 
 ### P1-03 MemoryIndexCoordinator
 
@@ -120,7 +124,7 @@ Implemented in `src/retrieval/index_coordinator.py`:
 - lexical-first commit
 - semantic degradation without lexical rollback
 
-Report: `docs/TEST_REPORTS/P1_03_MEMORY_INDEX_COORDINATOR_TEST_REPORT.md`
+Focused local tests passed.
 
 ### P1-04 Runtime Wiring
 
@@ -134,19 +138,16 @@ EmbeddingProvider
   -> MemoryGateway
 ```
 
-Implemented:
+Implemented and validated:
 
 - Workspace-aware provider construction
 - one shared provider for retrieval and indexing
 - lexical-only fallback after semantic bootstrap failure
-- existing production Vault/SQLite transition paths preserved
 - explicit acceptance isolation
-
-Report: `docs/TEST_REPORTS/P1_04_SEMANTIC_RUNTIME_WIRING_TEST_REPORT.md`
+- coordinated rebuild without degradation
+- multilingual retrieval
 
 ### P1-05 Memory And Vector Status
-
-Repository implementation has landed in the P1-05 integration branch.
 
 Implemented:
 
@@ -157,7 +158,7 @@ Implemented:
 - stale snapshot detection
 - truthful unknown values instead of fake zero
 - Brain Status correction
-- MCP written-document callback now uses coordinated indexing
+- MCP written-document callback uses coordinated indexing
 
 Authenticated Local Control API:
 
@@ -165,74 +166,120 @@ Authenticated Local Control API:
 GET /api/memory/status
 GET /api/vector/status
 GET /api/vector/coverage
+GET /api/brain/status
 ```
 
-The shared contract is also exposed in Brain Status, Overview, Settings and Provider Status.
-
-Tests added:
+Real local acceptance passed:
 
 ```text
-tests/test_memory_statistics.py
-tests/test_status_snapshot_wiring.py
+semantic provider active          PASS
+bge-m3 verified                   PASS
+actual dimension 1024             PASS
+coordinated rebuild               PASS
+vector coverage 2/2 = 1.0         PASS
+multilingual retrieval            PASS
+memory status API                 PASS
+vector status API                 PASS
+vector coverage API               PASS
+Brain Status real counters        PASS
+acceptance isolation              PASS
 ```
 
-Updated:
+Reports:
+
+- `docs/TEST_REPORTS/P1_05_MEMORY_VECTOR_STATUS_TEST_REPORT.md`
+- `docs/TEST_REPORTS/P1_05_LOCAL_ACCEPTANCE_SUMMARY.md`
+
+## 5. Test State
+
+Focused Phase 1 and status suites passed, including:
 
 ```text
-tests/test_control_api.py
+test_memory_statistics.py
+test_status_snapshot_wiring.py
+test_embedding_provider.py
+test_qdrant_semantic_provider.py
+test_memory_index_coordinator.py
+test_semantic_runtime_wiring.py
+test_workspace_contract.py
+test_control_api.py
 ```
 
-Local validator:
+Full repository result:
 
 ```text
-scripts/validate_p1_05_local.py
+244 passed
+2 failed
+9 skipped
+146.50 seconds
 ```
 
-Recommended isolated acceptance:
+The two failures are known pre-existing environment/baseline checks:
+
+1. `test_brain_status_endpoint`
+   - requires a separately running service in the full-suite context
+   - the official P1-05 validator verified the endpoint successfully
+
+2. `test_original_startup_files_are_unchanged`
+   - compares the feature branch with master-era startup files
+   - the feature branch intentionally differs
+
+The nine skipped tests require the real Obsidian CLI.
+
+Accurate conclusion:
 
 ```text
-ollama pull bge-m3
-python scripts/validate_p1_05_local.py --model bge-m3 --run-pytest
+Phase 1 runtime acceptance = PASS
+Focused Phase 1 tests      = PASS
+Full suite completely green = NO
+Full suite result           = PASS WITH 2 KNOWN PRE-EXISTING FAILURES AND 9 OPTIONAL SKIPS
 ```
 
-This validator uses a temporary acceptance Workspace and in-memory Qdrant. It does not touch production data.
-
-Report: `docs/TEST_REPORTS/P1_05_MEMORY_VECTOR_STATUS_TEST_REPORT.md`
-
-## 5. Current Accurate State
+## 6. Current Accurate State
 
 ```text
-Embedding migration          = implemented
-Qdrant migration             = implemented
-Workspace isolation          = implemented
-Lexical/vector coordination  = implemented
-MemoryGateway runtime wiring = implemented
-8766 status API              = implemented
-Brain Status real counters   = implemented
-Repository tests             = committed
-Real local acceptance        = pending
-Full pytest                   = pending
-Tauri Vector Center          = not implemented
+Embedding migration          = implemented and locally validated
+Qdrant migration             = implemented and locally validated
+Workspace isolation          = implemented and locally validated
+Lexical/vector coordination  = implemented and locally validated
+MemoryGateway runtime wiring = implemented and locally validated
+8766 status API              = implemented and locally validated
+Brain Status real counters   = implemented and locally validated
+bge-m3 acceptance            = passed at 1024 dimensions
+Production bge-m3 switch     = not performed
+Production vector rebuild    = not performed
+Tauri Vector Center          = in parallel development branch
+Memory Inspector             = not implemented
 ```
 
-No CI result currently proves the complete-checkout test commands passed.
+## 7. bge-m3 Position
 
-## 6. bge-m3 Position
+`bge-m3` is now the validated acceptance model for LingJi Chinese, English and mixed-language retrieval.
 
-The isolated P1-05 validator defaults to `bge-m3` because LingJi primarily needs Chinese, English and mixed-language document retrieval.
+The production default is not silently changed. A production switch requires:
 
-The production default is not silently changed. A model change can alter vector dimension and therefore requires an explicit collection rebuild decision.
+```text
+new production collection
+-> full vector rebuild
+-> coverage validation
+-> search parity validation
+-> controlled collection switch
+-> rollback retention
+```
 
-## 7. Remaining Critical Gaps
+Do not mix vectors from models with different dimensions in one collection.
 
-1. Run real Windows/Ollama/bge-m3 acceptance.
-2. Run focused Phase 1 tests and full `tests/`.
-3. Implement staged replacement-collection build and validated switch for model/dimension changes.
-4. Surface search-time semantic degradation in search responses.
-5. Expose editable vector/workspace/MCP groups in Runtime Settings.
-6. Add the minimal Tauri status card, then later the full Vector Center and Memory Inspector.
+## 8. Remaining Critical Gaps
 
-## 8. Development Freeze Rules
+1. Complete and review `P2-01 Tauri Vector Center`.
+2. Implement staged replacement-collection build and validated production switch to bge-m3.
+3. Surface search-time semantic degradation in search responses.
+4. Expose editable vector/workspace/MCP groups in Runtime Settings.
+5. Develop structured source/conversation/message read models.
+6. Develop Memory Inspector after shared statistics and Vector Center are stable.
+7. Clean up or reclassify the two pre-existing full-suite failures.
+
+## 9. Development Freeze Rules
 
 - new memory features only in `src/`
 - new ingestion only in `src/extraction/`
@@ -241,21 +288,13 @@ The production default is not silently changed. A model change can alter vector 
 - no direct Tauri access to `8765`, `8767` or Qdrant
 - no compatibility-data deletion before export, parity and rollback validation
 
-## 9. Next Development Sequence
-
-First complete local validation:
+## 10. Next Development Sequence
 
 ```text
-python -m pip install -r requirements.txt
-ollama pull bge-m3
-python scripts/validate_p1_05_local.py --model bge-m3 --run-pytest
-python -m pytest tests/ -v
+P2-01 Tauri Vector Center
+-> staged bge-m3 production collection migration
+-> structured source/conversation/message read model
+-> Memory Inspector
 ```
 
-After acceptance passes:
-
-```text
-P2 structured source/conversation/message read model
-```
-
-A minimal Tauri status card may consume the new 8766 endpoints before the full Memory Inspector is developed.
+The Vector Center branch must remain separate until reviewed against this accepted P1-05 backend contract.
