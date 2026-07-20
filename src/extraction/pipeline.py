@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 from uuid import uuid4
 
+from .errors import safe_extraction_error
 from .models import ExtractionRequest
 from .queue import SQLiteExtractionQueue
 from .registry import AdapterRegistry
@@ -147,7 +148,10 @@ class ExtractionPipeline:
             except Exception as exc:
                 logger.exception("Post-extraction index synchronization failed")
                 response["indexed"] = False
-                response["index_error"] = str(exc)[:1000]
+                response["index_error"] = safe_extraction_error(
+                    exc,
+                    message="Post-extraction index synchronization failed; see local logs",
+                )
                 indexing_succeeded = False
         response["structured_read_model"] = self._write_structured(
             batch=batch,
