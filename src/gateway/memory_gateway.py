@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from src.gateway.profiles import AIProfileRegistry
 from src.memory.lifecycle import MemoryLifecycleService
 from src.retrieval.context_pack import ContextPackBuilder, ContextPackRequest
 from src.retrieval.hybrid import HybridRetriever, SearchFilters
-from src.retrieval.incremental_sync import IncrementalMemorySynchronizer
+from src.retrieval.index_coordinator import MemoryIndexCoordinator
 from src.retrieval.memory_db import MemoryDatabase
 
 
@@ -22,6 +22,10 @@ class MemoryGateway:
         lifecycle: MemoryLifecycleService,
         profiles: AIProfileRegistry | None = None,
         state_db=None,
+        *,
+        index_coordinator: MemoryIndexCoordinator | None = None,
+        runtime_warnings: list[dict[str, Any]] | None = None,
+        closeables: Iterable[Any] | None = None,
     ):
         self.database = database
         self.retriever = retriever
@@ -29,6 +33,13 @@ class MemoryGateway:
         self.lifecycle = lifecycle
         self.profiles = profiles or AIProfileRegistry()
         self.state_db = state_db
+        self.index_coordinator = index_coordinator or MemoryIndexCoordinator(
+            database,
+            retriever.semantic_provider,
+            state_db=state_db,
+        )
+        self.runtime_warnings = list(runtime_warnings or [])
+        self._closeables = list(closeables or [])
 
     def search_memory(
         self,
@@ -175,6 +186,7 @@ class MemoryGateway:
             "database": self.database.stats(),
             "integrity": self.database.integrity_check(),
             "profiles": self.profiles.list(),
+            "runtime_warnings": list(self.runtime_warnings),
         }
 
     def rebuild(
@@ -185,18 +197,31 @@ class MemoryGateway:
         *,
         force: bool = False,
     ) -> dict[str, Any]:
-        integrity = self.database.integrity_check()
-        if force or not integrity.get("healthy", False):
-            result: dict[str, Any] = self.database.rebuild_from_index(entries, vault_root, chunker)
-            result["full_rebuild"] = True
-            event_type = "memory_index_rebuilt"
-        else:
-            result = IncrementalMemorySynchronizer(self.database).sync(entries, vault_root, chunker)
-            event_type = "memory_index_synced"
+        result = self.index_coordinator.sync(
+            entries,
+            vault_root,
+            chunker,
+            force=force,
+        )
         if result.get("added") or result.get("updated") or result.get("removed") or result.get("full_rebuild"):
             self.retriever.clear_cache()
+        event_type = "memory_index_rebuilt" if result.get("full_rebuild") else "memory_index_synced"
         self._event(event_type, "lingji", result)
         return result
+
+    def close(self) -> None:
+        seen: set[int] = set()
+        for resource in reversed(self._closeables):
+            if resource is None or id(resource) in seen:
+                continue
+            seen.add(id(resource))
+            close = getattr(resource, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    continue
+        self._closeables.clear()
 
     def _event(self, event_type: str, entity_id: str, payload: dict[str, Any]) -> None:
         if self.state_db:
