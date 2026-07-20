@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
-from typing import Any, Protocol, Sequence
+from typing import Any, Mapping, Protocol, Sequence
 
 import requests
 
@@ -234,3 +234,40 @@ class OllamaEmbeddingProvider:
         if exc is None:
             return "unknown embedding error"
         return f"{type(exc).__name__}: {exc}"[:500]
+
+
+def build_embedding_provider(
+    settings: Any,
+    runtime_values: Mapping[str, Any] | None = None,
+    *,
+    transport: EmbeddingTransport | None = None,
+) -> EmbeddingProvider | None:
+    """Build the configured provider without creating a semantic index or Qdrant client."""
+
+    values = dict(runtime_values or {})
+    enabled = _as_bool(values.get("embedding_enabled", getattr(settings, "embedding_enabled", True)))
+    provider_id = str(values.get("embedding_provider", getattr(settings, "embedding_provider", "ollama"))).strip().lower()
+    if not enabled or provider_id in {"", "off", "disabled", "none"}:
+        return None
+    if provider_id != "ollama":
+        raise ValueError(f"Unsupported embedding provider: {provider_id}")
+
+    return OllamaEmbeddingProvider(
+        base_url=str(values.get("embedding_endpoint", getattr(settings, "ollama_base_url", "http://127.0.0.1:11434"))),
+        primary_model=str(values.get("embedding_primary_model", getattr(settings, "embed_model", ""))),
+        fallback_model=str(values.get("embedding_fallback_model", getattr(settings, "fallback_embed_model", ""))) or None,
+        timeout_seconds=float(values.get("embedding_timeout_seconds", getattr(settings, "embedding_timeout_seconds", 60.0))),
+        batch_size=int(values.get("embedding_batch_size", getattr(settings, "embedding_batch_size", 32))),
+        transport=transport,
+    )
+
+
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off", ""}:
+        return False
+    raise ValueError(f"Invalid boolean value: {value!r}")
