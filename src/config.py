@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     embedding_enabled: bool = True
     embedding_timeout_seconds: float = Field(default=60.0, ge=0.1, le=3600.0)
     embedding_batch_size: int = Field(default=32, ge=1, le=2048)
+    semantic_enabled: bool = True
+    semantic_batch_size: int = Field(default=64, ge=1, le=2048)
+    qdrant_distance: str = "cosine"
+    qdrant_timeout_seconds: float = Field(default=10.0, ge=0.1, le=3600.0)
+    qdrant_collection_schema: str = "v1"
     vault_dir: str = "vault"
     storage_dir: str = "storage"
     snapshot_dir: str = "snapshot"
