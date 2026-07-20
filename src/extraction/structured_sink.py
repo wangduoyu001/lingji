@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -13,7 +12,7 @@ logger = logging.getLogger("lingji.extraction.structured")
 
 
 class StructuredReadModelSink:
-    """Write rebuildable structured source data through SourceReadModel's public contract."""
+    """Write rebuildable source data through SourceReadModel's public package contract."""
 
     def __init__(
         self,
@@ -42,12 +41,10 @@ class StructuredReadModelSink:
     ) -> dict[str, Any]:
         if not batch.structured_sources:
             return self._result("not_applicable")
-
         totals = {"sources": 0, "conversations": 0, "messages": 0, "links": 0}
         warnings: list[str] = []
         vault_map = self._vault_map(vault_results)
         raw_reference, raw_metadata = self._raw_provenance(raw_snapshot)
-
         try:
             for source in batch.structured_sources:
                 bundle, bundle_warnings = self._bundle(
@@ -69,8 +66,7 @@ class StructuredReadModelSink:
             logger.exception("Structured read model write failed")
             warnings.append(self._safe_error(exc))
             state = "degraded"
-            totals = {"sources": 0, "conversations": 0, "messages": 0, "links": 0}
-
+            totals = {key: 0 for key in totals}
         result = self._result(state, **totals, warnings=warnings)
         self._event("structured_ingestion_completed", execution_id, result)
         return result
@@ -90,14 +86,12 @@ class StructuredReadModelSink:
         warnings: list[str] = []
         conversations = []
         source_vault_reference = ""
-
         for conversation in source.conversations:
             document_stable_id = str(conversation.metadata.get("document_stable_id") or "")
-            vault_path = vault_map.get(document_stable_id, "")
-            vault_reference = f"vault:{vault_path}" if vault_path else ""
-            if vault_reference and not source_vault_reference:
-                source_vault_reference = vault_reference
-            conversation_record, conversation_warnings = self._conversation_record(
+            relative_path = vault_map.get(document_stable_id, "")
+            vault_reference = f"vault:{relative_path}" if relative_path else ""
+            source_vault_reference = source_vault_reference or vault_reference
+            record, record_warnings = self._conversation_record(
                 conversation,
                 source=source,
                 raw_reference=raw_reference,
@@ -105,36 +99,30 @@ class StructuredReadModelSink:
                 document_stable_id=document_stable_id,
                 indexing_succeeded=indexing_succeeded,
             )
-            conversations.append(conversation_record)
-            warnings.extend(conversation_warnings)
-
-        source_metadata = dict(source.metadata)
-        source_metadata.update(raw_metadata)
-        source_metadata.update(
-            {
-                "import_execution_id": execution_id,
-                "adapter_name": adapter_name,
-                "adapter_version": adapter_version,
-            }
+            conversations.append(record)
+            warnings.extend(record_warnings)
+        metadata = dict(source.metadata)
+        metadata.update(raw_metadata)
+        metadata.update(
+            import_execution_id=execution_id,
+            adapter_name=adapter_name,
+            adapter_version=adapter_version,
         )
-        return (
-            {
-                "source": {
-                    "source_type": source.source_type,
-                    "external_id": source.external_id,
-                    "display_name": source.display_name,
-                    "raw_reference": raw_reference,
-                    "vault_reference": source_vault_reference,
-                    "privacy": source.privacy,
-                    "projects": list(source.projects),
-                    "agent_scope": list(source.agent_scope),
-                    "status": source.status,
-                    "metadata": source_metadata,
-                },
-                "conversations": conversations,
+        return {
+            "source": {
+                "source_type": source.source_type,
+                "external_id": source.external_id,
+                "display_name": source.display_name,
+                "raw_reference": raw_reference,
+                "vault_reference": source_vault_reference,
+                "privacy": source.privacy,
+                "projects": list(source.projects),
+                "agent_scope": list(source.agent_scope),
+                "status": source.status,
+                "metadata": metadata,
             },
-            warnings,
-        )
+            "conversations": conversations,
+        }, warnings
 
     def _conversation_record(
         self,
@@ -150,7 +138,6 @@ class StructuredReadModelSink:
         metadata = dict(conversation.metadata)
         if vault_reference:
             metadata["vault_reference"] = vault_reference
-        messages = []
         link_allowed = bool(
             indexing_succeeded
             and document_stable_id
@@ -160,7 +147,7 @@ class StructuredReadModelSink:
             warnings.append(
                 f"memory link skipped for conversation {conversation.external_id}: memory unavailable"
             )
-
+        messages = []
         for message in conversation.messages:
             record = self._message_record(
                 message,
@@ -169,14 +156,11 @@ class StructuredReadModelSink:
                 raw_reference=raw_reference,
             )
             if link_allowed:
-                record["memory_links"] = [
-                    {
-                        "memory_id": document_stable_id,
-                        "relation_type": "contained_in_source_document",
-                    }
-                ]
+                record["memory_links"] = [{
+                    "memory_id": document_stable_id,
+                    "relation_type": "contained_in_source_document",
+                }]
             messages.append(record)
-
         record: dict[str, Any] = {
             "external_id": conversation.external_id,
             "title": conversation.title,
@@ -274,18 +258,20 @@ class StructuredReadModelSink:
         return result
 
     def _memory_exists(self, memory_id: str) -> bool:
-        database = self.memory_database
-        if database is None:
+        if self.memory_database is None:
             return False
-        for method_name in ("get_document", "get_memory", "get"):
-            method = getattr(database, method_name, None)
-            if callable(method):
-                try:
-                    return bool(method(memory_id))
-                except (KeyError, LookupError):
-                    return False
-                except TypeError:
-                    continue
+        for method_name in ("fetch_memory", "get_document", "get_memory", "get"):
+            method = getattr(self.memory_database, method_name, None)
+            if not callable(method):
+                continue
+            try:
+                if method_name == "fetch_memory":
+                    return bool(method(memory_id, include_chunks=False))
+                return bool(method(memory_id))
+            except (KeyError, LookupError):
+                return False
+            except TypeError:
+                continue
         return False
 
     @staticmethod
