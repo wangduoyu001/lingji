@@ -9,7 +9,7 @@ from typing import Any
 
 from .index_coordinator import MemoryIndexCoordinator
 from .memory_db import MemoryDatabase
-from .semantic import SemanticIndexProvider
+from .semantic import SemanticProvider
 
 _COLLECTION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{2,254}$")
 
@@ -87,8 +87,11 @@ class VectorCollectionMigrationService:
         selected_batch_size = int(batch_size)
         if selected_batch_size <= 0:
             raise ValueError("batch_size must be greater than zero")
+        selected_workspace = str(workspace_name or "").strip()
+        if not selected_workspace:
+            raise ValueError("workspace_name must not be empty")
         self.database = database
-        self.workspace_name = str(workspace_name or "").strip()
+        self.workspace_name = selected_workspace
         self.source_collection = self._validate_collection(source_collection, "source_collection")
         self.source_model = self._validate_model(source_model, "source_model")
         self.source_fallback_model = self._validate_model(
@@ -125,12 +128,18 @@ class VectorCollectionMigrationService:
 
     def build_candidate(
         self,
-        target_provider: SemanticIndexProvider,
+        target_provider: SemanticProvider,
         *,
         target_model: str,
         manifest_path: Path | str | None = None,
     ) -> VectorCollectionMigrationResult:
         target_collection = str(getattr(target_provider, "collection", "") or "").strip()
+        provider_workspace = getattr(getattr(target_provider, "workspace", None), "name", None)
+        provider_workspace_name = getattr(provider_workspace, "value", provider_workspace)
+        if provider_workspace_name and str(provider_workspace_name) != self.workspace_name:
+            raise VectorCollectionMigrationError(
+                f"Target provider workspace {provider_workspace_name!r} does not match migration workspace {self.workspace_name!r}"
+            )
         plan = self.plan(
             target_collection=target_collection,
             target_model=target_model,
@@ -241,6 +250,11 @@ class VectorCollectionMigrationService:
         if provider_collection and provider_collection != plan.target_collection:
             failures.append(
                 f"provider status collection {provider_collection!r} does not match target"
+            )
+        status_workspace = str(vector_status.get("workspace") or "")
+        if status_workspace and status_workspace != plan.workspace:
+            failures.append(
+                f"provider status workspace {status_workspace!r} does not match {plan.workspace!r}"
             )
         if failures:
             raise VectorCollectionMigrationError("; ".join(failures))
