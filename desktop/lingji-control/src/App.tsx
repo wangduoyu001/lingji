@@ -4,16 +4,18 @@ import { useLingJiConnection } from "./hooks/useLingJiConnection";
 import { NAVIGATION } from "./navigation";
 import AcceptancePage from "./pages/AcceptancePage";
 import BackupsPage from "./pages/BackupsPage";
+import BrainStatusPage from "./pages/BrainStatusPage";
 import CapturePage from "./pages/CapturePage";
 import JobsPage from "./pages/JobsPage";
 import LogsPage from "./pages/LogsPage";
 import MediaPage from "./pages/MediaPage";
 import ModelsPage from "./pages/ModelsPage";
-import BrainStatusPage from "./pages/BrainStatusPage";
 import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
 import StoragePage from "./pages/StoragePage";
 import SystemComputePage from "./pages/SystemComputePage";
+import VectorCenterPage from "./pages/VectorCenterPage";
+import "./pages/VectorCenterPage.css";
 import type { PageId } from "./types";
 
 export default function App() {
@@ -40,8 +42,9 @@ export default function App() {
         {connection.error && <Notice kind="error">{connection.error}</Notice>}
         {!connection.connected && <Notice kind="warning">先启动 <code>python run_control_api.py</code>。浏览器开发模式需填写 <code>storage/control_api_token</code>。</Notice>}
         <section className="page-content">
-                    {page === "brain_status" && <BrainStatusPage api={connection.api} active={connection.connected} />}
           {page === "overview" && <OverviewPage data={connection.overview} refresh={connection.connect} />}
+          {page === "brain_status" && <BrainStatusPage api={connection.api} active={connection.connected} />}
+          {page === "vector_center" && <VectorCenterPage api={connection.api} active={connection.connected} />}
           {page === "system_compute" && <SystemComputePage api={connection.api} active={connection.connected} />}
           {page === "models" && <ModelsPage api={connection.api} active={connection.connected} />}
           {page === "jobs" && <JobsPage api={connection.api} active={connection.connected} />}
