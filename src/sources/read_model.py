@@ -11,10 +11,15 @@ from typing import Any, Iterable, Iterator, Mapping
 
 SOURCE_READ_MODEL_SCHEMA_VERSION = "1"
 _ID_PREFIXES = {"source": "LJ-SRC", "conversation": "LJ-CONV", "message": "LJ-MSG"}
+_INHERITED_COLUMNS = (
+    ("privacy_inherited", "INTEGER NOT NULL DEFAULT 1"),
+    ("projects_inherited", "INTEGER NOT NULL DEFAULT 1"),
+    ("agent_scope_inherited", "INTEGER NOT NULL DEFAULT 1"),
+)
 
 
 class SourceReadModelError(RuntimeError):
-    """Raised when the rebuildable source read model cannot be queried."""
+    """Raised when the rebuildable source read model cannot be queried safely."""
 
 
 class SourceReadModel:
@@ -48,13 +53,30 @@ class SourceReadModel:
 
     def _initialize(self) -> None:
         with self._lock, self._connection() as connection:
-            connection.executescript(
+            connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS source_read_model_meta (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
-                );
+                )
+                """
+            )
+            version_row = connection.execute(
+                "SELECT value FROM source_read_model_meta WHERE key = 'schema_version'"
+            ).fetchone()
+            if version_row is None:
+                connection.execute(
+                    "INSERT INTO source_read_model_meta(key, value) VALUES ('schema_version', ?)",
+                    (SOURCE_READ_MODEL_SCHEMA_VERSION,),
+                )
+            elif str(version_row["value"]) != SOURCE_READ_MODEL_SCHEMA_VERSION:
+                raise SourceReadModelError(
+                    "Unsupported structured read model schema version: "
+                    f"{version_row['value']}; expected {SOURCE_READ_MODEL_SCHEMA_VERSION}"
+                )
 
+            connection.executescript(
+                """
                 CREATE TABLE IF NOT EXISTS source_records (
                     source_id TEXT PRIMARY KEY,
                     source_type TEXT NOT NULL,
@@ -84,6 +106,9 @@ class SourceReadModel:
                     privacy TEXT NOT NULL DEFAULT 'private',
                     projects_json TEXT NOT NULL DEFAULT '[]',
                     agent_scope_json TEXT NOT NULL DEFAULT '[]',
+                    privacy_inherited INTEGER NOT NULL DEFAULT 1,
+                    projects_inherited INTEGER NOT NULL DEFAULT 1,
+                    agent_scope_inherited INTEGER NOT NULL DEFAULT 1,
                     content_hash TEXT NOT NULL,
                     created_at TEXT,
                     updated_at TEXT,
@@ -106,6 +131,9 @@ class SourceReadModel:
                     privacy TEXT NOT NULL DEFAULT 'private',
                     projects_json TEXT NOT NULL DEFAULT '[]',
                     agent_scope_json TEXT NOT NULL DEFAULT '[]',
+                    privacy_inherited INTEGER NOT NULL DEFAULT 1,
+                    projects_inherited INTEGER NOT NULL DEFAULT 1,
+                    agent_scope_inherited INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT,
                     updated_at TEXT,
                     metadata_json TEXT NOT NULL DEFAULT '{}',
@@ -148,13 +176,68 @@ class SourceReadModel:
                     ON message_memory_links(memory_id, message_id);
                 """
             )
-            connection.execute(
-                """
-                INSERT INTO source_read_model_meta(key, value) VALUES ('schema_version', ?)
-                ON CONFLICT(key) DO UPDATE SET value = excluded.value
-                """,
-                (SOURCE_READ_MODEL_SCHEMA_VERSION,),
+            conversation_added = self._ensure_inheritance_columns(
+                connection, "conversation_records"
             )
+            message_added = self._ensure_inheritance_columns(connection, "message_records")
+            if conversation_added:
+                self._backfill_conversation_inheritance(connection)
+            if message_added:
+                self._backfill_message_inheritance(connection)
+
+    def _ensure_inheritance_columns(
+        self, connection: sqlite3.Connection, table: str
+    ) -> bool:
+        existing = {
+            str(row["name"])
+            for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        added = False
+        for column, definition in _INHERITED_COLUMNS:
+            if column not in existing:
+                connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+                added = True
+        return added
+
+    @staticmethod
+    def _backfill_conversation_inheritance(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            UPDATE conversation_records
+            SET privacy_inherited = CASE WHEN privacy = (
+                    SELECT s.privacy FROM source_records s
+                    WHERE s.source_id = conversation_records.source_id
+                ) THEN 1 ELSE 0 END,
+                projects_inherited = CASE WHEN projects_json = (
+                    SELECT s.projects_json FROM source_records s
+                    WHERE s.source_id = conversation_records.source_id
+                ) THEN 1 ELSE 0 END,
+                agent_scope_inherited = CASE WHEN agent_scope_json = (
+                    SELECT s.agent_scope_json FROM source_records s
+                    WHERE s.source_id = conversation_records.source_id
+                ) THEN 1 ELSE 0 END
+            """
+        )
+
+    @staticmethod
+    def _backfill_message_inheritance(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            UPDATE message_records
+            SET privacy_inherited = CASE WHEN privacy = (
+                    SELECT c.privacy FROM conversation_records c
+                    WHERE c.conversation_id = message_records.conversation_id
+                ) THEN 1 ELSE 0 END,
+                projects_inherited = CASE WHEN projects_json = (
+                    SELECT c.projects_json FROM conversation_records c
+                    WHERE c.conversation_id = message_records.conversation_id
+                ) THEN 1 ELSE 0 END,
+                agent_scope_inherited = CASE WHEN agent_scope_json = (
+                    SELECT c.agent_scope_json FROM conversation_records c
+                    WHERE c.conversation_id = message_records.conversation_id
+                ) THEN 1 ELSE 0 END
+            """
+        )
 
     @staticmethod
     def stable_id(kind: str, *parts: Any) -> str:
@@ -472,7 +555,9 @@ class SourceReadModel:
         with self._connection() as connection:
             counts = {
                 table: int(
-                    connection.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"]
+                    connection.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()[
+                        "count"
+                    ]
                 )
                 for table in (
                     "source_records",
@@ -503,7 +588,7 @@ class SourceReadModel:
         )
         existing = (
             connection.execute(
-                "SELECT source_id FROM source_records WHERE source_type = ? AND external_id = ?",
+                "SELECT * FROM source_records WHERE source_type = ? AND external_id = ?",
                 (source_type, external_id),
             ).fetchone()
             if external_id
@@ -520,6 +605,21 @@ class SourceReadModel:
             )
         )
         now = self._now()
+        privacy = str(
+            record.get("privacy")
+            if "privacy" in record and record.get("privacy") not in (None, "")
+            else (existing["privacy"] if existing else "private")
+        )
+        projects = (
+            self._as_list(record.get("projects") if "projects" in record else record.get("project"))
+            if "projects" in record or "project" in record
+            else self._loads(existing["projects_json"], []) if existing else []
+        )
+        agent_scope = (
+            self._as_list(record.get("agent_scope"))
+            if "agent_scope" in record
+            else self._loads(existing["agent_scope_json"], []) if existing else []
+        )
         connection.execute(
             """
             INSERT INTO source_records(
@@ -549,16 +649,23 @@ class SourceReadModel:
                 external_id,
                 raw_reference,
                 vault_reference,
-                str(record.get("privacy") or "private"),
-                self._json(self._as_list(record.get("projects") or record.get("project"))),
-                self._json(self._as_list(record.get("agent_scope"))),
-                str(record.get("status") or "active"),
+                privacy,
+                self._json(projects),
+                self._json(agent_scope),
+                str(record.get("status") or (existing["status"] if existing else "active")),
                 content_hash,
-                str(record.get("created_at") or now),
+                str(record.get("created_at") or (existing["created_at"] if existing else now)),
                 str(record.get("updated_at") or now),
-                self._json(dict(record.get("metadata") or {})),
+                self._json(
+                    dict(record.get("metadata") or {})
+                    if "metadata" in record
+                    else self._loads(existing["metadata_json"], {})
+                    if existing
+                    else {}
+                ),
             ),
         )
+        self._sync_source_descendants(connection, source_id)
         return source_id
 
     def _upsert_conversation(
@@ -572,14 +679,32 @@ class SourceReadModel:
         if source_row is None:
             raise LookupError(f"source not found: {source_id}")
         external_id = self._optional(record.get("external_id"))
-        title = str(record.get("title") or "Untitled conversation").strip()
-        privacy = str(record.get("privacy") or source_row["privacy"] or "private")
-        projects = self._as_list(record.get("projects") or record.get("project"))
-        if not projects:
-            projects = self._loads(source_row["projects_json"], [])
-        agent_scope = self._as_list(record.get("agent_scope"))
-        if not agent_scope:
-            agent_scope = self._loads(source_row["agent_scope_json"], [])
+        existing = self._find_existing_conversation(connection, record, source_id)
+        title = str(record.get("title") or (existing["title"] if existing else "Untitled conversation")).strip()
+        privacy, privacy_inherited = self._resolve_scalar(
+            record,
+            "privacy",
+            str(source_row["privacy"] or "private"),
+            existing,
+            "privacy",
+            "privacy_inherited",
+        )
+        projects, projects_inherited = self._resolve_list(
+            record,
+            ("projects", "project"),
+            self._loads(source_row["projects_json"], []),
+            existing,
+            "projects_json",
+            "projects_inherited",
+        )
+        agent_scope, agent_scope_inherited = self._resolve_list(
+            record,
+            ("agent_scope",),
+            self._loads(source_row["agent_scope_json"], []),
+            existing,
+            "agent_scope_json",
+            "agent_scope_inherited",
+        )
         content_hash = str(record.get("content_hash") or "").strip() or self.content_hash(
             json.dumps(
                 {
@@ -591,14 +716,6 @@ class SourceReadModel:
                 ensure_ascii=False,
                 sort_keys=True,
             )
-        )
-        existing = (
-            connection.execute(
-                "SELECT conversation_id FROM conversation_records WHERE source_id = ? AND external_id = ?",
-                (source_id, external_id),
-            ).fetchone()
-            if external_id
-            else None
         )
         conversation_id = (
             str(existing["conversation_id"])
@@ -612,8 +729,9 @@ class SourceReadModel:
             INSERT INTO conversation_records(
                 conversation_id, source_id, external_id, title, participants_json,
                 started_at, ended_at, message_count, privacy, projects_json,
-                agent_scope_json, content_hash, created_at, updated_at, metadata_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                agent_scope_json, privacy_inherited, projects_inherited,
+                agent_scope_inherited, content_hash, created_at, updated_at, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(conversation_id) DO UPDATE SET
                 source_id = excluded.source_id,
                 external_id = excluded.external_id,
@@ -625,6 +743,9 @@ class SourceReadModel:
                 privacy = excluded.privacy,
                 projects_json = excluded.projects_json,
                 agent_scope_json = excluded.agent_scope_json,
+                privacy_inherited = excluded.privacy_inherited,
+                projects_inherited = excluded.projects_inherited,
+                agent_scope_inherited = excluded.agent_scope_inherited,
                 content_hash = excluded.content_hash,
                 created_at = COALESCE(conversation_records.created_at, excluded.created_at),
                 updated_at = excluded.updated_at,
@@ -635,19 +756,47 @@ class SourceReadModel:
                 source_id,
                 external_id,
                 title,
-                self._json(self._as_list(record.get("participants"))),
-                self._optional(record.get("started_at")),
-                self._optional(record.get("ended_at")),
-                int(record.get("message_count") or len(record.get("messages") or [])),
+                self._json(
+                    self._as_list(record.get("participants"))
+                    if "participants" in record
+                    else self._loads(existing["participants_json"], []) if existing else []
+                ),
+                self._optional(
+                    record.get("started_at")
+                    if "started_at" in record
+                    else existing["started_at"] if existing else None
+                ),
+                self._optional(
+                    record.get("ended_at")
+                    if "ended_at" in record
+                    else existing["ended_at"] if existing else None
+                ),
+                int(
+                    record.get("message_count")
+                    if record.get("message_count") is not None
+                    else len(record.get("messages") or [])
+                    if "messages" in record
+                    else existing["message_count"] if existing else 0
+                ),
                 privacy,
                 self._json(projects),
                 self._json(agent_scope),
+                privacy_inherited,
+                projects_inherited,
+                agent_scope_inherited,
                 content_hash,
-                str(record.get("created_at") or now),
+                str(record.get("created_at") or (existing["created_at"] if existing else now)),
                 str(record.get("updated_at") or now),
-                self._json(dict(record.get("metadata") or {})),
+                self._json(
+                    dict(record.get("metadata") or {})
+                    if "metadata" in record
+                    else self._loads(existing["metadata_json"], {})
+                    if existing
+                    else {}
+                ),
             ),
         )
+        self._sync_conversation_messages(connection, conversation_id)
         return conversation_id
 
     def _upsert_message(self, connection: sqlite3.Connection, record: Mapping[str, Any]) -> str:
@@ -665,24 +814,38 @@ class SourceReadModel:
         if str(conversation_row["source_id"]) != source_id:
             raise ValueError("message source_id does not match conversation source_id")
         role = self._required(record.get("role"), "role")
-        privacy = str(record.get("privacy") or conversation_row["privacy"] or "private")
-        projects = self._as_list(record.get("projects") or record.get("project"))
-        if not projects:
-            projects = self._loads(conversation_row["projects_json"], [])
-        agent_scope = self._as_list(record.get("agent_scope"))
-        if not agent_scope:
-            agent_scope = self._loads(conversation_row["agent_scope_json"], [])
-        content = str(record.get("content") or "")
-        content_hash = str(record.get("content_hash") or "").strip() or self.content_hash(content)
         external_id = self._optional(record.get("external_id"))
-        sequence = int(record.get("sequence") if record.get("sequence") is not None else 0)
-        existing = (
-            connection.execute(
-                "SELECT message_id FROM message_records WHERE conversation_id = ? AND external_id = ?",
-                (conversation_id, external_id),
-            ).fetchone()
-            if external_id
-            else None
+        existing = self._find_existing_message(connection, record, conversation_id)
+        privacy, privacy_inherited = self._resolve_scalar(
+            record,
+            "privacy",
+            str(conversation_row["privacy"] or "private"),
+            existing,
+            "privacy",
+            "privacy_inherited",
+        )
+        projects, projects_inherited = self._resolve_list(
+            record,
+            ("projects", "project"),
+            self._loads(conversation_row["projects_json"], []),
+            existing,
+            "projects_json",
+            "projects_inherited",
+        )
+        agent_scope, agent_scope_inherited = self._resolve_list(
+            record,
+            ("agent_scope",),
+            self._loads(conversation_row["agent_scope_json"], []),
+            existing,
+            "agent_scope_json",
+            "agent_scope_inherited",
+        )
+        content = str(record.get("content") if "content" in record else existing["content"] if existing else "")
+        content_hash = str(record.get("content_hash") or "").strip() or self.content_hash(content)
+        sequence = int(
+            record.get("sequence")
+            if record.get("sequence") is not None
+            else existing["sequence"] if existing else 0
         )
         message_id = (
             str(existing["message_id"])
@@ -700,8 +863,9 @@ class SourceReadModel:
             INSERT INTO message_records(
                 message_id, conversation_id, source_id, external_id, role, author,
                 occurred_at, sequence, content, content_hash, raw_reference, privacy,
-                projects_json, agent_scope_json, created_at, updated_at, metadata_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                projects_json, agent_scope_json, privacy_inherited, projects_inherited,
+                agent_scope_inherited, created_at, updated_at, metadata_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(message_id) DO UPDATE SET
                 conversation_id = excluded.conversation_id,
                 source_id = excluded.source_id,
@@ -716,6 +880,9 @@ class SourceReadModel:
                 privacy = excluded.privacy,
                 projects_json = excluded.projects_json,
                 agent_scope_json = excluded.agent_scope_json,
+                privacy_inherited = excluded.privacy_inherited,
+                projects_inherited = excluded.projects_inherited,
+                agent_scope_inherited = excluded.agent_scope_inherited,
                 created_at = COALESCE(message_records.created_at, excluded.created_at),
                 updated_at = excluded.updated_at,
                 metadata_json = excluded.metadata_json
@@ -726,18 +893,37 @@ class SourceReadModel:
                 source_id,
                 external_id,
                 role,
-                self._optional(record.get("author")),
-                self._optional(record.get("occurred_at")),
+                self._optional(
+                    record.get("author") if "author" in record else existing["author"] if existing else None
+                ),
+                self._optional(
+                    record.get("occurred_at")
+                    if "occurred_at" in record
+                    else existing["occurred_at"] if existing else None
+                ),
                 sequence,
                 content,
                 content_hash,
-                self._optional(record.get("raw_reference")),
+                self._optional(
+                    record.get("raw_reference")
+                    if "raw_reference" in record
+                    else existing["raw_reference"] if existing else None
+                ),
                 privacy,
                 self._json(projects),
                 self._json(agent_scope),
-                str(record.get("created_at") or now),
+                privacy_inherited,
+                projects_inherited,
+                agent_scope_inherited,
+                str(record.get("created_at") or (existing["created_at"] if existing else now)),
                 str(record.get("updated_at") or now),
-                self._json(dict(record.get("metadata") or {})),
+                self._json(
+                    dict(record.get("metadata") or {})
+                    if "metadata" in record
+                    else self._loads(existing["metadata_json"], {})
+                    if existing
+                    else {}
+                ),
             ),
         )
         connection.execute(
@@ -751,6 +937,145 @@ class SourceReadModel:
             (conversation_id, now, conversation_id),
         )
         return message_id
+
+    def _sync_source_descendants(self, connection: sqlite3.Connection, source_id: str) -> None:
+        source = connection.execute(
+            "SELECT privacy, projects_json, agent_scope_json FROM source_records WHERE source_id = ?",
+            (source_id,),
+        ).fetchone()
+        if source is None:
+            return
+        connection.execute(
+            """
+            UPDATE conversation_records
+            SET privacy = CASE WHEN privacy_inherited = 1 THEN ? ELSE privacy END,
+                projects_json = CASE WHEN projects_inherited = 1 THEN ? ELSE projects_json END,
+                agent_scope_json = CASE WHEN agent_scope_inherited = 1 THEN ? ELSE agent_scope_json END
+            WHERE source_id = ?
+            """,
+            (
+                source["privacy"],
+                source["projects_json"],
+                source["agent_scope_json"],
+                source_id,
+            ),
+        )
+        connection.execute(
+            """
+            UPDATE message_records
+            SET privacy = CASE WHEN privacy_inherited = 1 THEN (
+                    SELECT c.privacy FROM conversation_records c
+                    WHERE c.conversation_id = message_records.conversation_id
+                ) ELSE privacy END,
+                projects_json = CASE WHEN projects_inherited = 1 THEN (
+                    SELECT c.projects_json FROM conversation_records c
+                    WHERE c.conversation_id = message_records.conversation_id
+                ) ELSE projects_json END,
+                agent_scope_json = CASE WHEN agent_scope_inherited = 1 THEN (
+                    SELECT c.agent_scope_json FROM conversation_records c
+                    WHERE c.conversation_id = message_records.conversation_id
+                ) ELSE agent_scope_json END
+            WHERE source_id = ?
+            """,
+            (source_id,),
+        )
+
+    def _sync_conversation_messages(
+        self, connection: sqlite3.Connection, conversation_id: str
+    ) -> None:
+        parent = connection.execute(
+            """
+            SELECT privacy, projects_json, agent_scope_json
+            FROM conversation_records WHERE conversation_id = ?
+            """,
+            (conversation_id,),
+        ).fetchone()
+        if parent is None:
+            return
+        connection.execute(
+            """
+            UPDATE message_records
+            SET privacy = CASE WHEN privacy_inherited = 1 THEN ? ELSE privacy END,
+                projects_json = CASE WHEN projects_inherited = 1 THEN ? ELSE projects_json END,
+                agent_scope_json = CASE WHEN agent_scope_inherited = 1 THEN ? ELSE agent_scope_json END
+            WHERE conversation_id = ?
+            """,
+            (
+                parent["privacy"],
+                parent["projects_json"],
+                parent["agent_scope_json"],
+                conversation_id,
+            ),
+        )
+
+    def _find_existing_conversation(
+        self, connection: sqlite3.Connection, record: Mapping[str, Any], source_id: str
+    ) -> sqlite3.Row | None:
+        external_id = self._optional(record.get("external_id"))
+        if external_id:
+            row = connection.execute(
+                "SELECT * FROM conversation_records WHERE source_id = ? AND external_id = ?",
+                (source_id, external_id),
+            ).fetchone()
+            if row is not None:
+                return row
+        conversation_id = str(record.get("conversation_id") or "").strip()
+        if conversation_id:
+            return connection.execute(
+                "SELECT * FROM conversation_records WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()
+        return None
+
+    def _find_existing_message(
+        self, connection: sqlite3.Connection, record: Mapping[str, Any], conversation_id: str
+    ) -> sqlite3.Row | None:
+        external_id = self._optional(record.get("external_id"))
+        if external_id:
+            row = connection.execute(
+                "SELECT * FROM message_records WHERE conversation_id = ? AND external_id = ?",
+                (conversation_id, external_id),
+            ).fetchone()
+            if row is not None:
+                return row
+        message_id = str(record.get("message_id") or "").strip()
+        if message_id:
+            return connection.execute(
+                "SELECT * FROM message_records WHERE message_id = ?", (message_id,)
+            ).fetchone()
+        return None
+
+    @staticmethod
+    def _resolve_scalar(
+        record: Mapping[str, Any],
+        key: str,
+        parent_value: str,
+        existing: sqlite3.Row | None,
+        value_column: str,
+        inherited_column: str,
+    ) -> tuple[str, int]:
+        if key in record and record.get(key) not in (None, ""):
+            return str(record.get(key)), 0
+        if existing is not None:
+            return str(existing[value_column]), int(existing[inherited_column])
+        return parent_value, 1
+
+    @classmethod
+    def _resolve_list(
+        cls,
+        record: Mapping[str, Any],
+        keys: tuple[str, ...],
+        parent_value: list[Any],
+        existing: sqlite3.Row | None,
+        value_column: str,
+        inherited_column: str,
+    ) -> tuple[list[Any], int]:
+        for key in keys:
+            if key in record:
+                return cls._as_list(record.get(key)), 0
+        if existing is not None:
+            return cls._loads(existing[value_column], []), int(existing[inherited_column])
+        return list(parent_value), 1
 
     def _link_message_memory(
         self,
@@ -943,6 +1268,9 @@ class SourceReadModel:
         item["participants"] = cls._loads(item.pop("participants_json", "[]"), [])
         item["projects"] = cls._loads(item.pop("projects_json", "[]"), [])
         item["agent_scope"] = cls._loads(item.pop("agent_scope_json", "[]"), [])
+        item["privacy_inherited"] = bool(item.get("privacy_inherited"))
+        item["projects_inherited"] = bool(item.get("projects_inherited"))
+        item["agent_scope_inherited"] = bool(item.get("agent_scope_inherited"))
         item["metadata"] = cls._loads(item.pop("metadata_json", "{}"), {})
         return item
 
@@ -956,6 +1284,9 @@ class SourceReadModel:
             item["content"] = content
         item["projects"] = cls._loads(item.pop("projects_json", "[]"), [])
         item["agent_scope"] = cls._loads(item.pop("agent_scope_json", "[]"), [])
+        item["privacy_inherited"] = bool(item.get("privacy_inherited"))
+        item["projects_inherited"] = bool(item.get("projects_inherited"))
+        item["agent_scope_inherited"] = bool(item.get("agent_scope_inherited"))
         item["metadata"] = cls._loads(item.pop("metadata_json", "{}"), {})
         return item
 
