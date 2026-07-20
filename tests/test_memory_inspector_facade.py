@@ -5,15 +5,16 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from src.gateway.memory_inspector import MemoryInspectorFacade
+from src.gateway import MemoryInspectorFacade
 from src.gateway.profiles import AIProfileRegistry
 from src.retrieval import MemoryDatabase
 from src.sources import SourceQueryService, SourceReadModel
 
 
 class FakeStatistics:
-    def __init__(self, workspace="acceptance"):
+    def __init__(self, workspace="acceptance", rebuild_required=False):
         self.workspace = workspace
+        self.rebuild_required = rebuild_required
 
     def memory_status(self):
         return {
@@ -31,7 +32,7 @@ class FakeStatistics:
             "workspace": self.workspace,
             "collection": "acceptance_vectors",
             "dimension": 1024,
-            "rebuild_required": False,
+            "rebuild_required": self.rebuild_required,
             "last_error": None,
         }
 
@@ -176,6 +177,18 @@ class MemoryInspectorFacadeTests(unittest.TestCase):
         chunk = facade.memory_vector("MEM-1")["vector"]["chunks"][0]
         self.assertIsNone(chunk["exists"])
         self.assertEqual(chunk["source"], "unavailable")
+
+    def test_rebuild_required_none_remains_unknown_at_all_levels(self):
+        facade = MemoryInspectorFacade(
+            self.database,
+            self.facade.source_service,
+            FakeStatistics(rebuild_required=None),
+            gateway=None,
+            workspace="acceptance",
+        )
+        response = facade.memory_vector("MEM-1")
+        self.assertIsNone(response["vector"]["rebuild_required"])
+        self.assertIsNone(response["vector"]["chunks"][0]["rebuild_required"])
 
     def test_production_and_acceptance_database_are_isolated(self):
         root = Path(self.temp_dir.name)
