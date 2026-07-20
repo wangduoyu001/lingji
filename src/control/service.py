@@ -8,6 +8,7 @@ from src.acceptance import AcceptanceChecker
 from src.acceptance_reports import AcceptanceReportStore
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.extraction.queue import SQLiteExtractionQueue
+from src.gateway.memory_statistics import MemoryStatisticsService
 from src.hardware import HardwareCapabilityService
 from src.health import StartupHealthChecker
 from src.media import (
@@ -33,6 +34,8 @@ class LocalControlService:
         pipeline: Any | None = None,
         hardware: HardwareCapabilityService | None = None,
         model_inventory: LocalModelInventoryService | None = None,
+        memory_gateway: Any | None = None,
+        memory_statistics: MemoryStatisticsService | None = None,
     ):
         self.settings = settings
         self.state_db = state_db or StateDatabase(settings.state_db_path)
@@ -49,10 +52,18 @@ class LocalControlService:
             settings,
             runtime_settings=self.runtime_settings,
         )
+        self.memory_gateway = memory_gateway
+        live_statistics = getattr(memory_gateway, "statistics", None)
+        self.memory_statistics = memory_statistics or live_statistics or MemoryStatisticsService(
+            snapshot_path=MemoryStatisticsService.snapshot_path_for(
+                settings,
+                getattr(memory_gateway, "workspace", None),
+            )
+        )
         self._sync_hardware_settings()
 
     def brain_status(self) -> dict:
-        """Aggregate brain status: memory, vector, model, GPU, recent tasks."""
+        """Aggregate truthful brain status without converting unknown values to zero."""
         try:
             overview = self.overview()
         except Exception:
@@ -65,43 +76,89 @@ class LocalControlService:
             inv = self.model_inventory.inventory(force=False)
         except Exception:
             inv = {}
+
+        memory_runtime = self.memory_statistics.snapshot()
+        memory = dict(memory_runtime.get("memory") or {})
+        vector = dict(memory_runtime.get("vector") or {})
+        embedding = dict(memory_runtime.get("embedding") or {})
         health = overview.get("health", {})
-        mem = overview.get("memory_stats", {})
         gpus = hw.get("gpus", [])
-        # Enrich GPU data with nvidia-smi utilization
+
         for gpu in gpus:
             gpu["utilization_percent"] = 0
         import subprocess
+
         try:
             smi_out = subprocess.run(
                 ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, timeout=5, check=False
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
             )
             if smi_out.returncode == 0:
-                util_lines = [l.strip() for l in smi_out.stdout.strip().split("\n") if l.strip()]
-                for i, gpu in enumerate(gpus):
-                    if i < len(util_lines) and util_lines[i].isdigit():
-                        gpu["utilization_percent"] = int(util_lines[i])
+                util_lines = [line.strip() for line in smi_out.stdout.strip().split("\n") if line.strip()]
+                for index, gpu in enumerate(gpus):
+                    if index < len(util_lines) and util_lines[index].isdigit():
+                        gpu["utilization_percent"] = int(util_lines[index])
         except Exception:
             pass
+
         assignments = inv.get("assignments", [])
-        chat_model = next((a["model"] for a in assignments if a["role"] == "chat_primary"), "N/A")
-        embed_model = next((a["model"] for a in assignments if a["role"] == "embedding_primary"), "N/A")
+        chat_model = next(
+            (item["model"] for item in assignments if item["role"] == "chat_primary"),
+            "N/A",
+        )
+        inventory_embed_model = next(
+            (item["model"] for item in assignments if item["role"] == "embedding_primary"),
+            "N/A",
+        )
+        embed_model = (
+            embedding.get("active_model")
+            or embedding.get("primary_model")
+            or inventory_embed_model
+        )
+        memory_state = str(memory_runtime.get("state") or "configuration_required")
+        health_state = str(health.get("status") or "unknown")
+        system_status = memory_state if memory_state != "healthy" else health_state
+
         return {
-            "memory_count": mem.get("total_entries", 0),
-            "memory_bytes": mem.get("total_bytes", 0),
-            "vector_count": mem.get("vector_count", 0),
+            "memory_count": memory.get("documents"),
+            "memory_chunk_count": memory.get("chunks"),
+            "memory_bytes": memory.get("database_bytes"),
+            "memory_revision": memory.get("revision"),
+            "memory_state": memory.get("state"),
+            "vector_count": vector.get("vectors"),
+            "vector_state": vector.get("state"),
+            "vector_collection": vector.get("collection"),
+            "vector_dimension": vector.get("dimension"),
+            "vector_rebuild_required": bool(vector.get("rebuild_required")),
+            "embedding_state": embedding.get("state"),
             "chat_model": chat_model,
             "embed_model": embed_model,
             "installed_models": inv.get("summary", {}).get("installed_models", 0),
             "gpus": gpus,
             "compute_mode": hw.get("compute", {}).get("mode", "unknown"),
-            "cuda_version": hw.get("cuda", {}).get("runtime_version") or hw.get("cuda", {}).get("driver_cuda_version", "N/A"),
+            "cuda_version": hw.get("cuda", {}).get("runtime_version")
+            or hw.get("cuda", {}).get("driver_cuda_version", "N/A"),
             "recent_tasks": [],
             "processing_status": "idle",
-            "system_status": health.get("status", "unknown"),
+            "system_status": system_status,
+            "workspace": memory_runtime.get("workspace"),
+            "status_source": memory_runtime.get("source"),
+            "status_stale": bool(memory_runtime.get("stale")),
+            "status_as_of": memory_runtime.get("as_of"),
+            "warnings": list(memory_runtime.get("warnings") or []),
         }
 
+    def memory_status(self) -> dict[str, Any]:
+        return self.memory_statistics.memory_status()
+
+    def vector_status(self) -> dict[str, Any]:
+        return self.memory_statistics.vector_status()
+
+    def vector_coverage(self) -> dict[str, Any]:
+        return self.memory_statistics.vector_coverage()
 
     def get_settings(self) -> dict[str, Any]:
         return self.runtime_settings.snapshot()
@@ -170,8 +227,14 @@ class LocalControlService:
         free_bytes = int(inventory["totals"]["disk_free_bytes"])
         minimum_free = int(float(values["storage_min_free_gb"]) * 1024**3)
         capabilities = self.hardware_capabilities()
+        memory_runtime = self.memory_statistics.snapshot()
         return {
             "health": self.health(),
+            "memory_runtime": memory_runtime,
+            "memory_stats": dict(memory_runtime.get("memory") or {}),
+            "embedding_status": dict(memory_runtime.get("embedding") or {}),
+            "vector_status": dict(memory_runtime.get("vector") or {}),
+            "vector_coverage": dict(memory_runtime.get("coverage") or {}),
             "queue": {
                 "stats": self.queue.stats(),
                 "recent": self.queue.list(limit=20),
@@ -320,7 +383,10 @@ class LocalControlService:
         return self.backups.stage_restore(backup, confirmation)
 
     def provider_status(self) -> dict[str, Any]:
+        memory_runtime = self.memory_statistics.snapshot()
         return {
+            "embedding": dict(memory_runtime.get("embedding") or {}),
+            "qdrant": dict(memory_runtime.get("vector") or {}),
             "faster_whisper": {
                 "available": FasterWhisperProvider.available(),
                 "capability": "asr",
