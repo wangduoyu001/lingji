@@ -35,6 +35,7 @@ class ControlApiTests(unittest.TestCase):
         response = self.client.get("/api/settings", headers=self.headers)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["values"]["media_max_keyframes"], 500)
+        self.assertEqual(response.json()["runtime_contracts"]["mcp"]["port"], 8767)
         response = self.client.patch(
             "/api/settings",
             headers=self.headers,
@@ -49,6 +50,17 @@ class ControlApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["values"]["media_max_keyframes"], 500)
+
+    def test_mcp_status_exposes_configuration_without_claiming_running_state(self):
+        response = self.client.get("/api/mcp/status", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["transport"], "stdio")
+        self.assertEqual(payload["compatibility_port"], 8765)
+        self.assertEqual(payload["control_port"], 8766)
+        self.assertEqual(payload["port"], 8767)
+        self.assertTrue(payload["contract_valid"])
+        self.assertIsNone(payload["running"])
 
 
 if __name__ == "__main__":
