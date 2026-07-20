@@ -1,33 +1,33 @@
-# LingJi Code Map
+# CODE_MAP.md — LingJi 代码地图
 
-> Updated: 2026-07-20
-> Purpose: identify real long-term entry points before development.
-> Architecture: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
-> Execution roadmap: `docs/MODULES/UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md`
+> Updated（更新时间）: 2026-07-20  
+> Formal Branch（正式分支）: `feature/second-brain-memory`  
+> Validated Code Commit（已验证代码提交）: `8a4860553edfbb698665c7dcb1f8bfaf3f556eba`  
+> Current Development（当前开发）: P2-03 Structured Read Model（结构化读取模型）
 
-## 1. Repository Roles
+## 1. 仓库职责
 
 ```text
 src/
-= long-term platform mainline
+= 长期平台主线
 
 second_brain/
-= compatibility, migration and acceptance source
+= Compatibility/Migration Runtime（兼容与迁移运行层）
 
 desktop/lingji-control/
-= only primary desktop UI
+= 唯一正式 Desktop UI（桌面用户界面）
 
 second_brain/desktop/
-= compatibility acceptance and diagnostic UI
+= 旧 PySide6 兼容、验收和诊断界面
 ```
 
-Do not infer product ownership from directory names. Confirm the real service and data flow before changing code.
+开发前必须确认真实服务和数据流，不能仅凭目录名猜测功能归属。
 
-## 2. Unified Runtime Flow
+## 2. 当前统一运行链路
 
 ```text
-src/extraction
-  -> raw snapshot and Vault documents
+src/extraction/
+  -> Raw Snapshot（原始快照）和 Vault 文档
   -> MemoryIndexCoordinator
        -> lingji_memory.db
        -> QdrantSemanticProvider
@@ -40,87 +40,84 @@ src/extraction
   -> Tauri UI
 ```
 
-The Provider, Coordinator and Gateway chain is wired by `build_memory_gateway()`. P1-05 adds a shared status snapshot so the Local Control process does not reopen the same embedded Qdrant directory.
+Provider（提供器）、Coordinator（协调器）和 Gateway（网关）由 `build_memory_gateway()` 统一装配。
 
-## 3. Canonical Data And Indexes
+## 3. 数据权威与索引
 
 ```text
 Obsidian Vault + Git
-= permanent memory and formal knowledge text
+= 永久记忆和正式知识文本
 
-workspace raw path
-= original imported material
+Workspace raw path
+= 原始导入材料
 
 src/storage/state_db.py
-= jobs, processing state, queue and audit events
+= 任务、处理状态、队列和 Audit Event（审计事件）
 
 src/retrieval/memory_db.py
-= rebuildable lexical and metadata index
+= 可重建 Lexical/Metadata Index（词法与元数据索引）
 
 src/retrieval/qdrant_provider.py
-= rebuildable semantic index provider
+= 可重建 Semantic Index Provider（语义向量索引提供器）
 
 <workspace storage>/memory_status.json
-= rebuildable runtime status snapshot, never memory authority
+= 可重建 Runtime Status Snapshot（运行状态快照）
 ```
 
-`second_brain/db.py` remains compatibility data during migration. It is not the final authority.
+`second_brain/db.py` 仍是迁移期 Compatibility Data（兼容数据），不是最终数据权威。
 
-## 4. Runtime Contracts
+Source/Conversation/Message（来源、对话、消息）数据必须迁移为可重建 Read Model（读取模型），不能让兼容数据库成为长期事实源。
 
-| Capability | Current long-term entry | Status |
+## 4. Workspace（工作区）入口
+
+| 能力 | 正式入口 | 状态 |
 |---|---|---|
-| Workspace names | `src/runtime/workspace.py::WorkspaceName` | implemented |
-| Workspace data object | `src/runtime/workspace.py::WorkspaceContext` | implemented |
-| Workspace resolution | `src/runtime/workspace.py::WorkspaceResolver` | implemented |
-| Workspace validation error | `src/runtime/workspace.py::WorkspaceValidationError` | implemented |
-| Port/process contract | `src/runtime/ports.py` | implemented, local validation pending |
-| Semantic runtime assembly | `src/gateway/bootstrap.py::build_memory_gateway()` | implemented, local validation pending |
-| Shared memory/vector statistics | `src/gateway/memory_statistics.py::MemoryStatisticsService` | implemented, local validation pending |
-| Isolated local validator | `scripts/validate_p1_05_local.py` | implemented |
+| Workspace 名称 | `src/runtime/workspace.py::WorkspaceName` | 已实现并验证 |
+| Workspace 对象 | `src/runtime/workspace.py::WorkspaceContext` | 已实现并验证 |
+| Workspace 解析 | `src/runtime/workspace.py::WorkspaceResolver` | 已实现并验证 |
+| Workspace 验证错误 | `src/runtime/workspace.py::WorkspaceValidationError` | 已实现 |
+| 端口合同 | `src/runtime/ports.py` | 已实现并验证 |
+| P1 本机验收 | `scripts/validate_p1_05_local.py` | 已通过 |
+| P2-02 隔离验收 | `scripts/validate_p2_02_local.py` | 已通过 |
 
-Without an explicit workspace, production retains the existing Vault and SQLite transition paths. Explicit acceptance contexts use the isolated P0-03 paths and collection.
+每个 Workspace 隔离：
 
-## 5. Workspace Resource Contract
-
-Each `WorkspaceContext` resolves:
-
-- Vault and raw archive
-- storage root
+- Vault
+- Raw Archive（原始资料归档）
 - `lingji_state.db`
 - `lingji_memory.db`
-- Qdrant mode, path or URL, and collection
-- logs and cache
-- runtime settings and task queue database
-- backups, derived files, temporary files and reports
+- Qdrant 路径或 URL 与 Collection
+- 日志和缓存
+- Runtime Settings（运行时设置）
+- 队列数据库
+- 备份、派生文件和报告
 
-Production and acceptance paths must not overlap. Qdrant collection names must differ even when a remote URL is shared.
+Production 与 Acceptance 路径不得重叠。
 
-## 6. Long-Term Memory Entry Points
+## 5. 正式记忆入口
 
-| Capability | Current long-term entry | Status |
+| 能力 | 正式入口 | 状态 |
 |---|---|---|
-| Memory gateway | `src/gateway/memory_gateway.py::MemoryGateway` | implemented; semantic-aware |
-| Runtime assembly | `src/gateway/bootstrap.py::build_memory_gateway()` | semantic and statistics wired |
-| AI profiles | `src/gateway/profiles.py::AIProfileRegistry` | implemented |
-| Lexical/semantic fusion | `src/retrieval/hybrid.py::HybridRetriever` | implemented |
-| Semantic contracts | `src/retrieval/semantic.py` | implemented |
-| Qdrant provider | `src/retrieval/qdrant_provider.py::QdrantSemanticProvider` | implemented and wired |
-| Embedding provider | `src/model_center/embedding.py::OllamaEmbeddingProvider` | implemented and wired |
-| Embedding factory | `src/model_center/embedding.py::build_embedding_provider()` | implemented |
-| Enhanced Chinese fallback | `src/retrieval/enhanced.py` | implemented |
-| Rebuildable memory index | `src/retrieval/memory_db.py::MemoryDatabase` | implemented |
-| Chunking | `src/retrieval/chunker.py::MarkdownChunker` | implemented |
-| Context Pack | `src/retrieval/context_pack.py::ContextPackBuilder` | implemented |
-| Incremental lexical sync | `src/retrieval/incremental_sync.py::IncrementalMemorySynchronizer` | coordinator implementation detail |
-| Lexical/vector coordinator | `src/retrieval/index_coordinator.py::MemoryIndexCoordinator` | implemented and wired |
-| Shared status service | `src/gateway/memory_statistics.py::MemoryStatisticsService` | implemented and wired |
-| Permanent-memory lifecycle | `src/memory/lifecycle.py::MemoryLifecycleService` | implemented |
-| State and events | `src/storage/state_db.py::StateDatabase` | implemented |
-| MCP tools/resources/prompts | `src/mcp_server.py` | coordinated indexing and status publishing |
-| MCP CLI startup | `run_mcp_server.py` | implemented |
+| Memory Gateway（记忆网关） | `src/gateway/memory_gateway.py::MemoryGateway` | 已实现，支持语义检索 |
+| Runtime Assembly（运行时装配） | `src/gateway/bootstrap.py::build_memory_gateway()` | 已实现并验证 |
+| AI Profile（AI 权限配置） | `src/gateway/profiles.py::AIProfileRegistry` | 已实现 |
+| 混合检索 | `src/retrieval/hybrid.py::HybridRetriever` | 已实现 |
+| 语义合同 | `src/retrieval/semantic.py` | 已实现 |
+| Qdrant Provider | `src/retrieval/qdrant_provider.py::QdrantSemanticProvider` | 已实现并接线 |
+| Embedding Provider | `src/model_center/embedding.py::OllamaEmbeddingProvider` | 已实现并接线 |
+| Embedding Factory（构建工厂） | `src/model_center/embedding.py::build_embedding_provider()` | 已实现 |
+| 中文短词回退 | `src/retrieval/enhanced.py` | 已实现 |
+| Memory Database（记忆数据库） | `src/retrieval/memory_db.py::MemoryDatabase` | 已实现 |
+| Chunker（文本分块器） | `src/retrieval/chunker.py::MarkdownChunker` | 已实现 |
+| Context Pack（上下文包） | `src/retrieval/context_pack.py::ContextPackBuilder` | 已实现 |
+| Incremental Sync（增量同步） | `src/retrieval/incremental_sync.py` | Coordinator 内部实现 |
+| Lexical/Vector Coordinator（词法与向量协调器） | `src/retrieval/index_coordinator.py::MemoryIndexCoordinator` | 已实现并验证 |
+| Status Service（状态服务） | `src/gateway/memory_statistics.py::MemoryStatisticsService` | 已实现并验证 |
+| Memory Lifecycle（记忆生命周期） | `src/memory/lifecycle.py::MemoryLifecycleService` | 已实现 |
+| State/Audit（状态与审计） | `src/storage/state_db.py::StateDatabase` | 已实现 |
+| MCP | `src/mcp_server.py` | 已接入协调索引和状态发布 |
 
-Current semantic and status chain:
+当前正式链路：
 
 ```text
 build_memory_gateway()
@@ -133,168 +130,172 @@ build_memory_gateway()
   -> atomic memory_status.json
 ```
 
-A semantic initialization error returns a lexical-only Gateway and a structured warning. It does not fail startup or fabricate vector counts.
+语义初始化失败时，Gateway 降级为 Lexical-only（仅词法检索），不得伪造向量成功状态。
 
-## 7. Provider And Status Boundaries
+## 6. Provider 与状态边界
 
 ```text
 src/model_center/embedding.py
-  -> vectors and verified model state
+  -> 向量生成和实际模型状态
 
 src/retrieval/qdrant_provider.py
-  -> semantic candidates
+  -> semantic candidates（语义候选）
   -> upsert/delete
   -> count/exists/coverage/status
 
 src/retrieval/index_coordinator.py
-  -> lexical commit first
-  -> canonical before/after snapshots
-  -> semantic delta
-  -> structured degraded warnings
+  -> lexical commit first（词法优先提交）
+  -> canonical snapshot（标准快照）
+  -> semantic delta（语义增量）
+  -> structured degraded warnings（结构化降级警告）
 
 src/retrieval/hybrid.py
-  -> canonical resolve
-  -> privacy and Agent Scope checks
-  -> RRF and metadata boosts
+  -> canonical resolve（标准结果解析）
+  -> privacy/Agent Scope 过滤
+  -> RRF（倒数排名融合）和 metadata boost（元数据加权）
 
 src/gateway/memory_statistics.py
-  -> memory/vector/embedding counters and health
-  -> no memory text or vectors
-  -> status snapshot for the control process
+  -> memory/vector/embedding 统计与健康状态
+  -> 不包含正文和原始向量
+  -> 为 Control Process（控制进程）提供快照
 ```
 
-Qdrant is not a permanent memory authority or a second ranking pipeline. The control process must not open embedded Qdrant merely to display status.
+Control Process 不得为了显示状态再次打开 Embedded Qdrant（嵌入式 Qdrant）。
 
-## 8. Unified Ingestion Entry Points
+## 7. Collection Migration（向量集合迁移）
 
-| Capability | Real entry |
-|---|---|
-| Adapter interface | `src/extraction/base.py::ExtractionAdapter` |
-| Adapter registry | `src/extraction/registry.py::AdapterRegistry` |
-| Pipeline | `src/extraction/pipeline.py::ExtractionPipeline` |
-| Persistent queue | `src/extraction/queue.py::SQLiteExtractionQueue` |
-| Worker | `src/extraction/worker.py::ExtractionWorker` |
-| Vault/raw sink | `src/extraction/sink.py::VaultExtractionSink` |
-| Runtime assembly | `src/extraction/bootstrap.py::build_extraction_pipeline()` |
-| ChatGPT import | `src/extraction/adapters/chatgpt.py::ChatGPTExportAdapter` |
-| Codex capture | `src/extraction/adapters/codex.py::CodexWorkReportAdapter` |
-| Web/social capture | `src/extraction/adapters/web.py::WebCaptureAdapter` |
-| Media extraction | `src/extraction/adapters/media.py::MediaExtractionAdapter` |
-
-MCP document writes now route through `MemoryGateway.rebuild()` so lexical, semantic and status state are updated together.
-
-## 9. Control, Settings And UI Entry Points
-
-| Capability | Entry |
-|---|---|
-| Control service | `src/control/service.py::LocalControlService` |
-| Control API | `src/control/api.py::create_control_app()` |
-| Memory status | `GET /api/memory/status` |
-| Vector status | `GET /api/vector/status` |
-| Vector coverage | `GET /api/vector/coverage` |
-| Brain status | `GET /api/brain/status` |
-| MCP contract status | `GET /api/mcp/status` |
-| Runtime settings | `src/control/runtime_settings.py::RuntimeSettingsStore` |
-| Control startup | `run_control_api.py` |
-| Model inventory | `src/model_center/inventory.py::LocalModelInventoryService` |
-| Tauri entry | `desktop/lingji-control/src/main.tsx` |
-| Tauri API client | `desktop/lingji-control/src/api.ts` |
-| UI smoke | `desktop/lingji-control/scripts/ui-modular-smoke.mjs` |
-
-Tauri uses only the authenticated Local Control API on `127.0.0.1:8766`.
-
-Remaining control/UI gaps:
-
-- Runtime Settings lacks complete editable memory, vector, workspace and MCP groups
-- no final Vector Center page
-- no final Memory Inspector page
-- local acceptance and full regression remain pending
-
-## 10. Compatibility Capabilities To Migrate
-
-| Capability | Current compatibility entry | Mainline status/target |
+| 能力 | 入口 | 状态 |
 |---|---|---|
-| Qdrant | `second_brain/vector_store.py::VectorStore` | adapted, wired and observable under `src` |
-| Ollama embedding fallback | `second_brain/embedding.py::OllamaEmbedder` | adapted and wired under Model Center |
-| Structured sources/conversations/messages | `second_brain/db.py` | rebuildable source read model planned |
-| Memory versions | `second_brain/db.py` | revision read model planned |
-| Relations and conflicts | `second_brain/conflict/`, DB tables | unified read models planned |
-| Acceptance scenarios | `second_brain/acceptance.py` | capability contracts and new isolated validators |
-| PySide6 flows | `second_brain/desktop/` | Tauri capability migration |
+| Migration Service（迁移服务） | `src/retrieval/collection_migration.py::VectorCollectionMigrationService` | 已合并并验证 |
+| Production Plan CLI（生产计划命令行） | `scripts/prepare_vector_collection_migration.py` | 已实现 |
+| Isolated Validation（隔离验收） | `scripts/validate_p2_02_local.py` | 已通过 |
+| Migration Tests（迁移测试） | `tests/test_vector_collection_migration.py` | 重点测试通过 |
 
-The compatibility runtime remains migration evidence. Do not extend it as a formal product.
+正式生产候选 Collection 尚未构建，生产模型尚未切换。
 
-## 11. Planned Unified Read Models
+## 8. 统一采集入口
 
-| Planned capability | Planned path |
+| 能力 | 正式入口 |
 |---|---|
-| Source/conversation/message index | `src/sources/read_model.py` |
-| Permission-aware source queries | `src/sources/service.py` |
-| Retrieval trace | `src/retrieval/trace.py` |
-| Memory Inspector facade | `src/gateway/memory_inspector.py` |
-| Revision model | `src/memory/revisions.py` |
-| Relation model | `src/memory/relations.py` |
-| Conflict candidates | `src/memory/conflicts.py` |
-| Legacy export/parity | `src/migration/` |
+| Adapter Interface（适配器接口） | `src/extraction/base.py::ExtractionAdapter` |
+| Adapter Registry（适配器注册表） | `src/extraction/registry.py::AdapterRegistry` |
+| Pipeline（处理管线） | `src/extraction/pipeline.py::ExtractionPipeline` |
+| Persistent Queue（持久队列） | `src/extraction/queue.py::SQLiteExtractionQueue` |
+| Worker（工作进程） | `src/extraction/worker.py::ExtractionWorker` |
+| Vault/Raw Sink（知识库与原始资料写入器） | `src/extraction/sink.py::VaultExtractionSink` |
+| Runtime Assembly | `src/extraction/bootstrap.py::build_extraction_pipeline()` |
+| ChatGPT Import | `src/extraction/adapters/chatgpt.py::ChatGPTExportAdapter` |
+| Codex Capture | `src/extraction/adapters/codex.py::CodexWorkReportAdapter` |
+| Web/Social Capture | `src/extraction/adapters/web.py::WebCaptureAdapter` |
+| Media Extraction | `src/extraction/adapters/media.py::MediaExtractionAdapter` |
 
-## 12. Port Map
+所有新采集必须进入 `src/extraction/`，不得扩展旧 Watcher 成为正式链路。
+
+## 9. Control API 与 Tauri
+
+| 能力 | 入口 | 状态 |
+|---|---|---|
+| Control Service | `src/control/service.py::LocalControlService` | 已实现 |
+| Control API | `src/control/api.py::create_control_app()` | 已实现 |
+| Memory Status | `GET /api/memory/status` | 已实现并验证 |
+| Vector Status | `GET /api/vector/status` | 已实现并验证 |
+| Vector Coverage | `GET /api/vector/coverage` | 已实现并验证 |
+| Brain Status | `GET /api/brain/status` | 已实现并验证 |
+| MCP Status | `GET /api/mcp/status` | 已实现 |
+| Runtime Settings | `src/control/runtime_settings.py::RuntimeSettingsStore` | 已实现基础框架 |
+| Control Startup | `run_control_api.py` | 已实现 |
+| Tauri Entry | `desktop/lingji-control/src/main.tsx` | 已实现 |
+| Tauri API Client | `desktop/lingji-control/src/api.ts` | 已实现，仅访问 8766 |
+| Vector Center Page | `desktop/lingji-control/src/pages/VectorCenterPage.tsx` | 已合并并验证 |
+| UI Smoke | `desktop/lingji-control/scripts/ui-modular-smoke.mjs` | 已包含 Vector Center |
+
+当前 UI 缺口：
+
+- Memory Inspector 尚未实现
+- Runtime Settings 缺少完整 memory/vector/workspace/MCP 可编辑分组
+- 知识中心、来源会话和 AI 权限可视化仍待完善
+
+## 10. P2-03 计划入口
+
+Code Map 中为 P2-03 保留的正式路径：
+
+| 能力 | 目标路径 |
+|---|---|
+| Source/Conversation/Message Read Model（来源、对话、消息读取模型） | `src/sources/read_model.py` |
+| Permission-aware Source Query（权限感知来源查询） | `src/sources/service.py` |
+| Memory Inspector Facade（记忆检查器门面） | `src/gateway/memory_inspector.py` |
+| Retrieval Trace（检索追踪） | `src/retrieval/trace.py` |
+| Revision Read Model（修订读取模型） | `src/memory/revisions.py` |
+| Relation Read Model（关系读取模型） | `src/memory/relations.py` |
+| Conflict Candidate（冲突候选） | `src/memory/conflicts.py` |
+| Legacy Export/Parity（旧数据导出与等价验证） | `src/migration/` |
+
+P2-03 当前只负责 Structured Read Model（结构化读取模型）和只读 8766 API 合同。
+
+P2-04 再开发 Tauri Memory Inspector 页面。
+
+创建目标文件前必须先检查现有实现；如果真实代码已有更合适入口，应复用而不是重复创建。
+
+## 11. Compatibility（兼容层）待迁移能力
+
+| 能力 | 兼容入口 | 正式目标 |
+|---|---|---|
+| Structured Source/Conversation/Message | `second_brain/db.py` | `src/sources/` 可重建 Read Model |
+| Memory Versions（记忆版本） | `second_brain/db.py` | Revision Read Model |
+| Relations/Conflicts（关系与冲突） | `second_brain/conflict/` 与 DB 表 | 统一只读模型 |
+| Acceptance Scenario（验收场景） | `second_brain/acceptance.py` | 正式 Capability Contract（能力合同） |
+| PySide6 Flow | `second_brain/desktop/` | Tauri 能力迁移 |
+
+兼容层只提供迁移证据，不得继续扩展为正式产品。
+
+## 12. 端口地图
 
 ```text
-second_brain compatibility API = 8765
-Local Control API              = 8766
-src MCP Streamable HTTP        = 8767
-src MCP default transport      = stdio
+8765 = second_brain Compatibility API
+8766 = authenticated Local Control API
+8767 = src MCP Streamable HTTP
+stdio = default local MCP transport
 ```
 
-P1-05 does not modify this contract.
+## 13. 当前测试地图
 
-## 13. Testing Map
+重点 Memory/Runtime（记忆与运行时）测试：
 
-Existing memory/runtime suites:
+```text
+tests/test_memory_retrieval.py
+tests/test_memory_lifecycle.py
+tests/test_permanent_memory_gateway.py
+tests/test_incremental_index_sync.py
+tests/test_workspace_contract.py
+tests/test_memory_capability_contract.py
+tests/test_embedding_provider.py
+tests/test_qdrant_semantic_provider.py
+tests/test_memory_index_coordinator.py
+tests/test_semantic_runtime_wiring.py
+tests/test_memory_statistics.py
+tests/test_status_snapshot_wiring.py
+tests/test_control_api.py
+tests/test_vector_collection_migration.py
+```
 
-- `tests/test_memory_retrieval.py`
-- `tests/test_memory_lifecycle.py`
-- `tests/test_permanent_memory_gateway.py`
-- `tests/test_incremental_index_sync.py`
-- `tests/test_workspace_contract.py`
-- `tests/test_memory_capability_contract.py`
+最新本机汇总：
 
-Phase 1 suites:
+```text
+223 passed
+0 failed
+8 skipped
+```
 
-- `tests/test_embedding_provider.py`
-- `tests/test_qdrant_semantic_provider.py`
-- `tests/test_memory_index_coordinator.py`
-- `tests/test_semantic_runtime_wiring.py`
-- `tests/test_memory_statistics.py`
-- `tests/test_status_snapshot_wiring.py`
-- `tests/test_control_api.py`
+测试数量相对 P1-05 有未核对差异，下一次全量 Regression Test（回归测试）必须解释。
 
-Reports:
+## 14. 开发前检查
 
-- `docs/TEST_REPORTS/P0_02_PORT_CONTRACT_TEST_REPORT.md`
-- `docs/TEST_REPORTS/P0_03_WORKSPACE_CAPABILITY_CONTRACT_TEST_REPORT.md`
-- `docs/TEST_REPORTS/P1_01_EMBEDDING_PROVIDER_TEST_REPORT.md`
-- `docs/TEST_REPORTS/P1_02_QDRANT_SEMANTIC_PROVIDER_TEST_REPORT.md`
-- `docs/TEST_REPORTS/P1_03_MEMORY_INDEX_COORDINATOR_TEST_REPORT.md`
-- `docs/TEST_REPORTS/P1_04_SEMANTIC_RUNTIME_WIRING_TEST_REPORT.md`
-- `docs/TEST_REPORTS/P1_05_MEMORY_VECTOR_STATUS_TEST_REPORT.md`
-
-Current evidence:
-
-- workspace contract: 8 passed in isolated environment
-- embedding fake-transport suite: 13 passed
-- Qdrant 1.12 direct in-memory API smoke: passed
-- committed P1-05 and full repository pytest: pending complete checkout
-- real Ollama, bge-m3 and Windows runtime: pending
-
-## 14. Before Coding Checklist
-
-1. Confirm branch and remote HEAD.
-2. Read the architecture plan, roadmap and current status.
-3. Resolve runtime resources through `WorkspaceResolver`.
-4. Preserve `HybridRetriever` as the only final ranking path.
-5. Preserve lexical success when semantic providers fail.
-6. Use the shared `MemoryStatisticsService`; do not invent UI counters.
-7. Do not let Tauri or the control process access embedded Qdrant directly.
-8. Add tests and a Markdown report for each major capability.
-9. Do not call Phase 1 validated until the isolated local validator and full regression pass.
+1. 确认 Remote HEAD（远程最新提交）。
+2. 阅读 `DOCUMENTATION_MAINTENANCE.md`、`PROJECT_STATUS.md` 和 `UNIFIED_MEMORY_EXECUTION_STATUS.md`。
+3. 使用 `WorkspaceResolver` 解析运行资源。
+4. 保留 `HybridRetriever` 为唯一最终排名路径。
+5. 保留语义失败时的词法成功路径。
+6. 使用共享 `MemoryStatisticsService`，不得伪造 UI 计数。
+7. Tauri 和 Control Process 不得直接访问 Embedded Qdrant。
+8. 每项重大能力必须包含测试和 Markdown 报告。
+9. 已验证且未受影响的 P1/P2 测试不重复执行。
