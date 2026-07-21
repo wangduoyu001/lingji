@@ -8,7 +8,8 @@ from uuid import uuid4
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from src.obsidian.frontmatter import atomic_write, content_hash, render_frontmatter, split_frontmatter
+from src.obsidian.frontmatter import atomic_write, render_frontmatter, split_frontmatter
+from src.project_memory.body_hash import body_content_hash, canonical_body
 
 
 class ObsidianPathError(PermissionError):
@@ -48,9 +49,23 @@ class SafeObsidianNotesService:
             raise FileNotFoundError(relative_path)
         raw = path.read_text(encoding="utf-8-sig")
         metadata, body = split_frontmatter(raw)
-        return {"id": str(metadata.get("id") or ""), "relative_path": self._relative(path), "metadata": metadata, "content": body, "content_hash": content_hash(body)}
+        return {
+            "id": str(metadata.get("id") or ""),
+            "relative_path": self._relative(path),
+            "metadata": metadata,
+            "content": body.lstrip("\n"),
+            "content_hash": body_content_hash(body),
+        }
 
-    def create_manual_note(self, *, title: str, content: str, directory: str = "03-Knowledge/Notes", project_ids: list[str] | None = None, tags: list[str] | None = None) -> dict[str, Any]:
+    def create_manual_note(
+        self,
+        *,
+        title: str,
+        content: str,
+        directory: str = "03-Knowledge/Notes",
+        project_ids: list[str] | None = None,
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]:
         directory_path = self._resolve(directory, write=True, directory=True)
         directory_path.mkdir(parents=True, exist_ok=True)
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -59,11 +74,29 @@ class SafeObsidianNotesService:
         target = directory_path / f"{safe[:100]}.md"
         if target.exists():
             target = directory_path / f"{safe[:80]}-{note_id[-8:]}.md"
-        body = content.strip() + "\n"
-        body_hash = content_hash(body)
-        metadata = {"schema_version": 1, "id": note_id, "title": title.strip(), "memory_type": "note", "status": "active", "privacy": "private", "project_ids": list(project_ids or []), "created_at": now, "updated_at": now, "content_hash": body_hash, "lingji_managed": True, "tags": self._tags(tags)}
+        body = canonical_body(content)
+        body_hash = body_content_hash(body)
+        metadata = {
+            "schema_version": 1,
+            "id": note_id,
+            "title": title.strip(),
+            "memory_type": "note",
+            "status": "active",
+            "privacy": "private",
+            "project_ids": list(project_ids or []),
+            "created_at": now,
+            "updated_at": now,
+            "content_hash": body_hash,
+            "lingji_managed": True,
+            "tags": self._tags(tags),
+        }
         atomic_write(target, render_frontmatter(metadata, body))
-        result = {"id": note_id, "relative_path": self._relative(target), "content_hash": body_hash, "created": True}
+        result = {
+            "id": note_id,
+            "relative_path": self._relative(target),
+            "content_hash": body_hash,
+            "created": True,
+        }
         if self.state_db:
             self.state_db.append_event("obsidian_manual_note_created", "note", note_id, result)
         return result
@@ -77,10 +110,18 @@ class SafeObsidianNotesService:
                 metadata, body = split_frontmatter(raw)
                 if metadata.get("lingji_managed") is not True:
                     continue
-                current = content_hash(body)
+                current = body_content_hash(body)
                 stored = str(metadata.get("content_hash") or "")
                 if stored and stored != current:
-                    changes.append({"id": str(metadata.get("id") or ""), "relative_path": self._relative(path), "state": "external_modified", "stored_hash": stored, "current_hash": current})
+                    changes.append(
+                        {
+                            "id": str(metadata.get("id") or ""),
+                            "relative_path": self._relative(path),
+                            "state": "external_modified",
+                            "stored_hash": stored,
+                            "current_hash": current,
+                        }
+                    )
         return {"items": changes, "count": len(changes)}
 
     def _resolve(self, value: str, *, write: bool, directory: bool = False) -> Path:
@@ -115,7 +156,12 @@ class SafeObsidianNotesService:
         return output
 
 
-def register_obsidian_note_routes(app, notes_service: SafeObsidianNotesService, *, token_validator: Callable[[str], bool] | None = None):
+def register_obsidian_note_routes(
+    app,
+    notes_service: SafeObsidianNotesService,
+    *,
+    token_validator: Callable[[str], bool] | None = None,
+):
     router = APIRouter()
 
     def auth(token):
