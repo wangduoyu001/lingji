@@ -4,6 +4,8 @@ from pathlib import Path
 
 from src.obsidian.frontmatter import content_hash, split_frontmatter
 
+from .body_hash import body_content_hash
+
 
 class CoreMemoryIntegrityService:
     """Read-only drift detection for owner-approved core memories."""
@@ -25,13 +27,14 @@ class CoreMemoryIntegrityService:
         raw = path.read_text(encoding="utf-8-sig")
         metadata, body = split_frontmatter(raw)
         approved = str(metadata.get("approved_hash") or "")
-        current = content_hash(body)
-        state = "healthy" if approved and current == approved else "external_modified"
+        serialized_hash = content_hash(body)
+        logical_hash = body_content_hash(body)
+        state = "healthy" if approved and approved in {serialized_hash, logical_hash} else "external_modified"
         return {
             "memory_id": memory_id,
             "state": state,
             "approved_hash": approved,
-            "current_hash": current,
+            "current_hash": logical_hash,
             "last_approved_at": str(metadata.get("approved_at") or metadata.get("promoted_at") or ""),
             "relative_path": self.layout.relative(path).as_posix(),
         }
