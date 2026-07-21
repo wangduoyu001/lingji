@@ -1,20 +1,44 @@
 # PROJECT_STATUS.md — LingJi 项目实时状态
 
-> Updated（更新时间）: 2026-07-21  
+> Updated（更新时间）: 2026-07-22  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> P0 Status（P0 状态）: `MERGED_AND_VALIDATED`  
-> P2-03 Status（P2-03 状态）: `MERGED_AND_VALIDATED`  
-> P2-03B Status（P2-03B 状态）: `MERGED_AND_VALIDATED`  
-> P2-03C Status（P2-03C 状态）: `MERGED_AND_VALIDATED`  
-> P2-04 Status（P2-04 状态）: `MERGED_AND_VALIDATED`  
-> P2-05 Validated Integration Tree（P2-05 已验证集成树）: `1bf95b8d16a9daea52b60518f0e920a0c0bd50db`  
-> P2-05 Formal Merge Commit（P2-05 正式合并提交）: `c77e78c0f71339264d54fc083dbc5cfabcfaa173`  
-> P2-05 Status（P2-05 状态）: `MERGED_AND_VALIDATED`  
-> P2-06 Validated Head（P2-06 已验证提交）: `6dfa31148585e2cb78c83af52b752550962820c9`  
-> P2-06 Formal Merge Commit（P2-06 正式合并提交）: `5ce10ed8be98784f57e8723ffc27e40e3abaffbc`  
-> P2-06 Status（P2-06 状态）: `MERGED_AND_VALIDATED`
+> Formal Head（正式提交）: `9efda7a9a976d20596dbdabda5741a5c54180954`  
+> P2-08 Status: `MERGED_AND_CI_VALIDATED_AWAITING_REAL_MACHINE_ACCEPTANCE`  
+> P2-09 Status: `MERGED_AND_CI_VALIDATED_AWAITING_REAL_MACHINE_ACCEPTANCE`
 
-## 1. 产品与代码主线
+## 1. 当前结论
+
+P2-08 Auto Review SHADOW Layer 与 P2-09 Runtime/Desktop Reliability 已完成实现、依赖合并和整仓 GitHub Actions 验证。
+
+```text
+PR #24  P2-09A Runtime Truth                         MERGED
+PR #25  P2-09B Canonical Idempotency + MCP Queue     MERGED
+PR #26  P2-09C Desktop Polling Data Layer             MERGED
+PR #27  P2-08A Deterministic Auto Review Core         MERGED
+PR #28  P2-08B Local AI Reviewer + SHADOW API         MERGED
+PR #29  P2-09D Desktop UX + SHADOW Dashboard          MERGED
+PR #30  Combined Integration Verification             MERGED
+```
+
+最终集成门禁：
+
+```text
+tests workflow #696: SUCCESS
+P0 Windows Gate #94: SUCCESS
+Python 3.11: SUCCESS
+Python 3.12: SUCCESS
+Windows full tests: SUCCESS
+Desktop smoke: SUCCESS
+React/Vite build: SUCCESS
+Tauri Rust check: SUCCESS
+MCP smoke: SUCCESS
+Browser capture smoke: SUCCESS
+Obsidian plugin smoke: SUCCESS
+```
+
+代码和 CI 已完成，但真实 Windows 主机、RTX 4060、Ollama 与生产 Qdrant 的现场验收仍未执行，因此不得标记为 Production Ready。
+
+## 2. 产品与代码主线
 
 ```text
 src/
@@ -24,34 +48,39 @@ desktop/lingji-control/
 = 唯一正式 Desktop UI
 
 second_brain/
-= Compatibility/Migration Runtime
+= Compatibility / Migration Runtime
 ```
 
-`second_brain/` 不再接收新的正式产品能力，只保留兼容、迁移和待退役实现。Obsidian CLI 已完成正式迁移，旧模块只负责转发。
+规则：
 
-## 2. 数据权威
+- 新正式能力进入 `src/`。
+- Desktop 只通过认证的 8766 Local Control API 访问后端。
+- `second_brain/` 不接收新的正式产品能力。
+- Obsidian CLI 正式实现位于 `src/obsidian/`。
+- MCP 默认使用 stdio；可选 HTTP 使用8767。
+
+## 3. 数据权威
 
 ```text
 Obsidian Vault + Git
-= 永久记忆和正式知识正文
+= 永久记忆与正式知识正文
 
 storage/raw
 = 原始导入材料
 
 lingji_state.db
-= 任务、队列、Runtime State 和 Audit Event
+= 任务、Extraction Queue、Runtime State、Audit Event
 
 lingji_memory.db
-= 可重建 Lexical/Metadata Index
-  + Structured Read Model
+= 可重建 Lexical/Metadata Index + Structured Read Model
 
 Qdrant
 = 可重建 Semantic Index
 ```
 
-SQLite、Qdrant 和 Structured Read Model 都是可重建派生数据，不得取代 Obsidian Vault + Git 的永久知识权威。
+SQLite、Qdrant、向量和 Structured Read Model 均为派生数据，不得取代 Obsidian Vault + Git 的正式知识权威。
 
-## 3. 已完成并验证阶段
+## 4. 已完成阶段
 
 ```text
 P0 Workspace/Port Contract                         MERGED_AND_VALIDATED
@@ -64,176 +93,179 @@ P2-03B Structured Ingestion Wiring                MERGED_AND_VALIDATED
 P2-03C Capture Sources Foundation                 MERGED_AND_VALIDATED
 P2-04 Memory Inspector UI                         MERGED_AND_VALIDATED
 P2-05 Manual Capture Center                       MERGED_AND_VALIDATED
-P2-06 Obsidian CLI Formal Migration                MERGED_AND_VALIDATED
+P2-06 Obsidian CLI Formal Migration               MERGED_AND_VALIDATED
+P2-07 Codex-first Local Memory Loop                MERGED_AND_VALIDATED
+P2-08 Auto Review SHADOW Layer                    MERGED_AND_CI_VALIDATED
+P2-09 Runtime/Desktop Reliability                 MERGED_AND_CI_VALIDATED
 ```
 
-Production `bge-m3` Switch 和生产 Collection 重建仍未执行。
-
-## 4. P2-03 Structured Read Model
-
-- Source、Conversation、Message 派生表。
-- Stable ID 和幂等 Upsert。
-- Privacy、Project、Agent Scope 权限继承和显式覆盖。
-- Message→Memory→Chunk→Vector 只读关系。
-- Read Model Schema Version 验证。
-- Inspector 稳定错误和路径脱敏。
-
-正式入口：
-
-```text
-src/sources/read_model.py::SourceReadModel
-src/sources/service.py::SourceQueryService
-src/gateway/memory_inspector.py::MemoryInspectorFacade
-src/control/api.py::create_control_app
-```
-
-## 5. P2-04 Memory Inspector Desktop UI
-
-- Source、Conversation、Message、Memory、Chunk、Vector 关系查看。
-- 分页、筛选、搜索防抖、请求取消和竞态保护。
-- Message→Memory、Memory Source、Vector 状态展示。
-- restricted 内容保护。
-- 401、503、网络不可用、空数据和无筛选结果状态。
-
-## 6. P2-05 Manual Capture Center
-
-状态：`MERGED_AND_VALIDATED`
-
-集成顺序：
-
-```text
-P2-05B -> f01e3b2cc49065cda69f1c8909933dd0c530e4ff
-P2-05A -> 46a0c5276252734c121f0cad7a56cf3a4a7c4bdc
-P2-05C -> fab0ba1b816c1228b8cfb3618aa04b5e2f2c4c3d
-Validated tree -> 1bf95b8d16a9daea52b60518f0e920a0c0bd50db
-Formal merge -> c77e78c0f71339264d54fc083dbc5cfabcfaa173
-```
+## 5. P2-09 Runtime Truth
 
 已实现：
 
-- 文本、网页、支持文件、媒体、ChatGPT Export 和 Codex Report 手动提交。
-- 正式 `manual_*` Capture Method 和现有 Adapter Registry 映射。
-- 所有 Desktop 手动提交默认进入持久化 Extraction Queue。
-- Capture Mode 持久化、暂停和恢复。
-- Queue 分页、筛选、取消和重试。
-- 脱敏 CaptureJob DTO、稳定错误码和 Audit Event。
-- Tauri Capture Center、官方文件选择 Dialog 和最小权限。
-- 完成任务可跳转 Memory Inspector。
-- 临时 `_api_core.py` 和 `_queue_core.py` 已折回正式模块并删除。
+- Brain Status 不再把未知 GPU 利用率伪装成0。
+- 静态硬件信息与动态遥测分离。
+- 动态遥测不可用时返回 `null`、`unavailable`、`stale` 与错误摘要。
+- Embedding 默认主模型为 `bge-m3`，备用为 `nomic-embed-text`。
+- Qdrant 维度不一致时阻止写入并标记 `rebuild_required`。
+- `run_service.py` 明确记录 Core、Extraction Worker 与8766 Control API 的实际启动边界。
 
-最终门禁：
+正式文件：
 
 ```text
-Windows Python 3.12 full pytest: 398 passed / 11 skipped / 0 failed
-npm ci: PASS
-npm run test:capture: PASS
-npm run test:smoke: PASS
-npm run build: PASS
-cargo check: PASS
-formal PR tests: SUCCESS
-formal PR P0 Windows Gate: SUCCESS
+src/config.py
+src/control/service.py
+src/hardware/
+src/model_center/embedding.py
+src/retrieval/qdrant_provider.py
+run_service.py
 ```
 
-完整报告：
-
-```text
-docs/MODULES/P2_05_INTEGRATED_IMPLEMENTATION.md
-docs/TEST_REPORTS/P2_05_INTEGRATED_VALIDATION_REPORT.md
-```
-
-## 7. P2-06 Obsidian CLI Formal Migration
-
-状态：`MERGED_AND_VALIDATED`
-
-```text
-Validated implementation -> 4b0ad577eb396030ee6baa5c3bb217e990385475
-Validated final head -> 6dfa31148585e2cb78c83af52b752550962820c9
-Formal merge -> 5ce10ed8be98784f57e8723ffc27e40e3abaffbc
-```
+## 6. P2-09 Canonical Idempotency 与 MCP Queue
 
 已实现：
 
-- Obsidian CLI 单一实现迁入 `src/obsidian/`。
-- `second_brain/obsidian_cli.py` 降为兼容转发，不再持有独立执行逻辑。
-- Runtime Settings 增加启用、CLI 路径、Vault 回退路径、名称、超时和 Dry Run。
-- CLI 发现支持 Runtime Settings、环境变量、PATH 和平台标准位置。
-- Workspace Vault 保持路径权威，不绕过 Production/Acceptance 隔离。
-- 8766 增加 `/api/obsidian/status`、`/validate` 和 `/refresh`。
-- Tauri 增加 Obsidian 状态与设置页，使用官方 Dialog Plugin。
-- 状态 DTO 只返回掩码路径和稳定错误，不暴露原始绝对路径。
-- create/append 使用相对路径边界并执行写后读取验证。
+- `src/extraction/idempotency.py` 是唯一持久幂等算法来源。
+- 文件使用内容哈希；目录使用稳定 Manifest；Payload 和 Options 使用 canonical JSON。
+- Pipeline 与 Queue 共享同一算法。
+- `submit_codex_work_report` 和 `capture_web_source` 默认先进入 SQLite Extraction Queue。
+- `process_now=True` 仍先持久入队，再通过正常 Queue/Lease 路径处理。
+- Work Report 必须包含任务、执行、仓库、分支、提交、文件和测试结构。
+- CaptureDeduplicator 继续负责短窗口去重，不与持久幂等混为一套。
 
-最终门禁：
+## 7. P2-09 Desktop Polling 与 UX
+
+已实现：
+
+- `usePollingResource<T>` 统一处理取消、无重叠、退避、隐藏暂停、过期、手动刷新与旧数据保留。
+- Brain Status 保留“真实0”和“未知 null”的区别。
+- Desktop 导航整理为五组：总览、记忆与项目、采集与处理、模型与运行、运维与设置。
+- API 地址与控制令牌改为可折叠连接栏。
+- Overview 展示真实 Memory、Vector、Embedding、Compute、Queue 和 Storage 状态。
+- Auto Review SHADOW 看板展示建议、风险、规则、AI 摘要和主人反馈。
+
+Desktop 不包含 Auto Review approve、reject、delete、execute 或 ACTIVE 控件。
+
+## 8. P2-08 Auto Review SHADOW
+
+模式合同：
 
 ```text
-Linux Python 3.12: 405 passed / 11 skipped / 0 failed / 2 warnings / 10.31s
-Windows Python 3.12: 405 passed / 11 skipped / 0 failed / 2 warnings / 71.77s
-npm ci: PASS
-npm run test:obsidian: PASS
-npm run test:smoke: PASS
-npm run build: PASS
-cargo check: PASS
-formal PR tests: SUCCESS
-formal PR P0 Windows Gate: SUCCESS
+OFF
+SHADOW
+ACTIVE  # 仅枚举存在，当前实现拒绝
 ```
 
-完整报告：
+确定性硬规则要求主人审核：
+
+- Core Memory。
+- 删除、遗忘、归档、权限或隐私变更。
+- restricted 内容。
+- 跨项目合并。
+- 知识冲突。
+- 证据不足的耐久知识。
+- 失败或未验证的开发报告。
+- 主人亲自编辑的记忆。
+
+本地 AI：
+
+- 只接受本机 Ollama loopback 地址。
+- 模型由 `auto_review_primary` / `auto_review_fallback` 角色解析。
+- 只允许增加风险，不允许降低硬规则风险或改变确定性动作。
+- 严格 JSON；失败时安全回退到确定性结果。
+- 不请求或存储私有思维链。
+
+8766 SHADOW API：
 
 ```text
-docs/MODULES/P2_06_OBSIDIAN_CLI_MIGRATION_IMPLEMENTATION.md
-docs/TEST_REPORTS/P2_06_OBSIDIAN_CLI_MIGRATION_TEST_REPORT.md
+GET  /api/auto-review/status
+GET  /api/auto-review/decisions
+GET  /api/auto-review/decisions/{decision_id}
+GET  /api/auto-review/metrics
+POST /api/auto-review/evaluate/{subject_id}
+POST /api/auto-review/feedback
+POST /api/auto-review/audit/verify
 ```
 
-## 8. 安全状态
+不存在自动批准、自动拒绝、删除、执行或启用 ACTIVE 的 API。
+
+## 9. 审核与写入权威
+
+```text
+MemoryReviewService
+= 主人审核入口
+
+MemoryLifecycleService
+= 唯一正式生命周期写入器
+
+Auto Review
+= 只生成 SHADOW 决策和 Audit Event
+```
+
+Auto Review 不得：
+
+- 伪造 `owner_confirmed=True`。
+- 修改候选状态。
+- 写入 Core Memory。
+- 写入 Obsidian。
+- 写入 Qdrant。
+- 执行批准、拒绝、删除或合并。
+
+## 10. 安全状态
 
 ```text
 Production ChatGPT 正文读取: NO
 Production Vault 修改: NO
 Production SQLite 修改: NO
-Production Qdrant 访问: NO
-Qdrant Server 启动: NO
-Ollama 启动: NO
-生产模型切换: NO
+Production Qdrant 修改: NO
+自动 Qdrant Collection 删除/重建: NO
+自动模型下载: NO
 数据库 Schema 修改: NO
 新数据库: NO
 第二套队列: NO
+第二套生命周期: NO
+第二套审计数据库: NO
 rebase: NO
 force push: NO
+master 修改: NO
 ```
 
-## 9. 当前状态
+## 11. 真实机器验收待办
 
 ```text
-P0 Engineering Hygiene:
-MERGED_AND_VALIDATED
-
-P2-03 / P2-03B / P2-03C / P2-04:
-MERGED_AND_VALIDATED
-
-P2-05 Manual Capture Center:
-MERGED_AND_VALIDATED
-
-P2-06 Obsidian CLI Formal Migration:
-MERGED_AND_VALIDATED
+1. RTX 4060 真实遥测成功路径。
+2. nvidia-smi 不可用时显示 unavailable/null，而不是0。
+3. bge-m3 主模型真实调用。
+4. nomic-embed-text 备用模型真实回退。
+5. Qdrant 维度冲突阻止写入并保持 lexical retrieval。
+6. Auto Review 本地模型主/备角色。
+7. 8766 Token 鉴权与 Tauri 连接。
+8. Desktop 隐藏窗口暂停、恢复、退避和布局。
+9. SHADOW 评估后候选、Obsidian 和 Qdrant 均不变化。
 ```
 
-## 10. 下一步
+Issue #23 在上述验收完成前保持打开。
+
+## 12. 关键文档
 
 ```text
-Schema v2 + Evidence Layer
--> Revision / Conflict / Owner Review
--> Retrieval Evaluation 与关系扩展
--> 微信、本地文件和其他 AI Adapter
--> AI Access Center 与主动第二大脑
+docs/MODULES/P2_09A_RUNTIME_TRUTH.md
+docs/MODULES/P2_09B_CANONICAL_IDEMPOTENCY.md
+docs/MODULES/P2_09C_DESKTOP_DATA_LAYER.md
+docs/MODULES/P2_09D_DESKTOP_UX_AUTO_REVIEW.md
+docs/MODULES/P2_08A_AUTO_REVIEW_CORE.md
+docs/MODULES/P2_08B_LOCAL_AI_REVIEWER.md
+docs/MODULES/P2_08B_SHADOW_API.md
+docs/TECH_RESEARCH/P2_08_STANDALONE_TO_LINGJI_MAPPING.md
+docs/TEST_REPORTS/P2_08_P2_09_INTEGRATION_TEST_REPORT.md
 ```
 
-当前明确不开发：
+## 13. 下一步
 
 ```text
-系统监听
-剪贴板监听
-文件夹监听
-手机分享客户端
-浏览器插件
-平台专用自动采集客户端
+真实 Windows 环境验收
+-> 修复现场差异
+-> 更新验收报告与 Issue #23
+-> 评估是否继续保持 SHADOW
+-> 在足够审计数据前不开发 ACTIVE
 ```

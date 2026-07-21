@@ -1,14 +1,9 @@
 # CODE_MAP.md — LingJi 代码地图
 
-> Updated（更新时间）: 2026-07-21  
+> Updated（更新时间）: 2026-07-22  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> P0 Status（P0 状态）: `MERGED_AND_VALIDATED`  
-> P2-05 Validated Integration Tree（P2-05 已验证集成树）: `1bf95b8d16a9daea52b60518f0e920a0c0bd50db`  
-> P2-05 Formal Merge Commit（P2-05 正式合并提交）: `c77e78c0f71339264d54fc083dbc5cfabcfaa173`  
-> P2-05 Status（P2-05 状态）: `MERGED_AND_VALIDATED`  
-> P2-06 Validated Head（P2-06 已验证提交）: `6dfa31148585e2cb78c83af52b752550962820c9`  
-> P2-06 Formal Merge Commit（P2-06 正式合并提交）: `5ce10ed8be98784f57e8723ffc27e40e3abaffbc`  
-> P2-06 Status（P2-06 状态）: `MERGED_AND_VALIDATED`
+> Formal Head（正式提交）: `9efda7a9a976d20596dbdabda5741a5c54180954`  
+> P2-08 / P2-09 Status: `MERGED_AND_CI_VALIDATED_AWAITING_REAL_MACHINE_ACCEPTANCE`
 
 ## 1. 仓库职责
 
@@ -17,7 +12,7 @@ src/
 = 长期平台主线
 
 second_brain/
-= Compatibility/Migration Runtime
+= Compatibility / Migration Runtime
 
 desktop/lingji-control/
 = 唯一正式 Desktop UI
@@ -25,11 +20,11 @@ desktop/lingji-control/
 
 规则：
 
-- 新的正式产品能力进入 `src/`。
-- `second_brain/` 只保留兼容、迁移和待退役行为。
-- Desktop 只通过认证的 8766 Local Control API 访问后端。
-- Desktop 不得直连 SQLite、Qdrant、Ollama、8765 或 8767。
-- Obsidian CLI 正式实现位于 `src/obsidian/`；旧模块只转发。
+- 新能力进入 `src/`。
+- `second_brain/` 只保留兼容和迁移行为。
+- Desktop 只访问认证的8766 API。
+- Desktop 不直连 SQLite、Qdrant、Ollama、8765 或8767。
+- Obsidian CLI 正式实现位于 `src/obsidian/`。
 
 ## 2. 数据权威与派生层
 
@@ -41,7 +36,7 @@ storage/raw
 = 原始输入归档
 
 src/storage/state_db.py
-= 任务、队列、Runtime State、Audit Event
+= 任务、Extraction Queue、Runtime State、Audit Event
 
 src/retrieval/memory_db.py
 = 可重建 Lexical/Metadata Index
@@ -53,7 +48,7 @@ src/retrieval/qdrant_provider.py
 = 可重建 Semantic Index Provider
 ```
 
-## 3. Workspace、路径与设置
+## 3. Workspace、配置与端口
 
 ```text
 src/config.py::Settings
@@ -61,29 +56,14 @@ src/runtime/workspace.py::WorkspaceResolver
 src/control/runtime_settings.py::RuntimeSettingsStore
 ```
 
-未配置备份目录时使用 `<storage_path>/backups`。Production、Acceptance 和测试临时根使用不同路径合同。
-
-Obsidian Runtime Settings：
-
-```text
-obsidian_cli_enabled
-obsidian_cli_path
-obsidian_vault_path
-obsidian_vault_name
-obsidian_cli_timeout_seconds
-obsidian_cli_dry_run
-```
-
-当前 Workspace Vault 始终优先于兼容回退路径。
-
-## 4. 端口和启动入口
-
 ```text
 8765 = second_brain Compatibility API
 8766 = authenticated Local Control API
 8767 = optional MCP Streamable HTTP
-stdio = default local MCP transport
+stdio = default MCP transport
 ```
+
+正式启动入口：
 
 ```text
 main.py
@@ -93,100 +73,174 @@ run_mcp_server.py
 run_extraction_worker.py
 ```
 
-启动合同测试：`tests/test_startup_contracts.py`。
-
-## 5. 统一采集与记忆链路
+关键配置：
 
 ```text
-Capture Input
--> src/capture/service.py::CaptureService
--> src/extraction/pipeline.py::ExtractionPipeline
--> Raw Snapshot
--> Adapter.extract()
--> VaultExtractionSink
--> StructuredReadModelSink
--> SourceReadModel
--> MemoryIndexCoordinator
--> HybridRetriever
--> MemoryGateway
--> MemoryInspectorFacade
--> authenticated 8766 API
--> Desktop UI
+embed_model = bge-m3
+fallback_embed_model = nomic-embed-text
+auto_review_mode = OFF
+auto_review_ai_enabled = False
+control_api_port = 8766
 ```
 
-## 6. Capture Foundation 与手动输入
+## 4. Runtime Truth 与硬件
+
+```text
+src/hardware/models.py
+src/hardware/detectors.py
+src/hardware/system_detectors.py
+src/hardware/service.py::HardwareCapabilityService
+src/control/service.py::LocalControlService.brain_status
+```
+
+数据边界：
+
+```text
+Static hardware facts
+= GPU 名称、ID、总显存、驱动/CUDA能力
+
+Dynamic telemetry
+= 利用率、温度、已用/空闲显存、采集时间、stale/error
+```
+
+未知动态值必须使用 `null` / `unavailable`，不得自动变成0。
+
+## 5. Embedding、Qdrant 与检索
+
+```text
+src/model_center/embedding.py::OllamaEmbeddingProvider
+src/model_center/inventory.py::LocalModelInventoryService
+src/retrieval/qdrant_provider.py::QdrantSemanticProvider
+src/retrieval/hybrid.py::HybridRetriever
+src/gateway/memory_statistics.py::MemoryStatisticsService
+src/gateway/memory.py::MemoryGateway
+src/gateway/bootstrap.py::build_memory_gateway
+```
+
+```text
+Lexical / Metadata
++ Semantic
++ RRF Hybrid
+```
+
+Qdrant Collection 维度不匹配时：
+
+```text
+rebuild_required = true
+write = blocked
+collection auto-delete/rebuild = forbidden
+lexical retrieval = remains available
+```
+
+## 6. Capture 与 Extraction
+
+Capture：
 
 ```text
 src/capture/models.py
 src/capture/policy.py
-src/capture/deduplication.py
+src/capture/deduplication.py::CaptureDeduplicator
 src/capture/manual.py
-src/capture/service.py
+src/capture/service.py::CaptureService
 ```
 
-正式手动方法：
-
-```text
-manual_text
-manual_web
-manual_file
-manual_media
-manual_chatgpt_export
-manual_codex_report
-local_control_share  # compatibility
-```
-
-能力：
-
-- LOW_POWER、NORMAL、DEEP_CAPTURE、PAUSED。
-- 两阶段去重。
-- Metadata 敏感字段和保留字段保护。
-- `process_later=True` 强制排队。
-- ChatGPT、Codex、Web 和 Media 映射到现有 Adapter Registry。
-- Office 文档和未知二进制稳定拒绝。
-- 手机、浏览器、剪贴板和文件夹入口标记为 disabled/deferred。
-
-## 7. Extraction 与队列
+Extraction：
 
 ```text
 src/extraction/models.py
 src/extraction/registry.py
 src/extraction/bootstrap.py
-src/extraction/pipeline.py
+src/extraction/idempotency.py
+src/extraction/pipeline.py::ExtractionPipeline
 src/extraction/queue.py::SQLiteExtractionQueue
 src/extraction/worker.py
+src/extraction/sink.py
 src/extraction/structured_sink.py
 src/extraction/errors.py::safe_extraction_error
 ```
 
-队列数据：`lingji_state.db::extraction_jobs`。
+正式链路：
 
 ```text
-queued
-running
-retrying
-completed
-failed
-cancelled
+Capture Input
+-> CaptureService
+-> ExtractionPipeline.enqueue
+-> SQLite extraction_jobs
+-> Lease / Heartbeat / Retry
+-> Adapter.extract
+-> Raw Snapshot
+-> VaultExtractionSink
+-> StructuredReadModelSink
+-> MemoryIndexCoordinator
+-> MemoryGateway
 ```
 
-队列操作：
+## 7. Canonical Idempotency
+
+单一实现：
 
 ```text
-cancel(job_id)
-retry(job_id)
-list_page(status, source_type, q, limit, offset)
-count(...)
+src/extraction/idempotency.py
 ```
 
-没有新增任务表、数据库或第二套队列。
+Identity Material：
 
-## 8. Structured Read Model
+```text
+schema_version
+source_type
+adapter name/version
+input identity
+payload
+effective options
+```
+
+规则：
+
+- 文件使用流式 SHA-256 内容哈希。
+- 目录使用排序后的相对路径 Manifest 和内容哈希。
+- Payload/Options 使用 canonical UTF-8 JSON。
+- Pipeline 和 Queue 只调用同一实现。
+- `CaptureDeduplicator` 仍只负责短窗口提交去重。
+
+## 8. MCP 提交与队列
+
+```text
+src/mcp_server.py
+src/mcp/extraction_submission.py
+src/mcp/project_context_tools.py
+```
+
+关键工具：
+
+```text
+submit_codex_work_report
+capture_web_source
+enqueue_chatgpt_export
+extraction_job_status
+extraction_queue_status
+process_extraction_jobs
+```
+
+默认流程：
+
+```text
+MCP request
+-> validation
+-> pipeline.enqueue
+-> durable SQLite job
+-> worker or process_job
+```
+
+`process_now=True` 不得绕过 Queue。
+
+## 9. Structured Read Model 与 Memory Inspector
 
 ```text
 src/sources/read_model.py::SourceReadModel
 src/sources/service.py::SourceQueryService
 src/sources/service.py::ViewerContext
+src/gateway/memory_inspector.py::MemoryInspectorFacade
+src/control/memory_inspector.py::build_memory_inspector
 ```
 
 ```text
@@ -198,74 +252,209 @@ Source
 -> Vector
 ```
 
-支持 Stable ID、幂等 Upsert、权限继承、显式覆盖、Message 级 Memory Link 和 Schema Version 校验。
-
-## 9. Memory Gateway 与检索
-
-```text
-src/gateway/bootstrap.py::build_memory_gateway
-src/gateway/memory.py::MemoryGateway
-src/retrieval/memory_db.py
-src/retrieval/qdrant_provider.py::QdrantSemanticProvider
-src/retrieval/hybrid.py::HybridRetriever
-```
-
-```text
-Lexical / Metadata
-+ Semantic
-+ RRF Hybrid
-```
-
-## 10. Memory Inspector
-
-后端：
-
-```text
-src/gateway/memory_inspector.py::MemoryInspectorFacade
-src/control/memory_inspector.py::build_memory_inspector
-src/control/api.py::create_control_app
-```
-
-前端：
+Desktop：
 
 ```text
 desktop/lingji-control/src/pages/MemoryInspectorPage.tsx
 ```
 
-## 11. Local Control API 与 Capture Control
+## 10. Memory Review 与生命周期
+
+```text
+src/project_memory/review_service.py::MemoryReviewService
+src/project_memory/lifecycle.py::MemoryLifecycleService
+src/project_memory/runtime.py
+```
+
+权威合同：
+
+```text
+MemoryReviewService
+= 主人审核入口
+
+MemoryLifecycleService
+= 唯一正式写入器
+```
+
+approve/reject/archive/create 等变更必须继续走现有 owner-confirmed 路径。
+
+## 11. Auto Review Deterministic Core
+
+正式包：
+
+```text
+src/auto_review/models.py
+src/auto_review/interfaces.py
+src/auto_review/security.py
+src/auto_review/risk.py
+src/auto_review/duplicate.py
+src/auto_review/evidence.py
+src/auto_review/project.py
+src/auto_review/link.py
+src/auto_review/evaluator.py::DeterministicAutoReviewEvaluator
+src/auto_review/audit.py
+src/auto_review/service.py::ShadowAutoReviewService
+```
+
+模式：
+
+```text
+OFF
+SHADOW
+ACTIVE  # 当前实现拒绝
+```
+
+输出动作：
+
+```text
+would_auto_approve
+would_append_evidence
+would_auto_reject_noise
+requires_owner_review
+blocked
+```
+
+所有决策必须包含：
+
+```text
+risk_score
+risk_level
+reasons
+reversible
+mutation_performed = false
+```
+
+## 12. Auto Review Local AI 与 Application
+
+```text
+src/auto_review/local_ai.py::LocalOllamaReviewer
+src/auto_review/application.py::AutoReviewApplicationService
+src/control/auto_review_api.py::register_auto_review_routes
+```
+
+模型角色：
+
+```text
+auto_review_primary
+auto_review_fallback
+```
+
+限制：
+
+- 只允许 loopback Ollama。
+- 严格 JSON。
+- AI 只增加风险。
+- AI 不改变确定性动作。
+- AI 不执行生命周期操作。
+- 不请求或存储私有思维链。
+
+## 13. Auto Review 8766 API
+
+```text
+GET  /api/auto-review/status
+GET  /api/auto-review/decisions
+GET  /api/auto-review/decisions/{decision_id}
+GET  /api/auto-review/metrics
+POST /api/auto-review/evaluate/{subject_id}
+POST /api/auto-review/feedback
+POST /api/auto-review/audit/verify
+```
+
+不存在：
+
+```text
+/api/auto-review/approve
+/api/auto-review/reject
+/api/auto-review/delete
+/api/auto-review/execute
+/api/auto-review/active
+```
+
+## 14. Local Control API
 
 ```text
 src/control/api.py::create_control_app
-src/control/capture_api.py::register_capture_routes
-src/control/capture.py::CaptureControlService
 src/control/service.py::LocalControlService
 src/control/runtime_settings.py::RuntimeSettingsStore
+src/control/capture_api.py::register_capture_routes
+src/control/auto_review_api.py::register_auto_review_routes
+src/control/p2_07_api.py::register_p2_07_routes
+run_control_api.py
 ```
 
-Capture API：
+所有 Desktop 请求继续使用 `X-LingJi-Token`。
+
+## 15. Desktop Shell 与 Polling
+
+壳层：
 
 ```text
-POST /api/capture/text
-POST /api/capture/web
-POST /api/capture/file
-POST /api/capture/media
-GET  /api/capture/status
-GET  /api/capture/capabilities
-GET  /api/capture/jobs
-GET  /api/capture/jobs/{job_id}
-POST /api/capture/jobs/{job_id}/retry
-POST /api/capture/jobs/{job_id}/cancel
-POST /api/capture/pause
-POST /api/capture/resume
+desktop/lingji-control/src/App.tsx
+desktop/lingji-control/src/AppPages.tsx
+desktop/lingji-control/src/navigation.ts
+desktop/lingji-control/src/types.ts
+desktop/lingji-control/src/DesktopUX.css
 ```
 
-`POST /api/share` 是兼容别名。所有 Desktop 请求使用 `X-LingJi-Token`。
+统一数据层：
 
-CaptureJob DTO 只暴露脱敏字段、稳定错误摘要、basename 和结构化结果引用。
+```text
+desktop/lingji-control/src/hooks/usePollingResource.ts
+desktop/lingji-control/src/contracts/resourceState.ts
+desktop/lingji-control/src/contracts/brainStatus.ts
+```
 
-## 12. Obsidian 正式包与兼容层
+Polling 合同：
 
-正式入口：
+```text
+enabled
+interval
+manual refresh
+pause/resume
+AbortController
+no overlap
+failure backoff
+hidden-window pause
+stale state
+last success/attempt timestamps
+preserve previous data
+```
+
+五组导航：
+
+```text
+home
+memory
+ingestion
+runtime
+operations
+```
+
+## 16. Desktop 关键页面
+
+```text
+desktop/lingji-control/src/pages/OverviewPage.tsx
+desktop/lingji-control/src/pages/BrainStatusPage.tsx
+desktop/lingji-control/src/pages/CodexWorkspacePage.tsx
+desktop/lingji-control/src/pages/MemoryReviewPage.tsx
+desktop/lingji-control/src/pages/AutoReviewPage.tsx
+desktop/lingji-control/src/pages/MemoryInspectorLoopPage.tsx
+desktop/lingji-control/src/pages/CaptureCenterPage.tsx
+desktop/lingji-control/src/pages/VectorCenterPage.tsx
+desktop/lingji-control/src/pages/SystemComputePage.tsx
+desktop/lingji-control/src/pages/ModelsPage.tsx
+desktop/lingji-control/src/pages/JobsPage.tsx
+desktop/lingji-control/src/pages/ObsidianLoopPage.tsx
+```
+
+Auto Review 前端合同：
+
+```text
+desktop/lingji-control/src/pages/autoReviewTypes.ts
+desktop/lingji-control/scripts/auto-review-shadow-smoke.mjs
+```
+
+## 17. Obsidian 正式实现
 
 ```text
 src/obsidian/models.py
@@ -284,170 +473,62 @@ second_brain/obsidian_cli.py
 = deprecated facade -> src.obsidian
 ```
 
-CLI 发现顺序：
-
-```text
-Runtime Settings explicit path
--> OBSIDIAN_CLI_PATH
--> PATH
--> platform-standard location
--> not_found
-```
-
-Vault 顺序：
-
-```text
-Current Workspace Vault
--> Runtime Settings fallback
--> OBSIDIAN_VAULT_PATH
--> SECOND_BRAIN_OBSIDIAN_DIR compatibility fallback
--> configuration_required
-```
-
-正式命令面：
-
-```text
-version / help
-vault info / vault list
-search / read
-create / append
-files / file count
-tags / tasks
-daily read / append / path
-```
-
-安全合同：
-
-- 不使用 Shell 字符串。
-- 拒绝绝对路径、盘符路径、NUL 和 `..`。
-- create/append 执行写后读取验证。
-- 支持 Dry Run。
-- 普通状态 DTO 不返回原始绝对路径、正文或 Token。
-
-8766 API：
-
-```text
-GET  /api/obsidian/status
-POST /api/obsidian/validate
-POST /api/obsidian/refresh
-```
-
-## 13. Desktop UI
-
-壳层与路由：
-
-```text
-desktop/lingji-control/src/App.tsx
-desktop/lingji-control/src/AppPages.tsx
-desktop/lingji-control/src/navigation.ts
-desktop/lingji-control/src/types.ts
-```
-
-P2-05 Capture Center：
-
-```text
-desktop/lingji-control/src/pages/CaptureCenterPage.tsx
-desktop/lingji-control/src/pages/captureCenterApi.ts
-desktop/lingji-control/src/pages/captureCenterContract.ts
-desktop/lingji-control/src/pages/captureCenterTypes.ts
-desktop/lingji-control/scripts/capture-center-smoke.mjs
-```
-
-P2-06 Obsidian：
-
-```text
-desktop/lingji-control/src/pages/ObsidianPage.tsx
-desktop/lingji-control/scripts/obsidian-smoke.mjs
-```
-
-Tauri：
-
-```text
-desktop/lingji-control/src-tauri/Cargo.toml
-desktop/lingji-control/src-tauri/Cargo.lock
-desktop/lingji-control/src-tauri/src/main.rs
-desktop/lingji-control/src-tauri/capabilities/default.json
-```
-
-文件选择使用官方 Tauri 2 Dialog Plugin 和 `dialog:default`，不申请广泛文件系统权限。Desktop 不直接执行 Obsidian CLI。
-
-## 14. 构建与验证
+## 18. 构建与验证
 
 ```text
 requirements-test.txt
 constraints/python-3.12-windows.txt
 scripts/validate_clean_install.py
+.github/workflows/tests.yml
 .github/workflows/p0-windows-gate.yml
 ```
 
-P2-05 最终验证：
+关键测试：
 
 ```text
-Windows full pytest: 398 passed / 11 skipped / 0 failed
-npm ci: PASS
-npm run test:capture: PASS
-npm run test:smoke: PASS
-npm run build: PASS
-cargo check: PASS
-formal PR tests: SUCCESS
-formal PR P0 Windows Gate: SUCCESS
+tests/test_runtime_truth.py
+tests/test_extraction_idempotency.py
+tests/test_mcp_extraction_submission.py
+tests/test_auto_review_core.py
+tests/test_auto_review_ai_api.py
+tests/test_p2_08_p2_09_integration.py
+
+desktop/lingji-control/scripts/polling-data-smoke.mjs
+desktop/lingji-control/scripts/auto-review-shadow-smoke.mjs
+desktop/lingji-control/scripts/run-smoke-suite.mjs
 ```
 
-P2-06 最终验证：
+最终集成：
 
 ```text
-Linux full pytest: 405 passed / 11 skipped / 0 failed / 2 warnings / 10.31s
-Windows full pytest: 405 passed / 11 skipped / 0 failed / 2 warnings / 71.77s
-npm ci: PASS
-npm run test:obsidian: PASS
-npm run test:smoke: PASS
-npm run build: PASS
-cargo check: PASS
-formal PR tests: SUCCESS
-formal PR P0 Windows Gate: SUCCESS
+formal head: 9efda7a9a976d20596dbdabda5741a5c54180954
+tests workflow #696: SUCCESS
+P0 Windows Gate #94: SUCCESS
 ```
 
-## 15. P2-05 合并记录
+## 19. 文档索引
 
 ```text
-P2-05B merge: f01e3b2cc49065cda69f1c8909933dd0c530e4ff
-P2-05A merge: 46a0c5276252734c121f0cad7a56cf3a4a7c4bdc
-P2-05C merge: fab0ba1b816c1228b8cfb3618aa04b5e2f2c4c3d
-Validated tree: 1bf95b8d16a9daea52b60518f0e920a0c0bd50db
-Formal merge: c77e78c0f71339264d54fc083dbc5cfabcfaa173
+docs/MODULES/P2_09A_RUNTIME_TRUTH.md
+docs/MODULES/P2_09B_CANONICAL_IDEMPOTENCY.md
+docs/MODULES/P2_09C_DESKTOP_DATA_LAYER.md
+docs/MODULES/P2_09D_DESKTOP_UX_AUTO_REVIEW.md
+docs/MODULES/P2_08A_AUTO_REVIEW_CORE.md
+docs/MODULES/P2_08B_LOCAL_AI_REVIEWER.md
+docs/MODULES/P2_08B_SHADOW_API.md
+docs/TECH_RESEARCH/P2_08_STANDALONE_TO_LINGJI_MAPPING.md
+docs/TEST_REPORTS/P2_08_P2_09_INTEGRATION_TEST_REPORT.md
 ```
 
-```text
-docs/MODULES/P2_05_INTEGRATED_IMPLEMENTATION.md
-docs/TEST_REPORTS/P2_05_INTEGRATED_VALIDATION_REPORT.md
-```
-
-## 16. P2-06 合并记录
+## 20. 当前状态
 
 ```text
-Validated implementation: 4b0ad577eb396030ee6baa5c3bb217e990385475
-Validated final head: 6dfa31148585e2cb78c83af52b752550962820c9
-Formal merge: 5ce10ed8be98784f57e8723ffc27e40e3abaffbc
-```
-
-```text
-docs/MODULES/OBSIDIAN_CLI_MIGRATION_PLAN.md
-docs/MODULES/P2_06_OBSIDIAN_CLI_MIGRATION_IMPLEMENTATION.md
-docs/TEST_REPORTS/P2_06_OBSIDIAN_CLI_MIGRATION_TEST_REPORT.md
-```
-
-## 17. 当前状态
-
-```text
-P0 Engineering Hygiene:
+P0 - P2-07:
 MERGED_AND_VALIDATED
 
-P2-03 / P2-03B / P2-03C / P2-04:
-MERGED_AND_VALIDATED
+P2-08 Auto Review SHADOW:
+MERGED_AND_CI_VALIDATED_AWAITING_REAL_MACHINE_ACCEPTANCE
 
-P2-05 Manual Capture Center:
-MERGED_AND_VALIDATED
-
-P2-06 Obsidian CLI Formal Migration:
-MERGED_AND_VALIDATED
+P2-09 Runtime/Desktop Reliability:
+MERGED_AND_CI_VALIDATED_AWAITING_REAL_MACHINE_ACCEPTANCE
 ```
