@@ -1,0 +1,99 @@
+name: P2-05 Integrated Gate
+
+on:
+  push:
+    branches:
+      - work/p2-05-integrated-validation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p2-05-integrated-gate
+  cancel-in-progress: true
+
+jobs:
+  python-full:
+    name: Windows Python 3.12 full repository
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-ui.txt
+            requirements-test.txt
+            requirements-mcp.txt
+            constraints/python-3.12-windows.txt
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install `
+            -r requirements-ui.txt `
+            -r requirements-test.txt `
+            -r requirements-mcp.txt `
+            -c constraints/python-3.12-windows.txt
+          python -m pip check
+      - name: Validate clean install
+        run: python scripts/validate_clean_install.py --root . --import-check
+      - name: Compile repository
+        shell: pwsh
+        run: |
+          python -m compileall -q `
+            main.py `
+            run_service.py `
+            run_control_api.py `
+            run_mcp_server.py `
+            run_extraction_worker.py `
+            src `
+            second_brain `
+            tests `
+            scripts
+      - name: Run full pytest
+        shell: pwsh
+        run: |
+          python -m pytest -q --tb=short *> p2-05-pytest.log
+          $exitCode = $LASTEXITCODE
+          Get-Content p2-05-pytest.log -Tail 240
+          exit $exitCode
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2-05-integrated-pytest
+          path: p2-05-pytest.log
+          retention-days: 7
+
+  desktop-full:
+    name: Windows Desktop and Tauri
+    runs-on: windows-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: desktop/lingji-control
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/lingji-control/package-lock.json
+      - name: Install exact frontend dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run Capture Center smoke
+        run: npm run test:capture
+      - name: Run all desktop smoke tests
+        run: npm run test:smoke
+      - name: Build frontend
+        run: npm run build
+      - name: Check Tauri crate
+        run: cargo check --manifest-path src-tauri/Cargo.toml
