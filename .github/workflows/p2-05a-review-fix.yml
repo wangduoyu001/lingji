@@ -4,21 +4,24 @@ on:
   push:
     branches:
       - work/p2-05a-capture-control-api
-  pull_request:
-    branches:
-      - feature/second-brain-memory
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: p2-05a-coordinated-review
+  cancel-in-progress: true
+
 jobs:
   review-fix:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout branch
         uses: actions/checkout@v4
+        with:
+          ref: work/p2-05a-capture-control-api
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -40,305 +43,43 @@ jobs:
             -r requirements-test.txt `
             -r requirements-mcp.txt `
             -c constraints/python-3.12-windows.txt
+          python -m pip check
 
-      - name: Apply coordinated contract fixes
-        shell: pwsh
-        run: |
-          @'
-          from pathlib import Path
-          from textwrap import dedent
-
-
-          def replace_once(text: str, old: str, new: str, label: str) -> str:
-              if old not in text:
-                  raise SystemExit(f"contract block not found: {label}")
-              return text.replace(old, new, 1)
-
-
-          api_path = Path("src/control/api.py")
-          api = api_path.read_text(encoding="utf-8")
-          api = replace_once(
-              api,
-              "import hmac\nimport logging\nfrom typing import Any\n",
-              "import hmac\nimport json\nimport logging\nfrom datetime import datetime, timezone\nfrom typing import Any, Mapping\n",
-              "api imports",
-          )
-          api = replace_once(
-              api,
-              dedent('''
-              class CaptureMediaRequest(CaptureCommonRequest):
-                  input_path: str = Field(min_length=1)
-                  allow_ocr: bool = False
-                  allow_transcription: bool = False
-                  extract_keyframes: bool = False
-              '''),
-              dedent('''
-              class CaptureMediaRequest(CaptureCommonRequest):
-                  input_path: str = Field(min_length=1)
-                  allow_ocr: bool = False
-                  allow_transcription: bool = False
-                  extract_keyframes: bool = False
-                  extract_audio: bool = False
-              '''),
-              "media request extract_audio",
-          )
-          helpers = dedent('''
-
-          _CAPTURE_JOB_STATUSES = ("queued", "running", "retrying", "completed", "failed", "cancelled")
-
-
-          def _normalize_result_refs(value: Any) -> dict[str, str] | None:
-              if isinstance(value, Mapping):
-                  result = {
-                      key: str(value[key])
-                      for key in ("memory_id", "source_id", "conversation_id", "message_id")
-                      if isinstance(value.get(key), str) and value.get(key)
-                  }
-                  return result or None
-              if isinstance(value, list):
-                  result: dict[str, str] = {}
-                  for item in value:
-                      if not isinstance(item, Mapping):
-                          continue
-                      ref_type = str(item.get("type") or "").strip()
-                      ref_id = str(item.get("id") or "").strip()
-                      key = f"{ref_type}_id" if ref_type in {"memory", "source", "conversation", "message"} else ""
-                      if key and ref_id:
-                          result[key] = ref_id
-                  return result or None
-              return None
-
-
-          def _normalize_job_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
-              result = dict(payload)
-              result["result_refs"] = _normalize_result_refs(result.get("result_refs"))
-              summary = result.get("result_summary")
-              if isinstance(summary, Mapping):
-                  result["result_summary"] = json.dumps(dict(summary), ensure_ascii=False, sort_keys=True)
-              elif summary is not None and not isinstance(summary, str):
-                  result["result_summary"] = str(summary)
-              return result
-
-
-          def _normalize_jobs_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
-              result = dict(payload)
-              items = payload.get("items")
-              result["items"] = [
-                  _normalize_job_payload(item)
-                  for item in items
-                  if isinstance(item, Mapping)
-              ] if isinstance(items, list) else []
-              return result
-
-
-          def _normalize_status_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
-              result = dict(payload)
-              raw_mode = str(payload.get("capture_mode") or payload.get("mode") or "low_power").strip().lower()
-              mode = raw_mode if raw_mode in {"normal", "low_power", "paused"} else "low_power"
-              queue = payload.get("queue") if isinstance(payload.get("queue"), Mapping) else {}
-              result["capture_mode"] = mode
-              result["mode"] = mode
-              result["mode_label"] = mode.upper()
-              result["paused"] = mode == "paused"
-              result["worker_state"] = str(payload.get("worker_state") or "available")
-              result["updated_at"] = payload.get("updated_at") or datetime.now(timezone.utc).isoformat()
-              for status in _CAPTURE_JOB_STATUSES:
-                  value = queue.get(status, payload.get(status))
-                  result[status] = int(value) if isinstance(value, (int, float)) else None
-              return result
-
-
-          def _normalize_capabilities_payload(payload: Mapping[str, Any], service: Any) -> dict[str, Any]:
-              result = dict(payload)
-              mode = str(payload.get("capture_mode") or "low_power").strip().lower()
-              capture_service = getattr(service, "capture_service", None)
-              policy = getattr(capture_service, "policy", None)
-              heavy_allowed = bool(policy.permits_heavy_media()) if policy is not None else False
-              result["state"] = "paused" if mode == "paused" else "healthy"
-              result["file_modes"] = ["web_snapshot", "chatgpt_export", "codex_report"]
-              result["media"] = {
-                  "ocr": bool(getattr(policy, "allow_ocr", False)),
-                  "transcription": bool(getattr(policy, "allow_video_transcription", False)),
-                  "keyframes": heavy_allowed,
-                  "extract_audio": heavy_allowed,
-                  "reasons": {} if heavy_allowed else {"low_power": "当前采集策略禁止重媒体处理"},
-              }
-              return result
-          ''')
-          marker = "\ndef _register_capture_routes(app: Any, settings: Any, control: Any, *, token: str) -> None:\n"
-          if "def _normalize_status_payload" not in api:
-              api = replace_once(api, marker, helpers + marker, "normalization helper insertion")
-          api = replace_once(
-              api,
-              "            return capture_control().status()",
-              "            return _normalize_status_payload(capture_control().status())",
-              "status route",
-          )
-          api = replace_once(
-              api,
-              "            return capture_control().capabilities()",
-              "            service = capture_control()\n            return _normalize_capabilities_payload(service.capabilities(), service)",
-              "capabilities route",
-          )
-          old_jobs = dedent('''
-                  try:
-                      return capture_control().list_jobs(
-                          status=status,
-                          source_type=source_type,
-                          q=q,
-                          limit=limit,
-                          offset=offset,
-                      )
-                  except Exception as exc:
-              ''')
-          new_jobs = dedent('''
-                  try:
-                      return _normalize_jobs_payload(capture_control().list_jobs(
-                          status=status,
-                          source_type=source_type,
-                          q=q,
-                          limit=limit,
-                          offset=offset,
-                      ))
-                  except Exception as exc:
-              ''')
-          api = replace_once(api, old_jobs, new_jobs, "jobs route")
-          for old, new, label in (
-              ("            return capture_control().get_job(job_id)", "            return _normalize_job_payload(capture_control().get_job(job_id))", "job detail route"),
-              ("            return capture_control().retry_job(job_id)", "            return _normalize_job_payload(capture_control().retry_job(job_id))", "retry route"),
-              ("            return capture_control().cancel_job(job_id)", "            return _normalize_job_payload(capture_control().cancel_job(job_id))", "cancel route"),
-              ("            return capture_control().pause()", "            return _normalize_status_payload(capture_control().pause())", "pause route"),
-              ("            return capture_control().resume()", "            return _normalize_status_payload(capture_control().resume())", "resume route"),
-          ):
-              api = replace_once(api, old, new, label)
-          api_path.write_text(api, encoding="utf-8")
-
-          capture_path = Path("src/control/capture.py")
-          capture = capture_path.read_text(encoding="utf-8")
-          capture = replace_once(
-              capture,
-              'self._envelope(payload, source_type=str(payload.get("source_type") or "web"), text=text),',
-              'self._envelope(payload, source_type=str(payload.get("source_type") or "web"), capture_method="manual_text", text=text),',
-              "manual text method",
-          )
-          capture = replace_once(
-              capture,
-              'source_type=str(payload.get("source_type") or "web"),\n                url=url,',
-              'source_type=str(payload.get("source_type") or "web"),\n                capture_method="manual_web",\n                url=url,',
-              "manual web method",
-          )
-          capture = replace_once(
-              capture,
-              '    def submit_file(self, payload: Mapping[str, Any]) -> dict[str, Any]:\n        return self._submit_path(payload, str(payload.get("source_type") or "web"))',
-              '    def submit_file(self, payload: Mapping[str, Any]) -> dict[str, Any]:\n        source_type = str(payload.get("source_type") or "web")\n        adapter_name = str(payload.get("adapter_name") or "")\n        capture_method = "manual_chatgpt_export" if source_type == "chatgpt_export" else "manual_codex_report" if source_type == "codex_report" or adapter_name == "codex_work_report" else "manual_file"\n        return self._submit_path(payload, source_type, capture_method=capture_method)',
-              "manual file methods",
-          )
-          capture = replace_once(
-              capture,
-              '            "media",\n            options={',
-              '            "media",\n            capture_method="manual_media",\n            options={',
-              "manual media method",
-          )
-          capture = replace_once(
-              capture,
-              '                "extract_keyframes": bool(payload.get("extract_keyframes", False)),\n            },',
-              '                "extract_keyframes": bool(payload.get("extract_keyframes", False)),\n                "extract_audio": bool(payload.get("extract_audio", False)),\n            },',
-              "media extract audio",
-          )
-          capture = replace_once(
-              capture,
-              '    def _submit_path(self, payload: Mapping[str, Any], source_type: str, *, options: Mapping[str, Any] | None = None) -> dict[str, Any]:',
-              '    def _submit_path(self, payload: Mapping[str, Any], source_type: str, *, capture_method: str = "manual_file", options: Mapping[str, Any] | None = None) -> dict[str, Any]:',
-              "submit path signature",
-          )
-          capture = replace_once(
-              capture,
-              'self._envelope(payload, source_type=source_type, capture_method="manual_upload", title=',
-              'self._envelope(payload, source_type=source_type, capture_method=capture_method, title=',
-              "submit path capture method",
-          )
-          capture_path.write_text(capture, encoding="utf-8")
-
-          queue_test = Path("tests/test_extraction_queue.py")
-          text = queue_test.read_text(encoding="utf-8")
-          text = replace_once(text, "import sqlite3\n", "import sqlite3\nfrom contextlib import closing\n", "closing import")
-          text = replace_once(
-              text,
-              "        with sqlite3.connect(self.db_path) as connection:\n",
-              "        with closing(sqlite3.connect(self.db_path)) as connection:\n",
-              "close query-plan connection",
-          )
-          queue_test.write_text(text, encoding="utf-8")
-
-          api_test = Path("tests/test_capture_api.py")
-          tests = api_test.read_text(encoding="utf-8")
-          tests = replace_once(
-              tests,
-              'return {"capture_mode": "paused" if self.paused else "low_power", "paused": self.paused}',
-              'return {"capture_mode": "paused" if self.paused else "low_power", "paused": self.paused, "queue": {"queued": 2, "running": 1, "retrying": 0, "completed": 3, "failed": 0, "cancelled": 1}}',
-              "fake status",
-          )
-          tests = replace_once(
-              tests,
-              'return {"inputs": {"text": {"enabled": True}}}',
-              'return {"capture_mode": "low_power", "inputs": {"text": {"enabled": True}}}',
-              "fake capabilities",
-          )
-          tests = replace_once(
-              tests,
-              'return {"job_id": job_id, "status": "queued"}',
-              'return {"job_id": job_id, "status": "queued", "result_refs": [{"type": "memory", "id": "MEM-1"}], "result_summary": {"memory_count": 1}}',
-              "fake job",
-          )
-          if "test_capture_http_contract_is_desktop_safe" not in tests:
-              tests += dedent('''
-
-              def test_capture_http_contract_is_desktop_safe():
-                  context, _ = client()
-                  headers = {"X-LingJi-Token": "secret"}
-                  with context as api:
-                      status = api.get("/api/capture/status", headers=headers).json()
-                      capabilities = api.get("/api/capture/capabilities", headers=headers).json()
-                      job = api.get("/api/capture/jobs/job-1", headers=headers).json()
-                  assert status["mode"] == "low_power"
-                  assert status["mode_label"] == "LOW_POWER"
-                  assert status["queued"] == 2
-                  assert status["running"] == 1
-                  assert status["updated_at"]
-                  assert capabilities["file_modes"] == ["web_snapshot", "chatgpt_export", "codex_report"]
-                  assert "media" in capabilities
-                  assert job["result_refs"] == {"memory_id": "MEM-1"}
-                  assert isinstance(job["result_summary"], str)
-              ''')
-          api_test.write_text(tests, encoding="utf-8")
-          '@ | python -
+      - name: Apply coordinated fixes
+        run: python scripts/p2_05a_review_fix.py
 
       - name: Compile focused files
-        run: python -m compileall -q src/control src/extraction/queue.py tests/test_capture_control.py tests/test_capture_api.py
+        run: python -m compileall -q src/control src/extraction/queue.py tests/test_capture_control.py tests/test_capture_api.py tests/test_extraction_queue.py
 
       - name: Run required five-file gate
-        run: |
-          python -m pytest `
-            tests/test_capture_control.py `
-            tests/test_capture_api.py `
-            tests/test_control_api.py `
-            tests/test_extraction_queue.py `
-            tests/test_capture_service.py `
-            -v --tb=short
+        run: >-
+          python -m pytest
+          tests/test_capture_control.py
+          tests/test_capture_api.py
+          tests/test_control_api.py
+          tests/test_extraction_queue.py
+          tests/test_capture_service.py
+          -v --tb=short
 
       - name: Run full repository gate
         run: python -m pytest -q --tb=short
 
+      - name: Remove temporary review tooling
+        shell: pwsh
+        run: |
+          Remove-Item scripts/p2_05a_review_fix.py -ErrorAction SilentlyContinue
+          Remove-Item .github/workflows/p2-05a-patch-diagnostics.yml -ErrorAction SilentlyContinue
+          Remove-Item .github/workflows/p2-05a-review-fix.yml -ErrorAction SilentlyContinue
+
+      - name: Validate diff
+        shell: pwsh
+        run: git diff --check
+
       - name: Commit reviewed fixes
-        if: github.event_name == 'push'
         shell: pwsh
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/control/api.py src/control/capture.py tests/test_capture_api.py tests/test_extraction_queue.py
-          if (git diff --cached --quiet) {
-            Write-Host "No coordinated changes to commit"
-          } else {
-            git commit -m "fix(capture): align control API with manual capture contracts"
-            git push origin HEAD:work/p2-05a-capture-control-api
-          }
+          git add -A
+          git commit -m "fix(control): align capture API integration contracts"
+          git push origin HEAD:work/p2-05a-capture-control-api
