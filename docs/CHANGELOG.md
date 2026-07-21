@@ -1,3 +1,14 @@
+## 2026-07-21
+
+### P0 Engineering Hygiene Final Validation
+
+- P0 最终验收全部 8 道门禁通过。
+- 全量 pytest：358 passed, 1 failed (env e2e), 10 skipped, 47.99s。
+- pip check、validate_clean_install、compileall：全部通过。
+- npm ci、test:smoke（6/6）、build：全部通过。
+- 生产代码零修改。
+- 新增 docs/TEST_REPORTS/P0_FINAL_VALIDATION_REPORT.md
+
 # CHANGELOG.md — LingJi（灵机）项目变更日志
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
