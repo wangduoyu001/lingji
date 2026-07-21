@@ -18,6 +18,7 @@ from src.media import (
     PySceneDetectProvider,
 )
 from src.model_center import LocalModelInventoryService
+from src.obsidian.service import ObsidianService
 from src.storage import BackupManager, StateDatabase, StorageLifecycleManager
 
 from .runtime_settings import RuntimeSettingsStore
@@ -40,6 +41,9 @@ class LocalControlService:
         self.settings = settings
         self.state_db = state_db or StateDatabase(settings.state_db_path)
         self.runtime_settings = RuntimeSettingsStore(settings, state_db=self.state_db)
+        self.obsidian = ObsidianService(
+            settings, runtime_settings=self.runtime_settings, state_db=self.state_db
+        )
         self.health_checker = StartupHealthChecker(settings)
         self.queue = SQLiteExtractionQueue(settings.state_db_path)
         self.pipeline = pipeline
@@ -182,6 +186,12 @@ class LocalControlService:
         snapshot = self.runtime_settings.reset(keys, actor=actor)
         self._sync_hardware_settings()
         return snapshot
+
+    def obsidian_status(self) -> dict[str, Any]:
+        return self.obsidian.status()
+
+    def validate_obsidian_settings(self, values: Mapping[str, Any]) -> dict[str, Any]:
+        return self.obsidian.validate_configuration(values)
 
     def hardware_capabilities(self, *, force: bool = False) -> dict[str, Any]:
         return self.hardware.capabilities(force=force)

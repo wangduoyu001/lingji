@@ -7,6 +7,7 @@ export type PageId =
   | "brain_status"
   | "memory_inspector"
   | "capture_center"
+  | "obsidian"
   | "vector_center"
   | "system_compute"
   | "models"
@@ -140,6 +141,37 @@ export type BrainStatusSummary = {
   status_as_of?: string | null;
   warnings?: RuntimeWarning[];
   [key: string]: unknown;
+};
+
+export type ObsidianIssueStatus = {
+  code: string;
+  message: string;
+};
+
+export type ObsidianStatus = {
+  as_of?: string;
+  state: RuntimeState;
+  enabled: boolean;
+  available: boolean;
+  version?: string | null;
+  vault_name?: string | null;
+  cli_configured: boolean;
+  vault_configured: boolean;
+  cli_path_display: string;
+  vault_path_display: string;
+  cli_discovery_source: string;
+  vault_discovery_source: string;
+  timeout_seconds: number;
+  dry_run: boolean;
+  persisted?: boolean;
+  capabilities: {
+    status: boolean;
+    read: boolean;
+    write: boolean;
+    dry_run: boolean;
+    compatibility_forwarding: boolean;
+  };
+  issues: ObsidianIssueStatus[];
 };
 
 export type SettingDefinition = {

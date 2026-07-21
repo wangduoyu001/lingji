@@ -11,6 +11,7 @@ from src.gateway.memory_inspector import ReadModelUnavailableError
 from src.runtime import mcp_runtime_status
 
 from .memory_inspector import build_memory_inspector
+from .obsidian_api import register_obsidian_routes
 from .service import LocalControlService
 from .capture_api import (
     CaptureCommonRequest,
@@ -568,5 +569,8 @@ def create_control_app(
         except Exception as exc:
             raise translate_error(exc) from exc
 
+    register_obsidian_routes(
+        app, control, dependencies=secured, translate_error=translate_error
+    )
     register_capture_routes(app, settings, control, token=token)
     return app
