@@ -37,25 +37,59 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Run Capture Center smoke
-        run: npm run test:capture
+        id: capture_smoke
+        continue-on-error: true
+        run: npm run test:capture 2>&1 | tee capture-center-smoke.log
 
       - name: Run all desktop smoke tests
-        run: npm run test:smoke
+        id: desktop_smoke
+        continue-on-error: true
+        run: npm run test:smoke 2>&1 | tee desktop-smoke.log
 
       - name: Build desktop frontend
-        run: npm run build
+        id: desktop_build
+        continue-on-error: true
+        run: npm run build 2>&1 | tee desktop-build.log
 
       - name: Generate Cargo lock
-        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+        id: cargo_lock
+        continue-on-error: true
+        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml 2>&1 | tee cargo-lock.log
 
       - name: Check Tauri crate
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+        id: cargo_check
+        continue-on-error: true
+        run: cargo check --manifest-path src-tauri/Cargo.toml 2>&1 | tee cargo-check.log
 
-      - name: Upload generated locks
+      - name: Upload generated locks and logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: p2-05c-generated-locks
           path: |
             desktop/lingji-control/package-lock.json
             desktop/lingji-control/src-tauri/Cargo.lock
+            desktop/lingji-control/capture-center-smoke.log
+            desktop/lingji-control/desktop-smoke.log
+            desktop/lingji-control/desktop-build.log
+            desktop/lingji-control/cargo-lock.log
+            desktop/lingji-control/cargo-check.log
           retention-days: 3
+
+      - name: Enforce gate result
+        if: always()
+        shell: bash
+        env:
+          CAPTURE_SMOKE: ${{ steps.capture_smoke.outcome }}
+          DESKTOP_SMOKE: ${{ steps.desktop_smoke.outcome }}
+          DESKTOP_BUILD: ${{ steps.desktop_build.outcome }}
+          CARGO_LOCK: ${{ steps.cargo_lock.outcome }}
+          CARGO_CHECK: ${{ steps.cargo_check.outcome }}
+        run: |
+          printf 'capture=%s desktop-smoke=%s build=%s cargo-lock=%s cargo-check=%s\n' \
+            "$CAPTURE_SMOKE" "$DESKTOP_SMOKE" "$DESKTOP_BUILD" "$CARGO_LOCK" "$CARGO_CHECK"
+          test "$CAPTURE_SMOKE" = success
+          test "$DESKTOP_SMOKE" = success
+          test "$DESKTOP_BUILD" = success
+          test "$CARGO_LOCK" = success
+          test "$CARGO_CHECK" = success
