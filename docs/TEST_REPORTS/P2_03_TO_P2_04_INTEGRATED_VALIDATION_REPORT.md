@@ -6,7 +6,7 @@
 |-------|-------|
 | Branch | `work/p2-04-integrated-validation` |
 | Base Commit | `432ae059454cc7db8ab0ba4aaa63d24f5c9173e9` |
-| Final HEAD | `b992f18` |
+| Final HEAD | `2688b8b` |
 | Operating System | Windows Server 2022 (x86_64) |
 | Python Version | 3.13.2 |
 | Node Version | 24.15.0 |
@@ -20,7 +20,7 @@
 | `origin/work/p2-03c-capture-sources` | `c9014bd967a76dc9107728b512ed695f0aebb888` | 15 | +1332 | -23 | None |
 | `origin/work/p2-04-memory-inspector-ui` | `ef4580d799af8273bd68a72e74730423fdd11cda` | 12 | +1193 | -37 | None |
 
-Final HEAD: `c69f95f` (plus 2 follow-up commits: `b992f18`)
+Final HEAD: `2688b8b` 
 
 ## Merge Conflicts
 
@@ -88,9 +88,10 @@ Final HEAD: `c69f95f` (plus 2 follow-up commits: `b992f18`)
 | `test_control_api.py` | 4 | 0 |
 | `test_memory_inspector_api.py` | 9 | 0 |
 | `test_memory_inspector_facade.py` | 10 | 0 |
+| `test_memory_retrieval.py` | 3 | 0 |
 | `test_source_read_model.py` | 7 | 0 |
 | `test_source_service.py` | 8 | 0 |
-| **Total** | **51** | **0** |
+| **Total** | **54** | **0** |
 
 ### Frontend Tests
 
