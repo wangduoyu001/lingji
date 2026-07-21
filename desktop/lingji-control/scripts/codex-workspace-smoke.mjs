@@ -13,7 +13,7 @@ assert.match(dashboard, /当前项目/); assert.match(dashboard, /无活动会�
 assert.match(page, /Session 详情/); assert.doesNotMatch(page, /transcript/i); assert.doesNotMatch(page, /absolute_path|input_path/);
 assert.match(api, /after_id=/); assert.match(contract, /ACTIVE_POLL_MS = 1000/); assert.match(contract, /IDLE_POLL_MS = 5000/);
 assert.match(page, /document\.hidden/); assert.match(page, /visibilitychange/);
-assert.match(page, /AbortController/); assert.match(page, /requestId/);
+assert.match(page, /AbortController/); assert.match(page, /listRequestId/); assert.match(page, /activityRequestId/);
 assert.match(page, /Context Pack/); assert.match(page, /navigator\.clipboard\.writeText\(contextPack\.markdown\)/);
 assert.match(page, /progress_current/); assert.match(page, /progress_total/);
 assert.match(page, /Memory Inspector/);
