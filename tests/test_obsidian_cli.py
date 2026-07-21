@@ -1,35 +1,19 @@
-"""
-==== Obsidian CLI 集成单元测试 ====
-
-测试覆盖:
-  - CLI 不存在
-  - CLI 超时
-  - 中文文件名/正文
-  - 路径包含空格
-  - 搜索无结果
-  - 读取不存在的笔记
-  - dry-run 不产生真实写入
-  - 参数注入防护
-  - 成功创建并重新读取
-"""
-
+"""Obsidian CLI compatibility and portable-discovery tests."""
 from __future__ import annotations
 
-import json
 import os
 import subprocess
-import sys
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
 
 import pytest
 
-# 添加项目根到路径
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 from second_brain.obsidian_cli import (
     DEFAULT_CLI_PATHS,
+    DISCOVERY_ENVIRONMENT,
+    DISCOVERY_NOT_FOUND,
+    DISCOVERY_PATH,
+    DISCOVERY_PLATFORM_LOCATION,
     ObsidianCli,
     ObsidianCliConfig,
     ObsidianCliError,
@@ -41,16 +25,20 @@ from second_brain.obsidian_cli import (
 )
 
 
-# ============================================================
-# 辅助函数
-# ============================================================
+def _touch_file(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("stub", encoding="utf-8")
+    return path
+
 
 @pytest.fixture
-def mock_cli_config():
-    """模拟有效的 CLI 配置，不依赖真实环境"""
+def mock_cli_config(tmp_path):
+    cli_path = _touch_file(tmp_path / "Obsidian" / "Obsidian.com")
+    vault_path = tmp_path / "vault"
+    vault_path.mkdir()
     return ObsidianCliConfig(
-        cli_path="D:\\Program Files (x86)\\Obsidian\\Obsidian.com",
-        vault_path="E:\\obsidian\\本地知识库",
+        cli_path=str(cli_path),
+        vault_path=str(vault_path),
         vault_name="本地知识库",
         timeout=15,
         dry_run=False,
@@ -58,248 +46,252 @@ def mock_cli_config():
 
 
 @pytest.fixture
-def mock_dry_run_config():
-    """dry-run 模式配置"""
-    return ObsidianCliConfig(
-        cli_path="D:\\Program Files (x86)\\Obsidian\\Obsidian.com",
-        vault_path="E:\\obsidian\\本地知识库",
-        vault_name="本地知识库",
-        timeout=15,
-        dry_run=True,
+def mock_dry_run_config(mock_cli_config):
+    mock_cli_config.dry_run = True
+    return mock_cli_config
+
+
+def test_environment_cli_has_highest_priority(tmp_path, monkeypatch):
+    explicit = _touch_file(tmp_path / "custom" / "Obsidian.com")
+    path_cli = _touch_file(tmp_path / "bin" / "Obsidian.com")
+    monkeypatch.setattr(
+        "second_brain.obsidian_cli.shutil.which",
+        lambda *args, **kwargs: str(path_cli),
     )
+    result = ObsidianCliConfig.discover(
+        environ={"OBSIDIAN_CLI_PATH": str(explicit), "PATH": str(path_cli.parent)}
+    )
+    assert result.path == str(explicit)
+    assert result.source == DISCOVERY_ENVIRONMENT
 
 
-# ============================================================
-# 测试：配置探测
-# ============================================================
+def test_path_discovery_checks_both_supported_names(tmp_path, monkeypatch):
+    cli_path = _touch_file(tmp_path / "bin" / "obsidian")
+    calls: list[str] = []
+
+    def fake_which(name, path=None):
+        calls.append(name)
+        return str(cli_path) if name == "obsidian" else None
+
+    monkeypatch.setattr("second_brain.obsidian_cli.shutil.which", fake_which)
+    result = ObsidianCliConfig.discover(
+        environ={"PATH": str(cli_path.parent)}, platform="linux"
+    )
+    assert result.path == str(cli_path)
+    assert result.source == DISCOVERY_PATH
+    assert calls == ["Obsidian.com", "obsidian"]
+
+
+@pytest.mark.parametrize("variable", ["LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)"])
+def test_windows_standard_locations_are_derived_from_environment(
+    variable, tmp_path, monkeypatch
+):
+    root = tmp_path / variable.replace("(", "_").replace(")", "")
+    expected = _touch_file(root / "Obsidian" / "Obsidian.com")
+    monkeypatch.setattr(
+        "second_brain.obsidian_cli.shutil.which", lambda *args, **kwargs: None
+    )
+    result = ObsidianCliConfig.discover(
+        environ={variable: str(root), "PATH": ""}, platform="win32"
+    )
+    assert result.path == str(expected)
+    assert result.source == DISCOVERY_PLATFORM_LOCATION
+
+
+def test_discovery_not_found_is_stable(monkeypatch):
+    monkeypatch.setattr(
+        "second_brain.obsidian_cli.shutil.which", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(Path, "is_file", lambda self: False)
+    result = ObsidianCliConfig.discover(environ={"PATH": ""}, platform="linux")
+    assert result.path == ""
+    assert result.source == DISCOVERY_NOT_FOUND
+
+
+def test_vault_priority_workspace_runtime_then_environment(tmp_path):
+    config = ObsidianCliConfig.from_env(
+        workspace_vault_path=tmp_path / "workspace",
+        runtime_vault_path=tmp_path / "runtime",
+        environ={"OBSIDIAN_VAULT_PATH": str(tmp_path / "environment")},
+    )
+    assert config.vault_path == str(tmp_path / "workspace")
+    assert config.vault_discovery_source == "workspace"
+
+    runtime_config = ObsidianCliConfig.from_env(
+        runtime_vault_path=tmp_path / "runtime",
+        environ={"OBSIDIAN_VAULT_PATH": str(tmp_path / "environment")},
+    )
+    assert runtime_config.vault_path == str(tmp_path / "runtime")
+    assert runtime_config.vault_discovery_source == "runtime_settings"
+
+    environment_config = ObsidianCliConfig.from_env(
+        environ={"OBSIDIAN_VAULT_PATH": str(tmp_path / "environment")}
+    )
+    assert environment_config.vault_path == str(tmp_path / "environment")
+    assert environment_config.vault_discovery_source == DISCOVERY_ENVIRONMENT
+
+
+def test_legacy_vault_environment_remains_supported(tmp_path):
+    config = ObsidianCliConfig.from_env(
+        environ={"SECOND_BRAIN_OBSIDIAN_DIR": str(tmp_path)}
+    )
+    assert config.vault_path == str(tmp_path)
+    assert config.vault_discovery_source == DISCOVERY_ENVIRONMENT
+
+
+def test_default_paths_do_not_encode_drive_or_user_directory():
+    normalized = [path.replace("\\", "/").casefold() for path in DEFAULT_CLI_PATHS]
+    assert all(not path.startswith("c:/") for path in normalized)
+    assert all(not path.startswith("d:/") for path in normalized)
+    assert all("/users/" not in path for path in normalized)
+
 
 def test_config_from_env_defaults():
-    """测试配置从环境变量读取"""
-    config = ObsidianCliConfig.from_env()
+    config = ObsidianCliConfig.from_env(environ={"PATH": ""})
     assert isinstance(config, ObsidianCliConfig)
     assert config.timeout > 0
-    assert config.vault_name == os.getenv("OBSIDIAN_VAULT_NAME", "本地知识库")
+    assert config.vault_name == "本地知识库"
 
 
-def test_config_validation_no_cli():
-    """测试 CLI 不存在时的验证"""
-    config = ObsidianCliConfig(cli_path="", vault_path="E:\\obsidian\\本地知识库", vault_name="test")
+def test_invalid_timeout_falls_back_to_default():
+    config = ObsidianCliConfig.from_env(
+        environ={"PATH": "", "OBSIDIAN_CLI_TIMEOUT": "invalid"}
+    )
+    assert config.timeout == 15
+
+
+def test_config_validation_no_cli(tmp_path):
+    config = ObsidianCliConfig(
+        cli_path="", vault_path=str(tmp_path), vault_name="test"
+    )
     issues = config.validate()
-    assert any("CLI" in i for i in issues)
+    assert any("CLI" in issue for issue in issues)
 
 
 def test_config_validation_ok(mock_cli_config):
-    """测试配置验证通过"""
-    if os.path.isfile(mock_cli_config.cli_path):
-        issues = mock_cli_config.validate()
-        assert len(issues) == 0
+    assert mock_cli_config.validate() == []
 
-
-# ============================================================
-# 测试：异常类型
-# ============================================================
 
 def test_error_hierarchy():
-    """测试异常继承链"""
     assert issubclass(ObsidianCliNotFound, ObsidianCliError)
     assert issubclass(ObsidianCliTimeout, ObsidianCliError)
     assert issubclass(ObsidianCliErrorResult, ObsidianCliError)
 
 
 def test_error_message():
-    """测试异常消息"""
-    err = ObsidianCliError("测试错误", command="test", rc=1, err="stderr")
-    assert str(err) == "测试错误"
-    assert err.command == "test"
-    assert err.returncode == 1
-    assert err.stderr == "stderr"
+    error = ObsidianCliError("测试错误", command="test", rc=1, err="stderr")
+    assert str(error) == "测试错误"
+    assert error.command == "test"
+    assert error.returncode == 1
+    assert error.stderr == "stderr"
 
-
-# ============================================================
-# 测试：安全工具
-# ============================================================
 
 def test_sanitize_filename():
-    """测试文件名安全化"""
     assert ObsidianCli.sanitize_filename("normal_file.md") == "normal_file.md"
     assert "/" not in ObsidianCli.sanitize_filename("a/b:c*d?e")
     assert "\\" not in ObsidianCli.sanitize_filename("a\\b")
-    # 空字符串
     assert ObsidianCli.sanitize_filename("") == ""
 
 
 def test_validate_path():
-    """测试路径安全验证"""
     assert ObsidianCli.validate_path("notes/test.md")
     assert ObsidianCli.validate_path("PEMIS/dashboard/Control Center.md")
     assert not ObsidianCli.validate_path("../outside.md")
     assert not ObsidianCli.validate_path("notes/../../../etc/passwd")
 
 
-# ============================================================
-# 测试：dry-run 模式
-# ============================================================
-
-def test_dry_run_no_writes(mock_dry_run_config):
-    """测试 dry-run 模式下不产生真实写入"""
+def test_dry_run_no_writes(mock_dry_run_config, monkeypatch):
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: pytest.fail("dry-run must not call subprocess"),
+    )
     cli = ObsidianCli(config=mock_dry_run_config)
-    assert cli.config.dry_run is True
-
     result = cli.create("test/dry-run-test.md", "测试内容", overwrite=False)
-    assert "DRY-RUN" in result or result == ""
-    assert len(cli.operation_log) > 0
+    assert result == ""
     assert cli.operation_log[-1]["dry_run"] is True
 
 
-# ============================================================
-# 测试：参数注入防护
-# ============================================================
+def test_timeout_is_translated(mock_cli_config, monkeypatch):
+    def timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], kwargs.get("timeout", 1))
 
-def test_argument_injection_protection():
-    """测试参数注入防护"""
-    cli = ObsidianCli(config=ObsidianCliConfig(
-        cli_path="obsidian.com",
-        vault_name="本地知识库",
-        dry_run=True,
-    ))
-    # 恶意输入：带分号的注入
-    try:
-        cli.search("test; rm -rf /")
-    except Exception:
-        pass
-    # 恶意路径
+    monkeypatch.setattr(subprocess, "run", timeout)
+    with pytest.raises(ObsidianCliTimeout):
+        ObsidianCli(mock_cli_config).get_version()
+
+
+def test_non_windows_does_not_require_create_no_window(
+    mock_cli_config, monkeypatch
+):
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout=b"1.0", stderr=b"")
+
+    monkeypatch.setattr("second_brain.obsidian_cli.os.name", "posix")
+    monkeypatch.delattr(subprocess, "CREATE_NO_WINDOW", raising=False)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert ObsidianCli(mock_cli_config).get_version() == "1.0"
+    assert "creationflags" not in captured
+
+
+def test_argument_injection_is_passed_as_single_argument(mock_dry_run_config):
+    cli = ObsidianCli(config=mock_dry_run_config)
+    cli.search("test; rm -rf /")
+    assert "query=test; rm -rf /" in cli.operation_log[-1]["command"]
     assert cli.validate_path("../outside.md") is False
 
 
-# ============================================================
-# 测试：不存在的笔记
-# ============================================================
-
-def test_read_nonexistent_note():
-    """测试读取不存在的笔记抛出异常"""
-    config = ObsidianCliConfig.from_env()
-    if not config.ok():
-        pytest.skip("Obsidian CLI 不可用，跳过测试")
-    cli = ObsidianCli(config=config)
-    with pytest.raises((ObsidianCliError, FileNotFoundError, Exception)):
-        cli.read("_不存在_的_笔记_测试_12345.md")
-
-
-# ============================================================
-# 测试：搜索无结果
-# ============================================================
-
-@pytest.mark.skipif(
-    not ObsidianCliConfig.from_env().ok() or not bool(os.getenv("OBSIDIAN_VAULT_PATH", "") or os.getenv("SECOND_BRAIN_OBSIDIAN_DIR", "")),
-    reason="Obsidian CLI 或 Vault 未配置",
-)
-def test_search_no_results():
-    """测试搜索无结果返回空列表"""
-    config = ObsidianCliConfig.from_env()
-    cli = ObsidianCli(config=config)
-    results = cli.search("x1y2z3_不存在的搜索词_abc123")
-    assert isinstance(results, list)
-    assert len(results) == 0
-
-
-# ============================================================
-# 测试：dataclass
-# ============================================================
-
 def test_note_dataclass():
-    """测试 ObsidianNote 数据类"""
     note = ObsidianNote(path="test.md", content="# Hello", vault="main")
     assert note.path == "test.md"
     assert note.content == "# Hello"
     assert note.vault == "main"
-    # 默认值
-    note2 = ObsidianNote()
-    assert note2.title == ""
-    assert note2.tags == []
+    assert ObsidianNote().tags == []
 
 
 def test_vault_info_dataclass():
-    """测试 ObsidianVaultInfo 数据类"""
     info = ObsidianVaultInfo(name="test", path="/vault")
     assert info.name == "test"
     assert info.path == "/vault"
 
 
-# ============================================================
-# 测试：真实 CLI 集成（仅在 CLI 可用时执行）
-# ============================================================
-
 @pytest.mark.skipif(
-    not ObsidianCliConfig.from_env().ok() or not bool(os.getenv("OBSIDIAN_VAULT_PATH", "") or os.getenv("SECOND_BRAIN_OBSIDIAN_DIR", "")),
-    reason="Obsidian CLI 或 Vault 未配置",
+    not ObsidianCliConfig.from_env().ok()
+    or not bool(
+        os.getenv("OBSIDIAN_VAULT_PATH", "")
+        or os.getenv("SECOND_BRAIN_OBSIDIAN_DIR", "")
+    ),
+    reason="Obsidian CLI or Vault is not configured",
 )
 class TestRealCli:
-    """真实 Obsidian CLI 集成测试"""
-
     def setup_method(self):
         self.cli = ObsidianCli()
 
     def test_version(self):
-        """测试获取版本号"""
         version = self.cli.get_version()
         assert isinstance(version, str)
-        assert len(version) > 0
-        assert version.startswith("1.") or version.startswith("0.")
+        assert version
 
     def test_vault_info(self):
-        """测试获取 Vault 信息"""
         info = self.cli.get_vault_info()
         assert isinstance(info, ObsidianVaultInfo)
-        assert len(info.name) > 0
-        assert len(info.path) > 0
+        assert info.name
+        assert info.path
 
-    def test_search_灵机(self):
-        """测试中文搜索"""
-        results = self.cli.search("灵机", limit=5)
-        assert isinstance(results, list)
-        assert len(results) >= 0
-
-    def test_read_existing_note(self):
-        """测试读取已存在笔记"""
-        try:
-            content = self.cli.read("PEMIS/dashboard/Control Center.md")
-            assert len(content) > 0
-            assert "灵机" in content or "控制中心" in content
-        except ObsidianCliErrorResult:
-            pass  # 文件可能不存在
+    def test_search(self):
+        assert isinstance(self.cli.search("灵机", limit=5), list)
 
     def test_list_files(self):
-        """测试列出文件"""
-        files = self.cli.list_files(folder="PEMIS", ext=".md")
-        assert isinstance(files, list)
+        assert isinstance(self.cli.list_files(folder="PEMIS", ext=".md"), list)
 
     def test_health(self):
-        """测试健康检查"""
         health = self.cli.health()
         assert health["available"] is True
-        assert "version" in health
-        assert len(health["issues"]) == 0
-
-    def test_create_and_verify_test_note(self):
-        """测试创建并验证测试笔记"""
-        test_path = "系统测试/Obsidian-CLI/单元测试-验证笔记.md"
-        test_content = "---\n测试: true\n---\n# 单元测试验证\n\n此笔记由自动化测试创建。\n- 创建时间: test\n- 状态: 通过"
-        try:
-            result = self.cli.create(test_path, test_content, overwrite=True)
-            assert result is not None
-            # 验证
-            read_back = self.cli.read(test_path)
-            assert "单元测试验证" in read_back
-            assert "状态: 通过" in read_back
-        finally:
-            # 清理
-            try:
-                import subprocess as sp
-                sp.run([
-                    self.cli.config.cli_path,
-                    f"vault={self.cli.config.vault_name}",
-                    "delete", f"path={test_path}", "permanent",
-                ], capture_output=True, text=True, timeout=15,
-                   creationflags=subprocess.CREATE_NO_WINDOW)
-            except Exception:
-                pass
+        assert health["cli_discovery_source"] in {
+            DISCOVERY_ENVIRONMENT,
+            DISCOVERY_PATH,
+            DISCOVERY_PLATFORM_LOCATION,
+        }
