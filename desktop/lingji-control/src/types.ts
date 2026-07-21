@@ -7,6 +7,7 @@ export type PageId =
   | "brain_status"
   | "codex_workspace"
   | "memory_review"
+  | "auto_review"
   | "memory_inspector"
   | "capture_center"
   | "obsidian"
@@ -22,10 +23,18 @@ export type PageId =
   | "settings"
   | "logs";
 
+export type NavigationGroupId = "home" | "memory" | "ingestion" | "runtime" | "operations";
+
 export type NavigationItem = {
   id: PageId;
   label: string;
   hint: string;
+  group: NavigationGroupId;
+};
+
+export type NavigationGroup = {
+  id: NavigationGroupId;
+  label: string;
 };
 
 export type PageProps = {

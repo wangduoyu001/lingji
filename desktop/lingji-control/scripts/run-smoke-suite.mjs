@@ -11,6 +11,7 @@ const scripts = [
   "memory-review-smoke.mjs",
   "obsidian-operations-smoke.mjs",
   "polling-data-smoke.mjs",
+  "auto-review-shadow-smoke.mjs",
 ];
 
 for (const script of scripts) {
