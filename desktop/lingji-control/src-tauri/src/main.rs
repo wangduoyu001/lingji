@@ -35,14 +35,12 @@ fn control_credentials() -> Result<ControlCredentials, String> {
             }
         }
     }
-    Ok(ControlCredentials {
-        base_url,
-        token: String::new(),
-    })
+    Ok(ControlCredentials { base_url, token: String::new() })
 }
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![control_credentials])
         .run(tauri::generate_context!())
         .expect("error while running LingJi control center");

@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Minimal capability for the LingJi local control window.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:default"]
 }

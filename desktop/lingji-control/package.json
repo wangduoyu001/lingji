@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "test:inspector": "tsx scripts/memory-inspector-smoke.mjs",
-    "test:smoke": "tsx scripts/acceptance-smoke.mjs && tsx scripts/ui-modular-smoke.mjs && tsx scripts/vector-center-smoke.mjs && tsx scripts/hardware-smoke.mjs && tsx scripts/models-smoke.mjs && tsx scripts/memory-inspector-smoke.mjs",
+    "test:capture": "tsx scripts/capture-center-smoke.mjs",
+    "test:smoke": "tsx scripts/acceptance-smoke.mjs && tsx scripts/ui-modular-smoke.mjs && tsx scripts/vector-center-smoke.mjs && tsx scripts/hardware-smoke.mjs && tsx scripts/models-smoke.mjs && tsx scripts/memory-inspector-smoke.mjs && tsx scripts/capture-center-smoke.mjs",
     "build": "npm run test:smoke && tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/plugin-dialog": "^2.7.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

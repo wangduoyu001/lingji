@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 const requiredFiles = [
+  "src/AppPages.tsx",
   "src/navigation.ts",
   "src/types.ts",
   "src/hooks/useLingJiConnection.ts",
@@ -26,14 +27,18 @@ for (const file of requiredFiles) {
 }
 
 const app = fs.readFileSync("src/App.tsx", "utf8");
+const routes = fs.readFileSync("src/AppPages.tsx", "utf8");
 const systemCompute = fs.readFileSync("src/pages/SystemComputePage.tsx", "utf8");
 const vectorCenter = fs.readFileSync("src/pages/VectorCenterPage.tsx", "utf8");
 const settings = fs.readFileSync("src/pages/SettingsPage.tsx", "utf8");
 const field = fs.readFileSync("src/components/settings/SettingField.tsx", "utf8");
 const navigation = fs.readFileSync("src/navigation.ts", "utf8");
 
-for (const token of ["NAVIGATION", "useLingJiConnection", "OverviewPage", "BrainStatusPage", "VectorCenterPage", "SystemComputePage", "ModelsPage", "SettingsPage", "AcceptancePage"]) {
+for (const token of ["NAVIGATION", "useLingJiConnection", "AppPages"]) {
   if (!app.includes(token)) throw new Error(`App shell is missing ${token}`);
+}
+for (const token of ["OverviewPage", "BrainStatusPage", "VectorCenterPage", "SystemComputePage", "ModelsPage", "SettingsPage", "AcceptancePage"]) {
+  if (!routes.includes(token)) throw new Error(`Page router is missing ${token}`);
 }
 
 for (const token of ["/api/hardware/capabilities", "/api/hardware/telemetry", "/api/compute/policy", "候选设备", "模型一定能运行"]) {
@@ -56,7 +61,7 @@ for (const token of ["脑状态", "向量中心", "系统与算力", "AI 与模�
   if (!navigation.includes(token)) throw new Error(`Navigation is missing ${token}`);
 }
 
-const appLines = app.split("\n").length;
+const appLines = app.split(/\r?\n/).length;
 if (appLines > 100) throw new Error(`App.tsx is still too large: ${appLines} lines`);
 
 console.log(`Modular UI smoke passed; App.tsx=${appLines} lines`);

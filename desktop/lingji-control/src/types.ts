@@ -6,6 +6,7 @@ export type PageId =
   | "overview"
   | "brain_status"
   | "memory_inspector"
+  | "capture_center"
   | "vector_center"
   | "system_compute"
   | "models"

@@ -86,11 +86,11 @@ assert.equal(contract.rebuildLabel(null), "未知");
 const page = readFileSync(new URL("../src/pages/MemoryInspectorPage.tsx", import.meta.url), "utf8");
 const api = readFileSync(new URL("../src/api.ts", import.meta.url), "utf8");
 const navigation = readFileSync(new URL("../src/navigation.ts", import.meta.url), "utf8");
-const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+const routes = readFileSync(new URL("../src/AppPages.tsx", import.meta.url), "utf8");
 assert.ok(page.includes("AbortController") && page.includes("messageRequestId") && page.includes("memoryRequestId"));
 assert.ok(page.includes("row.metadata?.model") && page.includes("row.metadata?.is_branch"));
 assert.ok(page.includes("isRestricted(row)"), "restricted state must be evaluated per message row");
 assert.ok(api.includes("ApiError") && api.includes("timeoutMs") && api.includes("signal"));
-assert.ok(navigation.includes("memory_inspector") && app.includes("<MemoryInspectorPage"));
+assert.ok(navigation.includes("memory_inspector") && routes.includes("<MemoryInspectorPage"));
 
 console.log("memory-inspector-smoke: PASS");
