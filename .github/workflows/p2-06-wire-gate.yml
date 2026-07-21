@@ -1,0 +1,96 @@
+name: P2-06 Obsidian Wiring Gate
+
+on:
+  push:
+    branches:
+      - work/p2-06-obsidian-cli-migration
+    paths:
+      - .github/workflows/p2-06-wire-gate.yml
+      - scripts/p2_06_wire.py
+
+permissions:
+  contents: write
+
+jobs:
+  wire-and-validate:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: work/p2-06-obsidian-cli-migration
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/lingji-control/package-lock.json
+
+      - name: Install Python dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install `
+            -r requirements.txt `
+            -r requirements-ui.txt `
+            -r requirements-mcp.txt `
+            -r requirements-test.txt `
+            -c constraints/python-3.12-windows.txt
+          python -m pip check
+
+      - name: Apply shared wiring
+        run: python scripts/p2_06_wire.py
+
+      - name: Validate clean install and compile
+        shell: pwsh
+        run: |
+          python scripts/validate_clean_install.py --import-check
+          python -m compileall -q src second_brain tests
+
+      - name: Run focused Obsidian tests
+        run: python -m pytest tests/test_obsidian_cli.py tests/test_obsidian_service.py tests/test_obsidian_api.py -q --tb=short
+
+      - name: Run full repository pytest
+        run: python -m pytest -q --tb=short
+
+      - name: Install Desktop dependencies
+        working-directory: desktop/lingji-control
+        run: npm ci
+
+      - name: Run Obsidian Desktop smoke
+        working-directory: desktop/lingji-control
+        run: npm run test:obsidian
+
+      - name: Run all Desktop smoke tests
+        working-directory: desktop/lingji-control
+        run: npm run test:smoke
+
+      - name: Build Desktop
+        working-directory: desktop/lingji-control
+        run: npm run build
+
+      - name: Check Tauri
+        run: cargo check --manifest-path desktop/lingji-control/src-tauri/Cargo.toml
+
+      - name: Check patch quality
+        shell: pwsh
+        run: git diff --check
+
+      - name: Remove one-shot tooling and commit
+        shell: pwsh
+        run: |
+          git rm scripts/p2_06_wire.py .github/workflows/p2-06-wire-gate.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(obsidian): wire formal CLI migration"
+          git push origin HEAD:work/p2-06-obsidian-cli-migration
