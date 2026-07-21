@@ -118,8 +118,8 @@ def build_codex_memory_loop(
     )
 
     def sync_memory_index(_path: Path) -> None:
-        entries = indexer.build_index(force=False)
-        gateway.rebuild(entries, indexer.vault_dir, chunker)
+        indexer.build_index(force=False)
+        gateway.rebuild(indexer.get_all(), indexer.vault_dir, chunker)
 
     memory_review = MemoryReviewService(
         gateway.lifecycle,
