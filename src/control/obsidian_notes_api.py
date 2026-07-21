@@ -48,7 +48,7 @@ class SafeObsidianNotesService:
             raise FileNotFoundError(relative_path)
         raw = path.read_text(encoding="utf-8-sig")
         metadata, body = split_frontmatter(raw)
-        return {"id": str(metadata.get("id") or ""), "relative_path": self._relative(path), "metadata": metadata, "content": body, "content_hash": content_hash(raw)}
+        return {"id": str(metadata.get("id") or ""), "relative_path": self._relative(path), "metadata": metadata, "content": body, "content_hash": content_hash(body)}
 
     def create_manual_note(self, *, title: str, content: str, directory: str = "03-Knowledge/Notes", project_ids: list[str] | None = None, tags: list[str] | None = None) -> dict[str, Any]:
         directory_path = self._resolve(directory, write=True, directory=True)
@@ -59,11 +59,11 @@ class SafeObsidianNotesService:
         target = directory_path / f"{safe[:100]}.md"
         if target.exists():
             target = directory_path / f"{safe[:80]}-{note_id[-8:]}.md"
-        metadata = {"schema_version": 1, "id": note_id, "title": title.strip(), "memory_type": "note", "status": "active", "privacy": "private", "project_ids": list(project_ids or []), "created_at": now, "updated_at": now, "lingji_managed": True, "tags": self._tags(tags)}
-        rendered = render_frontmatter(metadata, content.strip() + "\n")
-        metadata["content_hash"] = content_hash(rendered)
-        atomic_write(target, render_frontmatter(metadata, content.strip() + "\n"))
-        result = {"id": note_id, "relative_path": self._relative(target), "content_hash": metadata["content_hash"], "created": True}
+        body = content.strip() + "\n"
+        body_hash = content_hash(body)
+        metadata = {"schema_version": 1, "id": note_id, "title": title.strip(), "memory_type": "note", "status": "active", "privacy": "private", "project_ids": list(project_ids or []), "created_at": now, "updated_at": now, "content_hash": body_hash, "lingji_managed": True, "tags": self._tags(tags)}
+        atomic_write(target, render_frontmatter(metadata, body))
+        result = {"id": note_id, "relative_path": self._relative(target), "content_hash": body_hash, "created": True}
         if self.state_db:
             self.state_db.append_event("obsidian_manual_note_created", "note", note_id, result)
         return result
@@ -74,16 +74,17 @@ class SafeObsidianNotesService:
             root = self.root / root_name
             for path in root.rglob("*.md") if root.exists() else ():
                 raw = path.read_text(encoding="utf-8-sig")
-                metadata, _ = split_frontmatter(raw)
+                metadata, body = split_frontmatter(raw)
                 if metadata.get("lingji_managed") is not True:
                     continue
-                current = content_hash(raw)
+                current = content_hash(body)
                 stored = str(metadata.get("content_hash") or "")
                 if stored and stored != current:
                     changes.append({"id": str(metadata.get("id") or ""), "relative_path": self._relative(path), "state": "external_modified", "stored_hash": stored, "current_hash": current})
         return {"items": changes, "count": len(changes)}
 
     def _resolve(self, value: str, *, write: bool, directory: bool = False) -> Path:
+        del directory
         raw = str(value or "").replace("\\", "/").strip()
         if not raw or "\x00" in raw or Path(raw).is_absolute() or (len(raw) > 1 and raw[1] == ":"):
             raise ObsidianPathError("OBSIDIAN_PATH_FORBIDDEN")
@@ -125,8 +126,7 @@ def register_obsidian_note_routes(app, notes_service: SafeObsidianNotesService, 
         try:
             return call()
         except ObsidianPathError as exc:
-            code = str(exc)
-            raise HTTPException(status_code=403, detail={"code": code}) from exc
+            raise HTTPException(status_code=403, detail={"code": str(exc)}) from exc
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail={"code": "OBSIDIAN_NOTE_NOT_FOUND"}) from exc
         except RuntimeError as exc:
@@ -140,7 +140,8 @@ def register_obsidian_note_routes(app, notes_service: SafeObsidianNotesService, 
     @router.post("/api/obsidian/notes")
     def create(request: NoteRequest, x_lingji_token: str | None = Header(default=None)):
         auth(x_lingji_token)
-        return guard(lambda: notes_service.create_manual_note(**request.model_dump()))
+        payload = request.model_dump() if hasattr(request, "model_dump") else request.dict()
+        return guard(lambda: notes_service.create_manual_note(**payload))
 
     @router.post("/api/obsidian/scan")
     def scan(x_lingji_token: str | None = Header(default=None)):
