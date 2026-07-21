@@ -1,10 +1,11 @@
 import type { LingJiApi } from "./api";
 
-export type Row = Record<string, any>;
+export type Row = Record<string, unknown>;
 
 export type PageId =
   | "overview"
   | "brain_status"
+  | "memory_inspector"
   | "vector_center"
   | "system_compute"
   | "models"
@@ -97,7 +98,7 @@ export type VectorStatus = {
   collection: string | null;
   mode: "embedded" | "remote" | "memory" | string | null;
   distance?: string | null;
-  rebuild_required: boolean;
+  rebuild_required: boolean | null;
   last_error?: string | null;
   embedding: EmbeddingStatus;
   [key: string]: unknown;
@@ -129,7 +130,7 @@ export type BrainStatusSummary = {
   vector_state?: string | null;
   vector_collection?: string | null;
   vector_dimension?: number | null;
-  vector_rebuild_required?: boolean;
+  vector_rebuild_required?: boolean | null;
   embedding_state?: string | null;
   embed_model?: string | null;
   workspace?: string | null;
@@ -168,7 +169,7 @@ export type SettingDefinition = {
 };
 
 export type SettingsSnapshot = {
-  values: Record<string, any>;
-  overrides: Record<string, any>;
+  values: Record<string, unknown>;
+  overrides: Record<string, unknown>;
   definitions: Record<string, SettingDefinition>;
 };
