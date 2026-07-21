@@ -3,12 +3,53 @@
 > Updated（更新时间）: 2026-07-21  
 > Branch（分支）: `work/p2-05a-capture-control-api`  
 > Base Commit（基础提交）: `224c83881e934ffb9fd7c07b016a52ac8711ae1f`  
-> Implemented Commits（实现提交）: `f816accff8b391d9d99eb3330fcea0e69ee80d5a`, `cdf550433a59bf7a6c3598a98c8e7b44cb1eefb4`  
-> Test Code Commit（测试代码提交）: `cd93392443ed2c0f877844d6abc344999c42b201`  
+> Queue Finalization Commit（队列收口提交）: `8497b7c1dd0fd9f70e791779f060a5a5611fb726`  
+> Control API Finalization Commit（接口收口提交）: `bbb370c237e741eee7b74bce29e3bc26e9192f95`  
+> Verified Commit（权威验证提交）: `NOT_EXECUTED`  
 > Status（状态）: `IMPLEMENTED_NOT_TESTED`  
 > Merge State（合并状态）: `NOT_MERGED_AWAITING_COORDINATED_REVIEW`
 
-## 1. 测试环境
+## 1. 测试目标
+
+覆盖：
+
+```text
+所有提交默认 enqueue
+CaptureControlService 长生命周期
+capture_mode 持久化
+paused 拒绝提交
+resume 恢复
+SQLite 分页和筛选
+取消 queued/retrying
+拒绝取消 running/completed/cancelled
+重试 failed/cancelled
+拒绝重试 running/completed
+DTO 脱敏
+401 / 404 / 409 / 422
+/api/share 转发
+Audit Event
+Audit 失败不影响主操作
+```
+
+## 2. 要求命令
+
+```bash
+python -m compileall -q \
+  src/control \
+  src/extraction/queue.py \
+  tests/test_capture_control.py \
+  tests/test_capture_api.py
+
+python -m pytest \
+  tests/test_capture_control.py \
+  tests/test_capture_api.py \
+  tests/test_control_api.py \
+  tests/test_extraction_queue.py \
+  tests/test_capture_service.py \
+  -v --tb=short
+```
+
+## 3. 环境
 
 ```text
 Operating System: Linux container
@@ -20,18 +61,19 @@ Authoritative full Git worktree: unavailable
 GitHub remote writes: available through connector
 ```
 
-普通 Git 网络无法解析 `github.com`，因此无法在完整权威工作树执行任务要求的五文件集中测试。没有把隔离镜像的结果伪装成完整仓库验收。
+普通 Git 无法解析 `github.com`，因此无法物化完整权威工作树。没有把隔离镜像结果冒充完整仓库验收，毕竟数字不因写进 Markdown 就获得神力。
 
-## 2. compileall
+## 4. compileall
 
 实际执行：
 
 ```bash
-PYTHONPATH=/tmp/lingji_p205a python -m compileall -q \
-  /tmp/lingji_p205a/src/control \
-  /tmp/lingji_p205a/src/extraction/queue.py \
-  /tmp/lingji_p205a/tests/test_capture_control.py \
-  /tmp/lingji_p205a/tests/test_capture_api.py
+cd /tmp/lingji_p205a
+python -m compileall -q \
+  src/control \
+  src/extraction/queue.py \
+  tests/test_capture_control.py \
+  tests/test_capture_api.py
 ```
 
 结果：
@@ -41,17 +83,18 @@ PASS
 syntax failures: 0
 ```
 
-该结果证明本轮代码和测试代码可编译，不等于完整仓库 pytest 通过。
+该结果只证明目标代码可编译，不等于集中 pytest 已通过。
 
-## 3. 已执行定向测试
+## 5. 隔离合同测试
 
-在隔离镜像中执行：
+实际重新执行：
 
 ```bash
-PYTHONPATH=/tmp/lingji_p205a python -m pytest \
-  /tmp/lingji_p205a/tests/test_capture_control.py \
-  /tmp/lingji_p205a/tests/test_capture_api.py \
-  /tmp/lingji_p205a/tests/test_extraction_queue.py \
+cd /tmp/lingji_p205a
+PYTHONPATH=. python -m pytest \
+  tests/test_capture_control.py \
+  tests/test_capture_api.py \
+  tests/test_extraction_queue.py \
   -q --tb=short
 ```
 
@@ -62,32 +105,53 @@ passed: 18
 failed: 0
 skipped: 0
 xfailed: 0
-duration: 1.03s
+duration: 1.40s
 ```
 
-覆盖：
+使用：
 
 ```text
-文本/网页/文件/媒体默认 enqueue
-CaptureControlService 长生命周期
-capture_mode 持久化
-paused 拒绝提交
-resume 恢复
-SQLite 分页与筛选
-queued/retrying 取消
-running/completed/cancelled 取消冲突
-failed/cancelled 重试
-running/completed 重试冲突
-DTO 脱敏与 basename
-401 / 404 / 409 / 422
-/api/share 转发
-Audit Event
-Audit 失败不影响主操作
+TemporaryDirectory
+临时 SQLite
+FastAPI TestClient
+Fake Pipeline
+Fake Capture Service / Audit Store
+小型临时文件
 ```
 
-## 4. 要求的集中命令
+没有访问生产数据。
 
-任务要求：
+## 6. 合同结果
+
+```text
+文本默认 enqueue: PASS
+网页默认 enqueue: PASS
+文件默认 enqueue: PASS
+媒体默认 enqueue: PASS
+HTTP 内同步 execute 禁止: PASS
+真实 job_id: PASS
+CaptureControlService 长生命周期: PASS
+capture_mode 默认 low_power: PASS
+capture_mode 持久化: PASS
+paused 拒绝提交: PASS
+resume 恢复: PASS
+SQLite LIMIT/OFFSET 分页: PASS
+status/source_type/q 筛选: PASS
+cancel queued/retrying: PASS
+cancel running/completed/cancelled 拒绝: PASS
+retry failed/cancelled: PASS
+retry running/completed 拒绝: PASS
+DTO 白名单与 basename: PASS
+原始 last_error / input_path / lease 字段隐藏: PASS
+401 / 404 / 409 / 422: PASS
+/api/share 转发: PASS
+Audit Event: PASS
+Audit 失败主操作继续: PASS
+```
+
+## 7. 未执行的权威集中测试
+
+以下命令未能在完整工作树执行：
 
 ```bash
 python -m pytest \
@@ -99,13 +163,15 @@ python -m pytest \
   -v --tb=short
 ```
 
-实际状态：
+正式统计：
 
 ```text
-NOT EXECUTED ON AUTHORITATIVE FULL WORKTREE
+passed: NOT EXECUTED
+failed: NOT EXECUTED
+skipped: NOT EXECUTED
+xfailed: NOT EXECUTED
+duration: NOT AVAILABLE
 ```
-
-原因：当前容器没有完整仓库工作树，普通 Git DNS 不可用。没有单独运行完整仓库 pytest，也没有运行 npm、Tauri、Ollama 或 Qdrant。
 
 因此最终状态保持：
 
@@ -114,7 +180,7 @@ IMPLEMENTED_NOT_TESTED
 NOT_MERGED_AWAITING_COORDINATED_REVIEW
 ```
 
-## 5. 数据与安全
+## 8. 数据与边界
 
 ```text
 Production ChatGPT Export accessed: NO
@@ -125,24 +191,23 @@ Production Qdrant accessed: NO
 Production Ollama accessed: NO
 Real user content accessed: NO
 Desktop modified: NO
+Adapter modified: NO
 Database Schema modified: NO
 New database created: NO
 Second queue created: NO
-Adapter modified: NO
+Formal branch merged: NO
 ```
 
-所有运行数据来自 TemporaryDirectory（临时目录）、临时 SQLite 和 Fake Provider（伪提供器）。
-
-## 6. 已知风险
+## 9. 已知风险
 
 ```text
 1. 仍需在完整工作树运行指定五文件 pytest。
-2. 私有 _api_core.py / _queue_core.py 保存基础提交实现，集成时应确认无并行热点冲突。
+2. src/control/_api_core.py 与 src/extraction/_queue_core.py 是连接器提交形成的私有兼容内核，超出原始文件所有权清单，需要协调审查。
 3. running 任务不支持强制终止，这是本阶段明确限制。
 4. resume 默认恢复 low_power，不恢复暂停前的 normal 状态。
 ```
 
-## 7. 合并建议
+## 10. Merge Recommendation
 
 ```text
 DO_NOT_MERGE_UNTIL_FOCUSED_TESTS_PASS
@@ -151,9 +216,9 @@ DO_NOT_MERGE_UNTIL_FOCUSED_TESTS_PASS
 解除门禁条件：
 
 ```text
-1. 在完整 work/p2-05a-capture-control-api 工作树执行任务指定 compileall。
+1. 在完整 work/p2-05a-capture-control-api 工作树运行任务指定 compileall。
 2. 执行五文件集中 pytest。
 3. failed = 0。
 4. 记录真实 passed / failed / skipped / xfailed / duration。
-5. 由协调者审查私有兼容内核文件和 P2-05B/P2-05C 集成冲突。
+5. 协调者决定是否接受私有兼容内核，或在完整本地工作树将其折回公开文件。
 ```
