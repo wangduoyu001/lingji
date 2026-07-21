@@ -1,8 +1,20 @@
 export type CaptureMode = "normal" | "low_power" | "paused" | string;
 export type CaptureJobStatus = "queued" | "running" | "retrying" | "completed" | "failed" | "cancelled" | string;
 
-export type Pagination = { limit: number; offset: number; total: number | null; has_more?: boolean };
-export type CaptureResultRefs = { memory_id?: string; source_id?: string; conversation_id?: string; message_id?: string };
+export type Pagination = {
+  limit: number;
+  offset: number;
+  total: number | null;
+  has_more?: boolean;
+};
+
+export type CaptureResultRefs = {
+  memory_id?: string;
+  source_id?: string;
+  conversation_id?: string;
+  message_id?: string;
+};
+
 export type CaptureJob = {
   job_id: string;
   title?: string | null;
@@ -26,7 +38,13 @@ export type CaptureJob = {
   updated_at?: string | null;
   completed_at?: string | null;
 };
-export type CaptureJobsResponse = { items: CaptureJob[]; pagination: Pagination; stats?: Record<string, number | null> };
+
+export type CaptureJobsResponse = {
+  items: CaptureJob[];
+  pagination: Pagination;
+  stats?: Record<string, number | null>;
+};
+
 export type CaptureStatusResponse = {
   mode?: CaptureMode | null;
   worker_state?: string | null;
@@ -38,12 +56,48 @@ export type CaptureStatusResponse = {
   cancelled?: number | null;
   updated_at?: string | null;
 };
+
 export type CaptureCapabilitiesResponse = {
   state?: string | null;
   file_modes?: string[];
-  media?: { ocr?: boolean; transcription?: boolean; keyframes?: boolean; extract_audio?: boolean; reasons?: Record<string, string> };
+  media?: {
+    ocr?: boolean;
+    transcription?: boolean;
+    keyframes?: boolean;
+    extract_audio?: boolean;
+    reasons?: Record<string, string>;
+  };
 };
-export type CaptureCommon = { title: string; project_ids: string[]; tags: string[]; privacy: "private" | "restricted"; priority: number; process_later: true; metadata: Record<string, unknown> };
-export type CaptureSubmissionResponse = { capture_id?: string; status?: string; job_id?: string; duplicate?: boolean; reason?: string; existing_job_id?: string; message?: string };
-export type CaptureJobFilters = { status: string; sourceType: string; q: string };
-export type CaptureInspectorTarget = CaptureResultRefs;
+
+export type CaptureCommon = {
+  title: string;
+  project_ids: string[];
+  tags: string[];
+  privacy: "private" | "restricted";
+  priority: number;
+  process_later: true;
+  metadata: Record<string, unknown>;
+};
+
+export type CaptureSubmissionResponse = {
+  capture_id?: string;
+  status?: string;
+  job_id?: string;
+  duplicate?: boolean;
+  reason?: string;
+  existing_job_id?: string;
+  message?: string;
+};
+
+export type CaptureJobFilters = {
+  status: string;
+  sourceType: string;
+  q: string;
+};
+
+export type CaptureInspectorTarget = CaptureResultRefs & {
+  project_id?: string;
+  source_type?: string;
+  related_memory_only?: boolean;
+  core_memory_only?: boolean;
+};

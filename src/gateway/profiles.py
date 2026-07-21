@@ -4,12 +4,8 @@ from dataclasses import asdict, dataclass
 from typing import Iterable
 
 READ_TOOLS = (
-    "search_memory",
-    "fetch_memory",
-    "get_core_memory",
-    "build_context_pack",
-    "recent_changes",
-    "memory_health",
+    "search_memory", "fetch_memory", "get_core_memory", "build_context_pack",
+    "recent_changes", "memory_health", "lingji_build_context",
 )
 PROPOSAL_TOOLS = (*READ_TOOLS, "propose_memory")
 
@@ -25,14 +21,16 @@ class AIClientProfile:
     can_propose_memory: bool = True
     can_modify_core_memory: bool = False
     local_only: bool = False
+    project_scope: str = "current"
+    can_read_other_projects: bool = False
+    can_write_managed_notes: bool = False
+    can_archive_memory: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
 
 class AIProfileRegistry:
-    """Provider-neutral permissions for AI clients connecting to LingJi."""
-
     def __init__(self, profiles: Iterable[AIClientProfile] | None = None):
         self._profiles = {profile.agent_id: profile for profile in (profiles or self.defaults())}
 
@@ -40,32 +38,17 @@ class AIProfileRegistry:
     def defaults() -> tuple[AIClientProfile, ...]:
         remote_privacy = ("public", "private")
         local_privacy = ("public", "private", "restricted")
-        return (
+        standard = [
             AIClientProfile("chatgpt", "ChatGPT", "mcp_streamable_http", PROPOSAL_TOOLS, remote_privacy, 14000),
-            AIClientProfile("codex", "Codex", "mcp_stdio", PROPOSAL_TOOLS, remote_privacy, 18000),
+            AIClientProfile("codex", "Codex", "mcp_stdio", PROPOSAL_TOOLS, remote_privacy, 18000, can_write_managed_notes=True),
             AIClientProfile("claude", "Claude", "mcp_streamable_http", PROPOSAL_TOOLS, remote_privacy, 16000),
             AIClientProfile("gemini", "Gemini", "mcp_streamable_http", PROPOSAL_TOOLS, remote_privacy, 14000),
             AIClientProfile("kimi", "Kimi", "mcp_stdio", PROPOSAL_TOOLS, remote_privacy, 14000),
             AIClientProfile("deepseek", "DeepSeek", "mcp_stdio", PROPOSAL_TOOLS, remote_privacy, 14000),
-            AIClientProfile(
-                "ollama",
-                "Ollama Local",
-                "mcp_stdio",
-                PROPOSAL_TOOLS,
-                local_privacy,
-                20000,
-                local_only=True,
-            ),
-            AIClientProfile(
-                "lingji-local",
-                "LingJi Local Agent",
-                "internal",
-                PROPOSAL_TOOLS,
-                local_privacy,
-                24000,
-                local_only=True,
-            ),
-        )
+            AIClientProfile("ollama", "Ollama Local", "mcp_stdio", PROPOSAL_TOOLS, local_privacy, 20000, local_only=True),
+        ]
+        standard.append(AIClientProfile("lingji-local", "LingJi Local Agent", "internal", PROPOSAL_TOOLS, local_privacy, 24000, local_only=True, can_read_other_projects=True, can_write_managed_notes=True, can_archive_memory=True, can_modify_core_memory=True))
+        return tuple(standard)
 
     def get(self, agent_id: str) -> AIClientProfile:
         key = str(agent_id or "").strip().lower()

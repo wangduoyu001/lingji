@@ -8,6 +8,7 @@ from src.storage import StateDatabase
 
 from .adapters.chatgpt import ChatGPTExportAdapter
 from .adapters.codex import CodexWorkReportAdapter
+from .adapters.codex_session import CodexSessionAdapter
 from .adapters.media import MediaExtractionAdapter
 from .adapters.web import WebCaptureAdapter
 from .pipeline import DocumentsWrittenCallback, ExtractionPipeline
@@ -39,6 +40,7 @@ def build_extraction_pipeline(
     registry = AdapterRegistry()
     registry.register(ChatGPTExportAdapter())
     registry.register(CodexWorkReportAdapter(), structured_fallback=True)
+    registry.register(CodexSessionAdapter())
     registry.register(WebCaptureAdapter(), structured_fallback=True)
     registry.register(MediaExtractionAdapter(settings.storage_path), structured_fallback=True)
     sink = VaultExtractionSink(layout, settings.storage_path, state_db=state_db)

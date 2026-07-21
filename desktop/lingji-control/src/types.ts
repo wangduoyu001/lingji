@@ -5,6 +5,8 @@ export type Row = Record<string, unknown>;
 export type PageId =
   | "overview"
   | "brain_status"
+  | "codex_workspace"
+  | "memory_review"
   | "memory_inspector"
   | "capture_center"
   | "obsidian"

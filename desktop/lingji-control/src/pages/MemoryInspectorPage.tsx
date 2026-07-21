@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "../api";
 import type { PageProps } from "../types";
+import type { CaptureInspectorTarget } from "./captureCenterTypes";
 import {
   buildConversationQuery,
   buildMessageQuery,
@@ -33,7 +34,7 @@ import type {
 } from "./memoryInspectorTypes";
 import "./MemoryInspectorPage.css";
 
-const initialFilters: InspectorFilters = {
+const baseFilters: InspectorFilters = {
   sourceType: "",
   project: "",
   privacy: "",
@@ -43,6 +44,15 @@ const initialFilters: InspectorFilters = {
   fromTime: "",
   toTime: "",
 };
+
+function filtersForTarget(target?: CaptureInspectorTarget | null): InspectorFilters {
+  return {
+    ...baseFilters,
+    sourceType: target?.source_type ?? "",
+    project: target?.project_id ?? "",
+    status: target?.core_memory_only ? "active" : "",
+  };
+}
 
 const text = (value: unknown): string => value === null || value === undefined || value === "" ? "未知" : String(value);
 const dateTime = (value: unknown): string => value ? new Date(String(value)).toLocaleString() : "未知";
@@ -57,8 +67,8 @@ function StateView({ error, empty, filtered }: { error: ApiError | null; empty: 
   return null;
 }
 
-export default function MemoryInspectorPage({ api, active }: PageProps) {
-  const [filters, setFilters] = useState(initialFilters);
+export default function MemoryInspectorPage({ api, active, target = null }: PageProps & { target?: CaptureInspectorTarget | null }) {
+  const [filters, setFilters] = useState<InspectorFilters>(() => filtersForTarget(target));
   const [debouncedQ, setDebouncedQ] = useState("");
   const [status, setStatus] = useState<ReturnType<typeof mapStatus> | null>(null);
   const [sources, setSources] = useState<SourceItem[]>([]);
@@ -82,11 +92,18 @@ export default function MemoryInspectorPage({ api, active }: PageProps) {
   const messageRequestId = useRef(0);
   const memoryController = useRef<AbortController | null>(null);
   const memoryRequestId = useRef(0);
+  const targetController = useRef<AbortController | null>(null);
+  const targetRequestId = useRef(0);
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebouncedQ(filters.q), 300);
     return () => window.clearTimeout(id);
   }, [filters.q]);
+
+  useEffect(() => {
+    setFilters(filtersForTarget(target));
+    setOffsets({ source: 0, conversation: 0, message: 0 });
+  }, [target]);
 
   const effectiveFilters = { ...filters, q: debouncedQ };
 
@@ -181,6 +198,46 @@ export default function MemoryInspectorPage({ api, active }: PageProps) {
     }
   };
 
+  useEffect(() => {
+    if (!active || !target) return;
+    targetController.current?.abort();
+    const controller = new AbortController();
+    const requestId = ++targetRequestId.current;
+    targetController.current = controller;
+    setDetailError(null);
+
+    const loadTarget = async () => {
+      try {
+        if (target.source_id) {
+          const response = await api.get<{ item: SourceItem }>(`/api/memory/inspector/sources/${encodeURIComponent(target.source_id)}`, { signal: controller.signal });
+          if (requestId === targetRequestId.current) setSelectedSource(response.item);
+        }
+        if (target.conversation_id) {
+          const response = await api.get<{ item: ConversationItem }>(`/api/memory/inspector/conversations/${encodeURIComponent(target.conversation_id)}`, { signal: controller.signal });
+          if (requestId === targetRequestId.current) setSelectedConversation(response.item);
+        }
+        if (target.message_id) {
+          const response = await api.get<MessageDetailResponse>(`/api/memory/inspector/messages/${encodeURIComponent(target.message_id)}`, { signal: controller.signal });
+          if (requestId === targetRequestId.current) {
+            const mapped = mapMessageDetail(response);
+            setSelectedMessage(mapped.item);
+            setMemoryLinks(mapped.memoryLinks);
+          }
+        }
+        if (target.memory_id) {
+          await openMemory({ memory_id: target.memory_id, relation_type: "shortcut" });
+        }
+      } catch (reason) {
+        if (requestId === targetRequestId.current && !(reason instanceof ApiError && reason.code === "REQUEST_CANCELLED")) {
+          setDetailError(reason instanceof ApiError ? reason : new ApiError(0, "UNKNOWN", "Unknown error"));
+        }
+      }
+    };
+
+    void loadTarget();
+    return () => controller.abort();
+  }, [active, api, target]);
+
   if (!active) return <div className="inspector-state">连接本机服务后显示 Memory Inspector（记忆检查器）</div>;
 
   return (
@@ -262,19 +319,19 @@ export default function MemoryInspectorPage({ api, active }: PageProps) {
         </section>
       </div>
 
-      {selectedMessage && (
+      {(selectedMessage || selectedMemory) && (
         <aside className="relation-panel">
-          <header><div><h2>Message 详情与 Memory 关系</h2><span>{selectedMessage.message_id}</span></div><button onClick={() => setSelectedMessage(null)}>关闭</button></header>
+          <header><div><h2>Message 详情与 Memory 关系</h2><span>{selectedMessage?.message_id ?? selectedMemory?.memory_id}</span></div><button onClick={() => { setSelectedMessage(null); setSelectedMemory(null); }}>关闭</button></header>
           {detailError && <div className="inspector-state error">详情读取失败，已保留当前可用数据</div>}
-          <div className={`message-content${privacyClass(selectedMessage)}`}>
+          {selectedMessage && <div className={`message-content${privacyClass(selectedMessage)}`}>
             {isRestricted(selectedMessage) ? <details><summary>restricted 受限内容，主动展开</summary><pre>{text(selectedMessage.content)}</pre></details> : <pre>{text(selectedMessage.content)}</pre>}
-          </div>
-          <h3>关联 Memory</h3>
+          </div>}
+          {selectedMessage && <><h3>关联 Memory</h3>
           {memoryLinks.length ? memoryLinks.map((link) => (
             <button className="memory-link" key={`${link.memory_id}-${link.relation_type ?? "unknown"}`} onClick={() => void openMemory(link)}>
               <strong>{link.memory_id}</strong><span>关系 {text(link.relation_type)} · 置信度 {typeof link.confidence === "number" ? link.confidence.toFixed(3) : "未知"}</span>
             </button>
-          )) : <p>当前 Message 没有关联 Memory。</p>}
+          )) : <p>当前 Message 没有关联 Memory。</p>}</>}
 
           {selectedMemory && (
             <div className="memory-detail">
@@ -295,7 +352,7 @@ export default function MemoryInspectorPage({ api, active }: PageProps) {
                 <dt>Vault 相对路径</dt><dd>{text(memorySource?.canonical?.relative_path)}</dd>
                 <dt>Citations</dt><dd>{
                   Array.isArray(memorySource?.canonical?.citations) && memorySource.canonical.citations.length > 0
-                    ? memorySource.canonical.citations.map(c =>
+                    ? memorySource.canonical.citations.map((c: Citation) =>
                         `${c.chunk_id}${c.relative_path ? ` (${c.relative_path})` : ""}${c.start_line != null ? ` L${c.start_line}` : ""}${c.end_line != null ? `-${c.end_line}` : ""}`
                       ).join("; ")
                     : "无引用来源"

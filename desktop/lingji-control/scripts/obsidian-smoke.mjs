@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 const root = new URL("../", import.meta.url);
 const repo = new URL("../../../", import.meta.url);
 const page = readFileSync(new URL("src/pages/ObsidianPage.tsx", root), "utf8");
+const loopPage = readFileSync(new URL("src/pages/ObsidianLoopPage.tsx", root), "utf8");
 const routes = readFileSync(new URL("src/AppPages.tsx", root), "utf8");
 const navigation = readFileSync(new URL("src/navigation.ts", root), "utf8");
 const types = readFileSync(new URL("src/types.ts", root), "utf8");
@@ -12,7 +13,8 @@ const service = readFileSync(new URL("src/obsidian/service.py", repo), "utf8");
 const compatibility = readFileSync(new URL("second_brain/obsidian_cli.py", repo), "utf8");
 
 assert.ok(navigation.includes('id: "obsidian"'));
-assert.ok(routes.includes("<ObsidianPage"));
+assert.ok(routes.includes("<ObsidianLoopPage"));
+assert.ok(loopPage.includes("<ObsidianPage") && loopPage.includes("<ObsidianOperations"));
 assert.ok(types.includes("export type ObsidianStatus"));
 
 for (const endpoint of [
