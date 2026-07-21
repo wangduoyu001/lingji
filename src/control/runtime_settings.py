@@ -218,6 +218,25 @@ class RuntimeSettingsStore:
                 performance_impact="间隔过短会增加进程启动和系统查询开销。",
                 risk_level="medium",
             ),
+            # Obsidian CLI integration. Workspace Vault remains authoritative.
+            "obsidian_cli_enabled": self._boolean(
+                "obsidian", "启用 Obsidian CLI", "启用正式 src.obsidian CLI 状态和命令能力。", True
+            ),
+            "obsidian_cli_path": self._string(
+                "obsidian", "Obsidian CLI 路径", "留空时按环境变量、PATH 和平台标准位置自动发现。", "", 2048
+            ),
+            "obsidian_vault_path": self._string(
+                "obsidian", "Obsidian Vault 路径", "当前 Workspace Vault 优先；此值仅作为显式兼容回退。", "", 2048
+            ),
+            "obsidian_vault_name": self._string(
+                "obsidian", "Obsidian Vault 名称", "留空时从 Vault 路径或 OBSIDIAN_VAULT_NAME 推导。", "", 256
+            ),
+            "obsidian_cli_timeout_seconds": self._integer(
+                "obsidian", "Obsidian CLI 超时（秒）", "单次 CLI 调用的最长等待时间。", 15, 1, 300
+            ),
+            "obsidian_cli_dry_run": self._boolean(
+                "obsidian", "Obsidian Dry Run", "开启后写命令只记录不执行，状态和只读命令仍可验证。", False
+            ),
             # Backup defaults.
             "backup_default_profile": self._choice(
                 "backup", "默认备份范围", "metadata 不含 Raw/Derived；full 包含全部。", "metadata", ["metadata", "full"]

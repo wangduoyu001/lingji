@@ -9,6 +9,7 @@ import LogsPage from "./pages/LogsPage";
 import MediaPage from "./pages/MediaPage";
 import MemoryInspectorPage from "./pages/MemoryInspectorPage";
 import ModelsPage from "./pages/ModelsPage";
+import ObsidianPage from "./pages/ObsidianPage";
 import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
 import StoragePage from "./pages/StoragePage";
@@ -40,6 +41,7 @@ export default function AppPages(props: AppPagesProps) {
       {page === "capture_center" && (
         <CaptureCenterPage api={api} active={connected} onOpenInspector={onOpenInspector} />
       )}
+      {page === "obsidian" && <ObsidianPage api={api} active={connected} />}
       {page === "vector_center" && <VectorCenterPage api={api} active={connected} />}
       {page === "system_compute" && <SystemComputePage api={api} active={connected} />}
       {page === "models" && <ModelsPage api={api} active={connected} />}
