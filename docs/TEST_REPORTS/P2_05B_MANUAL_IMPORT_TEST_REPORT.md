@@ -2,6 +2,7 @@
 
 > Branch: `work/p2-05b-manual-import-wiring`  
 > Base: `224c83881e934ffb9fd7c07b016a52ac8711ae1f`  
+> Implementation HEAD: `ac14617d391a322ae5786737ee11cd6aeb74df6b`  
 > Status: `IMPLEMENTED_NOT_TESTED`
 
 ## Added focused coverage
@@ -45,9 +46,11 @@ python -m pytest \
 compileall: NOT EXECUTED
 pytest: NOT EXECUTED
 failed: UNKNOWN
+GitHub combined statuses: NONE
+GitHub workflow runs: NONE
 ```
 
-The current execution container cannot resolve `github.com`, so the remote branch cannot be cloned into the Python runtime. No passing result is claimed without evidence.
+The execution container cannot resolve `github.com`, and GitHub did not start CI for the pushed commit. No passing result is claimed without evidence.
 
 ## Safety
 

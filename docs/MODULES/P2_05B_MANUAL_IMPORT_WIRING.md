@@ -2,6 +2,7 @@
 
 > Branch: `work/p2-05b-manual-import-wiring`  
 > Base: `224c83881e934ffb9fd7c07b016a52ac8711ae1f`  
+> Implementation HEAD: `ac14617d391a322ae5786737ee11cd6aeb74df6b`  
 > Status: `IMPLEMENTED_NOT_TESTED`
 
 ## Input classification
@@ -17,7 +18,7 @@
 | explicit Codex JSON mode | codex_report | manual_codex_report | codex_work_report |
 | supported audio/video | media | manual_media | media_local |
 
-The media adapter's existing canonical registry name is `media_local`; no adapter was renamed and no second Registry was introduced.
+The existing `MediaExtractionAdapter` registry name is `media_local`; it was not renamed. No second Registry was introduced.
 
 ## Stable rejection
 
@@ -25,15 +26,15 @@ PDF, DOCX, XLSX, PPTX and unknown binary files return `CAPTURE_UNSUPPORTED_TYPE`
 
 ## Helper semantics
 
-`submit_text`, `submit_web`, `submit_file`, `submit_media`, `submit_chatgpt_export` and `submit_codex_report` default to `process_later=True` and `privacy=private`, therefore manual submissions use the existing persistent Extraction queue.
+`submit_text`, `submit_web`, `submit_file`, `submit_media`, `submit_chatgpt_export` and `submit_codex_report` default to `process_later=True` and `privacy=private`. `submit_file()` always records `manual_file`; specialized helpers record their dedicated methods.
 
 ## Adapter conflict protection
 
-The classified `source_type` and `adapter_name` are passed to the existing `ExtractionPipeline`. A mismatch is rejected before enqueue/execute; the service never silently resolves a different adapter.
+The classified `source_type` and `adapter_name` are passed to the existing `ExtractionPipeline`. A mismatch is rejected before enqueue/execute; the service never silently chooses another Adapter.
 
 ## Media policy
 
-Requested OCR, transcription, keyframes and audio extraction are intersected with CapturePolicy. LOW_POWER cannot be bypassed by setting request booleans. Existing Pipeline runtime settings and Media Adapter provider, size and duration checks remain authoritative.
+Requested OCR, transcription, keyframes and audio extraction are intersected with CapturePolicy. LOW_POWER cannot be bypassed by request booleans. Existing Pipeline runtime settings and Media Adapter provider, size and duration checks remain authoritative.
 
 ## Capabilities
 
@@ -41,8 +42,8 @@ Manual methods are enabled. Mobile share, browser extension, clipboard and folde
 
 ## Privacy
 
-User-visible validation errors use stable codes rather than absolute paths. Metadata recursively rejects secrets and cannot override source type, method, adapter, path, privacy, projects, tags or priority. Structured Adapter path redaction and Vault Markdown behavior are unchanged.
+User-visible file validation uses stable codes rather than absolute paths. Metadata recursively rejects secrets and cannot override source type, method, adapter, path, privacy, projects, tags or priority. Structured Message path redaction and Vault Markdown behavior are unchanged.
 
 ## Rollback
 
-Revert the P2-05B implementation commit. No schema, queue, Control API or Desktop migration is required.
+Revert commits `ac14617d391a322ae5786737ee11cd6aeb74df6b` and `e51b1972486cd82bc1ee9f087fdc8ce553c017c4`. No schema, queue, Control API or Desktop migration is required.
