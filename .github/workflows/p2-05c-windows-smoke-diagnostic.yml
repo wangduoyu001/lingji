@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - work/p2-05c-capture-center-ui
+  pull_request:
+    branches:
+      - feature/second-brain-memory
   workflow_dispatch:
 
 permissions:
