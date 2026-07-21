@@ -1,0 +1,126 @@
+name: P2-05B Review Fix Gate
+
+on:
+  push:
+    branches:
+      - work/p2-05b-manual-import-wiring
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  review-fix:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-ui.txt
+            requirements-test.txt
+            requirements-mcp.txt
+            constraints/python-3.12-windows.txt
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install `
+            -r requirements-ui.txt `
+            -r requirements-test.txt `
+            -r requirements-mcp.txt `
+            -c constraints/python-3.12-windows.txt
+
+      - name: Apply coordinated review fixes
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+
+          service_path = Path("src/capture/service.py")
+          service = service_path.read_text(encoding="utf-8")
+          capability_marker = '            CaptureCapability("manual_codex_report", True, description="manual queued Codex report import"),\n'
+          capability_line = capability_marker + '            CaptureCapability("local_control_share", True, description="compatibility manual share entry"),\n'
+          if capability_marker not in service:
+              raise SystemExit("manual capability marker not found")
+          if 'CaptureCapability("local_control_share"' not in service:
+              service = service.replace(capability_marker, capability_line)
+          service_path.write_text(service, encoding="utf-8")
+
+          manual_path = Path("src/capture/manual.py")
+          manual = manual_path.read_text(encoding="utf-8")
+          old_probe = '''    candidate = Path(raw).expanduser()
+              if candidate.exists() or candidate.suffix:
+                  classification = _classify_path(candidate, kind)
+                  if classification.supported or candidate.exists():
+                      return classification
+          '''
+          new_probe = '''    candidate = Path(raw).expanduser()
+              try:
+                  candidate_exists = candidate.exists()
+                  candidate_suffix = candidate.suffix
+              except OSError:
+                  candidate_exists = False
+                  candidate_suffix = ""
+              if candidate_exists or candidate_suffix:
+                  classification = _classify_path(candidate, kind)
+                  if classification.supported or candidate_exists:
+                      return classification
+          '''
+          if old_probe not in manual:
+              raise SystemExit("manual path probe block not found")
+          manual_path.write_text(manual.replace(old_probe, new_probe), encoding="utf-8")
+
+          test_path = Path("tests/test_manual_capture.py")
+          tests = test_path.read_text(encoding="utf-8")
+          additions = '''
+
+          def test_long_manual_text_does_not_fail_path_probe():
+              value = "manual text " * 1000
+              result = classify_manual_input(value)
+              assert result.kind is ManualCaptureKind.TEXT
+              assert result.text == value.strip()
+
+
+          def test_local_control_share_capability_remains_enabled():
+              capabilities = {item.name: item for item in CaptureService(FakePipeline()).capabilities()}
+              assert capabilities["local_control_share"].enabled is True
+          '''
+          if "test_long_manual_text_does_not_fail_path_probe" not in tests:
+              tests += additions
+          test_path.write_text(tests, encoding="utf-8")
+          '@ | python -
+
+      - name: Compile focused files
+        run: python -m compileall -q src/capture tests/test_manual_capture.py
+
+      - name: Run focused tests
+        run: |
+          python -m pytest `
+            tests/test_manual_capture.py `
+            tests/test_capture_models.py `
+            tests/test_capture_policy.py `
+            tests/test_capture_service.py `
+            tests/test_capture_adapters.py `
+            tests/test_structured_ingestion.py `
+            -q --tb=short
+
+      - name: Commit reviewed fixes
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/capture/manual.py src/capture/service.py tests/test_manual_capture.py
+          if (git diff --cached --quiet) {
+            Write-Host "No reviewed changes to commit"
+          } else {
+            git commit -m "fix(capture): close coordinated manual import review"
+            git push origin HEAD:work/p2-05b-manual-import-wiring
+          }
