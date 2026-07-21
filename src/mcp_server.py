@@ -9,7 +9,9 @@ from src.config import settings
 from src.extraction import build_extraction_pipeline
 from src.gateway.bootstrap import build_memory_gateway
 from src.indexer.index import PEMISIndex
+from src.mcp.project_context_tools import register_project_context_tools
 from src.project_context import ProjectRegistry, ProjectResolver
+from src.project_memory.runtime import build_project_context_service
 from src.retrieval import MarkdownChunker
 from src.skills import SkillRegistry
 
@@ -107,8 +109,10 @@ def create_mcp_server(
     gateway=None,
     default_agent_id: str | None = None,
     codex_service: CodexSessionService | None = None,
+    project_context_service: Any | None = None,
+    extraction_pipeline: Any | None = None,
 ):
-    """Create the local LingJi MCP server."""
+    """Create the local LingJi MCP server with one shared pipeline and Codex runtime."""
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:
@@ -138,7 +142,7 @@ def create_mcp_server(
         if changed:
             memory_gateway.rebuild(indexer.get_all(), settings.vault_path, chunker)
 
-    extraction_pipeline = build_extraction_pipeline(
+    pipeline = extraction_pipeline or build_extraction_pipeline(
         settings,
         on_documents_written=sync_written,
     )
@@ -146,10 +150,15 @@ def create_mcp_server(
     default_agent = default_agent_id or settings.mcp_default_agent_id
     mcp = FastMCP(settings.mcp_server_name)
     session_service = codex_service or build_codex_session_service(
-        extraction_pipeline,
+        pipeline,
         state_db=memory_gateway.state_db,
     )
+    context_service = project_context_service or build_project_context_service(
+        memory_gateway,
+        session_service,
+    )
     register_codex_mcp_tools(mcp, session_service)
+    register_project_context_tools(mcp, context_service, lambda: default_agent)
 
     def agent(value: str | None) -> str:
         return str(value or default_agent).strip().lower()
@@ -235,19 +244,19 @@ def create_mcp_server(
         process_now: bool = False, privacy_scan: bool = True,
     ) -> dict[str, Any]:
         """Queue an official ChatGPT ZIP/JSON export for local extraction."""
-        job = extraction_pipeline.enqueue(
+        job = pipeline.enqueue(
             "chatgpt", input_path=path,
             options={"project_id": project_id or [], "privacy_scan": privacy_scan},
             adapter_name="chatgpt_export", force=force,
         )
         if process_now:
-            return extraction_pipeline.process_job(job["job_id"])
+            return pipeline.process_job(job["job_id"])
         return job
 
     @mcp.tool()
     def submit_codex_work_report(report: dict[str, Any]) -> dict[str, Any]:
         """Write a versioned Codex report and reviewable error, decision and task candidates."""
-        return extraction_pipeline.execute("codex", payload=report, adapter_name="codex_work_report")
+        return pipeline.execute("codex", payload=report, adapter_name="codex_work_report")
 
     @mcp.tool()
     def capture_web_source(
@@ -261,7 +270,7 @@ def create_mcp_server(
         source_type = platform if platform in {
             "wechat_article", "video_channel", "douyin", "xiaohongshu"
         } else "web"
-        return extraction_pipeline.execute(
+        return pipeline.execute(
             source_type,
             payload={
                 "url": url, "title": title, "text": text, "html": html,
@@ -298,21 +307,21 @@ def create_mcp_server(
     @mcp.tool()
     def extraction_job_status(job_id: str) -> dict[str, Any]:
         """Return one durable extraction job."""
-        return extraction_pipeline.queue.get(job_id)
+        return pipeline.queue.get(job_id)
 
     @mcp.tool()
     def extraction_queue_status() -> dict[str, Any]:
         """Return queue counters, registered adapters and Skill status."""
         return {
-            "queue": extraction_pipeline.queue.stats(),
-            "adapters": extraction_pipeline.registry.list(),
+            "queue": pipeline.queue.stats(),
+            "adapters": pipeline.registry.list(),
             "skills": skill_registry.status(),
         }
 
     @mcp.tool()
     def process_extraction_jobs(limit: int = 5) -> dict[str, Any]:
         """Process pending extraction jobs immediately on this local machine."""
-        return extraction_pipeline.process_pending(limit=limit)
+        return pipeline.process_pending(limit=limit)
 
     @mcp.resource("lingji://memory/health")
     def health_resource() -> str:
@@ -325,8 +334,8 @@ def create_mcp_server(
     @mcp.resource("lingji://extraction/queue")
     def extraction_queue_resource() -> str:
         return json.dumps({
-            "queue": extraction_pipeline.queue.stats(),
-            "adapters": extraction_pipeline.registry.list(),
+            "queue": pipeline.queue.stats(),
+            "adapters": pipeline.registry.list(),
             "skills": skill_registry.status(),
         }, ensure_ascii=False, indent=2)
 
