@@ -20,13 +20,13 @@ import {
 const root = new URL("../", import.meta.url);
 const page = readFileSync(new URL("src/pages/CaptureCenterPage.tsx", root), "utf8");
 const api = readFileSync(new URL("src/pages/captureCenterApi.ts", root), "utf8");
-const app = readFileSync(new URL("src/App.tsx", root), "utf8");
+const routes = readFileSync(new URL("src/AppPages.tsx", root), "utf8");
 const navigation = readFileSync(new URL("src/navigation.ts", root), "utf8");
 const main = readFileSync(new URL("src-tauri/src/main.rs", root), "utf8");
 const capability = readFileSync(new URL("src-tauri/capabilities/default.json", root), "utf8");
 
 assert.ok(navigation.includes('id: "capture_center"'));
-assert.ok(app.includes("<CaptureCenterPage"));
+assert.ok(routes.includes("<CaptureCenterPage"));
 for (const endpoint of [
   "/api/capture/text",
   "/api/capture/web",
