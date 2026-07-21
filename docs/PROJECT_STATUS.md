@@ -8,7 +8,8 @@
 > P2-03C Status（P2-03C 状态）: `MERGED_AND_VALIDATED`  
 > P2-04 Status（P2-04 状态）: `MERGED_AND_VALIDATED`  
 > P2-05 Validated Integration Tree（P2-05 已验证集成树）: `1bf95b8d16a9daea52b60518f0e920a0c0bd50db`  
-> P2-05 Status（P2-05 状态）: `READY_FOR_FORMAL_MERGE`
+> P2-05 Formal Merge Commit（P2-05 正式合并提交）: `c77e78c0f71339264d54fc083dbc5cfabcfaa173`  
+> P2-05 Status（P2-05 状态）: `MERGED_AND_VALIDATED`
 
 ## 1. 产品与代码主线
 
@@ -17,10 +18,10 @@ src/
 = 长期平台主线
 
 desktop/lingji-control/
-= 唯一正式 Desktop UI（桌面用户界面）
+= 唯一正式 Desktop UI
 
 second_brain/
-= Compatibility/Migration Runtime（兼容与迁移运行层）
+= Compatibility/Migration Runtime
 ```
 
 `second_brain/` 不再接收新的正式产品能力，只保留兼容、迁移和待退役实现。
@@ -59,31 +60,12 @@ P2-03 Structured Read Model                       MERGED_AND_VALIDATED
 P2-03B Structured Ingestion Wiring                MERGED_AND_VALIDATED
 P2-03C Capture Sources Foundation                 MERGED_AND_VALIDATED
 P2-04 Memory Inspector UI                         MERGED_AND_VALIDATED
-P2-05 Manual Capture Center                       INTEGRATED_AND_VALIDATED
+P2-05 Manual Capture Center                       MERGED_AND_VALIDATED
 ```
 
 Production `bge-m3` Switch 和生产 Collection 重建仍未执行。
 
-## 4. P0 Engineering Hygiene
-
-状态：`MERGED_AND_VALIDATED`
-
-已完成：
-
-- 删除机器专属备份路径。
-- 统一 Workspace、Runtime Settings 和环境探测路径合同。
-- 建立 Windows Python 3.12 与 Linux Python 3.13 依赖约束。
-- 删除启动文件逐字源码比较测试。
-- 建立 Windows 测试专用 Workspace 临时根。
-- 保留生产系统盘拒绝保护。
-- Qdrant 单元测试使用 in-memory 合同。
-- 建立 Windows GitHub Actions 自动门禁。
-
-## 5. P2-03 Structured Read Model
-
-状态：`MERGED_AND_VALIDATED`
-
-已实现：
+## 4. P2-03 Structured Read Model
 
 - Source、Conversation、Message 派生表。
 - Stable ID 和幂等 Upsert。
@@ -101,35 +83,7 @@ src/gateway/memory_inspector.py::MemoryInspectorFacade
 src/control/api.py::create_control_app
 ```
 
-## 6. P2-03B Structured Ingestion Wiring
-
-状态：`MERGED_AND_VALIDATED`
-
-```text
-Raw Snapshot
--> Adapter
--> Vault write
--> StructuredReadModelSink
--> SourceReadModel.upsert_bundle()
--> Memory Index
--> Audit Event
-```
-
-Sink 或 Audit 失败不会回滚已经完成的 Raw/Vault 写入；外部错误摘要不泄露绝对路径和异常原文。
-
-## 7. P2-03C Capture Sources Foundation
-
-状态：`MERGED_AND_VALIDATED`
-
-- `src/capture/` 持有统一入口模型、Policy、去重和服务合同。
-- Capture 负责入口与调度，Extraction 负责解析和写入。
-- `process_later=True` 强制排队。
-- Metadata 使用递归敏感字段检查。
-- 手机分享和浏览器扩展只保留兼容合同，客户端暂缓。
-
-## 8. P2-04 Memory Inspector Desktop UI
-
-状态：`MERGED_AND_VALIDATED`
+## 5. P2-04 Memory Inspector Desktop UI
 
 - Source、Conversation、Message、Memory、Chunk、Vector 关系查看。
 - 分页、筛选、搜索防抖、请求取消和竞态保护。
@@ -137,9 +91,9 @@ Sink 或 Audit 失败不会回滚已经完成的 Raw/Vault 写入；外部错误
 - restricted 内容保护。
 - 401、503、网络不可用、空数据和无筛选结果状态。
 
-## 9. P2-05 Manual Capture Center
+## 6. P2-05 Manual Capture Center
 
-状态：`READY_FOR_FORMAL_MERGE`
+状态：`MERGED_AND_VALIDATED`
 
 集成顺序：
 
@@ -148,6 +102,7 @@ P2-05B -> f01e3b2cc49065cda69f1c8909933dd0c530e4ff
 P2-05A -> 46a0c5276252734c121f0cad7a56cf3a4a7c4bdc
 P2-05C -> fab0ba1b816c1228b8cfb3618aa04b5e2f2c4c3d
 Validated tree -> 1bf95b8d16a9daea52b60518f0e920a0c0bd50db
+Formal merge -> c77e78c0f71339264d54fc083dbc5cfabcfaa173
 ```
 
 已实现：
@@ -171,6 +126,8 @@ npm run test:capture: PASS
 npm run test:smoke: PASS
 npm run build: PASS
 cargo check: PASS
+formal PR tests: SUCCESS
+formal PR P0 Windows Gate: SUCCESS
 ```
 
 完整报告：
@@ -180,7 +137,7 @@ docs/MODULES/P2_05_INTEGRATED_IMPLEMENTATION.md
 docs/TEST_REPORTS/P2_05_INTEGRATED_VALIDATION_REPORT.md
 ```
 
-## 10. 安全状态
+## 7. 安全状态
 
 ```text
 Production ChatGPT 正文读取: NO
@@ -197,7 +154,7 @@ rebase: NO
 force push: NO
 ```
 
-## 11. 当前开发状态
+## 8. 当前状态
 
 ```text
 P0 Engineering Hygiene:
@@ -207,17 +164,17 @@ P2-03 / P2-03B / P2-03C / P2-04:
 MERGED_AND_VALIDATED
 
 P2-05 Manual Capture Center:
-READY_FOR_FORMAL_MERGE
+MERGED_AND_VALIDATED
 ```
 
-## 12. 下一步
+## 9. 下一步
 
 ```text
-合并 work/p2-05-integrated-validation
--> feature/second-brain-memory
--> 更新正式合并提交和状态
--> 关闭 Issue #10
--> 进入 Obsidian CLI 正式迁入 src 阶段
+Obsidian CLI 正式迁入 src
+-> 接入 8766 Local Control API
+-> 接入 Runtime Settings
+-> 接入 Tauri 状态与设置入口
+-> 保持 second_brain 仅为兼容层
 ```
 
 当前明确不开发：
