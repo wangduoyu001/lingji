@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.control import p2_07_api
+from src.control import obsidian_notes_api, p2_07_api, project_memory_api
 from src.gateway.profiles import AIProfileRegistry
 from src.project_memory.runtime import build_project_context_service
 
@@ -60,6 +61,22 @@ class _FakeSessions:
 
 
 def test_route_registration_is_lazy_and_auth_precedes_runtime(monkeypatch):
+    # Some contract tests intentionally import route modules with fake FastAPI
+    # classes. Reload the two independently registered routers so this test
+    # validates the production FastAPI integration rather than leaked fakes.
+    project_routes = importlib.reload(project_memory_api)
+    obsidian_routes = importlib.reload(obsidian_notes_api)
+    monkeypatch.setattr(
+        p2_07_api,
+        "register_project_memory_routes",
+        project_routes.register_project_memory_routes,
+    )
+    monkeypatch.setattr(
+        p2_07_api,
+        "register_obsidian_note_routes",
+        obsidian_routes.register_obsidian_note_routes,
+    )
+
     app = FastAPI()
     control = SimpleNamespace()
     initialized = []
