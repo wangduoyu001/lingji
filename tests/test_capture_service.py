@@ -59,15 +59,30 @@ def test_low_power_queues_web_and_media():
     assert len(pipeline.enqueued) == 1
 
 
-def test_normal_policy_executes_light_capture_but_queues_media(tmp_path):
+def test_manual_helpers_queue_under_normal_policy(tmp_path):
     pipeline = FakePipeline()
     service = CaptureService(pipeline, policy=CapturePolicy.for_mode(CaptureMode.NORMAL))
     text = service.submit_text("hello")
-    assert text.status is CaptureStatus.EXECUTED
+    assert text.status is CaptureStatus.QUEUED
     media = tmp_path / "clip.mp4"
     media.write_bytes(b"media")
     result = service.submit_media(media)
     assert result.status is CaptureStatus.QUEUED
+    assert not pipeline.executed
+
+
+def test_explicit_non_manual_realtime_envelope_can_execute():
+    pipeline = FakePipeline()
+    service = CaptureService(pipeline, policy=CapturePolicy.for_mode(CaptureMode.NORMAL))
+    envelope = CaptureEnvelope(
+        capture_id="cap-realtime",
+        source_type="web",
+        capture_method="local_control_share",
+        adapter_name="web_capture",
+        text="hello",
+        process_later=False,
+    )
+    assert service.submit(envelope).status is CaptureStatus.EXECUTED
 
 
 def test_process_later_forces_enqueue_under_normal_policy():
@@ -84,7 +99,7 @@ def test_paused_service_rejects_processing():
     assert result.status is CaptureStatus.PAUSED
 
 
-def test_normalized_url_and_clipboard_content_are_deduplicated():
+def test_normalized_url_and_manual_text_are_deduplicated():
     service = CaptureService(FakePipeline())
     first = service.submit_web("https://EXAMPLE.com/a/?utm_source=x", title="A")
     second = service.submit_web("https://example.com/a", title="A")
@@ -126,10 +141,18 @@ def test_execute_failure_does_not_poison_deduplication():
     pipeline = FakePipeline()
     pipeline.fail_execute_once = True
     service = CaptureService(pipeline, policy=CapturePolicy.for_mode(CaptureMode.NORMAL))
+    envelope = CaptureEnvelope(
+        capture_id="cap-execute-1",
+        source_type="web",
+        capture_method="local_control_share",
+        adapter_name="web_capture",
+        text="retry execute",
+        process_later=False,
+    )
     with pytest.raises(RuntimeError):
-        service.submit_text("retry execute")
-    retry = service.submit_text("retry execute")
-    assert retry.status is CaptureStatus.EXECUTED
+        service.submit(envelope)
+    retry = CaptureEnvelope(**{**envelope.__dict__, "capture_id": "cap-execute-2"})
+    assert service.submit(retry).status is CaptureStatus.EXECUTED
 
 
 def test_successful_submit_is_remembered_only_after_pipeline_success():
@@ -152,15 +175,19 @@ def test_nested_sensitive_metadata_is_rejected(key):
         service.submit(envelope)
 
 
-def test_metadata_cannot_override_reserved_payload_fields():
+@pytest.mark.parametrize(
+    "key",
+    ["source_type", "capture_method", "adapter_name", "input_path", "privacy", "project_ids", "tags", "priority"],
+)
+def test_metadata_cannot_override_capture_contract(key):
     service = CaptureService(FakePipeline())
     envelope = CaptureEnvelope(
-        capture_id="cap-reserved",
+        capture_id=f"cap-{key}",
         source_type="web",
-        capture_method="mobile_share",
+        capture_method="manual_text",
+        adapter_name="web_capture",
         text="hello",
-        title="real title",
-        metadata={"title": "spoofed"},
+        metadata={key: "spoofed"},
     )
     with pytest.raises(ValueError):
         service.submit(envelope)
@@ -172,15 +199,14 @@ def test_explicit_share_fields_are_forwarded_without_metadata_shadowing():
     result = service.submit_web(
         "https://example.com/item",
         platform="xiaohongshu",
-        description="saved from phone",
+        description="saved manually",
         external_id="note-42",
-        process_later=True,
         metadata={"labels": ["idea"]},
     )
     assert result.status is CaptureStatus.QUEUED
     payload = pipeline.enqueued[0][1]["payload"]
     assert payload["platform"] == "xiaohongshu"
-    assert payload["description"] == "saved from phone"
+    assert payload["description"] == "saved manually"
     assert payload["external_id"] == "note-42"
     assert payload["metadata"] == {"labels": ["idea"]}
 
@@ -230,8 +256,6 @@ def test_codex_messages_link_to_their_own_memories_and_skip_only_missing(tmp_pat
     assert records[0]["memory_links"][0]["memory_id"] == "mem-report"
     assert "memory_links" not in records[1]
     assert records[2]["memory_links"][0]["memory_id"] == "mem-task"
-    # Both bundles must have idempotent business data: only execution-level
-    # metadata (import_execution_id) may differ between runs.
     import copy
     b0, b1 = copy.deepcopy(read_model.bundles[0]), copy.deepcopy(read_model.bundles[1])
     b0["source"]["metadata"].pop("import_execution_id", None)

@@ -31,6 +31,7 @@ class CaptureEnvelope:
     capture_id: str
     source_type: str
     capture_method: str
+    adapter_name: str = ""
     title: str = ""
     url: str = ""
     text: str = ""
@@ -47,6 +48,10 @@ class CaptureEnvelope:
     description: str = ""
     external_id: str = ""
     process_later: bool = False
+    allow_ocr: bool = False
+    allow_transcription: bool = False
+    extract_keyframes: bool = False
+    extract_audio: bool = False
     project_ids: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
     privacy: str = "private"
