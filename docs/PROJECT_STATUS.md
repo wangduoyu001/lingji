@@ -253,9 +253,15 @@ duration: 45.99s
 19 个失败属于里程碑门禁外的环境相关测试：
 
 - `test_qdrant_semantic_provider.py`: 7，测试环境未启动 Qdrant。
-- `test_memory_capability_contract.py`: 6，Windows `C:\Temp` 系统盘限制。
-- `test_semantic_runtime_wiring.py`: 5，Windows `C:\Temp` 系统盘限制。
-- `test_status_snapshot_wiring.py`: 1，Windows `C:\Temp` 系统盘限制。
+  - 	est_memory_capability_contract.py: 6 → 0（使用 allow_test_workspace_root fixture，已修复）
+  - 	est_semantic_runtime_wiring.py: 5 → 0（使用 allow_test_workspace_root fixture，已修复）
+  - 	est_status_snapshot_wiring.py: 1 → 0（使用 allow_test_workspace_root fixture，已修复）
+
+P0 Engineer Hygiene: RESOLVED。19 个 C:\Temp 失败已全部修复（使用 allow_test_workspace_root fixture）。
+
+生产代码未修改：_reject_system_drive 和 _reject_system_drive_text 安全检查保持有效。
+
+新增文件：	ests/fixtures/workspace_paths.py、constraints/python-3.12-windows.txt。
 
 这些失败不属于 P2-03 → P2-04 目标门禁；目标门禁 91/91 全部通过。
 

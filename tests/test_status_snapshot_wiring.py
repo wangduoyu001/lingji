@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import tempfile
+from tests.fixtures.workspace_paths import allow_test_workspace_root
 import unittest
 from pathlib import Path
 
@@ -17,6 +18,9 @@ class StatusSnapshotWiringTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.root = Path(self.temp_dir.name)
+        self._allow_cm = allow_test_workspace_root(self.root)
+        self._allow_cm.__enter__()
+        self.addCleanup(self._allow_cm.__exit__, None, None, None)
         self.settings = Settings(
             _env_file=None,
             workspace_root=str(self.root / "workspaces"),

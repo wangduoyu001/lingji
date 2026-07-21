@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-import importlib.util
+try:
+    import qdrant_client  # noqa: F401
+    HAS_QDRANT = True
+except ImportError:
+    HAS_QDRANT = False
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,10 +14,10 @@ from src.retrieval.qdrant_provider import (
     VectorDimensionMismatchError,
 )
 from src.retrieval.semantic import SemanticPoint
+from tests.fixtures.workspace_paths import allow_test_workspace_root
 from src.runtime.workspace import WorkspaceContext, WorkspaceName
 
 
-HAS_QDRANT = importlib.util.find_spec("qdrant_client") is not None
 
 
 class FakeEmbeddingProvider:
@@ -111,21 +115,22 @@ class QdrantProviderContractTests(unittest.TestCase):
     def test_point_id_is_stable_and_workspace_scoped(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            acceptance = QdrantSemanticProvider(
-                workspace(root, WorkspaceName.ACCEPTANCE),
-                FakeEmbeddingProvider(),
-                client=object(),
-            )
-            acceptance_again = QdrantSemanticProvider(
-                workspace(root, WorkspaceName.ACCEPTANCE),
-                FakeEmbeddingProvider(),
-                client=object(),
-            )
-            production = QdrantSemanticProvider(
-                workspace(root, WorkspaceName.PRODUCTION),
-                FakeEmbeddingProvider(),
-                client=object(),
-            )
+            with allow_test_workspace_root(root):
+                acceptance = QdrantSemanticProvider(
+                    workspace(root, WorkspaceName.ACCEPTANCE),
+                    FakeEmbeddingProvider(),
+                    client=object(),
+                )
+                acceptance_again = QdrantSemanticProvider(
+                    workspace(root, WorkspaceName.ACCEPTANCE),
+                    FakeEmbeddingProvider(),
+                    client=object(),
+                )
+                production = QdrantSemanticProvider(
+                    workspace(root, WorkspaceName.PRODUCTION),
+                    FakeEmbeddingProvider(),
+                    client=object(),
+                )
 
             self.assertEqual(
                 acceptance.point_id("LJ-CHUNK-1"),
@@ -154,7 +159,11 @@ class QdrantProviderIntegrationTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
-        self.workspace = workspace(Path(self.temp_dir.name))
+        root = Path(self.temp_dir.name)
+        self._allow_cm = allow_test_workspace_root(root)
+        self._allow_cm.__enter__()
+        self.addCleanup(self._allow_cm.__exit__, None, None, None)
+        self.workspace = workspace(root)
         self.embedding = FakeEmbeddingProvider()
         self.provider = QdrantSemanticProvider(self.workspace, self.embedding)
         self.addCleanup(self.provider.close)

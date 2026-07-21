@@ -139,11 +139,10 @@ def test_legacy_vault_environment_remains_supported(tmp_path):
     assert config.vault_discovery_source == DISCOVERY_ENVIRONMENT
 
 
-def test_default_paths_do_not_encode_drive_or_user_directory():
-    normalized = [path.replace("\\", "/").casefold() for path in DEFAULT_CLI_PATHS]
-    assert all(not path.startswith("c:/") for path in normalized)
-    assert all(not path.startswith("d:/") for path in normalized)
-    assert all("/users/" not in path for path in normalized)
+    config = ObsidianCliConfig.from_env(environ={"PATH": ""})
+    assert isinstance(config, ObsidianCliConfig)
+    assert config.timeout > 0
+    assert config.vault_name == "本地知识库"
 
 
 def test_config_from_env_defaults():
@@ -151,6 +150,73 @@ def test_config_from_env_defaults():
     assert isinstance(config, ObsidianCliConfig)
     assert config.timeout > 0
     assert config.vault_name == "本地知识库"
+
+
+def test_source_code_does_not_contain_developer_specific_paths():
+    import inspect
+    from second_brain import obsidian_cli as oc
+    src = inspect.getsource(oc)
+    assert "D:\\codex" not in src
+    assert "C:\\Users" not in src
+
+
+def test_synthetic_localappdata_generates_programs_and_direct_path():
+    from second_brain.obsidian_cli import _platform_cli_candidates
+    env = {"LOCALAPPDATA": "D:\\Test\\AppData", "ProgramFiles": "D:\\Test\\Program Files", "ProgramFiles(x86)": "D:\\Test\\Program Files (x86)", "PATH": ""}
+    paths = _platform_cli_candidates(platform="win32", environ=env)
+    assert any("Programs" in str(p) for p in paths)
+    assert any(str(p).endswith("Obsidian.com") for p in paths)
+    assert len(paths) >= 2
+
+
+def test_candidate_paths_change_when_environment_changes():
+    from second_brain.obsidian_cli import _platform_cli_candidates
+    env_a = {"LOCALAPPDATA": "D:\\A", "ProgramFiles": "D:\\B", "ProgramFiles(x86)": "D:\\C", "PATH": ""}
+    env_b = {"LOCALAPPDATA": "D:\\X", "ProgramFiles": "D:\\Y", "ProgramFiles(x86)": "D:\\Z", "PATH": ""}
+    paths_a = _platform_cli_candidates(platform="win32", environ=env_a)
+    paths_b = _platform_cli_candidates(platform="win32", environ=env_b)
+    assert paths_a != paths_b
+    assert any("D:\\A" in str(p) for p in paths_a)
+    assert any("D:\\X" in str(p) for p in paths_b)
+
+
+
+def test_vault_name_from_environment_variable():
+    config = ObsidianCliConfig.from_env(
+        environ={"PATH": "", "OBSIDIAN_VAULT_NAME": "工作知识库"}
+    )
+    assert config.vault_name == "工作知识库"
+
+
+def test_vault_name_from_vault_path_when_env_not_set():
+    config = ObsidianCliConfig.from_env(
+        workspace_vault_path="D:\\test\\main-vault",
+        environ={"PATH": ""},
+    )
+    assert config.vault_name == "main-vault"
+
+
+def test_vault_name_defaults_when_neither_path_nor_env():
+    config = ObsidianCliConfig.from_env(environ={"PATH": ""})
+    assert config.vault_name == "本地知识库"
+
+
+def test_resolve_vault_name_env_has_highest_priority():
+    from second_brain.obsidian_cli import ObsidianCliConfig
+    result = ObsidianCliConfig._resolve_vault_name(
+        vault_path="D:\\other\\vault",
+        environ={"OBSIDIAN_VAULT_NAME": "环境优先"},
+    )
+    assert result == "环境优先"
+
+
+def test_resolve_vault_name_falls_back_to_path_name():
+    from second_brain.obsidian_cli import ObsidianCliConfig
+    result = ObsidianCliConfig._resolve_vault_name(
+        vault_path="D:\\my-vault",
+        environ={},
+    )
+    assert result == "my-vault"
 
 
 def test_invalid_timeout_falls_back_to_default():

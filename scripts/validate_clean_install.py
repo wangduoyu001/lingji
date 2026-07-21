@@ -22,7 +22,10 @@ REQUIREMENT_FILES = {
     "mcp": Path("requirements-mcp.txt"),
     "test": Path("requirements-test.txt"),
 }
-CONSTRAINT_FILES = (Path("constraints/python-3.13-linux.txt"),)
+CONSTRAINT_FILES = (
+    Path("constraints/python-3.13-linux.txt"),
+    Path("constraints/python-3.12-windows.txt"),
+)
 FORBIDDEN_DEPENDENCY_PATTERNS = (
     re.compile(r"^\s*-e(?:\s|$)", re.IGNORECASE),
     re.compile(r"^\s*(?:file|git\+file)://", re.IGNORECASE),

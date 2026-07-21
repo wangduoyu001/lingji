@@ -84,6 +84,8 @@ def _platform_cli_candidates(
         for variable in ("LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)"):
             root = str(env.get(variable, "") or "").strip()
             if root:
+                if variable == "LOCALAPPDATA":
+                    candidates.append(Path(root).expanduser() / "Programs" / "Obsidian" / "Obsidian.com")
                 candidates.append(Path(root).expanduser() / "Obsidian" / "Obsidian.com")
     elif current == "darwin":
         candidates.extend(
@@ -158,7 +160,7 @@ class ObsidianCliConfig:
         return cls(
             cli_path=discovery.path,
             vault_path=vault_path,
-            vault_name=str(env.get("OBSIDIAN_VAULT_NAME", "本地知识库") or "本地知识库"),
+            vault_name=cls._resolve_vault_name(vault_path=vault_path, environ=env),
             timeout=timeout,
             dry_run=str(env.get("OBSIDIAN_CLI_DRY_RUN", "0") or "0") == "1",
             cli_discovery_source=discovery.source,
@@ -210,6 +212,23 @@ class ObsidianCliConfig:
             if text:
                 return str(Path(text).expanduser()), source
         return "", DISCOVERY_NOT_FOUND
+
+
+    @staticmethod
+    def _resolve_vault_name(
+        *,
+        vault_path: str,
+        environ: Mapping[str, str] | None = None,
+    ) -> str:
+        env = os.environ if environ is None else environ
+        explicit = str(env.get("OBSIDIAN_VAULT_NAME", "") or "").strip()
+        if explicit:
+            return explicit
+        if vault_path:
+            name = Path(vault_path).name
+            if name:
+                return name
+        return "本地知识库"
 
     def validate(self) -> list[str]:
         issues: list[str] = []

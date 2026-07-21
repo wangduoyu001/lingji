@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import tempfile
+from tests.fixtures.workspace_paths import allow_test_workspace_root
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -92,6 +93,9 @@ class SemanticRuntimeWiringTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         root = Path(self.temp_dir.name)
+        self._allow_cm = allow_test_workspace_root(root)
+        self._allow_cm.__enter__()
+        self.addCleanup(self._allow_cm.__exit__, None, None, None)
         self.root = root
         self.settings = Settings(
             _env_file=None,
