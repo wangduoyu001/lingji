@@ -1,6 +1,7 @@
 import { useState } from "react";
 import AppPages from "./AppPages";
 import { Notice } from "./components/ui";
+import "./DesktopUX.css";
 import { useLingJiConnection } from "./hooks/useLingJiConnection";
 import { NAVIGATION, NAVIGATION_GROUPS } from "./navigation";
 import type { CaptureInspectorTarget } from "./pages/captureCenterTypes";
