@@ -11,6 +11,8 @@ export default function MemoryInspectorLoopPage({ api, active, target }: PagePro
   const controller = useRef<AbortController | null>(null);
   const requestId = useRef(0);
 
+  useEffect(() => { setShortcut(target); }, [target]);
+
   useEffect(() => {
     if (!active) return;
     controller.current?.abort(); const abort = new AbortController(); const id = ++requestId.current; controller.current = abort;
@@ -34,13 +36,13 @@ export default function MemoryInspectorLoopPage({ api, active, target }: PagePro
   return <div className="stack">
     <div className="toolbar">
       <button className="button secondary" disabled={!current?.project?.project_id} onClick={() => apply({ project_id: current?.project?.project_id })}>当前项目</button>
-      <button className="button secondary" onClick={() => apply({ source_type: "codex" })}>仅 Codex</button>
+      <button className="button secondary" onClick={() => apply({ source_type: "codex_session" })}>仅 Codex</button>
       <button className="button secondary" disabled={!current?.session?.conversation_ids?.[0]} onClick={() => apply({ project_id: current?.project?.project_id, conversation_id: current?.session?.conversation_ids?.[0] })}>当前 Session</button>
       <button className="button secondary" onClick={() => apply({ ...shortcut, related_memory_only: true })}>仅有关联 Memory</button>
       <button className="button secondary" onClick={() => apply({ ...shortcut, core_memory_only: true })}>仅 Core Memory</button>
       <button className="button secondary" onClick={() => apply(null)}>清除快捷筛选</button>
       <span>{shortcut ? `快捷筛选：${Object.entries(shortcut).filter(([, value]) => value).map(([key, value]) => `${key}=${value}`).join(" · ")}` : "未启用快捷筛选"}</span>
     </div>
-    <MemoryInspectorPage key={JSON.stringify(shortcut)} api={api} active={active} />
+    <MemoryInspectorPage key={JSON.stringify(shortcut)} api={api} active={active} target={shortcut} />
   </div>;
 }
