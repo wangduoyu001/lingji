@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const contractSource = readFileSync(
-  new URL("../src/pages/memoryInspectorContract.ts", import.meta.url),
-  "utf8",
-);
-const contract = await import(`data:text/javascript;base64,${Buffer.from(contractSource).toString("base64")}`);
+const contract = await import("../src/pages/memoryInspectorContract.ts");
 
 const filters = {
   sourceType: "chatgpt",
@@ -76,9 +72,11 @@ assert.equal(vector.state, "ready");
 assert.equal(vector.rebuild_required, false);
 assert.equal(vector.chunks[0].chunk_id, "C-1");
 
-const source = contract.mapMemorySource({ canonical: { relative_path: "Memory/a.md", citation: "L1-L3" }, links: [{ message_id: "MSG-1" }] });
+const source = contract.mapMemorySource({ canonical: { relative_path: "Memory/a.md", citations: [{ chunk_id: "C-1", relative_path: "Memory/a.md", start_line: 1, end_line: 3 }] }, links: [{ message_id: "MSG-1" }] });
 assert.equal(source.canonical.relative_path, "Memory/a.md");
-assert.equal(source.canonical.citation, "L1-L3");
+assert.equal(source.canonical.citations[0].chunk_id, "C-1");
+assert.equal(source.canonical.citations[0].start_line, 1);
+assert.equal(source.canonical.citations[0].end_line, 3);
 assert.equal(source.links[0].message_id, "MSG-1");
 
 assert.equal(contract.rebuildLabel(true), "需要重建");

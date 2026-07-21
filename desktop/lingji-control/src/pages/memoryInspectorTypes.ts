@@ -1,3 +1,10 @@
+﻿export type Citation = {
+  chunk_id: string;
+  relative_path?: string | null;
+  start_line?: number | null;
+  end_line?: number | null;
+};
+
 export type Pagination = {
   limit: number;
   offset: number;
@@ -67,6 +74,7 @@ export type MemoryItem = {
   title?: string | null;
   memory_type?: string | null;
   status?: string | null;
+  chunks?: unknown[] | null;
   chunk_count?: number | null;
 };
 
@@ -76,7 +84,7 @@ export type MemorySourceResponse = {
   memory_id?: string;
   canonical?: {
     relative_path?: string | null;
-    citation?: string | null;
+    citations?: Citation[] | null;
     [key: string]: unknown;
   } | null;
   links?: Array<{

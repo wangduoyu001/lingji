@@ -17,6 +17,7 @@ import {
   toQueryString,
 } from "./memoryInspectorContract";
 import type {
+  Citation,
   ConversationItem,
   InspectorFilters,
   InspectorStatusResponse,
@@ -101,8 +102,8 @@ export default function MemoryInspectorPage({ api, active }: PageProps) {
     try {
       const [sourceResponse, conversationResponse, messageResponse, statusResponse] = await Promise.all([
         api.get<PageResponse<SourceItem>>(`/api/memory/inspector/sources?${toQueryString(buildSourceQuery(effectiveFilters, offsets.source))}`, { signal: controller.signal }),
-        api.get<PageResponse<ConversationItem>>(`/api/memory/inspector/conversations?${toQueryString(buildConversationQuery(effectiveFilters, selectedSource?.source_id, offsets.conversation))}`, { signal: controller.signal }),
-        api.get<PageResponse<MessageItem>>(`/api/memory/inspector/messages?${toQueryString(buildMessageQuery(effectiveFilters, selectedSource?.source_id, selectedConversation?.conversation_id, offsets.message))}`, { signal: controller.signal }),
+        api.get<PageResponse<ConversationItem>>(`/api/memory/inspector/conversations?${toQueryString(buildConversationQuery(effectiveFilters, selectedSource?.source_id ?? "", offsets.conversation))}`, { signal: controller.signal }),
+        api.get<PageResponse<MessageItem>>(`/api/memory/inspector/messages?${toQueryString(buildMessageQuery(effectiveFilters, selectedSource?.source_id ?? "", selectedConversation?.conversation_id ?? "", offsets.message))}`, { signal: controller.signal }),
         api.get<InspectorStatusResponse>("/api/memory/inspector/status", { signal: controller.signal }),
       ]);
       if (requestId !== listRequestId.current) return;
@@ -282,11 +283,23 @@ export default function MemoryInspectorPage({ api, active }: PageProps) {
                 <dt>Memory ID</dt><dd>{selectedMemory.memory_id}</dd>
                 <dt>类型</dt><dd>{text(selectedMemory.memory_type)}</dd>
                 <dt>状态</dt><dd>{text(selectedMemory.status)}</dd>
-                <dt>Chunk 数量</dt><dd>{countLabel(selectedMemory.chunk_count)}</dd>
+                <dt>Chunk 数量</dt><dd>{
+                  typeof selectedMemory.chunk_count === "number"
+                    ? selectedMemory.chunk_count.toLocaleString()
+                    : Array.isArray(selectedMemory.chunks)
+                      ? selectedMemory.chunks.length.toLocaleString()
+                      : "未知"
+                }</dd>
                 <dt>Vector 状态</dt><dd>{text(memoryVector?.state)}</dd>
                 <dt>rebuild_required</dt><dd>{rebuildLabel(memoryVector?.rebuild_required)}</dd>
                 <dt>Vault 相对路径</dt><dd>{text(memorySource?.canonical?.relative_path)}</dd>
-                <dt>Citation</dt><dd>{text(memorySource?.canonical?.citation)}</dd>
+                <dt>Citations</dt><dd>{
+                  Array.isArray(memorySource?.canonical?.citations) && memorySource.canonical.citations.length > 0
+                    ? memorySource.canonical.citations.map(c =>
+                        `${c.chunk_id}${c.relative_path ? ` (${c.relative_path})` : ""}${c.start_line != null ? ` L${c.start_line}` : ""}${c.end_line != null ? `-${c.end_line}` : ""}`
+                      ).join("; ")
+                    : "无引用来源"
+                }</dd>
               </dl>
               <h4>来源 Message Links</h4>
               {memorySource?.links?.length ? memorySource.links.map((link, index) => <p key={`${link.message_id ?? "unknown"}-${index}`}>{text(link.message_id)} · {text(link.relation_type)} · {text(link.citation)}</p>) : <p>未知或没有来源 Message Link。</p>}
