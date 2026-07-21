@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import DataTable from "../components/DataTable";
 import { Empty, Metric, Notice, Panel, bytes } from "../components/ui";
 import type { PageProps, Row } from "../types";
@@ -45,11 +45,11 @@ export default function ModelsPage({ api, active }: PageProps) {
 
   if (!inventory || !registry) return <Empty text="连接本机服务后读取模型清单。" />;
 
-  const summary = inventory.summary ?? {};
-  const models: Row[] = inventory.models ?? [];
-  const providers: Row[] = inventory.providers ?? [];
-  const assignments: Row[] = inventory.assignments ?? [];
-  const capabilities = registry.capabilities ?? {};
+  const summary: Record<string, unknown> = (inventory.summary ?? {}) as Record<string, unknown>;
+  const models: Row[] = (inventory.models ?? []) as Row[];
+  const providers: Row[] = (inventory.providers ?? []) as Row[];
+  const assignments: Row[] = (inventory.assignments ?? []) as Row[];
+  const capabilities: Record<string, unknown> = (registry.capabilities ?? {}) as Record<string, unknown>;
 
   return (
     <div className="stack">
@@ -73,45 +73,42 @@ export default function ModelsPage({ api, active }: PageProps) {
       </div>
 
       <Panel title="模型用途">
-        <DataTable headers={["用途", "说明"]} rows={Object.values(capabilities).map((item) => {
-          const capability = item as Row;
-          return [capability.label, capability.description];
-        })} />
+        <DataTable headers={["用途", "说明"]} rows={(Object.values(capabilities) as Row[]).map((capability) => [capability.label, capability.description] as React.ReactNode[])} />
       </Panel>
 
       <Panel title="Ollama 本地模型">
         <DataTable
           headers={["模型", "用途", "安装", "运行", "大小", "参数", "量化", "预计 RAM", "预计显存", "当前设备证据", "兼容性", "最近测速", "当前任务", "错误"]}
           rows={models.map((model) => [
-            model.display_name,
-            (model.capabilities ?? []).map((value: string) => capabilities[value]?.label || value).join("、") || "官方未声明",
+            String(model.display_name ?? ""),
+            String((((model.capabilities ?? []) as string[]).map((value: string) => String((capabilities[value] as Record<string, unknown>)?.label ?? value)).join("、") || "官方未声明")),
             model.installed ? "已安装" : "未安装",
             model.running ? "运行中" : "未运行",
-            bytes(model.size_bytes),
+            bytes(model.size_bytes as number ?? 0),
             text(model.parameter_size),
             text(model.quantization),
-            model.estimated_ram_bytes == null ? "待实测" : bytes(model.estimated_ram_bytes),
-            model.estimated_vram_bytes == null ? "待实测" : bytes(model.estimated_vram_bytes),
-            text(model.runtime?.device_evidence, "未运行"),
-            text(model.compatibility?.status, "unverified"),
+            model.estimated_ram_bytes == null ? "待实测" : bytes(model.estimated_ram_bytes as number ?? 0),
+            model.estimated_vram_bytes == null ? "待实测" : bytes(model.estimated_vram_bytes as number ?? 0),
+            String((model.runtime as Record<string, unknown>)?.device_evidence ?? "未运行"),
+            String((model.compatibility as Record<string, unknown>)?.status ?? "unverified"),
             model.last_benchmark ? text(model.last_benchmark) : "尚未测速",
             model.current_task ? text(model.current_task) : "无",
-            text(model.last_error),
-          ])}
+            String(model.last_error ?? ""),
+          ] as React.ReactNode[])}
         />
       </Panel>
 
       <div className="two-column">
         <Panel title="当前配置引用">
-          <DataTable headers={["角色", "模型", "用途", "安装状态", "兼容性"]} rows={assignments.map((item) => [item.role, item.model, capabilities[item.capability]?.label || item.capability, item.installed ? "已安装" : "缺失", item.compatibility?.status || "unverified"])} />
+          <DataTable headers={["角色", "模型", "用途", "安装状态", "兼容性"]} rows={assignments.map((item) => [String(item.role ?? ""), String(item.model ?? ""), String(item.capability ?? ""), item.installed ? "已安装" : "缺失", String((item.compatibility as Record<string, unknown>)?.status ?? "unverified")] as React.ReactNode[])} />
         </Panel>
         <Panel title="Python Provider">
-          <DataTable headers={["Provider", "用途", "包", "模型状态", "配置模型", "目录", "错误"]} rows={providers.map((item) => [item.label, (item.capabilities ?? []).map((value: string) => capabilities[value]?.label || value).join("、"), item.package_available ? "已安装" : "未安装", item.installation_status, text(item.configured_model), text(item.model_root), text(item.last_error)])} />
+          <DataTable headers={["Provider", "用途", "包", "模型状态", "配置模型", "目录", "错误"]} rows={providers.map((item) => [String(item.label ?? ""), String(item.capabilities ?? ""), item.package_available ? "已安装" : "未安装", String(item.installation_status ?? ""), String(item.configured_model ?? ""), String(item.model_root ?? ""), String(item.last_error ?? "")] as React.ReactNode[])} />
         </Panel>
       </div>
 
       <Panel title="兼容性判断步骤">
-        <div className="list">{(inventory.compatibility_process ?? []).map((step: string, index: number) => <div className="list-row" key={step}><span className="pill neutral">{index + 1}</span><div><strong>{step}</strong><small>{index < 2 ? "P3 后续实现" : "需要真实模型和主人电脑"}</small></div></div>)}</div>
+        <div className="list">{((inventory.compatibility_process as any[]) ?? []).map((step: string, index: number) => <div className="list-row" key={step}><span className="pill neutral">{index + 1}</span><div><strong>{step}</strong><small>{index < 2 ? "P3 后续实现" : "需要真实模型和主人电脑"}</small></div></div>)}</div>
       </Panel>
     </div>
   );

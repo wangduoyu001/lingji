@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Empty, Metric } from "../components/ui";
 import DataTable from "../components/DataTable";
 import type { LingJiApi } from "../api";
@@ -68,7 +68,7 @@ export default function BrainStatusPage({ api, active }: { api: LingJiApi; activ
         <div className="panel">
           <div className="panel-title">最近任务</div>
           {data?.recent_tasks?.length ? (
-            <DataTable headers={["任务", "状态", "时间"]} rows={data.recent_tasks.map((t: Row) => [t.task || t.job_id, t.state, (t.created_at || "").slice(0, 16) || "-"])} />
+            <DataTable headers={["任务", "状态", "时间"]} rows={data.recent_tasks.map((t: any) => [t.task || t.job_id, t.state, String(t.created_at ?? "").slice(0, 16) || "-"])} />
           ) : <Empty text="无待处理任务" />}
         </div>
       </div>

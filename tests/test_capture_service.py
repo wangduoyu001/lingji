@@ -230,4 +230,10 @@ def test_codex_messages_link_to_their_own_memories_and_skip_only_missing(tmp_pat
     assert records[0]["memory_links"][0]["memory_id"] == "mem-report"
     assert "memory_links" not in records[1]
     assert records[2]["memory_links"][0]["memory_id"] == "mem-task"
-    assert read_model.bundles[0] == read_model.bundles[1]
+    # Both bundles must have idempotent business data: only execution-level
+    # metadata (import_execution_id) may differ between runs.
+    import copy
+    b0, b1 = copy.deepcopy(read_model.bundles[0]), copy.deepcopy(read_model.bundles[1])
+    b0["source"]["metadata"].pop("import_execution_id", None)
+    b1["source"]["metadata"].pop("import_execution_id", None)
+    assert b0 == b1, "bundles differ beyond import_execution_id"

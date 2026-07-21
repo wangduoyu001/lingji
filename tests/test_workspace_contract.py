@@ -13,8 +13,13 @@ from src.runtime.workspace import (
 
 class WorkspaceContractTests(unittest.TestCase):
     def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp_dir.name)
+        import platform, uuid
+        if platform.system() == "Windows":
+            self._managed = None
+            self.root = Path(f"D:\\LingJiTest\\{uuid.uuid4().hex}")
+        else:
+            self._managed = tempfile.TemporaryDirectory()
+            self.root = Path(self._managed.name)
         self.settings = Settings(
             _env_file=None,
             workspace_name="production",
@@ -24,7 +29,8 @@ class WorkspaceContractTests(unittest.TestCase):
         )
 
     def tearDown(self):
-        self.temp_dir.cleanup()
+        if self._managed is not None:
+            self._managed.cleanup()
 
     def test_default_workspaces_are_physically_isolated_and_serializable(self):
         contexts = WorkspaceResolver.resolve_all(

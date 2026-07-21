@@ -10,8 +10,8 @@ export default function LogsPage({ api, active }: PageProps) {
   useEffect(() => { void load(); }, [load]);
   return (
     <div className="stack">
-      <div className="toolbar"><button className="button secondary" onClick={() => void load()}>刷新</button><span>{data.path}</span><span>{bytes(data.size)}</span></div>
-      <pre className="log-view">{(data.lines ?? []).join("\n") || "暂无日志"}</pre>
+      <div className="toolbar"><button className="button secondary" onClick={() => void load()}>刷新</button><span>{String(data.path ?? "")}</span><span>{bytes(data.size as number ?? 0)}</span></div>
+      <pre className="log-view">{((data.lines ?? []) as string[]).join("\n") || "暂无日志"}</pre>
     </div>
   );
 }

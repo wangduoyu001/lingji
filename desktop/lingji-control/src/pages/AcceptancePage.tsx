@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import DataTable from "../components/DataTable";
 import { Empty, Json, Metric, Notice, Panel } from "../components/ui";
@@ -63,12 +63,12 @@ export default function AcceptancePage({ api, active }: PageProps) {
           {error && <Notice kind="error">{error}</Notice>}
         </Panel>
         <Panel title="本次结果">
-          {report ? <div className="stack"><div className="metric-grid"><Metric title="状态" value={String(report.status || "未知")} /><Metric title="输入未变化" value={report.inputs_unchanged ? "是" : "否"} /><Metric title="错误" value={String(report.error_count || 0)} /><Metric title="警告" value={String(report.warning_count || 0)} /></div><small>JSON：{String(result?.json_path || "-")}</small><small>Markdown：{String(result?.markdown_path || "-")}</small><Json value={report.checks ?? []} /></div> : <Empty text="运行后显示状态、输入完整性和报告路径。" />}
+          {report ? <div className="stack"><div className="metric-grid"><Metric title="状态" value={String(report.status || "未知")} /><Metric title="输入未变化" value={report.inputs_unchanged ? "是" : "否"} /><Metric title="错误" value={String(report.error_count || 0)} /><Metric title="警告" value={String(report.warning_count || 0)} /></div><small>JSON：{String(result?.json_path || "-")}</small><small>Markdown：{String(result?.markdown_path || "-")}</small><Json value={(report.checks ?? []) as React.ReactNode[][]} /></div> : <Empty text="运行后显示状态、输入完整性和报告路径。" />}
         </Panel>
       </div>
       <Panel title="验收历史">
         <div className="toolbar"><button className="button secondary" onClick={() => void load()} disabled={!active}>刷新</button></div>
-        <DataTable headers={["时间", "状态", "错误", "警告", "输入未变化", "报告"]} rows={reports.map((item) => [item.generated_at || "-", item.status || "-", item.error_count || 0, item.warning_count || 0, item.inputs_unchanged ? "是" : "否", item.markdown_path || item.path])} />
+        <DataTable headers={["时间", "状态", "错误", "警告", "输入未变化", "报告"]} rows={reports.map((item: any): React.ReactNode[] => [String(item.generated_at ?? "-"), String(item.status ?? "-"), item.error_count ?? 0, item.warning_count ?? 0, item.inputs_unchanged ? "是" : "否", String(item.markdown_path ?? String(item.path ?? ""))])} />
       </Panel>
     </div>
   );

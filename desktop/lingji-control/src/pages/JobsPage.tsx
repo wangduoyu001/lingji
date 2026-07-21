@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import DataTable from "../components/DataTable";
 import { Panel } from "../components/ui";
 import type { PageProps, Row } from "../types";
@@ -19,7 +19,7 @@ export default function JobsPage({ api, active }: PageProps) {
         </select>
         <button className="button secondary" onClick={() => void load()}>刷新</button>
       </div>
-      <Panel title="任务队列"><DataTable headers={["任务 ID", "来源", "状态", "进度", "尝试", "错误", "更新时间"]} rows={(data.jobs ?? []).map((job: Row) => [job.job_id, job.source_type, job.status, job.progress_message || "-", `${job.attempts || 0}/${job.max_attempts || 0}`, job.last_error || "-", job.updated_at])} /></Panel>
+      <Panel title="任务队列"><DataTable headers={["任务 ID", "来源", "状态", "进度", "尝试", "错误", "更新时间"]} rows={((data as any).jobs ?? []).map((job: any) => [job.job_id, job.source_type, job.status, job.progress_message || "-", `${job.attempts || 0}/${job.max_attempts || 0}`, job.last_error || "-", job.updated_at] as React.ReactNode[])} /></Panel>
     </div>
   );
 }

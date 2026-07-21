@@ -28,7 +28,7 @@ function StatusBadge({ value }: { value: string | null | undefined }) {
   const normalized = value || "unknown";
   return <span className={`pill ${stateTone(normalized)}`}>{STATE_LABELS[normalized] || normalized}</span>;
 }
-function BooleanBadge({ value, trueLabel = "是", falseLabel = "否" }: { value: boolean | undefined; trueLabel?: string; falseLabel?: string }) {
+function BooleanBadge({ value, trueLabel = "是", falseLabel = "否" }: { value: boolean | null | undefined; trueLabel?: string; falseLabel?: string }) {
   if (value === undefined) return <span className="pill neutral">未知</span>;
   return <span className={`pill ${value ? "success" : "neutral"}`}>{value ? trueLabel : falseLabel}</span>;
 }
