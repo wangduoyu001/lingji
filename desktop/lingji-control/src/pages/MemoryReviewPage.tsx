@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api";
+import { Notice } from "../components/ui";
 import type { PageProps } from "../types";
 import { REVIEW_LIMIT, canApprove, integrityMessage } from "./codexWorkspaceContract";
 import { MemoryReviewApi } from "./memoryReviewApi";
@@ -81,6 +82,7 @@ export default function MemoryReviewPage({ api, active }: PageProps) {
   if (!active) return <div className="loop-state">连接本机服务后显示记忆审核。</div>;
   return <div className="loop-page">
     <header className="loop-toolbar"><button className="button secondary" onClick={() => void load()}>刷新</button><span>批准、编辑或拒绝 AI 提出的长期记忆</span></header>
+    <Notice kind="warning"><strong>这里是唯一的记忆变更入口。</strong> Auto Review SHADOW 只提供建议和风险解释，不会代替主人点击批准、拒绝、归档或新增长期记忆。</Notice>
     {error && <div className="loop-state error">{error.status === 409 ? "候选内容已变化，请刷新后重新审核。" : error.status === 401 ? "需要本地授权" : error.status === 503 ? "服务暂不可用" : "操作失败，已保留编辑内容。"}</div>}
     <section className="review-layout">
       <div className="loop-panel"><h2>待审核记忆</h2><div className="loop-filters"><input placeholder="项目" value={filters.projectId} onChange={(e) => setFilters({ ...filters, projectId: e.target.value, offset: 0 })} /><input placeholder="Agent" value={filters.agent} onChange={(e) => setFilters({ ...filters, agent: e.target.value, offset: 0 })} /><input placeholder="类型" value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value, offset: 0 })} /><select value={filters.importance} onChange={(e) => setFilters({ ...filters, importance: e.target.value, offset: 0 })}><option value="">全部重要性</option><option>high</option><option>medium</option><option>low</option></select><input placeholder="关键词" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value, offset: 0 })} /></div>{items.length ? items.map((item) => <button className="loop-card" key={item.memory_id} onClick={() => void openCandidate(item)}><strong>{item.title ?? item.memory_id}</strong><span>{item.content_preview ?? "无预览"}</span><span>{item.project_ids?.join("、") || "未绑定项目"} · {item.proposed_by ?? "未知 Agent"}</span><small>{item.importance ?? "未知"} · 置信度 {item.confidence ?? "未知"} · {dt(item.created_at)}</small></button>) : <p>{Object.values(filters).some((v) => v !== "" && v !== 0 && v !== REVIEW_LIMIT) ? "筛选后没有候选记忆。" : "没有待审核记忆。"}</p>}<div className="loop-pager"><button disabled={filters.offset === 0} onClick={() => setFilters({ ...filters, offset: Math.max(0, filters.offset - REVIEW_LIMIT) })}>上一页</button><button onClick={() => setFilters({ ...filters, offset: filters.offset + REVIEW_LIMIT })}>下一页</button></div></div>
