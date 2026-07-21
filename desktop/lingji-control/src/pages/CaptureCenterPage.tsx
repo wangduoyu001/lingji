@@ -142,7 +142,15 @@ export default function CaptureCenterPage({ api, active, onOpenInspector }: Prop
   const chooseFile = async () => {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({ multiple: false, directory: false });
+      const mode = tab === "chatgpt_export" ? "chatgpt_export" : tab === "codex_report" ? "codex_report" : fileMode;
+      const filters = tab === "media"
+        ? [{ name: "音频和视频", extensions: ["mp4", "mov", "mkv", "avi", "webm", "m4v", "flv", "ts", "mts", "m2ts", "mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "wma"] }]
+        : mode === "chatgpt_export"
+          ? [{ name: "ChatGPT Export", extensions: ["zip", "json"] }]
+          : mode === "codex_report"
+            ? [{ name: "Codex Report", extensions: ["json"] }]
+            : [{ name: "Web Snapshot", extensions: ["html", "htm", "json", "txt", "md"] }];
+      const selected = await open({ multiple: false, directory: false, filters });
       if (typeof selected === "string") setSelectedPath(selected);
     } catch {
       setSubmissionMessage("文件选择仅在已配置 Dialog Plugin 的桌面应用中可用");
@@ -218,8 +226,6 @@ export default function CaptureCenterPage({ api, active, onOpenInspector }: Prop
       </div>
 
       <div className="capture-toolbar">
-        <button disabled={status?.mode === "normal"} onClick={() => void setMode("resume")}>正常</button>
-        <button disabled={status?.mode === "low_power"} onClick={() => void setMode("resume")}>低功耗</button>
         <button disabled={paused} onClick={() => void setMode("pause")}>暂停</button>
         <button disabled={!paused} onClick={() => void setMode("resume")}>恢复</button>
         <button disabled={loading} onClick={() => void load()}>{loading ? "刷新中…" : "刷新"}</button>
