@@ -10,6 +10,7 @@ const scripts = [
   "codex-workspace-smoke.mjs",
   "memory-review-smoke.mjs",
   "obsidian-operations-smoke.mjs",
+  "polling-data-smoke.mjs",
 ];
 
 for (const script of scripts) {

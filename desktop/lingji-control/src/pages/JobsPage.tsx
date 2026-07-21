@@ -1,15 +1,24 @@
-﻿import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useState } from "react";
 import DataTable from "../components/DataTable";
-import { Panel } from "../components/ui";
+import { Notice, Panel } from "../components/ui";
+import { usePollingResource } from "../hooks/usePollingResource";
 import type { PageProps, Row } from "../types";
 
 export default function JobsPage({ api, active }: PageProps) {
-  const [data, setData] = useState<Row>({ stats: {}, jobs: [] });
   const [status, setStatus] = useState("");
-  const load = useCallback(async () => {
-    if (active) setData(await api.get<Row>(`/api/jobs?limit=300${status ? `&status=${status}` : ""}`));
-  }, [active, api, status]);
-  useEffect(() => { void load(); }, [load]);
+  const load = useCallback(
+    (signal: AbortSignal) => api.get<Row>(`/api/jobs?limit=300${status ? `&status=${status}` : ""}`, { signal }),
+    [api, status],
+  );
+  const resource = usePollingResource({
+    fetcher: load,
+    enabled: active,
+    intervalMs: 3_000,
+    staleAfterMs: 10_000,
+    pauseWhenHidden: true,
+  });
+  const data = resource.data ?? { stats: {}, jobs: [] };
+
   return (
     <div className="stack">
       <div className="toolbar">
@@ -17,9 +26,26 @@ export default function JobsPage({ api, active }: PageProps) {
           <option value="">全部状态</option>
           {["queued", "running", "retrying", "failed", "completed"].map((item) => <option key={item}>{item}</option>)}
         </select>
-        <button className="button secondary" onClick={() => void load()}>刷新</button>
+        <button className="button secondary" disabled={!active || resource.refreshing} onClick={() => void resource.refresh()}>
+          {resource.refreshing ? "刷新中..." : "刷新"}
+        </button>
+        {resource.stale && <span>数据已过期</span>}
       </div>
-      <Panel title="任务队列"><DataTable headers={["任务 ID", "来源", "状态", "进度", "尝试", "错误", "更新时间"]} rows={((data as any).jobs ?? []).map((job: any) => [job.job_id, job.source_type, job.status, job.progress_message || "-", `${job.attempts || 0}/${job.max_attempts || 0}`, job.last_error || "-", job.updated_at] as React.ReactNode[])} /></Panel>
+      {resource.error && <Notice kind="error">刷新失败：{resource.error.message}。已保留最近一次成功数据。</Notice>}
+      <Panel title="任务队列">
+        <DataTable
+          headers={["任务 ID", "来源", "状态", "进度", "尝试", "错误", "更新时间"]}
+          rows={((data as { jobs?: Row[] }).jobs ?? []).map((job) => [
+            String(job.job_id ?? ""),
+            String(job.source_type ?? ""),
+            String(job.status ?? "unknown"),
+            String(job.progress_message ?? "-"),
+            `${Number(job.attempts ?? 0)}/${Number(job.max_attempts ?? 0)}`,
+            String(job.last_error ?? "-"),
+            String(job.updated_at ?? ""),
+          ] as React.ReactNode[])}
+        />
+      </Panel>
     </div>
   );
 }
