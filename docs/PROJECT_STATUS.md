@@ -2,15 +2,14 @@
 
 > Updated（更新时间）: 2026-07-21  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Current Formal HEAD（当前正式提交）: `43dfbd2fdfc2f81545e825fa21328e72153eeddb`  
-> P0 Validation Branch（P0 验证分支）: `work/p0-engineering-hygiene`  
+> P0 Formal Merge Commit（P0 正式合并提交）: `d2a605e463552cb982342bdb2376da8aad1b36b5`  
 > P0 Verified Code Commit（P0 已验证代码提交）: `08b507c2855e05a1d971cb2bcae5c8d2fea578eb`  
-> P0 Status（P0 状态）: `FOCUSED_TESTED_AWAITING_FORMAL_MERGE`  
+> P0 Status（P0 状态）: `MERGED_AND_VALIDATED`  
 > P2-03 Status（P2-03 状态）: `MERGED_AND_VALIDATED`  
 > P2-03B Status（P2-03B 状态）: `MERGED_AND_VALIDATED`  
 > P2-03C Status（P2-03C 状态）: `MERGED_AND_VALIDATED`  
 > P2-04 Status（P2-04 状态）: `MERGED_AND_VALIDATED`  
-> P2-05 Status（P2-05 状态）: `PLANNED_BLOCKED_UNTIL_P0_MERGE`
+> P2-05 Status（P2-05 状态）: `READY_FOR_PARALLEL_IMPLEMENTATION`
 
 ## 1. 产品与代码主线
 
@@ -53,6 +52,7 @@ SQLite、Qdrant、Read Model 都是可重建派生数据，不得取代 Obsidian
 
 ```text
 P0 Workspace/Port Contract（工作区与端口合同）       MERGED_AND_VALIDATED
+P0 Engineering Hygiene（工程卫生）                   MERGED_AND_VALIDATED
 P1 Unified Semantic Memory（统一语义记忆）           MERGED_AND_VALIDATED
 P2-01 Vector Center（向量中心）                      MERGED_AND_VALIDATED
 P2-02 Collection Migration（向量集合迁移）           MERGED_AND_VALIDATED
@@ -69,7 +69,7 @@ Production bge-m3 Switch（生产模型切换）和生产 Collection（向量集
 状态：
 
 ```text
-FOCUSED_TESTED_AWAITING_FORMAL_MERGE
+MERGED_AND_VALIDATED
 ```
 
 已完成：
@@ -219,24 +219,33 @@ rebase: NO
 force push: NO
 ```
 
-## 11. 当前合并状态
+## 11. 当前开发状态
 
 ```text
 P0 Engineering Hygiene:
-READY_FOR_FORMAL_MERGE
+MERGED_AND_VALIDATED
 
-P2-05:
-BLOCKED_UNTIL_P0_FORMAL_MERGE
+P2-05 Manual Capture Center:
+READY_FOR_PARALLEL_IMPLEMENTATION
+```
+
+P2-05 分工：
+
+```text
+1号：Capture Control API、队列操作与 Runtime Settings
+2号：Manual Import、CaptureService 和 Adapter 映射
+3号：Desktop Capture Center 与 Tauri 文件选择
+4号：三条实现分支稳定后的集成验证
 ```
 
 ## 12. 下一步
 
 ```text
-合并 P0 到 feature/second-brain-memory
--> 更新 CHANGELOG
--> 关闭 Issue #9
--> 将三个 P2-05 分支移动到统一正式基线
--> 启动 P2-05A / P2-05B / P2-05C 并行开发
+将三个 P2-05 分支移动到同一正式基线
+-> 发布更新后的1号、2号、3号任务
+-> 三条实现分支并行开发
+-> 集成分支统一测试
+-> 正式合并 P2-05
 ```
 
 当前明确不开发：
