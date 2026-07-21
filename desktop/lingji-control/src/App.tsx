@@ -6,19 +6,16 @@ import { useLingJiConnection } from "./hooks/useLingJiConnection";
 import { NAVIGATION, NAVIGATION_GROUPS } from "./navigation";
 import type { CaptureInspectorTarget } from "./pages/captureCenterTypes";
 import type { PageId } from "./types";
-
 export default function App() {
   const [page, setPage] = useState<PageId>("overview");
   const [inspectorTarget, setInspectorTarget] = useState<CaptureInspectorTarget | null>(null);
   const [connectionExpanded, setConnectionExpanded] = useState(false);
   const connection = useLingJiConnection();
   const current = NAVIGATION.find((item) => item.id === page) ?? NAVIGATION[0];
-
   const openInspector = (target: CaptureInspectorTarget) => {
     setInspectorTarget(target);
     setPage("memory_inspector");
   };
-
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -51,7 +48,6 @@ export default function App() {
           {connection.connected ? "本机服务已连接" : "本机服务未连接"}
         </div>
       </aside>
-
       <main className="main-area">
         <header className="topbar">
           <div>
@@ -68,7 +64,6 @@ export default function App() {
             <small>{connectionExpanded ? "收起" : "展开"}</small>
           </button>
         </header>
-
         {connectionExpanded && (
           <section className="connection-panel" aria-label="本机服务连接设置">
             <div className="connection-controls">
@@ -79,14 +74,12 @@ export default function App() {
             <small>令牌仅用于本机 8766 控制 API。Tauri 环境会优先读取本地凭据，浏览器模式才需要手动填写。</small>
           </section>
         )}
-
         {connection.error && <Notice kind="error">{connection.error}</Notice>}
         {!connection.connected && (
           <Notice kind="warning">
             先启动 <code>python run_control_api.py</code>，再展开右上角连接栏。浏览器开发模式需要读取 <code>storage/control_api_token</code>。
           </Notice>
         )}
-
         <AppPages
           page={page}
           api={connection.api}
