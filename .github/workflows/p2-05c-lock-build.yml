@@ -1,0 +1,58 @@
+name: P2-05C Lock and Build Gate
+
+on:
+  push:
+    branches:
+      - work/p2-05c-capture-center-ui
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-locks-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: desktop/lingji-control
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/lingji-control/package-lock.json
+
+      - name: Generate npm lock
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Install exact frontend dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run Capture Center smoke
+        run: npm run test:capture
+
+      - name: Run all desktop smoke tests
+        run: npm run test:smoke
+
+      - name: Build desktop frontend
+        run: npm run build
+
+      - name: Generate Cargo lock
+        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+
+      - name: Check Tauri crate
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Upload generated locks
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2-05c-generated-locks
+          path: |
+            desktop/lingji-control/package-lock.json
+            desktop/lingji-control/src-tauri/Cargo.lock
+          retention-days: 3
