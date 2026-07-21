@@ -9,7 +9,10 @@
 > P2-04 Status（P2-04 状态）: `MERGED_AND_VALIDATED`  
 > P2-05 Validated Integration Tree（P2-05 已验证集成树）: `1bf95b8d16a9daea52b60518f0e920a0c0bd50db`  
 > P2-05 Formal Merge Commit（P2-05 正式合并提交）: `c77e78c0f71339264d54fc083dbc5cfabcfaa173`  
-> P2-05 Status（P2-05 状态）: `MERGED_AND_VALIDATED`
+> P2-05 Status（P2-05 状态）: `MERGED_AND_VALIDATED`  
+> P2-06 Validated Head（P2-06 已验证提交）: `6dfa31148585e2cb78c83af52b752550962820c9`  
+> P2-06 Formal Merge Commit（P2-06 正式合并提交）: `5ce10ed8be98784f57e8723ffc27e40e3abaffbc`  
+> P2-06 Status（P2-06 状态）: `MERGED_AND_VALIDATED`
 
 ## 1. 产品与代码主线
 
@@ -24,7 +27,7 @@ second_brain/
 = Compatibility/Migration Runtime
 ```
 
-`second_brain/` 不再接收新的正式产品能力，只保留兼容、迁移和待退役实现。
+`second_brain/` 不再接收新的正式产品能力，只保留兼容、迁移和待退役实现。Obsidian CLI 已完成正式迁移，旧模块只负责转发。
 
 ## 2. 数据权威
 
@@ -61,6 +64,7 @@ P2-03B Structured Ingestion Wiring                MERGED_AND_VALIDATED
 P2-03C Capture Sources Foundation                 MERGED_AND_VALIDATED
 P2-04 Memory Inspector UI                         MERGED_AND_VALIDATED
 P2-05 Manual Capture Center                       MERGED_AND_VALIDATED
+P2-06 Obsidian CLI Formal Migration                MERGED_AND_VALIDATED
 ```
 
 Production `bge-m3` Switch 和生产 Collection 重建仍未执行。
@@ -137,7 +141,50 @@ docs/MODULES/P2_05_INTEGRATED_IMPLEMENTATION.md
 docs/TEST_REPORTS/P2_05_INTEGRATED_VALIDATION_REPORT.md
 ```
 
-## 7. 安全状态
+## 7. P2-06 Obsidian CLI Formal Migration
+
+状态：`MERGED_AND_VALIDATED`
+
+```text
+Validated implementation -> 4b0ad577eb396030ee6baa5c3bb217e990385475
+Validated final head -> 6dfa31148585e2cb78c83af52b752550962820c9
+Formal merge -> 5ce10ed8be98784f57e8723ffc27e40e3abaffbc
+```
+
+已实现：
+
+- Obsidian CLI 单一实现迁入 `src/obsidian/`。
+- `second_brain/obsidian_cli.py` 降为兼容转发，不再持有独立执行逻辑。
+- Runtime Settings 增加启用、CLI 路径、Vault 回退路径、名称、超时和 Dry Run。
+- CLI 发现支持 Runtime Settings、环境变量、PATH 和平台标准位置。
+- Workspace Vault 保持路径权威，不绕过 Production/Acceptance 隔离。
+- 8766 增加 `/api/obsidian/status`、`/validate` 和 `/refresh`。
+- Tauri 增加 Obsidian 状态与设置页，使用官方 Dialog Plugin。
+- 状态 DTO 只返回掩码路径和稳定错误，不暴露原始绝对路径。
+- create/append 使用相对路径边界并执行写后读取验证。
+
+最终门禁：
+
+```text
+Linux Python 3.12: 405 passed / 11 skipped / 0 failed / 2 warnings / 10.31s
+Windows Python 3.12: 405 passed / 11 skipped / 0 failed / 2 warnings / 71.77s
+npm ci: PASS
+npm run test:obsidian: PASS
+npm run test:smoke: PASS
+npm run build: PASS
+cargo check: PASS
+formal PR tests: SUCCESS
+formal PR P0 Windows Gate: SUCCESS
+```
+
+完整报告：
+
+```text
+docs/MODULES/P2_06_OBSIDIAN_CLI_MIGRATION_IMPLEMENTATION.md
+docs/TEST_REPORTS/P2_06_OBSIDIAN_CLI_MIGRATION_TEST_REPORT.md
+```
+
+## 8. 安全状态
 
 ```text
 Production ChatGPT 正文读取: NO
@@ -154,7 +201,7 @@ rebase: NO
 force push: NO
 ```
 
-## 8. 当前状态
+## 9. 当前状态
 
 ```text
 P0 Engineering Hygiene:
@@ -165,16 +212,19 @@ MERGED_AND_VALIDATED
 
 P2-05 Manual Capture Center:
 MERGED_AND_VALIDATED
+
+P2-06 Obsidian CLI Formal Migration:
+MERGED_AND_VALIDATED
 ```
 
-## 9. 下一步
+## 10. 下一步
 
 ```text
-Obsidian CLI 正式迁入 src
--> 接入 8766 Local Control API
--> 接入 Runtime Settings
--> 接入 Tauri 状态与设置入口
--> 保持 second_brain 仅为兼容层
+Schema v2 + Evidence Layer
+-> Revision / Conflict / Owner Review
+-> Retrieval Evaluation 与关系扩展
+-> 微信、本地文件和其他 AI Adapter
+-> AI Access Center 与主动第二大脑
 ```
 
 当前明确不开发：
