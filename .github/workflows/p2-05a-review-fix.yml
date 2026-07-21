@@ -46,16 +46,43 @@ jobs:
         run: |
           @'
           from pathlib import Path
+          from textwrap import dedent
+
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f"contract block not found: {label}")
+              return text.replace(old, new, 1)
+
 
           api_path = Path("src/control/api.py")
           api = api_path.read_text(encoding="utf-8")
-          api = api.replace("import hmac\nimport logging\nfrom typing import Any\n", "import hmac\nimport json\nimport logging\nfrom datetime import datetime, timezone\nfrom typing import Any, Mapping\n")
-          api = api.replace(
-              "class CaptureMediaRequest(CaptureCommonRequest):\n    input_path: str = Field(min_length=1)\n    allow_ocr: bool = False\n    allow_transcription: bool = False\n    extract_keyframes: bool = False\n",
-              "class CaptureMediaRequest(CaptureCommonRequest):\n    input_path: str = Field(min_length=1)\n    allow_ocr: bool = False\n    allow_transcription: bool = False\n    extract_keyframes: bool = False\n    extract_audio: bool = False\n",
+          api = replace_once(
+              api,
+              "import hmac\nimport logging\nfrom typing import Any\n",
+              "import hmac\nimport json\nimport logging\nfrom datetime import datetime, timezone\nfrom typing import Any, Mapping\n",
+              "api imports",
           )
-          marker = "\ndef _register_capture_routes(app: Any, settings: Any, control: Any, *, token: str) -> None:\n"
-          helpers = r'''
+          api = replace_once(
+              api,
+              dedent('''
+              class CaptureMediaRequest(CaptureCommonRequest):
+                  input_path: str = Field(min_length=1)
+                  allow_ocr: bool = False
+                  allow_transcription: bool = False
+                  extract_keyframes: bool = False
+              '''),
+              dedent('''
+              class CaptureMediaRequest(CaptureCommonRequest):
+                  input_path: str = Field(min_length=1)
+                  allow_ocr: bool = False
+                  allow_transcription: bool = False
+                  extract_keyframes: bool = False
+                  extract_audio: bool = False
+              '''),
+              "media request extract_audio",
+          )
+          helpers = dedent('''
 
           _CAPTURE_JOB_STATUSES = ("queued", "running", "retrying", "completed", "failed", "cancelled")
 
@@ -137,103 +164,152 @@ jobs:
                   "reasons": {} if heavy_allowed else {"low_power": "当前采集策略禁止重媒体处理"},
               }
               return result
-          '''
-          helpers = "\n".join(line[10:] if line.startswith("          ") else line for line in helpers.splitlines())
+          ''')
+          marker = "\ndef _register_capture_routes(app: Any, settings: Any, control: Any, *, token: str) -> None:\n"
           if "def _normalize_status_payload" not in api:
-              if marker not in api:
-                  raise SystemExit("capture route marker not found")
-              api = api.replace(marker, helpers + marker)
-          api = api.replace("            return capture_control().status()", "            return _normalize_status_payload(capture_control().status())")
-          api = api.replace("            return capture_control().capabilities()", "            service = capture_control()\n            return _normalize_capabilities_payload(service.capabilities(), service)")
-          api = api.replace("            return capture_control().list_jobs(\n", "            return _normalize_jobs_payload(capture_control().list_jobs(\n")
-          api = api.replace("                offset=offset,\n            )\n        except Exception as exc:\n            raise translate(exc) from exc\n\n    @app.get(\"/api/capture/jobs/{job_id}\"", "                offset=offset,\n            ))\n        except Exception as exc:\n            raise translate(exc) from exc\n\n    @app.get(\"/api/capture/jobs/{job_id}\"")
-          api = api.replace("            return capture_control().get_job(job_id)", "            return _normalize_job_payload(capture_control().get_job(job_id))")
-          api = api.replace("            return capture_control().retry_job(job_id)", "            return _normalize_job_payload(capture_control().retry_job(job_id))")
-          api = api.replace("            return capture_control().cancel_job(job_id)", "            return _normalize_job_payload(capture_control().cancel_job(job_id))")
-          api = api.replace("            return capture_control().pause()", "            return _normalize_status_payload(capture_control().pause())")
-          api = api.replace("            return capture_control().resume()", "            return _normalize_status_payload(capture_control().resume())")
+              api = replace_once(api, marker, helpers + marker, "normalization helper insertion")
+          api = replace_once(
+              api,
+              "            return capture_control().status()",
+              "            return _normalize_status_payload(capture_control().status())",
+              "status route",
+          )
+          api = replace_once(
+              api,
+              "            return capture_control().capabilities()",
+              "            service = capture_control()\n            return _normalize_capabilities_payload(service.capabilities(), service)",
+              "capabilities route",
+          )
+          old_jobs = dedent('''
+                  try:
+                      return capture_control().list_jobs(
+                          status=status,
+                          source_type=source_type,
+                          q=q,
+                          limit=limit,
+                          offset=offset,
+                      )
+                  except Exception as exc:
+              ''')
+          new_jobs = dedent('''
+                  try:
+                      return _normalize_jobs_payload(capture_control().list_jobs(
+                          status=status,
+                          source_type=source_type,
+                          q=q,
+                          limit=limit,
+                          offset=offset,
+                      ))
+                  except Exception as exc:
+              ''')
+          api = replace_once(api, old_jobs, new_jobs, "jobs route")
+          for old, new, label in (
+              ("            return capture_control().get_job(job_id)", "            return _normalize_job_payload(capture_control().get_job(job_id))", "job detail route"),
+              ("            return capture_control().retry_job(job_id)", "            return _normalize_job_payload(capture_control().retry_job(job_id))", "retry route"),
+              ("            return capture_control().cancel_job(job_id)", "            return _normalize_job_payload(capture_control().cancel_job(job_id))", "cancel route"),
+              ("            return capture_control().pause()", "            return _normalize_status_payload(capture_control().pause())", "pause route"),
+              ("            return capture_control().resume()", "            return _normalize_status_payload(capture_control().resume())", "resume route"),
+          ):
+              api = replace_once(api, old, new, label)
           api_path.write_text(api, encoding="utf-8")
 
           capture_path = Path("src/control/capture.py")
           capture = capture_path.read_text(encoding="utf-8")
-          capture = capture.replace(
+          capture = replace_once(
+              capture,
               'self._envelope(payload, source_type=str(payload.get("source_type") or "web"), text=text),',
               'self._envelope(payload, source_type=str(payload.get("source_type") or "web"), capture_method="manual_text", text=text),',
+              "manual text method",
           )
-          capture = capture.replace(
+          capture = replace_once(
+              capture,
               'source_type=str(payload.get("source_type") or "web"),\n                url=url,',
               'source_type=str(payload.get("source_type") or "web"),\n                capture_method="manual_web",\n                url=url,',
+              "manual web method",
           )
-          capture = capture.replace(
-              'return self._submit_path(payload, str(payload.get("source_type") or "web"))',
-              'source_type = str(payload.get("source_type") or "web")\n        adapter_name = str(payload.get("adapter_name") or "")\n        capture_method = "manual_chatgpt_export" if source_type == "chatgpt_export" else "manual_codex_report" if source_type == "codex_report" or adapter_name == "codex_work_report" else "manual_file"\n        return self._submit_path(payload, source_type, capture_method=capture_method)',
+          capture = replace_once(
+              capture,
+              '    def submit_file(self, payload: Mapping[str, Any]) -> dict[str, Any]:\n        return self._submit_path(payload, str(payload.get("source_type") or "web"))',
+              '    def submit_file(self, payload: Mapping[str, Any]) -> dict[str, Any]:\n        source_type = str(payload.get("source_type") or "web")\n        adapter_name = str(payload.get("adapter_name") or "")\n        capture_method = "manual_chatgpt_export" if source_type == "chatgpt_export" else "manual_codex_report" if source_type == "codex_report" or adapter_name == "codex_work_report" else "manual_file"\n        return self._submit_path(payload, source_type, capture_method=capture_method)',
+              "manual file methods",
           )
-          capture = capture.replace(
-              'payload,\n            "media",\n            options={',
-              'payload,\n            "media",\n            capture_method="manual_media",\n            options={',
+          capture = replace_once(
+              capture,
+              '            "media",\n            options={',
+              '            "media",\n            capture_method="manual_media",\n            options={',
+              "manual media method",
           )
-          capture = capture.replace(
-              '"extract_keyframes": bool(payload.get("extract_keyframes", False)),\n            },',
-              '"extract_keyframes": bool(payload.get("extract_keyframes", False)),\n                "extract_audio": bool(payload.get("extract_audio", False)),\n            },',
+          capture = replace_once(
+              capture,
+              '                "extract_keyframes": bool(payload.get("extract_keyframes", False)),\n            },',
+              '                "extract_keyframes": bool(payload.get("extract_keyframes", False)),\n                "extract_audio": bool(payload.get("extract_audio", False)),\n            },',
+              "media extract audio",
           )
-          capture = capture.replace(
-              'def _submit_path(self, payload: Mapping[str, Any], source_type: str, *, options: Mapping[str, Any] | None = None) -> dict[str, Any]:',
-              'def _submit_path(self, payload: Mapping[str, Any], source_type: str, *, capture_method: str = "manual_file", options: Mapping[str, Any] | None = None) -> dict[str, Any]:',
+          capture = replace_once(
+              capture,
+              '    def _submit_path(self, payload: Mapping[str, Any], source_type: str, *, options: Mapping[str, Any] | None = None) -> dict[str, Any]:',
+              '    def _submit_path(self, payload: Mapping[str, Any], source_type: str, *, capture_method: str = "manual_file", options: Mapping[str, Any] | None = None) -> dict[str, Any]:',
+              "submit path signature",
           )
-          capture = capture.replace(
+          capture = replace_once(
+              capture,
               'self._envelope(payload, source_type=source_type, capture_method="manual_upload", title=',
               'self._envelope(payload, source_type=source_type, capture_method=capture_method, title=',
+              "submit path capture method",
           )
           capture_path.write_text(capture, encoding="utf-8")
 
           queue_test = Path("tests/test_extraction_queue.py")
           text = queue_test.read_text(encoding="utf-8")
-          old = '''        with sqlite3.connect(self.db_path) as connection:
-              plan = connection.execute(
-                  "EXPLAIN QUERY PLAN SELECT * FROM extraction_jobs WHERE source_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                  ("web", 2, 1),
-              ).fetchall()
-          '''
-          new = '''        connection = sqlite3.connect(self.db_path)
-              try:
-                  plan = connection.execute(
-                      "EXPLAIN QUERY PLAN SELECT * FROM extraction_jobs WHERE source_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                      ("web", 2, 1),
-                  ).fetchall()
-              finally:
-                  connection.close()
-          '''
-          if old not in text:
-              raise SystemExit("SQLite plan test block not found")
-          queue_test.write_text(text.replace(old, new), encoding="utf-8")
+          text = replace_once(text, "import sqlite3\n", "import sqlite3\nfrom contextlib import closing\n", "closing import")
+          text = replace_once(
+              text,
+              "        with sqlite3.connect(self.db_path) as connection:\n",
+              "        with closing(sqlite3.connect(self.db_path)) as connection:\n",
+              "close query-plan connection",
+          )
+          queue_test.write_text(text, encoding="utf-8")
 
           api_test = Path("tests/test_capture_api.py")
           tests = api_test.read_text(encoding="utf-8")
-          tests = tests.replace('return {"capture_mode": "paused" if self.paused else "low_power", "paused": self.paused}', 'return {"capture_mode": "paused" if self.paused else "low_power", "paused": self.paused, "queue": {"queued": 2, "running": 1, "retrying": 0, "completed": 3, "failed": 0, "cancelled": 1}}')
-          tests = tests.replace('return {"inputs": {"text": {"enabled": True}}}', 'return {"capture_mode": "low_power", "inputs": {"text": {"enabled": True}}}')
-          tests = tests.replace('return {"job_id": job_id, "status": "queued"}', 'return {"job_id": job_id, "status": "queued", "result_refs": [{"type": "memory", "id": "MEM-1"}], "result_summary": {"memory_count": 1}}')
-          additions = '''
-
-          def test_capture_http_contract_is_desktop_safe():
-              context, _ = client()
-              headers = {"X-LingJi-Token": "secret"}
-              with context as api:
-                  status = api.get("/api/capture/status", headers=headers).json()
-                  capabilities = api.get("/api/capture/capabilities", headers=headers).json()
-                  job = api.get("/api/capture/jobs/job-1", headers=headers).json()
-              assert status["mode"] == "low_power"
-              assert status["mode_label"] == "LOW_POWER"
-              assert status["queued"] == 2
-              assert status["running"] == 1
-              assert status["updated_at"]
-              assert capabilities["file_modes"] == ["web_snapshot", "chatgpt_export", "codex_report"]
-              assert "media" in capabilities
-              assert job["result_refs"] == {"memory_id": "MEM-1"}
-              assert isinstance(job["result_summary"], str)
-          '''
-          additions = "\n".join(line[10:] if line.startswith("          ") else line for line in additions.splitlines())
+          tests = replace_once(
+              tests,
+              'return {"capture_mode": "paused" if self.paused else "low_power", "paused": self.paused}',
+              'return {"capture_mode": "paused" if self.paused else "low_power", "paused": self.paused, "queue": {"queued": 2, "running": 1, "retrying": 0, "completed": 3, "failed": 0, "cancelled": 1}}',
+              "fake status",
+          )
+          tests = replace_once(
+              tests,
+              'return {"inputs": {"text": {"enabled": True}}}',
+              'return {"capture_mode": "low_power", "inputs": {"text": {"enabled": True}}}',
+              "fake capabilities",
+          )
+          tests = replace_once(
+              tests,
+              'return {"job_id": job_id, "status": "queued"}',
+              'return {"job_id": job_id, "status": "queued", "result_refs": [{"type": "memory", "id": "MEM-1"}], "result_summary": {"memory_count": 1}}',
+              "fake job",
+          )
           if "test_capture_http_contract_is_desktop_safe" not in tests:
-              tests += additions
+              tests += dedent('''
+
+              def test_capture_http_contract_is_desktop_safe():
+                  context, _ = client()
+                  headers = {"X-LingJi-Token": "secret"}
+                  with context as api:
+                      status = api.get("/api/capture/status", headers=headers).json()
+                      capabilities = api.get("/api/capture/capabilities", headers=headers).json()
+                      job = api.get("/api/capture/jobs/job-1", headers=headers).json()
+                  assert status["mode"] == "low_power"
+                  assert status["mode_label"] == "LOW_POWER"
+                  assert status["queued"] == 2
+                  assert status["running"] == 1
+                  assert status["updated_at"]
+                  assert capabilities["file_modes"] == ["web_snapshot", "chatgpt_export", "codex_report"]
+                  assert "media" in capabilities
+                  assert job["result_refs"] == {"memory_id": "MEM-1"}
+                  assert isinstance(job["result_summary"], str)
+              ''')
           api_test.write_text(tests, encoding="utf-8")
           '@ | python -
 
