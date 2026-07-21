@@ -4,6 +4,27 @@
 
 ## 2026-07-21
 
+### P0 Engineering Hygiene 正式合并
+
+- 通过 PR #12 将 `work/p0-engineering-hygiene` 正常合并到 `feature/second-brain-memory`。
+- P0 正式 merge commit：`d2a605e463552cb982342bdb2376da8aad1b36b5`。
+- 删除 `src/config.py` 中机器专属 `D:/codex/backups/pemis` 默认值，未配置时统一使用 `<storage_path>/backups`。
+- Obsidian CLI 改为环境变量、PATH 和平台标准目录探测，补充 `%LOCALAPPDATA%\Programs\Obsidian`。
+- Vault 名称改为 `OBSIDIAN_VAULT_NAME -> Vault 目录名 -> 兼容默认值`。
+- 建立核心、UI、媒体、MCP、测试依赖所有权。
+- 增加 `constraints/python-3.12-windows.txt` 和 `constraints/python-3.13-linux.txt`。
+- 新增 `scripts/validate_clean_install.py`，检查依赖归属、精确约束、敏感源、本机路径和前端锁文件。
+- 删除启动文件逐字源码比较测试，改为 AST、Settings、main guard 和端口所有权合同测试。
+- 增加 Windows 测试专用 Workspace 临时根 Fixture，同时保留生产 `C:\` 系统盘拒绝保护。
+- Qdrant 单元测试改为确定性的 in-memory 合同，不依赖生产 Qdrant Server。
+- Brain Status API 测试改为 FastAPI 应用级合同，不再通过真实端口和 `nvidia-smi` 超时碰运气。
+- 新增 `.github/workflows/p0-windows-gate.yml`，自动执行 Windows Python 3.12 和 Desktop 门禁。
+- Windows CI 最终结果：`359 passed, 11 skipped, 0 failed`，持续 63.24 秒。
+- Python 依赖安装、`pip check`、clean-install validator、完整 `compileall` 全部通过。
+- `npm ci`、Desktop Smoke Test、`npm run build` 全部通过。
+- 历史 `306 passed / 19 failed / 13 skipped` 的19项失败全部关闭。
+- 未访问生产 Vault、SQLite、Qdrant、Ollama，未修改数据库 Schema，未执行 rebase 或 force push。
+
 ### P2-03 → P2-04 正式集成
 
 - 将 `work/p2-04-integrated-validation` 以安全 fast-forward 方式合入正式分支 `feature/second-brain-memory`。
@@ -17,7 +38,7 @@
 - 恢复 TypeScript 构建门禁，锁定 `tsx 4.23.1`，`tsc -b`、6 套 Smoke Test 和 `npm run build` 全部通过。
 - P2-03 → P2-04 最终里程碑门禁：`91 passed, 0 failed, 0 skipped`。
 - 遗漏历史回归补充验证：`20 passed, 0 failed`。
-- 全仓库 pytest 记录为 `306 passed, 19 environment-specific failures, 13 skipped`；19 个失败来自未启动 Qdrant 和 Windows `C:\Temp` 系统盘测试环境，不计入本里程碑目标门禁。
+- 当时全仓库 pytest 记录为 `306 passed, 19 environment-specific failures, 13 skipped`；这些失败已在同日 P0 Engineering Hygiene 中全部关闭。
 - 正式数据和生产 Qdrant、Ollama、Vault、SQLite 均未访问或修改。
 - 用户明确暂缓系统监听、剪贴板监听、文件夹监听、手机分享客户端和浏览器插件；下一阶段转向 P2-05 Manual Capture Center（手动信息入口中心）。
 
