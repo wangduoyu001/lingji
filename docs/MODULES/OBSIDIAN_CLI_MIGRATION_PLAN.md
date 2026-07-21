@@ -1,15 +1,18 @@
 # OBSIDIAN_CLI_MIGRATION_PLAN.md — Obsidian CLI 迁移计划
 
 > Updated（更新时间）: 2026-07-21  
-> Branch（分支）: `work/p2-06-obsidian-cli-migration`  
-> Validated Commit（已验证提交）: `4b0ad577eb396030ee6baa5c3bb217e990385475`  
-> Status（状态）: `IMPLEMENTED_COORDINATOR_VALIDATED`  
+> Formal Branch（正式分支）: `feature/second-brain-memory`  
+> Source Branch（来源分支）: `work/p2-06-obsidian-cli-migration`  
+> Validated Implementation Commit（已验证实现提交）: `4b0ad577eb396030ee6baa5c3bb217e990385475`  
+> Final Validated Head（最终已验证提交）: `6dfa31148585e2cb78c83af52b752550962820c9`  
+> Formal Merge Commit（正式合并提交）: `5ce10ed8be98784f57e8723ffc27e40e3abaffbc`  
+> Status（状态）: `MERGED_AND_VALIDATED`  
 > Implementation Report（实施报告）: `docs/MODULES/P2_06_OBSIDIAN_CLI_MIGRATION_IMPLEMENTATION.md`  
 > Test Report（测试报告）: `docs/TEST_REPORTS/P2_06_OBSIDIAN_CLI_MIGRATION_TEST_REPORT.md`
 
 ## 1. 目标
 
-将 Obsidian CLI（命令行接口）从 `second_brain/` 兼容实现迁入 `src/` 正式主线，同时保持：
+将 Obsidian CLI 从 `second_brain/` 兼容实现迁入 `src/` 正式主线，同时保持：
 
 ```text
 一份 CLI 命令实现
@@ -20,7 +23,7 @@
 
 迁移不得创建第二套 Vault 写入、数据库、任务队列或 Schema。
 
-## 2. 当前完成状态
+## 2. 完成状态
 
 已完成：
 
@@ -33,7 +36,7 @@
 - 8766 状态、草稿校验和刷新 API。
 - Tauri Obsidian 状态与设置页。
 - `second_brain/obsidian_cli.py` 降为兼容转发。
-- Windows Python、Desktop 与 Cargo 协调门禁通过。
+- Linux、Windows、Desktop 与 Cargo 正式门禁通过。
 
 正式迁移不覆盖既有 `src/obsidian/management.py` 和 `system_ui.py`，而是与它们组成同一正式包。
 
@@ -50,8 +53,6 @@ src/obsidian/
   management.py
   system_ui.py
 ```
-
-职责：
 
 | 文件 | 职责 |
 |---|---|
@@ -78,8 +79,6 @@ second_brain/obsidian_cli.py
 - 不保留 `_run`、发现、读写或校验实现；
 - 不接受新的正式产品能力。
 
-因此同一输入不会被两套 CLI 实现重复处理。
-
 ## 5. 数据流
 
 ```text
@@ -94,10 +93,10 @@ Workspace Vault
 边界：
 
 1. Workspace Vault 保持路径权威。
-2. Runtime Settings 提供主人可编辑覆盖，不绕过 Production/Acceptance 隔离。
+2. Runtime Settings 不绕过 Production/Acceptance 隔离。
 3. Client 只执行注册过的类型化命令，不接受 Shell 字符串。
 4. Service 负责状态、错误、脱敏、校验和审计。
-5. Tauri 只调用 8766，不直接启动 CLI、读取 SQLite 或导入兼容模块。
+5. Tauri 只调用 8766，不直接启动 CLI 或读取 SQLite。
 
 ## 6. 配置优先级
 
@@ -140,8 +139,6 @@ obsidian_vault_name
 obsidian_cli_timeout_seconds
 obsidian_cli_dry_run
 ```
-
-用户可以在通用设置页或 Obsidian 专页查看和修改这些值。
 
 ## 8. 正式命令面
 
@@ -187,16 +184,9 @@ POST /api/obsidian/validate
 POST /api/obsidian/refresh
 ```
 
-状态接口只返回：
+状态接口只返回稳定状态、版本、发现来源、Vault 名称、掩码路径、超时、Dry Run 和错误码，不返回原始路径、正文或 Token。
 
-- 稳定状态与错误码；
-- 版本、发现来源、Vault 名称；
-- 掩码路径显示；
-- 超时、Dry Run 和能力状态。
-
-状态接口不返回原始 `cli_path`、`vault_path`、正文或 Token。
-
-`/api/obsidian/validate` 验证草稿配置，不持久化；保存仍统一走现有 `/api/settings`。
+`/api/obsidian/validate` 验证草稿配置但不持久化；保存统一走 `/api/settings`。
 
 ## 10. Tauri
 
@@ -234,28 +224,19 @@ OBSIDIAN_PATH_OUTSIDE_WORKSPACE
 OBSIDIAN_WRITE_VERIFICATION_FAILED
 ```
 
-完整命令、stderr 和本机绝对路径只进入受控本地诊断，不进入普通状态 DTO。
-
-## 12. 测试策略与结果
-
-协调门禁已验证：
+## 12. 正式测试结果
 
 ```text
-Python dependency install: PASS
-pip check: PASS
-clean-install validator: PASS
-compileall: PASS
-focused Obsidian tests: PASS
-full repository pytest: PASS
+Linux Python 3.12: 405 passed / 11 skipped / 0 failed / 2 warnings / 10.31s
+Windows Python 3.12: 405 passed / 11 skipped / 0 failed / 2 warnings / 71.77s
 npm ci: PASS
-Obsidian Smoke: PASS
-all Desktop Smoke: PASS
-TypeScript/Vite Build: PASS
+npm run test:obsidian: PASS
+npm run test:smoke: PASS
+npm run build: PASS
 cargo check: PASS
-git diff --check: PASS
+formal PR tests: SUCCESS
+formal PR P0 Windows Gate: SUCCESS
 ```
-
-正式 PR Linux 与 Windows CI 在文档提交后重新执行，最终精确计数写入测试报告。
 
 ## 13. 本轮明确不做
 
@@ -269,4 +250,4 @@ git diff --check: PASS
 
 ## 14. 回滚
 
-回滚以正式分支 Git 提交为单位。兼容导入面仍然存在，因此调用方可以在迁移回滚窗口继续使用旧模块名，但所有执行都指向 `src.obsidian`。不得恢复机器专属路径或第二套命令实现。
+回滚以正式分支 Git 提交为单位。兼容导入面仍然存在，因此调用方可以继续使用旧模块名，但所有执行都指向 `src.obsidian`。不得恢复机器专属路径或第二套命令实现。
