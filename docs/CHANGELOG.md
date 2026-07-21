@@ -23,7 +23,10 @@
 - Python 依赖安装、`pip check`、clean-install validator、完整 `compileall` 全部通过。
 - `npm ci`、Desktop Smoke Test、`npm run build` 全部通过。
 - 历史 `306 passed / 19 failed / 13 skipped` 的19项失败全部关闭。
-- 未访问生产 Vault、SQLite、Qdrant、Ollama，未修改数据库 Schema，未执行 rebase 或 force push。
+- 新增 `docs/TEST_REPORTS/P0_FINAL_VALIDATION_REPORT.md`，以 post-fix Windows CI 结果作为最终验收权威。
+- 通用 `.github/workflows/tests.yml` 改为安装测试/MCP依赖、使用 pytest、执行完整 compileall，并将 Desktop CI 收口为 `npm ci + test:smoke + build`。
+- 关闭 P0 Issue #9，并将 P2-05A、P2-05B、P2-05C 三条分支移动到同一正式基线。
+- 未访问生产 Vault、SQLite、Qdrant、Ollama，未修改数据库 Schema，未执行 force push。
 
 ### P2-03 → P2-04 正式集成
 
