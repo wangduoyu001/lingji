@@ -121,9 +121,7 @@ class CaptureService:
     def submit_file(self, path: Path | str, **kwargs: Any) -> CaptureResult:
         kwargs = self._manual_defaults(kwargs)
         envelope = self._manual_envelope(Path(path), **kwargs)
-        if envelope.capture_method not in {"manual_chatgpt_export", "manual_media"}:
-            envelope = self._replace_capture_method(envelope, "manual_file")
-        return self.submit(envelope)
+        return self.submit(self._replace_capture_method(envelope, "manual_file"))
 
     def submit_media(self, path: Path | str, **kwargs: Any) -> CaptureResult:
         kwargs = self._manual_defaults(kwargs)

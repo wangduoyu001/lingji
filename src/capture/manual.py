@@ -6,6 +6,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 from src.extraction.adapters.media import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS
 
@@ -114,7 +115,7 @@ def build_manual_envelope(
     kwargs.setdefault("privacy", "private")
     kwargs.setdefault("title", _default_title(classification))
     return CaptureEnvelope(
-        capture_id=str(kwargs.pop("capture_id", "")),
+        capture_id=str(kwargs.pop("capture_id", f"LJ-CAP-{uuid4().hex[:16].upper()}")),
         source_type=classification.source_type,
         capture_method=classification.capture_method,
         adapter_name=classification.adapter_name,
