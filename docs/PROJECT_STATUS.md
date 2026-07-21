@@ -1,14 +1,17 @@
-﻿# PROJECT_STATUS.md — LingJi 项目实时状态
+# PROJECT_STATUS.md — LingJi 项目实时状态
 
 > Updated（更新时间）: 2026-07-21  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Combined Development Branch（联合开发分支）: `work/p2-03b-ingestion-wiring`  
+> Combined Development Branch（联合开发分支）: `work/p2-04-integrated-validation`  
 > P2-03 Base Commit（基础提交）: `9f5f444e389cd549db653471c3a34ef27a109e15`  
-> Combined Implementation Commit（联合实现提交）: `82a13334d475584869e92801b60e65bbc654937d`  
-> Verified Commit（已验证提交）: `2688b8b`  
-> P2-03 Status（P2-03 状态）: `IMPLEMENTED_NOT_TESTED`  
-> P2-03B Status（P2-03B 状态）: `IMPLEMENTED_NOT_TESTED`  
-> Combined Merge State（联合合并状态）: `NOT_MERGED_AWAITING_COORDINATED_REVIEW`
+> Integrated Base Commit（集成基础提交）: `432ae059454cc7db8ab0ba4aaa63d24f5c9173e9`  
+> Verified Code Commit（已验证代码提交）: `2688b8b2521890af852b049e78795cffade43584`  
+> Validation Documentation Commit（验证文档基线提交）: `c4ba1c4`  
+> P2-03 Status（P2-03 状态）: `IMPLEMENTED_FOCUSED_TESTED`  
+> P2-03B Status（P2-03B 状态）: `IMPLEMENTED_FOCUSED_TESTED`  
+> P2-03C Status（P2-03C 状态）: `IMPLEMENTED_FOCUSED_TESTED`  
+> P2-04 Status（P2-04 状态）: `IMPLEMENTED_FOCUSED_TESTED`  
+> Integrated Merge State（集成合并状态）: `VALIDATED_AWAITING_FORMAL_MERGE`
 
 ## 1. 产品与代码主线
 
@@ -23,7 +26,7 @@ second_brain/
 = Compatibility/Migration Runtime（兼容与迁移运行层）
 ```
 
-本轮没有创建新分支，没有 rebase，没有 force push，没有修改 Tauri，没有开始 P2-04，也没有合并正式分支。
+本轮完成 P2-03 至 P2-04 的联合开发、返工、集成和本机集中验证。未执行 rebase、force push，也未合并正式分支。
 
 ## 2. 数据权威
 
@@ -63,10 +66,10 @@ Production bge-m3 Switch（生产模型切换）和生产 Collection（向量集
 状态：
 
 ```text
-IMPLEMENTED_NOT_TESTED
+IMPLEMENTED_FOCUSED_TESTED
 ```
 
-已实现：
+已实现并验证：
 
 - Source/Conversation/Message（来源、对话、消息）派生表。
 - Stable ID（稳定标识符）和 Idempotent Upsert（幂等更新或插入）。
@@ -78,8 +81,8 @@ IMPLEMENTED_NOT_TESTED
 - Message→Memory→Chunk→Vector 只读关联。
 - `rebuild_required` true/false/null 三态。
 - Inspector 503 稳定错误和路径脱敏。
-- HTTP/HTTPS URL（统一资源定位符）认证信息和敏感查询参数脱敏。
-- 只读 `/api/memory/inspector/*` GET API（接口）。
+- HTTP/HTTPS URL 认证信息和敏感查询参数脱敏。
+- 只读 `/api/memory/inspector/*` GET API。
 
 正式单一实现：
 
@@ -94,7 +97,7 @@ src/control/api.py::create_control_app
 状态：
 
 ```text
-IMPLEMENTED_NOT_TESTED
+IMPLEMENTED_FOCUSED_TESTED
 ```
 
 当前正式数据流：
@@ -109,20 +112,64 @@ Raw Snapshot（原始快照）
 -> Audit Event（审计事件）
 ```
 
-已实现：
+已实现并验证：
 
 - `StructuredMessage`、`StructuredConversation`、`StructuredSource`。
 - ChatGPT Adapter 同时生成 Markdown 和结构化消息。
 - Raw/Vault 安全相对引用。
 - Structured Sink 幂等写入 Read Model。
-- Memory Link 仅在索引成功且 Memory 可见时写入。
+- 每条 Message 优先使用自身 `document_stable_id` 建立 Memory Link。
+- Memory Link 缺失时只跳过对应 Message，不影响其他 Message。
 - Structured Sink 失败不回滚 Raw/Vault。
 - `StateDatabase.append_event()` 正式审计事件接线。
-- `entity_type = structured_ingestion`。
-- `entity_id = execution_id`。
 - Audit Event 写入失败不影响采集主流程。
+- Vector Provider 和 Snapshot 错误只返回稳定摘要，不泄漏本机路径。
 
-## 6. 统一异常脱敏
+## 6. P2-03C Capture Sources Foundation
+
+状态：
+
+```text
+IMPLEMENTED_FOCUSED_TESTED
+```
+
+已实现并验证：
+
+- `src/capture/` 统一入口模型、策略、去重、服务和监听器合同。
+- Capture 只负责入口合同和调度，Extraction 负责解析和写入。
+- LOW_POWER、NORMAL、DEEP_CAPTURE、PAUSED 四种模式。
+- 全局键盘监听、全屏截图监听默认关闭。
+- 文件、网页、文本稳定去重。
+- 去重采用 `probe -> Pipeline success -> commit`，失败后允许重试。
+- 手机分享和浏览器扩展正式后端合同。
+- Codex、Web、Media 显式启用结构化回退。
+- 未知 Adapter 默认不自动包装。
+- Metadata 递归敏感字段检查，不能覆盖保留字段。
+- `process_later=True` 强制进入队列。
+
+## 7. P2-04 Memory Inspector Desktop UI
+
+状态：
+
+```text
+IMPLEMENTED_FOCUSED_TESTED
+```
+
+已实现并验证：
+
+- Desktop 侧边栏新增“记忆检查器”。
+- Source、Conversation、Message、Memory、Chunk、Vector 关系查看。
+- 后端分页、筛选、搜索防抖、请求取消和竞态保护。
+- Message→Memory 关系、Memory Source、Vector 状态展示。
+- `rebuild_required` true/false/null 三态显示。
+- restricted 内容列表隐藏摘要，详情默认折叠。
+- 401、503、网络不可用、空数据和筛选无结果状态区分。
+- Memory Source 使用 `canonical.citations` 数组。
+- Chunk 数量使用 `chunk_count -> chunks.length -> 未知` 回退。
+- `memoryInspectorContract.ts` 已移除 `ts-nocheck`。
+- TypeScript Build、Smoke Tests 和 Vite Build 均通过。
+
+## 8. 统一异常脱敏
 
 唯一正式工具：
 
@@ -144,68 +191,70 @@ src/extraction/structured_sink.py
 Post-extraction index synchronization failed; see local logs
 <conversation_id>: conversation extraction failed; see local logs
 structured read model write failed; see local logs
+Vector status unavailable; see local logs
 ```
 
-完整异常只进入本地 logger（日志记录器），不得进入 API response（接口响应）、`batch.warnings` 或 `index_error`。
+完整异常只进入本地 logger，不得进入 API response、`batch.warnings`、`index_error` 或 Vector HTTP 200 响应。
 
-## 7. 最小集成测试代码
+## 9. 集成测试结果
 
-`tests/test_structured_ingestion.py` 已增加：
-
-- `TemporaryDirectory` + 真实 `MemoryDatabase`。
-- 真实 `SourceReadModel`。
-- 真实 `StructuredReadModelSink`。
-- 真实 `StateDatabase`。
-- Source/Conversation/Message 写入和正文读取。
-- 重复写入幂等验证。
-- Vault→index callback→Structured Sink 顺序验证。
-- 索引异常包含 Windows 路径时的降级验证。
-- `structured_ingestion_completed` 审计事件验证。
-- Audit payload 绝对路径泄漏检查。
-- ChatGPT warning 脱敏验证。
-- Audit Event 写入失败不影响主流程验证。
-
-## 8. 当前测试状态
-
-计划执行：
-
-```powershell
-python -m pytest `
-  tests/test_structured_ingestion.py `
-  tests/test_source_read_model.py `
-  tests/test_source_service.py `
-  tests/test_memory_inspector_facade.py `
-  tests/test_memory_inspector_api.py `
-  -v --tb=short
-```
-
-当前环境无法解析 `github.com`，无法物化完整仓库测试环境。
+### 9.1 Python 语法检查
 
 ```text
-pytest: NOT EXECUTED
-py_compile: NOT EXECUTED
-passed: NOT EXECUTED
-failed: NOT EXECUTED
-skipped: NOT EXECUTED
-xfailed: NOT EXECUTED
+python -m compileall
+PASS
+exit code: 0
 ```
 
-不得将代码已提交、测试文件存在或没有 CI 红灯解释为测试通过。
-
-## 9. 未执行范围
+### 9.2 遗漏历史回归组
 
 ```text
-完整 pytest
-第二批历史回归
-npm
-Tauri
-Ollama
-真实 Qdrant
-生产 ChatGPT Export
-生产 Vault
-生产 SQLite
-本机 Codex
+collected: 20
+passed: 20
+failed: 0
+skipped: 0
+duration: 8.05s
+exit code: 0
 ```
+
+### 9.3 最终里程碑门禁集合
+
+```text
+collected: 91
+passed: 91
+failed: 0
+skipped: 0
+duration: 11.30s
+exit code: 0
+```
+
+### 9.4 Frontend 门禁
+
+```text
+test:inspector: PASS
+test:smoke: PASS（6/6）
+tsc -b: PASS（0 errors）
+npm run build: PASS
+```
+
+### 9.5 Full Repository Pytest
+
+```text
+collected: 338
+passed: 306
+failed: 19
+skipped: 13
+duration: 45.99s
+```
+
+19 个失败属于里程碑门禁外的环境相关测试：
+
+- `test_qdrant_semantic_provider.py`: 7，测试环境未启动 Qdrant。
+- `test_memory_capability_contract.py`: 6，Windows `C:\Temp` 系统盘限制。
+- `test_semantic_runtime_wiring.py`: 5，Windows `C:\Temp` 系统盘限制。
+- `test_status_snapshot_wiring.py`: 1，Windows `C:\Temp` 系统盘限制。
+
+这些失败不属于 P2-03 → P2-04 目标门禁；目标门禁 91/91 全部通过。
 
 ## 10. 数据安全
 
@@ -214,32 +263,39 @@ Ollama
 修改 Production Vault: NO
 修改 Production SQLite: NO
 访问 Production Qdrant: NO
+启动 Production Qdrant: NO
+启动 Ollama: NO
+启动 Tauri: NO
 切换生产模型: NO
 创建或删除生产 Collection: NO
-修改 Tauri: NO
+修改数据库 Schema: NO
 ```
 
 ## 11. 当前联合状态
 
 ```text
-P2-03:  IMPLEMENTED_NOT_TESTED
-P2-03B: IMPLEMENTED_NOT_TESTED
-Combined Merge State: NOT_MERGED_AWAITING_COORDINATED_REVIEW
-```
+P2-03:  IMPLEMENTED_FOCUSED_TESTED
+P2-03B: IMPLEMENTED_FOCUSED_TESTED
+P2-03C: IMPLEMENTED_FOCUSED_TESTED
+P2-04:  IMPLEMENTED_FOCUSED_TESTED
 
-当前不能合并正式分支。
+Integrated Merge State:
+VALIDATED_AWAITING_FORMAL_MERGE
+
+Merge Recommendation:
+READY_FOR_FORMAL_MERGE
+```
 
 ## 12. 下一步
 
-停止开发，等待联合代码审查和一次集中本机测试。
-
-指定测试全部通过后，才允许更新为：
+只剩正式合并与合并后最低成本验证：
 
 ```text
-P2-03:  IMPLEMENTED_FOCUSED_TESTED
-P2-03B: IMPLEMENTED_FOCUSED_TESTED
-Combined Merge State: NOT_MERGED_AWAITING_COORDINATED_REVIEW
+work/p2-04-integrated-validation
+-> feature/second-brain-memory
+-> compileall
+-> npm run build
+-> 更新 PROJECT_STATUS / CHANGELOG
 ```
 
-不要开始 P2-04 Memory Inspector（记忆检查器）。
-
+正式合并必须使用普通 merge，不得 rebase，不得 force push。
