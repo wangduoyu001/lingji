@@ -17,6 +17,7 @@
 - Windows Python 3.12 最终全仓结果：`398 passed, 11 skipped, 0 failed`，持续 79.40 秒。
 - `npm ci`、Capture Smoke、7项 Desktop Smoke、TypeScript/Vite Build 和 `cargo check` 全部通过。
 - 已验证集成树：`1bf95b8d16a9daea52b60518f0e920a0c0bd50db`。
+- 正式合并提交：`c77e78c0f71339264d54fc083dbc5cfabcfaa173`。
 - 未访问生产 Vault、SQLite、Qdrant 或 Ollama；未修改数据库 Schema；未开发监听、手机端或浏览器插件。
 
 ### P0 Engineering Hygiene 正式合并
