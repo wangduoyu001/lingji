@@ -29,7 +29,8 @@ class _LazyProxy:
         self._attribute = attribute
 
     def __getattr__(self, name: str) -> Any:
-        return getattr(getattr(self._getter(), self._attribute), name)
+        service = getattr(self._getter(), self._attribute)
+        return getattr(service, name)
 
 
 def register_p2_07_routes(app: Any, settings: Any, control: Any, *, token: str) -> None:
@@ -77,13 +78,13 @@ def register_p2_07_routes(app: Any, settings: Any, control: Any, *, token: str) 
 
     register_codex_routes(
         app,
-        _LazyProxy(runtime, "loop").codex_sessions,
+        _LazyProxy(lambda: runtime().loop, "codex_sessions"),
         _header_authorizer(token),
     )
     register_project_memory_routes(
         app,
-        _LazyProxy(runtime, "loop").project_context,
-        _LazyProxy(runtime, "loop").memory_review,
+        _LazyProxy(lambda: runtime().loop, "project_context"),
+        _LazyProxy(lambda: runtime().loop, "memory_review"),
         token_validator=token_valid,
     )
     register_obsidian_note_routes(
