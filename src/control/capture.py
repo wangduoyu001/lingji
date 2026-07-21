@@ -110,7 +110,12 @@ class CaptureControlService:
         if not text:
             self._invalid("Capture text is required")
         return self._submit(
-            self._envelope(payload, source_type=str(payload.get("source_type") or "web"), text=text),
+            self._envelope(
+                payload,
+                source_type=str(payload.get("source_type") or "web"),
+                capture_method=str(payload.get("capture_method") or "manual_text"),
+                text=text,
+            ),
             adapter_name=self._adapter(payload),
         )
 
@@ -124,6 +129,7 @@ class CaptureControlService:
             self._envelope(
                 payload,
                 source_type=str(payload.get("source_type") or "web"),
+                capture_method=str(payload.get("capture_method") or "manual_web"),
                 url=url,
                 text=text,
                 html=html,
@@ -138,12 +144,23 @@ class CaptureControlService:
         )
 
     def submit_file(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        return self._submit_path(payload, str(payload.get("source_type") or "web"))
+        source_type = str(payload.get("source_type") or "web")
+        adapter_name = str(payload.get("adapter_name") or "")
+        capture_method = str(payload.get("capture_method") or "")
+        if not capture_method:
+            if source_type == "chatgpt_export":
+                capture_method = "manual_chatgpt_export"
+            elif source_type == "codex_report" or adapter_name == "codex_work_report":
+                capture_method = "manual_codex_report"
+            else:
+                capture_method = "manual_file"
+        return self._submit_path(payload, source_type, capture_method=capture_method)
 
     def submit_media(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         return self._submit_path(
             payload,
             "media",
+            capture_method=str(payload.get("capture_method") or "manual_media"),
             options={
                 "allow_ocr": bool(payload.get("allow_ocr", False)),
                 "allow_video_transcription": bool(payload.get("allow_transcription", False)),
@@ -287,13 +304,20 @@ class CaptureControlService:
             "file_name": self._basename(str(row.get("input_path") or "")),
         }
 
-    def _submit_path(self, payload: Mapping[str, Any], source_type: str, *, options: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    def _submit_path(
+        self,
+        payload: Mapping[str, Any],
+        source_type: str,
+        *,
+        capture_method: str = "manual_file",
+        options: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
         raw_path = str(payload.get("input_path") or "").strip()
         if not raw_path:
             self._invalid("Capture input path is required")
         path = Path(raw_path).expanduser()
         return self._submit(
-            self._envelope(payload, source_type=source_type, capture_method="manual_upload", title=str(payload.get("title") or path.name), input_path=path),
+            self._envelope(payload, source_type=source_type, capture_method=capture_method, title=str(payload.get("title") or path.name), input_path=path),
             adapter_name=self._adapter(payload),
             option_overrides=options,
         )

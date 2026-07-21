@@ -14,7 +14,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Mapping
 
 
@@ -225,7 +225,7 @@ class ObsidianCliConfig:
         if explicit:
             return explicit
         if vault_path:
-            name = Path(vault_path).name
+            name = PureWindowsPath(vault_path).name if "\\" in vault_path else Path(vault_path).name
             if name:
                 return name
         return "本地知识库"
