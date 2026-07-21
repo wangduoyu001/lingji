@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from datetime import datetime, timedelta
@@ -60,6 +62,71 @@ class SQLiteExtractionQueueTests(unittest.TestCase):
         released = self.queue.release_stale(stale_after_seconds=30, now=datetime.now())
         self.assertEqual(released, 1)
         self.assertEqual(self.queue.get(job["job_id"])["status"], "retrying")
+
+    def test_cancel_only_accepts_queued_or_retrying(self):
+        queued = self.queue.enqueue("web", payload={"title": "queued"})
+        cancelled = self.queue.cancel(queued["job_id"])
+        self.assertEqual(cancelled["status"], "cancelled")
+        self.assertIsNotNone(cancelled["completed_at"])
+        self.assertIsNone(cancelled["lease_token"])
+        with self.assertRaises(RuntimeError):
+            self.queue.cancel(queued["job_id"])
+
+        running = self.queue.enqueue("web", payload={"title": "running"})
+        self.queue.claim("worker", job_id=running["job_id"])
+        with self.assertRaises(RuntimeError):
+            self.queue.cancel(running["job_id"])
+
+    def test_retry_resets_failed_and_cancelled_jobs(self):
+        failed = self.queue.enqueue("web", payload={"title": "failed"}, max_attempts=1)
+        claimed = self.queue.claim("worker", job_id=failed["job_id"])
+        self.queue.heartbeat(
+            claimed["job_id"],
+            "worker",
+            claimed["lease_token"],
+            progress_current=3,
+            progress_total=9,
+            progress_message="working",
+        )
+        self.queue.fail(claimed["job_id"], "private failure", retry_delay_seconds=0)
+        retried = self.queue.retry(failed["job_id"])
+        self.assertEqual(retried["status"], "queued")
+        self.assertEqual(retried["attempts"], 0)
+        self.assertIsNone(retried["last_error"])
+        self.assertEqual(retried["result"], {})
+        self.assertIsNone(retried["completed_at"])
+        self.assertEqual(retried["progress_current"], 0)
+        self.assertEqual(retried["progress_total"], 0)
+        self.assertIsNone(retried["progress_message"])
+
+        cancelled = self.queue.enqueue("media", payload={"title": "cancelled"})
+        self.queue.cancel(cancelled["job_id"])
+        self.assertEqual(self.queue.retry(cancelled["job_id"])["status"], "queued")
+
+        completed = self.queue.enqueue("codex", payload={"title": "done"})
+        self.queue.claim("worker", job_id=completed["job_id"])
+        self.queue.complete(completed["job_id"], {"ok": True})
+        with self.assertRaises(RuntimeError):
+            self.queue.retry(completed["job_id"])
+
+    def test_list_page_and_count_use_sql_filters_and_offsets(self):
+        for index in range(5):
+            self.queue.enqueue(
+                "web" if index < 3 else "media",
+                payload={"title": f"item-{index}"},
+                adapter_name=f"adapter-{index}",
+            )
+        page = self.queue.list_page(source_type="web", q="adapter", limit=2, offset=1)
+        self.assertEqual(len(page), 2)
+        self.assertEqual(self.queue.count(source_type="web", q="adapter"), 3)
+        self.assertTrue(all(item["source_type"] == "web" for item in page))
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            with closing(connection.execute(
+                "EXPLAIN QUERY PLAN SELECT * FROM extraction_jobs WHERE source_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                ("web", 2, 1),
+            )) as cursor:
+                plan = cursor.fetchall()
+        self.assertTrue(plan)
 
 
 if __name__ == "__main__":

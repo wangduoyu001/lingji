@@ -2,72 +2,67 @@ from __future__ import annotations
 
 import hmac
 import logging
-import sqlite3
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from src.gateway.memory_inspector import ReadModelUnavailableError
-from src.runtime import mcp_runtime_status
-
-from .memory_inspector import build_memory_inspector
+from ._api_core import *  # noqa: F401,F403
+from ._api_core import create_control_app as _create_control_app
+from .capture import (
+    CAPTURE_SERVICE_UNAVAILABLE,
+    CaptureControlError,
+    CaptureControlService,
+    CaptureRuntimeSettingsStore,
+)
 from .service import LocalControlService
 
-logger = logging.getLogger("lingji.control.read_model")
-READ_MODEL_ERROR_CODE = "READ_MODEL_UNAVAILABLE"
-READ_MODEL_ERROR_MESSAGE = "Structured read model is unavailable"
+logger = logging.getLogger("lingji.control.capture_api")
 
 
-class SettingsPatch(BaseModel):
-    values: dict[str, Any] = Field(default_factory=dict)
+class CaptureCommonRequest(BaseModel):
+    capture_id: str = ""
+    title: str = ""
+    project_ids: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    privacy: str = "private"
+    priority: int = Field(default=100, ge=0, le=10000)
+    process_later: bool = True
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    adapter_name: str = ""
 
 
-class SettingsReset(BaseModel):
-    keys: list[str] | None = None
+class CaptureTextRequest(CaptureCommonRequest):
+    text: str = Field(min_length=1)
+    source_type: str = "web"
 
 
-class ComputePolicyPatch(BaseModel):
-    mode: str
+class CaptureWebRequest(CaptureCommonRequest):
+    url: str = ""
+    text: str = ""
+    html: str = ""
+    author: str = ""
+    account_name: str = ""
+    published_at: str = ""
+    platform: str = ""
+    description: str = ""
+    external_id: str = ""
+    source_type: str = "web"
 
 
-class StoragePlanRequest(BaseModel):
-    policy: dict[str, Any] | None = None
+class CaptureFileRequest(CaptureCommonRequest):
+    input_path: str = Field(min_length=1)
+    source_type: str = "web"
 
 
-class ConfirmationRequest(BaseModel):
-    confirmation: str
+class CaptureMediaRequest(CaptureCommonRequest):
+    input_path: str = Field(min_length=1)
+    allow_ocr: bool = False
+    allow_transcription: bool = False
+    extract_keyframes: bool = False
+    extract_audio: bool = False
 
 
-class BackupRequest(BaseModel):
-    profile: str | None = None
-    include_raw: bool = False
-    include_derived: bool = False
-
-
-class BackupVerifyRequest(BaseModel):
-    backup: str
-
-
-class RestoreStageRequest(BaseModel):
-    backup: str
-    confirmation: str
-
-
-class MediaAnalyzeRequest(BaseModel):
-    media_path: str
-    keyframe_directory: str | None = None
-    overrides: dict[str, Any] = Field(default_factory=dict)
-
-
-class AcceptanceRunRequest(BaseModel):
-    vault: str | None = None
-    chatgpt_export: str | None = None
-    media: str | None = None
-    deep_zip_check: bool = True
-    hash_inputs: bool = True
-
-
-class ShareRequest(BaseModel):
+class CaptureShareRequest(BaseModel):
     source_type: str = "web"
     platform: str = ""
     input_path: str = ""
@@ -90,6 +85,197 @@ class ShareRequest(BaseModel):
     capture_method: str = "local_control_share"
     payload: dict[str, Any] = Field(default_factory=dict)
     options: dict[str, Any] = Field(default_factory=dict)
+    project_ids: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    privacy: str = "private"
+    priority: int = Field(default=100, ge=0, le=10000)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+def _register_capture_routes(app: Any, settings: Any, control: Any, *, token: str) -> None:
+    from fastapi import Depends, Header, HTTPException, Query
+    from fastapi.responses import JSONResponse
+
+    capture: CaptureControlService | None = None
+
+    def authorize(x_lingji_token: str | None = Header(default=None)) -> None:
+        if token and not hmac.compare_digest(str(x_lingji_token or ""), token):
+            raise HTTPException(status_code=401, detail="Invalid local control token")
+
+    def capture_control() -> CaptureControlService:
+        nonlocal capture
+        if capture is not None:
+            return capture
+        existing = getattr(control, "capture_control", None)
+        if existing is not None:
+            capture = existing
+            return capture
+        try:
+            from src.extraction.bootstrap import build_extraction_pipeline
+
+            state_db = getattr(control, "state_db", None)
+            runtime_settings = CaptureRuntimeSettingsStore(settings, state_db=state_db)
+            pipeline = getattr(control, "pipeline", None)
+            if pipeline is None:
+                pipeline = build_extraction_pipeline(settings, runtime_settings=runtime_settings)
+                try:
+                    control.pipeline = pipeline
+                except Exception:
+                    pass
+            queue = getattr(pipeline, "queue", None) or getattr(control, "queue", None)
+            capture = CaptureControlService(
+                settings,
+                pipeline=pipeline,
+                queue=queue,
+                runtime_settings=runtime_settings,
+                state_db=state_db,
+            )
+            try:
+                control.capture_control = capture
+                control.queue = capture.queue
+            except Exception:
+                pass
+            return capture
+        except CaptureControlError:
+            raise
+        except Exception as exc:
+            logger.exception("Capture control initialization failed")
+            raise CaptureControlError(
+                CAPTURE_SERVICE_UNAVAILABLE,
+                "Capture service unavailable; see local logs",
+                status_code=503,
+            ) from exc
+
+    def translate(exc: Exception) -> HTTPException:
+        if isinstance(exc, CaptureControlError):
+            return HTTPException(
+                status_code=exc.status_code,
+                detail={"code": exc.code, "message": exc.message},
+            )
+        logger.exception("Capture API request failed")
+        return HTTPException(
+            status_code=503,
+            detail={
+                "code": CAPTURE_SERVICE_UNAVAILABLE,
+                "message": "Capture service unavailable; see local logs",
+            },
+        )
+
+    def response(payload: dict[str, Any]) -> JSONResponse:
+        return JSONResponse(status_code=200 if payload.get("duplicate") else 202, content=payload)
+
+    app.router.routes[:] = [
+        route
+        for route in app.router.routes
+        if not (
+            getattr(route, "path", None) == "/api/share"
+            and "POST" in (getattr(route, "methods", set()) or set())
+        )
+    ]
+    secured = [Depends(authorize)]
+
+    @app.post("/api/capture/text", dependencies=secured)
+    def capture_text(request: CaptureTextRequest):
+        try:
+            return response(capture_control().submit_text(request.model_dump()))
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/capture/web", dependencies=secured)
+    def capture_web(request: CaptureWebRequest):
+        try:
+            return response(capture_control().submit_web(request.model_dump()))
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/capture/file", dependencies=secured)
+    def capture_file(request: CaptureFileRequest):
+        try:
+            return response(capture_control().submit_file(request.model_dump()))
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/capture/media", dependencies=secured)
+    def capture_media(request: CaptureMediaRequest):
+        try:
+            return response(capture_control().submit_media(request.model_dump()))
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.get("/api/capture/status", dependencies=secured)
+    def capture_status() -> dict[str, Any]:
+        try:
+            return capture_control().status()
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.get("/api/capture/capabilities", dependencies=secured)
+    def capture_capabilities() -> dict[str, Any]:
+        try:
+            return capture_control().capabilities()
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.get("/api/capture/jobs", dependencies=secured)
+    def capture_jobs(
+        status: str | None = Query(default=None),
+        source_type: str | None = Query(default=None),
+        q: str | None = Query(default=None),
+        limit: int = Query(default=30, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
+        try:
+            return capture_control().list_jobs(
+                status=status,
+                source_type=source_type,
+                q=q,
+                limit=limit,
+                offset=offset,
+            )
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.get("/api/capture/jobs/{job_id}", dependencies=secured)
+    def capture_job(job_id: str) -> dict[str, Any]:
+        try:
+            return capture_control().get_job(job_id)
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/capture/jobs/{job_id}/retry", dependencies=secured)
+    def capture_job_retry(job_id: str) -> dict[str, Any]:
+        try:
+            return capture_control().retry_job(job_id)
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/capture/jobs/{job_id}/cancel", dependencies=secured)
+    def capture_job_cancel(job_id: str) -> dict[str, Any]:
+        try:
+            return capture_control().cancel_job(job_id)
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/capture/pause", dependencies=secured)
+    def capture_pause() -> dict[str, Any]:
+        try:
+            return capture_control().pause()
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/capture/resume", dependencies=secured)
+    def capture_resume() -> dict[str, Any]:
+        try:
+            return capture_control().resume()
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/share", dependencies=secured)
+    def capture_share(request: CaptureShareRequest):
+        try:
+            return response(capture_control().submit_share(request.model_dump()))
+        except Exception as exc:
+            raise translate(exc) from exc
 
 
 def create_control_app(
@@ -98,465 +284,9 @@ def create_control_app(
     service: LocalControlService | None = None,
     token: str = "",
 ):
-    """Create the loopback-only FastAPI app used by Tauri and browser helpers."""
-
-    try:
-        from fastapi import Depends, FastAPI, Header, HTTPException, Query
-        from fastapi.middleware.cors import CORSMiddleware
-    except ImportError as exc:
-        raise RuntimeError("Install requirements-ui.txt to run the local control API") from exc
+    """Create the existing Control API and attach the P2-05A capture routes."""
 
     control = service or LocalControlService(settings)
-    inspector = None
-    app = FastAPI(title="LingJi Local Control API", version="0.7.0")
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
-            "http://127.0.0.1:5173",
-            "http://localhost:5173",
-            "http://tauri.localhost",
-            "https://tauri.localhost",
-            "tauri://localhost",
-        ],
-        allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
-        allow_headers=["Content-Type", "X-LingJi-Token"],
-    )
-
-    def authorize(x_lingji_token: str | None = Header(default=None)) -> None:
-        if token and not hmac.compare_digest(str(x_lingji_token or ""), token):
-            raise HTTPException(status_code=401, detail="Invalid local control token")
-
-    def translate_error(exc: Exception) -> HTTPException:
-        if isinstance(exc, (ReadModelUnavailableError, sqlite3.Error)):
-            logger.error(
-                "Structured read model request failed",
-                exc_info=(type(exc), exc, exc.__traceback__),
-            )
-            return HTTPException(
-                status_code=503,
-                detail={
-                    "code": READ_MODEL_ERROR_CODE,
-                    "message": READ_MODEL_ERROR_MESSAGE,
-                },
-            )
-        if isinstance(exc, LookupError):
-            return HTTPException(status_code=404, detail=str(exc))
-        if isinstance(exc, PermissionError):
-            return HTTPException(status_code=403, detail=str(exc))
-        if isinstance(exc, FileExistsError):
-            return HTTPException(status_code=409, detail=str(exc))
-        if isinstance(exc, FileNotFoundError):
-            return HTTPException(status_code=404, detail=str(exc))
-        return HTTPException(status_code=422, detail=str(exc))
-
-    def memory_inspector():
-        nonlocal inspector
-        if inspector is None:
-            try:
-                inspector = build_memory_inspector(settings, control)
-            except Exception as exc:
-                raise ReadModelUnavailableError(READ_MODEL_ERROR_MESSAGE) from exc
-        return inspector
-
-    secured = [Depends(authorize)]
-
-    @app.get("/api/health", dependencies=secured)
-    def health() -> dict[str, Any]:
-        return control.health()
-
-    @app.get("/api/overview", dependencies=secured)
-    def overview() -> dict[str, Any]:
-        return control.overview()
-
-    @app.get("/api/brain/status", dependencies=secured)
-    def brain_status() -> dict[str, Any]:
-        return control.brain_status()
-
-    @app.get("/api/memory/status", dependencies=secured)
-    def memory_status() -> dict[str, Any]:
-        return control.memory_status()
-
-    @app.get("/api/vector/status", dependencies=secured)
-    def vector_status() -> dict[str, Any]:
-        return control.vector_status()
-
-    @app.get("/api/vector/coverage", dependencies=secured)
-    def vector_coverage() -> dict[str, Any]:
-        return control.vector_coverage()
-
-    @app.get("/api/memory/inspector/status", dependencies=secured)
-    def inspector_status() -> dict[str, Any]:
-        try:
-            return memory_inspector().status()
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/memory/inspector/sources", dependencies=secured)
-    def inspector_sources(
-        source_type: str | None = Query(default=None),
-        privacy: str | None = Query(default=None),
-        project: str | None = Query(default=None),
-        status: str | None = Query(default=None),
-        q: str | None = Query(default=None),
-        limit: int = Query(default=50, ge=1, le=200),
-        offset: int = Query(default=0, ge=0),
-    ) -> dict[str, Any]:
-        try:
-            return memory_inspector().list_sources(
-                source_type=source_type,
-                privacy=privacy,
-                project=project,
-                status=status,
-                q=q,
-                limit=limit,
-                offset=offset,
-            )
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/memory/inspector/sources/{source_id}", dependencies=secured)
-    def inspector_source(source_id: str) -> dict[str, Any]:
-        try:
-            return memory_inspector().get_source(source_id)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/memory/inspector/conversations", dependencies=secured)
-    def inspector_conversations(
-        source_id: str | None = Query(default=None),
-        source_type: str | None = Query(default=None),
-        privacy: str | None = Query(default=None),
-        project: str | None = Query(default=None),
-        from_time: str | None = Query(default=None),
-        to_time: str | None = Query(default=None),
-        q: str | None = Query(default=None),
-        limit: int = Query(default=50, ge=1, le=200),
-        offset: int = Query(default=0, ge=0),
-    ) -> dict[str, Any]:
-        try:
-            return memory_inspector().list_conversations(
-                source_id=source_id,
-                source_type=source_type,
-                privacy=privacy,
-                project=project,
-                from_time=from_time,
-                to_time=to_time,
-                q=q,
-                limit=limit,
-                offset=offset,
-            )
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get(
-        "/api/memory/inspector/conversations/{conversation_id}/messages",
-        dependencies=secured,
-    )
-    def inspector_conversation_messages(
-        conversation_id: str,
-        role: str | None = Query(default=None),
-        from_time: str | None = Query(default=None),
-        to_time: str | None = Query(default=None),
-        q: str | None = Query(default=None),
-        limit: int = Query(default=50, ge=1, le=200),
-        offset: int = Query(default=0, ge=0),
-    ) -> dict[str, Any]:
-        try:
-            return memory_inspector().list_messages(
-                conversation_id=conversation_id,
-                role=role,
-                from_time=from_time,
-                to_time=to_time,
-                q=q,
-                limit=limit,
-                offset=offset,
-            )
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get(
-        "/api/memory/inspector/conversations/{conversation_id}",
-        dependencies=secured,
-    )
-    def inspector_conversation(conversation_id: str) -> dict[str, Any]:
-        try:
-            return memory_inspector().get_conversation(conversation_id)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/memory/inspector/messages", dependencies=secured)
-    def inspector_messages(
-        conversation_id: str | None = Query(default=None),
-        source_id: str | None = Query(default=None),
-        role: str | None = Query(default=None),
-        from_time: str | None = Query(default=None),
-        to_time: str | None = Query(default=None),
-        q: str | None = Query(default=None),
-        limit: int = Query(default=50, ge=1, le=200),
-        offset: int = Query(default=0, ge=0),
-    ) -> dict[str, Any]:
-        try:
-            return memory_inspector().list_messages(
-                conversation_id=conversation_id,
-                source_id=source_id,
-                role=role,
-                from_time=from_time,
-                to_time=to_time,
-                q=q,
-                limit=limit,
-                offset=offset,
-            )
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/memory/inspector/messages/{message_id}", dependencies=secured)
-    def inspector_message(message_id: str) -> dict[str, Any]:
-        try:
-            return memory_inspector().get_message(message_id)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/memory/inspector/memories", dependencies=secured)
-    def inspector_memories(
-        memory_type: str | None = Query(default=None),
-        status: str | None = Query(default=None),
-        privacy: str | None = Query(default=None),
-        project: str | None = Query(default=None),
-        q: str | None = Query(default=None),
-        limit: int = Query(default=50, ge=1, le=200),
-        offset: int = Query(default=0, ge=0),
-    ) -> dict[str, Any]:
-        try:
-            return memory_inspector().list_memories(
-                memory_type=memory_type,
-                status=status,
-                privacy=privacy,
-                project=project,
-                q=q,
-                limit=limit,
-                offset=offset,
-            )
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get(
-        "/api/memory/inspector/memories/{memory_id}/source",
-        dependencies=secured,
-    )
-    def inspector_memory_source(memory_id: str) -> dict[str, Any]:
-        try:
-            return memory_inspector().memory_source(memory_id)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get(
-        "/api/memory/inspector/memories/{memory_id}/vector",
-        dependencies=secured,
-    )
-    def inspector_memory_vector(memory_id: str) -> dict[str, Any]:
-        try:
-            return memory_inspector().memory_vector(memory_id)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/memory/inspector/memories/{memory_id}", dependencies=secured)
-    def inspector_memory(memory_id: str) -> dict[str, Any]:
-        try:
-            return memory_inspector().get_memory(memory_id)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/mcp/status", dependencies=secured)
-    def mcp_status() -> dict[str, Any]:
-        runtime_values = control.get_settings().get("values", {})
-        return mcp_runtime_status(settings, runtime_values)
-
-    @app.get("/api/settings", dependencies=secured)
-    def get_settings() -> dict[str, Any]:
-        payload = control.get_settings()
-        payload["runtime_contracts"] = {
-            "mcp": mcp_runtime_status(settings, payload.get("values", {})),
-            "memory": control.memory_status(),
-            "vector": control.vector_status(),
-        }
-        return payload
-
-    @app.patch("/api/settings", dependencies=secured)
-    def update_settings(request: SettingsPatch) -> dict[str, Any]:
-        try:
-            return control.update_settings(request.values, actor="local_ui")
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.post("/api/settings/reset", dependencies=secured)
-    def reset_settings(request: SettingsReset) -> dict[str, Any]:
-        try:
-            return control.reset_settings(request.keys, actor="local_ui")
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/hardware/capabilities", dependencies=secured)
-    def hardware_capabilities() -> dict[str, Any]:
-        return control.hardware_capabilities()
-
-    @app.get("/api/hardware/telemetry", dependencies=secured)
-    def hardware_telemetry() -> dict[str, Any]:
-        return control.hardware_telemetry()
-
-    @app.post("/api/hardware/refresh", dependencies=secured)
-    def refresh_hardware() -> dict[str, Any]:
-        return control.refresh_hardware()
-
-    @app.get("/api/compute/policy", dependencies=secured)
-    def compute_policy() -> dict[str, Any]:
-        return control.compute_policy()
-
-    @app.patch("/api/compute/policy", dependencies=secured)
-    def update_compute_policy(request: ComputePolicyPatch) -> dict[str, Any]:
-        try:
-            return control.update_compute_policy(request.mode, actor="local_ui")
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/models/registry", dependencies=secured)
-    def model_registry() -> dict[str, Any]:
-        return control.model_registry()
-
-    @app.get("/api/models", dependencies=secured)
-    def models() -> dict[str, Any]:
-        return control.models()
-
-    @app.post("/api/models/refresh", dependencies=secured)
-    def refresh_models() -> dict[str, Any]:
-        return control.refresh_models()
-
-    @app.get("/api/jobs", dependencies=secured)
-    def jobs(
-        status: str | None = Query(default=None),
-        limit: int = Query(default=100, ge=1, le=1000),
-    ) -> dict[str, Any]:
-        return control.jobs(status=status, limit=limit)
-
-    @app.get("/api/jobs/{job_id}", dependencies=secured)
-    def job(job_id: str) -> dict[str, Any]:
-        try:
-            return control.job(job_id)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/events", dependencies=secured)
-    def events(limit: int = Query(default=100, ge=1, le=1000)) -> list[dict[str, Any]]:
-        return control.recent_events(limit=limit)
-
-    @app.get("/api/logs", dependencies=secured)
-    def logs(lines: int = Query(default=300, ge=1, le=5000)) -> dict[str, Any]:
-        return control.logs(lines=lines)
-
-    @app.get("/api/providers", dependencies=secured)
-    def providers() -> dict[str, Any]:
-        return control.provider_status()
-
-    @app.get("/api/acceptance/reports", dependencies=secured)
-    def acceptance_reports(
-        limit: int = Query(default=100, ge=1, le=1000),
-    ) -> list[dict[str, Any]]:
-        return control.list_acceptance_reports(limit=limit)
-
-    @app.post("/api/acceptance/run", dependencies=secured)
-    def run_acceptance(request: AcceptanceRunRequest) -> dict[str, Any]:
-        try:
-            return control.run_acceptance(
-                vault=request.vault,
-                chatgpt_export=request.chatgpt_export,
-                media=request.media,
-                deep_zip_check=request.deep_zip_check,
-                hash_inputs=request.hash_inputs,
-            )
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/storage", dependencies=secured)
-    def storage_inventory() -> dict[str, Any]:
-        return control.storage_inventory()
-
-    @app.get("/api/storage/plans", dependencies=secured)
-    def storage_plans(limit: int = Query(default=50, ge=1, le=500)) -> list[dict[str, Any]]:
-        return control.list_storage_plans(limit=limit)
-
-    @app.get("/api/storage/plans/{plan_id}", dependencies=secured)
-    def storage_plan(plan_id: str) -> dict[str, Any]:
-        try:
-            return control.get_storage_plan(plan_id)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.post("/api/storage/plans", dependencies=secured)
-    def create_storage_plan(request: StoragePlanRequest) -> dict[str, Any]:
-        try:
-            return control.create_storage_plan(request.policy)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.post("/api/storage/plans/{plan_id}/execute", dependencies=secured)
-    def execute_storage_plan(plan_id: str, request: ConfirmationRequest) -> dict[str, Any]:
-        try:
-            return control.execute_storage_plan(plan_id, request.confirmation)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.post("/api/storage/plans/{plan_id}/restore", dependencies=secured)
-    def restore_storage_plan(plan_id: str, request: ConfirmationRequest) -> dict[str, Any]:
-        try:
-            return control.restore_storage_plan(plan_id, request.confirmation)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.get("/api/backups", dependencies=secured)
-    def backups(limit: int = Query(default=100, ge=1, le=500)) -> list[dict[str, Any]]:
-        return control.list_backups(limit=limit)
-
-    @app.post("/api/backups", dependencies=secured)
-    def create_backup(request: BackupRequest) -> dict[str, Any]:
-        try:
-            return control.create_backup(
-                profile=request.profile,
-                include_raw=request.include_raw,
-                include_derived=request.include_derived,
-            )
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.post("/api/backups/verify", dependencies=secured)
-    def verify_backup(request: BackupVerifyRequest) -> dict[str, Any]:
-        try:
-            return control.verify_backup(request.backup)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.post("/api/backups/stage-restore", dependencies=secured)
-    def stage_restore(request: RestoreStageRequest) -> dict[str, Any]:
-        try:
-            return control.stage_restore(request.backup, request.confirmation)
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.post("/api/media/analyze", dependencies=secured)
-    def analyze_media(request: MediaAnalyzeRequest) -> dict[str, Any]:
-        try:
-            return control.analyze_media(
-                request.media_path,
-                request.overrides,
-                keyframe_directory=request.keyframe_directory,
-            )
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
-    @app.post("/api/share", dependencies=secured)
-    def capture_share(request: ShareRequest) -> dict[str, Any]:
-        try:
-            return control.capture_share(request.model_dump())
-        except Exception as exc:
-            raise translate_error(exc) from exc
-
+    app = _create_control_app(settings, service=control, token=token)
+    _register_capture_routes(app, settings, control, token=token)
     return app
