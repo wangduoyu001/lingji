@@ -2,9 +2,10 @@
 
 > Updated（更新时间）: 2026-07-21  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> P0 Validation Branch（P0 验证分支）: `work/p0-engineering-hygiene`  
+> P0 Formal Merge Commit（P0 正式合并提交）: `d2a605e463552cb982342bdb2376da8aad1b36b5`  
 > P0 Verified Code Commit（P0 已验证代码提交）: `08b507c2855e05a1d971cb2bcae5c8d2fea578eb`  
-> P0 Status（P0 状态）: `READY_FOR_FORMAL_MERGE`
+> P0 Status（P0 状态）: `MERGED_AND_VALIDATED`  
+> P2-05 Status（P2-05 状态）: `READY_FOR_PARALLEL_IMPLEMENTATION`
 
 ## 1. 仓库职责
 
@@ -21,9 +22,10 @@ desktop/lingji-control/
 
 规则：
 
-- 新的正式产品能力必须进入 `src/`。
-- `second_brain/` 只允许兼容、迁移和待退役行为。
-- Desktop 不得直连 SQLite、Qdrant、Ollama 或 Compatibility API。
+- 新的正式产品能力进入 `src/`。
+- `second_brain/` 只保留兼容、迁移和待退役行为。
+- Desktop 只通过 8766 Local Control API 访问后端。
+- Desktop 不得直连 SQLite、Qdrant、Ollama、8765 或 8767。
 
 ## 2. 数据权威与派生层
 
@@ -47,13 +49,14 @@ src/retrieval/qdrant_provider.py
 = 可重建 Semantic Index Provider
 ```
 
-## 3. Workspace 与路径合同
+## 3. Workspace、路径与设置
 
 正式入口：
 
 ```text
 src/config.py::Settings
 src/runtime/workspace.py::WorkspaceResolver
+src/control/runtime_settings.py::RuntimeSettingsStore
 ```
 
 关键路径：
@@ -70,15 +73,15 @@ runtime_settings_path
 qdrant_path / qdrant_url / qdrant_collection
 ```
 
-P0 规则：
+P0 合同：
 
 - 未配置备份目录时使用 `<storage_path>/backups`。
 - 不允许机器专属固定盘符或用户名目录。
 - Production 和 Acceptance 必须物理隔离。
 - 生产系统盘保护由 `src/runtime/workspace.py` 持有。
-- `tests/fixtures/workspace_paths.py` 仅允许显式测试临时根绕过系统盘限制。
+- `tests/fixtures/workspace_paths.py` 只允许显式测试临时根绕过系统盘限制。
 
-## 4. 端口和进程边界
+## 4. 端口和启动入口
 
 ```text
 8765 = second_brain Compatibility API
@@ -87,7 +90,7 @@ P0 规则：
 stdio = default local MCP transport
 ```
 
-正式启动入口：
+启动入口：
 
 ```text
 main.py
@@ -97,13 +100,13 @@ run_mcp_server.py
 run_extraction_worker.py
 ```
 
-行为合同测试：
+合同测试：
 
 ```text
 tests/test_startup_contracts.py
 ```
 
-测试不再逐字比较启动文件源码。
+测试验证 main guard、Settings 端口所有权和 import 阶段不启动服务，不再逐字比较源码。
 
 ## 5. 统一采集与记忆链路
 
@@ -116,7 +119,7 @@ Capture Input
 -> VaultExtractionSink
 -> StructuredReadModelSink
 -> SourceReadModel
--> Memory Index Coordinator
+-> MemoryIndexCoordinator
 -> HybridRetriever
 -> MemoryGateway
 -> MemoryInspectorFacade
@@ -143,7 +146,7 @@ src/capture/service.py
 - Metadata 敏感字段检查。
 - `process_later=True` 排队合同。
 
-下一阶段 P2-05 不创建第二套队列或数据库。
+P2-05 不创建第二套队列或数据库。
 
 ## 7. Extraction 与队列
 
@@ -160,7 +163,7 @@ src/extraction/structured_sink.py
 src/extraction/errors.py::safe_extraction_error
 ```
 
-队列数据存储：
+队列数据：
 
 ```text
 lingji_state.db::extraction_jobs
@@ -198,14 +201,7 @@ Source
 -> Vector
 ```
 
-支持：
-
-- Stable ID。
-- 幂等 Upsert。
-- Privacy / Project / Agent Scope。
-- 权限继承与显式覆盖。
-- Message 级 Memory Link。
-- Schema Version 校验。
+支持 Stable ID、幂等 Upsert、权限继承、显式覆盖、Message 级 Memory Link 和 Schema Version 校验。
 
 ## 9. Memory Gateway 与检索
 
@@ -227,11 +223,11 @@ Lexical / Metadata
 + RRF Hybrid
 ```
 
-Qdrant 测试默认使用 in-memory 合同，不要求外部生产服务。
+Qdrant 单元测试使用 in-memory 合同，不要求生产 Qdrant Server。
 
 ## 10. Memory Inspector
 
-正式后端：
+后端：
 
 ```text
 src/gateway/memory_inspector.py::MemoryInspectorFacade
@@ -239,7 +235,7 @@ src/control/memory_inspector.py::build_memory_inspector
 src/control/api.py::create_control_app
 ```
 
-正式前端：
+前端：
 
 ```text
 desktop/lingji-control/src/pages/MemoryInspectorPage.tsx
@@ -294,12 +290,6 @@ tests/test_brain_status_e2e.py
 second_brain/obsidian_cli.py
 ```
 
-当前职责：
-
-- CLI 可执行文件发现。
-- Vault 路径和名称发现。
-- 兼容命令包装。
-
 发现顺序：
 
 ```text
@@ -307,6 +297,14 @@ OBSIDIAN_CLI_PATH
 -> PATH
 -> platform location
 -> not_found
+```
+
+Vault 名称：
+
+```text
+OBSIDIAN_VAULT_NAME
+-> Vault 目录名
+-> 兼容默认值
 ```
 
 正式迁移目标：
@@ -354,7 +352,7 @@ npm run test:smoke
 npm run build
 ```
 
-## 14. P0 依赖与测试基础
+## 14. P0 依赖与验证基础
 
 依赖文件：
 
@@ -375,7 +373,7 @@ scripts/validate_clean_install.py
 .github/workflows/p0-windows-gate.yml
 ```
 
-最终 P0 门禁：
+最终门禁：
 
 ```text
 Windows Python 3.12 install: PASS
@@ -389,7 +387,7 @@ Desktop build: PASS
 
 ## 15. P2-05 文件所有权
 
-规划文档：
+规划：
 
 ```text
 docs/MODULES/P2_05_MANUAL_CAPTURE_CENTER_PLAN.md
@@ -399,30 +397,43 @@ docs/MODULES/P2_05_PARALLEL_OWNERSHIP.md
 并行边界：
 
 ```text
-Engineer 1:
+1号工程师:
 src/control/
 src/extraction/queue.py
 
-Engineer 2:
+2号工程师:
 src/capture/
 必要的 Adapter 映射
 
-Engineer 3:
+3号工程师:
 desktop/lingji-control/
 
-Integration Engineer:
+4号集成工程师:
 共享文档、冲突解决、集成测试
+```
+
+共享热点在同一阶段只能有一个所有者：
+
+```text
+src/control/api.py
+src/control/service.py
+src/control/runtime_settings.py
+src/capture/models.py
+src/capture/service.py
+src/extraction/queue.py
+Desktop navigation / common API types
+PROJECT_STATUS / CODE_MAP / CHANGELOG
 ```
 
 ## 16. 当前状态
 
 ```text
 P0 Engineering Hygiene:
-READY_FOR_FORMAL_MERGE
+MERGED_AND_VALIDATED
 
 P2-03 / P2-03B / P2-03C / P2-04:
 MERGED_AND_VALIDATED
 
-P2-05:
-PLANNED_BLOCKED_UNTIL_P0_MERGE
+P2-05 Manual Capture Center:
+READY_FOR_PARALLEL_IMPLEMENTATION
 ```
