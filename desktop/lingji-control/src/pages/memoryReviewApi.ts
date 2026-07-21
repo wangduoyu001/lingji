@@ -10,7 +10,7 @@ export class MemoryReviewApi {
   approve(id: string, hash: string, signal?: AbortSignal) { return this.api.post<MemoryCandidate>(`/api/memory/review/candidates/${encodeURIComponent(id)}/approve`, { owner_confirmed: true, expected_content_hash: hash }, { signal }); }
   editApprove(id: string, hash: string, content: string, signal?: AbortSignal) { return this.api.post<MemoryCandidate>(`/api/memory/review/candidates/${encodeURIComponent(id)}/edit-approve`, { owner_confirmed: true, expected_content_hash: hash, content }, { signal }); }
   reject(id: string, reason: string, signal?: AbortSignal) { return this.api.post<{ ok: boolean }>(`/api/memory/review/candidates/${encodeURIComponent(id)}/reject`, { reason }, { signal }); }
-  createCore(body: CoreMemoryDraft, signal?: AbortSignal) { return this.api.post<{ memory_id: string }>("/api/memory/core", body, { signal }); }
+  createCore(body: CoreMemoryDraft, signal?: AbortSignal) { return this.api.post<{ memory_id: string }>("/api/memory/core", { ...body }, { signal }); }
   archive(id: string, signal?: AbortSignal) { return this.api.post<{ ok: boolean }>(`/api/memory/core/${encodeURIComponent(id)}/archive`, {}, { signal }); }
   integrity(id: string, signal?: AbortSignal) { return this.api.get<CoreIntegrity>(`/api/memory/core/${encodeURIComponent(id)}/integrity`, { signal }); }
   readNote(path: string, signal?: AbortSignal) { return this.api.get<ObsidianNote>(`/api/obsidian/notes?relative_path=${encodeURIComponent(path)}`, { signal }); }
