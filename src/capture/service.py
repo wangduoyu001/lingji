@@ -6,20 +6,39 @@ from typing import Any, Mapping
 from uuid import uuid4
 
 from .deduplication import CaptureDeduplicator
+from .manual import ManualCaptureKind, build_manual_envelope
 from .models import CaptureCapability, CaptureEnvelope, CaptureResult, CaptureStatus
 from .policy import CaptureMode, CapturePolicy
 
 _ALLOWED_METHODS = {
+    "manual_text", "manual_web", "manual_file", "manual_media",
+    "manual_chatgpt_export", "manual_codex_report", "manual_upload",
     "mobile_share", "browser_extension", "clipboard", "folder_watch",
-    "manual_upload", "local_control_share", "scheduled_import",
+    "local_control_share", "scheduled_import",
 }
 _SENSITIVE_KEYS = {
     "token", "access_token", "cookie", "api_key", "apikey", "authorization",
     "password", "secret", "credential", "session",
 }
-_RESERVED_PAYLOAD_KEYS = {
-    "title", "url", "capture_method", "author", "account_name", "published_at",
-    "media_url", "cover_url", "transcript", "ocr_text",
+_RESERVED_METADATA_KEYS = {
+    "source_type", "capture_method", "adapter_name", "input_path", "privacy",
+    "project_ids", "tags", "priority", "title", "url", "author", "account_name",
+    "published_at", "media_url", "cover_url", "transcript", "ocr_text",
+}
+_SOURCE_ADAPTERS = {
+    "chatgpt": "chatgpt_export",
+    "chatgpt_export": "chatgpt_export",
+    "codex": "codex_work_report",
+    "codex_report": "codex_work_report",
+    "web": "web_capture",
+    "browser": "web_capture",
+    "wechat_article": "web_capture",
+    "video_channel": "web_capture",
+    "douyin": "web_capture",
+    "xiaohongshu": "web_capture",
+    "media": "media_local",
+    "video": "media_local",
+    "audio": "media_local",
 }
 
 
@@ -51,12 +70,17 @@ class CaptureService:
         payload, options = self._pipeline_input(envelope)
         heavy = envelope.source_type in {"media", "video", "audio"}
         queue = envelope.process_later or self.policy.queue_only or heavy or not self.policy.allow_realtime
+        call = self.pipeline.enqueue if queue else self.pipeline.execute
+        common = {
+            "input_path": envelope.input_path,
+            "payload": payload,
+            "options": options,
+            "adapter_name": envelope.adapter_name or None,
+        }
         if queue:
-            outcome = self.pipeline.enqueue(
+            outcome = call(
                 envelope.source_type,
-                input_path=envelope.input_path,
-                payload=payload,
-                options=options,
+                **common,
                 priority=envelope.priority,
                 idempotency_key=duplicate.deduplication_key,
             )
@@ -68,11 +92,9 @@ class CaptureService:
                 queued=True,
             )
         else:
-            outcome = self.pipeline.execute(
+            outcome = call(
                 envelope.source_type,
-                input_path=envelope.input_path,
-                payload=payload,
-                options=options,
+                **common,
                 execution_id=envelope.capture_id,
             )
             result = CaptureResult(
@@ -86,29 +108,57 @@ class CaptureService:
         self._submitted += 1
         return result
 
-    def submit_file(self, path: Path | str, *, source_type: str = "media", **kwargs: Any) -> CaptureResult:
-        return self.submit(self._envelope(source_type, "manual_upload", input_path=Path(path), **kwargs))
-
     def submit_text(self, text: str, *, source_type: str = "web", **kwargs: Any) -> CaptureResult:
-        return self.submit(self._envelope(source_type, "clipboard", text=text, **kwargs))
+        kwargs = self._manual_defaults(kwargs)
+        envelope = self._manual_envelope(text, selected_kind=ManualCaptureKind.TEXT, source_type=source_type, **kwargs)
+        return self.submit(envelope)
 
     def submit_web(self, url: str, **kwargs: Any) -> CaptureResult:
-        return self.submit(self._envelope("web", kwargs.pop("capture_method", "browser_extension"), url=url, **kwargs))
+        kwargs = self._manual_defaults(kwargs)
+        envelope = self._manual_envelope(url, selected_kind=ManualCaptureKind.WEB, **kwargs)
+        return self.submit(envelope)
+
+    def submit_file(self, path: Path | str, **kwargs: Any) -> CaptureResult:
+        kwargs = self._manual_defaults(kwargs)
+        envelope = self._manual_envelope(Path(path), **kwargs)
+        if envelope.capture_method not in {"manual_chatgpt_export", "manual_media"}:
+            envelope = self._replace_capture_method(envelope, "manual_file")
+        return self.submit(envelope)
 
     def submit_media(self, path: Path | str, **kwargs: Any) -> CaptureResult:
-        return self.submit(self._envelope("media", kwargs.pop("capture_method", "manual_upload"), input_path=Path(path), **kwargs))
+        kwargs = self._manual_defaults(kwargs)
+        return self.submit(self._manual_envelope(Path(path), selected_kind=ManualCaptureKind.MEDIA, **kwargs))
+
+    def submit_chatgpt_export(self, path: Path | str, **kwargs: Any) -> CaptureResult:
+        kwargs = self._manual_defaults(kwargs)
+        return self.submit(
+            self._manual_envelope(Path(path), selected_kind=ManualCaptureKind.CHATGPT_EXPORT, **kwargs)
+        )
+
+    def submit_codex_report(self, path: Path | str, **kwargs: Any) -> CaptureResult:
+        kwargs = self._manual_defaults(kwargs)
+        return self.submit(
+            self._manual_envelope(Path(path), selected_kind=ManualCaptureKind.CODEX_REPORT, **kwargs)
+        )
 
     def status(self) -> dict[str, Any]:
         return {"paused": self._paused, "mode": self.policy.mode.value, "submitted": self._submitted}
 
     def capabilities(self) -> tuple[CaptureCapability, ...]:
+        deferred = "disabled / deferred"
         return (
-            CaptureCapability("mobile_share", True),
-            CaptureCapability("browser_extension", True),
-            CaptureCapability("clipboard", True, realtime=False),
-            CaptureCapability("folder_watch", True, realtime=False),
-            CaptureCapability("global_keyboard_listener", False),
-            CaptureCapability("fullscreen_capture_listener", False),
+            CaptureCapability("manual_text", True, description="manual queued text import"),
+            CaptureCapability("manual_web", True, description="manual queued web import"),
+            CaptureCapability("manual_file", True, description="manual queued supported-file import"),
+            CaptureCapability("manual_media", True, description="manual queued media import"),
+            CaptureCapability("manual_chatgpt_export", True, description="manual queued ChatGPT export import"),
+            CaptureCapability("manual_codex_report", True, description="manual queued Codex report import"),
+            CaptureCapability("mobile_share", False, description=deferred),
+            CaptureCapability("browser_extension", False, description=deferred),
+            CaptureCapability("clipboard", False, description=deferred),
+            CaptureCapability("folder_watch", False, description=deferred),
+            CaptureCapability("global_keyboard_listener", False, description="disabled"),
+            CaptureCapability("fullscreen_capture_listener", False, description="disabled"),
         )
 
     def pause(self) -> None:
@@ -118,28 +168,42 @@ class CaptureService:
         self._paused = False
 
     @staticmethod
-    def _envelope(source_type: str, capture_method: str, **kwargs: Any) -> CaptureEnvelope:
-        return CaptureEnvelope(
-            capture_id=str(kwargs.pop("capture_id", f"LJ-CAP-{uuid4().hex[:16].upper()}")),
-            source_type=source_type,
-            capture_method=capture_method,
-            **kwargs,
-        )
+    def _manual_defaults(kwargs: Mapping[str, Any]) -> dict[str, Any]:
+        result = dict(kwargs)
+        result.setdefault("process_later", True)
+        result.setdefault("privacy", "private")
+        return result
+
+    @staticmethod
+    def _manual_envelope(value: Path | str, **kwargs: Any) -> CaptureEnvelope:
+        kwargs.setdefault("capture_id", f"LJ-CAP-{uuid4().hex[:16].upper()}")
+        return build_manual_envelope(value, **kwargs)
+
+    @staticmethod
+    def _replace_capture_method(envelope: CaptureEnvelope, capture_method: str) -> CaptureEnvelope:
+        values = dict(envelope.__dict__)
+        values["capture_method"] = capture_method
+        return CaptureEnvelope(**values)
 
     def _validate(self, envelope: CaptureEnvelope) -> None:
         if not envelope.capture_id.strip() or not envelope.source_type.strip():
             raise ValueError("capture_id and source_type are required")
         if envelope.capture_method not in _ALLOWED_METHODS:
             raise ValueError(f"unsupported capture_method: {envelope.capture_method}")
+        expected_adapter = _SOURCE_ADAPTERS.get(envelope.source_type)
+        if envelope.adapter_name and envelope.adapter_name != expected_adapter:
+            raise ValueError("capture source_type conflicts with adapter_name")
         if envelope.input_path:
-            if not envelope.input_path.exists() or not envelope.input_path.is_file():
-                raise FileNotFoundError(envelope.input_path)
-            if envelope.input_path.stat().st_size > self.policy.max_file_bytes:
-                raise ValueError("capture file exceeds policy limit")
+            if not envelope.input_path.exists():
+                raise ValueError("CAPTURE_FILE_NOT_FOUND")
+            if not (envelope.input_path.is_file() or envelope.input_path.is_dir()):
+                raise ValueError("CAPTURE_UNSUPPORTED_TYPE")
+            if envelope.input_path.is_file() and envelope.input_path.stat().st_size > self.policy.max_file_bytes:
+                raise ValueError("CAPTURE_FILE_TOO_LARGE")
         self._validate_metadata(envelope.metadata)
-        collisions = {str(key).lower() for key in envelope.metadata} & _RESERVED_PAYLOAD_KEYS
+        collisions = {str(key).lower() for key in envelope.metadata} & _RESERVED_METADATA_KEYS
         if collisions:
-            raise ValueError("capture metadata cannot override reserved payload fields")
+            raise ValueError("capture metadata cannot override reserved capture fields")
         if not any((envelope.url, envelope.text, envelope.html, envelope.input_path, envelope.transcript, envelope.ocr_text, envelope.media_url)):
             raise ValueError("capture has no usable content")
 
@@ -173,14 +237,17 @@ class CaptureService:
             "external_id": envelope.external_id,
             "metadata": dict(envelope.metadata),
         }
+        heavy_allowed = self.policy.permits_heavy_media()
         options = {
             "project": list(envelope.project_ids),
             "tags": list(envelope.tags),
             "privacy": envelope.privacy,
-            "allow_ocr": self.policy.allow_ocr,
-            "allow_video_transcription": self.policy.allow_video_transcription,
+            "allow_ocr": bool(envelope.allow_ocr and self.policy.allow_ocr),
+            "allow_video_transcription": bool(
+                envelope.allow_transcription and self.policy.allow_video_transcription
+            ),
             "allow_vectorization": self.policy.allow_vectorization,
-            "extract_audio": False,
-            "extract_keyframes": False,
+            "extract_audio": bool(envelope.extract_audio and heavy_allowed),
+            "extract_keyframes": bool(envelope.extract_keyframes and heavy_allowed),
         }
         return {key: value for key, value in payload.items() if value not in (None, "", [], {})}, options
