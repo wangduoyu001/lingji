@@ -126,6 +126,11 @@ class Settings(BaseSettings):
     mcp_transport: str = "stdio"
     mcp_default_agent_id: str = "lingji-local"
 
+    # Auto Review remains OFF/SHADOW only. Model names come from model-role assignments.
+    auto_review_mode: str = "OFF"
+    auto_review_ai_enabled: bool = False
+    auto_review_timeout_seconds: float = Field(default=20.0, ge=0.1, le=300.0)
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
