@@ -1,16 +1,16 @@
 name: P2-05A Coordinated Review Fix
 
 on:
-  pull_request:
+  push:
     branches:
-      - feature/second-brain-memory
+      - work/p2-05a-capture-control-api
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: p2-05a-coordinated-review-${{ github.event.pull_request.number || github.ref }}
+  group: p2-05a-coordinated-review
   cancel-in-progress: true
 
 jobs:
@@ -18,8 +18,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout branch
         uses: actions/checkout@v4
+        with:
+          ref: work/p2-05a-capture-control-api
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -43,83 +45,50 @@ jobs:
             -c constraints/python-3.12-windows.txt
           python -m pip check
 
-      - name: Fix replacement escaping
+      - name: Apply coordinated fixes once
         shell: pwsh
         run: |
-          $path = "scripts/p2_05a_review_fix.py"
-          $text = Get-Content $path -Raw
-          $old = "re.subn(pattern, replacement, text, count=1, flags=re.S)"
-          $new = "re.subn(pattern, lambda _match: replacement, text, count=1, flags=re.S)"
-          if (-not $text.Contains($old)) { throw "replace_pattern implementation not found" }
-          Set-Content -Path $path -Value ($text.Replace($old, $new)) -Encoding utf8NoBOM
-
-      - name: Apply coordinated fixes
-        run: python scripts/p2_05a_review_fix.py
+          if (Select-String -Path src/control/capture.py -Pattern '"mode_label"' -Quiet) {
+            Write-Host "Coordinated contract already present"
+          } else {
+            $path = "scripts/p2_05a_review_fix.py"
+            $text = Get-Content $path -Raw
+            $old = "re.subn(pattern, replacement, text, count=1, flags=re.S)"
+            $new = "re.subn(pattern, lambda _match: replacement, text, count=1, flags=re.S)"
+            if (-not $text.Contains($old)) { throw "replace_pattern implementation not found" }
+            Set-Content -Path $path -Value ($text.Replace($old, $new)) -Encoding utf8NoBOM
+            python $path
+          }
 
       - name: Compile focused files
-        id: compile
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          python -m compileall -q src/control src/extraction/queue.py tests/test_capture_control.py tests/test_capture_api.py tests/test_extraction_queue.py *> compile.log
-          $exitCode = $LASTEXITCODE
-          Get-Content compile.log
-          exit $exitCode
+        run: python -m compileall -q src/control src/extraction/queue.py tests/test_capture_control.py tests/test_capture_api.py tests/test_extraction_queue.py
 
       - name: Run required five-file gate
-        id: focused
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          if ("${{ steps.compile.outcome }}" -ne "success") { Write-Host "compile failed; focused skipped"; exit 1 }
-          python -m pytest tests/test_capture_control.py tests/test_capture_api.py tests/test_control_api.py tests/test_extraction_queue.py tests/test_capture_service.py -v --tb=short *> focused.log
-          $exitCode = $LASTEXITCODE
-          Get-Content focused.log -Tail 240
-          exit $exitCode
+        run: >-
+          python -m pytest
+          tests/test_capture_control.py
+          tests/test_capture_api.py
+          tests/test_control_api.py
+          tests/test_extraction_queue.py
+          tests/test_capture_service.py
+          -v --tb=short
 
       - name: Run full repository gate
-        id: full
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          if ("${{ steps.focused.outcome }}" -ne "success") { Write-Host "focused failed; full skipped"; exit 1 }
-          python -m pytest -q --tb=short *> full.log
-          $exitCode = $LASTEXITCODE
-          Get-Content full.log -Tail 240
-          exit $exitCode
+        run: python -m pytest -q --tb=short
 
       - name: Validate diff
-        id: diff
-        if: always()
-        continue-on-error: true
         shell: pwsh
         run: git diff --check
 
-      - name: Upload patch and logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: p2-05a-validated-patch
-          path: |
-            src/control/api.py
-            src/control/capture.py
-            tests/test_capture_api.py
-            tests/test_capture_control.py
-            tests/test_extraction_queue.py
-            compile.log
-            focused.log
-            full.log
-          if-no-files-found: warn
-          retention-days: 3
-
-      - name: Enforce result
-        if: always()
+      - name: Commit validated patch
         shell: pwsh
-        env:
-          COMPILE: ${{ steps.compile.outcome }}
-          FOCUSED: ${{ steps.focused.outcome }}
-          FULL: ${{ steps.full.outcome }}
-          DIFF: ${{ steps.diff.outcome }}
         run: |
-          Write-Host "compile=$env:COMPILE focused=$env:FOCUSED full=$env:FULL diff=$env:DIFF"
-          if ($env:COMPILE -ne "success" -or $env:FOCUSED -ne "success" -or $env:FULL -ne "success" -or $env:DIFF -ne "success") { exit 1 }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/control/api.py src/control/capture.py tests/test_capture_api.py tests/test_capture_control.py tests/test_extraction_queue.py
+          if (git diff --cached --quiet) {
+            Write-Host "No coordinated code changes to commit"
+          } else {
+            git commit -m "fix(control): align capture API integration contracts"
+            git push origin HEAD:work/p2-05a-capture-control-api
+          }
