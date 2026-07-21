@@ -48,10 +48,11 @@ class FakeCaptureControl:
         return self._result("share", payload)
 
     def status(self):
-        return {"capture_mode": "paused" if self.paused else "low_power", "paused": self.paused}
+        mode = "paused" if self.paused else "low_power"
+        return {"capture_mode": mode, "mode": mode, "mode_label": mode.upper(), "paused": self.paused, "queued": 2, "running": 1, "retrying": 0, "completed": 3, "failed": 0, "cancelled": 1, "updated_at": "2026-07-21T00:00:00+00:00"}
 
     def capabilities(self):
-        return {"inputs": {"text": {"enabled": True}}}
+        return {"capture_mode": "low_power", "state": "healthy", "inputs": {"text": {"enabled": True}}, "file_modes": ["web_snapshot", "chatgpt_export", "codex_report"], "media": {"ocr": False, "transcription": False, "keyframes": False, "extract_audio": False, "reasons": {}}}
 
     def list_jobs(self, **kwargs):
         self.calls.append(("list", kwargs))
@@ -60,7 +61,7 @@ class FakeCaptureControl:
     def get_job(self, job_id):
         if job_id == "missing":
             raise CaptureControlError("CAPTURE_JOB_NOT_FOUND", "Capture job not found", status_code=404)
-        return {"job_id": job_id, "status": "queued"}
+        return {"job_id": job_id, "status": "queued", "result_refs": {"memory_id": "MEM-1"}, "result_summary": "{\"memory_count\": 1}"}
 
     def retry_job(self, job_id):
         if job_id == "running":
@@ -147,3 +148,22 @@ def test_invalid_capture_payload_returns_422():
     with context as api:
         assert api.post("/api/capture/text", headers=headers, json={"text": ""}).status_code == 422
         assert api.get("/api/capture/jobs?limit=201", headers=headers).status_code == 422
+
+
+
+def test_capture_http_contract_matches_desktop_client():
+    context, _ = client()
+    headers = {"X-LingJi-Token": "secret"}
+    with context as api:
+        status = api.get("/api/capture/status", headers=headers).json()
+        capabilities = api.get("/api/capture/capabilities", headers=headers).json()
+        job = api.get("/api/capture/jobs/job-1", headers=headers).json()
+    assert status["mode"] == "low_power"
+    assert status["mode_label"] == "LOW_POWER"
+    assert status["queued"] == 2
+    assert status["running"] == 1
+    assert status["updated_at"]
+    assert capabilities["file_modes"] == ["web_snapshot", "chatgpt_export", "codex_report"]
+    assert "media" in capabilities
+    assert job["result_refs"] == {"memory_id": "MEM-1"}
+    assert isinstance(job["result_summary"], str)

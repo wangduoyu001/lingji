@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
 import threading
-from pathlib import Path
+from datetime import datetime, timezone
+from pathlib import Path, PureWindowsPath
 from typing import Any, Mapping
 from uuid import uuid4
 
@@ -146,6 +148,7 @@ class CaptureControlService:
                 "allow_ocr": bool(payload.get("allow_ocr", False)),
                 "allow_video_transcription": bool(payload.get("allow_transcription", False)),
                 "extract_keyframes": bool(payload.get("extract_keyframes", False)),
+                "extract_audio": bool(payload.get("extract_audio", False)),
             },
         )
 
@@ -162,22 +165,42 @@ class CaptureControlService:
     def status(self) -> dict[str, Any]:
         mode = self._mode().value
         service_status = self.capture_service.status()
+        queue_stats = self.queue.stats()
         return {
             "capture_mode": mode,
-            "mode": _MODE_LABELS[mode],
+            "mode": mode,
+            "mode_label": _MODE_LABELS[mode],
             "paused": mode == "paused",
+            "worker_state": "available",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
             "submitted": int(service_status.get("submitted") or 0),
-            "queue": self.queue.stats(),
+            "queue": queue_stats,
+            **{
+                status: int(queue_stats.get(status, 0))
+                for status in ("queued", "running", "retrying", "completed", "failed", "cancelled")
+            },
         }
 
     def capabilities(self) -> dict[str, Any]:
+        mode = self._mode().value
+        policy = self.capture_service.policy
+        heavy_allowed = policy.permits_heavy_media()
         return {
-            "capture_mode": self._mode().value,
+            "capture_mode": mode,
+            "state": "paused" if mode == "paused" else "healthy",
             "inputs": {name: {"enabled": True, "enqueue_only": True} for name in ("text", "web", "file", "media")},
             "operations": {
                 "cancel": ["queued", "retrying"],
                 "retry": ["failed", "cancelled"],
                 "running_termination": False,
+            },
+            "file_modes": ["web_snapshot", "chatgpt_export", "codex_report"],
+            "media": {
+                "ocr": bool(policy.allow_ocr),
+                "transcription": bool(policy.allow_video_transcription),
+                "keyframes": heavy_allowed,
+                "extract_audio": heavy_allowed,
+                "reasons": {} if heavy_allowed else {"low_power": "当前采集策略禁止重媒体处理"},
             },
         }
 
@@ -261,7 +284,7 @@ class CaptureControlService:
             "error_message": _FAILED_MESSAGE if status == "failed" else None,
             "result_summary": self._result_summary(result),
             "result_refs": self._result_refs(result),
-            "file_name": Path(str(row.get("input_path") or "")).name or None,
+            "file_name": self._basename(str(row.get("input_path") or "")),
         }
 
     def _submit_path(self, payload: Mapping[str, Any], source_type: str, *, options: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -382,16 +405,31 @@ class CaptureControlService:
         return tuple(str(item) for item in value if str(item).strip())
 
     @staticmethod
-    def _result_summary(result: Mapping[str, Any]) -> dict[str, Any]:
-        allowed = ("execution_id", "source_type", "adapter", "adapter_version", "indexed", "document_count", "memory_count")
-        return {key: result[key] for key in allowed if key in result and isinstance(result[key], (str, int, float, bool, type(None)))}
+    def _basename(value: str) -> str | None:
+        if not value:
+            return None
+        windows_name = PureWindowsPath(value).name
+        posix_name = Path(value).name
+        return windows_name if "\\" in value else posix_name
 
     @staticmethod
-    def _result_refs(result: Mapping[str, Any]) -> list[dict[str, str]]:
-        refs: list[dict[str, str]] = []
-        for container in (result, result.get("structured_read_model") if isinstance(result.get("structured_read_model"), Mapping) else {}):
+    def _result_summary(result: Mapping[str, Any]) -> str | None:
+        allowed = ("execution_id", "source_type", "adapter", "adapter_version", "indexed", "document_count", "memory_count")
+        summary = {
+            key: result[key]
+            for key in allowed
+            if key in result and isinstance(result[key], (str, int, float, bool, type(None)))
+        }
+        return json.dumps(summary, ensure_ascii=False, sort_keys=True) if summary else None
+
+    @staticmethod
+    def _result_refs(result: Mapping[str, Any]) -> dict[str, str] | None:
+        refs: dict[str, str] = {}
+        structured = result.get("structured_read_model")
+        containers = (result, structured if isinstance(structured, Mapping) else {})
+        for container in containers:
             for key in ("memory_id", "source_id", "conversation_id", "message_id"):
                 value = container.get(key)
                 if isinstance(value, str) and value:
-                    refs.append({"type": key.removesuffix("_id"), "id": value})
-        return refs
+                    refs[key] = value
+        return refs or None

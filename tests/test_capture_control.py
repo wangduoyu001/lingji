@@ -105,7 +105,8 @@ def test_capture_mode_persists_pause_rejects_and_resume_restores(harness):
     settings, _, _, state_db, service = harness
     assert service.status()["capture_mode"] == "low_power"
     service.pause()
-    assert service.status()["mode"] == "PAUSED"
+    assert service.status()["mode"] == "paused"
+    assert service.status()["mode_label"] == "PAUSED"
     fresh = CaptureRuntimeSettingsStore(settings, state_db=state_db)
     assert fresh.snapshot()["values"]["capture_mode"] == "paused"
     with pytest.raises(CaptureControlError) as raised:

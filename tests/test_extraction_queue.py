@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from datetime import datetime, timedelta
@@ -119,11 +120,12 @@ class SQLiteExtractionQueueTests(unittest.TestCase):
         self.assertEqual(len(page), 2)
         self.assertEqual(self.queue.count(source_type="web", q="adapter"), 3)
         self.assertTrue(all(item["source_type"] == "web" for item in page))
-        with sqlite3.connect(self.db_path) as connection:
-            plan = connection.execute(
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            with closing(connection.execute(
                 "EXPLAIN QUERY PLAN SELECT * FROM extraction_jobs WHERE source_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
                 ("web", 2, 1),
-            ).fetchall()
+            )) as cursor:
+                plan = cursor.fetchall()
         self.assertTrue(plan)
 
 
