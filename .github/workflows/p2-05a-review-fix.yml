@@ -1,16 +1,16 @@
 name: P2-05A Coordinated Review Fix
 
 on:
-  push:
+  pull_request:
     branches:
-      - work/p2-05a-capture-control-api
+      - feature/second-brain-memory
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: p2-05a-coordinated-review
+  group: p2-05a-coordinated-review-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -18,10 +18,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout branch
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: work/p2-05a-capture-control-api
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -64,22 +62,18 @@ jobs:
       - name: Run full repository gate
         run: python -m pytest -q --tb=short
 
-      - name: Remove temporary review tooling
-        shell: pwsh
-        run: |
-          Remove-Item scripts/p2_05a_review_fix.py -ErrorAction SilentlyContinue
-          Remove-Item .github/workflows/p2-05a-patch-diagnostics.yml -ErrorAction SilentlyContinue
-          Remove-Item .github/workflows/p2-05a-review-fix.yml -ErrorAction SilentlyContinue
-
       - name: Validate diff
         shell: pwsh
         run: git diff --check
 
-      - name: Commit reviewed fixes
-        shell: pwsh
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "fix(control): align capture API integration contracts"
-          git push origin HEAD:work/p2-05a-capture-control-api
+      - name: Upload validated patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2-05a-validated-patch
+          path: |
+            src/control/api.py
+            src/control/capture.py
+            tests/test_capture_api.py
+            tests/test_capture_control.py
+            tests/test_extraction_queue.py
+          retention-days: 3
