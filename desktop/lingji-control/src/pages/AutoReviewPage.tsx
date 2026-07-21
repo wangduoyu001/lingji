@@ -10,13 +10,15 @@ import type {
   AutoReviewStatus,
 } from "./autoReviewTypes";
 
-const actionLabel = (value: string) => ({
+const ACTION_LABELS: Record<string, string> = {
   would_auto_approve: "建议自动批准",
   would_append_evidence: "建议追加证据",
   would_auto_reject_noise: "建议拒绝低价值噪声",
   requires_owner_review: "必须主人审核",
   blocked: "已阻止",
-}[value] ?? value || "未知");
+};
+
+const actionLabel = (value: string) => ACTION_LABELS[value] ?? value || "未知";
 
 const riskTone = (risk: string): "good" | "warn" | "bad" | undefined =>
   risk === "low" ? "good" : risk === "medium" ? "warn" : risk === "high" || risk === "critical" ? "bad" : undefined;
@@ -63,13 +65,14 @@ export default function AutoReviewPage({ api, active }: PageProps) {
     setActionError("");
     try {
       const candidate = await api.get<Row>(`/api/memory/review/candidates/${encodeURIComponent(id)}`);
+      const sourceRefs = Array.isArray(candidate.source_refs) ? candidate.source_refs : [];
       const result = await api.post<AutoReviewAudit>(
         `/api/auto-review/evaluate/${encodeURIComponent(id)}`,
         {
           candidate,
           context: {
             mode: "SHADOW",
-            evidence_sufficient: Array.isArray(candidate.source_refs) && candidate.source_refs.length > 0,
+            evidence_sufficient: sourceRefs.length > 0,
             owner_authored: candidate.proposed_by === "owner" || candidate.proposed_by === "owner_manual",
           },
         },
