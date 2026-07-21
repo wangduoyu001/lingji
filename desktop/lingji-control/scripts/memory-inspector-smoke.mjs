@@ -84,13 +84,16 @@ assert.equal(contract.rebuildLabel(false), "无需重建");
 assert.equal(contract.rebuildLabel(null), "未知");
 
 const page = readFileSync(new URL("../src/pages/MemoryInspectorPage.tsx", import.meta.url), "utf8");
+const loopPage = readFileSync(new URL("../src/pages/MemoryInspectorLoopPage.tsx", import.meta.url), "utf8");
 const api = readFileSync(new URL("../src/api.ts", import.meta.url), "utf8");
 const navigation = readFileSync(new URL("../src/navigation.ts", import.meta.url), "utf8");
 const routes = readFileSync(new URL("../src/AppPages.tsx", import.meta.url), "utf8");
 assert.ok(page.includes("AbortController") && page.includes("messageRequestId") && page.includes("memoryRequestId"));
 assert.ok(page.includes("row.metadata?.model") && page.includes("row.metadata?.is_branch"));
 assert.ok(page.includes("isRestricted(row)"), "restricted state must be evaluated per message row");
+assert.ok(page.includes("target?: CaptureInspectorTarget") && page.includes("target.message_id") && page.includes("target.memory_id"));
+assert.ok(loopPage.includes("<MemoryInspectorPage") && loopPage.includes("target={shortcut}"));
 assert.ok(api.includes("ApiError") && api.includes("timeoutMs") && api.includes("signal"));
-assert.ok(navigation.includes("memory_inspector") && routes.includes("<MemoryInspectorPage"));
+assert.ok(navigation.includes("memory_inspector") && routes.includes("<MemoryInspectorLoopPage"));
 
 console.log("memory-inspector-smoke: PASS");
