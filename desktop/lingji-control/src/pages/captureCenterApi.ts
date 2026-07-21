@@ -1,4 +1,5 @@
 import type { JsonObject, LingJiApi } from "../api";
+import { fileModeContract } from "./captureCenterContract";
 import type {
   CaptureCapabilitiesResponse,
   CaptureCommon,
@@ -37,7 +38,9 @@ export class CaptureCenterApi {
   }
 
   submitFile(payload: CaptureCommon & { input_path: string; source_type: string; adapter_name?: string }): Promise<CaptureSubmissionResponse> {
-    return this.api.post("/api/capture/file", body(payload));
+    const selectedMode = payload.adapter_name || payload.source_type;
+    const contract = fileModeContract(selectedMode);
+    return this.api.post("/api/capture/file", body({ ...payload, ...contract }));
   }
 
   submitMedia(payload: CaptureCommon & { input_path: string; allow_ocr: boolean; allow_transcription: boolean; extract_keyframes: boolean; extract_audio: boolean }): Promise<CaptureSubmissionResponse> {
