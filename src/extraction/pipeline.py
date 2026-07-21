@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import os
 import socket
@@ -11,6 +9,7 @@ from typing import Any, Callable, Mapping
 from uuid import uuid4
 
 from .errors import safe_extraction_error
+from .idempotency import directory_manifest, extraction_key_for_request, sha256_file
 from .models import ExtractionRequest
 from .queue import SQLiteExtractionQueue
 from .registry import AdapterRegistry
@@ -348,49 +347,28 @@ class ExtractionPipeline:
         adapter_name: str | None,
         adapter_version: str = "",
     ) -> str:
-        file_identity: dict[str, Any] = {}
-        if input_path:
-            if input_path.is_file():
-                stat = input_path.stat()
-                file_identity = {
-                    "size": stat.st_size,
-                    "sha256": self._sha256_file(input_path),
-                }
-            else:
-                file_identity = {"manifest": self._directory_manifest(input_path)}
-        material = {
-            "source_type": source_type,
-            "adapter_name": adapter_name or "",
-            "adapter_version": adapter_version,
-            "input": file_identity,
-            "payload": payload or {},
-            "options": options or {},
-        }
-        encoded = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+        """Compatibility entry point delegated to the canonical identity module."""
+
+        return extraction_key_for_request(
+            source_type=source_type,
+            adapter_name=adapter_name or "",
+            adapter_version=adapter_version,
+            input_path=input_path,
+            payload=payload,
+            effective_options=options,
+        )
 
     @staticmethod
     def _sha256_file(path: Path) -> str:
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
+        """Compatibility wrapper; new callers should import idempotency.sha256_file."""
+
+        return sha256_file(path)
 
     @staticmethod
     def _directory_manifest(path: Path) -> list[dict[str, Any]]:
-        result = []
-        for file_path in sorted(path.rglob("*")):
-            if file_path.is_file() and not file_path.is_symlink():
-                stat = file_path.stat()
-                result.append(
-                    {
-                        "path": file_path.relative_to(path).as_posix(),
-                        "size": stat.st_size,
-                        "sha256": ExtractionPipeline._sha256_file(file_path),
-                    }
-                )
-        return result
+        """Compatibility wrapper; new callers should import idempotency.directory_manifest."""
+
+        return directory_manifest(path)
 
     @staticmethod
     def _worker_id() -> str:
