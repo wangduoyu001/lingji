@@ -5,6 +5,7 @@ from pathlib import Path
 
 from src.config import settings
 from src.control.api import create_control_app
+from src.control.p2_07_api import register_p2_07_routes
 from src.control.service import LocalControlService
 from src.storage import StateDatabase
 
@@ -39,6 +40,7 @@ def main() -> None:
     state_db = StateDatabase(settings.state_db_path)
     service = LocalControlService(settings, state_db=state_db)
     app = create_control_app(settings, service=service, token=token)
+    register_p2_07_routes(app, settings, service, token=token)
     uvicorn.run(
         app,
         host=settings.control_api_host,
