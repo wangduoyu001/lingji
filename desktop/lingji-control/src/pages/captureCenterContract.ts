@@ -31,7 +31,7 @@ export const progressLabel = (job: CaptureJob): string => {
   if (typeof job.progress_current === "number" && typeof job.progress_total === "number" && job.progress_total > 0) return `${job.progress_current}/${job.progress_total}`;
   return job.progress_message || "未知";
 };
-export const safeName = (job: CaptureJob): string => job.filename || job.title || job.job_id;
+export const safeName = (job: CaptureJob): string => job.file_name || job.filename || job.title || job.job_id;
 export const resultTarget = (job: CaptureJob): CaptureResultRefs | null => job.result_refs && Object.values(job.result_refs).some(Boolean) ? job.result_refs : null;
 
 const extension = (path: string): string => path.split(/[\\/]/).pop()?.toLowerCase().split(".").pop() || "";
@@ -39,10 +39,19 @@ export const acceptsFileMode = (path: string, mode: string): boolean => {
   const ext = extension(path);
   if (mode === "chatgpt_export") return ["zip", "json"].includes(ext);
   if (mode === "codex_report") return ext === "json";
-  return ["html", "htm", "json", "txt"].includes(ext);
+  return ["html", "htm", "json", "txt", "md"].includes(ext);
 };
-export const acceptsMedia = (path: string): boolean => ["mp3", "wav", "m4a", "mp4", "mov", "mkv", "webm", "jpg", "jpeg", "png", "webp"].includes(extension(path));
+export const acceptsMedia = (path: string): boolean => [
+  "mp4", "mov", "mkv", "avi", "webm", "m4v", "flv", "ts", "mts", "m2ts",
+  "mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "wma",
+].includes(extension(path));
 export const fileNameOnly = (path: string): string => path.split(/[\\/]/).pop() || "未选择文件";
+
+export const fileModeContract = (mode: string): { source_type: string; adapter_name: string } => {
+  if (mode === "chatgpt_export") return { source_type: "chatgpt_export", adapter_name: "chatgpt_export" };
+  if (mode === "codex_report") return { source_type: "codex_report", adapter_name: "codex_work_report" };
+  return { source_type: "web", adapter_name: "web_capture" };
+};
 
 export const validateUrl = (value: string): string | null => {
   try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) ? null : "仅支持 HTTP 或 HTTPS URL"; }
