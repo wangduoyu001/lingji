@@ -1,0 +1,75 @@
+name: Update P2-05 Validated Documentation V2
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/p2-05-update-docs-v2.yml
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: p2-05-update-docs
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: work/p2-05-integrated-validation
+          path: integration
+          fetch-depth: 0
+
+      - name: Checkout documentation updater
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          path: control
+          sparse-checkout: |
+            scripts/ci/p2_05_update_docs.py
+          sparse-checkout-cone-mode: false
+
+      - name: Generate and push documentation
+        id: docs
+        continue-on-error: true
+        working-directory: integration
+        run: |
+          set -euo pipefail
+          if [ ! -f docs/TEST_REPORTS/P2_05_INTEGRATED_VALIDATION_REPORT.md ]; then
+            python ../control/scripts/ci/p2_05_update_docs.py
+          fi
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/PROJECT_STATUS.md docs/MODULES/CODE_MAP.md docs/CHANGELOG.md docs/MODULES/P2_05_INTEGRATED_IMPLEMENTATION.md docs/TEST_REPORTS/P2_05_INTEGRATED_VALIDATION_REPORT.md
+          if git diff --cached --quiet; then
+            echo "documentation already current" > ../p2-05-doc-status.txt
+          else
+            git commit -m "docs(p2-05): record integrated validation"
+            git push origin HEAD:work/p2-05-integrated-validation
+            echo "documentation committed and pushed" > ../p2-05-doc-status.txt
+          fi
+
+      - name: Publish result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.docs.outcome }}
+        run: |
+          DETAILS=$(cat p2-05-doc-status.txt 2>/dev/null || echo "documentation update did not produce a status file")
+          gh issue comment 10 --repo ${{ github.repository }} --body "## P2-05 Documentation Finalizer
+
+Outcome: **${OUTCOME}**
+
+${DETAILS}"
+
+      - name: Enforce result
+        if: always()
+        run: test "${{ steps.docs.outcome }}" = "success"
