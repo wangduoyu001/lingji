@@ -1,7 +1,10 @@
 import json
+import os
+import string
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.config import Settings
 from src.runtime.workspace import (
@@ -11,12 +14,24 @@ from src.runtime.workspace import (
 )
 
 
+def _synthetic_non_system_windows_root() -> Path:
+    system_drive = str(os.environ.get("SystemDrive", "C:")).rstrip("\\/").casefold()
+    drive = next(
+        f"{letter}:"
+        for letter in string.ascii_uppercase
+        if f"{letter}:".casefold() != system_drive
+    )
+    return Path(drive + "\\LingJiSyntheticTest")
+
+
 class WorkspaceContractTests(unittest.TestCase):
     def setUp(self):
-        import platform, uuid
+        import platform
+        import uuid
+
         if platform.system() == "Windows":
             self._managed = None
-            self.root = Path(f"D:\\LingJiTest\\{uuid.uuid4().hex}")
+            self.root = _synthetic_non_system_windows_root() / uuid.uuid4().hex
         else:
             self._managed = tempfile.TemporaryDirectory()
             self.root = Path(self._managed.name)
@@ -46,6 +61,7 @@ class WorkspaceContractTests(unittest.TestCase):
         self.assertNotEqual(production.state_db_path, acceptance.state_db_path)
         self.assertNotEqual(production.memory_db_path, acceptance.memory_db_path)
         self.assertNotEqual(production.queue_db_path, acceptance.queue_db_path)
+        self.assertNotEqual(production.backup_path, acceptance.backup_path)
         self.assertNotEqual(production.reports_path, acceptance.reports_path)
         self.assertNotEqual(production.temp_path, acceptance.temp_path)
         for left in production.mutable_paths().values():
@@ -54,6 +70,48 @@ class WorkspaceContractTests(unittest.TestCase):
         json.dumps(production.to_dict())
         self.assertFalse(production.storage_path.exists())
         self.assertFalse(acceptance.storage_path.exists())
+
+    def test_default_backup_path_is_storage_backups(self):
+        context = WorkspaceResolver.resolve(
+            self.settings,
+            "production",
+            environ={},
+            project_root=self.root,
+        )
+        self.assertEqual(context.backup_path, context.storage_path / "backups")
+
+    def test_workspace_backup_environment_override(self):
+        target = self.root / "external-backup"
+        context = WorkspaceResolver.resolve(
+            self.settings,
+            "production",
+            environ={"LINGJI_PRODUCTION_BACKUP": str(target)},
+            project_root=self.root,
+        )
+        self.assertEqual(context.backup_path, target.resolve())
+
+    def test_settings_backup_path_defaults_to_legacy_storage_backups(self):
+        settings = Settings(_env_file=None, storage_dir="storage", backup_dir="")
+        self.assertEqual(settings.backup_path, Path("storage/backups").resolve())
+
+    def test_settings_backup_path_preserves_explicit_relative_and_absolute_values(self):
+        relative = Settings(_env_file=None, backup_dir="owner/backups")
+        self.assertEqual(relative.backup_path, Path("owner/backups").resolve())
+        absolute_target = (self.root / "absolute-backup").resolve()
+        absolute = Settings(_env_file=None, backup_dir=str(absolute_target))
+        self.assertEqual(absolute.backup_path, absolute_target)
+
+    def test_settings_backup_environment_override_remains_compatible(self):
+        target = (self.root / "environment-backup").resolve()
+        with patch.dict(os.environ, {"BACKUP_DIR": str(target)}, clear=False):
+            settings = Settings(_env_file=None)
+        self.assertEqual(settings.backup_path, target)
+
+    def test_settings_default_contains_no_machine_specific_backup_path(self):
+        settings = Settings(_env_file=None)
+        normalized = str(settings.backup_dir).replace("\\", "/").casefold()
+        self.assertNotIn("d:/codex", normalized)
+        self.assertNotIn("/users/", normalized)
 
     def test_resolution_precedence_is_override_then_environment_then_settings(self):
         self.settings.production_vault_dir = "settings-vault"
