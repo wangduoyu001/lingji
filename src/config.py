@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     vault_dir: str = "vault"
     storage_dir: str = "storage"
     snapshot_dir: str = "snapshot"
-    backup_dir: str = "D:/codex/backups/pemis"
+    backup_dir: str = ""
     log_dir: str = "logs"
     safety_mode: str = "NORMAL"
     topk_normal: int = 10
@@ -145,7 +145,9 @@ class Settings(BaseSettings):
 
     @property
     def backup_path(self) -> Path:
-        return Path(self.backup_dir).expanduser()
+        configured = str(self.backup_dir or "").strip()
+        base = Path(configured).expanduser() if configured else self.storage_path / "backups"
+        return base.resolve(strict=False)
 
     @property
     def log_path(self) -> Path:
