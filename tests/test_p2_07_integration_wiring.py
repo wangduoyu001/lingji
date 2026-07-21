@@ -76,7 +76,7 @@ def test_route_registration_is_lazy_and_auth_precedes_runtime(monkeypatch):
         token="secret-token",
     )
 
-    paths = {route.path for route in app.routes}
+    paths = {route.path for route in app.routes if hasattr(route, "path")}
     assert "/api/codex/current" in paths
     assert "/api/context/project" in paths
     assert "/api/memory/review/candidates" in paths
