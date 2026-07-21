@@ -2,15 +2,15 @@
 
 > Updated（更新时间）: 2026-07-21  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Formal Integration Commit（正式集成提交）: `41a5264b344d24300ab731dffc19985402f5b24e`  
-> Integrated Development Branch（集成开发分支）: `work/p2-04-integrated-validation`  
-> Integrated Base Commit（集成基础提交）: `432ae059454cc7db8ab0ba4aaa63d24f5c9173e9`  
-> Verified Code Commit（已验证代码提交）: `2688b8b2521890af852b049e78795cffade43584`  
+> Current Formal HEAD（当前正式提交）: `43dfbd2fdfc2f81545e825fa21328e72153eeddb`  
+> P0 Validation Branch（P0 验证分支）: `work/p0-engineering-hygiene`  
+> P0 Verified Code Commit（P0 已验证代码提交）: `08b507c2855e05a1d971cb2bcae5c8d2fea578eb`  
+> P0 Status（P0 状态）: `FOCUSED_TESTED_AWAITING_FORMAL_MERGE`  
 > P2-03 Status（P2-03 状态）: `MERGED_AND_VALIDATED`  
 > P2-03B Status（P2-03B 状态）: `MERGED_AND_VALIDATED`  
 > P2-03C Status（P2-03C 状态）: `MERGED_AND_VALIDATED`  
 > P2-04 Status（P2-04 状态）: `MERGED_AND_VALIDATED`  
-> Integrated Merge State（集成合并状态）: `MERGED_AND_VALIDATED`
+> P2-05 Status（P2-05 状态）: `PLANNED_BLOCKED_UNTIL_P0_MERGE`
 
 ## 1. 产品与代码主线
 
@@ -25,7 +25,7 @@ second_brain/
 = Compatibility/Migration Runtime（兼容与迁移运行层）
 ```
 
-P2-03 至 P2-04 已完成联合开发、返工、集成、本机集中验证，并以安全 fast-forward 方式进入正式分支。未执行 rebase 或 force push。
+`second_brain/` 不再接收新的正式产品能力，只保留兼容、迁移和待退役实现。
 
 ## 2. 数据权威
 
@@ -47,248 +47,199 @@ Qdrant
 = 可重建 Semantic Index（语义索引）
 ```
 
-`second_brain.sqlite3` 仍是 Compatibility Data（兼容数据）和迁移证据，不是长期事实源。
+SQLite、Qdrant、Read Model 都是可重建派生数据，不得取代 Obsidian Vault + Git 的永久知识权威。
 
 ## 3. 已完成并验证阶段
 
 ```text
-P0 Workspace/Port Contract（工作区与端口合同）  MERGED_AND_VALIDATED
-P1 Unified Semantic Memory（统一语义记忆）      MERGED_AND_VALIDATED
-P2-01 Vector Center（向量中心）                 MERGED_AND_VALIDATED
-P2-02 Collection Migration（向量集合迁移）      MERGED_AND_VALIDATED
-P2-03 Structured Read Model（结构化读取模型）    MERGED_AND_VALIDATED
-P2-03B Structured Ingestion Wiring（结构化采集接线） MERGED_AND_VALIDATED
-P2-03C Capture Sources Foundation（信息入口基础） MERGED_AND_VALIDATED
-P2-04 Memory Inspector UI（记忆检查器）          MERGED_AND_VALIDATED
+P0 Workspace/Port Contract（工作区与端口合同）       MERGED_AND_VALIDATED
+P1 Unified Semantic Memory（统一语义记忆）           MERGED_AND_VALIDATED
+P2-01 Vector Center（向量中心）                      MERGED_AND_VALIDATED
+P2-02 Collection Migration（向量集合迁移）           MERGED_AND_VALIDATED
+P2-03 Structured Read Model（结构化读取模型）         MERGED_AND_VALIDATED
+P2-03B Structured Ingestion Wiring（结构化采集接线）  MERGED_AND_VALIDATED
+P2-03C Capture Sources Foundation（信息入口基础）      MERGED_AND_VALIDATED
+P2-04 Memory Inspector UI（记忆检查器）               MERGED_AND_VALIDATED
 ```
 
 Production bge-m3 Switch（生产模型切换）和生产 Collection（向量集合）重建仍未执行。
 
-## 4. P2-03 Structured Read Model
+## 4. P0 Engineering Hygiene
 
 状态：
 
 ```text
-MERGED_AND_VALIDATED
+FOCUSED_TESTED_AWAITING_FORMAL_MERGE
 ```
 
-已实现并验证：
+已完成：
 
-- Source/Conversation/Message（来源、对话、消息）派生表。
-- Stable ID（稳定标识符）和 Idempotent Upsert（幂等更新或插入）。
-- Privacy Filter（隐私过滤）和 Agent Scope（智能体范围）。
-- `privacy_inherited`、`projects_inherited`、`agent_scope_inherited`。
-- Source→Conversation 与 Conversation→Message 权限同步。
-- 显式子级权限保护。
-- Schema Version（数据库结构版本）验证。
-- Message→Memory→Chunk→Vector 只读关联。
-- `rebuild_required` true/false/null 三态。
-- Inspector 503 稳定错误和路径脱敏。
-- HTTP/HTTPS URL 认证信息和敏感查询参数脱敏。
-- 只读 `/api/memory/inspector/*` GET API。
+- 删除 `src/config.py` 中机器专属 D 盘备份默认值。
+- 未配置备份目录时统一使用 `<storage_path>/backups`。
+- 保留 Workspace、环境变量和用户显式配置优先级。
+- Obsidian CLI 改为环境、PATH 和平台标准目录探测。
+- Windows 支持 `%LOCALAPPDATA%\Programs\Obsidian` 等标准路径。
+- Vault 名称由显式环境变量或 Vault 目录名推导。
+- 增加 Windows Python 3.12 和 Linux Python 3.13 依赖约束。
+- 建立核心、UI、媒体、MCP 和测试依赖所有权。
+- 删除启动文件逐字比较测试，改为行为和 AST 合同测试。
+- 建立 Windows 测试专用 Workspace 临时根放行机制。
+- 保留生产 `C:\` 系统盘拒绝保护和专用验证测试。
+- Qdrant 单元测试使用确定性的 in-memory 合同。
+- Brain Status API 测试不再启动真实端口或真实硬件探测。
+- 新增 Windows GitHub Actions 自动门禁。
 
-正式单一实现：
+## 5. P2-03 Structured Read Model
+
+状态：`MERGED_AND_VALIDATED`
+
+已实现：
+
+- Source、Conversation、Message 派生表。
+- Stable ID 和幂等 Upsert。
+- Privacy、Project、Agent Scope 权限继承和显式覆盖。
+- Message→Memory→Chunk→Vector 只读关系。
+- Read Model Schema Version 验证。
+- Inspector 503 稳定错误与路径脱敏。
+- 只读 `/api/memory/inspector/*` API。
+
+正式入口：
 
 ```text
 src/sources/read_model.py::SourceReadModel
+src/sources/service.py::SourceQueryService
 src/gateway/memory_inspector.py::MemoryInspectorFacade
 src/control/api.py::create_control_app
 ```
 
-## 5. P2-03B Structured Ingestion Wiring
+## 6. P2-03B Structured Ingestion Wiring
 
-状态：
+状态：`MERGED_AND_VALIDATED`
 
-```text
-MERGED_AND_VALIDATED
-```
-
-当前正式数据流：
+正式数据流：
 
 ```text
-Raw Snapshot（原始快照）
--> Adapter（适配器）
--> Vault write（知识库写入）
--> on_documents_written
+Raw Snapshot
+-> Adapter
+-> Vault write
 -> StructuredReadModelSink
 -> SourceReadModel.upsert_bundle()
--> Audit Event（审计事件）
+-> Memory Index
+-> Audit Event
 ```
 
-已实现并验证：
+已验证：
 
-- `StructuredMessage`、`StructuredConversation`、`StructuredSource`。
-- ChatGPT Adapter 同时生成 Markdown 和结构化消息。
-- Raw/Vault 安全相对引用。
-- Structured Sink 幂等写入 Read Model。
-- 每条 Message 优先使用自身 `document_stable_id` 建立 Memory Link。
-- Memory Link 缺失时只跳过对应 Message，不影响其他 Message。
-- Structured Sink 失败不回滚 Raw/Vault。
-- `StateDatabase.append_event()` 正式审计事件接线。
-- Audit Event 写入失败不影响采集主流程。
-- Vector Provider 和 Snapshot 错误只返回稳定摘要，不泄漏本机路径。
+- ChatGPT Markdown 与结构化 Source/Conversation/Message 同步生成。
+- Raw/Vault 使用安全相对引用。
+- Sink 幂等写入。
+- Message 级 Memory Link。
+- Sink 或 Audit 失败不回滚 Raw/Vault。
+- 外部错误摘要不泄露绝对路径和异常原文。
 
-## 6. P2-03C Capture Sources Foundation
+## 7. P2-03C Capture Sources Foundation
 
-状态：
+状态：`MERGED_AND_VALIDATED`
 
-```text
-MERGED_AND_VALIDATED
-```
+已实现：
 
-已实现并验证：
+- `src/capture/` 统一入口模型、Policy、去重和服务合同。
+- Capture 负责入口和调度，Extraction 负责解析和写入。
+- LOW_POWER、NORMAL、DEEP_CAPTURE、PAUSED 模式。
+- 文件、网页和文本稳定去重。
+- `probe -> success -> commit` 两阶段去重。
+- `process_later=True` 强制排队。
+- Metadata 递归敏感字段检查。
+- 手机分享和浏览器扩展只保留后端合同，客户端暂缓。
 
-- `src/capture/` 统一入口模型、策略、去重、服务和监听器合同。
-- Capture 只负责入口合同和调度，Extraction 负责解析和写入。
-- LOW_POWER、NORMAL、DEEP_CAPTURE、PAUSED 四种模式。
-- 全局键盘监听、全屏截图监听默认关闭。
-- 文件、网页、文本稳定去重。
-- 去重采用 `probe -> Pipeline success -> commit`，失败后允许重试。
-- 手机分享和浏览器扩展仅保留后端合同，客户端暂不开发。
-- Codex、Web、Media 显式启用结构化回退。
-- 未知 Adapter 默认不自动包装。
-- Metadata 递归敏感字段检查，不能覆盖保留字段。
-- `process_later=True` 强制进入队列。
+## 8. P2-04 Memory Inspector Desktop UI
 
-## 7. P2-04 Memory Inspector Desktop UI
+状态：`MERGED_AND_VALIDATED`
 
-状态：
+已实现：
 
-```text
-MERGED_AND_VALIDATED
-```
-
-已实现并验证：
-
-- Desktop 侧边栏新增“记忆检查器”。
 - Source、Conversation、Message、Memory、Chunk、Vector 关系查看。
-- 后端分页、筛选、搜索防抖、请求取消和竞态保护。
-- Message→Memory 关系、Memory Source、Vector 状态展示。
-- `rebuild_required` true/false/null 三态显示。
-- restricted 内容列表隐藏摘要，详情默认折叠。
-- 401、503、网络不可用、空数据和筛选无结果状态区分。
-- Memory Source 使用 `canonical.citations` 数组。
-- Chunk 数量使用 `chunk_count -> chunks.length -> 未知` 回退。
-- `memoryInspectorContract.ts` 已移除 `ts-nocheck`。
-- TypeScript Build、Smoke Tests 和 Vite Build 均通过。
+- 分页、筛选、搜索防抖、请求取消和竞态保护。
+- Message→Memory、Memory Source、Vector 状态展示。
+- `rebuild_required` true/false/null 三态。
+- restricted 内容保护。
+- 401、503、网络不可用、空数据和无筛选结果状态。
+- TypeScript、Smoke Test 和 Vite Build 全部通过。
 
-## 8. 统一异常脱敏
+## 9. P0 最终门禁结果
 
-唯一正式工具：
+### Windows Python 3.12
 
 ```text
-src/extraction/errors.py::safe_extraction_error
+Dependency install: PASS
+pip check: PASS
+validate_clean_install: PASS
+compileall: PASS
 ```
 
-使用位置：
+### Full Repository Pytest
 
 ```text
-src/extraction/pipeline.py
-src/extraction/adapters/chatgpt.py
-src/extraction/structured_sink.py
-```
-
-对外稳定摘要：
-
-```text
-Post-extraction index synchronization failed; see local logs
-<conversation_id>: conversation extraction failed; see local logs
-structured read model write failed; see local logs
-Vector status unavailable; see local logs
-```
-
-完整异常只进入本地 logger，不得进入 API response、`batch.warnings`、`index_error` 或 Vector HTTP 200 响应。
-
-## 9. 集成测试结果
-
-### 9.1 Python 语法检查
-
-```text
-python -m compileall
-PASS
-exit code: 0
-```
-
-### 9.2 遗漏历史回归组
-
-```text
-collected: 20
-passed: 20
+collected: 370
+passed: 359
 failed: 0
-skipped: 0
-duration: 8.05s
+skipped: 11
+warnings: 2
+duration: 63.24s
 exit code: 0
 ```
 
-### 9.3 最终里程碑门禁集合
+### Desktop
 
 ```text
-collected: 91
-passed: 91
-failed: 0
-skipped: 0
-duration: 11.30s
-exit code: 0
-```
-
-### 9.4 Frontend 门禁
-
-```text
-test:inspector: PASS
-test:smoke: PASS（6/6）
-tsc -b: PASS（0 errors）
+npm ci: PASS
+npm run test:smoke: PASS
 npm run build: PASS
+exit code: 0
 ```
 
-### 9.5 Full Repository Pytest
+完整报告：
 
 ```text
-collected: 338
-passed: 306
-failed: 19
-skipped: 13
-duration: 45.99s
+docs/TEST_REPORTS/P0_ENGINEERING_HYGIENE_TEST_REPORT.md
 ```
 
-19 个失败属于里程碑门禁外的环境相关测试：
-
-- `test_qdrant_semantic_provider.py`: 7，测试环境未启动 Qdrant。
-- `test_memory_capability_contract.py`: 6，Windows `C:\Temp` 系统盘限制。
-- `test_semantic_runtime_wiring.py`: 5，Windows `C:\Temp` 系统盘限制。
-- `test_status_snapshot_wiring.py`: 1，Windows `C:\Temp` 系统盘限制。
-
-这些失败不属于 P2-03 → P2-04 目标门禁；目标门禁 91/91 全部通过。
-
-## 10. 数据安全
+## 10. 安全状态
 
 ```text
-读取 Production ChatGPT 正文: NO
-修改 Production Vault: NO
-修改 Production SQLite: NO
-访问 Production Qdrant: NO
-启动 Production Qdrant: NO
-启动 Ollama: NO
-启动 Tauri: NO
-切换生产模型: NO
-创建或删除生产 Collection: NO
-修改数据库 Schema: NO
+Production ChatGPT 正文读取: NO
+Production Vault 修改: NO
+Production SQLite 修改: NO
+Production Qdrant 访问: NO
+Qdrant Server 启动: NO
+Ollama 启动: NO
+生产模型切换: NO
+数据库 Schema 修改: NO
+rebase: NO
+force push: NO
 ```
 
-## 11. 当前状态
+## 11. 当前合并状态
 
 ```text
-P2-03:  MERGED_AND_VALIDATED
-P2-03B: MERGED_AND_VALIDATED
-P2-03C: MERGED_AND_VALIDATED
-P2-04:  MERGED_AND_VALIDATED
+P0 Engineering Hygiene:
+READY_FOR_FORMAL_MERGE
 
-Integrated Merge State:
-MERGED_AND_VALIDATED
+P2-05:
+BLOCKED_UNTIL_P0_FORMAL_MERGE
 ```
 
-## 12. 下一阶段边界
+## 12. 下一步
 
-用户已明确暂不开发：
+```text
+合并 P0 到 feature/second-brain-memory
+-> 更新 CHANGELOG
+-> 关闭 Issue #9
+-> 将三个 P2-05 分支移动到统一正式基线
+-> 启动 P2-05A / P2-05B / P2-05C 并行开发
+```
+
+当前明确不开发：
 
 ```text
 系统监听
@@ -296,16 +247,5 @@ MERGED_AND_VALIDATED
 文件夹监听
 手机分享客户端
 浏览器插件
+平台专用自动采集客户端
 ```
-
-下一阶段聚焦：
-
-```text
-P2-05 Manual Capture Center（手动信息入口中心）
--> Capture Control API
--> 任务状态持久化
--> 手动文本、网页、文件、媒体导入
--> Desktop 任务进度与结果跳转
-```
-
-正式分支后续开发必须从当前 `feature/second-brain-memory` 最新提交创建新分支。

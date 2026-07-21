@@ -1,4 +1,5 @@
 import tempfile
+from tests.fixtures.workspace_paths import allow_test_workspace_root
 import unittest
 from pathlib import Path
 
@@ -11,7 +12,11 @@ from tests.fixtures.memory_capability import (
 class LexicalMemoryCapabilityContractTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
-        fixtures = build_workspace_memory_fixtures(Path(self.temp_dir.name))
+        root = Path(self.temp_dir.name)
+        self._allow_cm = allow_test_workspace_root(root)
+        self._allow_cm.__enter__()
+        self.addCleanup(self._allow_cm.__exit__, None, None, None)
+        fixtures = build_workspace_memory_fixtures(root)
         self.production = fixtures["production"]
         self.acceptance = fixtures["acceptance"]
 

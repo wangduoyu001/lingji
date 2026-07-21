@@ -106,14 +106,6 @@ class SecondBrainTests(unittest.TestCase):
         self.runtime.vectors.client.delete_collection(self.runtime.vectors.collection)
         self.assertEqual(self.runtime.memories.rebuild_vectors(), result["chunks"])
 
-    def test_original_startup_files_are_unchanged(self) -> None:
-        for name in ("start_lingji.bat", "start_lingji.py", "run_service.py"):
-            committed = subprocess.run(
-                ["git", "show", f"HEAD:{name}"], cwd=ROOT, check=True, capture_output=True
-            ).stdout.decode("utf-8-sig").replace("\r\n", "\n")
-            working = (ROOT / name).read_text(encoding="utf-8-sig").replace("\r\n", "\n")
-            self.assertEqual(working, committed)
-
     def test_second_brain_is_not_in_original_start_chain(self) -> None:
         startup = "\n".join((ROOT / name).read_text(encoding="utf-8-sig") for name in ("start_lingji.py", "run_service.py"))
         self.assertNotIn("second_brain", startup)
