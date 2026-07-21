@@ -60,6 +60,7 @@ class LingJiService:
 
             self.core = PEMISCore()
             self.core.start()
+            logger.info("Runtime component: core service started")
             self.local_control = LocalControlService(settings, state_db=self.core.state_db)
             self.extraction_pipeline = build_extraction_pipeline(
                 settings,
@@ -92,6 +93,9 @@ class LingJiService:
                     batch_size=settings.extraction_batch_size,
                 )
                 self.extraction_worker.start()
+                logger.info("Runtime component: extraction worker started")
+            else:
+                logger.info("Runtime component: extraction worker disabled by configuration")
             self.running = True
             if self.health_report:
                 self.core.state_db.append_event(
@@ -100,6 +104,12 @@ class LingJiService:
                     "lingji",
                     self.health_report,
                 )
+            logger.info(
+                "Runtime component: control API %s:%s is not started by run_service.py",
+                settings.control_api_host,
+                settings.control_api_port,
+            )
+            logger.info("Start the local control API separately with: python run_control_api.py")
             logger.info("LingJi service started successfully")
         except Exception:
             if self.extraction_worker:
