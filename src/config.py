@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     llm_model: str = "qwen3:8b"
     fallback_llm: str = "qwen3:8b"
-    embed_model: str = "nomic-embed-text"
+    embed_model: str = "bge-m3"
     fallback_embed_model: str = "nomic-embed-text"
     ollama_base_url: str = "http://127.0.0.1:11434"
     embedding_provider: str = "ollama"
