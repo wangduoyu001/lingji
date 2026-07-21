@@ -47,26 +47,46 @@ jobs:
         run: python scripts/p2_05a_review_fix.py
 
       - name: Compile focused files
-        run: python -m compileall -q src/control src/extraction/queue.py tests/test_capture_control.py tests/test_capture_api.py tests/test_extraction_queue.py
+        id: compile
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          python -m compileall -q src/control src/extraction/queue.py tests/test_capture_control.py tests/test_capture_api.py tests/test_extraction_queue.py *> compile.log
+          $exitCode = $LASTEXITCODE
+          Get-Content compile.log
+          exit $exitCode
 
       - name: Run required five-file gate
-        run: >-
-          python -m pytest
-          tests/test_capture_control.py
-          tests/test_capture_api.py
-          tests/test_control_api.py
-          tests/test_extraction_queue.py
-          tests/test_capture_service.py
-          -v --tb=short
+        id: focused
+        if: steps.compile.outcome == 'success'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          python -m pytest tests/test_capture_control.py tests/test_capture_api.py tests/test_control_api.py tests/test_extraction_queue.py tests/test_capture_service.py -v --tb=short *> focused.log
+          $exitCode = $LASTEXITCODE
+          Get-Content focused.log -Tail 240
+          exit $exitCode
 
       - name: Run full repository gate
-        run: python -m pytest -q --tb=short
+        id: full
+        if: steps.focused.outcome == 'success'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          python -m pytest -q --tb=short *> full.log
+          $exitCode = $LASTEXITCODE
+          Get-Content full.log -Tail 240
+          exit $exitCode
 
       - name: Validate diff
+        id: diff
+        if: always()
+        continue-on-error: true
         shell: pwsh
         run: git diff --check
 
-      - name: Upload validated patch
+      - name: Upload patch and logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: p2-05a-validated-patch
@@ -76,4 +96,20 @@ jobs:
             tests/test_capture_api.py
             tests/test_capture_control.py
             tests/test_extraction_queue.py
+            compile.log
+            focused.log
+            full.log
+          if-no-files-found: warn
           retention-days: 3
+
+      - name: Enforce result
+        if: always()
+        shell: pwsh
+        env:
+          COMPILE: ${{ steps.compile.outcome }}
+          FOCUSED: ${{ steps.focused.outcome }}
+          FULL: ${{ steps.full.outcome }}
+          DIFF: ${{ steps.diff.outcome }}
+        run: |
+          Write-Host "compile=$env:COMPILE focused=$env:FOCUSED full=$env:FULL diff=$env:DIFF"
+          if ($env:COMPILE -ne "success" -or $env:FOCUSED -ne "success" -or $env:FULL -ne "success" -or $env:DIFF -ne "success") { exit 1 }
