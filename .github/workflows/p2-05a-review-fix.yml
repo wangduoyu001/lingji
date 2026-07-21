@@ -43,6 +43,16 @@ jobs:
             -c constraints/python-3.12-windows.txt
           python -m pip check
 
+      - name: Fix replacement escaping
+        shell: pwsh
+        run: |
+          $path = "scripts/p2_05a_review_fix.py"
+          $text = Get-Content $path -Raw
+          $old = "re.subn(pattern, replacement, text, count=1, flags=re.S)"
+          $new = "re.subn(pattern, lambda _match: replacement, text, count=1, flags=re.S)"
+          if (-not $text.Contains($old)) { throw "replace_pattern implementation not found" }
+          Set-Content -Path $path -Value ($text.Replace($old, $new)) -Encoding utf8NoBOM
+
       - name: Apply coordinated fixes
         run: python scripts/p2_05a_review_fix.py
 
@@ -58,10 +68,10 @@ jobs:
 
       - name: Run required five-file gate
         id: focused
-        if: steps.compile.outcome == 'success'
         continue-on-error: true
         shell: pwsh
         run: |
+          if ("${{ steps.compile.outcome }}" -ne "success") { Write-Host "compile failed; focused skipped"; exit 1 }
           python -m pytest tests/test_capture_control.py tests/test_capture_api.py tests/test_control_api.py tests/test_extraction_queue.py tests/test_capture_service.py -v --tb=short *> focused.log
           $exitCode = $LASTEXITCODE
           Get-Content focused.log -Tail 240
@@ -69,10 +79,10 @@ jobs:
 
       - name: Run full repository gate
         id: full
-        if: steps.focused.outcome == 'success'
         continue-on-error: true
         shell: pwsh
         run: |
+          if ("${{ steps.focused.outcome }}" -ne "success") { Write-Host "focused failed; full skipped"; exit 1 }
           python -m pytest -q --tb=short *> full.log
           $exitCode = $LASTEXITCODE
           Get-Content full.log -Tail 240
