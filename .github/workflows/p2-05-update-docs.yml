@@ -1,0 +1,56 @@
+name: Update P2-05 Validated Documentation
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/p2-05-update-docs.yml
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: work/p2-05-integrated-validation
+          path: integration
+          fetch-depth: 0
+
+      - name: Checkout documentation updater
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          path: control
+          sparse-checkout: |
+            scripts/ci/p2_05_update_docs.py
+          sparse-checkout-cone-mode: false
+
+      - name: Update authoritative documentation
+        working-directory: integration
+        run: python ../control/scripts/ci/p2_05_update_docs.py
+
+      - name: Validate documentation diff
+        working-directory: integration
+        run: git diff --check
+
+      - name: Commit and push documentation
+        working-directory: integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/PROJECT_STATUS.md docs/MODULES/CODE_MAP.md docs/CHANGELOG.md docs/MODULES/P2_05_INTEGRATED_IMPLEMENTATION.md docs/TEST_REPORTS/P2_05_INTEGRATED_VALIDATION_REPORT.md
+          git commit -m "docs(p2-05): record integrated validation"
+          git push origin HEAD:work/p2-05-integrated-validation
+
+      - name: Publish documentation status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 10 --repo ${{ github.repository }} --body "P2-05 authoritative implementation report, validation report, PROJECT_STATUS, CODE_MAP, and CHANGELOG were updated on the integration branch. Status: READY_FOR_FORMAL_MERGE."
