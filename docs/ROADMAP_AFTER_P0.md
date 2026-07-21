@@ -2,7 +2,8 @@
 
 > Updated: 2026-07-21  
 > Formal Branch: `feature/second-brain-memory`  
-> Current Gate: P0 Engineering Hygiene must pass before P2-05 starts.  
+> Current Stage: `P2-05 Manual Capture Center`  
+> P0 Formal Merge Commit: `d2a605e463552cb982342bdb2376da8aad1b36b5`  
 > Scope Decision: no system listener, clipboard listener, folder listener, mobile share client, or browser extension in the current roadmap.
 
 ## 1. Current Position
@@ -10,6 +11,7 @@
 Completed and merged:
 
 - P0 Workspace/Port Contract
+- P0 Engineering Hygiene
 - P1 Unified Semantic Memory
 - P2-01 Vector Center
 - P2-02 Collection Migration
@@ -18,13 +20,23 @@ Completed and merged:
 - P2-03C Capture Sources Foundation
 - P2-04 Memory Inspector Desktop UI
 
-Current blocking work:
+P0 final Windows gate:
 
-- P0 Engineering Hygiene final Windows validation
-- portable paths
-- reproducible dependency baselines
-- startup contract tests
-- complete repository test baseline
+```text
+Python 3.12 clean install: PASS
+pip check: PASS
+clean-install validator: PASS
+compileall: PASS
+full pytest: 359 passed / 11 skipped / 0 failed
+Desktop smoke: PASS
+Desktop build: PASS
+```
+
+Current product work:
+
+```text
+P2-05 Manual Capture Center
+```
 
 ## 2. Remaining Product Stages
 
@@ -165,7 +177,7 @@ Typical safe model:
 
 Five engineers are only reasonable when at least two workstreams are isolated adapters, evaluation, documentation, or test infrastructure.
 
-More than five active writers is not recommended because the following files and contracts are shared hotspots:
+More than five active writers is not recommended because these contracts are shared hotspots:
 
 - `src/control/api.py`
 - `src/control/service.py`
@@ -185,7 +197,7 @@ More than five active writers is not recommended because the following files and
 4. Shared status documents are updated only by the integration branch.
 5. No rebase or force push during coordinated development.
 6. Each large task includes implementation documentation and a test report.
-7. A stage is merged only after targeted tests, build gates, and integration tests pass.
+7. A stage is merged only after targeted tests, build gates, integration tests, and required CI checks pass.
 8. Full-suite failures must be classified precisely; environment-specific failures cannot be described as an all-green run.
 
 ## 5. Rough Completion Estimate
@@ -200,21 +212,19 @@ Relative to the complete Personal Memory OS vision:
 
 Estimated current completion:
 
-- core memory-platform foundation: 65 to 75 percent
-- usable second-brain MVP: 40 to 50 percent
-- full long-term Personal Memory OS vision: 25 to 35 percent
+- core memory-platform foundation: 70 to 80 percent
+- usable second-brain MVP: 45 to 55 percent
+- full long-term Personal Memory OS vision: 30 to 40 percent
 
 These percentages are planning estimates, not test metrics.
 
 ## 6. Immediate Sequence
 
 ```text
-P0 Windows final gate
--> merge P0
--> move P2-05 branches to the verified base
--> run three P2-05 implementation branches in parallel
--> integration review and test
--> formal merge
+move P2-05 branches to one verified formal base
+-> run P2-05A / P2-05B / P2-05C in parallel
+-> integration review and Windows test gate
+-> formal P2-05 merge
 -> Obsidian CLI formal migration
 -> Evidence Layer and owner-review loop
 ```
