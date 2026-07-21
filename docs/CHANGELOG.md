@@ -2,6 +2,25 @@
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
 
+## 2026-07-21
+
+### P2-03 → P2-04 正式集成
+
+- 将 `work/p2-04-integrated-validation` 以安全 fast-forward 方式合入正式分支 `feature/second-brain-memory`。
+- 合并 P2-03 Structured Read Model（结构化读取模型），建立 Source、Conversation、Message 派生读取模型、权限继承、稳定 ID、幂等写入和只读关联查询。
+- 合并 P2-03B Structured Ingestion Wiring（结构化采集接线），将 Adapter、Vault、Memory、Structured Read Model 和 Audit Event 接入正式采集链路。
+- 合并 P2-03C Capture Sources Foundation（信息入口基础框架），增加统一 Capture 模型、低功耗策略、两阶段去重、隐私检查和 Codex/Web/Media 结构化回退。
+- 合并 P2-04 Memory Inspector Desktop UI（记忆检查器桌面界面），支持 Source、Conversation、Message、Memory、Chunk 和 Vector 真实关系查看。
+- 修复 Vector Provider 和 Snapshot 错误路径泄漏，对外只返回稳定摘要。
+- 修复 Capture 去重失败污染、Message 独立 Memory Link、嵌套敏感 Metadata 和保留字段覆盖问题。
+- 修复 Memory Inspector Query 参数、嵌套状态、Message→Memory、Vector、Citation 和 Chunk Count 合同。
+- 恢复 TypeScript 构建门禁，锁定 `tsx 4.23.1`，`tsc -b`、6 套 Smoke Test 和 `npm run build` 全部通过。
+- P2-03 → P2-04 最终里程碑门禁：`91 passed, 0 failed, 0 skipped`。
+- 遗漏历史回归补充验证：`20 passed, 0 failed`。
+- 全仓库 pytest 记录为 `306 passed, 19 environment-specific failures, 13 skipped`；19 个失败来自未启动 Qdrant 和 Windows `C:\Temp` 系统盘测试环境，不计入本里程碑目标门禁。
+- 正式数据和生产 Qdrant、Ollama、Vault、SQLite 均未访问或修改。
+- 用户明确暂缓系统监听、剪贴板监听、文件夹监听、手机分享客户端和浏览器插件；下一阶段转向 P2-05 Manual Capture Center（手动信息入口中心）。
+
 ## 2026-07-20
 
 ### P2 合并与验证
