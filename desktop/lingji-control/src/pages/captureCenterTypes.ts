@@ -6,6 +6,7 @@ export type CaptureResultRefs = { memory_id?: string; source_id?: string; conver
 export type CaptureJob = {
   job_id: string;
   title?: string | null;
+  file_name?: string | null;
   filename?: string | null;
   source_type?: string | null;
   adapter_name?: string | null;
@@ -43,6 +44,6 @@ export type CaptureCapabilitiesResponse = {
   media?: { ocr?: boolean; transcription?: boolean; keyframes?: boolean; extract_audio?: boolean; reasons?: Record<string, string> };
 };
 export type CaptureCommon = { title: string; project_ids: string[]; tags: string[]; privacy: "private" | "restricted"; priority: number; process_later: true; metadata: Record<string, unknown> };
-export type CaptureSubmissionResponse = { job_id?: string; duplicate?: boolean; existing_job_id?: string; message?: string };
+export type CaptureSubmissionResponse = { capture_id?: string; status?: string; job_id?: string; duplicate?: boolean; reason?: string; existing_job_id?: string; message?: string };
 export type CaptureJobFilters = { status: string; sourceType: string; q: string };
 export type CaptureInspectorTarget = CaptureResultRefs;
