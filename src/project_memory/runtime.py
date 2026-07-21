@@ -22,15 +22,12 @@ class CodexMemoryLoopServices:
     memory_review: MemoryReviewService
 
 
-def build_codex_memory_loop(
+def build_codex_session_runtime(
     settings: Any,
     *,
-    gateway: Any,
     pipeline: Any,
     state_db: Any | None = None,
-) -> CodexMemoryLoopServices:
-    """Build the single Codex-first memory loop shared by Control API and MCP."""
-
+) -> tuple[ProjectResolver, CodexSessionService]:
     registry = ProjectRegistry(Path(settings.storage_path) / "project_registry.json")
     resolver = ProjectResolver(registry)
     archive = CodexSessionArchive(settings.storage_path)
@@ -40,7 +37,10 @@ def build_codex_memory_loop(
         pipeline,
         state_db=state_db,
     )
+    return resolver, sessions
 
+
+def build_project_context_service(gateway: Any, sessions: CodexSessionService) -> ProjectContextService:
     def session_provider(
         *,
         project_id: str,
@@ -71,6 +71,7 @@ def build_codex_memory_loop(
                     "agent_scope": ["codex", "lingji-local"],
                     "privacy": str(full.get("privacy") or "private"),
                     "status": str(full.get("status") or "completed"),
+                    "review_status": "approved",
                     "title": str(full.get("title") or selected_id),
                     "summary": str(last.get("summary") or full.get("title") or ""),
                     "text": str(last.get("summary") or full.get("title") or ""),
@@ -81,12 +82,29 @@ def build_codex_memory_loop(
             )
         return output
 
-    project_context = ProjectContextService(
+    return ProjectContextService(
         gateway.database,
         gateway.retriever,
         profiles=gateway.profiles,
         session_provider=session_provider,
     )
+
+
+def build_codex_memory_loop(
+    settings: Any,
+    *,
+    gateway: Any,
+    pipeline: Any,
+    state_db: Any | None = None,
+) -> CodexMemoryLoopServices:
+    """Build the single Codex-first memory loop used by the local Control API."""
+
+    resolver, sessions = build_codex_session_runtime(
+        settings,
+        pipeline=pipeline,
+        state_db=state_db,
+    )
+    project_context = build_project_context_service(gateway, sessions)
 
     indexer = PEMISIndex(
         getattr(getattr(gateway, "workspace", None), "vault_path", None)
