@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from src.config import Settings
@@ -96,7 +97,8 @@ class P3FixesTests(unittest.TestCase):
                 return {"returncode": 1, "stdout": "", "stderr": "unsupported"}
 
         runner = SafeRunner(command_runner=MockRunner())
-        snapshot = cpu_snapshot(None, runner=runner)
+        with patch("src.hardware.system_detectors.platform.system", return_value="Windows"):
+            snapshot = cpu_snapshot(None, runner=runner)
         self.assertIn("i7-9700", snapshot["model"])
         self.assertNotIn("Family", snapshot["model"])
 

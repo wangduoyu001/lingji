@@ -12,6 +12,15 @@ from src.runtime import mcp_runtime_status
 
 from .memory_inspector import build_memory_inspector
 from .service import LocalControlService
+from .capture_api import (
+    CaptureCommonRequest,
+    CaptureFileRequest,
+    CaptureMediaRequest,
+    CaptureShareRequest,
+    CaptureTextRequest,
+    CaptureWebRequest,
+    register_capture_routes,
+)
 
 logger = logging.getLogger("lingji.control.read_model")
 READ_MODEL_ERROR_CODE = "READ_MODEL_UNAVAILABLE"
@@ -559,4 +568,5 @@ def create_control_app(
         except Exception as exc:
             raise translate_error(exc) from exc
 
+    register_capture_routes(app, settings, control, token=token)
     return app

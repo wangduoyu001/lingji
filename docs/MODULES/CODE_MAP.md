@@ -2,10 +2,9 @@
 
 > Updated（更新时间）: 2026-07-21  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> P0 Formal Merge Commit（P0 正式合并提交）: `d2a605e463552cb982342bdb2376da8aad1b36b5`  
-> P0 Verified Code Commit（P0 已验证代码提交）: `08b507c2855e05a1d971cb2bcae5c8d2fea578eb`  
 > P0 Status（P0 状态）: `MERGED_AND_VALIDATED`  
-> P2-05 Status（P2-05 状态）: `READY_FOR_PARALLEL_IMPLEMENTATION`
+> P2-05 Validated Integration Tree（P2-05 已验证集成树）: `1bf95b8d16a9daea52b60518f0e920a0c0bd50db`  
+> P2-05 Status（P2-05 状态）: `READY_FOR_FORMAL_MERGE`
 
 ## 1. 仓库职责
 
@@ -14,17 +13,17 @@ src/
 = 长期平台主线
 
 second_brain/
-= Compatibility/Migration Runtime（兼容与迁移运行层）
+= Compatibility/Migration Runtime
 
 desktop/lingji-control/
-= 唯一正式 Desktop UI（桌面用户界面）
+= 唯一正式 Desktop UI
 ```
 
 规则：
 
 - 新的正式产品能力进入 `src/`。
 - `second_brain/` 只保留兼容、迁移和待退役行为。
-- Desktop 只通过 8766 Local Control API 访问后端。
+- Desktop 只通过认证的 8766 Local Control API 访问后端。
 - Desktop 不得直连 SQLite、Qdrant、Ollama、8765 或 8767。
 
 ## 2. 数据权威与派生层
@@ -51,8 +50,6 @@ src/retrieval/qdrant_provider.py
 
 ## 3. Workspace、路径与设置
 
-正式入口：
-
 ```text
 src/config.py::Settings
 src/runtime/workspace.py::WorkspaceResolver
@@ -73,13 +70,7 @@ runtime_settings_path
 qdrant_path / qdrant_url / qdrant_collection
 ```
 
-P0 合同：
-
-- 未配置备份目录时使用 `<storage_path>/backups`。
-- 不允许机器专属固定盘符或用户名目录。
-- Production 和 Acceptance 必须物理隔离。
-- 生产系统盘保护由 `src/runtime/workspace.py` 持有。
-- `tests/fixtures/workspace_paths.py` 只允许显式测试临时根绕过系统盘限制。
+未配置备份目录时使用 `<storage_path>/backups`。Production、Acceptance 和测试临时根使用不同路径合同。
 
 ## 4. 端口和启动入口
 
@@ -100,13 +91,7 @@ run_mcp_server.py
 run_extraction_worker.py
 ```
 
-合同测试：
-
-```text
-tests/test_startup_contracts.py
-```
-
-测试验证 main guard、Settings 端口所有权和 import 阶段不启动服务，不再逐字比较源码。
+启动合同测试：`tests/test_startup_contracts.py`。
 
 ## 5. 统一采集与记忆链路
 
@@ -127,7 +112,7 @@ Capture Input
 -> Desktop UI
 ```
 
-## 6. Capture Foundation
+## 6. Capture Foundation 与手动输入
 
 正式入口：
 
@@ -135,18 +120,31 @@ Capture Input
 src/capture/models.py
 src/capture/policy.py
 src/capture/deduplication.py
+src/capture/manual.py
 src/capture/service.py
 ```
 
-现有能力：
+正式手动方法：
 
-- 文本、网页、文件、媒体入口合同。
+```text
+manual_text
+manual_web
+manual_file
+manual_media
+manual_chatgpt_export
+manual_codex_report
+local_control_share  # compatibility
+```
+
+能力：
+
 - LOW_POWER、NORMAL、DEEP_CAPTURE、PAUSED。
 - 两阶段去重。
-- Metadata 敏感字段检查。
-- `process_later=True` 排队合同。
-
-P2-05 不创建第二套队列或数据库。
+- Metadata 敏感字段和保留字段保护。
+- `process_later=True` 强制排队。
+- ChatGPT、Codex、Web 和 Media 映射到现有 Adapter Registry。
+- Office 文档和未知二进制稳定拒绝。
+- 手机、浏览器、剪贴板和文件夹入口标记为 disabled/deferred。
 
 ## 7. Extraction 与队列
 
@@ -163,11 +161,7 @@ src/extraction/structured_sink.py
 src/extraction/errors.py::safe_extraction_error
 ```
 
-队列数据：
-
-```text
-lingji_state.db::extraction_jobs
-```
+队列数据：`lingji_state.db::extraction_jobs`。
 
 状态：
 
@@ -180,9 +174,18 @@ failed
 cancelled
 ```
 
-## 8. Structured Read Model
+P2-05 队列操作：
 
-正式入口：
+```text
+cancel(job_id)
+retry(job_id)
+list_page(status, source_type, q, limit, offset)
+count(...)
+```
+
+没有新增任务表、数据库或第二套队列。
+
+## 8. Structured Read Model
 
 ```text
 src/sources/read_model.py::SourceReadModel
@@ -205,8 +208,6 @@ Source
 
 ## 9. Memory Gateway 与检索
 
-正式入口：
-
 ```text
 src/gateway/bootstrap.py::build_memory_gateway
 src/gateway/memory.py::MemoryGateway
@@ -214,8 +215,6 @@ src/retrieval/memory_db.py
 src/retrieval/qdrant_provider.py::QdrantSemanticProvider
 src/retrieval/hybrid.py::HybridRetriever
 ```
-
-检索层：
 
 ```text
 Lexical / Metadata
@@ -251,36 +250,38 @@ GET /api/memory/inspector/messages
 GET /api/memory/inspector/memories
 ```
 
-## 11. Local Control API
+## 11. Local Control API 与 Capture Control
 
 正式入口：
 
 ```text
 src/control/api.py::create_control_app
+src/control/capture_api.py::register_capture_routes
+src/control/capture.py::CaptureControlService
 src/control/service.py::LocalControlService
 src/control/runtime_settings.py::RuntimeSettingsStore
 ```
 
-基础接口：
+Capture API：
 
 ```text
-/api/health
-/api/overview
-/api/brain/status
-/api/jobs
-/api/settings
-/api/memory/inspector/*
+POST /api/capture/text
+POST /api/capture/web
+POST /api/capture/file
+POST /api/capture/media
+GET  /api/capture/status
+GET  /api/capture/capabilities
+GET  /api/capture/jobs
+GET  /api/capture/jobs/{job_id}
+POST /api/capture/jobs/{job_id}/retry
+POST /api/capture/jobs/{job_id}/cancel
+POST /api/capture/pause
+POST /api/capture/resume
 ```
 
-所有 Desktop 请求使用 `X-LingJi-Token`。
+`POST /api/share` 是兼容别名。所有 Desktop 请求使用 `X-LingJi-Token`。
 
-Brain Status API 合同测试：
-
-```text
-tests/test_brain_status_e2e.py
-```
-
-该测试使用确定性注入服务，不启动真实端口、GPU 探测或本地模型服务。
+CaptureJob DTO 只暴露脱敏字段、稳定错误摘要、basename 和结构化结果引用。
 
 ## 12. Obsidian CLI 兼容层
 
@@ -303,7 +304,7 @@ Vault 名称：
 
 ```text
 OBSIDIAN_VAULT_NAME
--> Vault 目录名
+-> Windows/POSIX Vault 目录名
 -> 兼容默认值
 ```
 
@@ -318,43 +319,51 @@ src/obsidian/
   service.py
 ```
 
-迁移计划：
-
-```text
-docs/MODULES/OBSIDIAN_CLI_MIGRATION_PLAN.md
-```
-
 ## 13. Desktop UI
 
-正式目录：
+正式目录：`desktop/lingji-control/`。
 
-```text
-desktop/lingji-control/
-```
-
-关键入口：
+壳层与路由：
 
 ```text
 src/App.tsx
-src/api.ts
+src/AppPages.tsx
 src/navigation.ts
 src/types.ts
-src/pages/JobsPage.tsx
-src/pages/MemoryInspectorPage.tsx
-src-tauri/
 ```
+
+P2-05 Capture Center：
+
+```text
+src/pages/CaptureCenterPage.tsx
+src/pages/captureCenterApi.ts
+src/pages/captureCenterContract.ts
+src/pages/captureCenterTypes.ts
+scripts/capture-center-smoke.mjs
+```
+
+Tauri：
+
+```text
+src-tauri/Cargo.toml
+src-tauri/Cargo.lock
+src-tauri/src/main.rs
+src-tauri/capabilities/default.json
+```
+
+文件选择使用官方 Tauri 2 Dialog Plugin 和 `dialog:default`，不申请广泛文件系统权限。
 
 构建门禁：
 
 ```text
 npm ci
+npm run test:capture
 npm run test:smoke
 npm run build
+cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
-## 14. P0 依赖与验证基础
-
-依赖文件：
+## 14. 依赖与验证基础
 
 ```text
 requirements.txt
@@ -364,65 +373,32 @@ requirements-mcp.txt
 requirements-test.txt
 constraints/python-3.13-linux.txt
 constraints/python-3.12-windows.txt
-```
-
-验证工具：
-
-```text
 scripts/validate_clean_install.py
 .github/workflows/p0-windows-gate.yml
 ```
 
-最终门禁：
+## 15. P2-05 集成验证
 
 ```text
-Windows Python 3.12 install: PASS
-pip check: PASS
-clean-install validator: PASS
-compileall: PASS
-full pytest: 359 passed / 11 skipped / 0 failed
+P2-05B merge: f01e3b2cc49065cda69f1c8909933dd0c530e4ff
+P2-05A merge: 46a0c5276252734c121f0cad7a56cf3a4a7c4bdc
+P2-05C merge: fab0ba1b816c1228b8cfb3618aa04b5e2f2c4c3d
+Validated tree: 1bf95b8d16a9daea52b60518f0e920a0c0bd50db
+```
+
+```text
+Windows full pytest: 398 passed / 11 skipped / 0 failed
+Capture smoke: PASS
 Desktop smoke: PASS
 Desktop build: PASS
+Cargo check: PASS
 ```
 
-## 15. P2-05 文件所有权
-
-规划：
+实施与测试报告：
 
 ```text
-docs/MODULES/P2_05_MANUAL_CAPTURE_CENTER_PLAN.md
-docs/MODULES/P2_05_PARALLEL_OWNERSHIP.md
-```
-
-并行边界：
-
-```text
-1号工程师:
-src/control/
-src/extraction/queue.py
-
-2号工程师:
-src/capture/
-必要的 Adapter 映射
-
-3号工程师:
-desktop/lingji-control/
-
-4号集成工程师:
-共享文档、冲突解决、集成测试
-```
-
-共享热点在同一阶段只能有一个所有者：
-
-```text
-src/control/api.py
-src/control/service.py
-src/control/runtime_settings.py
-src/capture/models.py
-src/capture/service.py
-src/extraction/queue.py
-Desktop navigation / common API types
-PROJECT_STATUS / CODE_MAP / CHANGELOG
+docs/MODULES/P2_05_INTEGRATED_IMPLEMENTATION.md
+docs/TEST_REPORTS/P2_05_INTEGRATED_VALIDATION_REPORT.md
 ```
 
 ## 16. 当前状态
@@ -435,5 +411,5 @@ P2-03 / P2-03B / P2-03C / P2-04:
 MERGED_AND_VALIDATED
 
 P2-05 Manual Capture Center:
-READY_FOR_PARALLEL_IMPLEMENTATION
+READY_FOR_FORMAL_MERGE
 ```

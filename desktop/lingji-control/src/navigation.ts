@@ -4,6 +4,7 @@ export const NAVIGATION: NavigationItem[] = [
   { id: "overview", label: "总览", hint: "状态与预警" },
   { id: "brain_status", label: "脑状态", hint: "记忆、模型、算力与任务" },
   { id: "memory_inspector", label: "记忆检查器", hint: "Source、Conversation、Message 与 Memory 关系" },
+  { id: "capture_center", label: "手动投喂中心", hint: "提交文本、网页、文件和媒体" },
   { id: "vector_center", label: "向量中心", hint: "Embedding、Qdrant 与索引覆盖率" },
   { id: "system_compute", label: "系统与算力", hint: "CPU、GPU、显存与运行模式" },
   { id: "models", label: "AI 与模型", hint: "模型清单、用途和兼容状态" },
