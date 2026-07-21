@@ -9,6 +9,11 @@ from src.config import settings
 from src.extraction import build_extraction_pipeline
 from src.gateway.bootstrap import build_memory_gateway
 from src.indexer.index import PEMISIndex
+from src.mcp.extraction_submission import (
+    durable_job_response,
+    enqueue_durable_submission,
+    validate_codex_work_report,
+)
 from src.mcp.project_context_tools import register_project_context_tools
 from src.project_context import ProjectRegistry, ProjectResolver
 from src.project_memory.runtime import build_project_context_service
@@ -250,13 +255,30 @@ def create_mcp_server(
             adapter_name="chatgpt_export", force=force,
         )
         if process_now:
-            return pipeline.process_job(job["job_id"])
-        return job
+            outcome = pipeline.process_job(job["job_id"])
+            return durable_job_response(
+                outcome.get("job") or pipeline.queue.get(job["job_id"]),
+                message="Durable extraction job processed through the queue",
+            ) | ({"result": outcome.get("result") or {}} if "result" in outcome else {})
+        return durable_job_response(job)
 
     @mcp.tool()
-    def submit_codex_work_report(report: dict[str, Any]) -> dict[str, Any]:
-        """Write a versioned Codex report and reviewable error, decision and task candidates."""
-        return pipeline.execute("codex", payload=report, adapter_name="codex_work_report")
+    def submit_codex_work_report(
+        report: dict[str, Any],
+        force: bool = False,
+        process_now: bool = False,
+    ) -> dict[str, Any]:
+        """Validate and queue a versioned Codex Work Report; never auto-approve it."""
+        normalized = validate_codex_work_report(report)
+        return enqueue_durable_submission(
+            pipeline,
+            "codex",
+            payload=normalized,
+            options={},
+            adapter_name="codex_work_report",
+            force=force,
+            process_now=process_now,
+        )
 
     @mcp.tool()
     def capture_web_source(
@@ -265,12 +287,14 @@ def create_mcp_server(
         published_at: str = "", duration_seconds: str = "", cover_url: str = "",
         media_url: str = "", transcript: str = "", ocr_text: str = "",
         project_id: str | None = None, allow_network_fetch: bool = False,
+        force: bool = False, process_now: bool = False,
     ) -> dict[str, Any]:
-        """Capture a webpage or social/video share using owner-provided content or a safe public fetch."""
+        """Queue a webpage or social/video share using supplied content or a safe public fetch."""
         source_type = platform if platform in {
             "wechat_article", "video_channel", "douyin", "xiaohongshu"
         } else "web"
-        return pipeline.execute(
+        return enqueue_durable_submission(
+            pipeline,
             source_type,
             payload={
                 "url": url, "title": title, "text": text, "html": html,
@@ -287,6 +311,8 @@ def create_mcp_server(
                 "max_response_bytes": settings.web_max_response_bytes,
             },
             adapter_name="web_capture",
+            force=force,
+            process_now=process_now,
         )
 
     @mcp.tool()
@@ -307,7 +333,7 @@ def create_mcp_server(
     @mcp.tool()
     def extraction_job_status(job_id: str) -> dict[str, Any]:
         """Return one durable extraction job."""
-        return pipeline.queue.get(job_id)
+        return durable_job_response(pipeline.queue.get(job_id), message="Durable extraction job status")
 
     @mcp.tool()
     def extraction_queue_status() -> dict[str, Any]:
