@@ -3,6 +3,8 @@ import type { NavigationItem } from "./types";
 export const NAVIGATION: NavigationItem[] = [
   { id: "overview", label: "总览", hint: "状态与预警" },
   { id: "brain_status", label: "脑状态", hint: "记忆、模型、算力与任务" },
+  { id: "codex_workspace", label: "项目与对话", hint: "查看 Codex 项目、会话和实时处理进度" },
+  { id: "memory_review", label: "记忆审核", hint: "批准、编辑或拒绝 AI 提出的长期记忆" },
   { id: "memory_inspector", label: "记忆检查器", hint: "Source、Conversation、Message 与 Memory 关系" },
   { id: "capture_center", label: "手动投喂中心", hint: "提交文本、网页、文件和媒体" },
   { id: "obsidian", label: "Obsidian", hint: "CLI、Vault、状态与配置" },
