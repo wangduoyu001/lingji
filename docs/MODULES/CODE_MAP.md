@@ -5,7 +5,10 @@
 > P0 Status（P0 状态）: `MERGED_AND_VALIDATED`  
 > P2-05 Validated Integration Tree（P2-05 已验证集成树）: `1bf95b8d16a9daea52b60518f0e920a0c0bd50db`  
 > P2-05 Formal Merge Commit（P2-05 正式合并提交）: `c77e78c0f71339264d54fc083dbc5cfabcfaa173`  
-> P2-05 Status（P2-05 状态）: `MERGED_AND_VALIDATED`
+> P2-05 Status（P2-05 状态）: `MERGED_AND_VALIDATED`  
+> P2-06 Validated Head（P2-06 已验证提交）: `6dfa31148585e2cb78c83af52b752550962820c9`  
+> P2-06 Formal Merge Commit（P2-06 正式合并提交）: `5ce10ed8be98784f57e8723ffc27e40e3abaffbc`  
+> P2-06 Status（P2-06 状态）: `MERGED_AND_VALIDATED`
 
 ## 1. 仓库职责
 
@@ -26,6 +29,7 @@ desktop/lingji-control/
 - `second_brain/` 只保留兼容、迁移和待退役行为。
 - Desktop 只通过认证的 8766 Local Control API 访问后端。
 - Desktop 不得直连 SQLite、Qdrant、Ollama、8765 或 8767。
+- Obsidian CLI 正式实现位于 `src/obsidian/`；旧模块只转发。
 
 ## 2. 数据权威与派生层
 
@@ -58,6 +62,19 @@ src/control/runtime_settings.py::RuntimeSettingsStore
 ```
 
 未配置备份目录时使用 `<storage_path>/backups`。Production、Acceptance 和测试临时根使用不同路径合同。
+
+Obsidian Runtime Settings：
+
+```text
+obsidian_cli_enabled
+obsidian_cli_path
+obsidian_vault_path
+obsidian_vault_name
+obsidian_cli_timeout_seconds
+obsidian_cli_dry_run
+```
+
+当前 Workspace Vault 始终优先于兼容回退路径。
 
 ## 4. 端口和启动入口
 
@@ -153,7 +170,7 @@ failed
 cancelled
 ```
 
-P2-05 队列操作：
+队列操作：
 
 ```text
 cancel(job_id)
@@ -246,30 +263,73 @@ POST /api/capture/resume
 
 CaptureJob DTO 只暴露脱敏字段、稳定错误摘要、basename 和结构化结果引用。
 
-## 12. Obsidian CLI 兼容层
+## 12. Obsidian 正式包与兼容层
+
+正式入口：
+
+```text
+src/obsidian/models.py
+src/obsidian/discovery.py
+src/obsidian/config.py
+src/obsidian/client.py::ObsidianCliClient
+src/obsidian/service.py::ObsidianService
+src/obsidian/management.py
+src/obsidian/system_ui.py
+```
+
+兼容入口：
 
 ```text
 second_brain/obsidian_cli.py
+= deprecated facade -> src.obsidian
 ```
 
-发现顺序：
+CLI 发现顺序：
 
 ```text
-OBSIDIAN_CLI_PATH
+Runtime Settings explicit path
+-> OBSIDIAN_CLI_PATH
 -> PATH
--> platform location
+-> platform-standard location
 -> not_found
 ```
 
-正式迁移目标：
+Vault 顺序：
 
 ```text
-src/obsidian/
-  config.py
-  discovery.py
-  models.py
-  client.py
-  service.py
+Current Workspace Vault
+-> Runtime Settings fallback
+-> OBSIDIAN_VAULT_PATH
+-> SECOND_BRAIN_OBSIDIAN_DIR compatibility fallback
+-> configuration_required
+```
+
+正式命令面：
+
+```text
+version / help
+vault info / vault list
+search / read
+create / append
+files / file count
+tags / tasks
+daily read / append / path
+```
+
+安全合同：
+
+- 不使用 Shell 字符串。
+- 拒绝绝对路径、盘符路径、NUL 和 `..`。
+- create/append 执行写后读取验证。
+- 支持 Dry Run。
+- 普通状态 DTO 不返回原始绝对路径、正文或 Token。
+
+8766 API：
+
+```text
+GET  /api/obsidian/status
+POST /api/obsidian/validate
+POST /api/obsidian/refresh
 ```
 
 ## 13. Desktop UI
@@ -293,6 +353,13 @@ desktop/lingji-control/src/pages/captureCenterTypes.ts
 desktop/lingji-control/scripts/capture-center-smoke.mjs
 ```
 
+P2-06 Obsidian：
+
+```text
+desktop/lingji-control/src/pages/ObsidianPage.tsx
+desktop/lingji-control/scripts/obsidian-smoke.mjs
+```
+
 Tauri：
 
 ```text
@@ -302,7 +369,7 @@ desktop/lingji-control/src-tauri/src/main.rs
 desktop/lingji-control/src-tauri/capabilities/default.json
 ```
 
-文件选择使用官方 Tauri 2 Dialog Plugin 和 `dialog:default`，不申请广泛文件系统权限。
+文件选择使用官方 Tauri 2 Dialog Plugin 和 `dialog:default`，不申请广泛文件系统权限。Desktop 不直接执行 Obsidian CLI。
 
 ## 14. 构建与验证
 
@@ -326,6 +393,20 @@ formal PR tests: SUCCESS
 formal PR P0 Windows Gate: SUCCESS
 ```
 
+P2-06 最终验证：
+
+```text
+Linux full pytest: 405 passed / 11 skipped / 0 failed / 2 warnings / 10.31s
+Windows full pytest: 405 passed / 11 skipped / 0 failed / 2 warnings / 71.77s
+npm ci: PASS
+npm run test:obsidian: PASS
+npm run test:smoke: PASS
+npm run build: PASS
+cargo check: PASS
+formal PR tests: SUCCESS
+formal PR P0 Windows Gate: SUCCESS
+```
+
 ## 15. P2-05 合并记录
 
 ```text
@@ -341,7 +422,21 @@ docs/MODULES/P2_05_INTEGRATED_IMPLEMENTATION.md
 docs/TEST_REPORTS/P2_05_INTEGRATED_VALIDATION_REPORT.md
 ```
 
-## 16. 当前状态
+## 16. P2-06 合并记录
+
+```text
+Validated implementation: 4b0ad577eb396030ee6baa5c3bb217e990385475
+Validated final head: 6dfa31148585e2cb78c83af52b752550962820c9
+Formal merge: 5ce10ed8be98784f57e8723ffc27e40e3abaffbc
+```
+
+```text
+docs/MODULES/OBSIDIAN_CLI_MIGRATION_PLAN.md
+docs/MODULES/P2_06_OBSIDIAN_CLI_MIGRATION_IMPLEMENTATION.md
+docs/TEST_REPORTS/P2_06_OBSIDIAN_CLI_MIGRATION_TEST_REPORT.md
+```
+
+## 17. 当前状态
 
 ```text
 P0 Engineering Hygiene:
@@ -351,5 +446,8 @@ P2-03 / P2-03B / P2-03C / P2-04:
 MERGED_AND_VALIDATED
 
 P2-05 Manual Capture Center:
+MERGED_AND_VALIDATED
+
+P2-06 Obsidian CLI Formal Migration:
 MERGED_AND_VALIDATED
 ```
