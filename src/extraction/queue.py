@@ -65,6 +65,14 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueue):
                 raise RuntimeError("Extraction job state changed before retry")
         return self.get(job_id)
 
+    def get_by_idempotency_key(self, idempotency_key: str) -> dict[str, Any] | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM extraction_jobs WHERE idempotency_key = ?",
+                (str(idempotency_key),),
+            ).fetchone()
+        return self._parse_row(row)
+
     @staticmethod
     def _filters(
         *,
@@ -89,6 +97,16 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueue):
             values.extend([needle] * 5)
         return (" WHERE " + " AND ".join(clauses)) if clauses else "", values
 
+    @staticmethod
+    def _page_values(limit: int, offset: int) -> tuple[int, int]:
+        normalized_limit = int(limit)
+        normalized_offset = int(offset)
+        if normalized_limit < 1 or normalized_limit > 200:
+            raise ValueError("limit must be between 1 and 200")
+        if normalized_offset < 0:
+            raise ValueError("offset must be greater than or equal to zero")
+        return normalized_limit, normalized_offset
+
     def list_page(
         self,
         *,
@@ -98,8 +116,7 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueue):
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
-        normalized_limit = max(min(int(limit), 200), 1)
-        normalized_offset = max(int(offset), 0)
+        normalized_limit, normalized_offset = self._page_values(limit, offset)
         where, values = self._filters(status=status, source_type=source_type, q=q)
         with self._connection() as connection:
             rows = connection.execute(
@@ -128,4 +145,4 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueue):
         return int(row["count"] if row else 0)
 
     def list(self, *, status: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
-        return self.list_page(status=status, limit=limit, offset=0)
+        return super().list(status=status, limit=limit)
