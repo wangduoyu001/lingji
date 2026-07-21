@@ -18,7 +18,7 @@ const ACTION_LABELS: Record<string, string> = {
   blocked: "已阻止",
 };
 
-const actionLabel = (value: string) => ACTION_LABELS[value] ?? value || "未知";
+const actionLabel = (value: string) => (ACTION_LABELS[value] ?? value) || "未知";
 
 const riskTone = (risk: string): "good" | "warn" | "bad" | undefined =>
   risk === "low" ? "good" : risk === "medium" ? "warn" : risk === "high" || risk === "critical" ? "bad" : undefined;
