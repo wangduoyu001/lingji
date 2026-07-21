@@ -1,34 +1,35 @@
 # ARCHITECTURE.md — LingJi Unified Architecture
 
-> Updated: 2026-07-20
-> Status: Target architecture with explicit transition state
+> Updated: 2026-07-21
+> Status: Active architecture contract
+> Formal branch: `feature/second-brain-memory`
 > Authoritative plan: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
 
 ## 1. Product Definition
 
 LingJi is one local-first private second brain, one shared memory system for approved AI clients, and one desktop control center.
 
-The repository currently contains overlapping implementations, but they are not separate long-term products.
+The repository contains compatibility code during migration, but it must not evolve into multiple long-term products.
 
 ## 2. Long-Term Ownership
 
 ```text
 src/
 = long-term platform mainline
-= ingestion, memory gateway, retrieval, MCP, control API, tasks and operations
+= capture, extraction, memory gateway, retrieval, MCP, control API, tasks and operations
 
 second_brain/
-= compatibility and migration runtime
-= source of working Qdrant, embedding, structured conversation and acceptance patterns
+= compatibility and migration runtime only
+= no new primary product features
 
 desktop/lingji-control/
 = only primary desktop UI
 
 second_brain/desktop/
-= acceptance, compatibility and emergency diagnosis only
+= compatibility, acceptance and emergency diagnosis only
 ```
 
-New memory features, ingestion adapters and primary UI pages must not be developed in parallel implementations.
+New memory features, capture contracts, adapters and primary UI pages must be developed in `src/` and `desktop/lingji-control/`, not duplicated in `second_brain/`.
 
 ## 3. Data Authority
 
@@ -52,23 +53,23 @@ Structured source/conversation/message queries
 = rebuildable derived read model
 ```
 
-`lingji_memory.db` and Qdrant are indexes, not independent permanent-memory authorities.
+SQLite indexes, Qdrant and the Structured Read Model are derived, rebuildable data. They are not independent permanent-memory authorities.
 
-`second_brain.sqlite3` remains a compatibility database during migration. It must not become a second long-term source of truth.
+`second_brain.sqlite3` remains compatibility data during migration and must not become a second source of truth.
 
-## 4. Target Runtime
+## 4. Current Verified Runtime
 
 ```text
 Input Sources
+  -> src/capture contracts
   -> src/extraction adapters
-  -> persistent queue, idempotency, retries and privacy scan
+  -> persistent SQLite extraction queue
   -> raw snapshot
-  -> Vault source documents and memory candidates
-  -> owner review
-  -> permanent memory in Obsidian/Git
-  -> incremental index synchronization
+  -> Vault source documents
+  -> Structured Read Model
+  -> lexical and semantic indexing
 
-Obsidian Vault
+Obsidian Vault + Git
   -> lingji_memory.db
        -> FTS5 / BM25 / trigram / metadata
   -> Qdrant SemanticProvider
@@ -86,13 +87,16 @@ Tauri Desktop
   -> authenticated Local Control API :8766
 ```
 
-## 5. Current Verified Gap
+The following are implemented and focused-tested:
 
-`src/retrieval/hybrid.py` already supports an optional `SemanticProvider`, but `src/gateway/bootstrap.py` currently passes `semantic_provider=None`.
+- unified semantic provider wiring in `src`
+- Qdrant-backed semantic retrieval with lexical degradation
+- Source/Conversation/Message Structured Read Model
+- structured ingestion wiring
+- Capture foundation contracts
+- Memory Inspector Local Control API and Desktop UI
 
-Therefore the current `src` retrieval path is primarily lexical and metadata based. Real Qdrant semantic retrieval still exists in `second_brain/` and must be adapted into `src`, not preserved as a second search stack.
-
-## 6. Retrieval Target
+## 5. Retrieval Contract
 
 ```text
 FTS5 / BM25 / Chinese substring fallback
@@ -106,33 +110,31 @@ RRF and existing boosts
 One retrieval pipeline
 ```
 
-Qdrant failure must not disable lexical retrieval.
+Qdrant failure must not disable lexical retrieval. Unknown vector state must not be fabricated as success or zero.
 
-## 7. Port Contract
-
-Target port map:
+## 6. Port Contract
 
 ```text
 8766 = Local Control API and Tauri gateway
 8767 = optional MCP Streamable HTTP
 stdio = default local MCP transport
+8765 = compatibility API only during migration
 ```
 
-Transition warning:
+Rules:
 
-- `second_brain` FastAPI currently uses `8765`
-- `src` currently defaults MCP HTTP to `8765`
-- these services conflict when both use HTTP
-- the conflict is not resolved until code and tests are updated
-- Tauri must never call `8765` directly
+- Tauri must use `8766`.
+- New product APIs must be added to the Local Control API, not the compatibility API.
+- `8765` must not receive new primary product responsibilities.
 
-## 8. UI Architecture
+## 7. UI Architecture
 
 The final primary UI is `desktop/lingji-control/`.
 
 It must expose truthful read models for:
 
 - overview and service health
+- manual Capture Center
 - memory inspector
 - knowledge and Obsidian indexing
 - sources and conversations
@@ -147,7 +149,7 @@ It must expose truthful read models for:
 
 PySide6 may remain during migration for acceptance and diagnosis, but it must not receive new competing product features.
 
-## 9. Workspace Isolation
+## 8. Workspace and Path Contract
 
 Production and acceptance must physically isolate:
 
@@ -159,25 +161,87 @@ Production and acceptance must physically isolate:
 - logs
 - generated assets
 - runtime settings
+- backup destination
 
-A request header alone does not provide physical isolation.
+Path rules:
 
-## 10. Migration Rules
+1. No machine-specific absolute path may be a production default.
+2. Paths must derive from Workspace, Runtime Settings, environment detection or explicit owner selection.
+3. Environment detection may propose a path but must not silently make it permanent authority.
+4. A request header alone does not provide physical isolation.
+
+## 9. Dependency and Test Contract
+
+Before new product stages depend on a package or startup entry:
+
+- dependency ownership must be explicit
+- versions must be reproducible
+- clean-environment installation must be validated
+- startup tests must verify behavior, not compare whole files byte-for-byte
+- test count changes must be explained in the stage report
+- targeted stage gates and full-repository results must be reported separately
+
+## 10. Obsidian CLI Migration Contract
+
+The existing Obsidian CLI implementation in `second_brain/` is compatibility code.
+
+Target ownership:
+
+```text
+src/obsidian/
+  -> CLI discovery and configuration
+  -> typed command runner
+  -> capability/status service
+  -> Local Control API integration
+  -> Desktop settings and status
+```
+
+Current migration step is contract registration and path cleanup only. Full command migration follows the Manual Capture Center and stable 8766 API boundary.
+
+No new primary Obsidian CLI features may be added under `second_brain/`.
+
+## 11. Migration Rules
 
 1. Freeze new duplicate development in `second_brain/`.
-2. Adapt Qdrant and embedding into `src` first.
-3. Migrate structured source/conversation/message read models.
-4. Migrate version, relation and conflict query capability.
-5. Build Memory Inspector on the unified `src` MemoryGateway.
-6. Run dual-read capability and data verification.
-7. Stop legacy writes, preserve read-only compatibility, then retire the old runtime.
+2. Keep Obsidian Vault + Git as permanent authority.
+3. Treat SQLite, Qdrant and read models as rebuildable derivatives.
+4. Complete engineering hygiene before P2-05 implementation branches begin.
+5. Build the Manual Capture Center on existing Capture, Extraction and Queue contracts.
+6. Migrate Obsidian CLI into `src` after the Capture Center boundary is stable.
+7. Add Schema v2 and Evidence Layer only after current read models and UI are stable.
+8. Add conflict review and knowledge update only after Evidence, Revision and owner-review contracts exist.
+9. Preserve read-only compatibility and rollback evidence before retiring legacy runtime.
 
 Direct deletion of `second_brain/` or its database is forbidden before parity, export and rollback checks pass.
 
-## 11. References
+## 12. Current Execution Order
 
-- `docs/TECH_RESEARCH/SRC_SECOND_BRAIN_CAPABILITY_AUDIT.md`
+```text
+P0 Engineering Hygiene
+  -> path cleanup
+  -> dependency and clean-install baseline
+  -> startup test repair
+  -> documentation authority alignment
+  -> Obsidian CLI migration registration
+
+P2-05 Manual Capture Center
+  -> Capture Control API
+  -> manual import wiring
+  -> Desktop Capture Center
+
+Obsidian CLI migration into src
+Schema v2 + Evidence Layer
+Knowledge revision, conflict and owner review
+Retrieval evaluation and relationship expansion
+Additional sources and active intelligence
+Legacy second_brain retirement
+```
+
+## 13. References
+
 - `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
 - `docs/MODULES/UNIFIED_DESKTOP_UI_PLAN.md`
+- `docs/MODULES/P0_ENGINEERING_HYGIENE_PLAN.md`
+- `docs/MODULES/P2_05_MANUAL_CAPTURE_CENTER_PLAN.md`
 - `docs/MEMORY_SYSTEM.md`
 - `docs/VECTOR_DATABASE.md`
