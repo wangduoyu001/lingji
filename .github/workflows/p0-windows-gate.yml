@@ -106,9 +106,9 @@ jobs:
           retention-days: 7
 
   desktop-gate:
-    name: Desktop smoke and build
+    name: Desktop smoke, build and Rust check
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     defaults:
       run:
@@ -126,6 +126,9 @@ jobs:
           cache-dependency-path: desktop/lingji-control/package-lock.json
           package-manager-cache: false
 
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install exact frontend dependencies
         run: npm ci
 
@@ -134,3 +137,6 @@ jobs:
 
       - name: Build desktop frontend
         run: npm run build
+
+      - name: Check Tauri Rust application
+        run: cargo check --manifest-path src-tauri/Cargo.toml
