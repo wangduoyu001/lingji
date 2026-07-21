@@ -67,64 +67,147 @@ class LocalControlService:
         self._sync_hardware_settings()
 
     def brain_status(self) -> dict:
-        """Aggregate truthful brain status without converting unknown values to zero."""
+        """Aggregate runtime facts without converting unknown values to healthy or zero."""
+
+        warnings: list[dict[str, Any]] = []
         try:
             overview = self.overview()
-        except Exception:
+        except Exception as exc:
             overview = {}
+            warnings.append(self._status_warning("overview_unavailable", "overview", exc))
         try:
-            hw = self.hardware_capabilities(force=False)
-        except Exception:
-            hw = {}
+            hardware = self.hardware_capabilities(force=False)
+        except Exception as exc:
+            hardware = {}
+            warnings.append(self._status_warning("hardware_capabilities_unavailable", "hardware", exc))
         try:
-            inv = self.model_inventory.inventory(force=False)
-        except Exception:
-            inv = {}
+            telemetry = self.hardware_telemetry(force=False)
+        except Exception as exc:
+            telemetry = {
+                "collected_at": None,
+                "gpus": [],
+                "errors": [f"{type(exc).__name__}: {exc}"[:500]],
+                "stale": True,
+                "source": "unavailable",
+            }
+            warnings.append(self._status_warning("hardware_telemetry_unavailable", "hardware", exc))
+        try:
+            inventory = self.model_inventory.inventory(force=False)
+        except Exception as exc:
+            inventory = {}
+            warnings.append(self._status_warning("model_inventory_unavailable", "models", exc))
+        try:
+            memory_runtime = self.memory_statistics.snapshot()
+        except Exception as exc:
+            memory_runtime = {
+                "state": "configuration_required",
+                "workspace": None,
+                "source": "unavailable",
+                "stale": True,
+                "as_of": None,
+                "memory": {"state": "configuration_required"},
+                "vector": {"state": "configuration_required"},
+                "embedding": {"state": "configuration_required", "active_model": None},
+                "warnings": [],
+            }
+            warnings.append(self._status_warning("memory_statistics_unavailable", "memory", exc))
 
-        memory_runtime = self.memory_statistics.snapshot()
         memory = dict(memory_runtime.get("memory") or {})
         vector = dict(memory_runtime.get("vector") or {})
         embedding = dict(memory_runtime.get("embedding") or {})
-        health = overview.get("health", {})
-        gpus = hw.get("gpus", [])
+        health = dict(overview.get("health") or {})
 
-        for gpu in gpus:
-            gpu["utilization_percent"] = 0
-        import subprocess
-
-        try:
-            smi_out = subprocess.run(
-                ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                check=False,
+        capability_gpus = {
+            str(item.get("gpu_id", index)): dict(item)
+            for index, item in enumerate(hardware.get("gpus") or [])
+            if isinstance(item, Mapping)
+        }
+        telemetry_errors = [str(item) for item in telemetry.get("errors") or []]
+        telemetry_gpus = telemetry.get("gpus") or []
+        gpus: list[dict[str, Any]] = []
+        seen_gpu_ids: set[str] = set()
+        for index, item in enumerate(telemetry_gpus):
+            if not isinstance(item, Mapping):
+                continue
+            gpu_id = str(item.get("gpu_id", index))
+            seen_gpu_ids.add(gpu_id)
+            merged = {**capability_gpus.get(gpu_id, {}), **dict(item)}
+            merged.setdefault("gpu_id", gpu_id)
+            merged["status"] = "available"
+            merged["collected_at"] = telemetry.get("collected_at")
+            merged["stale"] = bool(telemetry.get("stale"))
+            merged["errors"] = telemetry_errors
+            gpus.append(merged)
+        for gpu_id, item in capability_gpus.items():
+            if gpu_id in seen_gpu_ids:
+                continue
+            merged = dict(item)
+            merged.update(
+                {
+                    "gpu_id": gpu_id,
+                    "status": "unavailable",
+                    "collected_at": telemetry.get("collected_at"),
+                    "stale": True,
+                    "utilization_percent": None,
+                    "temperature_c": None,
+                    "used_vram_bytes": None,
+                    "errors": telemetry_errors or ["dynamic_gpu_telemetry_unavailable"],
+                }
             )
-            if smi_out.returncode == 0:
-                util_lines = [line.strip() for line in smi_out.stdout.strip().split("\n") if line.strip()]
-                for index, gpu in enumerate(gpus):
-                    if index < len(util_lines) and util_lines[index].isdigit():
-                        gpu["utilization_percent"] = int(util_lines[index])
-        except Exception:
-            pass
+            gpus.append(merged)
 
-        assignments = inv.get("assignments", [])
+        if telemetry_errors:
+            warnings.append(
+                {
+                    "code": "hardware_telemetry_errors",
+                    "stage": "hardware",
+                    "severity": "warning",
+                    "message": "; ".join(telemetry_errors)[:500],
+                    "action": "Check psutil, NVIDIA driver and nvidia-smi availability.",
+                }
+            )
+
+        assignments = [item for item in inventory.get("assignments") or [] if isinstance(item, Mapping)]
         chat_model = next(
-            (item["model"] for item in assignments if item["role"] == "chat_primary"),
-            "N/A",
+            (item.get("model") for item in assignments if item.get("role") == "chat_primary"),
+            None,
         )
         inventory_embed_model = next(
-            (item["model"] for item in assignments if item["role"] == "embedding_primary"),
-            "N/A",
+            (item.get("model") for item in assignments if item.get("role") == "embedding_primary"),
+            None,
         )
         embed_model = (
             embedding.get("active_model")
+            or embedding.get("configured_model")
             or embedding.get("primary_model")
             or inventory_embed_model
         )
+
+        try:
+            compute_policy = self.compute_policy()
+        except Exception as exc:
+            compute_policy = {}
+            warnings.append(self._status_warning("compute_policy_unavailable", "hardware", exc))
+
+        try:
+            recent_tasks = self.queue.list(limit=10)
+        except Exception as exc:
+            recent_tasks = []
+            warnings.append(self._status_warning("queue_status_unavailable", "extraction", exc))
+        active_states = {"queued", "leased", "running", "retrying"}
+        processing_status = (
+            "active"
+            if any(str(item.get("status") or "").lower() in active_states for item in recent_tasks)
+            else "idle"
+        )
+
         memory_state = str(memory_runtime.get("state") or "configuration_required")
         health_state = str(health.get("status") or "unknown")
         system_status = memory_state if memory_state != "healthy" else health_state
+        warnings = [
+            *[dict(item) for item in memory_runtime.get("warnings") or [] if isinstance(item, Mapping)],
+            *warnings,
+        ]
 
         return {
             "memory_count": memory.get("documents"),
@@ -136,23 +219,23 @@ class LocalControlService:
             "vector_state": vector.get("state"),
             "vector_collection": vector.get("collection"),
             "vector_dimension": vector.get("dimension"),
-            "vector_rebuild_required": bool(vector.get("rebuild_required")),
+            "vector_rebuild_required": vector.get("rebuild_required"),
             "embedding_state": embedding.get("state"),
             "chat_model": chat_model,
             "embed_model": embed_model,
-            "installed_models": inv.get("summary", {}).get("installed_models", 0),
+            "installed_models": dict(inventory.get("summary") or {}).get("installed_models"),
             "gpus": gpus,
-            "compute_mode": hw.get("compute", {}).get("mode", "unknown"),
-            "cuda_version": hw.get("cuda", {}).get("runtime_version")
-            or hw.get("cuda", {}).get("driver_cuda_version", "N/A"),
-            "recent_tasks": [],
-            "processing_status": "idle",
+            "compute_mode": compute_policy.get("requested_mode"),
+            "cuda_version": dict(hardware.get("cuda") or {}).get("runtime_version")
+            or dict(hardware.get("cuda") or {}).get("driver_cuda_version"),
+            "recent_tasks": recent_tasks,
+            "processing_status": processing_status,
             "system_status": system_status,
             "workspace": memory_runtime.get("workspace"),
             "status_source": memory_runtime.get("source"),
-            "status_stale": bool(memory_runtime.get("stale")),
-            "status_as_of": memory_runtime.get("as_of"),
-            "warnings": list(memory_runtime.get("warnings") or []),
+            "status_stale": bool(memory_runtime.get("stale")) or bool(telemetry.get("stale")),
+            "status_as_of": memory_runtime.get("as_of") or telemetry.get("collected_at"),
+            "warnings": warnings,
         }
 
     def memory_status(self) -> dict[str, Any]:
@@ -491,6 +574,16 @@ class LocalControlService:
                 telemetry_cache_seconds=float(policy["foreground_interval_seconds"]),
                 gpu_cache_seconds=float(policy["nvidia_smi_min_interval_seconds"]),
             )
+
+    @staticmethod
+    def _status_warning(code: str, stage: str, exc: Exception) -> dict[str, Any]:
+        return {
+            "code": code,
+            "stage": stage,
+            "severity": "warning",
+            "message": f"{type(exc).__name__}: {exc}"[:500],
+            "action": "Inspect the named runtime provider and retry the status request.",
+        }
 
     @staticmethod
     def _tail(path: Path, limit: int) -> list[str]:
