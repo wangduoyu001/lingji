@@ -1,0 +1,331 @@
+name: Finalize P2-05 Integration
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/p2-05-finalize-integration.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: p2-05-finalize-integration
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: work/p2-05-integrated-validation
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-ui.txt
+            requirements-test.txt
+            requirements-mcp.txt
+            constraints/python-3.12-windows.txt
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/lingji-control/package-lock.json
+
+      - name: Install Python dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install `
+            -r requirements-ui.txt `
+            -r requirements-test.txt `
+            -r requirements-mcp.txt `
+            -c constraints/python-3.12-windows.txt
+          python -m pip check
+
+      - name: Apply final architecture cleanup
+        shell: pwsh
+        run: |
+          @'
+          from __future__ import annotations
+
+          from pathlib import Path
+
+
+          def read(path: str) -> str:
+              return Path(path).read_text(encoding="utf-8")
+
+
+          def write(path: str, text: str) -> None:
+              Path(path).write_text(text, encoding="utf-8")
+
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f"missing integration contract: {label}")
+              return text.replace(old, new, 1)
+
+
+          # Fold the temporary API core back into the formal API module while
+          # keeping capture route registration in a focused companion module.
+          api_extension = read("src/control/api.py")
+          api_core = read("src/control/_api_core.py")
+          capture_api = api_extension
+          for line in (
+              "from ._api_core import *  # noqa: F401,F403\n",
+              "from ._api_core import create_control_app as _create_control_app\n",
+              "from .service import LocalControlService\n",
+          ):
+              capture_api = capture_api.replace(line, "", 1)
+          wrapper_at = capture_api.rfind("\ndef create_control_app(")
+          if wrapper_at < 0:
+              raise SystemExit("capture API wrapper not found")
+          capture_api = capture_api[:wrapper_at].rstrip() + "\n"
+          capture_api = replace_once(
+              capture_api,
+              "def _register_capture_routes(",
+              "def register_capture_routes(",
+              "capture route registrar",
+          )
+          write("src/control/capture_api.py", capture_api)
+
+          capture_import = '''from .capture_api import (
+              CaptureCommonRequest,
+              CaptureFileRequest,
+              CaptureMediaRequest,
+              CaptureShareRequest,
+              CaptureTextRequest,
+              CaptureWebRequest,
+              register_capture_routes,
+          )
+          '''
+          capture_import = "\n".join(
+              line[10:] if line.startswith("          ") else line
+              for line in capture_import.splitlines()
+          ) + "\n"
+          api_core = replace_once(
+              api_core,
+              "from .service import LocalControlService\n",
+              "from .service import LocalControlService\n" + capture_import,
+              "main API capture import",
+          )
+          final_return = api_core.rfind("    return app\n")
+          if final_return < 0:
+              raise SystemExit("main API final return not found")
+          api_core = (
+              api_core[:final_return]
+              + "    register_capture_routes(app, settings, control, token=token)\n"
+              + api_core[final_return:]
+          )
+          write("src/control/api.py", api_core)
+          Path("src/control/_api_core.py").unlink()
+
+          # Fold the temporary queue core back into the formal queue module.
+          queue_core = read("src/extraction/_queue_core.py")
+          queue_extension = read("src/extraction/queue.py")
+          queue_core = replace_once(
+              queue_core,
+              "class SQLiteExtractionQueue:",
+              "class _SQLiteExtractionQueueBase:",
+              "queue base class",
+          )
+          extension_at = queue_extension.find("CANCELLABLE_STATUSES =")
+          if extension_at < 0:
+              raise SystemExit("queue extension marker not found")
+          extension = queue_extension[extension_at:]
+          extension = replace_once(
+              extension,
+              "class SQLiteExtractionQueue(_SQLiteExtractionQueue):",
+              "class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):",
+              "formal queue class",
+          )
+          write("src/extraction/queue.py", queue_core.rstrip() + "\n\n\n" + extension)
+          Path("src/extraction/_queue_core.py").unlink()
+
+          # Align the Control API with P2-05B's formal manual Capture Methods.
+          capture_path = "src/control/capture.py"
+          capture = read(capture_path)
+          capture = replace_once(
+              capture,
+              'self._envelope(payload, source_type=str(payload.get("source_type") or "web"), text=text),',
+              'self._envelope(\n                payload,\n                source_type=str(payload.get("source_type") or "web"),\n                capture_method=str(payload.get("capture_method") or "manual_text"),\n                text=text,\n            ),',
+              "manual text method",
+          )
+          capture = replace_once(
+              capture,
+              'source_type=str(payload.get("source_type") or "web"),\n                url=url,',
+              'source_type=str(payload.get("source_type") or "web"),\n                capture_method=str(payload.get("capture_method") or "manual_web"),\n                url=url,',
+              "manual web method",
+          )
+          capture = replace_once(
+              capture,
+              '''    def submit_file(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+                  return self._submit_path(payload, str(payload.get("source_type") or "web"))
+          ''',
+              '''    def submit_file(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+                  source_type = str(payload.get("source_type") or "web")
+                  adapter_name = str(payload.get("adapter_name") or "")
+                  capture_method = str(payload.get("capture_method") or "")
+                  if not capture_method:
+                      if source_type == "chatgpt_export":
+                          capture_method = "manual_chatgpt_export"
+                      elif source_type == "codex_report" or adapter_name == "codex_work_report":
+                          capture_method = "manual_codex_report"
+                      else:
+                          capture_method = "manual_file"
+                  return self._submit_path(payload, source_type, capture_method=capture_method)
+          ''',
+              "manual file method",
+          )
+          capture = replace_once(
+              capture,
+              '            "media",\n            options={',
+              '            "media",\n            capture_method=str(payload.get("capture_method") or "manual_media"),\n            options={',
+              "manual media method",
+          )
+          capture = replace_once(
+              capture,
+              'def _submit_path(self, payload: Mapping[str, Any], source_type: str, *, options: Mapping[str, Any] | None = None) -> dict[str, Any]:',
+              'def _submit_path(\n        self,\n        payload: Mapping[str, Any],\n        source_type: str,\n        *,\n        capture_method: str = "manual_file",\n        options: Mapping[str, Any] | None = None,\n    ) -> dict[str, Any]:',
+              "submit path signature",
+          )
+          capture = replace_once(
+              capture,
+              'self._envelope(payload, source_type=source_type, capture_method="manual_upload", title=',
+              'self._envelope(payload, source_type=source_type, capture_method=capture_method, title=',
+              "submit path envelope method",
+          )
+          write(capture_path, capture)
+
+          # Make Windows-style Vault names deterministic on POSIX CI.
+          obsidian_path = "second_brain/obsidian_cli.py"
+          obsidian = read(obsidian_path)
+          obsidian = replace_once(
+              obsidian,
+              "from pathlib import Path\n",
+              "from pathlib import Path, PureWindowsPath\n",
+              "portable Vault path import",
+          )
+          obsidian = replace_once(
+              obsidian,
+              "            name = Path(vault_path).name\n",
+              '            name = PureWindowsPath(vault_path).name if "\\\\" in vault_path else Path(vault_path).name\n',
+              "portable Vault name",
+          )
+          write(obsidian_path, obsidian)
+
+          # The Windows CPU contract must explicitly simulate Windows on Linux CI.
+          cpu_test_name = "test_cpu_snapshot_uses_powershell_cim_on_windows"
+          cpu_test_file: Path | None = None
+          for candidate in Path("tests").rglob("*.py"):
+              if cpu_test_name in candidate.read_text(encoding="utf-8"):
+                  cpu_test_file = candidate
+                  break
+          if cpu_test_file is None:
+              raise SystemExit("Windows CPU contract test not found")
+          cpu_test = cpu_test_file.read_text(encoding="utf-8")
+          if "from unittest.mock import patch" not in cpu_test:
+              cpu_test = replace_once(
+                  cpu_test,
+                  "import unittest\n",
+                  "import unittest\nfrom unittest.mock import patch\n",
+                  "CPU patch import",
+              )
+          cpu_test = replace_once(
+              cpu_test,
+              '''        runner = SafeRunner(command_runner=MockRunner())
+                  snapshot = cpu_snapshot(None, runner=runner)
+          ''',
+              '''        runner = SafeRunner(command_runner=MockRunner())
+                  with patch("src.hardware.system_detectors.platform.system", return_value="Windows"):
+                      snapshot = cpu_snapshot(None, runner=runner)
+          ''',
+              "Windows CPU platform simulation",
+          )
+          cpu_test_file.write_text(cpu_test, encoding="utf-8")
+
+          # Remove integration-only validation scaffolding from the product tree.
+          Path(".github/workflows/p2-05-integrated-gate.yml").unlink(missing_ok=True)
+          '@ | python -
+
+      - name: Validate clean-install contracts
+        run: python scripts/validate_clean_install.py --root . --import-check
+
+      - name: Compile final integrated tree
+        shell: pwsh
+        run: |
+          python -m compileall -q `
+            main.py `
+            run_service.py `
+            run_control_api.py `
+            run_mcp_server.py `
+            run_extraction_worker.py `
+            src `
+            second_brain `
+            tests `
+            scripts
+
+      - name: Run Windows full repository pytest
+        shell: pwsh
+        run: |
+          python -m pytest -q --tb=short --junitxml=p2-05-pytest.xml *> p2-05-pytest.log
+          $exitCode = $LASTEXITCODE
+          Get-Content p2-05-pytest.log -Tail 260
+          exit $exitCode
+
+      - name: Install exact desktop dependencies
+        working-directory: desktop/lingji-control
+        run: npm ci --no-audit --no-fund
+
+      - name: Run Capture Center smoke
+        working-directory: desktop/lingji-control
+        run: npm run test:capture
+
+      - name: Run all desktop smoke tests
+        working-directory: desktop/lingji-control
+        run: npm run test:smoke
+
+      - name: Build desktop frontend
+        working-directory: desktop/lingji-control
+        run: npm run build
+
+      - name: Check Tauri crate
+        working-directory: desktop/lingji-control
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Validate final diff
+        shell: pwsh
+        run: |
+          git diff --check
+          git status --short
+
+      - name: Commit finalized integration
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(p2-05): finalize integrated capture architecture"
+          git push origin HEAD:work/p2-05-integrated-validation
+
+      - name: Upload final validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2-05-final-validation
+          path: |
+            p2-05-pytest.xml
+            p2-05-pytest.log
+          if-no-files-found: warn
+          retention-days: 7
