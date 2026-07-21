@@ -1,21 +1,23 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 from uuid import uuid4
 
+from .idempotency import extraction_key_for_request
 
 TERMINAL_STATUSES = ("completed", "failed", "cancelled")
+CANCELLABLE_STATUSES = ("queued", "retrying")
+RETRYABLE_STATUSES = ("failed", "cancelled")
 
 
 class _SQLiteExtractionQueueBase:
-    """Durable extraction queue with idempotency and lease ownership."""
+    """Durable extraction queue with canonical idempotency and lease ownership."""
 
     def __init__(self, path: Path | str):
         self.path = Path(path)
@@ -126,30 +128,30 @@ class _SQLiteExtractionQueueBase:
     @staticmethod
     def build_idempotency_key(
         source_type: str,
-        input_path: str | None,
-        payload: Any,
-        options: Any = None,
+        input_path: str | Path | None,
+        payload: Mapping[str, Any] | None,
+        options: Mapping[str, Any] | None = None,
         adapter_name: str | None = None,
         adapter_version: str = "",
     ) -> str:
-        material = {
-            "source_type": source_type,
-            "adapter_name": adapter_name or "",
-            "adapter_version": adapter_version,
-            "input_path": str(input_path or ""),
-            "payload": payload or {},
-            "options": options or {},
-        }
-        encoded = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+        """Compatibility signature backed by the canonical identity module."""
+
+        return extraction_key_for_request(
+            source_type=source_type,
+            adapter_name=adapter_name or "",
+            adapter_version=adapter_version,
+            input_path=input_path,
+            payload=payload,
+            effective_options=options,
+        )
 
     def enqueue(
         self,
         source_type: str,
         *,
         input_path: Path | str | None = None,
-        payload: Any = None,
-        options: Any = None,
+        payload: Mapping[str, Any] | None = None,
+        options: Mapping[str, Any] | None = None,
         adapter_name: str | None = None,
         adapter_version: str = "",
         idempotency_key: str | None = None,
@@ -170,6 +172,7 @@ class _SQLiteExtractionQueueBase:
         )
         job_id = f"LJ-JOB-{uuid4().hex[:12].upper()}"
         selected_job_id = job_id
+        existing_job = False
         with self._lock, self._connection() as connection:
             existing = connection.execute(
                 "SELECT * FROM extraction_jobs WHERE idempotency_key = ?", (key,)
@@ -178,9 +181,10 @@ class _SQLiteExtractionQueueBase:
                 parsed = self._parse_row(existing)
                 if not parsed:
                     raise RuntimeError("Unable to parse existing extraction job")
-                selected_job_id = parsed["job_id"]
+                existing_job = True
+                selected_job_id = str(parsed["job_id"])
                 if not force or parsed["status"] not in TERMINAL_STATUSES:
-                    return parsed
+                    return {**parsed, "existing_job": True}
                 connection.execute(
                     """
                     UPDATE extraction_jobs
@@ -231,7 +235,7 @@ class _SQLiteExtractionQueueBase:
                         self._iso(now),
                     ),
                 )
-        return self.get(selected_job_id)
+        return {**self.get(selected_job_id), "existing_job": existing_job}
 
     def claim(
         self,
@@ -446,7 +450,7 @@ class _SQLiteExtractionQueueBase:
                     "SELECT * FROM extraction_jobs ORDER BY created_at DESC LIMIT ?",
                     (max(int(limit), 1),),
                 ).fetchall()
-        return [self._parse_row(row) for row in rows]
+        return [parsed for row in rows if (parsed := self._parse_row(row)) is not None]
 
     def stats(self) -> dict[str, int]:
         result = {
@@ -465,10 +469,6 @@ class _SQLiteExtractionQueueBase:
             result[str(row["status"])] = int(row["count"])
         result["pending"] = result["queued"] + result["retrying"] + result["running"]
         return result
-
-
-CANCELLABLE_STATUSES = ("queued", "retrying")
-RETRYABLE_STATUSES = ("failed", "cancelled")
 
 
 class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
@@ -584,11 +584,7 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
                 "ORDER BY created_at DESC, job_id DESC LIMIT ? OFFSET ?",
                 tuple(values + [normalized_limit, normalized_offset]),
             ).fetchall()
-        return [
-            parsed
-            for row in rows
-            if (parsed := self._parse_row(row)) is not None
-        ]
+        return [parsed for row in rows if (parsed := self._parse_row(row)) is not None]
 
     def count(
         self,
