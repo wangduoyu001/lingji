@@ -70,9 +70,15 @@ def classify_manual_input(
         )
 
     candidate = Path(raw).expanduser()
-    if candidate.exists() or candidate.suffix:
+    try:
+        candidate_exists = candidate.exists()
+        candidate_suffix = candidate.suffix
+    except OSError:
+        candidate_exists = False
+        candidate_suffix = ""
+    if candidate_exists or candidate_suffix:
         classification = _classify_path(candidate, kind)
-        if classification.supported or candidate.exists():
+        if classification.supported or candidate_exists:
             return classification
 
     if kind in (ManualCaptureKind.CHATGPT_EXPORT, ManualCaptureKind.CODEX_REPORT, ManualCaptureKind.MEDIA):

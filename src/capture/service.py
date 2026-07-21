@@ -151,6 +151,7 @@ class CaptureService:
             CaptureCapability("manual_media", True, description="manual queued media import"),
             CaptureCapability("manual_chatgpt_export", True, description="manual queued ChatGPT export import"),
             CaptureCapability("manual_codex_report", True, description="manual queued Codex report import"),
+            CaptureCapability("local_control_share", True, description="compatibility manual share entry"),
             CaptureCapability("mobile_share", False, description=deferred),
             CaptureCapability("browser_extension", False, description=deferred),
             CaptureCapability("clipboard", False, description=deferred),

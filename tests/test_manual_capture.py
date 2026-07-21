@@ -182,3 +182,15 @@ def test_missing_path_error_does_not_expose_absolute_path(tmp_path):
         service.submit_media(missing)
     assert str(exc.value) == "CAPTURE_FILE_NOT_FOUND"
     assert str(tmp_path) not in str(exc.value)
+
+
+def test_long_manual_text_does_not_fail_path_probe():
+    value = "manual text " * 1000
+    result = classify_manual_input(value)
+    assert result.kind is ManualCaptureKind.TEXT
+    assert result.text == value.strip()
+
+
+def test_local_control_share_capability_remains_enabled():
+    capabilities = {item.name: item for item in CaptureService(FakePipeline()).capabilities()}
+    assert capabilities["local_control_share"].enabled is True
