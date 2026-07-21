@@ -2,16 +2,15 @@
 
 > Updated（更新时间）: 2026-07-21  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Combined Development Branch（联合开发分支）: `work/p2-04-integrated-validation`  
-> P2-03 Base Commit（基础提交）: `9f5f444e389cd549db653471c3a34ef27a109e15`  
+> Formal Integration Commit（正式集成提交）: `41a5264b344d24300ab731dffc19985402f5b24e`  
+> Integrated Development Branch（集成开发分支）: `work/p2-04-integrated-validation`  
 > Integrated Base Commit（集成基础提交）: `432ae059454cc7db8ab0ba4aaa63d24f5c9173e9`  
 > Verified Code Commit（已验证代码提交）: `2688b8b2521890af852b049e78795cffade43584`  
-> Validation Documentation Commit（验证文档基线提交）: `c4ba1c4`  
-> P2-03 Status（P2-03 状态）: `IMPLEMENTED_FOCUSED_TESTED`  
-> P2-03B Status（P2-03B 状态）: `IMPLEMENTED_FOCUSED_TESTED`  
-> P2-03C Status（P2-03C 状态）: `IMPLEMENTED_FOCUSED_TESTED`  
-> P2-04 Status（P2-04 状态）: `IMPLEMENTED_FOCUSED_TESTED`  
-> Integrated Merge State（集成合并状态）: `VALIDATED_AWAITING_FORMAL_MERGE`
+> P2-03 Status（P2-03 状态）: `MERGED_AND_VALIDATED`  
+> P2-03B Status（P2-03B 状态）: `MERGED_AND_VALIDATED`  
+> P2-03C Status（P2-03C 状态）: `MERGED_AND_VALIDATED`  
+> P2-04 Status（P2-04 状态）: `MERGED_AND_VALIDATED`  
+> Integrated Merge State（集成合并状态）: `MERGED_AND_VALIDATED`
 
 ## 1. 产品与代码主线
 
@@ -26,7 +25,7 @@ second_brain/
 = Compatibility/Migration Runtime（兼容与迁移运行层）
 ```
 
-本轮完成 P2-03 至 P2-04 的联合开发、返工、集成和本机集中验证。未执行 rebase、force push，也未合并正式分支。
+P2-03 至 P2-04 已完成联合开发、返工、集成、本机集中验证，并以安全 fast-forward 方式进入正式分支。未执行 rebase 或 force push。
 
 ## 2. 数据权威
 
@@ -57,6 +56,10 @@ P0 Workspace/Port Contract（工作区与端口合同）  MERGED_AND_VALIDATED
 P1 Unified Semantic Memory（统一语义记忆）      MERGED_AND_VALIDATED
 P2-01 Vector Center（向量中心）                 MERGED_AND_VALIDATED
 P2-02 Collection Migration（向量集合迁移）      MERGED_AND_VALIDATED
+P2-03 Structured Read Model（结构化读取模型）    MERGED_AND_VALIDATED
+P2-03B Structured Ingestion Wiring（结构化采集接线） MERGED_AND_VALIDATED
+P2-03C Capture Sources Foundation（信息入口基础） MERGED_AND_VALIDATED
+P2-04 Memory Inspector UI（记忆检查器）          MERGED_AND_VALIDATED
 ```
 
 Production bge-m3 Switch（生产模型切换）和生产 Collection（向量集合）重建仍未执行。
@@ -66,7 +69,7 @@ Production bge-m3 Switch（生产模型切换）和生产 Collection（向量集
 状态：
 
 ```text
-IMPLEMENTED_FOCUSED_TESTED
+MERGED_AND_VALIDATED
 ```
 
 已实现并验证：
@@ -97,7 +100,7 @@ src/control/api.py::create_control_app
 状态：
 
 ```text
-IMPLEMENTED_FOCUSED_TESTED
+MERGED_AND_VALIDATED
 ```
 
 当前正式数据流：
@@ -130,7 +133,7 @@ Raw Snapshot（原始快照）
 状态：
 
 ```text
-IMPLEMENTED_FOCUSED_TESTED
+MERGED_AND_VALIDATED
 ```
 
 已实现并验证：
@@ -141,7 +144,7 @@ IMPLEMENTED_FOCUSED_TESTED
 - 全局键盘监听、全屏截图监听默认关闭。
 - 文件、网页、文本稳定去重。
 - 去重采用 `probe -> Pipeline success -> commit`，失败后允许重试。
-- 手机分享和浏览器扩展正式后端合同。
+- 手机分享和浏览器扩展仅保留后端合同，客户端暂不开发。
 - Codex、Web、Media 显式启用结构化回退。
 - 未知 Adapter 默认不自动包装。
 - Metadata 递归敏感字段检查，不能覆盖保留字段。
@@ -152,7 +155,7 @@ IMPLEMENTED_FOCUSED_TESTED
 状态：
 
 ```text
-IMPLEMENTED_FOCUSED_TESTED
+MERGED_AND_VALIDATED
 ```
 
 已实现并验证：
@@ -271,31 +274,38 @@ duration: 45.99s
 修改数据库 Schema: NO
 ```
 
-## 11. 当前联合状态
+## 11. 当前状态
 
 ```text
-P2-03:  IMPLEMENTED_FOCUSED_TESTED
-P2-03B: IMPLEMENTED_FOCUSED_TESTED
-P2-03C: IMPLEMENTED_FOCUSED_TESTED
-P2-04:  IMPLEMENTED_FOCUSED_TESTED
+P2-03:  MERGED_AND_VALIDATED
+P2-03B: MERGED_AND_VALIDATED
+P2-03C: MERGED_AND_VALIDATED
+P2-04:  MERGED_AND_VALIDATED
 
 Integrated Merge State:
-VALIDATED_AWAITING_FORMAL_MERGE
-
-Merge Recommendation:
-READY_FOR_FORMAL_MERGE
+MERGED_AND_VALIDATED
 ```
 
-## 12. 下一步
+## 12. 下一阶段边界
 
-只剩正式合并与合并后最低成本验证：
+用户已明确暂不开发：
 
 ```text
-work/p2-04-integrated-validation
--> feature/second-brain-memory
--> compileall
--> npm run build
--> 更新 PROJECT_STATUS / CHANGELOG
+系统监听
+剪贴板监听
+文件夹监听
+手机分享客户端
+浏览器插件
 ```
 
-正式合并必须使用普通 merge，不得 rebase，不得 force push。
+下一阶段聚焦：
+
+```text
+P2-05 Manual Capture Center（手动信息入口中心）
+-> Capture Control API
+-> 任务状态持久化
+-> 手动文本、网页、文件、媒体导入
+-> Desktop 任务进度与结果跳转
+```
+
+正式分支后续开发必须从当前 `feature/second-brain-memory` 最新提交创建新分支。
