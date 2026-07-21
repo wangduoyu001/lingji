@@ -59,6 +59,7 @@ class CaptureMediaRequest(CaptureCommonRequest):
     allow_ocr: bool = False
     allow_transcription: bool = False
     extract_keyframes: bool = False
+    extract_audio: bool = False
 
 
 class CaptureShareRequest(BaseModel):
