@@ -144,15 +144,6 @@ class StructuredReadModelSink:
         metadata = dict(conversation.metadata)
         if vault_reference:
             metadata["vault_reference"] = vault_reference
-        link_allowed = bool(
-            indexing_succeeded
-            and document_stable_id
-            and self._memory_exists(document_stable_id)
-        )
-        if document_stable_id and not link_allowed:
-            warnings.append(
-                f"memory link skipped for conversation {conversation.external_id}: memory unavailable"
-            )
         messages = []
         for message in conversation.messages:
             record = self._message_record(
@@ -161,13 +152,25 @@ class StructuredReadModelSink:
                 source=source,
                 raw_reference=raw_reference,
             )
+            message_memory_id = str(
+                message.metadata.get("document_stable_id") or document_stable_id or ""
+            )
+            link_allowed = bool(
+                indexing_succeeded
+                and message_memory_id
+                and self._memory_exists(message_memory_id)
+            )
             if link_allowed:
                 record["memory_links"] = [
                     {
-                        "memory_id": document_stable_id,
+                        "memory_id": message_memory_id,
                         "relation_type": "contained_in_source_document",
                     }
                 ]
+            elif message_memory_id:
+                warnings.append(
+                    f"memory link skipped for message {message.external_id}: memory unavailable"
+                )
             messages.append(record)
         record: dict[str, Any] = {
             "external_id": conversation.external_id,

@@ -38,9 +38,9 @@ def build_extraction_pipeline(
     queue = SQLiteExtractionQueue(settings.state_db_path)
     registry = AdapterRegistry()
     registry.register(ChatGPTExportAdapter())
-    registry.register(CodexWorkReportAdapter())
-    registry.register(WebCaptureAdapter())
-    registry.register(MediaExtractionAdapter(settings.storage_path))
+    registry.register(CodexWorkReportAdapter(), structured_fallback=True)
+    registry.register(WebCaptureAdapter(), structured_fallback=True)
+    registry.register(MediaExtractionAdapter(settings.storage_path), structured_fallback=True)
     sink = VaultExtractionSink(layout, settings.storage_path, state_db=state_db)
     return ExtractionPipeline(
         queue,
