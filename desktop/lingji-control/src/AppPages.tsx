@@ -1,5 +1,6 @@
 import type { LingJiApi } from "./api";
 import AcceptancePage from "./pages/AcceptancePage";
+import AutoReviewPage from "./pages/AutoReviewPage";
 import BackupsPage from "./pages/BackupsPage";
 import BrainStatusPage from "./pages/BrainStatusPage";
 import CaptureCenterPage from "./pages/CaptureCenterPage";
@@ -31,6 +32,7 @@ export default function AppPages(props: AppPagesProps) {
     {page === "memory_inspector" && <MemoryInspectorLoopPage api={api} active={connected} target={inspectorTarget} />}
     {page === "codex_workspace" && <CodexWorkspacePage api={api} active={connected} onOpenInspector={onOpenInspector} />}
     {page === "memory_review" && <MemoryReviewPage api={api} active={connected} />}
+    {page === "auto_review" && <AutoReviewPage api={api} active={connected} />}
     {page === "capture_center" && <CaptureCenterPage api={api} active={connected} onOpenInspector={onOpenInspector} />}
     {page === "obsidian" && <ObsidianLoopPage api={api} active={connected} />}
     {page === "vector_center" && <VectorCenterPage api={api} active={connected} />}
