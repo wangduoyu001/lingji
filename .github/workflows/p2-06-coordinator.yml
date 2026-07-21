@@ -13,6 +13,7 @@ concurrency:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   migrate-and-validate:
@@ -89,6 +90,7 @@ jobs:
         run: git diff --check
 
       - name: Commit validated migration
+        id: commit
         shell: pwsh
         run: |
           git rm scripts/p2_06_wire.py
@@ -97,3 +99,20 @@ jobs:
           git add -A
           git commit -m "feat(obsidian): wire formal CLI migration"
           git push origin HEAD:work/p2-06-obsidian-cli-migration
+          "sha=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT
+
+      - name: Report success
+        if: success()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 17 --repo ${{ github.repository }} --body "P2-06 coordinator passed all Python, Desktop and Cargo gates. Validated commit: `${{ steps.commit.outputs.sha }}`."
+
+      - name: Report failure
+        if: failure()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 17 --repo ${{ github.repository }} --body "P2-06 coordinator failed. Inspect workflow run `${{ github.run_id }}`; no validated implementation commit was pushed by this attempt."
