@@ -1,0 +1,180 @@
+name: Finalize P2-05 Integration V2
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/p2-05-finalize-integration-v2.yml
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: p2-05-finalize-integration
+  cancel-in-progress: true
+
+jobs:
+  finalize:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - name: Checkout integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: work/p2-05-integrated-validation
+          path: integration
+          fetch-depth: 0
+
+      - name: Checkout finalizer tooling
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          path: control
+          sparse-checkout: |
+            scripts/ci/p2_05_finalize_integration.py
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            integration/requirements-ui.txt
+            integration/requirements-test.txt
+            integration/requirements-mcp.txt
+            integration/constraints/python-3.12-windows.txt
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: integration/desktop/lingji-control/package-lock.json
+
+      - name: Finalize and validate
+        id: finalizer
+        continue-on-error: true
+        shell: pwsh
+        working-directory: integration
+        run: |
+          $ErrorActionPreference = "Stop"
+          $status = Join-Path $PWD "p2-05-finalizer-status.txt"
+          "P2-05 Finalizer" | Set-Content $status
+          "start=$(Get-Date -Format o)" | Add-Content $status
+
+          function Invoke-Checked([string]$Name, [scriptblock]$Action) {
+            "START $Name" | Add-Content $status
+            & $Action
+            if ($LASTEXITCODE -ne 0) { throw "$Name failed with exit code $LASTEXITCODE" }
+            "PASS $Name" | Add-Content $status
+          }
+
+          try {
+            Invoke-Checked "install-python" {
+              python -m pip install --upgrade pip
+              python -m pip install `
+                -r requirements-ui.txt `
+                -r requirements-test.txt `
+                -r requirements-mcp.txt `
+                -c constraints/python-3.12-windows.txt
+              python -m pip check
+            }
+
+            Invoke-Checked "architecture-cleanup" {
+              python ../control/scripts/ci/p2_05_finalize_integration.py
+            }
+
+            Invoke-Checked "clean-install-validator" {
+              python scripts/validate_clean_install.py --root . --import-check
+            }
+
+            Invoke-Checked "compileall" {
+              python -m compileall -q `
+                main.py `
+                run_service.py `
+                run_control_api.py `
+                run_mcp_server.py `
+                run_extraction_worker.py `
+                src `
+                second_brain `
+                tests `
+                scripts
+            }
+
+            Invoke-Checked "pytest-full" {
+              python -m pytest -q --tb=short --junitxml=p2-05-pytest.xml *> p2-05-pytest.log
+            }
+            Get-Content p2-05-pytest.log -Tail 260
+
+            Push-Location desktop/lingji-control
+            try {
+              Invoke-Checked "npm-ci" { npm ci --no-audit --no-fund }
+              Invoke-Checked "capture-smoke" { npm run test:capture }
+              Invoke-Checked "desktop-smoke" { npm run test:smoke }
+              Invoke-Checked "desktop-build" { npm run build }
+              Invoke-Checked "cargo-check" { cargo check --manifest-path src-tauri/Cargo.toml }
+            } finally {
+              Pop-Location
+            }
+
+            Invoke-Checked "diff-check" { git diff --check }
+
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "fix(p2-05): finalize integrated capture architecture"
+            if ($LASTEXITCODE -ne 0) { throw "git commit failed with exit code $LASTEXITCODE" }
+            git push origin HEAD:work/p2-05-integrated-validation
+            if ($LASTEXITCODE -ne 0) { throw "git push failed with exit code $LASTEXITCODE" }
+            "PASS commit-and-push" | Add-Content $status
+            "final=SUCCESS" | Add-Content $status
+          } catch {
+            "final=FAILED" | Add-Content $status
+            "error=$($_.Exception.Message)" | Add-Content $status
+            Write-Error $_
+            exit 1
+          } finally {
+            "end=$(Get-Date -Format o)" | Add-Content $status
+            Get-Content $status
+          }
+
+      - name: Upload finalization evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p2-05-finalization-evidence
+          path: |
+            integration/p2-05-finalizer-status.txt
+            integration/p2-05-pytest.xml
+            integration/p2-05-pytest.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Publish status to Issue 10
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.finalizer.outcome }}
+        run: |
+          $statusPath = "integration/p2-05-finalizer-status.txt"
+          $details = if (Test-Path $statusPath) { Get-Content $statusPath -Raw } else { "No finalizer status file was produced." }
+          $body = @"
+          ## P2-05 Integration Finalizer
+
+          Workflow outcome: **$env:OUTCOME**
+
+          ```text
+          $details
+          ```
+          "@
+          gh issue comment 10 --repo ${{ github.repository }} --body $body
+
+      - name: Enforce final result
+        if: always()
+        shell: pwsh
+        run: |
+          if ("${{ steps.finalizer.outcome }}" -ne "success") { exit 1 }
