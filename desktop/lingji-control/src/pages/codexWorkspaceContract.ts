@@ -17,7 +17,7 @@ export function workspaceQuery(filters: WorkspaceFilters): string {
 }
 
 export function reviewQuery(filters: ReviewFilters): string {
-  return queryString({ project_id: filters.projectId, agent: filters.agent, type: filters.type, importance: filters.importance, q: filters.q, limit: filters.limit, offset: filters.offset });
+  return queryString({ project_id: filters.projectId, agent_id: filters.agent, memory_type: filters.type, importance: filters.importance, q: filters.q, limit: filters.limit, offset: filters.offset });
 }
 
 export function displayPath(value?: string): string {
