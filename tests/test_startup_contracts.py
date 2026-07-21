@@ -55,19 +55,38 @@ def _attribute_chain(node: ast.AST) -> str:
     return ".".join(reversed(parts))
 
 
+class _ModuleLevelCallVisitor(ast.NodeVisitor):
+    """Collect calls executed at import time while skipping deferred bodies."""
+
+    def __init__(self) -> None:
+        self.calls: set[str] = set()
+
+    def visit_Call(self, node: ast.Call) -> None:
+        name = _attribute_chain(node.func)
+        if name:
+            self.calls.add(name)
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        return
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        return
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        return
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        return
+
+
 def _top_level_calls(tree: ast.Module) -> set[str]:
-    calls: set[str] = set()
+    visitor = _ModuleLevelCallVisitor()
     for statement in tree.body:
         if _is_main_guard(statement):
             continue
-        for node in ast.walk(statement):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
-                continue
-            if isinstance(node, ast.Call):
-                name = _attribute_chain(node.func)
-                if name:
-                    calls.add(name)
-    return calls
+        visitor.visit(statement)
+    return visitor.calls
 
 
 def test_all_startup_entrypoints_have_main_guards():
