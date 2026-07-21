@@ -7,13 +7,14 @@ const page = fs.readFileSync(pagePath, "utf8");
 const navigation = fs.readFileSync("src/navigation.ts", "utf8");
 const types = fs.readFileSync("src/types.ts", "utf8");
 const app = fs.readFileSync("src/App.tsx", "utf8");
+const routes = fs.readFileSync("src/AppPages.tsx", "utf8");
 
 for (const token of ["vector_center", "向量中心", "Embedding、Qdrant 与索引覆盖率"]) {
   if (!navigation.includes(token)) throw new Error(`Navigation is missing ${token}`);
 }
 if (!types.includes('"vector_center"')) throw new Error("PageId is missing vector_center");
 for (const token of ["VectorCenterPage", 'page === "vector_center"']) {
-  if (!app.includes(token)) throw new Error(`App shell is missing ${token}`);
+  if (!routes.includes(token)) throw new Error(`Page router is missing ${token}`);
 }
 for (const endpoint of ["/api/memory/status", "/api/vector/status", "/api/vector/coverage"]) {
   if (!page.includes(endpoint)) throw new Error(`Vector Center is missing ${endpoint}`);
