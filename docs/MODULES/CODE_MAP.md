@@ -2,12 +2,9 @@
 
 > Updated（更新时间）: 2026-07-21  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Combined Development Branch（联合开发分支）: `work/p2-03b-ingestion-wiring`  
-> P2-03 Base Commit（基础提交）: `9f5f444e389cd549db653471c3a34ef27a109e15`  
-> Combined Implementation Commit（联合实现提交）: `82a13334d475584869e92801b60e65bbc654937d`  
-> Verified Commit（已验证提交）: `NOT_EXECUTED`  
-> P2-03 Status（状态）: `IMPLEMENTED_NOT_TESTED`  
-> P2-03B Status（状态）: `IMPLEMENTED_NOT_TESTED`
+> P0 Validation Branch（P0 验证分支）: `work/p0-engineering-hygiene`  
+> P0 Verified Code Commit（P0 已验证代码提交）: `08b507c2855e05a1d971cb2bcae5c8d2fea578eb`  
+> P0 Status（P0 状态）: `READY_FOR_FORMAL_MERGE`
 
 ## 1. 仓库职责
 
@@ -22,216 +19,410 @@ desktop/lingji-control/
 = 唯一正式 Desktop UI（桌面用户界面）
 ```
 
-## 2. 当前统一采集与记忆链路
+规则：
 
-```text
-src/extraction/
-  -> Raw Snapshot（原始快照）
-  -> Adapter.extract()
-       -> documents
-       -> structured_sources
-  -> VaultExtractionSink.write_batch()
-  -> on_documents_written
-  -> StructuredReadModelSink.write_batch()
-       -> SourceReadModel.upsert_bundle()
-       -> StateDatabase.append_event()
-  -> MemoryIndexCoordinator（记忆索引协调器）
-       -> lingji_memory.db Lexical Index（词法索引）
-       -> QdrantSemanticProvider（Qdrant 语义提供器）
-  -> HybridRetriever（混合检索器）
-  -> MemoryGateway（记忆网关）
-  -> MemoryInspectorFacade（记忆检查器门面）
-  -> authenticated 8766 GET API（带认证的只读接口）
-```
+- 新的正式产品能力必须进入 `src/`。
+- `second_brain/` 只允许兼容、迁移和待退役行为。
+- Desktop 不得直连 SQLite、Qdrant、Ollama 或 Compatibility API。
 
-P2-03 Read Model（读取模型）是可重建查询层，不取代 Vault、raw、MemoryGateway 或 HybridRetriever。
-
-## 3. 数据权威
+## 2. 数据权威与派生层
 
 ```text
 Obsidian Vault + Git
-= 永久记忆和正式知识正文
+= 永久知识权威
 
 storage/raw
-= 原始导入材料
+= 原始输入归档
 
 src/storage/state_db.py
-= 队列、处理状态和 Audit Event（审计事件）
+= 任务、队列、Runtime State、Audit Event
 
 src/retrieval/memory_db.py
-= 可重建 Lexical/Metadata Index（词法与元数据索引）
+= 可重建 Lexical/Metadata Index
 
 src/sources/read_model.py
-= 可重建 Structured Read Model（结构化读取模型）
+= 可重建 Structured Read Model
 
 src/retrieval/qdrant_provider.py
-= 可重建 Semantic Index Provider（语义索引提供器）
+= 可重建 Semantic Index Provider
 ```
 
-`second_brain/db.py` 仍是 Compatibility Data（兼容数据）和迁移证据。
+## 3. Workspace 与路径合同
 
-## 4. P2-03 正式入口
-
-| 能力 | 正式入口 | 状态 |
-|---|---|---|
-| Source Read Model（来源读取模型） | `src/sources/read_model.py::SourceReadModel` | `IMPLEMENTED_NOT_TESTED` |
-| Permission Query（权限查询） | `src/sources/service.py::SourceQueryService` | `IMPLEMENTED_NOT_TESTED` |
-| Viewer Contract（查看者合同） | `src/sources/service.py::ViewerContext` | `IMPLEMENTED_NOT_TESTED` |
-| Memory Inspector Facade | `src/gateway/memory_inspector.py::MemoryInspectorFacade` | `IMPLEMENTED_NOT_TESTED` |
-| Inspector Builder | `src/control/memory_inspector.py::build_memory_inspector` | `IMPLEMENTED_NOT_TESTED` |
-| Inspector API | `src/control/api.py::create_control_app()` | `IMPLEMENTED_NOT_TESTED` |
-
-正式实现只有：
+正式入口：
 
 ```text
-src/sources/read_model.py::SourceReadModel
-src/gateway/memory_inspector.py::MemoryInspectorFacade
-src/control/api.py::create_control_app
+src/config.py::Settings
+src/runtime/workspace.py::WorkspaceResolver
 ```
 
-不存在平行 `*_contract.py` 包装层或 Monkey Patch（猴子补丁）。
-
-## 5. P2-03B 正式入口
-
-| 能力 | 正式入口 | 状态 |
-|---|---|---|
-| Structured Models（结构化传输模型） | `src/extraction/models.py` | `IMPLEMENTED_NOT_TESTED` |
-| ChatGPT Mapping（ChatGPT 映射） | `src/extraction/adapters/chatgpt.py::ChatGPTExportAdapter` | `IMPLEMENTED_NOT_TESTED` |
-| Structured Sink（结构化写入器） | `src/extraction/structured_sink.py::StructuredReadModelSink` | `IMPLEMENTED_NOT_TESTED` |
-| Pipeline（处理管线） | `src/extraction/pipeline.py::ExtractionPipeline` | `IMPLEMENTED_NOT_TESTED` |
-| Runtime Assembly（运行时装配） | `src/extraction/bootstrap.py::build_extraction_pipeline()` | `IMPLEMENTED_NOT_TESTED` |
-| Safe Error Summary（安全错误摘要） | `src/extraction/errors.py::safe_extraction_error` | `IMPLEMENTED_NOT_TESTED` |
-| Audit Store（审计存储） | `src/storage/state_db.py::StateDatabase.append_event` | 已有正式接口，P2-03B 已接线 |
-
-## 6. Audit Event 合同
-
-`StructuredReadModelSink` 只使用：
-
-```python
-state_db.append_event(
-    event_type,
-    "structured_ingestion",
-    execution_id,
-    dict(payload),
-)
-```
-
-事件：
-
-```text
-event_type  = structured_ingestion_completed
-entity_type = structured_ingestion
-entity_id   = execution_id
-```
-
-事件失败只写入 logger，不影响主流程。不保留 `record_event` 旁路。
-
-## 7. 统一异常脱敏
-
-唯一正式工具：
-
-```text
-src/extraction/errors.py::safe_extraction_error
-```
-
-调用位置：
-
-```text
-src/extraction/pipeline.py
-src/extraction/adapters/chatgpt.py
-src/extraction/structured_sink.py
-```
-
-外部只返回稳定摘要；完整异常仅进入 logger（日志记录器）。
-
-## 8. Pipeline 顺序与降级
-
-正式顺序：
-
-```text
-preserve_raw
--> Adapter
--> Vault write
--> on_documents_written
--> Structured Sink
-```
-
-索引回调失败时：
-
-- Vault 结果保留。
-- `indexed=false`。
-- `index_error` 不包含异常原文或路径。
-- Structured Source/Conversation/Message 继续写入。
-- Memory Link 按索引失败合同跳过。
-
-## 9. Workspace 与端口边界
-
-```text
-8765 = second_brain Compatibility API（兼容接口）
-8766 = authenticated Local Control API（带认证的本地控制接口）
-8767 = optional MCP Streamable HTTP（可选 MCP 流式接口）
-stdio = default local MCP transport（默认本地 MCP 传输）
-```
-
-Tauri 只能访问 8766，不得直连 SQLite、Qdrant、Ollama、8765 或 8767。
-
-P2-03/P2-03B 使用当前 Workspace 的：
+关键路径：
 
 ```text
 vault_path
 storage_path
+raw_path
 state_db_path
 memory_db_path
+queue_db_path
+backup_path
+runtime_settings_path
+qdrant_path / qdrant_url / qdrant_collection
 ```
 
-## 10. 最小联合测试地图
+P0 规则：
+
+- 未配置备份目录时使用 `<storage_path>/backups`。
+- 不允许机器专属固定盘符或用户名目录。
+- Production 和 Acceptance 必须物理隔离。
+- 生产系统盘保护由 `src/runtime/workspace.py` 持有。
+- `tests/fixtures/workspace_paths.py` 仅允许显式测试临时根绕过系统盘限制。
+
+## 4. 端口和进程边界
 
 ```text
-tests/test_structured_ingestion.py
-tests/test_source_read_model.py
-tests/test_source_service.py
-tests/test_memory_inspector_facade.py
-tests/test_memory_inspector_api.py
+8765 = second_brain Compatibility API
+8766 = authenticated Local Control API
+8767 = optional MCP Streamable HTTP
+stdio = default local MCP transport
 ```
 
-`tests/test_structured_ingestion.py` 包括：
-
-- 真实临时 `MemoryDatabase`。
-- 真实 `SourceReadModel`。
-- 真实 `StructuredReadModelSink`。
-- 真实 `StateDatabase`。
-- 幂等 Source/Conversation/Message 写入。
-- Message 正文详情。
-- Pipeline 顺序。
-- 索引失败降级与路径脱敏。
-- Audit Event 查询。
-- ChatGPT warning 脱敏。
-
-计划命令：
-
-```powershell
-python -m pytest `
-  tests/test_structured_ingestion.py `
-  tests/test_source_read_model.py `
-  tests/test_source_service.py `
-  tests/test_memory_inspector_facade.py `
-  tests/test_memory_inspector_api.py `
-  -v --tb=short
-```
-
-当前 pytest 未执行。
-
-## 11. 当前状态
+正式启动入口：
 
 ```text
-P2-03:  IMPLEMENTED_NOT_TESTED
-P2-03B: IMPLEMENTED_NOT_TESTED
-Combined Development Branch: work/p2-03b-ingestion-wiring
-Combined Merge State: NOT_MERGED_AWAITING_COORDINATED_REVIEW
+main.py
+run_service.py
+run_control_api.py
+run_mcp_server.py
+run_extraction_worker.py
 ```
 
-## 12. 下一步
+行为合同测试：
 
-停止开发，等待联合代码审查和一次集中测试。
+```text
+tests/test_startup_contracts.py
+```
 
-不得开始 P2-04 Memory Inspector（记忆检查器），不得合并正式分支，不得 force push。
+测试不再逐字比较启动文件源码。
+
+## 5. 统一采集与记忆链路
+
+```text
+Capture Input
+-> src/capture/service.py::CaptureService
+-> src/extraction/pipeline.py::ExtractionPipeline
+-> Raw Snapshot
+-> Adapter.extract()
+-> VaultExtractionSink
+-> StructuredReadModelSink
+-> SourceReadModel
+-> Memory Index Coordinator
+-> HybridRetriever
+-> MemoryGateway
+-> MemoryInspectorFacade
+-> authenticated 8766 API
+-> Desktop UI
+```
+
+## 6. Capture Foundation
+
+正式入口：
+
+```text
+src/capture/models.py
+src/capture/policy.py
+src/capture/deduplication.py
+src/capture/service.py
+```
+
+现有能力：
+
+- 文本、网页、文件、媒体入口合同。
+- LOW_POWER、NORMAL、DEEP_CAPTURE、PAUSED。
+- 两阶段去重。
+- Metadata 敏感字段检查。
+- `process_later=True` 排队合同。
+
+下一阶段 P2-05 不创建第二套队列或数据库。
+
+## 7. Extraction 与队列
+
+正式入口：
+
+```text
+src/extraction/models.py
+src/extraction/registry.py
+src/extraction/bootstrap.py
+src/extraction/pipeline.py
+src/extraction/queue.py::SQLiteExtractionQueue
+src/extraction/worker.py
+src/extraction/structured_sink.py
+src/extraction/errors.py::safe_extraction_error
+```
+
+队列数据存储：
+
+```text
+lingji_state.db::extraction_jobs
+```
+
+状态：
+
+```text
+queued
+running
+retrying
+completed
+failed
+cancelled
+```
+
+## 8. Structured Read Model
+
+正式入口：
+
+```text
+src/sources/read_model.py::SourceReadModel
+src/sources/service.py::SourceQueryService
+src/sources/service.py::ViewerContext
+```
+
+实体关系：
+
+```text
+Source
+-> Conversation
+-> Message
+-> Memory
+-> Chunk
+-> Vector
+```
+
+支持：
+
+- Stable ID。
+- 幂等 Upsert。
+- Privacy / Project / Agent Scope。
+- 权限继承与显式覆盖。
+- Message 级 Memory Link。
+- Schema Version 校验。
+
+## 9. Memory Gateway 与检索
+
+正式入口：
+
+```text
+src/gateway/bootstrap.py::build_memory_gateway
+src/gateway/memory.py::MemoryGateway
+src/retrieval/memory_db.py
+src/retrieval/qdrant_provider.py::QdrantSemanticProvider
+src/retrieval/hybrid.py::HybridRetriever
+```
+
+检索层：
+
+```text
+Lexical / Metadata
++ Semantic
++ RRF Hybrid
+```
+
+Qdrant 测试默认使用 in-memory 合同，不要求外部生产服务。
+
+## 10. Memory Inspector
+
+正式后端：
+
+```text
+src/gateway/memory_inspector.py::MemoryInspectorFacade
+src/control/memory_inspector.py::build_memory_inspector
+src/control/api.py::create_control_app
+```
+
+正式前端：
+
+```text
+desktop/lingji-control/src/pages/MemoryInspectorPage.tsx
+```
+
+API：
+
+```text
+GET /api/memory/inspector/status
+GET /api/memory/inspector/sources
+GET /api/memory/inspector/conversations
+GET /api/memory/inspector/messages
+GET /api/memory/inspector/memories
+```
+
+## 11. Local Control API
+
+正式入口：
+
+```text
+src/control/api.py::create_control_app
+src/control/service.py::LocalControlService
+src/control/runtime_settings.py::RuntimeSettingsStore
+```
+
+基础接口：
+
+```text
+/api/health
+/api/overview
+/api/brain/status
+/api/jobs
+/api/settings
+/api/memory/inspector/*
+```
+
+所有 Desktop 请求使用 `X-LingJi-Token`。
+
+Brain Status API 合同测试：
+
+```text
+tests/test_brain_status_e2e.py
+```
+
+该测试使用确定性注入服务，不启动真实端口、GPU 探测或本地模型服务。
+
+## 12. Obsidian CLI 兼容层
+
+当前位置：
+
+```text
+second_brain/obsidian_cli.py
+```
+
+当前职责：
+
+- CLI 可执行文件发现。
+- Vault 路径和名称发现。
+- 兼容命令包装。
+
+发现顺序：
+
+```text
+OBSIDIAN_CLI_PATH
+-> PATH
+-> platform location
+-> not_found
+```
+
+正式迁移目标：
+
+```text
+src/obsidian/
+  config.py
+  discovery.py
+  models.py
+  client.py
+  service.py
+```
+
+迁移计划：
+
+```text
+docs/MODULES/OBSIDIAN_CLI_MIGRATION_PLAN.md
+```
+
+## 13. Desktop UI
+
+正式目录：
+
+```text
+desktop/lingji-control/
+```
+
+关键入口：
+
+```text
+src/App.tsx
+src/api.ts
+src/navigation.ts
+src/types.ts
+src/pages/JobsPage.tsx
+src/pages/MemoryInspectorPage.tsx
+src-tauri/
+```
+
+构建门禁：
+
+```text
+npm ci
+npm run test:smoke
+npm run build
+```
+
+## 14. P0 依赖与测试基础
+
+依赖文件：
+
+```text
+requirements.txt
+requirements-ui.txt
+requirements-media.txt
+requirements-mcp.txt
+requirements-test.txt
+constraints/python-3.13-linux.txt
+constraints/python-3.12-windows.txt
+```
+
+验证工具：
+
+```text
+scripts/validate_clean_install.py
+.github/workflows/p0-windows-gate.yml
+```
+
+最终 P0 门禁：
+
+```text
+Windows Python 3.12 install: PASS
+pip check: PASS
+clean-install validator: PASS
+compileall: PASS
+full pytest: 359 passed / 11 skipped / 0 failed
+Desktop smoke: PASS
+Desktop build: PASS
+```
+
+## 15. P2-05 文件所有权
+
+规划文档：
+
+```text
+docs/MODULES/P2_05_MANUAL_CAPTURE_CENTER_PLAN.md
+docs/MODULES/P2_05_PARALLEL_OWNERSHIP.md
+```
+
+并行边界：
+
+```text
+Engineer 1:
+src/control/
+src/extraction/queue.py
+
+Engineer 2:
+src/capture/
+必要的 Adapter 映射
+
+Engineer 3:
+desktop/lingji-control/
+
+Integration Engineer:
+共享文档、冲突解决、集成测试
+```
+
+## 16. 当前状态
+
+```text
+P0 Engineering Hygiene:
+READY_FOR_FORMAL_MERGE
+
+P2-03 / P2-03B / P2-03C / P2-04:
+MERGED_AND_VALIDATED
+
+P2-05:
+PLANNED_BLOCKED_UNTIL_P0_MERGE
+```
