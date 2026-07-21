@@ -1,0 +1,75 @@
+name: Finalize P2-05 Formal Status
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/p2-05-post-merge-status.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize-status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout formal branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/second-brain-memory
+          fetch-depth: 0
+
+      - name: Update formal status documents
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          formal_merge = "c77e78c0f71339264d54fc083dbc5cfabcfaa173"
+
+          project_path = Path("docs/PROJECT_STATUS.md")
+          project = project_path.read_text(encoding="utf-8")
+          project = project.replace(
+              "> P2-05 Validated Integration Tree（P2-05 已验证集成树）: `1bf95b8d16a9daea52b60518f0e920a0c0bd50db`  \n> P2-05 Status（P2-05 状态）: `READY_FOR_FORMAL_MERGE`",
+              "> P2-05 Validated Integration Tree（P2-05 已验证集成树）: `1bf95b8d16a9daea52b60518f0e920a0c0bd50db`  \n> P2-05 Formal Merge Commit（P2-05 正式合并提交）: `c77e78c0f71339264d54fc083dbc5cfabcfaa173`  \n> P2-05 Status（P2-05 状态）: `MERGED_AND_VALIDATED`",
+          )
+          project = project.replace("P2-05 Manual Capture Center                       INTEGRATED_AND_VALIDATED", "P2-05 Manual Capture Center                       MERGED_AND_VALIDATED")
+          project = project.replace("状态：`READY_FOR_FORMAL_MERGE`", "状态：`MERGED_AND_VALIDATED`", 1)
+          project = project.replace("P2-05 Manual Capture Center:\nREADY_FOR_FORMAL_MERGE", "P2-05 Manual Capture Center:\nMERGED_AND_VALIDATED")
+          project = project.replace(
+              "合并 work/p2-05-integrated-validation\n-> feature/second-brain-memory\n-> 更新正式合并提交和状态\n-> 关闭 Issue #10\n-> 进入 Obsidian CLI 正式迁入 src 阶段",
+              "P2-05 已正式合并并验证\n-> 关闭 Issue #10\n-> 进入 Obsidian CLI 正式迁入 src\n-> 接入 8766、Runtime Settings 和 Tauri 状态入口",
+          )
+          project_path.write_text(project, encoding="utf-8")
+
+          map_path = Path("docs/MODULES/CODE_MAP.md")
+          code_map = map_path.read_text(encoding="utf-8")
+          code_map = code_map.replace(
+              "> P2-05 Validated Integration Tree（P2-05 已验证集成树）: `1bf95b8d16a9daea52b60518f0e920a0c0bd50db`  \n> P2-05 Status（P2-05 状态）: `READY_FOR_FORMAL_MERGE`",
+              "> P2-05 Validated Integration Tree（P2-05 已验证集成树）: `1bf95b8d16a9daea52b60518f0e920a0c0bd50db`  \n> P2-05 Formal Merge Commit（P2-05 正式合并提交）: `c77e78c0f71339264d54fc083dbc5cfabcfaa173`  \n> P2-05 Status（P2-05 状态）: `MERGED_AND_VALIDATED`",
+          )
+          code_map = code_map.replace("P2-05 Manual Capture Center:\nREADY_FOR_FORMAL_MERGE", "P2-05 Manual Capture Center:\nMERGED_AND_VALIDATED")
+          map_path.write_text(code_map, encoding="utf-8")
+
+          changelog_path = Path("docs/CHANGELOG.md")
+          changelog = changelog_path.read_text(encoding="utf-8")
+          marker = "- 已验证集成树：`1bf95b8d16a9daea52b60518f0e920a0c0bd50db`。\n"
+          formal_line = f"- 正式合并提交：`{formal_merge}`。\n"
+          if formal_line not in changelog:
+              if marker not in changelog:
+                  raise SystemExit("P2-05 changelog marker not found")
+              changelog = changelog.replace(marker, marker + formal_line, 1)
+          changelog_path.write_text(changelog, encoding="utf-8")
+          PY
+
+      - name: Validate document diff
+        run: git diff --check
+
+      - name: Commit and push formal status
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/PROJECT_STATUS.md docs/MODULES/CODE_MAP.md docs/CHANGELOG.md
+          git commit -m "docs(p2-05): mark formal merge validated"
+          git push origin HEAD:feature/second-brain-memory
