@@ -1,183 +1,218 @@
 # OBSIDIAN_CLI_MIGRATION_PLAN.md — Obsidian CLI 迁移计划
 
 > Updated（更新时间）: 2026-07-21  
-> Branch（分支）: `work/p0-engineering-hygiene`  
-> Verified Commit（已验证提交）: `NOT_FULL_REPOSITORY_VALIDATED`  
-> Status（状态）: `PLANNED_COMPATIBILITY_PATH_FIXED`  
-> Evidence（证据来源）: `second_brain/obsidian_cli.py`、`docs/ARCHITECTURE.md`、`docs/MEMORY_SYSTEM.md`
+> Branch（分支）: `work/p2-06-obsidian-cli-migration`  
+> Validated Commit（已验证提交）: `4b0ad577eb396030ee6baa5c3bb217e990385475`  
+> Status（状态）: `IMPLEMENTED_COORDINATOR_VALIDATED`  
+> Implementation Report（实施报告）: `docs/MODULES/P2_06_OBSIDIAN_CLI_MIGRATION_IMPLEMENTATION.md`  
+> Test Report（测试报告）: `docs/TEST_REPORTS/P2_06_OBSIDIAN_CLI_MIGRATION_TEST_REPORT.md`
 
 ## 1. 目标
 
-将 Obsidian CLI（命令行接口）从 `second_brain/` 的兼容实现逐步迁移到 `src/` 正式主线，同时保持一份命令实现、一套 Workspace（工作区）路径合同和一个 Local Control API（本地控制接口）入口。
-
-P0 只修复兼容层的机器专属路径，并登记最终迁移合同，不迁移完整命令面。
-
-## 2. 当前状态
-
-当前兼容实现：
+将 Obsidian CLI（命令行接口）从 `second_brain/` 兼容实现迁入 `src/` 正式主线，同时保持：
 
 ```text
-second_brain/obsidian_cli.py
+一份 CLI 命令实现
++ 一套 Workspace / Runtime Settings 路径合同
++ 一个 8766 Local Control API 入口
++ 一个 Tauri 状态与设置入口
 ```
 
-P0 已收口：
+迁移不得创建第二套 Vault 写入、数据库、任务队列或 Schema。
 
-- `OBSIDIAN_CLI_PATH` 保持最高优先级。
-- `PATH` 依次探测 `Obsidian.com` 与 `obsidian`。
-- Windows 标准候选从 `LOCALAPPDATA`、`ProgramFiles`、`ProgramFiles(x86)` 构造。
-- macOS 与 Linux 使用平台标准候选。
-- 不再写死 C:、D: 或用户目录。
-- CLI 发现来源区分为 `environment`、`path`、`platform_location`、`not_found`。
-- Vault 路径合同支持 Workspace、Runtime Settings、`OBSIDIAN_VAULT_PATH` 与旧 `SECOND_BRAIN_OBSIDIAN_DIR`。
-- 非 Windows 平台不再直接依赖 `subprocess.CREATE_NO_WINDOW`。
+## 2. 当前完成状态
 
-兼容实现仍然是 `DEPRECATED_COMPATIBILITY_ONLY`，不得继续增加正式产品能力。
+已完成：
 
-## 3. 最终目录
+- `src/obsidian/` 正式 CLI 包。
+- 可执行文件与 Vault 跨平台发现。
+- Workspace 与 Runtime Settings 接线。
+- 类型化只读与安全写入命令面迁移。
+- 超时、编码、稳定错误和路径边界。
+- 写入后读取验证与 Dry Run。
+- 8766 状态、草稿校验和刷新 API。
+- Tauri Obsidian 状态与设置页。
+- `second_brain/obsidian_cli.py` 降为兼容转发。
+- Windows Python、Desktop 与 Cargo 协调门禁通过。
+
+正式迁移不覆盖既有 `src/obsidian/management.py` 和 `system_ui.py`，而是与它们组成同一正式包。
+
+## 3. 正式目录
 
 ```text
 src/obsidian/
   __init__.py
-  config.py
-  discovery.py
   models.py
+  discovery.py
+  config.py
   client.py
   service.py
+  management.py
+  system_ui.py
 ```
 
 职责：
 
-| 文件 | 最终职责 |
+| 文件 | 职责 |
 |---|---|
-| `config.py` | CLI、Vault、超时、Dry Run（试运行）与能力配置模型 |
-| `discovery.py` | 可执行文件和平台候选发现，返回路径及发现来源 |
-| `models.py` | 命令结果、Vault 信息、能力状态与稳定错误模型 |
-| `client.py` | 类型化参数、超时、编码、错误转换和安全子进程执行 |
-| `service.py` | Workspace/Runtime Settings 接线、能力聚合、权限与审计 |
-| `__init__.py` | 仅导出稳定公共接口 |
+| `models.py` | 稳定状态、错误码和公共数据模型 |
+| `discovery.py` | Runtime、环境变量、PATH、平台标准位置发现 |
+| `config.py` | CLI、Vault、超时、Dry Run 与 Workspace 配置模型 |
+| `client.py` | 类型化参数、安全子进程、编码、超时、写入验证 |
+| `service.py` | Runtime Settings、状态、脱敏、校验和审计 |
+| `management.py` | 已有安全笔记属性、标签和关系管理 |
+| `system_ui.py` | 已有 Obsidian 系统界面生成 |
+| `__init__.py` | 稳定公共接口导出 |
 
-不得把完整 `ObsidianCli` 类复制一份后再逐渐分叉。迁移必须按能力移动，并保持单一写入实现。
+## 4. 单一实现合同
 
-## 4. 最终数据流
+```text
+second_brain/obsidian_cli.py
+= DEPRECATED COMPATIBILITY FACADE
+```
+
+兼容模块：
+
+- 只从 `src.obsidian` 转发公共接口；
+- 保留旧调用方和测试需要的导入名；
+- 不保留 `_run`、发现、读写或校验实现；
+- 不接受新的正式产品能力。
+
+因此同一输入不会被两套 CLI 实现重复处理。
+
+## 5. 数据流
 
 ```text
 Workspace Vault
+-> Runtime Settings owner override
 -> ObsidianService
 -> ObsidianCliClient
--> Local Control API :8766
--> Tauri 状态与设置
+-> authenticated Local Control API :8766
+-> Tauri Obsidian page
 ```
 
 边界：
 
-1. Workspace 决定当前 Vault 和隔离环境。
-2. Runtime Settings 保存用户可编辑配置，不取代 Workspace 权威。
-3. Client 只执行已经注册的类型化命令，不接受任意 Shell 字符串。
-4. Service 负责能力判断、状态、权限、审计与降级。
-5. Tauri 只调用 `127.0.0.1:8766`，不得直接启动 CLI 或读取兼容配置。
-6. `second_brain/` 在迁移期间只保留兼容转发或只读验收。
+1. Workspace Vault 保持路径权威。
+2. Runtime Settings 提供主人可编辑覆盖，不绕过 Production/Acceptance 隔离。
+3. Client 只执行注册过的类型化命令，不接受 Shell 字符串。
+4. Service 负责状态、错误、脱敏、校验和审计。
+5. Tauri 只调用 8766，不直接启动 CLI、读取 SQLite 或导入兼容模块。
 
-## 5. 配置优先级
+## 6. 配置优先级
 
-### 5.1 CLI 可执行文件
+### 6.1 CLI 可执行文件
 
 ```text
-显式 Runtime Settings 或 Workspace 配置
+Runtime Settings 显式路径
 -> OBSIDIAN_CLI_PATH
 -> PATH: Obsidian.com / obsidian
 -> 平台标准位置
 -> not_found
 ```
 
-P0 兼容层仍将 `OBSIDIAN_CLI_PATH` 放在自动发现之前。迁入 `src` 时，用户在 UI 中保存的显式配置应成为最高优先级，并记录配置来源。
-
-### 5.2 Vault
+### 6.2 Vault
 
 ```text
 当前 Workspace Vault
--> Runtime Settings 显式 Vault
+-> Runtime Settings 显式回退路径
 -> OBSIDIAN_VAULT_PATH
 -> SECOND_BRAIN_OBSIDIAN_DIR（兼容）
 -> configuration_required
 ```
 
-Production 与 Acceptance 不得共享可写 Vault。
+### 6.3 Vault 名称
 
-## 6. 迁移阶段
+```text
+Runtime Settings 显式名称
+-> OBSIDIAN_VAULT_NAME
+-> Vault 目录名
+-> 兼容默认值
+```
 
-### Stage 1：配置、发现、状态
+## 7. Runtime Settings
 
-目标：
+```text
+obsidian_cli_enabled
+obsidian_cli_path
+obsidian_vault_path
+obsidian_vault_name
+obsidian_cli_timeout_seconds
+obsidian_cli_dry_run
+```
 
-- 建立 `config.py`、`discovery.py`、`models.py`。
-- 输出 CLI 路径、发现来源、Vault 路径、版本、可用性和稳定错误。
-- 接入 Workspace 与 Runtime Settings。
-- 不执行写命令。
+用户可以在通用设置页或 Obsidian 专页查看和修改这些值。
 
-验收：
+## 8. 正式命令面
 
-- 环境变量、PATH 和平台位置优先级测试。
-- Production/Acceptance 路径隔离。
-- 未安装 CLI 时稳定返回 `configuration_required` 或 `unavailable`。
+只读：
 
-### Stage 2：只读命令
+```text
+version
+help
+vault info
+vault list
+search
+read
+files
+file count
+tags
+tasks
+daily read
+daily path
+```
 
-目标：
+安全写入：
 
-- 迁移版本、Vault 信息、文件列表、搜索、读取和只读健康检查。
-- 建立类型化命令参数和统一错误映射。
+```text
+create
+append
+daily append
+```
 
-验收：
+写入合同：
 
-- 超时、UTF-8/BOM、中文路径和空结果。
-- 不存在笔记与 CLI 不可用的稳定错误。
-- 只读命令不得修改 Vault。
+- 只接受 Vault 相对路径；
+- 拒绝绝对路径、盘符路径、NUL 和 `..`；
+- 不使用 Shell；
+- 支持 Dry Run；
+- create/append 写后重新读取验证；
+- 测试不使用 Production Vault。
 
-### Stage 3：安全写入命令
+## 9. 8766 API
 
-目标：
+```text
+GET  /api/obsidian/status
+POST /api/obsidian/validate
+POST /api/obsidian/refresh
+```
 
-- 迁移 create、append、Daily Note 等允许的写入能力。
-- 增加 Dry Run、路径边界、原子或可验证写入、审计和回滚信息。
+状态接口只返回：
 
-验收：
+- 稳定状态与错误码；
+- 版本、发现来源、Vault 名称；
+- 掩码路径显示；
+- 超时、Dry Run 和能力状态。
 
-- 只在 Acceptance fixture Vault 执行写测试。
-- 写后重新读取验证。
-- 禁止任意命令拼接和路径遍历。
-- 批量写入遵守预览、确认与 Git checkpoint 合同。
+状态接口不返回原始 `cli_path`、`vault_path`、正文或 Token。
 
-### Stage 4：8766 API 与 Tauri
+`/api/obsidian/validate` 验证草稿配置，不持久化；保存仍统一走现有 `/api/settings`。
 
-目标：
+## 10. Tauri
 
-- `ObsidianService` 接入 Local Control API `8766`。
-- Tauri 设置页展示路径来源、CLI 版本、Vault、状态和错误。
-- 用户可选择或修改显式路径，并在保存前校验。
+Obsidian 页面支持：
 
-验收：
+- 状态、版本、发现来源和错误查看；
+- CLI 文件和 Vault 目录选择；
+- 启用、Vault 名称、超时和 Dry Run；
+- 验证但不保存；
+- 保存后刷新状态。
 
-- Tauri 不访问 `8765`、SQLite 或 CLI 子进程。
-- API 不泄露 Token、完整私人正文或未脱敏绝对路径。
-- UI 不推测 CLI/Vault 正常状态。
+Tauri 使用官方 Dialog Plugin，不直接执行 CLI。
 
-### Stage 5：停止 second_brain CLI 写入
+## 11. 状态与错误合同
 
-目标：
-
-- 兼容入口转发到 `src` 服务或进入只读模式。
-- 停止 `second_brain` 的正式写入。
-- 保留迁移验收和回滚窗口。
-
-验收：
-
-- 同一输入不会由两套 CLI 实现重复写入。
-- 关闭兼容写入后正式桌面功能仍正常。
-- 迁移差异、数据导出和回滚方案有报告。
-
-## 7. 错误与状态合同
-
-建议稳定状态：
+状态：
 
 ```text
 healthy
@@ -187,7 +222,7 @@ disabled
 degraded
 ```
 
-建议稳定错误码：
+错误码：
 
 ```text
 OBSIDIAN_CLI_NOT_FOUND
@@ -199,38 +234,39 @@ OBSIDIAN_PATH_OUTSIDE_WORKSPACE
 OBSIDIAN_WRITE_VERIFICATION_FAILED
 ```
 
-完整命令、正文和本机敏感路径只进入受控本地日志，不进入普通 API 响应。
+完整命令、stderr 和本机绝对路径只进入受控本地诊断，不进入普通状态 DTO。
 
-## 8. 测试策略
+## 12. 测试策略与结果
 
-- Discovery（发现）使用 `shutil.which`、环境变量和临时平台目录模拟。
-- Client 使用 Fake Process（假进程）验证参数、编码、超时和错误。
-- Service 使用临时 Workspace 和 Acceptance Vault。
-- 真正 Obsidian CLI 测试必须显式标记为可选集成测试，未安装时说明原因后跳过。
-- 写入测试不得使用 Production Vault。
-- Windows 专有标志必须通过 `getattr` 或平台判断，保证 Linux/macOS 可导入。
-
-## 9. 本轮不做
-
-P0 不实现：
-
-- `src/obsidian/` 完整命令代码。
-- 8766 Obsidian 新 API。
-- Tauri 设置页或状态页。
-- 新 Obsidian 功能。
-- 批量知识修改。
-- 兼容运行时退役。
-
-## 10. 回滚
-
-P0 兼容层路径修复可通过回退对应提交恢复旧实现，但旧机器专属默认值不得重新进入正式主线。
-
-未来每一阶段必须保持：
+协调门禁已验证：
 
 ```text
-新 src 能力可关闭
-+
-兼容实现可只读回退
-+
-Production Vault 不被测试修改
+Python dependency install: PASS
+pip check: PASS
+clean-install validator: PASS
+compileall: PASS
+focused Obsidian tests: PASS
+full repository pytest: PASS
+npm ci: PASS
+Obsidian Smoke: PASS
+all Desktop Smoke: PASS
+TypeScript/Vite Build: PASS
+cargo check: PASS
+git diff --check: PASS
 ```
+
+正式 PR Linux 与 Windows CI 在文档提交后重新执行，最终精确计数写入测试报告。
+
+## 13. 本轮明确不做
+
+- Production Vault 写入验收；
+- 批量知识修改；
+- 系统、剪贴板或文件夹监听；
+- 手机分享客户端；
+- 浏览器扩展；
+- 数据库 Schema 修改；
+- 新数据库或第二套任务队列。
+
+## 14. 回滚
+
+回滚以正式分支 Git 提交为单位。兼容导入面仍然存在，因此调用方可以在迁移回滚窗口继续使用旧模块名，但所有执行都指向 `src.obsidian`。不得恢复机器专属路径或第二套命令实现。
