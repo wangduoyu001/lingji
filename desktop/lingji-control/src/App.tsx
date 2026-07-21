@@ -1,23 +1,8 @@
 import { useState } from "react";
+import AppPages from "./AppPages";
 import { Notice } from "./components/ui";
 import { useLingJiConnection } from "./hooks/useLingJiConnection";
 import { NAVIGATION } from "./navigation";
-import AcceptancePage from "./pages/AcceptancePage";
-import BackupsPage from "./pages/BackupsPage";
-import BrainStatusPage from "./pages/BrainStatusPage";
-import CaptureCenterPage from "./pages/CaptureCenterPage";
-import CapturePage from "./pages/CapturePage";
-import JobsPage from "./pages/JobsPage";
-import LogsPage from "./pages/LogsPage";
-import MediaPage from "./pages/MediaPage";
-import MemoryInspectorPage from "./pages/MemoryInspectorPage";
-import ModelsPage from "./pages/ModelsPage";
-import OverviewPage from "./pages/OverviewPage";
-import SettingsPage from "./pages/SettingsPage";
-import StoragePage from "./pages/StoragePage";
-import SystemComputePage from "./pages/SystemComputePage";
-import VectorCenterPage from "./pages/VectorCenterPage";
-import "./pages/VectorCenterPage.css";
 import type { CaptureInspectorTarget } from "./pages/captureCenterTypes";
 import type { PageId } from "./types";
 
@@ -67,18 +52,8 @@ export default function App() {
             <p>{current.hint}</p>
           </div>
           <div className="connection-controls">
-            <input
-              value={connection.baseUrl}
-              onChange={(event) => connection.setBaseUrl(event.target.value)}
-              aria-label="API 地址"
-            />
-            <input
-              value={connection.token}
-              onChange={(event) => connection.setToken(event.target.value)}
-              type="password"
-              placeholder="控制令牌"
-              aria-label="控制令牌"
-            />
+            <input value={connection.baseUrl} onChange={(event) => connection.setBaseUrl(event.target.value)} aria-label="API 地址" />
+            <input value={connection.token} onChange={(event) => connection.setToken(event.target.value)} type="password" placeholder="控制令牌" aria-label="控制令牌" />
             <button className="button secondary" onClick={() => void connection.connect()}>连接</button>
           </div>
         </header>
@@ -90,35 +65,15 @@ export default function App() {
           </Notice>
         )}
 
-        <section className="page-content">
-          {page === "overview" && <OverviewPage data={connection.overview} refresh={connection.connect} />}
-          {page === "brain_status" && <BrainStatusPage api={connection.api} active={connection.connected} />}
-          {page === "memory_inspector" && (
-            <MemoryInspectorPage
-              key={JSON.stringify(inspectorTarget)}
-              api={connection.api}
-              active={connection.connected}
-            />
-          )}
-          {page === "capture_center" && (
-            <CaptureCenterPage
-              api={connection.api}
-              active={connection.connected}
-              onOpenInspector={openInspector}
-            />
-          )}
-          {page === "vector_center" && <VectorCenterPage api={connection.api} active={connection.connected} />}
-          {page === "system_compute" && <SystemComputePage api={connection.api} active={connection.connected} />}
-          {page === "models" && <ModelsPage api={connection.api} active={connection.connected} />}
-          {page === "jobs" && <JobsPage api={connection.api} active={connection.connected} />}
-          {page === "capture" && <CapturePage api={connection.api} active={connection.connected} />}
-          {page === "media" && <MediaPage api={connection.api} active={connection.connected} />}
-          {page === "storage" && <StoragePage api={connection.api} active={connection.connected} />}
-          {page === "backups" && <BackupsPage api={connection.api} active={connection.connected} />}
-          {page === "acceptance" && <AcceptancePage api={connection.api} active={connection.connected} />}
-          {page === "settings" && <SettingsPage api={connection.api} active={connection.connected} />}
-          {page === "logs" && <LogsPage api={connection.api} active={connection.connected} />}
-        </section>
+        <AppPages
+          page={page}
+          api={connection.api}
+          connected={connection.connected}
+          overview={connection.overview}
+          refresh={connection.connect}
+          inspectorTarget={inspectorTarget}
+          onOpenInspector={openInspector}
+        />
       </main>
     </div>
   );
