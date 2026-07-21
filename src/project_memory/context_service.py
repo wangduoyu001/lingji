@@ -49,7 +49,16 @@ class ProjectContextService:
         pack.active_tasks = self._bounded(self._eligible_full(tasks, profile, project_id, allow_cross_project), dt_budget - half)
 
         sessions = list(self.session_provider(project_id=project_id, session_id=session_id or "", limit=30) if self.session_provider else [])
-        pack.recent_sessions = self._bounded(self._eligible(sessions, profile, project_id, allow_cross_project), sessions_budget)
+        pack.recent_sessions = self._bounded(
+            self._eligible(
+                sessions,
+                profile,
+                project_id,
+                allow_cross_project,
+                allowed_statuses={"active", "completed", "failed", "abandoned"},
+            ),
+            sessions_budget,
+        )
 
         if query:
             results = self.retriever.search(query, limit=40, filters=SearchFilters(project=None if allow_cross_project else project_id, privacy=profile.allowed_privacy, agent_id=profile.agent_id, include_archived=False))
@@ -82,7 +91,8 @@ class ProjectContextService:
                 merged.update(full)
                 yield merged
 
-    def _eligible(self, items, profile, project_id, allow_cross_project):
+    def _eligible(self, items, profile, project_id, allow_cross_project, allowed_statuses=None):
+        statuses = set(allowed_statuses or {"active"})
         for raw in items:
             item = dict(raw)
             path = str(item.get("relative_path") or (item.get("citation") or {}).get("path") or "")
@@ -90,7 +100,7 @@ class ProjectContextService:
                 continue
             if str(item.get("privacy") or "private") not in profile.allowed_privacy:
                 continue
-            if str(item.get("status") or "active") != "active":
+            if str(item.get("status") or "active") not in statuses:
                 continue
             review = str(item.get("review_status") or "approved")
             if review not in {"", "approved"}:
