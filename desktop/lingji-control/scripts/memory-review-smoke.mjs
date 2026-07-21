@@ -8,10 +8,12 @@ const nav = fs.readFileSync(new URL("../src/navigation.ts", import.meta.url), "u
 
 assert.match(nav, /memory_review/);
 for (const path of ["/api/memory/review/candidates", "/approve", "/edit-approve", "/reject", "/api/memory/core", "/archive", "/integrity"]) assert.ok(api.includes(path), path);
-assert.match(page, /expected_content_hash|content_hash/); assert.match(api, /owner_confirmed: true/);
+assert.match(page, /selected\.current_hash/);
+assert.match(api, /expected_content_hash/);
+assert.match(api, /owner_confirmed: true/);
 assert.match(page, /候选内容已变化，请刷新后重新审核/); assert.match(page, /批准/); assert.match(page, /编辑后批准/); assert.match(page, /拒绝理由/);
 assert.match(page, /确认加入长期记忆/); assert.match(page, /归档后不再默认注入 Codex，但不会物理删除文件/);
-assert.doesNotMatch(page, /永久删除/); assert.doesNotMatch(page, /HMAC|Tombstone|Merge/);
+assert.doesNotMatch(page, /永久删除/); assert.doesNotMatch(page, /HMAC|Tombstone|复杂 Merge/);
 assert.match(contract, /external_modified/); assert.match(contract, /missing/);
 assert.match(page, /AbortController/); assert.match(page, /requestId/);
 assert.match(page, /error\.status === 409/); assert.match(page, /error\.status === 401/); assert.match(page, /error\.status === 503/);
