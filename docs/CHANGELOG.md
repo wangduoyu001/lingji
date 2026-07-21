@@ -4,6 +4,21 @@
 
 ## 2026-07-21
 
+### P2-05 Manual Capture Center 集成验证
+
+- 按 `P2-05B -> P2-05A -> P2-05C` 顺序合入 `work/p2-05-integrated-validation`。
+- 增加手动文本、网页、支持文件、媒体、ChatGPT Export 和 Codex Report 入口。
+- 增加持久化 Capture Mode、Queue 分页、取消、重试、暂停和恢复。
+- 增加脱敏 CaptureJob DTO、稳定错误码和 Capture Audit Event。
+- 增加 Tauri Capture Center、官方 Dialog Plugin、任务操作和 Memory Inspector 跳转。
+- 真实生成并锁定 npm 与 Cargo 依赖文件。
+- 将临时 `_api_core.py` 和 `_queue_core.py` 折回正式模块并删除。
+- 修复 Windows SQLite 测试连接泄漏、Windows Vault 路径跨平台解析和 CPU 平台模拟测试。
+- Windows Python 3.12 最终全仓结果：`398 passed, 11 skipped, 0 failed`，持续 79.40 秒。
+- `npm ci`、Capture Smoke、7项 Desktop Smoke、TypeScript/Vite Build 和 `cargo check` 全部通过。
+- 已验证集成树：`1bf95b8d16a9daea52b60518f0e920a0c0bd50db`。
+- 未访问生产 Vault、SQLite、Qdrant 或 Ollama；未修改数据库 Schema；未开发监听、手机端或浏览器插件。
+
 ### P0 Engineering Hygiene 正式合并
 
 - 通过 PR #12 将 `work/p0-engineering-hygiene` 正常合并到 `feature/second-brain-memory`。
