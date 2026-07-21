@@ -12,7 +12,7 @@ It does not redesign the product and does not pause the roadmap indefinitely. It
 
 ## 2. Scope
 
-P0 covers exactly four areas:
+P0 covers exactly five areas:
 
 1. authority and architecture documentation alignment
 2. machine-specific path removal
