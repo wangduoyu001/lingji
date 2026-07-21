@@ -14,12 +14,24 @@ on:
       - "scripts/**"
       - "desktop/lingji-control/**"
       - ".github/workflows/p0-windows-gate.yml"
+  pull_request:
+    branches:
+      - feature/second-brain-memory
+    paths:
+      - "requirements*.txt"
+      - "constraints/**"
+      - "src/**"
+      - "second_brain/**"
+      - "tests/**"
+      - "scripts/**"
+      - "desktop/lingji-control/**"
+      - ".github/workflows/p0-windows-gate.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: p0-windows-gate-${{ github.ref }}
+  group: p0-windows-gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
