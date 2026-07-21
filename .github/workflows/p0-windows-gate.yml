@@ -90,7 +90,20 @@ jobs:
         shell: pwsh
         env:
           PYTHONUTF8: "1"
-        run: python -m pytest -q --tb=short
+        run: |
+          python -m pytest -q --tb=short *> pytest-windows.log
+          $testExit = $LASTEXITCODE
+          Get-Content pytest-windows.log -Tail 200
+          exit $testExit
+
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: p0-windows-pytest-log
+          path: pytest-windows.log
+          if-no-files-found: error
+          retention-days: 7
 
   desktop-gate:
     name: Desktop smoke and build
