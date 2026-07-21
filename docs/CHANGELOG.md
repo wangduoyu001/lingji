@@ -4,6 +4,22 @@
 
 ## 2026-07-21
 
+### P2-06 Obsidian CLI 正式迁移
+
+- 将 Obsidian CLI 单一实现迁入 `src/obsidian/`，按 models、discovery、config、client、service 分层。
+- 保留既有 `management.py` 和 `system_ui.py`，未复制第二套 Vault 管理能力。
+- 将 `second_brain/obsidian_cli.py` 降为兼容转发，删除约400行重复命令实现。
+- 增加 Runtime Settings 的启用、CLI/Vault 路径、Vault 名称、超时和 Dry Run。
+- 增加认证的 8766 Obsidian 状态、配置草稿校验和刷新接口。
+- 增加 Tauri Obsidian 页面、官方 Dialog Plugin 路径选择和独立 Smoke Test。
+- 状态 API 不返回原始 CLI/Vault 绝对路径；Client 拒绝绝对路径和 `..` 越界。
+- Linux Python 3.12：`405 passed, 11 skipped, 0 failed`，10.31 秒。
+- Windows Python 3.12：`405 passed, 11 skipped, 0 failed`，71.77 秒。
+- `npm ci`、Obsidian Smoke、全部 Desktop Smoke、Build 和 `cargo check` 通过。
+- 已验证实现提交：`4b0ad577eb396030ee6baa5c3bb217e990385475`；最终已验证 HEAD：`6dfa31148585e2cb78c83af52b752550962820c9`。
+- 正式合并提交：`5ce10ed8be98784f57e8723ffc27e40e3abaffbc`。
+- 未访问生产 Vault、SQLite、Qdrant 或 Ollama；未修改数据库 Schema；未新增监听、手机端或浏览器扩展。
+
 ### P2-05 Manual Capture Center 集成验证
 
 - 按 `P2-05B -> P2-05A -> P2-05C` 顺序合入 `work/p2-05-integrated-validation`。
