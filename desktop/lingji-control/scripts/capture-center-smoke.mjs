@@ -8,9 +8,11 @@ import {
   canCancel,
   canRetry,
   errorLabel,
+  fileModeContract,
   fileNameOnly,
   resultTarget,
   restrictedClass,
+  safeName,
   validateText,
   validateUrl,
 } from "../src/pages/captureCenterContract";
@@ -56,12 +58,19 @@ assert.equal(query.get("source_type"), "web");
 assert.equal(query.get("q"), "abc");
 
 assert.equal(acceptsFileMode("capture.html", "web_snapshot"), true);
+assert.equal(acceptsFileMode("capture.md", "web_snapshot"), true);
 assert.equal(acceptsFileMode("chatgpt.zip", "chatgpt_export"), true);
 assert.equal(acceptsFileMode("report.txt", "codex_report"), false);
+assert.deepEqual(fileModeContract("web_snapshot"), { source_type: "web", adapter_name: "web_capture" });
+assert.deepEqual(fileModeContract("chatgpt_export"), { source_type: "chatgpt_export", adapter_name: "chatgpt_export" });
+assert.deepEqual(fileModeContract("codex_report"), { source_type: "codex_report", adapter_name: "codex_work_report" });
 assert.equal(acceptsMedia("clip.mp4"), true);
+assert.equal(acceptsMedia("voice.flac"), true);
+assert.equal(acceptsMedia("image.png"), false);
 assert.equal(acceptsMedia("document.pdf"), false);
 assert.equal(fileNameOnly("C:\\secret\\clip.mp4"), "clip.mp4");
 assert.equal(fileNameOnly("/home/user/clip.mp4"), "clip.mp4");
+assert.equal(safeName({ job_id: "J1", status: "queued", file_name: "safe.txt" }), "safe.txt");
 
 assert.equal(canCancel("queued"), true);
 assert.equal(canCancel("retrying"), true);
