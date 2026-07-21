@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate-locks-and-validate:
@@ -29,6 +29,56 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: desktop/lingji-control/package-lock.json
+
+      - name: Align file dialog and mode controls
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          page_path = Path("src/pages/CaptureCenterPage.tsx")
+          page = page_path.read_text(encoding="utf-8")
+          old_picker = '''  const chooseFile = async () => {
+              try {
+                const { open } = await import("@tauri-apps/plugin-dialog");
+                const selected = await open({ multiple: false, directory: false });
+                if (typeof selected === "string") setSelectedPath(selected);
+              } catch {
+                setSubmissionMessage("文件选择仅在已配置 Dialog Plugin 的桌面应用中可用");
+              }
+            };'''
+          new_picker = '''  const chooseFile = async () => {
+              try {
+                const { open } = await import("@tauri-apps/plugin-dialog");
+                const mode = tab === "chatgpt_export" ? "chatgpt_export" : tab === "codex_report" ? "codex_report" : fileMode;
+                const filters = tab === "media"
+                  ? [{ name: "音频和视频", extensions: ["mp4", "mov", "mkv", "avi", "webm", "m4v", "flv", "ts", "mts", "m2ts", "mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "wma"] }]
+                  : mode === "chatgpt_export"
+                    ? [{ name: "ChatGPT Export", extensions: ["zip", "json"] }]
+                    : mode === "codex_report"
+                      ? [{ name: "Codex Report", extensions: ["json"] }]
+                      : [{ name: "Web Snapshot", extensions: ["html", "htm", "json", "txt", "md"] }];
+                const selected = await open({ multiple: false, directory: false, filters });
+                if (typeof selected === "string") setSelectedPath(selected);
+              } catch {
+                setSubmissionMessage("文件选择仅在已配置 Dialog Plugin 的桌面应用中可用");
+              }
+            };'''
+          if old_picker not in page:
+              raise SystemExit("file picker contract block not found")
+          page = page.replace(old_picker, new_picker)
+          page = page.replace('''        <button disabled={status?.mode === "normal"} onClick={() => void setMode("resume")}>正常</button>
+                  <button disabled={status?.mode === "low_power"} onClick={() => void setMode("resume")}>低功耗</button>
+          ''', "")
+          page_path.write_text(page, encoding="utf-8")
+
+          smoke_path = Path("scripts/capture-center-smoke.mjs")
+          smoke = smoke_path.read_text(encoding="utf-8")
+          marker = 'assert.ok(page.includes("multiple: false"));\n'
+          additions = marker + 'assert.ok(page.includes("filters"));\nassert.ok(!page.includes(">正常</button>"));\nassert.ok(!page.includes(">低功耗</button>"));\n'
+          if marker not in smoke:
+              raise SystemExit("capture smoke marker not found")
+          smoke_path.write_text(smoke.replace(marker, additions), encoding="utf-8")
+          PY
 
       - name: Generate npm lock
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
@@ -60,6 +110,20 @@ jobs:
         id: cargo_check
         continue-on-error: true
         run: cargo check --manifest-path src-tauri/Cargo.toml 2>&1 | tee cargo-check.log
+
+      - name: Commit generated locks and reviewed fixes
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json src-tauri/Cargo.lock src/pages/CaptureCenterPage.tsx scripts/capture-center-smoke.mjs
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit"
+          else
+            git commit -m "build(desktop): lock dialog dependencies and align picker contracts"
+            git push origin HEAD:work/p2-05c-capture-center-ui
+          fi
 
       - name: Upload generated locks and logs
         if: always()
