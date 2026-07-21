@@ -1,4 +1,4 @@
-import type { LingJiApi } from "../api";
+import type { JsonObject, LingJiApi } from "../api";
 import type {
   CaptureCapabilitiesResponse,
   CaptureCommon,
@@ -6,6 +6,8 @@ import type {
   CaptureStatusResponse,
   CaptureSubmissionResponse,
 } from "./captureCenterTypes";
+
+const body = (value: object): JsonObject => value as JsonObject;
 
 export class CaptureCenterApi {
   constructor(private readonly api: LingJiApi) {}
@@ -22,24 +24,24 @@ export class CaptureCenterApi {
     return this.api.get(`/api/capture/jobs?${query}`, { signal });
   }
 
-  job(jobId: string, signal?: AbortSignal) {
+  job(jobId: string, signal?: AbortSignal): Promise<unknown> {
     return this.api.get(`/api/capture/jobs/${encodeURIComponent(jobId)}`, { signal });
   }
 
   submitText(payload: CaptureCommon & { text: string; source_type: string }): Promise<CaptureSubmissionResponse> {
-    return this.api.post("/api/capture/text", payload);
+    return this.api.post("/api/capture/text", body(payload));
   }
 
   submitWeb(payload: CaptureCommon & { url: string; text?: string; author?: string; published_at?: string; platform?: string }): Promise<CaptureSubmissionResponse> {
-    return this.api.post("/api/capture/web", payload);
+    return this.api.post("/api/capture/web", body(payload));
   }
 
   submitFile(payload: CaptureCommon & { input_path: string; source_type: string; adapter_name?: string }): Promise<CaptureSubmissionResponse> {
-    return this.api.post("/api/capture/file", payload);
+    return this.api.post("/api/capture/file", body(payload));
   }
 
   submitMedia(payload: CaptureCommon & { input_path: string; allow_ocr: boolean; allow_transcription: boolean; extract_keyframes: boolean; extract_audio: boolean }): Promise<CaptureSubmissionResponse> {
-    return this.api.post("/api/capture/media", payload);
+    return this.api.post("/api/capture/media", body(payload));
   }
 
   retry(jobId: string): Promise<unknown> {
