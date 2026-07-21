@@ -1,8 +1,9 @@
 # P2-06 Obsidian CLI Formal Migration — Validation Report
 
-> Status: `FORMAL_CI_VALIDATED`  
+> Status: `MERGED_AND_VALIDATED`  
+> Formal Merge Commit: `5ce10ed8be98784f57e8723ffc27e40e3abaffbc`  
 > Validated Implementation Commit: `4b0ad577eb396030ee6baa5c3bb217e990385475`  
-> Final Report Commit: recorded by Git history  
+> Final Validated Head: `6dfa31148585e2cb78c83af52b752550962820c9`  
 > Environments: Ubuntu 24.04 / Python 3.12.13 and Windows Server 2025 / Python 3.12.10 / Node.js 22  
 > Date: 2026-07-21
 
@@ -81,7 +82,7 @@ all Desktop smoke tests: PASS
 Desktop frontend build: PASS
 ```
 
-Both formal PR workflows concluded `success` on commit `2c2f4c1cf7e0170b08a6f4327599d18ef4186254`.
+Both formal PR workflows concluded `success` on commit `6dfa31148585e2cb78c83af52b752550962820c9` before formal merge.
 
 ## 4. Focused Contract Coverage
 
