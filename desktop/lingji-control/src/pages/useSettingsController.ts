@@ -75,6 +75,11 @@ export function useSettingsController(api: LingJiApi, active: boolean) {
     setMessage("已取消未保存修改。");
   }, [snapshot]);
 
+  const reload = useCallback(async () => {
+    if (dirtyCount && !window.confirm("重新加载会丢弃所有未保存修改，确认继续？")) return;
+    await load();
+  }, [dirtyCount, load]);
+
   const save = useCallback(async () => {
     if (!snapshot || !dirtyCount || saving) return;
     setSaving(true);
@@ -112,16 +117,19 @@ export function useSettingsController(api: LingJiApi, active: boolean) {
     setSaving(true);
     setError("");
     try {
+      const preserved = Object.fromEntries(
+        Object.entries(dirtyValues).filter(([key]) => !keys.includes(key)),
+      );
       const next = await client.reset(keys);
       setSnapshot(next);
-      setDraft(next.values);
-      setMessage(`已恢复 ${keys.length} 项系统默认值。`);
+      setDraft({ ...next.values, ...preserved });
+      setMessage(`已恢复 ${keys.length} 项系统默认值；其他未保存修改已保留。`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setSaving(false);
     }
-  }, [client, saving, snapshot]);
+  }, [client, dirtyValues, saving, snapshot]);
 
   return {
     snapshot,
@@ -131,10 +139,10 @@ export function useSettingsController(api: LingJiApi, active: boolean) {
     error,
     message,
     saving,
-    load,
     change,
     save,
     reset,
+    reload,
     cancelDraft,
   };
 }
