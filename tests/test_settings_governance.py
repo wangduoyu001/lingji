@@ -6,6 +6,7 @@ import pytest
 
 from src.config import Settings
 from src.control import RuntimeSettingsStore
+from src.control.settings_catalog import CompleteOwnerSettingsRegistry
 from src.control.settings_governance import (
     CONFIRM_HIGH_RISK_SETTINGS,
     OwnerSettingsRegistry,
@@ -20,17 +21,18 @@ class _StateDB:
         self.events.append(args)
 
 
-def registry(tmp_path: Path, **overrides) -> OwnerSettingsRegistry:
+def registry(tmp_path: Path, **overrides) -> CompleteOwnerSettingsRegistry:
     settings = Settings(
         _env_file=None,
         storage_dir=str(tmp_path),
         **overrides,
     )
-    return OwnerSettingsRegistry(settings, state_db=_StateDB())
+    return CompleteOwnerSettingsRegistry(settings, state_db=_StateDB())
 
 
-def test_control_package_exports_governed_registry():
-    assert RuntimeSettingsStore is OwnerSettingsRegistry
+def test_control_package_exports_complete_governed_registry():
+    assert RuntimeSettingsStore is CompleteOwnerSettingsRegistry
+    assert issubclass(CompleteOwnerSettingsRegistry, OwnerSettingsRegistry)
 
 
 def test_settings_model_default_overrides_duplicate_registry_literal(tmp_path: Path):
@@ -40,6 +42,15 @@ def test_settings_model_default_overrides_duplicate_registry_literal(tmp_path: P
 
     assert definition["default"] == 45.0
     assert store.snapshot()["values"]["media_keyframe_interval_seconds"] == 45.0
+
+
+def test_auto_review_settings_are_owner_visible_and_active_is_not_a_choice(tmp_path: Path):
+    definitions = registry(tmp_path).definitions()
+
+    assert definitions["auto_review_mode"]["choices"] == ["OFF", "SHADOW"]
+    assert "auto_review_ai_enabled" in definitions
+    assert "auto_review_timeout_seconds" in definitions
+    assert "ACTIVE" not in definitions["auto_review_mode"]["choices"]
 
 
 def test_every_owner_visible_definition_has_complete_governance_metadata(tmp_path: Path):
@@ -130,6 +141,7 @@ def test_groups_are_backend_owned_and_ordered(tmp_path: Path):
     groups = registry(tmp_path).snapshot()["groups"]
 
     assert groups[0]["id"] == "media_processing"
+    assert any(group["id"] == "auto_review" and group["label"] == "自动审查" for group in groups)
     assert all(group["label"] and group["description"] for group in groups)
     assert [group["order"] for group in groups] == sorted(group["order"] for group in groups)
 
