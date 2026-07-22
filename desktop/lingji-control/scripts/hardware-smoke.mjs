@@ -3,6 +3,7 @@ import fs from "node:fs";
 const page = fs.readFileSync("src/pages/SystemComputePage.tsx", "utf8");
 const navigation = fs.readFileSync("src/navigation.ts", "utf8");
 const settings = fs.readFileSync("src/pages/SettingsPage.tsx", "utf8");
+const registry = fs.readFileSync("../../src/control/settings_governance.py", "utf8");
 
 for (const token of [
   "/api/hardware/capabilities",
@@ -21,8 +22,11 @@ for (const token of ["系统与算力", 'id: "system_compute"']) {
   if (!navigation.includes(token)) throw new Error(`Navigation is missing: ${token}`);
 }
 
-if (!settings.includes("hardware_compute") || !settings.includes("系统与算力")) {
-  throw new Error("Settings page is missing the hardware_compute group label");
+if (!/snapshot\?*\.groups/.test(settings) || settings.includes("GROUP_LABELS")) {
+  throw new Error("Settings page must consume backend-owned groups");
+}
+if (!registry.includes('"hardware_compute"') || !registry.includes('"系统与算力"')) {
+  throw new Error("Backend Settings Registry is missing the hardware_compute group metadata");
 }
 
 console.log("Hardware capability UI smoke passed");
