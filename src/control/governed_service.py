@@ -76,20 +76,16 @@ class GovernedLocalControlService(LocalControlService):
                 "reason": status.get("last_error"),
                 "optional_requirements": status.get("optional_requirements"),
             }
-        try:
-            obsidian = self.obsidian_status()
-            capabilities["obsidian_cli"] = {
-                "available": bool(obsidian.get("available")),
-                "reason": "; ".join(
-                    str(item.get("message") or item.get("code") or "")
-                    for item in obsidian.get("issues") or []
-                    if isinstance(item, Mapping)
-                )
-                or None,
-            }
-        except Exception as exc:
+
+        runtime_values = self.runtime_settings.snapshot().get("values", {})
+        if runtime_values.get("obsidian_cli_enabled") is False:
             capabilities["obsidian_cli"] = {
                 "available": False,
-                "reason": f"Obsidian status unavailable: {type(exc).__name__}",
+                "reason": "Obsidian CLI 已由主人关闭",
+            }
+        else:
+            capabilities["obsidian_cli"] = {
+                "available": None,
+                "reason": "具体 CLI 与 Vault 可用性请在 Obsidian 页面执行检测",
             }
         return capabilities
