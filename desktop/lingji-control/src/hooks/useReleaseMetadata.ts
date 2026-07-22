@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useCallback, useEffect, useState } from "react";
 import { isTauriDesktopRuntime } from "../api";
+import type { RuntimeStatus } from "../runtimeTypes";
 
 export type ReleaseMetadata = {
   product_name: string;
@@ -23,7 +24,11 @@ export function useReleaseMetadata() {
       .catch(() => setMetadata(null));
   }, []);
 
-  const copyDiagnostics = useCallback(async (connectionState: string, connected: boolean) => {
+  const copyDiagnostics = useCallback(async (
+    connectionState: string,
+    connected: boolean,
+    runtimeStatus: RuntimeStatus | null,
+  ) => {
     const lines = [
       `product=${metadata?.product_name ?? "LingJi"}`,
       `version=${metadata?.version ?? "unknown"}`,
@@ -35,6 +40,15 @@ export function useReleaseMetadata() {
       `signed=${metadata?.signed === true ? "true" : "false"}`,
       `connection_state=${connectionState}`,
       `control_service=${connected ? "connected" : "disconnected"}`,
+      `runtime_state=${runtimeStatus?.state ?? "unknown"}`,
+      `runtime_healthy=${runtimeStatus?.healthy === true ? "true" : "false"}`,
+      `runtime_managed=${runtimeStatus?.managed === true ? "true" : "false"}`,
+      `runtime_pid=${runtimeStatus?.pid ?? "none"}`,
+      `runtime_restart_count=${runtimeStatus?.restart_count ?? 0}`,
+      `runtime_last_exit_code=${runtimeStatus?.last_exit_code ?? "none"}`,
+      `runtime_binary_available=${runtimeStatus?.binary_available === true ? "true" : "false"}`,
+      `runtime_data_root=${runtimeStatus?.data_root_display ?? "unknown"}`,
+      `runtime_log=${runtimeStatus?.log_path_display ?? "unknown"}`,
       `platform=${navigator.platform || "unknown"}`,
       `user_agent=${navigator.userAgent}`,
     ];
