@@ -2,7 +2,7 @@ use std::env;
 
 fn export_build_value(name: &str, fallback: &str) {
     let value = env::var(name).unwrap_or_else(|_| fallback.to_string());
-    let sanitized = value.replace(['\r', '\n'], " ");
+    let sanitized = value.replace('\r', " ").replace('\n', " ");
     println!("cargo:rustc-env={name}={sanitized}");
     println!("cargo:rerun-if-env-changed={name}");
 }
