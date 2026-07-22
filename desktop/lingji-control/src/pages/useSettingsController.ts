@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { LingJiApi } from "../api";
+import { ApiError, type LingJiApi } from "../api";
 import { SettingsApi } from "./settingsApi";
 import type { SettingsChangePreview, SettingsSnapshot } from "./settingsTypes";
 
@@ -33,7 +33,7 @@ export function useSettingsController(api: LingJiApi, active: boolean) {
       setDraft(next.values);
       setError("");
     } catch (reason) {
-      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      if (reason instanceof ApiError && reason.code === "REQUEST_CANCELLED") return;
       setError(reason instanceof Error ? reason.message : String(reason));
     }
   }, [active, client]);
