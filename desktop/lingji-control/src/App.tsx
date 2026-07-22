@@ -2,6 +2,7 @@ import { useState } from "react";
 import AppPages from "./AppPages";
 import DesktopShell from "./components/DesktopShell";
 import "./DesktopUX.css";
+import "./ReleaseUX.css";
 import { useLingJiConnection } from "./hooks/useLingJiConnection";
 import { useReleaseMetadata } from "./hooks/useReleaseMetadata";
 import { NAVIGATION } from "./navigation";
