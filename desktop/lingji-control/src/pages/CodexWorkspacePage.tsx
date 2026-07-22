@@ -190,7 +190,7 @@ export default function CodexWorkspacePage({ api, active, onOpenInspector }: Pro
           <SessionFact title="阻塞" values={selected.blockers} empty="无" tone="warning" />
           <SessionFact title="下一步" values={selected.next_steps} />
           <button className="button secondary" onClick={() => onOpenInspector({ project_id: selected.project_id, source_id: selected.source_ids?.[0], conversation_id: selected.conversation_ids?.[0] })}>查看 Memory Inspector</button>
-        </div> : <div className="workspace-empty-detail"><span className="desktop-eyebrow">SESSION</span><h2>选择一个 Session</h2><p>这里会整理目标、完成项、决策、测试、阻塞和下一步，而不是倾倒完整 transcript。</p></div>}
+        </div> : <div className="workspace-empty-detail"><span className="desktop-eyebrow">SESSION</span><h2>选择一个 Session</h2><p>这里会整理目标、完成项、决策、测试、阻塞和下一步，而不是倾倒完整原始对话。</p></div>}
       </aside>
     </section>
 
