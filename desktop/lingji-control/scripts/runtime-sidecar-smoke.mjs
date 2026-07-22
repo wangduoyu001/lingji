@@ -12,6 +12,7 @@ const [
   buildScript,
   sidecarConfigText,
   hooks,
+  cargo,
   rustMain,
   manager,
   connection,
@@ -24,6 +25,7 @@ const [
   read("../../../scripts/build_windows_sidecar.ps1"),
   read("../src-tauri/tauri.sidecar.conf.json"),
   read("../src-tauri/windows/sidecar-hooks.nsh"),
+  read("../src-tauri/Cargo.toml"),
   read("../src-tauri/src/main.rs"),
   read("../src-tauri/src/runtime_manager.rs"),
   read("../src/hooks/useLingJiConnection.ts"),
@@ -45,10 +47,18 @@ for (const token of [
   "CONTROL_API_HOST",
   "127.0.0.1",
   "owner_data_outside_install_dir",
+  "sidecar-state.json",
+  "sidecar-stop-request.json",
+  "install_runtime_lifecycle",
+  "instance_id",
 ]) assert.ok(entrypoint.includes(token), `Packaged entrypoint is missing ${token}`);
 assert.equal(entrypoint.includes('"0.0.0.0"'), false);
+assert.match(entrypoint, /target\.setdefault\("VAULT_DIR"/);
 assert.match(pythonTests, /rejects_non_loopback_host/);
 assert.match(pythonTests, /rejects_filesystem_root/);
+assert.match(pythonTests, /preserves_explicit_owner_vault/);
+assert.match(pythonTests, /matching_stop_request/);
+assert.match(pythonTests, /mismatched_stop_request/);
 
 for (const token of [
   "PyInstaller",
@@ -65,6 +75,7 @@ assert.match(hooks, /taskkill \/F \/IM lingji-core\.exe/);
 assert.match(hooks, /RMDir \/r "\$INSTDIR\\lingji_core_lib"/);
 assert.equal(hooks.includes("LingJi\\storage"), false, "Installer hooks must not delete owner storage");
 assert.equal(hooks.includes("Obsidian"), false, "Installer hooks must not touch the Vault");
+assert.match(cargo, /serde_json = "1"/);
 
 for (const token of [
   "mod runtime_manager",
@@ -81,15 +92,20 @@ for (const token of [
   "X-LingJi-Token",
   "STARTUP_ATTEMPTS",
   "spawn_blocking",
+  "PackagedRuntimeIdentity",
+  "sidecar-state.json",
+  "sidecar-stop-request.json",
+  "write_stop_request",
   "The healthy 8766 service was started outside this Desktop and will not be stopped",
   "The healthy 8766 service is external and cannot be restarted",
   "CREATE_NO_WINDOW",
+  "#[cfg(debug_assertions)]",
 ]) assert.ok(manager.includes(token), `Runtime manager is missing ${token}`);
 assert.equal(manager.includes("tauri_plugin_shell"), false, "Runtime manager must not expose general shell execution");
 assert.equal(manager.includes("Command::new(command"), false, "Runtime manager must not accept a user command");
 
 for (const command of ["runtime_ensure", "runtime_status", "runtime_stop", "runtime_restart"]) {
-  assert.ok(connection.includes(`\"${command}\"`) || connection.includes(`"${command}"`), `Desktop connection hook is missing ${command}`);
+  assert.ok(connection.includes(`"${command}"`), `Desktop connection hook is missing ${command}`);
 }
 assert.match(connection, /runtimeBusy/);
 assert.match(runtimeTypes, /RuntimeStatus/);
