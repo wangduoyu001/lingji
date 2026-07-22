@@ -1,8 +1,9 @@
+import type { ReactNode } from "react";
 import type { NavigationIcon } from "../types";
 
 type Props = { name: NavigationIcon; size?: number };
 
-const paths: Record<NavigationIcon, React.ReactNode> = {
+const paths: Record<NavigationIcon, ReactNode> = {
   home: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-6h5v6"/></>,
   pulse: <><path d="M3 12h4l2-6 4 12 2-6h6"/></>,
   project: <><path d="M4 5h6l2 2h8v12H4z"/><path d="M4 9h16"/></>,
