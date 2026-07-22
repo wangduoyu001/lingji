@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     env,
     fs::{self, File, OpenOptions},
@@ -21,6 +21,9 @@ const CONTROL_PORT: u16 = 8766;
 const STARTUP_ATTEMPTS: u32 = 3;
 const STARTUP_POLLS: usize = 80;
 const STARTUP_POLL_DELAY: Duration = Duration::from_millis(250);
+const ADOPTION_GRACE_MS: u128 = 30_000;
+const STOP_POLLS: usize = 50;
+const STOP_POLL_DELAY: Duration = Duration::from_millis(100);
 
 #[derive(Clone, Debug, Serialize)]
 pub struct RuntimeStatus {
@@ -39,8 +42,27 @@ pub struct RuntimeStatus {
     pub port: u16,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct PackagedRuntimeIdentity {
+    schema_version: u32,
+    mode: String,
+    pid: u32,
+    instance_id: String,
+    started_at_ms: u128,
+    host: String,
+    port: u16,
+}
+
+#[derive(Serialize)]
+struct StopRequest<'a> {
+    schema_version: u32,
+    instance_id: &'a str,
+    requested_at_ms: u128,
+}
+
 struct RuntimeInner {
     child: Option<Child>,
+    instance_id: Option<String>,
     state: String,
     managed: bool,
     pid: Option<u32>,
@@ -54,6 +76,7 @@ impl Default for RuntimeInner {
     fn default() -> Self {
         Self {
             child: None,
+            instance_id: None,
             state: "stopped".to_string(),
             managed: false,
             pid: None,
@@ -121,6 +144,7 @@ fn display_paths(root: &Path) -> (String, String) {
 
 fn runtime_binary_candidates(app: &AppHandle) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
+    #[cfg(debug_assertions)]
     if let Ok(explicit) = env::var("LINGJI_RUNTIME_BINARY") {
         candidates.push(PathBuf::from(explicit));
     }
@@ -148,6 +172,69 @@ fn runtime_binary(app: &AppHandle) -> Option<PathBuf> {
 
 fn token_path(root: &Path) -> PathBuf {
     root.join("storage").join("control_api_token")
+}
+
+fn runtime_dir(root: &Path) -> PathBuf {
+    root.join("runtime")
+}
+
+fn identity_path(root: &Path) -> PathBuf {
+    runtime_dir(root).join("sidecar-state.json")
+}
+
+fn stop_request_path(root: &Path) -> PathBuf {
+    runtime_dir(root).join("sidecar-stop-request.json")
+}
+
+fn read_identity(root: &Path) -> Option<PackagedRuntimeIdentity> {
+    let bytes = fs::read(identity_path(root)).ok()?;
+    let identity: PackagedRuntimeIdentity = serde_json::from_slice(&bytes).ok()?;
+    if identity.schema_version != 1
+        || identity.mode != "packaged_sidecar"
+        || identity.pid == 0
+        || identity.instance_id.trim().is_empty()
+        || identity.host != "127.0.0.1"
+        || identity.port != CONTROL_PORT
+    {
+        return None;
+    }
+    Some(identity)
+}
+
+fn write_stop_request(root: &Path, instance_id: &str) -> Result<(), String> {
+    let directory = runtime_dir(root);
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("Unable to create runtime directory: {error}"))?;
+    let path = stop_request_path(root);
+    let temporary = path.with_extension("json.tmp");
+    let payload = serde_json::to_vec(&StopRequest {
+        schema_version: 1,
+        instance_id,
+        requested_at_ms: now_ms(),
+    })
+    .map_err(|error| format!("Unable to encode runtime stop request: {error}"))?;
+    fs::write(&temporary, payload)
+        .map_err(|error| format!("Unable to write runtime stop request: {error}"))?;
+    fs::rename(&temporary, &path)
+        .map_err(|error| format!("Unable to activate runtime stop request: {error}"))?;
+    Ok(())
+}
+
+fn clear_lifecycle_files(root: &Path, expected_instance: Option<&str>) {
+    if let Some(expected) = expected_instance {
+        if read_identity(root)
+            .as_ref()
+            .is_some_and(|identity| identity.instance_id != expected)
+        {
+            return;
+        }
+    }
+    let _ = fs::remove_file(identity_path(root));
+    let _ = fs::remove_file(stop_request_path(root));
+}
+
+fn identity_is_recent(identity: &PackagedRuntimeIdentity) -> bool {
+    now_ms().saturating_sub(identity.started_at_ms) <= ADOPTION_GRACE_MS
 }
 
 fn open_runtime_log(root: &Path) -> Result<File, String> {
@@ -187,6 +274,23 @@ fn authenticated_health(root: &Path) -> bool {
     status.starts_with("HTTP/1.1 200") || status.starts_with("HTTP/1.0 200")
 }
 
+fn force_kill_pid(pid: u32) {
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = Command::new("taskkill");
+        command
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .creation_flags(CREATE_NO_WINDOW);
+        let _ = command.status();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status();
+    }
+}
+
 impl RuntimeManager {
     fn snapshot(&self, app: &AppHandle, root: &Path, healthy: bool) -> RuntimeStatus {
         let binary_available = runtime_binary(app).is_some();
@@ -218,9 +322,10 @@ impl RuntimeManager {
         if let Some(status) = exit {
             inner.child = None;
             inner.pid = None;
+            inner.instance_id = None;
             inner.managed = false;
             inner.last_exit_code = status.code();
-            if inner.state != "stopped" {
+            if inner.state != "stopped" && inner.state != "stopping" {
                 inner.state = "failed".to_string();
                 inner.last_error = Some(format!(
                     "LingJi runtime exited with code {}",
@@ -230,30 +335,85 @@ impl RuntimeManager {
         }
     }
 
+    fn adopt_identity(inner: &mut RuntimeInner, identity: &PackagedRuntimeIdentity, state: &str) {
+        inner.state = state.to_string();
+        inner.managed = true;
+        inner.pid = Some(identity.pid);
+        inner.started_at_ms = Some(identity.started_at_ms);
+        inner.instance_id = Some(identity.instance_id.clone());
+    }
+
     pub fn status(&self, app: &AppHandle) -> Result<RuntimeStatus, String> {
         let root = owner_data_root()?;
         self.refresh_child();
         let healthy = authenticated_health(&root);
+        let identity = read_identity(&root);
         {
             let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             if healthy {
-                if inner.child.is_some() {
+                if let Some(identity) = identity.as_ref() {
+                    Self::adopt_identity(&mut inner, identity, "healthy");
+                } else if inner.child.is_some() {
                     inner.state = "healthy".to_string();
                     inner.managed = true;
                 } else {
                     inner.state = "external".to_string();
                     inner.managed = false;
+                    inner.pid = None;
+                    inner.started_at_ms = None;
+                    inner.instance_id = None;
                 }
                 inner.last_error = None;
-            } else if inner.child.is_some() && inner.state == "healthy" {
-                inner.state = "unhealthy".to_string();
-            } else if inner.child.is_none() && inner.state != "failed" {
+            } else if inner.child.is_some() {
+                if inner.state == "healthy" {
+                    inner.state = "unhealthy".to_string();
+                }
+            } else if let Some(identity) = identity.as_ref() {
+                if inner.state != "failed" && identity_is_recent(identity) {
+                    Self::adopt_identity(&mut inner, identity, "starting");
+                } else {
+                    clear_lifecycle_files(&root, Some(&identity.instance_id));
+                    if inner.state != "failed" {
+                        inner.state = "stopped".to_string();
+                        inner.last_error = None;
+                    }
+                    inner.managed = false;
+                    inner.pid = None;
+                    inner.started_at_ms = None;
+                    inner.instance_id = None;
+                }
+            } else if inner.state != "failed" {
                 inner.state = "stopped".to_string();
                 inner.managed = false;
                 inner.pid = None;
+                inner.started_at_ms = None;
+                inner.instance_id = None;
             }
         }
         Ok(self.snapshot(app, &root, healthy))
+    }
+
+    fn wait_for_health(&self, app: &AppHandle, root: &Path) -> Result<RuntimeStatus, String> {
+        for _ in 0..STARTUP_POLLS {
+            thread::sleep(STARTUP_POLL_DELAY);
+            self.refresh_child();
+            if authenticated_health(root) {
+                return self.status(app);
+            }
+            let managed_process_exists = {
+                let inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                inner.child.is_some() || read_identity(root).is_some()
+            };
+            if !managed_process_exists {
+                return self.status(app);
+            }
+        }
+        self.stop_managed_process(root);
+        let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        inner.state = "failed".to_string();
+        inner.last_error = Some("LingJi runtime did not become healthy within 20 seconds".to_string());
+        drop(inner);
+        Ok(self.snapshot(app, root, false))
     }
 
     fn spawn_once(&self, app: &AppHandle) -> Result<RuntimeStatus, String> {
@@ -262,6 +422,9 @@ impl RuntimeManager {
         let current = self.status(app)?;
         if current.healthy {
             return Ok(current);
+        }
+        if current.managed && current.state == "starting" {
+            return self.wait_for_health(app, &root);
         }
         let has_child = {
             self.inner
@@ -274,6 +437,7 @@ impl RuntimeManager {
             return Ok(self.snapshot(app, &root, false));
         }
 
+        clear_lifecycle_files(&root, None);
         let binary = runtime_binary(app).ok_or_else(|| {
             "Packaged LingJi runtime is unavailable. Install a Sidecar-enabled Desktop build.".to_string()
         })?;
@@ -308,39 +472,11 @@ impl RuntimeManager {
             inner.managed = true;
             inner.pid = Some(pid);
             inner.started_at_ms = Some(now_ms());
+            inner.instance_id = None;
             inner.last_exit_code = None;
             inner.last_error = None;
         }
-
-        for _ in 0..STARTUP_POLLS {
-            thread::sleep(STARTUP_POLL_DELAY);
-            self.refresh_child();
-            if authenticated_health(&root) {
-                let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-                inner.state = "healthy".to_string();
-                inner.managed = true;
-                inner.last_error = None;
-                drop(inner);
-                return Ok(self.snapshot(app, &root, true));
-            }
-            let child_exited = {
-                self.inner
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .child
-                    .is_none()
-            };
-            if child_exited {
-                return self.status(app);
-            }
-        }
-
-        self.stop_managed_process();
-        let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        inner.state = "failed".to_string();
-        inner.last_error = Some("LingJi runtime did not become healthy within 20 seconds".to_string());
-        drop(inner);
-        Ok(self.snapshot(app, &root, false))
+        self.wait_for_health(app, &root)
     }
 
     pub fn ensure(&self, app: &AppHandle) -> Result<RuntimeStatus, String> {
@@ -350,6 +486,12 @@ impl RuntimeManager {
         }
         if !last.binary_available {
             return Ok(last);
+        }
+        if last.managed && last.state == "starting" {
+            last = self.wait_for_health(app, &owner_data_root()?)?;
+            if last.healthy {
+                return Ok(last);
+            }
         }
         for attempt in 0..STARTUP_ATTEMPTS {
             if attempt > 0 {
@@ -367,19 +509,60 @@ impl RuntimeManager {
         Ok(last)
     }
 
-    fn stop_managed_process(&self) {
-        let child = {
+    fn stop_managed_process(&self, root: &Path) {
+        let (mut child, pid, instance_id, managed) = {
             let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            inner.child.take()
+            inner.state = "stopping".to_string();
+            (
+                inner.child.take(),
+                inner.pid,
+                inner.instance_id.clone().or_else(|| read_identity(root).map(|value| value.instance_id)),
+                inner.managed,
+            )
         };
-        if let Some(mut child) = child {
-            let _ = child.kill();
-            let status = child.wait().ok();
-            let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            inner.last_exit_code = status.and_then(|value| value.code());
+        if !managed {
+            return;
         }
+
+        if let Some(instance_id) = instance_id.as_deref() {
+            let _ = write_stop_request(root, instance_id);
+        }
+
+        let mut stopped = false;
+        for _ in 0..STOP_POLLS {
+            if let Some(process) = child.as_mut() {
+                if let Ok(Some(status)) = process.try_wait() {
+                    let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                    inner.last_exit_code = status.code();
+                    stopped = true;
+                    break;
+                }
+            }
+            if !authenticated_health(root) && read_identity(root).is_none() {
+                stopped = true;
+                break;
+            }
+            thread::sleep(STOP_POLL_DELAY);
+        }
+
+        if !stopped {
+            if let Some(process) = child.as_mut() {
+                let _ = process.kill();
+                let status = process.wait().ok();
+                let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                inner.last_exit_code = status.and_then(|value| value.code());
+            } else if let Some(pid) = pid {
+                force_kill_pid(pid);
+            }
+        } else if let Some(process) = child.as_mut() {
+            let _ = process.wait();
+        }
+
+        clear_lifecycle_files(root, instance_id.as_deref());
         let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        inner.child = None;
         inner.pid = None;
+        inner.instance_id = None;
         inner.managed = false;
         inner.started_at_ms = None;
     }
@@ -390,7 +573,7 @@ impl RuntimeManager {
         if status.healthy && !status.managed {
             return Err("The healthy 8766 service was started outside this Desktop and will not be stopped.".to_string());
         }
-        self.stop_managed_process();
+        self.stop_managed_process(&root);
         {
             let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             inner.state = "stopped".to_string();
@@ -400,11 +583,12 @@ impl RuntimeManager {
     }
 
     pub fn restart(&self, app: &AppHandle) -> Result<RuntimeStatus, String> {
+        let root = owner_data_root()?;
         let current = self.status(app)?;
         if current.healthy && !current.managed {
             return Err("The healthy 8766 service is external and cannot be restarted by this Desktop.".to_string());
         }
-        self.stop_managed_process();
+        self.stop_managed_process(&root);
         {
             let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             inner.state = "stopped".to_string();
@@ -414,7 +598,16 @@ impl RuntimeManager {
     }
 
     pub fn shutdown(&self) {
-        self.stop_managed_process();
+        let managed = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .managed;
+        if managed {
+            if let Ok(root) = owner_data_root() {
+                self.stop_managed_process(&root);
+            }
+        }
     }
 }
 
@@ -479,5 +672,21 @@ mod tests {
     fn token_path_stays_under_storage() {
         let root = PathBuf::from(r"C:\Data\LingJi");
         assert_eq!(token_path(&root), root.join("storage").join("control_api_token"));
+    }
+
+    #[test]
+    fn packaged_identity_requires_fixed_mode_and_loopback() {
+        let identity = PackagedRuntimeIdentity {
+            schema_version: 1,
+            mode: "packaged_sidecar".to_string(),
+            pid: 123,
+            instance_id: "instance".to_string(),
+            started_at_ms: now_ms(),
+            host: "127.0.0.1".to_string(),
+            port: CONTROL_PORT,
+        };
+        assert!(identity_is_recent(&identity));
+        assert_eq!(identity.mode, "packaged_sidecar");
+        assert_eq!(identity.host, "127.0.0.1");
     }
 }
