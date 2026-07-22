@@ -2,13 +2,14 @@
 
 > Updated（更新时间）: 2026-07-22  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Formal Head（正式提交）: `f955b7c8a9a28aa1351d02e5ef70be2551a565b2`  
+> Formal Head（正式提交）: `325ad6e4a5f9d2c21bc4441039f32a28292b0f1d`  
 > P2-08 Status: `MERGED_AND_VALIDATED`  
-> P2-09 Status: `MERGED_AND_VALIDATED`
+> P2-09 Status: `MERGED_AND_VALIDATED`  
+> P2-10A Status: `MERGED_AND_CI_VALIDATED`
 
 ## 1. 当前结论
 
-P2-08 Auto Review SHADOW Layer 与 P2-09 Runtime/Desktop Reliability 已完成实现、依赖合并、整仓 GitHub Actions 验证和本机现场验收。
+P2-08 Auto Review SHADOW、P2-09 Runtime/Desktop Reliability 与 P2-10A Owner-visible Settings Governance Core 已进入正式功能分支。
 
 ```text
 PR #24  P2-09A Runtime Truth                         MERGED
@@ -18,18 +19,20 @@ PR #27  P2-08A Deterministic Auto Review Core         MERGED
 PR #28  P2-08B Local AI Reviewer + SHADOW API         MERGED
 PR #29  P2-09D Desktop UX + SHADOW Dashboard          MERGED
 PR #30  Combined Integration Verification             MERGED
-PR #31  Project Status / Changelog / Code Map Sync    MERGED
+PR #31  P2-08/P2-09 Documentation Sync                MERGED
+PR #32  P2-08/P2-09 Local Acceptance Closeout         MERGED
+PR #33  P2-10A Settings Governance Core               MERGED
 ```
 
-最终集成门禁：
+P2-10A 最终门禁：
 
 ```text
-tests workflow #696: SUCCESS
-P0 Windows Gate #94: SUCCESS
+tests workflow #709: SUCCESS
+P0 Windows Gate #102: SUCCESS
 Python 3.11: SUCCESS
 Python 3.12: SUCCESS
 Windows full tests: SUCCESS
-Desktop smoke: SUCCESS
+14-script Desktop smoke: SUCCESS
 React/Vite build: SUCCESS
 Tauri Rust check: SUCCESS
 MCP smoke: SUCCESS
@@ -37,7 +40,7 @@ Browser capture smoke: SUCCESS
 Obsidian plugin smoke: SUCCESS
 ```
 
-2026-07-22，项目主人确认此前列出的真实 Windows、RTX 4060、Ollama、Qdrant、8766 与 Tauri 本机验收已经完成。该结论按主人现场确认记录；仓库未附加新的逐项命令、原始日志、耗时或硬件数值，因此文档不虚构这些细节。
+P2-10A 完成的是设置治理代码底座。完整 Desktop 视觉重设计与信息层级优化尚未开始，不得把“代码合同稳定”写成“UI 已完成”。
 
 ## 2. 产品与代码主线
 
@@ -55,10 +58,10 @@ second_brain/
 规则：
 
 - 新正式能力进入 `src/`。
-- Desktop 只通过认证的 8766 Local Control API 访问后端。
+- Desktop 只通过认证的8766 Local Control API访问后端。
 - `second_brain/` 不接收新的正式产品能力。
-- Obsidian CLI 正式实现位于 `src/obsidian/`。
-- MCP 默认使用 stdio；可选 HTTP 使用8767。
+- Obsidian CLI正式实现位于 `src/obsidian/`。
+- MCP默认使用stdio；可选HTTP使用8767。
 
 ## 3. 数据权威
 
@@ -98,56 +101,166 @@ P2-06 Obsidian CLI Formal Migration               MERGED_AND_VALIDATED
 P2-07 Codex-first Local Memory Loop                MERGED_AND_VALIDATED
 P2-08 Auto Review SHADOW Layer                    MERGED_AND_VALIDATED
 P2-09 Runtime/Desktop Reliability                 MERGED_AND_VALIDATED
+P2-10A Owner-visible Settings Governance Core     MERGED_AND_CI_VALIDATED
 ```
 
-## 5. P2-09 Runtime Truth
+## 5. P2-10A 设置治理结论
 
-已实现：
-
-- Brain Status 不再把未知 GPU 利用率伪装成0。
-- 静态硬件信息与动态遥测分离。
-- 动态遥测不可用时返回 `null`、`unavailable`、`stale` 与错误摘要。
-- Embedding 默认主模型为 `bge-m3`，备用为 `nomic-embed-text`。
-- Qdrant 维度不一致时阻止写入并标记 `rebuild_required`。
-- `run_service.py` 明确记录 Core、Extraction Worker 与8766 Control API 的实际启动边界。
-
-正式文件：
+后端正式权威：
 
 ```text
-src/config.py
-src/control/service.py
-src/hardware/
-src/model_center/embedding.py
-src/retrieval/qdrant_provider.py
-run_service.py
+src/control/runtime_settings.py
+= 兼容持久化与基础类型校验
+
+src/control/settings_governance.py::OwnerSettingsRegistry
+= 推荐值、影响、风险、能力状态、预览与确认合同
+
+src/control/settings_catalog.py::CompleteOwnerSettingsRegistry
+= 当前完整主人可见设置目录
+
+src/control/governed_service.py::GovernedLocalControlService
+= 正式8766运行服务
 ```
 
-## 6. P2-09 Canonical Idempotency 与 MCP Queue
+Desktop 不再复制：
+
+- 设置默认值。
+- 分组标签。
+- 推荐值。
+- 风险等级。
+- 性能、存储、费用和隐私影响。
+- Provider可用性原因。
+
+这些内容全部由认证的 `/api/settings` 返回。
+
+## 6. 设置变更流程
+
+正式流程：
+
+```text
+Desktop Draft
+-> 只收集 dirty values
+-> POST /api/settings/preview
+-> 后端类型与跨字段校验
+-> 返回当前值/目标值/默认值/推荐值/影响/风险
+-> 高风险变更要求主人确认
+-> POST /api/settings/commit
+-> 写入既有 runtime_settings.json
+-> 写入既有 Audit Event
+```
+
+新增认证接口：
+
+```text
+POST /api/settings/preview
+POST /api/settings/commit
+```
+
+既有接口继续保留：
+
+```text
+GET  /api/settings
+PATCH /api/settings
+POST /api/settings/reset
+```
+
+正式 Desktop 高风险流程不能绕过 Preview 与 Confirmation。
+
+## 7. 高风险设置合同
+
+当前高风险示例：
+
+- 开启自动清理。
+- 修改冷存储路径。
+- 修改明确的 Obsidian Vault 路径。
+
+高风险提交要求后端确认短语：
+
+```text
+CONFIRM_HIGH_RISK_SETTINGS
+```
+
+该短语只是交互确认合同，不是密钥，也不能替代8766 Token。
+
+## 8. 跨字段与能力校验
+
+当前阻止：
+
+- 自动转写开启但 ASR Provider 为 `off`。
+- 自动 OCR 开启但 OCR Provider 为 `off`。
+- 镜头检测开启但 Scene Provider 为 `off`。
+- 冷存储开启但未选择目录。
+
+能力不可用时设置仍可见，并返回：
+
+```text
+availability_state
+disabled_reason
+optional_requirements
+```
+
+加载设置页不会为了显示状态而执行耗时的外部 Obsidian CLI 命令。
+
+## 9. Auto Review 设置治理
+
+P2-08新增设置已进入主人可见 Registry：
+
+```text
+auto_review_mode
+auto_review_ai_enabled
+auto_review_timeout_seconds
+```
+
+`auto_review_mode` 只允许：
+
+```text
+OFF
+SHADOW
+```
+
+ACTIVE不进入选项。若环境配置错误写成ACTIVE，设置目录回落OFF；执行层仍继续拒绝ACTIVE。
+
+## 10. Desktop 设置代码结构
+
+```text
+desktop/lingji-control/src/pages/settingsTypes.ts
+= 后端合同类型
+
+desktop/lingji-control/src/pages/settingsApi.ts
+= API客户端
+
+desktop/lingji-control/src/pages/useSettingsController.ts
+= 草稿、预览、确认、提交、重置和离开保护
+
+desktop/lingji-control/src/pages/SettingsPage.tsx
+= 搜索、筛选和页面编排
+
+desktop/lingji-control/src/components/settings/SettingField.tsx
+= 单个设置项渲染
+```
 
 已实现：
 
-- `src/extraction/idempotency.py` 是唯一持久幂等算法来源。
-- 文件使用内容哈希；目录使用稳定 Manifest；Payload 和 Options 使用 canonical JSON。
-- Pipeline 与 Queue 共享同一算法。
-- `submit_codex_work_report` 和 `capture_web_source` 默认先进入 SQLite Extraction Queue。
-- `process_now=True` 仍先持久入队，再通过正常 Queue/Lease 路径处理。
-- Work Report 必须包含任务、执行、仓库、分支、提交、文件和测试结构。
-- CaptureDeduplicator 继续负责短窗口去重，不与持久幂等混为一套。
+- 全局搜索。
+- 只显示已修改。
+- 只看高风险。
+- 只看不可用。
+- 单项恢复默认。
+- 分组恢复默认。
+- 未保存草稿离开提示。
+- 手动重新加载确认。
+- 重置单项时保留其他未保存草稿。
+- 只提交真实变化项。
 
-## 7. P2-09 Desktop Polling 与 UX
+## 11. P2-09 Runtime Truth
 
-已实现：
+- Brain Status 不再把未知GPU利用率伪装成0。
+- 静态硬件信息与动态遥测分离。
+- 动态遥测不可用时返回 `null`、`unavailable`、`stale` 与错误摘要。
+- Embedding默认主模型为 `bge-m3`，备用为 `nomic-embed-text`。
+- Qdrant维度不一致时阻止写入并标记 `rebuild_required`。
 
-- `usePollingResource<T>` 统一处理取消、无重叠、退避、隐藏暂停、过期、手动刷新与旧数据保留。
-- Brain Status 保留“真实0”和“未知 null”的区别。
-- Desktop 导航整理为五组：总览、记忆与项目、采集与处理、模型与运行、运维与设置。
-- API 地址与控制令牌改为可折叠连接栏。
-- Overview 展示真实 Memory、Vector、Embedding、Compute、Queue 和 Storage 状态。
-- Auto Review SHADOW 看板展示建议、风险、规则、AI 摘要和主人反馈。
-
-Desktop 不包含 Auto Review approve、reject、delete、execute 或 ACTIVE 控件。
-
-## 8. P2-08 Auto Review SHADOW
+## 12. P2-08 Auto Review SHADOW
 
 模式合同：
 
@@ -157,40 +270,16 @@ SHADOW
 ACTIVE  # 仅枚举存在，当前实现拒绝
 ```
 
-确定性硬规则要求主人审核：
+Auto Review不得：
 
-- Core Memory。
-- 删除、遗忘、归档、权限或隐私变更。
-- restricted 内容。
-- 跨项目合并。
-- 知识冲突。
-- 证据不足的耐久知识。
-- 失败或未验证的开发报告。
-- 主人亲自编辑的记忆。
+- 伪造 `owner_confirmed=True`。
+- 修改候选状态。
+- 写入Core Memory。
+- 写入Obsidian。
+- 写入Qdrant。
+- 执行批准、拒绝、删除或合并。
 
-本地 AI：
-
-- 只接受本机 Ollama loopback 地址。
-- 模型由 `auto_review_primary` / `auto_review_fallback` 角色解析。
-- 只允许增加风险，不允许降低硬规则风险或改变确定性动作。
-- 严格 JSON；失败时安全回退到确定性结果。
-- 不请求或存储私有思维链。
-
-8766 SHADOW API：
-
-```text
-GET  /api/auto-review/status
-GET  /api/auto-review/decisions
-GET  /api/auto-review/decisions/{decision_id}
-GET  /api/auto-review/metrics
-POST /api/auto-review/evaluate/{subject_id}
-POST /api/auto-review/feedback
-POST /api/auto-review/audit/verify
-```
-
-不存在自动批准、自动拒绝、删除、执行或启用 ACTIVE 的 API。
-
-## 9. 审核与写入权威
+## 13. 审核与写入权威
 
 ```text
 MemoryReviewService
@@ -200,25 +289,17 @@ MemoryLifecycleService
 = 唯一正式生命周期写入器
 
 Auto Review
-= 只生成 SHADOW 决策和 Audit Event
+= 只生成SHADOW决策和Audit Event
 ```
 
-Auto Review 不得：
-
-- 伪造 `owner_confirmed=True`。
-- 修改候选状态。
-- 写入 Core Memory。
-- 写入 Obsidian。
-- 写入 Qdrant。
-- 执行批准、拒绝、删除或合并。
-
-## 10. 安全状态
+## 14. 安全状态
 
 ```text
 自动 Qdrant Collection 删除/重建: NO
 自动模型下载: NO
 数据库 Schema 修改: NO
 新数据库: NO
+第二套配置文件: NO
 第二套队列: NO
 第二套生命周期: NO
 第二套审计数据库: NO
@@ -227,31 +308,11 @@ force push: NO
 master 修改: NO
 ```
 
-本机验收允许在主人控制的现场环境中读取运行状态并验证既有生产依赖，但没有改变上述自动化和架构边界。
-
-## 11. 本机验收结果
-
-项目主人确认以下现场验收范围已完成：
+## 15. 关键文档
 
 ```text
-1. RTX 4060 真实遥测与失败路径。
-2. nvidia-smi 不可用时的 unavailable/null 表达。
-3. bge-m3 主模型调用。
-4. nomic-embed-text 备用模型回退。
-5. Qdrant 维度冲突保护与 lexical retrieval 保留。
-6. Auto Review 本地模型主/备角色。
-7. 8766 Token 鉴权与 Tauri 连接。
-8. Desktop 隐藏窗口暂停、恢复、退避和布局。
-9. SHADOW 评估后候选、Obsidian 和 Qdrant 不发生自动变更。
-```
-
-验收结论来源为项目主人现场确认。没有附加逐项原始日志时，不记录未提供的精确数值或命令输出。
-
-Issue #23 已按 `completed` 关闭。
-
-## 12. 关键文档
-
-```text
+docs/MODULES/P2_10A_SETTINGS_GOVERNANCE_CORE.md
+docs/TEST_REPORTS/P2_10A_SETTINGS_GOVERNANCE_TEST_REPORT.md
 docs/MODULES/P2_09A_RUNTIME_TRUTH.md
 docs/MODULES/P2_09B_CANONICAL_IDEMPOTENCY.md
 docs/MODULES/P2_09C_DESKTOP_DATA_LAYER.md
@@ -259,15 +320,14 @@ docs/MODULES/P2_09D_DESKTOP_UX_AUTO_REVIEW.md
 docs/MODULES/P2_08A_AUTO_REVIEW_CORE.md
 docs/MODULES/P2_08B_LOCAL_AI_REVIEWER.md
 docs/MODULES/P2_08B_SHADOW_API.md
-docs/TECH_RESEARCH/P2_08_STANDALONE_TO_LINGJI_MAPPING.md
-docs/TEST_REPORTS/P2_08_P2_09_INTEGRATION_TEST_REPORT.md
 ```
 
-## 13. 下一步
+## 16. 下一步
 
 ```text
-保持 Auto Review 为 SHADOW
--> 积累主人反馈和审计样本
--> 评估误判率、风险分布与人工审核节省量
--> 在足够样本和独立设计评审前不开发 ACTIVE
+P2-10B Desktop UI / Information Architecture Refinement
+-> 基于稳定设置合同设计页面层级
+-> 重做总览、设置中心和全局状态语义
+-> 不复制后端默认值或风险规则
+-> 不开发ACTIVE
 ```

@@ -2,8 +2,8 @@
 
 > Updated（更新时间）: 2026-07-22  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Formal Head（正式提交）: `f955b7c8a9a28aa1351d02e5ef70be2551a565b2`  
-> P2-08 / P2-09 Status: `MERGED_AND_VALIDATED`
+> Formal Head（正式提交）: `325ad6e4a5f9d2c21bc4441039f32a28292b0f1d`  
+> P2-08 / P2-09 / P2-10A Status: `MERGED_AND_VALIDATED`
 
 ## 1. 仓库职责
 
@@ -20,11 +20,11 @@ desktop/lingji-control/
 
 规则：
 
-- 新能力进入 `src/`。
+- 新正式能力进入 `src/`。
 - `second_brain/` 只保留兼容和迁移行为。
 - Desktop 只访问认证的8766 API。
 - Desktop 不直连 SQLite、Qdrant、Ollama、8765 或8767。
-- Obsidian CLI 正式实现位于 `src/obsidian/`。
+- Obsidian CLI正式实现位于 `src/obsidian/`。
 
 ## 2. 数据权威与派生层
 
@@ -54,6 +54,8 @@ src/retrieval/qdrant_provider.py
 src/config.py::Settings
 src/runtime/workspace.py::WorkspaceResolver
 src/control/runtime_settings.py::RuntimeSettingsStore
+src/control/settings_governance.py::OwnerSettingsRegistry
+src/control/settings_catalog.py::CompleteOwnerSettingsRegistry
 ```
 
 ```text
@@ -83,7 +85,153 @@ auto_review_ai_enabled = False
 control_api_port = 8766
 ```
 
-## 4. Runtime Truth 与硬件
+## 4. P2-10A 设置治理架构
+
+兼容持久化层：
+
+```text
+src/control/runtime_settings.py::RuntimeSettingsStore
+```
+
+职责：
+
+- 读取和写入既有 `runtime_settings.json`。
+- 基础类型与范围校验。
+- 兼容现有调用方。
+- 不作为 Desktop 分组、推荐和风险的最终合同。
+
+治理层：
+
+```text
+src/control/settings_governance.py::OwnerSettingsRegistry
+```
+
+职责：
+
+- 使用验证后的 Settings 对象作为可对应字段的默认值来源。
+- 补全推荐值、推荐原因、修改时机。
+- 补全性能、存储、费用、隐私影响。
+- 提供风险级别与确认要求。
+- 提供 Provider 可用性和不可用原因。
+- 生成变更预览。
+- 执行跨字段校验。
+- 阻止未经确认的高风险提交。
+- 将高风险确认写入既有 Audit Event。
+
+完整目录：
+
+```text
+src/control/settings_catalog.py::CompleteOwnerSettingsRegistry
+```
+
+当前额外收录：
+
+```text
+auto_review_mode
+auto_review_ai_enabled
+auto_review_timeout_seconds
+```
+
+Auto Review模式只允许OFF与SHADOW。ACTIVE不进入目录；错误ACTIVE环境值回落OFF。
+
+正式服务：
+
+```text
+src/control/governed_service.py::GovernedLocalControlService
+```
+
+职责：
+
+- 替换正式8766启动器中的普通LocalControlService。
+- 将完整Registry共享给Obsidian与Model Inventory。
+- 将支持的运行值同步到当前Settings对象。
+- 使用轻量Provider能力检测。
+- 加载设置页时不执行外部Obsidian CLI探测。
+
+## 5. 设置 API
+
+```text
+src/control/settings_api.py::register_settings_governance_routes
+```
+
+既有接口：
+
+```text
+GET  /api/settings
+PATCH /api/settings
+POST /api/settings/reset
+```
+
+新增认证接口：
+
+```text
+POST /api/settings/preview
+POST /api/settings/commit
+```
+
+正式Desktop变更链：
+
+```text
+Draft dirty values
+-> preview
+-> normalize and cross-validate
+-> return impacts and risk
+-> explicit confirmation when required
+-> commit
+-> existing runtime_settings.json
+-> existing audit event stream
+```
+
+高风险确认短语：
+
+```text
+CONFIRM_HIGH_RISK_SETTINGS
+```
+
+该短语不是密钥，不能替代 `X-LingJi-Token`。
+
+## 6. Desktop 设置代码
+
+```text
+desktop/lingji-control/src/pages/settingsTypes.ts
+= 后端设置合同类型
+
+desktop/lingji-control/src/pages/settingsApi.ts
+= Snapshot / Preview / Commit / Reset客户端
+
+desktop/lingji-control/src/pages/useSettingsController.ts
+= 草稿、dirty计算、预览、确认、提交、重置和离开保护
+
+desktop/lingji-control/src/pages/SettingsPage.tsx
+= 搜索、筛选、动态分组和操作编排
+
+desktop/lingji-control/src/components/settings/SettingField.tsx
+= 单个设置字段显示与编辑
+```
+
+前端禁止复制：
+
+- 后端默认值。
+- 分组标签。
+- 推荐值和推荐原因。
+- 风险规则。
+- 影响说明。
+- 能力可用性。
+
+当前交互合同：
+
+- 全局搜索。
+- 只显示已修改。
+- 只看高风险。
+- 只看不可用。
+- 单项恢复默认。
+- 分组恢复默认。
+- 只提交dirty values。
+- 页面离开前提示未保存草稿。
+- 手动重新加载前确认。
+- 重置部分设置时保留其他未保存草稿。
+
+## 7. Runtime Truth 与硬件
 
 ```text
 src/hardware/models.py
@@ -93,11 +241,9 @@ src/hardware/service.py::HardwareCapabilityService
 src/control/service.py::LocalControlService.brain_status
 ```
 
-数据边界：
-
 ```text
 Static hardware facts
-= GPU 名称、ID、总显存、驱动/CUDA能力
+= GPU名称、ID、总显存、驱动/CUDA能力
 
 Dynamic telemetry
 = 利用率、温度、已用/空闲显存、采集时间、stale/error
@@ -105,7 +251,7 @@ Dynamic telemetry
 
 未知动态值必须使用 `null` / `unavailable`，不得自动变成0。
 
-## 5. Embedding、Qdrant 与检索
+## 8. Embedding、Qdrant 与检索
 
 ```text
 src/model_center/embedding.py::OllamaEmbeddingProvider
@@ -123,7 +269,7 @@ Lexical / Metadata
 + RRF Hybrid
 ```
 
-Qdrant Collection 维度不匹配时：
+Qdrant Collection维度不匹配时：
 
 ```text
 rebuild_required = true
@@ -132,7 +278,7 @@ collection auto-delete/rebuild = forbidden
 lexical retrieval = remains available
 ```
 
-## 6. Capture 与 Extraction
+## 9. Capture、Extraction 与幂等
 
 Capture：
 
@@ -156,7 +302,6 @@ src/extraction/queue.py::SQLiteExtractionQueue
 src/extraction/worker.py
 src/extraction/sink.py
 src/extraction/structured_sink.py
-src/extraction/errors.py::safe_extraction_error
 ```
 
 正式链路：
@@ -175,15 +320,7 @@ Capture Input
 -> MemoryGateway
 ```
 
-## 7. Canonical Idempotency
-
-单一实现：
-
-```text
-src/extraction/idempotency.py
-```
-
-Identity Material：
+Canonical Identity：
 
 ```text
 schema_version
@@ -194,15 +331,9 @@ payload
 effective options
 ```
 
-规则：
+文件使用内容SHA-256；目录使用稳定Manifest；Payload/Options使用canonical JSON。
 
-- 文件使用流式 SHA-256 内容哈希。
-- 目录使用排序后的相对路径 Manifest 和内容哈希。
-- Payload/Options 使用 canonical UTF-8 JSON。
-- Pipeline 和 Queue 只调用同一实现。
-- `CaptureDeduplicator` 仍只负责短窗口提交去重。
-
-## 8. MCP 提交与队列
+## 10. MCP 提交与队列
 
 ```text
 src/mcp_server.py
@@ -231,9 +362,9 @@ MCP request
 -> worker or process_job
 ```
 
-`process_now=True` 不得绕过 Queue。
+`process_now=True` 不得绕过Queue。
 
-## 9. Structured Read Model 与 Memory Inspector
+## 11. Structured Read Model 与 Memory Inspector
 
 ```text
 src/sources/read_model.py::SourceReadModel
@@ -252,21 +383,13 @@ Source
 -> Vector
 ```
 
-Desktop：
-
-```text
-desktop/lingji-control/src/pages/MemoryInspectorPage.tsx
-```
-
-## 10. Memory Review 与生命周期
+## 12. Memory Review 与生命周期
 
 ```text
 src/project_memory/review_service.py::MemoryReviewService
 src/project_memory/lifecycle.py::MemoryLifecycleService
 src/project_memory/runtime.py
 ```
-
-权威合同：
 
 ```text
 MemoryReviewService
@@ -276,11 +399,9 @@ MemoryLifecycleService
 = 唯一正式写入器
 ```
 
-approve/reject/archive/create 等变更必须继续走现有 owner-confirmed 路径。
+approve/reject/archive/create等变更必须继续走现有owner-confirmed路径。
 
-## 11. Auto Review Deterministic Core
-
-正式包：
+## 13. Auto Review Deterministic Core
 
 ```text
 src/auto_review/models.py
@@ -295,8 +416,6 @@ src/auto_review/evaluator.py::DeterministicAutoReviewEvaluator
 src/auto_review/audit.py
 src/auto_review/service.py::ShadowAutoReviewService
 ```
-
-模式：
 
 ```text
 OFF
@@ -314,17 +433,9 @@ requires_owner_review
 blocked
 ```
 
-所有决策必须包含：
+所有决策必须包含 `mutation_performed = false`。
 
-```text
-risk_score
-risk_level
-reasons
-reversible
-mutation_performed = false
-```
-
-## 12. Auto Review Local AI 与 Application
+## 14. Auto Review Local AI 与 API
 
 ```text
 src/auto_review/local_ai.py::LocalOllamaReviewer
@@ -332,23 +443,16 @@ src/auto_review/application.py::AutoReviewApplicationService
 src/control/auto_review_api.py::register_auto_review_routes
 ```
 
-模型角色：
-
-```text
-auto_review_primary
-auto_review_fallback
-```
-
 限制：
 
-- 只允许 loopback Ollama。
-- 严格 JSON。
-- AI 只增加风险。
-- AI 不改变确定性动作。
-- AI 不执行生命周期操作。
+- 只允许loopback Ollama。
+- 严格JSON。
+- AI只增加风险。
+- AI不改变确定性动作。
+- AI不执行生命周期操作。
 - 不请求或存储私有思维链。
 
-## 13. Auto Review 8766 API
+8766 SHADOW API：
 
 ```text
 GET  /api/auto-review/status
@@ -360,33 +464,24 @@ POST /api/auto-review/feedback
 POST /api/auto-review/audit/verify
 ```
 
-不存在：
+不存在approve、reject、delete、execute或ACTIVE启用接口。
 
-```text
-/api/auto-review/approve
-/api/auto-review/reject
-/api/auto-review/delete
-/api/auto-review/execute
-/api/auto-review/active
-```
-
-## 14. Local Control API
+## 15. Local Control API
 
 ```text
 src/control/api.py::create_control_app
 src/control/service.py::LocalControlService
-src/control/runtime_settings.py::RuntimeSettingsStore
+src/control/governed_service.py::GovernedLocalControlService
+src/control/settings_api.py::register_settings_governance_routes
 src/control/capture_api.py::register_capture_routes
 src/control/auto_review_api.py::register_auto_review_routes
 src/control/p2_07_api.py::register_p2_07_routes
 run_control_api.py
 ```
 
-所有 Desktop 请求继续使用 `X-LingJi-Token`。
+所有Desktop请求继续使用 `X-LingJi-Token`。
 
-## 15. Desktop Shell 与 Polling
-
-壳层：
+## 16. Desktop Shell 与 Polling
 
 ```text
 desktop/lingji-control/src/App.tsx
@@ -396,15 +491,13 @@ desktop/lingji-control/src/types.ts
 desktop/lingji-control/src/DesktopUX.css
 ```
 
-统一数据层：
-
 ```text
 desktop/lingji-control/src/hooks/usePollingResource.ts
 desktop/lingji-control/src/contracts/resourceState.ts
 desktop/lingji-control/src/contracts/brainStatus.ts
 ```
 
-Polling 合同：
+Polling合同：
 
 ```text
 enabled
@@ -430,7 +523,7 @@ runtime
 operations
 ```
 
-## 16. Desktop 关键页面
+## 17. Desktop 关键页面
 
 ```text
 desktop/lingji-control/src/pages/OverviewPage.tsx
@@ -444,17 +537,11 @@ desktop/lingji-control/src/pages/VectorCenterPage.tsx
 desktop/lingji-control/src/pages/SystemComputePage.tsx
 desktop/lingji-control/src/pages/ModelsPage.tsx
 desktop/lingji-control/src/pages/JobsPage.tsx
+desktop/lingji-control/src/pages/SettingsPage.tsx
 desktop/lingji-control/src/pages/ObsidianLoopPage.tsx
 ```
 
-Auto Review 前端合同：
-
-```text
-desktop/lingji-control/src/pages/autoReviewTypes.ts
-desktop/lingji-control/scripts/auto-review-shadow-smoke.mjs
-```
-
-## 17. Obsidian 正式实现
+## 18. Obsidian 正式实现
 
 ```text
 src/obsidian/models.py
@@ -473,7 +560,7 @@ second_brain/obsidian_cli.py
 = deprecated facade -> src.obsidian
 ```
 
-## 18. 构建与验证
+## 19. 构建与验证
 
 ```text
 requirements-test.txt
@@ -483,36 +570,34 @@ scripts/validate_clean_install.py
 .github/workflows/p0-windows-gate.yml
 ```
 
-关键测试：
+P2-10A关键测试：
 
 ```text
-tests/test_runtime_truth.py
-tests/test_extraction_idempotency.py
-tests/test_mcp_extraction_submission.py
-tests/test_auto_review_core.py
-tests/test_auto_review_ai_api.py
-tests/test_p2_08_p2_09_integration.py
-
-desktop/lingji-control/scripts/polling-data-smoke.mjs
-desktop/lingji-control/scripts/auto-review-shadow-smoke.mjs
-desktop/lingji-control/scripts/run-smoke-suite.mjs
+tests/test_settings_governance.py
+tests/test_settings_governance_api.py
+desktop/lingji-control/scripts/settings-governance-smoke.mjs
+desktop/lingji-control/scripts/ui-modular-smoke.mjs
+desktop/lingji-control/scripts/hardware-smoke.mjs
 ```
 
-最终集成：
+最终验证：
 
 ```text
-formal feature implementation: 9efda7a9a976d20596dbdabda5741a5c54180954
-formal documentation sync: f955b7c8a9a28aa1351d02e5ef70be2551a565b2
-tests workflow #696: SUCCESS
-P0 Windows Gate #94: SUCCESS
-owner-confirmed local acceptance: COMPLETE
+formal P2-10A merge: 325ad6e4a5f9d2c21bc4441039f32a28292b0f1d
+tests workflow #709: SUCCESS
+P0 Windows Gate #102: SUCCESS
+Python 3.11 / 3.12: SUCCESS
+Windows full tests: SUCCESS
+14-script Desktop smoke: SUCCESS
+React/Vite build: SUCCESS
+Tauri Rust check: SUCCESS
 ```
 
-本机验收结论来自项目主人现场确认；没有附加原始日志时，不在代码地图中编造精确数值或命令输出。
-
-## 19. 文档索引
+## 20. 文档索引
 
 ```text
+docs/MODULES/P2_10A_SETTINGS_GOVERNANCE_CORE.md
+docs/TEST_REPORTS/P2_10A_SETTINGS_GOVERNANCE_TEST_REPORT.md
 docs/MODULES/P2_09A_RUNTIME_TRUTH.md
 docs/MODULES/P2_09B_CANONICAL_IDEMPOTENCY.md
 docs/MODULES/P2_09C_DESKTOP_DATA_LAYER.md
@@ -520,22 +605,20 @@ docs/MODULES/P2_09D_DESKTOP_UX_AUTO_REVIEW.md
 docs/MODULES/P2_08A_AUTO_REVIEW_CORE.md
 docs/MODULES/P2_08B_LOCAL_AI_REVIEWER.md
 docs/MODULES/P2_08B_SHADOW_API.md
-docs/TECH_RESEARCH/P2_08_STANDALONE_TO_LINGJI_MAPPING.md
-docs/TEST_REPORTS/P2_08_P2_09_INTEGRATION_TEST_REPORT.md
 ```
 
-## 20. 当前状态
+## 21. 当前状态
 
 ```text
-P0 - P2-07:
+P0 - P2-09:
 MERGED_AND_VALIDATED
 
-P2-08 Auto Review SHADOW:
-MERGED_AND_VALIDATED
+P2-10A Settings Governance Core:
+MERGED_AND_CI_VALIDATED
 
-P2-09 Runtime/Desktop Reliability:
-MERGED_AND_VALIDATED
-
-Issue #23:
+Issue #11:
 CLOSED_COMPLETED
+
+下一开发阶段:
+P2-10B Desktop UI / Information Architecture Refinement
 ```

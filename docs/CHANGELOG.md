@@ -4,6 +4,30 @@
 
 ## 2026-07-22
 
+### P2-10A Owner-visible Settings Governance Core
+
+- 合并 PR #33，将设置治理代码底座纳入 `feature/second-brain-memory`。
+- 正式合并提交：`325ad6e4a5f9d2c21bc4441039f32a28292b0f1d`。
+- 增加 `OwnerSettingsRegistry` 与 `CompleteOwnerSettingsRegistry`，由后端统一提供默认值、推荐值、分组、风险、影响和能力状态。
+- `Settings` 中存在的字段成为默认值来源，避免兼容 Registry 的历史字面量与真实配置分叉。
+- 增加认证接口 `POST /api/settings/preview` 与 `POST /api/settings/commit`。
+- 高风险设置必须先预览性能、存储、费用和隐私影响，再提交明确确认；未经确认返回403。
+- 增加跨设置校验：自动转写、OCR、镜头检测必须配置相应 Provider；冷存储必须选择目录。
+- 增加能力状态与不可用原因；设置页加载不执行耗时的外部 Obsidian CLI 探测。
+- 将 `auto_review_mode`、`auto_review_ai_enabled`、`auto_review_timeout_seconds` 纳入主人可见目录。
+- Auto Review 模式只暴露 OFF/SHADOW；错误 ACTIVE 默认值回落 OFF，执行层仍拒绝 ACTIVE。
+- Desktop 删除重复 `GROUP_LABELS` 与默认值合同，改为消费后端动态分组和元数据。
+- 设置页支持全局搜索、只显示已修改、只看高风险、只看不可用、单项恢复、分组恢复和未保存草稿保护。
+- 修复恢复单项默认时覆盖其他未保存草稿的问题。
+- 只提交真实 dirty values，手动重新加载前会提示未保存修改。
+- 新增 `tests/test_settings_governance.py`、`tests/test_settings_governance_api.py` 与 `settings-governance-smoke.mjs`。
+- `tests` workflow #709：SUCCESS。
+- `P0 Windows Gate` #102：SUCCESS。
+- Python 3.11、Python 3.12、Windows 全量测试、14套 Desktop Smoke、React/Vite Build、Tauri Rust Check、MCP、浏览器采集和 Obsidian Plugin 全部通过。
+- Issue #11 按 `completed` 关闭。
+- 未修改数据库 Schema，未新增设置文件、数据库或第二套配置系统，未执行 rebase、force push 或 master 修改。
+- 完整视觉与信息层级重设计尚未开始；P2-10A 只完成其依赖的稳定代码合同。
+
 ### P2-08 Auto Review SHADOW 与 P2-09 Runtime/Desktop Reliability
 
 - 合并 PR #24：修复 Brain Status GPU 假零、复用正式遥测服务、区分未知与真实0，并将 Embedding 默认值对齐为 `bge-m3` 主模型与 `nomic-embed-text` 备用模型。
@@ -36,11 +60,11 @@
 - 保留既有 `management.py` 和 `system_ui.py`，未复制第二套 Vault 管理能力。
 - 将 `second_brain/obsidian_cli.py` 降为兼容转发，删除约400行重复命令实现。
 - 增加 Runtime Settings 的启用、CLI/Vault 路径、Vault 名称、超时和 Dry Run。
-- 增加认证的 8766 Obsidian 状态、配置草稿校验和刷新接口。
+- 增加认证的8766 Obsidian状态、配置草稿校验和刷新接口。
 - 增加 Tauri Obsidian 页面、官方 Dialog Plugin 路径选择和独立 Smoke Test。
 - 状态 API 不返回原始 CLI/Vault 绝对路径；Client 拒绝绝对路径和 `..` 越界。
-- Linux Python 3.12：`405 passed, 11 skipped, 0 failed`，10.31 秒。
-- Windows Python 3.12：`405 passed, 11 skipped, 0 failed`，71.77 秒。
+- Linux Python 3.12：`405 passed, 11 skipped, 0 failed`，10.31秒。
+- Windows Python 3.12：`405 passed, 11 skipped, 0 failed`，71.77秒。
 - `npm ci`、Obsidian Smoke、全部 Desktop Smoke、Build 和 `cargo check` 通过。
 - 已验证实现提交：`4b0ad577eb396030ee6baa5c3bb217e990385475`；最终已验证 HEAD：`6dfa31148585e2cb78c83af52b752550962820c9`。
 - 正式合并提交：`5ce10ed8be98784f57e8723ffc27e40e3abaffbc`。
@@ -56,7 +80,7 @@
 - 真实生成并锁定 npm 与 Cargo 依赖文件。
 - 将临时 `_api_core.py` 和 `_queue_core.py` 折回正式模块并删除。
 - 修复 Windows SQLite 测试连接泄漏、Windows Vault 路径跨平台解析和 CPU 平台模拟测试。
-- Windows Python 3.12 最终全仓结果：`398 passed, 11 skipped, 0 failed`，持续 79.40 秒。
+- Windows Python 3.12 最终全仓结果：`398 passed, 11 skipped, 0 failed`，持续79.40秒。
 - `npm ci`、Capture Smoke、7项 Desktop Smoke、TypeScript/Vite Build 和 `cargo check` 全部通过。
 - 已验证集成树：`1bf95b8d16a9daea52b60518f0e920a0c0bd50db`。
 - 正式合并提交：`c77e78c0f71339264d54fc083dbc5cfabcfaa173`。
@@ -77,7 +101,7 @@
 - Qdrant 单元测试改为确定性的 in-memory 合同，不依赖生产 Qdrant Server。
 - Brain Status API 测试改为 FastAPI 应用级合同，不再通过真实端口和 `nvidia-smi` 超时碰运气。
 - 新增 `.github/workflows/p0-windows-gate.yml`，自动执行 Windows Python 3.12 和 Desktop 门禁。
-- Windows CI 最终结果：`359 passed, 11 skipped, 0 failed`，持续 63.24 秒。
+- Windows CI 最终结果：`359 passed, 11 skipped, 0 failed`，持续63.24秒。
 - Python 依赖安装、`pip check`、clean-install validator、完整 `compileall` 全部通过。
 - `npm ci`、Desktop Smoke Test、`npm run build` 全部通过。
 - 历史 `306 passed / 19 failed / 13 skipped` 的19项失败全部关闭。
@@ -96,7 +120,7 @@
 - 修复 Vector Provider 和 Snapshot 错误路径泄漏，对外只返回稳定摘要。
 - 修复 Capture 去重失败污染、Message 独立 Memory Link、嵌套敏感 Metadata 和保留字段覆盖问题。
 - 修复 Memory Inspector Query 参数、嵌套状态、Message→Memory、Vector、Citation 和 Chunk Count 合同。
-- 恢复 TypeScript 构建门禁，锁定 `tsx 4.23.1`，`tsc -b`、6 套 Smoke Test 和 `npm run build` 全部通过。
+- 恢复 TypeScript 构建门禁，锁定 `tsx 4.23.1`，`tsc -b`、6套 Smoke Test 和 `npm run build` 全部通过。
 - P2-03 → P2-04 最终里程碑门禁：`91 passed, 0 failed, 0 skipped`。
 - 遗漏历史回归补充验证：`20 passed, 0 failed`。
 - 当时全仓库 pytest 记录为 `306 passed, 19 environment-specific failures, 13 skipped`；这些失败已在同日 P0 Engineering Hygiene 中全部关闭。
@@ -109,10 +133,10 @@
 
 - 合并并验证 P2-01 Vector Center 到 `feature/second-brain-memory`。
 - 在 Tauri 控制中心增加 Memory Index、Embedding Provider、Qdrant 和 Vector Coverage 只读状态页。
-- P2-01 本机汇总：5 项 Smoke Test 通过，`npm run build` 通过。
+- P2-01 本机汇总：5项 Smoke Test 通过，`npm run build` 通过。
 - 合并并验证 P2-02 Collection Migration。
-- 增加独立候选 Collection 构建、模型与维度检查、精确向量计数、100% 覆盖率验证、Activation Settings、Rollback Settings 和 Atomic Manifest。
-- P2-02 本机汇总：8/8 重点单元测试通过，真实 `bge-m3` 隔离验收覆盖率 100%。
+- 增加独立候选 Collection 构建、模型与维度检查、精确向量计数、100%覆盖率验证、Activation Settings、Rollback Settings 和 Atomic Manifest。
+- P2-02 本机汇总：8/8重点单元测试通过，真实 `bge-m3` 隔离验收覆盖率100%。
 - 正式生产 `bge-m3` Collection 构建和生产模型切换仍未执行。
 - 最新本机测试汇总记录为 `223 passed, 0 failed, 8 skipped`。
 - 记录测试质量债务：旧 PySide6 桌面测试按依赖跳过；启动文件测试仍需改成 Semantic Startup Contract Test；测试数量差异尚未核对。
@@ -133,7 +157,7 @@
 - 增加 `MemoryIndexCoordinator`，实现 lexical-first 和 semantic-degraded-safe 同步。
 - 将 Embedding、Qdrant、HybridRetriever 和 MemoryIndexCoordinator 接入正式 MemoryGateway 运行链路。
 - 增加 `MemoryStatisticsService` 与 Workspace 状态快照。
-- 在8766 Local Control API 增加认证状态接口。
+- 在8766 Local Control API增加认证状态接口。
 - 修复 Brain Status 未知数量被显示成假零的问题。
 - 将 MCP 写入文档接入统一词法与向量索引流程。
 - 增加 Production/Acceptance Workspace 隔离合同。
