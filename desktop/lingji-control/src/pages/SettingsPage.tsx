@@ -56,7 +56,7 @@ export default function SettingsPage({ api, active }: PageProps) {
       {message && <Notice>{message}</Notice>}
       <div className="toolbar">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索全部设置、说明、分组或参数键" aria-label="搜索设置" />
-        <label><input type="checkbox" checked={modifiedOnly} onChange={(event) => setModifiedOnly(event.target.checked)} /> 只看已修改</label>
+        <label><input type="checkbox" checked={modifiedOnly} onChange={(event) => setModifiedOnly(event.target.checked)} /> 只显示已修改</label>
         <label><input type="checkbox" checked={highRiskOnly} onChange={(event) => setHighRiskOnly(event.target.checked)} /> 只看高风险</label>
         <label><input type="checkbox" checked={unavailableOnly} onChange={(event) => setUnavailableOnly(event.target.checked)} /> 只看不可用</label>
         <span>{dirtyCount ? `${dirtyCount} 项等待保存` : "没有未保存修改"}</span>
