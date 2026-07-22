@@ -33,7 +33,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "shortDescription": "灵机独立本地记忆与任务控制中心",
     "longDescription": "用于管理灵机记忆、项目、采集、模型、算力、存储、备份和运行状态的本地桌面应用。",
     "icon": [
@@ -45,6 +45,15 @@
       "icons/Square150x150Logo.png",
       "icons/Square310x310Logo.png",
       "icons/StoreLogo.png"
-    ]
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
+    }
   }
 }

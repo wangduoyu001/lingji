@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { NAVIGATION, NAVIGATION_GROUPS } from "../navigation";
+import type { ReleaseMetadata } from "../hooks/useReleaseMetadata";
 import type { NavigationItem, PageId } from "../types";
 import NavIcon from "./NavIcon";
 
@@ -8,8 +9,10 @@ type Props = {
   current: NavigationItem;
   connected: boolean;
   connectionState: "booting" | "connected" | "offline" | "unsupported";
+  releaseMetadata: ReleaseMetadata | null;
   onNavigate: (page: PageId) => void;
   onRetry: () => void;
+  onCopyDiagnostics: () => Promise<void>;
   children: ReactNode;
 };
 
@@ -20,7 +23,22 @@ const connectionText = {
   unsupported: "仅支持桌面应用",
 };
 
-export default function DesktopShell({ page, current, connected, connectionState, onNavigate, onRetry, children }: Props) {
+export default function DesktopShell({ page, current, connected, connectionState, releaseMetadata, onNavigate, onRetry, onCopyDiagnostics, children }: Props) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const shortCommit = releaseMetadata?.commit && releaseMetadata.commit !== "development"
+    ? releaseMetadata.commit.slice(0, 8)
+    : "dev";
+
+  const copyDiagnostics = async () => {
+    try {
+      await onCopyDiagnostics();
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+    window.setTimeout(() => setCopyState("idle"), 2200);
+  };
+
   return (
     <div className="desktop-frame">
       <aside className="desktop-sidebar" aria-label="灵机主导航">
@@ -65,9 +83,21 @@ export default function DesktopShell({ page, current, connected, connectionState
               <small>{connected ? "127.0.0.1:8766" : "本机私有连接"}</small>
             </div>
           </div>
-          {!connected && connectionState !== "unsupported" && (
-            <button className="desktop-retry-button" onClick={onRetry}>重新连接</button>
-          )}
+          <div className="desktop-release-line">
+            <span>v{releaseMetadata?.version ?? "0.1.0"}</span>
+            <span>{releaseMetadata?.channel ?? "development"}</span>
+            <span>{shortCommit}</span>
+          </div>
+          <div className="desktop-sidebar-actions">
+            {!connected && connectionState !== "unsupported" && (
+              <button className="desktop-retry-button" onClick={onRetry}>重新连接</button>
+            )}
+            {connectionState !== "unsupported" && (
+              <button className="desktop-diagnostics-button" onClick={() => void copyDiagnostics()}>
+                {copyState === "copied" ? "诊断信息已复制" : copyState === "failed" ? "复制失败" : "复制诊断信息"}
+              </button>
+            )}
+          </div>
         </div>
       </aside>
 

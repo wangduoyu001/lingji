@@ -1,0 +1,132 @@
+name: Windows Desktop Release Baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Build channel recorded in metadata
+        required: true
+        default: development
+        type: choice
+        options:
+          - development
+          - acceptance
+          - release-candidate
+  push:
+    tags:
+      - "desktop-v*"
+  pull_request:
+    branches:
+      - feature/second-brain-memory
+    paths:
+      - "desktop/lingji-control/**"
+      - ".github/workflows/windows-desktop-release.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-desktop-release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows-installer:
+    name: Build Windows NSIS installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        working-directory: desktop/lingji-control
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/lingji-control/package-lock.json
+          package-manager-cache: false
+
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/lingji-control/src-tauri -> target
+
+      - name: Resolve release metadata
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $config = Get-Content "src-tauri/tauri.conf.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+          $version = [string]$config.version
+          $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
+          $eventName = "${{ github.event_name }}"
+          $channel = "pr"
+          if ($eventName -eq "workflow_dispatch") {
+            $channel = "${{ inputs.channel }}"
+          } elseif ($env:GITHUB_REF -like "refs/tags/*") {
+            $channel = "release"
+            $expectedTag = "desktop-v$version"
+            if ($env:GITHUB_REF_NAME -ne $expectedTag) {
+              throw "Tag $env:GITHUB_REF_NAME does not match Desktop version $expectedTag"
+            }
+          }
+          $buildTime = (Get-Date).ToUniversalTime().ToString("o")
+          $shortCommit = $commit.Substring(0, [Math]::Min(8, $commit.Length))
+          "LINGJI_BUILD_COMMIT=$commit" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LINGJI_BUILD_TIME_UTC=$buildTime" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LINGJI_BUILD_CHANNEL=$channel" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LINGJI_BUILD_TARGET=x86_64-pc-windows-msvc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LINGJI_BUILD_SIGNED=false" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LINGJI_RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "LINGJI_BUILD_COMMIT_SHORT=$shortCommit" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Install exact frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri NSIS installer
+        run: npm run tauri build -- --bundles nsis --target x86_64-pc-windows-msvc
+
+      - name: Package installer, executable and checksums
+        shell: pwsh
+        run: |
+          ./scripts/package-windows-release.ps1 `
+            -Commit "$env:LINGJI_BUILD_COMMIT" `
+            -BuildTimeUtc "$env:LINGJI_BUILD_TIME_UTC" `
+            -Channel "$env:LINGJI_BUILD_CHANNEL" `
+            -Target "$env:LINGJI_BUILD_TARGET"
+
+      - name: Verify release artifact contract
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $release = "release/windows-x64"
+          $installer = Get-ChildItem $release -Filter "*_setup.exe" -File
+          if ($installer.Count -ne 1 -or $installer[0].Length -le 0) {
+            throw "Expected one non-empty NSIS installer"
+          }
+          foreach ($required in @("build-metadata.json", "SHA256SUMS.txt", "INSTALLATION-NOTES.txt")) {
+            if (-not (Test-Path (Join-Path $release $required))) {
+              throw "Missing release file: $required"
+            }
+          }
+          $metadata = Get-Content (Join-Path $release "build-metadata.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+          if ($metadata.commit -ne $env:LINGJI_BUILD_COMMIT) { throw "Commit metadata mismatch" }
+          if ($metadata.version -ne $env:LINGJI_RELEASE_VERSION) { throw "Version metadata mismatch" }
+          if ($metadata.signed -ne $false) { throw "Unsigned baseline must not claim code signing" }
+
+      - name: Upload Windows release baseline
+        uses: actions/upload-artifact@v7
+        with:
+          name: lingji-windows-${{ env.LINGJI_RELEASE_VERSION }}-${{ env.LINGJI_BUILD_COMMIT_SHORT }}
+          path: desktop/lingji-control/release/windows-x64/*
+          if-no-files-found: error
+          retention-days: 14

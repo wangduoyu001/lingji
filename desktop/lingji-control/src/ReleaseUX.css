@@ -1,0 +1,47 @@
+.desktop-release-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: var(--muted-2);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 9px;
+}
+
+.desktop-release-line span + span::before {
+  content: "·";
+  margin-right: 8px;
+  color: #3f4857;
+}
+
+.desktop-sidebar-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.desktop-sidebar-actions:has(.desktop-diagnostics-button:only-child) {
+  grid-template-columns: 1fr;
+}
+
+.desktop-retry-button,
+.desktop-diagnostics-button {
+  min-height: 31px;
+  padding: 6px 8px;
+  color: var(--text-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 10px;
+}
+
+.desktop-retry-button:hover,
+.desktop-diagnostics-button:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+}
+
+@media (max-width: 1240px) {
+  .desktop-sidebar-actions {
+    grid-template-columns: 1fr;
+  }
+}

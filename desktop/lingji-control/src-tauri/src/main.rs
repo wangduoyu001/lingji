@@ -7,6 +7,28 @@ struct ControlCredentials {
     token: String,
 }
 
+#[derive(Serialize)]
+struct ReleaseMetadata {
+    product_name: &'static str,
+    version: &'static str,
+    commit: &'static str,
+    build_time_utc: &'static str,
+    channel: &'static str,
+    target: &'static str,
+    installer_format: &'static str,
+    signed: bool,
+}
+
+fn push_env_path(candidates: &mut Vec<PathBuf>, variable: &str, suffix: &[&str]) {
+    if let Ok(root) = env::var(variable) {
+        let mut path = PathBuf::from(root);
+        for part in suffix {
+            path.push(part);
+        }
+        candidates.push(path);
+    }
+}
+
 #[tauri::command]
 fn control_credentials() -> Result<ControlCredentials, String> {
     let base_url = env::var("LINGJI_CONTROL_BASE_URL")
@@ -16,6 +38,23 @@ fn control_credentials() -> Result<ControlCredentials, String> {
     if let Some(path) = explicit {
         candidates.push(path);
     }
+
+    push_env_path(
+        &mut candidates,
+        "LOCALAPPDATA",
+        &["LingJi", "storage", "control_api_token"],
+    );
+    push_env_path(
+        &mut candidates,
+        "APPDATA",
+        &["LingJi", "storage", "control_api_token"],
+    );
+    push_env_path(
+        &mut candidates,
+        "USERPROFILE",
+        &[".lingji", "storage", "control_api_token"],
+    );
+
     if let Ok(current) = env::current_dir() {
         candidates.push(current.join("storage").join("control_api_token"));
         candidates.push(current.join("..").join("storage").join("control_api_token"));
@@ -38,10 +77,24 @@ fn control_credentials() -> Result<ControlCredentials, String> {
     Ok(ControlCredentials { base_url, token: String::new() })
 }
 
+#[tauri::command]
+fn release_metadata() -> ReleaseMetadata {
+    ReleaseMetadata {
+        product_name: "灵机",
+        version: env!("CARGO_PKG_VERSION"),
+        commit: env!("LINGJI_BUILD_COMMIT"),
+        build_time_utc: env!("LINGJI_BUILD_TIME_UTC"),
+        channel: env!("LINGJI_BUILD_CHANNEL"),
+        target: env!("LINGJI_BUILD_TARGET"),
+        installer_format: "nsis",
+        signed: env!("LINGJI_BUILD_SIGNED").eq_ignore_ascii_case("true"),
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![control_credentials])
+        .invoke_handler(tauri::generate_handler![control_credentials, release_metadata])
         .run(tauri::generate_context!())
         .expect("error while running LingJi control center");
 }
