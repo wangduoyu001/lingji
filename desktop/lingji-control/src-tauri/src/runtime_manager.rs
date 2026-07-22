@@ -263,11 +263,15 @@ impl RuntimeManager {
         if current.healthy {
             return Ok(current);
         }
-        {
-            let inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            if inner.child.is_some() {
-                return Ok(self.snapshot(app, &root, false));
-            }
+        let has_child = {
+            self.inner
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .child
+                .is_some()
+        };
+        if has_child {
+            return Ok(self.snapshot(app, &root, false));
         }
 
         let binary = runtime_binary(app).ok_or_else(|| {
@@ -277,16 +281,15 @@ impl RuntimeManager {
         let stderr = log
             .try_clone()
             .map_err(|error| format!("Unable to clone runtime log handle: {error}"))?;
+        let port = CONTROL_PORT.to_string();
         let mut command = Command::new(&binary);
         command
-            .args([
-                "--data-root",
-                &root.to_string_lossy(),
-                "--host",
-                "127.0.0.1",
-                "--port",
-                &CONTROL_PORT.to_string(),
-            ])
+            .arg("--data-root")
+            .arg(root.as_os_str())
+            .arg("--host")
+            .arg("127.0.0.1")
+            .arg("--port")
+            .arg(&port)
             .current_dir(&root)
             .env("LINGJI_OWNER_DATA_ROOT", &root)
             .stdout(Stdio::from(log))
@@ -320,13 +323,14 @@ impl RuntimeManager {
                 drop(inner);
                 return Ok(self.snapshot(app, &root, true));
             }
-            if self
-                .inner
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .child
-                .is_none()
-            {
+            let child_exited = {
+                self.inner
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .child
+                    .is_none()
+            };
+            if child_exited {
                 return self.status(app);
             }
         }
