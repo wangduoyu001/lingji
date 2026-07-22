@@ -3,6 +3,7 @@ import AppPages from "./AppPages";
 import DesktopShell from "./components/DesktopShell";
 import "./DesktopUX.css";
 import { useLingJiConnection } from "./hooks/useLingJiConnection";
+import { useReleaseMetadata } from "./hooks/useReleaseMetadata";
 import { NAVIGATION } from "./navigation";
 import type { CaptureInspectorTarget } from "./pages/captureCenterTypes";
 import type { PageId } from "./types";
@@ -11,6 +12,7 @@ export default function App() {
   const [page, setPage] = useState<PageId>("overview");
   const [inspectorTarget, setInspectorTarget] = useState<CaptureInspectorTarget | null>(null);
   const connection = useLingJiConnection();
+  const release = useReleaseMetadata();
   const current = NAVIGATION.find((item) => item.id === page) ?? NAVIGATION[0];
 
   const openInspector = (target: CaptureInspectorTarget) => {
@@ -24,8 +26,10 @@ export default function App() {
       current={current}
       connected={connection.connected}
       connectionState={connection.state}
+      releaseMetadata={release.metadata}
       onNavigate={setPage}
       onRetry={() => void connection.connect()}
+      onCopyDiagnostics={() => release.copyDiagnostics(connection.state, connection.connected)}
     >
       {connection.state === "unsupported" ? (
         <section className="desktop-runtime-card desktop-runtime-card-blocked">
