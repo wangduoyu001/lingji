@@ -2,8 +2,8 @@
 
 > Updated（更新时间）: 2026-07-22  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Formal Head（正式提交）: `9efda7a9a976d20596dbdabda5741a5c54180954`  
-> P2-08 / P2-09 Status: `MERGED_AND_CI_VALIDATED_AWAITING_REAL_MACHINE_ACCEPTANCE`
+> Formal Head（正式提交）: `f955b7c8a9a28aa1351d02e5ef70be2551a565b2`  
+> P2-08 / P2-09 Status: `MERGED_AND_VALIDATED`
 
 ## 1. 仓库职责
 
@@ -501,10 +501,14 @@ desktop/lingji-control/scripts/run-smoke-suite.mjs
 最终集成：
 
 ```text
-formal head: 9efda7a9a976d20596dbdabda5741a5c54180954
+formal feature implementation: 9efda7a9a976d20596dbdabda5741a5c54180954
+formal documentation sync: f955b7c8a9a28aa1351d02e5ef70be2551a565b2
 tests workflow #696: SUCCESS
 P0 Windows Gate #94: SUCCESS
+owner-confirmed local acceptance: COMPLETE
 ```
+
+本机验收结论来自项目主人现场确认；没有附加原始日志时，不在代码地图中编造精确数值或命令输出。
 
 ## 19. 文档索引
 
@@ -527,8 +531,11 @@ P0 - P2-07:
 MERGED_AND_VALIDATED
 
 P2-08 Auto Review SHADOW:
-MERGED_AND_CI_VALIDATED_AWAITING_REAL_MACHINE_ACCEPTANCE
+MERGED_AND_VALIDATED
 
 P2-09 Runtime/Desktop Reliability:
-MERGED_AND_CI_VALIDATED_AWAITING_REAL_MACHINE_ACCEPTANCE
+MERGED_AND_VALIDATED
+
+Issue #23:
+CLOSED_COMPLETED
 ```

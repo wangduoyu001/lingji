@@ -2,13 +2,13 @@
 
 > Updated（更新时间）: 2026-07-22  
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Formal Head（正式提交）: `9efda7a9a976d20596dbdabda5741a5c54180954`  
-> P2-08 Status: `MERGED_AND_CI_VALIDATED_AWAITING_REAL_MACHINE_ACCEPTANCE`  
-> P2-09 Status: `MERGED_AND_CI_VALIDATED_AWAITING_REAL_MACHINE_ACCEPTANCE`
+> Formal Head（正式提交）: `f955b7c8a9a28aa1351d02e5ef70be2551a565b2`  
+> P2-08 Status: `MERGED_AND_VALIDATED`  
+> P2-09 Status: `MERGED_AND_VALIDATED`
 
 ## 1. 当前结论
 
-P2-08 Auto Review SHADOW Layer 与 P2-09 Runtime/Desktop Reliability 已完成实现、依赖合并和整仓 GitHub Actions 验证。
+P2-08 Auto Review SHADOW Layer 与 P2-09 Runtime/Desktop Reliability 已完成实现、依赖合并、整仓 GitHub Actions 验证和本机现场验收。
 
 ```text
 PR #24  P2-09A Runtime Truth                         MERGED
@@ -18,6 +18,7 @@ PR #27  P2-08A Deterministic Auto Review Core         MERGED
 PR #28  P2-08B Local AI Reviewer + SHADOW API         MERGED
 PR #29  P2-09D Desktop UX + SHADOW Dashboard          MERGED
 PR #30  Combined Integration Verification             MERGED
+PR #31  Project Status / Changelog / Code Map Sync    MERGED
 ```
 
 最终集成门禁：
@@ -36,7 +37,7 @@ Browser capture smoke: SUCCESS
 Obsidian plugin smoke: SUCCESS
 ```
 
-代码和 CI 已完成，但真实 Windows 主机、RTX 4060、Ollama 与生产 Qdrant 的现场验收仍未执行，因此不得标记为 Production Ready。
+2026-07-22，项目主人确认此前列出的真实 Windows、RTX 4060、Ollama、Qdrant、8766 与 Tauri 本机验收已经完成。该结论按主人现场确认记录；仓库未附加新的逐项命令、原始日志、耗时或硬件数值，因此文档不虚构这些细节。
 
 ## 2. 产品与代码主线
 
@@ -95,8 +96,8 @@ P2-04 Memory Inspector UI                         MERGED_AND_VALIDATED
 P2-05 Manual Capture Center                       MERGED_AND_VALIDATED
 P2-06 Obsidian CLI Formal Migration               MERGED_AND_VALIDATED
 P2-07 Codex-first Local Memory Loop                MERGED_AND_VALIDATED
-P2-08 Auto Review SHADOW Layer                    MERGED_AND_CI_VALIDATED
-P2-09 Runtime/Desktop Reliability                 MERGED_AND_CI_VALIDATED
+P2-08 Auto Review SHADOW Layer                    MERGED_AND_VALIDATED
+P2-09 Runtime/Desktop Reliability                 MERGED_AND_VALIDATED
 ```
 
 ## 5. P2-09 Runtime Truth
@@ -214,10 +215,6 @@ Auto Review 不得：
 ## 10. 安全状态
 
 ```text
-Production ChatGPT 正文读取: NO
-Production Vault 修改: NO
-Production SQLite 修改: NO
-Production Qdrant 修改: NO
 自动 Qdrant Collection 删除/重建: NO
 自动模型下载: NO
 数据库 Schema 修改: NO
@@ -230,21 +227,27 @@ force push: NO
 master 修改: NO
 ```
 
-## 11. 真实机器验收待办
+本机验收允许在主人控制的现场环境中读取运行状态并验证既有生产依赖，但没有改变上述自动化和架构边界。
+
+## 11. 本机验收结果
+
+项目主人确认以下现场验收范围已完成：
 
 ```text
-1. RTX 4060 真实遥测成功路径。
-2. nvidia-smi 不可用时显示 unavailable/null，而不是0。
-3. bge-m3 主模型真实调用。
-4. nomic-embed-text 备用模型真实回退。
-5. Qdrant 维度冲突阻止写入并保持 lexical retrieval。
+1. RTX 4060 真实遥测与失败路径。
+2. nvidia-smi 不可用时的 unavailable/null 表达。
+3. bge-m3 主模型调用。
+4. nomic-embed-text 备用模型回退。
+5. Qdrant 维度冲突保护与 lexical retrieval 保留。
 6. Auto Review 本地模型主/备角色。
 7. 8766 Token 鉴权与 Tauri 连接。
 8. Desktop 隐藏窗口暂停、恢复、退避和布局。
-9. SHADOW 评估后候选、Obsidian 和 Qdrant 均不变化。
+9. SHADOW 评估后候选、Obsidian 和 Qdrant 不发生自动变更。
 ```
 
-Issue #23 在上述验收完成前保持打开。
+验收结论来源为项目主人现场确认。没有附加逐项原始日志时，不记录未提供的精确数值或命令输出。
+
+Issue #23 已按 `completed` 关闭。
 
 ## 12. 关键文档
 
@@ -263,9 +266,8 @@ docs/TEST_REPORTS/P2_08_P2_09_INTEGRATION_TEST_REPORT.md
 ## 13. 下一步
 
 ```text
-真实 Windows 环境验收
--> 修复现场差异
--> 更新验收报告与 Issue #23
--> 评估是否继续保持 SHADOW
--> 在足够审计数据前不开发 ACTIVE
+保持 Auto Review 为 SHADOW
+-> 积累主人反馈和审计样本
+-> 评估误判率、风险分布与人工审核节省量
+-> 在足够样本和独立设计评审前不开发 ACTIVE
 ```
