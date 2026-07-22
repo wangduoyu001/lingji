@@ -2,6 +2,7 @@ const scripts = [
   "acceptance-smoke.mjs",
   "ui-modular-smoke.mjs",
   "native-desktop-ui-smoke.mjs",
+  "memory-workspace-ui-smoke.mjs",
   "vector-center-smoke.mjs",
   "hardware-smoke.mjs",
   "models-smoke.mjs",
