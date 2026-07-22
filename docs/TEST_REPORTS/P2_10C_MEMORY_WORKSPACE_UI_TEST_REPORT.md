@@ -37,7 +37,7 @@ The new test is registered in the complete Desktop smoke suite, increasing the s
 
 ## Existing contract tests preserved
 
-The implementation must continue to pass:
+The implementation continues to pass:
 
 ```text
 memory-review-smoke.mjs
@@ -60,22 +60,44 @@ These tests preserve:
 - inspector query and mapping contracts;
 - Tauri-only credential behavior.
 
-## Required CI gates
+## GitHub Actions results
+
+Validated implementation head before this documentation-only update:
 
 ```text
-npm ci
-npm run test:smoke
-npm run build
-cargo check
-Python 3.11 tests
-Python 3.12 tests
-Windows full tests
-MCP smoke
-Browser capture smoke
-Obsidian plugin smoke
+be1ac496d6f931fdafd5504b4d2a513dee6f12d6
 ```
 
-## Manual checks after CI
+Workflow results:
+
+```text
+tests #719: SUCCESS
+P0 Windows Gate #108: SUCCESS
+```
+
+Passed gates:
+
+```text
+16-script Desktop smoke suite: SUCCESS
+React / TypeScript / Vite production build: SUCCESS
+Tauri configuration validation: SUCCESS
+Tauri Rust cargo check: SUCCESS
+Python 3.11 unit tests: SUCCESS
+Python 3.12 unit tests: SUCCESS
+Python 3.12 full repository gate: SUCCESS
+Windows compile and full tests: SUCCESS
+clean-install contract validation: SUCCESS
+full Python entry-point compile: SUCCESS
+MCP smoke: SUCCESS
+Browser capture smoke: SUCCESS
+Obsidian plugin smoke: SUCCESS
+```
+
+## Manual owner checks still required
+
+CI validates contracts, source compilation, Windows tests, frontend production build and Rust compilation. It does not prove interaction with the packaged application on the owner's real Windows machine.
+
+Remaining checks:
 
 1. Open Artificial Memory Review and verify candidate selection is visually obvious.
 2. Verify no approve or reject action is shown before selecting a candidate.
@@ -108,5 +130,5 @@ second_brain changes: no
 ## Status
 
 ```text
-TESTS_ADDED_AWAITING_GITHUB_ACTIONS
+CI_VALIDATED_AWAITING_OWNER_PACKAGED_APP_CHECK
 ```
