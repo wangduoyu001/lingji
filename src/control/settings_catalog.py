@@ -10,6 +10,8 @@ class CompleteOwnerSettingsRegistry(OwnerSettingsRegistry):
 
     def definitions(self) -> dict[str, dict[str, Any]]:
         definitions = super().definitions()
+        configured_mode = str(getattr(self.settings, "auto_review_mode", "OFF") or "OFF").upper()
+        safe_mode = configured_mode if configured_mode in {"OFF", "SHADOW"} else "OFF"
         definitions.update(
             {
                 "auto_review_mode": self._annotate(
@@ -17,7 +19,7 @@ class CompleteOwnerSettingsRegistry(OwnerSettingsRegistry):
                         "auto_review",
                         "Auto Review 模式",
                         "OFF 完全关闭；SHADOW 只记录建议和风险，不执行记忆变更。",
-                        str(getattr(self.settings, "auto_review_mode", "OFF")).upper(),
+                        safe_mode,
                         ["OFF", "SHADOW"],
                     ),
                     recommended="SHADOW",
