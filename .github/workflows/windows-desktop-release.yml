@@ -104,6 +104,9 @@ jobs:
       - name: Install exact frontend dependencies
         run: npm ci
 
+      - name: Build Desktop frontend for Tauri context
+        run: npm run build
+
       - name: Test Rust runtime manager
         shell: pwsh
         run: |
