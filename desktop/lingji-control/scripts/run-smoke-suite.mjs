@@ -4,6 +4,7 @@ const scripts = [
   "native-desktop-ui-smoke.mjs",
   "memory-workspace-ui-smoke.mjs",
   "windows-release-smoke.mjs",
+  "runtime-sidecar-smoke.mjs",
   "vector-center-smoke.mjs",
   "hardware-smoke.mjs",
   "models-smoke.mjs",
