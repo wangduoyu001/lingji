@@ -1,3 +1,71 @@
+.overview-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(27,32,42,.96), rgba(16,19,26,.98));
+  box-shadow: 0 16px 38px rgba(0,0,0,.16);
+}
+
+.overview-hero-good {
+  border-color: rgba(119,214,163,.24);
+  background: linear-gradient(135deg, rgba(35,80,61,.22), rgba(16,19,26,.98));
+}
+
+.overview-hero-warn {
+  border-color: rgba(230,184,107,.24);
+  background: linear-gradient(135deg, rgba(88,65,27,.22), rgba(16,19,26,.98));
+}
+
+.overview-hero-bad {
+  border-color: rgba(241,139,139,.25);
+  background: linear-gradient(135deg, rgba(93,42,42,.23), rgba(16,19,26,.98));
+}
+
+.overview-title-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.overview-title-line h2 {
+  margin: 5px 0 0;
+  font-size: 24px;
+  letter-spacing: -.035em;
+}
+
+.overview-hero p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.overview-section {
+  display: grid;
+  gap: 11px;
+}
+
+.overview-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 2px;
+}
+
+.overview-section-heading h3 {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.overview-section-heading small {
+  color: var(--muted-2);
+}
+
 .auto-review-page .panel-body {
   display: grid;
   gap: 14px;
