@@ -17,7 +17,7 @@ const [page, field, api, controller, types] = await Promise.all([
 assert.equal(page.includes("GROUP_LABELS"), false, "Frontend must not duplicate backend group labels");
 assert.match(page, /snapshot\.groups/);
 assert.match(page, /snapshot\.summary/);
-assert.match(page, /只看已修改/);
+assert.match(page, /只显示已修改/);
 assert.match(page, /只看高风险/);
 assert.match(page, /只看不可用/);
 assert.match(api, /\/api\/settings\/preview/);
@@ -26,6 +26,7 @@ assert.match(controller, /dirtyValues/);
 assert.match(controller, /preview\.requires_confirmation/);
 assert.match(controller, /window\.confirm/);
 assert.match(controller, /beforeunload/);
+assert.match(controller, /其他未保存修改已保留/);
 assert.match(field, /availability_state/);
 assert.match(field, /performance_impact/);
 assert.match(field, /privacy_impact/);
