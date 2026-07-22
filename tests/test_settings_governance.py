@@ -53,6 +53,13 @@ def test_auto_review_settings_are_owner_visible_and_active_is_not_a_choice(tmp_p
     assert "ACTIVE" not in definitions["auto_review_mode"]["choices"]
 
 
+def test_invalid_active_default_is_clamped_to_off(tmp_path: Path):
+    definition = registry(tmp_path, auto_review_mode="ACTIVE").definitions()["auto_review_mode"]
+
+    assert definition["default"] == "OFF"
+    assert definition["recommended"] == "SHADOW"
+
+
 def test_every_owner_visible_definition_has_complete_governance_metadata(tmp_path: Path):
     definitions = registry(tmp_path).definitions()
     required = {
