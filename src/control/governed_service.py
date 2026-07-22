@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .service import LocalControlService
-from .settings_governance import OwnerSettingsRegistry
+from .settings_catalog import CompleteOwnerSettingsRegistry
 
 
 class GovernedLocalControlService(LocalControlService):
@@ -11,8 +11,9 @@ class GovernedLocalControlService(LocalControlService):
 
     def __init__(self, settings: Any, state_db: Any | None = None, **kwargs: Any):
         super().__init__(settings, state_db=state_db, **kwargs)
-        registry = OwnerSettingsRegistry(settings, state_db=self.state_db)
+        registry = CompleteOwnerSettingsRegistry(settings, state_db=self.state_db)
         self.runtime_settings = registry
+        self._apply_settings_model(registry.snapshot().get("values", {}))
         if hasattr(self.obsidian, "runtime_settings"):
             self.obsidian.runtime_settings = registry
         if hasattr(self.model_inventory, "runtime_settings"):
@@ -32,12 +33,13 @@ class GovernedLocalControlService(LocalControlService):
         confirmation: str = "",
         actor: str = "owner",
     ) -> dict[str, Any]:
-        self.runtime_settings.update(
+        snapshot = self.runtime_settings.update(
             values,
             actor=actor,
             confirmation=confirmation,
             capabilities=self._settings_capabilities(),
         )
+        self._apply_settings_model(snapshot.get("values", {}), keys=values.keys())
         self._sync_hardware_settings()
         return self.get_settings()
 
@@ -55,9 +57,22 @@ class GovernedLocalControlService(LocalControlService):
         *,
         actor: str = "owner",
     ) -> dict[str, Any]:
-        self.runtime_settings.reset(keys, actor=actor)
+        snapshot = self.runtime_settings.reset(keys, actor=actor)
+        selected_keys = keys or snapshot.get("values", {}).keys()
+        self._apply_settings_model(snapshot.get("values", {}), keys=selected_keys)
         self._sync_hardware_settings()
         return self.get_settings()
+
+    def _apply_settings_model(
+        self,
+        values: Mapping[str, Any],
+        *,
+        keys: Any | None = None,
+    ) -> None:
+        selected = list(keys) if keys is not None else list(values)
+        for key in selected:
+            if key in values and hasattr(self.settings, key):
+                setattr(self.settings, key, values[key])
 
     def _settings_capabilities(self) -> dict[str, dict[str, Any]]:
         capabilities: dict[str, dict[str, Any]] = {}
