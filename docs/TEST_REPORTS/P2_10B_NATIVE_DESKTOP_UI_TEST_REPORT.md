@@ -8,7 +8,7 @@ Implementation was performed through the writable GitHub connector on branch:
 work/p2-10b-native-desktop-ui
 ```
 
-No local Windows, Tauri, browser or Node runtime is attached to this conversation. Executable evidence must come from GitHub Actions.
+No local Windows, packaged Tauri application, browser or Node runtime was attached to this conversation. Executable evidence comes from GitHub Actions. Packaged-application interaction checks remain an owner-machine verification item.
 
 ## New smoke contract
 
@@ -41,26 +41,46 @@ src/components/NavIcon.tsx
 
 It continues to verify all formal pages, settings governance, runtime pages and modular App size.
 
-## Build gates required
+The Auto Review smoke now checks grouped-navigation ownership in `DesktopShell` rather than requiring navigation implementation details to remain in `App.tsx`.
 
-The pull request must pass:
+## GitHub Actions results
+
+Validated implementation head:
 
 ```text
-npm ci
-npm run test:smoke
-npm run build
-cargo check
-Python 3.11 tests
-Python 3.12 tests
-Windows full tests
-MCP smoke
-Browser capture smoke
-Obsidian plugin smoke
+eda286679830cecc979a5db04747a8b9c1c3053e
+```
+
+Workflow results:
+
+```text
+tests #715: SUCCESS
+P0 Windows Gate #105: SUCCESS
+```
+
+Passed gates:
+
+```text
+Python 3.11 unit tests: SUCCESS
+Python 3.12 unit tests: SUCCESS
+Windows compile and full tests: SUCCESS
+clean-install contract validation: SUCCESS
+full Python entry-point compile: SUCCESS
+15-script Desktop smoke suite: SUCCESS
+React / TypeScript / Vite production build: SUCCESS
+Tauri Rust cargo check: SUCCESS
+MCP smoke: SUCCESS
+Browser capture smoke: SUCCESS
+Obsidian plugin smoke: SUCCESS
 ```
 
 Browser capture smoke is unrelated to the Desktop rendering surface. It validates the existing optional capture extension and does not make the Desktop browser-dependent.
 
-## Manual owner checks after CI
+## Manual owner checks still required
+
+CI validates code, contracts, builds and Rust compilation. It does not prove physical interaction with the packaged application on the owner's Windows machine.
+
+Remaining checks:
 
 1. Launch the packaged Tauri application and verify no browser window is required.
 2. Verify the operating-system titlebar, resize and minimize/maximize behavior.
@@ -68,7 +88,7 @@ Browser capture smoke is unrelated to the Desktop rendering surface. It validate
 4. Verify credentials are loaded without displaying a token field.
 5. Stop 8766 and verify the offline banner and reconnect action.
 6. Restart 8766 and verify reconnect restores the overview.
-7. Open the same frontend URL in a browser and verify the desktop-only boundary screen appears.
+7. Open the frontend development URL in a browser and verify the desktop-only boundary screen appears.
 8. Resize to the minimum window size and verify sidebar, overview and settings remain usable.
 9. Verify navigation icons and active state are clear without relying on color alone.
 10. Verify stale and unknown runtime values remain truthful.
@@ -90,5 +110,5 @@ second_brain changes: no
 ## Status
 
 ```text
-TESTS_ADDED_AWAITING_GITHUB_ACTIONS
+CI_VALIDATED_AWAITING_OWNER_PACKAGED_APP_CHECK
 ```
