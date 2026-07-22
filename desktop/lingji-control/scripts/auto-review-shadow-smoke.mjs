@@ -6,15 +6,17 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const source = async (path) => readFile(resolve(here, path), "utf8");
 
-const [app, navigation, page, memoryReview] = await Promise.all([
+const [app, shell, navigation, page, memoryReview] = await Promise.all([
   source("../src/App.tsx"),
+  source("../src/components/DesktopShell.tsx"),
   source("../src/navigation.ts"),
   source("../src/pages/AutoReviewPage.tsx"),
   source("../src/pages/MemoryReviewPage.tsx"),
 ]);
 
-assert.match(app, /NAVIGATION_GROUPS/);
-assert.match(app, /connectionExpanded/);
+assert.match(app, /DesktopShell/);
+assert.match(shell, /NAVIGATION_GROUPS/);
+assert.match(shell, /connectionState/);
 assert.equal((navigation.match(/id: "(home|memory|ingestion|runtime|operations)"/g) ?? []).length, 5);
 assert.match(navigation, /id: "auto_review"/);
 

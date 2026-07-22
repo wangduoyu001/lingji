@@ -1,57 +1,70 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LingJiApi } from "../api";
+import { ApiError, LingJiApi, isTauriDesktopRuntime } from "../api";
 import type { Row } from "../types";
+
+export type ConnectionState = "booting" | "connected" | "offline" | "unsupported";
+
+function connectionMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === "CREDENTIALS_UNAVAILABLE") return "未找到本机控制凭据，请先启动灵机控制服务。";
+    if (error.code === "DESKTOP_BRIDGE_UNAVAILABLE") return "桌面桥接不可用，请重新启动灵机桌面应用。";
+    if (error.code === "NETWORK_UNAVAILABLE") return "本机控制服务未启动或暂时不可用。";
+    return error.message;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
 
 export function useLingJiConnection() {
   const api = useMemo(() => new LingJiApi(), []);
-  const [baseUrl, setBaseUrl] = useState(api.baseUrl);
-  const [token, setToken] = useState(api.token);
-  const [connected, setConnected] = useState(false);
+  const [state, setState] = useState<ConnectionState>("booting");
   const [overview, setOverview] = useState<Row | null>(null);
   const [error, setError] = useState("");
 
   const connect = useCallback(async () => {
-    api.configure(baseUrl, token);
+    if (!isTauriDesktopRuntime()) {
+      setState("unsupported");
+      setOverview(null);
+      setError("灵机控制中心只作为 Tauri 桌面应用运行，不提供浏览器操作入口。");
+      return;
+    }
+    setState("booting");
     try {
+      await api.tryTauriToken();
       const next = await api.get<Row>("/api/overview");
       setOverview(next);
-      setConnected(true);
+      setState("connected");
       setError("");
     } catch (reason) {
-      setConnected(false);
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setOverview(null);
+      setState("offline");
+      setError(connectionMessage(reason));
     }
-  }, [api, baseUrl, token]);
-
-  useEffect(() => {
-    void (async () => {
-      await api.tryTauriToken();
-      setBaseUrl(api.baseUrl);
-      setToken(api.token);
-      try {
-        setOverview(await api.get<Row>("/api/overview"));
-        setConnected(true);
-      } catch {
-        setConnected(false);
-      }
-    })();
   }, [api]);
 
   useEffect(() => {
-    if (!connected) return;
+    void connect();
+  }, [connect]);
+
+  useEffect(() => {
+    if (state !== "connected") return;
     const timer = window.setInterval(() => {
-      void api.get<Row>("/api/overview").then(setOverview).catch(() => setConnected(false));
-    }, 10000);
+      void api.get<Row>("/api/overview")
+        .then((next) => {
+          setOverview(next);
+          setError("");
+        })
+        .catch((reason) => {
+          setState("offline");
+          setError(connectionMessage(reason));
+        });
+    }, 10_000);
     return () => window.clearInterval(timer);
-  }, [api, connected]);
+  }, [api, state]);
 
   return {
     api,
-    baseUrl,
-    setBaseUrl,
-    token,
-    setToken,
-    connected,
+    state,
+    connected: state === "connected",
     overview,
     error,
     connect,

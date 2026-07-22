@@ -25,11 +25,33 @@ export type PageId =
 
 export type NavigationGroupId = "home" | "memory" | "ingestion" | "runtime" | "operations";
 
+export type NavigationIcon =
+  | "home"
+  | "pulse"
+  | "project"
+  | "review"
+  | "shield"
+  | "inspect"
+  | "vault"
+  | "capture"
+  | "feed"
+  | "media"
+  | "queue"
+  | "vector"
+  | "compute"
+  | "model"
+  | "storage"
+  | "backup"
+  | "acceptance"
+  | "settings"
+  | "logs";
+
 export type NavigationItem = {
   id: PageId;
   label: string;
   hint: string;
   group: NavigationGroupId;
+  icon: NavigationIcon;
 };
 
 export type NavigationGroup = {

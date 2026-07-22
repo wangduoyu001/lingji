@@ -6,6 +6,8 @@ const requiredFiles = [
   "src/types.ts",
   "src/hooks/useLingJiConnection.ts",
   "src/components/ui.tsx",
+  "src/components/DesktopShell.tsx",
+  "src/components/NavIcon.tsx",
   "src/components/settings/SettingField.tsx",
   "src/pages/OverviewPage.tsx",
   "src/pages/BrainStatusPage.tsx",
@@ -27,6 +29,7 @@ for (const file of requiredFiles) {
 }
 
 const app = fs.readFileSync("src/App.tsx", "utf8");
+const shell = fs.readFileSync("src/components/DesktopShell.tsx", "utf8");
 const routes = fs.readFileSync("src/AppPages.tsx", "utf8");
 const systemCompute = fs.readFileSync("src/pages/SystemComputePage.tsx", "utf8");
 const vectorCenter = fs.readFileSync("src/pages/VectorCenterPage.tsx", "utf8");
@@ -34,8 +37,11 @@ const settings = fs.readFileSync("src/pages/SettingsPage.tsx", "utf8");
 const field = fs.readFileSync("src/components/settings/SettingField.tsx", "utf8");
 const navigation = fs.readFileSync("src/navigation.ts", "utf8");
 
-for (const token of ["NAVIGATION", "useLingJiConnection", "AppPages"]) {
+for (const token of ["NAVIGATION", "useLingJiConnection", "AppPages", "DesktopShell"]) {
   if (!app.includes(token)) throw new Error(`App shell is missing ${token}`);
+}
+for (const token of ["desktop-sidebar", "desktop-toolbar", "NavIcon"]) {
+  if (!shell.includes(token)) throw new Error(`Desktop shell is missing ${token}`);
 }
 for (const token of ["OverviewPage", "BrainStatusPage", "VectorCenterPage", "SystemComputePage", "ModelsPage", "SettingsPage", "AcceptancePage"]) {
   if (!routes.includes(token)) throw new Error(`Page router is missing ${token}`);
@@ -59,7 +65,7 @@ for (const token of ["使用系统默认", "主人已修改", "为什么推荐",
   if (!field.includes(token)) throw new Error(`Setting field is missing ${token}`);
 }
 
-for (const token of ["脑状态", "向量中心", "系统与算力", "AI 与模型", "环境验收", "设置", "主动投喂", "媒体分析"]) {
+for (const token of ["脑状态", "向量中心", "系统与算力", "AI 与模型", "环境验收", "设置", "主动投喂", "媒体分析", "icon:"]) {
   if (!navigation.includes(token)) throw new Error(`Navigation is missing ${token}`);
 }
 

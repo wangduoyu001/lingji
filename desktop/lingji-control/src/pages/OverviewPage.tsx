@@ -15,8 +15,25 @@ const stateTone = (value: unknown): "good" | "warn" | "bad" | undefined => {
   return undefined;
 };
 
+function stateLabel(value: unknown): string {
+  const state = String(value ?? "unknown").toLowerCase();
+  const labels: Record<string, string> = {
+    healthy: "运行正常",
+    ready: "已就绪",
+    available: "可用",
+    degraded: "降级运行",
+    warning: "需要关注",
+    stale: "数据过期",
+    failed: "运行失败",
+    error: "存在错误",
+    unavailable: "当前不可用",
+    blocked: "已阻止",
+  };
+  return labels[state] ?? display(value);
+}
+
 export default function OverviewPage({ data, refresh, api, active }: { data: Row | null; refresh: () => Promise<void>; api: LingJiApi; active: boolean }) {
-  if (!data) return <Empty text="连接服务后显示总览。" />;
+  if (!data) return <Empty text="连接本机服务后显示控制总览。" />;
   const d = data as Record<string, unknown>;
   const health = (d.health ?? {}) as Record<string, unknown>;
   const queue = ((d.queue as Record<string, unknown> | undefined)?.stats ?? {}) as Record<string, unknown>;
@@ -35,29 +52,44 @@ export default function OverviewPage({ data, refresh, api, active }: { data: Row
   const runtimeState = memoryRuntime.state ?? health.status;
   const stale = Boolean(memoryRuntime.stale);
 
-  return <div className="stack">
-    <div className="toolbar">
-      <button className="button secondary" onClick={() => void refresh()}>立即刷新</button>
-      <span>工作区 {display(memoryRuntime.workspace)}</span>
-      <span>数据源 {display(memoryRuntime.source)}</span>
-      <span>状态时间 {display(memoryRuntime.as_of)}</span>
-    </div>
+  return <div className="stack overview-page">
+    <section className={`overview-hero overview-hero-${stateTone(runtimeState) ?? "neutral"}`}>
+      <div className="overview-hero-main">
+        <span className="desktop-eyebrow">SYSTEM POSTURE</span>
+        <div className="overview-title-line">
+          <h2>{stateLabel(runtimeState)}</h2>
+          <span className={`pill ${stateTone(runtimeState) === "good" ? "ok" : stateTone(runtimeState) === "bad" ? "error" : "warning"}`}>{display(runtimeState)}</span>
+        </div>
+        <p>工作区 {display(memoryRuntime.workspace)} · 数据源 {display(memoryRuntime.source)} · 状态时间 {display(memoryRuntime.as_of)}</p>
+      </div>
+      <button className="button secondary" onClick={() => void refresh()}>刷新本机状态</button>
+    </section>
+
     {stale && <Notice kind="warning">当前记忆和向量统计来自旧快照，不能当成实时状态。</Notice>}
     <CurrentWorkPanel api={api} active={active} />
 
-    <div className="metric-grid">
-      <Metric title="系统状态" value={display(runtimeState)} detail={`${display(health.error_count)} 错误 / ${display(health.warning_count)} 警告`} tone={stateTone(runtimeState)} />
-      <Metric title="待处理任务" value={display(queue.pending)} detail={`运行中 ${display(queue.running)} · 重试 ${display(queue.retrying)}`} tone={Number(queue.failed ?? 0) > 0 ? "warn" : undefined} />
-      <Metric title="记忆文档" value={display(memory.documents)} detail={`分块 ${display(memory.chunks)} · 修订 ${display(memory.revision)}`} tone={stateTone(memory.state)} />
-      <Metric title="向量索引" value={display(vector.vectors)} detail={`${display(vector.state)} · 维度 ${display(vector.dimension)}`} tone={vector.rebuild_required ? "bad" : stateTone(vector.state)} />
-    </div>
+    <section className="overview-section">
+      <div className="overview-section-heading">
+        <div><span className="desktop-eyebrow">CORE</span><h3>核心运行状态</h3></div>
+        <small>{display(health.error_count)} 个错误 · {display(health.warning_count)} 个警告</small>
+      </div>
+      <div className="metric-grid">
+        <Metric title="系统状态" value={stateLabel(runtimeState)} detail={`${display(health.error_count)} 错误 / ${display(health.warning_count)} 警告`} tone={stateTone(runtimeState)} />
+        <Metric title="待处理任务" value={display(queue.pending)} detail={`运行中 ${display(queue.running)} · 重试 ${display(queue.retrying)}`} tone={Number(queue.failed ?? 0) > 0 ? "warn" : undefined} />
+        <Metric title="记忆文档" value={display(memory.documents)} detail={`分块 ${display(memory.chunks)} · 修订 ${display(memory.revision)}`} tone={stateTone(memory.state)} />
+        <Metric title="向量索引" value={display(vector.vectors)} detail={`${display(vector.state)} · 维度 ${display(vector.dimension)}`} tone={vector.rebuild_required ? "bad" : stateTone(vector.state)} />
+      </div>
+    </section>
 
-    <div className="metric-grid">
-      <Metric title="Embedding" value={display(embedding.active_model ?? embedding.configured_model)} detail={display(embedding.state)} tone={stateTone(embedding.state)} />
-      <Metric title="算力模式" value={display(computePolicy.requested_mode ?? computePolicy.mode)} detail={`设备 ${display(computePolicy.selected_device ?? computePolicy.device)}`} tone={stateTone(computePolicy.state)} />
-      <Metric title="灵机占用" value={storage.bytes == null ? "未知" : bytes(Number(storage.bytes))} detail={`${display(storage.files)} 个文件`} />
-      <Metric title="磁盘剩余" value={storage.disk_free_bytes == null ? "未知" : bytes(Number(storage.disk_free_bytes))} detail={`${display(storage.disk_free_percent, "%")}`} tone={storageAlerts.below_minimum_free ? "bad" : "good"} />
-    </div>
+    <section className="overview-section">
+      <div className="overview-section-heading"><div><span className="desktop-eyebrow">RUNTIME</span><h3>模型、算力与存储</h3></div></div>
+      <div className="metric-grid">
+        <Metric title="Embedding" value={display(embedding.active_model ?? embedding.configured_model)} detail={display(embedding.state)} tone={stateTone(embedding.state)} />
+        <Metric title="算力模式" value={display(computePolicy.requested_mode ?? computePolicy.mode)} detail={`设备 ${display(computePolicy.selected_device ?? computePolicy.device)}`} tone={stateTone(computePolicy.state)} />
+        <Metric title="灵机占用" value={storage.bytes == null ? "未知" : bytes(Number(storage.bytes))} detail={`${display(storage.files)} 个文件`} />
+        <Metric title="磁盘剩余" value={storage.disk_free_bytes == null ? "未知" : bytes(Number(storage.disk_free_bytes))} detail={`${display(storage.disk_free_percent, "%")}`} tone={storageAlerts.below_minimum_free ? "bad" : "good"} />
+      </div>
+    </section>
 
     <div className="two-column">
       <Panel title="健康检查">
