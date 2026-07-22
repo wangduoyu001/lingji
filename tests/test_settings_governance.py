@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from src.config import Settings
+from src.control import RuntimeSettingsStore
 from src.control.settings_governance import (
     CONFIRM_HIGH_RISK_SETTINGS,
     OwnerSettingsRegistry,
@@ -27,6 +27,10 @@ def registry(tmp_path: Path, **overrides) -> OwnerSettingsRegistry:
         **overrides,
     )
     return OwnerSettingsRegistry(settings, state_db=_StateDB())
+
+
+def test_control_package_exports_governed_registry():
+    assert RuntimeSettingsStore is OwnerSettingsRegistry
 
 
 def test_settings_model_default_overrides_duplicate_registry_literal(tmp_path: Path):
@@ -128,3 +132,11 @@ def test_groups_are_backend_owned_and_ordered(tmp_path: Path):
     assert groups[0]["id"] == "media_processing"
     assert all(group["label"] and group["description"] for group in groups)
     assert [group["order"] for group in groups] == sorted(group["order"] for group in groups)
+
+
+def test_formal_control_startup_wires_governed_service_and_routes():
+    source = Path("run_control_api.py").read_text(encoding="utf-8")
+
+    assert "GovernedLocalControlService" in source
+    assert "register_settings_governance_routes" in source
+    assert "service = GovernedLocalControlService" in source
