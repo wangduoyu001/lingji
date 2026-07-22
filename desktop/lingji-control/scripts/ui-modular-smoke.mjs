@@ -49,9 +49,10 @@ for (const token of ["/api/memory/status", "/api/vector/status", "/api/vector/co
   if (!vectorCenter.includes(token)) throw new Error(`Vector Center page is missing ${token}`);
 }
 
-for (const token of ["只显示已修改", "恢复本组默认", "取消未保存修改", "搜索设置", "snapshot.groups"]) {
+for (const token of ["只显示已修改", "恢复本组默认", "取消未保存修改", "搜索设置"]) {
   if (!settings.includes(token)) throw new Error(`Settings page is missing ${token}`);
 }
+if (!/snapshot\?*\.groups/.test(settings)) throw new Error("Settings page must consume backend groups");
 if (settings.includes("GROUP_LABELS")) throw new Error("Settings page must not duplicate backend group labels");
 
 for (const token of ["使用系统默认", "主人已修改", "为什么推荐", "什么时候修改", "恢复默认"]) {
