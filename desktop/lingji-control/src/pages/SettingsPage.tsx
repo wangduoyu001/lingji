@@ -103,7 +103,7 @@ export default function SettingsPage({ api, active }: PageProps) {
             <button className="button primary" disabled={saving || dirtyCount === 0} onClick={() => void controller.save()}>{saving ? "处理中…" : "预览并保存修改"}</button>
             <button className="button secondary" disabled={saving || groupKeys.length === 0} onClick={() => void controller.reset(groupKeys)}>恢复本组默认</button>
             <button className="button secondary" disabled={saving || dirtyCount === 0} onClick={controller.cancelDraft}>取消未保存修改</button>
-            <button className="button secondary" disabled={saving} onClick={() => void controller.load()}>重新加载</button>
+            <button className="button secondary" disabled={saving} onClick={() => void controller.reload()}>重新加载</button>
           </div>
         </Panel>
       </div>
