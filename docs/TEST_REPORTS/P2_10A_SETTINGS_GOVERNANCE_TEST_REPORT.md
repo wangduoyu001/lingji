@@ -4,7 +4,7 @@
 
 Development was performed through the writable GitHub connector on branch `work/p2-10a-settings-governance-core`.
 
-No local Python, Node, browser, Tauri or Windows runtime was attached to this conversation. Executable results must come from GitHub Actions.
+No local Python, Node, browser, Tauri or Windows runtime was attached to this conversation. Executable evidence comes from GitHub Actions.
 
 ## Python tests added
 
@@ -16,6 +16,7 @@ Covers:
 - validated Settings values override duplicated compatibility literals;
 - Auto Review settings are owner-visible;
 - ACTIVE is not an allowed Auto Review choice;
+- an invalid ACTIVE environment default is clamped to OFF;
 - every setting has recommendation, impact, risk and confirmation metadata;
 - preview returns only effective changes;
 - high-risk updates require explicit confirmation;
@@ -44,11 +45,34 @@ Covers:
 - only dirty values are managed by the controller;
 - high-risk confirmation is present;
 - unload protection is present;
+- unrelated drafts survive a setting reset;
 - risk, availability and impact metadata are rendered.
 
-The smoke is registered in the existing Desktop smoke suite.
+The smoke is registered in the existing Desktop smoke suite. Existing modular and hardware smoke contracts were updated to verify backend-owned group metadata rather than requiring the Settings page to duplicate labels.
 
-## Manual checks after CI
+## GitHub Actions results
+
+Validated head before this documentation-only result update:
+
+`1654ed83df015e785178d15b1b6f999d06d1ad95`
+
+Results:
+
+- `tests` workflow #708: SUCCESS
+- `P0 Windows Gate` #101: SUCCESS
+- Python 3.11 unit tests: SUCCESS
+- Python 3.12 unit tests: SUCCESS
+- Windows unit tests and compile: SUCCESS
+- clean-install validation: SUCCESS
+- full Python entry-point compile: SUCCESS
+- 14-script Desktop smoke suite: SUCCESS
+- React/Vite production build: SUCCESS
+- Tauri Rust check: SUCCESS
+- MCP smoke: SUCCESS
+- browser capture smoke: SUCCESS
+- Obsidian plugin smoke: SUCCESS
+
+## Manual checks recommended for the owner environment
 
 1. Change a low-risk setting and verify preview then commit.
 2. Change automatic cleanup and verify a visible high-risk confirmation appears.
@@ -71,4 +95,4 @@ The smoke is registered in the existing Desktop smoke suite.
 
 ## Status
 
-`TESTS_ADDED_AWAITING_GITHUB_ACTIONS`
+`IMPLEMENTED_AND_CI_VALIDATED_AWAITING_MERGE`
