@@ -104,6 +104,18 @@ jobs:
       - name: Install exact frontend dependencies
         run: npm ci
 
+      - name: Test Rust runtime manager
+        run: cargo test --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc
+
+      - name: Upload resolved Rust lockfile
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lingji-runtime-cargo-lock-${{ env.LINGJI_BUILD_COMMIT_SHORT }}
+          path: desktop/lingji-control/src-tauri/Cargo.lock
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Install packaged runtime dependencies
         shell: pwsh
         run: |
