@@ -20,6 +20,11 @@ on:
       - feature/second-brain-memory
     paths:
       - "desktop/lingji-control/**"
+      - "src/**"
+      - "run_control_api.py"
+      - "run_packaged_control_api.py"
+      - "requirements*.txt"
+      - "scripts/build_windows_sidecar.ps1"
       - ".github/workflows/windows-desktop-release.yml"
 
 permissions:
@@ -31,9 +36,9 @@ concurrency:
 
 jobs:
   build-windows-installer:
-    name: Build Windows NSIS installer
+    name: Build Windows Desktop and packaged runtime
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
 
     defaults:
       run:
@@ -50,6 +55,13 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/lingji-control/package-lock.json
           package-manager-cache: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-sidecar-build.txt
 
       - name: Set up Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -92,8 +104,73 @@ jobs:
       - name: Install exact frontend dependencies
         run: npm ci
 
-      - name: Build Tauri NSIS installer
-        run: npm run tauri build -- --bundles nsis --target x86_64-pc-windows-msvc
+      - name: Install packaged runtime dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r ../../requirements-sidecar-build.txt
+          python -m pip check
+
+      - name: Validate packaged runtime Python contract
+        shell: pwsh
+        run: |
+          python -m pytest ../../tests/test_packaged_control_api.py -q
+          $checkRoot = Join-Path $env:RUNNER_TEMP "lingji-contract"
+          python ../../run_packaged_control_api.py --data-root $checkRoot --check-config
+
+      - name: Build packaged Python runtime
+        shell: pwsh
+        run: |
+          ../../scripts/build_windows_sidecar.ps1 -TargetTriple x86_64-pc-windows-msvc
+
+      - name: Start packaged runtime and verify authenticated health
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $sidecar = Resolve-Path "../../build/sidecar/dist/lingji-core/lingji-core.exe"
+          $dataRoot = Join-Path $env:RUNNER_TEMP "lingji-sidecar-acceptance"
+          if (Test-Path $dataRoot) { Remove-Item $dataRoot -Recurse -Force }
+          New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
+          $process = Start-Process -FilePath $sidecar -ArgumentList @(
+            "--data-root", $dataRoot,
+            "--host", "127.0.0.1",
+            "--port", "8766"
+          ) -PassThru -WindowStyle Hidden
+          try {
+            $healthy = $false
+            for ($attempt = 0; $attempt -lt 120; $attempt++) {
+              Start-Sleep -Milliseconds 500
+              if ($process.HasExited) {
+                throw "Packaged runtime exited before becoming healthy: $($process.ExitCode)"
+              }
+              $tokenPath = Join-Path $dataRoot "storage/control_api_token"
+              if (-not (Test-Path $tokenPath)) { continue }
+              $token = (Get-Content $tokenPath -Raw -Encoding UTF8).Trim()
+              if ([string]::IsNullOrWhiteSpace($token)) { continue }
+              try {
+                $response = Invoke-WebRequest `
+                  -Uri "http://127.0.0.1:8766/api/health" `
+                  -Headers @{ "X-LingJi-Token" = $token } `
+                  -UseBasicParsing `
+                  -TimeoutSec 2
+                if ($response.StatusCode -eq 200) {
+                  $healthy = $true
+                  break
+                }
+              } catch {
+                continue
+              }
+            }
+            if (-not $healthy) { throw "Packaged runtime did not pass authenticated health" }
+          } finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+              $process.WaitForExit()
+            }
+          }
+
+      - name: Build Tauri NSIS installer with packaged runtime
+        run: npm run tauri build -- --config src-tauri/tauri.sidecar.conf.json --bundles nsis --target x86_64-pc-windows-msvc
 
       - name: Package installer, executable and checksums
         shell: pwsh
@@ -113,7 +190,12 @@ jobs:
           if ($installer.Count -ne 1 -or $installer[0].Length -le 0) {
             throw "Expected one non-empty NSIS installer"
           }
-          foreach ($required in @("build-metadata.json", "SHA256SUMS.txt", "INSTALLATION-NOTES.txt")) {
+          foreach ($required in @(
+            "build-metadata.json",
+            "SHA256SUMS.txt",
+            "INSTALLATION-NOTES.txt",
+            "lingji-core-manifest.json"
+          )) {
             if (-not (Test-Path (Join-Path $release $required))) {
               throw "Missing release file: $required"
             }
@@ -122,8 +204,11 @@ jobs:
           if ($metadata.commit -ne $env:LINGJI_BUILD_COMMIT) { throw "Commit metadata mismatch" }
           if ($metadata.version -ne $env:LINGJI_RELEASE_VERSION) { throw "Version metadata mismatch" }
           if ($metadata.signed -ne $false) { throw "Unsigned baseline must not claim code signing" }
+          if ($metadata.runtime_boundary.python_sidecar_included -ne $true) { throw "Packaged runtime is missing" }
+          if ($metadata.runtime_boundary.pyinstaller_mode -ne "onedir") { throw "Unexpected sidecar mode" }
+          if ($metadata.runtime_boundary.updater_included -ne $false) { throw "Updater must remain disabled" }
 
-      - name: Upload Windows release baseline
+      - name: Upload Windows Desktop and runtime
         uses: actions/upload-artifact@v7
         with:
           name: lingji-windows-${{ env.LINGJI_RELEASE_VERSION }}-${{ env.LINGJI_BUILD_COMMIT_SHORT }}
