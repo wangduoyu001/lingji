@@ -71,6 +71,13 @@ class CompleteOwnerSettingsRegistry(OwnerSettingsRegistry):
                 ),
             }
         )
+        for definition in definitions.values():
+            definition.setdefault("editable", True)
+            definition.setdefault("scope", "runtime")
+            definition.setdefault("restart_required", False)
+            definition.setdefault("task_required", False)
+            definition.setdefault("dependencies", [])
+            definition.setdefault("conflicts", [])
         return definitions
 
     def groups(self, definitions: Mapping[str, Mapping[str, Any]] | None = None) -> list[dict[str, Any]]:
