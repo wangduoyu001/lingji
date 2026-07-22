@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from .settings_catalog import CompleteOwnerSettingsRegistry
 from .settings_governance import OwnerSettingsRegistry
 
-RuntimeSettingsStore = OwnerSettingsRegistry
+RuntimeSettingsStore = CompleteOwnerSettingsRegistry
 
-__all__ = ["RuntimeSettingsStore", "OwnerSettingsRegistry", "LocalControlService", "GovernedLocalControlService"]
+__all__ = [
+    "RuntimeSettingsStore",
+    "OwnerSettingsRegistry",
+    "CompleteOwnerSettingsRegistry",
+    "LocalControlService",
+    "GovernedLocalControlService",
+]
 
 
 def __getattr__(name: str):
