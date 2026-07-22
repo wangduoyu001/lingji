@@ -105,14 +105,21 @@ jobs:
         run: npm ci
 
       - name: Test Rust runtime manager
-        run: cargo test --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release/runtime-validation -Force | Out-Null
+          cargo test --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc *>&1 |
+            Tee-Object -FilePath release/runtime-validation/cargo-test.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Upload resolved Rust lockfile
+      - name: Upload Rust validation evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: lingji-runtime-cargo-lock-${{ env.LINGJI_BUILD_COMMIT_SHORT }}
-          path: desktop/lingji-control/src-tauri/Cargo.lock
+          name: lingji-runtime-rust-validation-${{ env.LINGJI_BUILD_COMMIT_SHORT }}
+          path: |
+            desktop/lingji-control/src-tauri/Cargo.lock
+            desktop/lingji-control/release/runtime-validation/cargo-test.log
           if-no-files-found: error
           retention-days: 7
 
