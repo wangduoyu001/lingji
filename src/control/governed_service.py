@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from src.media import FasterWhisperProvider, PaddleOCRProvider, PySceneDetectProvider
+
 from .service import LocalControlService
 from .settings_catalog import CompleteOwnerSettingsRegistry
 
@@ -75,23 +77,20 @@ class GovernedLocalControlService(LocalControlService):
                 setattr(self.settings, key, values[key])
 
     def _settings_capabilities(self) -> dict[str, dict[str, Any]]:
-        capabilities: dict[str, dict[str, Any]] = {}
-        try:
-            providers = self.provider_status()
-        except Exception as exc:
-            providers = {}
-            capabilities["provider_inventory"] = {
-                "available": False,
-                "reason": f"Provider inventory unavailable: {type(exc).__name__}",
-            }
-        for provider_id in ("faster_whisper", "paddleocr", "pyscenedetect"):
-            status = dict(providers.get(provider_id) or {})
-            capabilities[provider_id] = {
-                "available": status.get("available"),
-                "reason": status.get("last_error"),
-                "optional_requirements": status.get("optional_requirements"),
-            }
-
+        capabilities = {
+            "faster_whisper": {
+                "available": FasterWhisperProvider.available(),
+                "optional_requirements": "requirements-media.txt",
+            },
+            "paddleocr": {
+                "available": PaddleOCRProvider.available(),
+                "optional_requirements": "requirements-media.txt",
+            },
+            "pyscenedetect": {
+                "available": PySceneDetectProvider.available(),
+                "optional_requirements": "requirements-media.txt",
+            },
+        }
         runtime_values = self.runtime_settings.snapshot().get("values", {})
         if runtime_values.get("obsidian_cli_enabled") is False:
             capabilities["obsidian_cli"] = {
