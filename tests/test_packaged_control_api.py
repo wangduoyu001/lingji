@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
 
 from run_packaged_control_api import (
     configure_packaged_environment,
+    install_runtime_lifecycle,
     main,
     packaged_runtime_contract,
+    runtime_state_path,
+    runtime_stop_request_path,
 )
 
 
@@ -35,6 +39,7 @@ def test_packaged_environment_uses_absolute_owner_local_paths(tmp_path: Path):
     ))
     assert (root / "storage").is_dir()
     assert (root / "logs").is_dir()
+    assert (root / "runtime").is_dir()
 
 
 def test_packaged_environment_preserves_explicit_owner_vault(tmp_path: Path):
@@ -71,6 +76,69 @@ def test_packaged_contract_is_explicit_about_safety_boundaries(tmp_path: Path):
     assert str(contract["token_file"]).endswith("storage/control_api_token") or str(
         contract["token_file"]
     ).endswith("storage\\control_api_token")
+    assert str(contract["state_file"]).endswith("runtime/sidecar-state.json") or str(
+        contract["state_file"]
+    ).endswith("runtime\\sidecar-state.json")
+
+
+def test_runtime_lifecycle_writes_identity_and_accepts_matching_stop_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    root = tmp_path / "LingJi"
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr("run_packaged_control_api.os.kill", lambda pid, sig: killed.append((pid, sig)))
+
+    state = install_runtime_lifecycle(
+        root,
+        host="127.0.0.1",
+        port=8766,
+        poll_seconds=0.01,
+    )
+
+    persisted = json.loads(runtime_state_path(root).read_text(encoding="utf-8"))
+    assert persisted["mode"] == "packaged_sidecar"
+    assert persisted["pid"] == state["pid"]
+    assert persisted["instance_id"] == state["instance_id"]
+
+    runtime_stop_request_path(root).write_text(
+        json.dumps({"instance_id": state["instance_id"]}),
+        encoding="utf-8",
+    )
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and not killed:
+        time.sleep(0.01)
+
+    assert killed
+    assert not runtime_state_path(root).exists()
+    assert not runtime_stop_request_path(root).exists()
+
+
+def test_runtime_lifecycle_ignores_mismatched_stop_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    root = tmp_path / "LingJi"
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr("run_packaged_control_api.os.kill", lambda pid, sig: killed.append((pid, sig)))
+
+    state = install_runtime_lifecycle(
+        root,
+        host="127.0.0.1",
+        port=8766,
+        poll_seconds=0.01,
+    )
+    runtime_stop_request_path(root).write_text(
+        json.dumps({"instance_id": "different-instance"}),
+        encoding="utf-8",
+    )
+    time.sleep(0.08)
+
+    assert killed == []
+    assert runtime_state_path(root).exists()
+    runtime_state_path(root).unlink(missing_ok=True)
+    runtime_stop_request_path(root).unlink(missing_ok=True)
+    assert state["instance_id"]
 
 
 def test_check_config_prints_json_without_starting_server(tmp_path: Path, capsys):
