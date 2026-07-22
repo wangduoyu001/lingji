@@ -34,7 +34,7 @@ It verifies:
 
 The complete Desktop smoke suite increases from 16 to 17 scripts.
 
-## New Windows release workflow
+## Windows release workflow
 
 ```text
 .github/workflows/windows-desktop-release.yml
@@ -50,7 +50,7 @@ SHA256SUMS.txt
 INSTALLATION-NOTES.txt
 ```
 
-The workflow must fail when:
+The workflow fails when:
 
 - no NSIS installer is produced;
 - the installer is empty;
@@ -59,36 +59,110 @@ The workflow must fail when:
 - metadata claims the unsigned baseline is signed;
 - a desktop-v tag does not match the Tauri version.
 
-## Existing gates preserved
+## GitHub Actions results
+
+Validated implementation head:
 
 ```text
-Python 3.11 tests
-Python 3.12 tests
-Windows full tests
-17-script Desktop smoke suite
-React / TypeScript / Vite build
-Tauri Rust cargo check
-MCP smoke
-Browser capture smoke
-Obsidian plugin smoke
+4e20ba0c244aff5b5850c1ce60ceb9da19817365
 ```
 
-## CI artifact checks
+Workflow results:
 
-After the pull request workflow runs:
+```text
+tests #723: SUCCESS
+P0 Windows Gate #111: SUCCESS
+Windows Desktop Release Baseline #2: SUCCESS
+```
 
-1. Download the `lingji-windows-<version>-<commit>` artifact.
-2. Confirm all five required files are present.
-3. Confirm the installer size is greater than zero.
-4. Recalculate SHA-256 for the installer and executable.
-5. Confirm the values match `SHA256SUMS.txt` and `build-metadata.json`.
-6. Confirm `signed` is false.
-7. Confirm `python_sidecar_included` is false.
-8. Confirm no Vault, storage, SQLite or Qdrant data is included.
+Passed gates:
+
+```text
+Python 3.11 tests: SUCCESS
+Python 3.12 tests: SUCCESS
+Windows full tests: SUCCESS
+17-script Desktop smoke suite: SUCCESS
+React / TypeScript / Vite build: SUCCESS
+Tauri configuration validation: SUCCESS
+Tauri Rust cargo check: SUCCESS
+MCP smoke: SUCCESS
+Browser capture smoke: SUCCESS
+Obsidian plugin smoke: SUCCESS
+Real Windows NSIS installer build: SUCCESS
+Release artifact packaging: SUCCESS
+Release artifact contract verification: SUCCESS
+GitHub Actions artifact upload: SUCCESS
+```
+
+## Generated artifact
+
+GitHub Actions artifact:
+
+```text
+name: lingji-windows-0.1.0-4e20ba0c
+artifact id: 8522596731
+archive bytes: 6,490,045
+expires: 2026-08-05
+```
+
+GitHub artifact digest:
+
+```text
+sha256:832cd68c46ac1006877091c8f42a5940dd96ddaf1561955ddb6cca21757c2149
+```
+
+The downloaded archive was independently recalculated and matched the GitHub digest:
+
+```text
+832cd68c46ac1006877091c8f42a5940dd96ddaf1561955ddb6cca21757c2149
+```
+
+## Artifact contents
+
+```text
+INSTALLATION-NOTES.txt                    688 bytes
+LingJi_0.1.0_windows_x64.exe        9,179,648 bytes
+LingJi_0.1.0_windows_x64_setup.exe  3,642,468 bytes
+SHA256SUMS.txt                            198 bytes
+build-metadata.json                     1,209 bytes
+```
+
+Build metadata confirmed:
+
+```text
+version: 0.1.0
+commit: 4e20ba0c244aff5b5850c1ce60ceb9da19817365
+channel: pr
+target: x86_64-pc-windows-msvc
+installer_format: nsis
+installer_install_mode: currentUser
+webview_install_mode: embedBootstrapper
+signed: false
+python_sidecar_included: false
+updater_included: false
+owner_data_bundled: false
+uninstall_deletes_owner_data: false
+```
+
+## Independent SHA-256 verification
+
+The checksums were recalculated after downloading and extracting the artifact.
+
+```text
+fe4b26fb6b6be98c81379c247beaccfd9c20267586842728cbf54c793f2babef  LingJi_0.1.0_windows_x64_setup.exe
+c043e7eeed102ee994c264d5c92a17263c3b762e9eb1b5c52cbf770f59f6fd8f  LingJi_0.1.0_windows_x64.exe
+```
+
+The recalculated values matched both:
+
+```text
+SHA256SUMS.txt
+build-metadata.json
+```
 
 ## Manual owner checks still required
 
-CI can build and inspect the installer but cannot prove all physical Windows interaction behavior on the owner's machine.
+CI can build, download and inspect the installer but cannot prove all physical Windows interaction behavior on the owner's machine.
 
 Required owner checks:
 
@@ -123,5 +197,5 @@ second_brain changes: no
 ## Status
 
 ```text
-TESTS_ADDED_AWAITING_GITHUB_ACTIONS
+CI_VALIDATED_AWAITING_OWNER_INSTALL_CHECK
 ```
