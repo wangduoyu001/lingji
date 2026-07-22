@@ -23,8 +23,10 @@
 - `tests` workflow #696：SUCCESS。
 - `P0 Windows Gate` #94：SUCCESS。
 - Python 3.11、Python 3.12、Windows 全量测试、Desktop Smoke、React/Vite Build、Tauri Rust Check、MCP、浏览器采集和 Obsidian Plugin 全部通过。
-- 未访问或修改生产 Vault、生产 SQLite、生产 Qdrant 或生产 Ollama；未修改数据库 Schema；未新增第二套队列、生命周期或审计数据库；未执行 rebase、force push 或 master 修改。
-- 真实 RTX 4060、Ollama、Qdrant 与 Tauri 现场验收仍待完成，因此状态为 `MERGED_AND_CI_VALIDATED_AWAITING_REAL_MACHINE_ACCEPTANCE`。
+- 未修改数据库 Schema；未新增第二套队列、生命周期或审计数据库；未执行 rebase、force push 或 master 修改。
+- 2026-07-22，项目主人确认 RTX 4060、Ollama、Qdrant、8766 与 Tauri 本机验收已经完成。
+- 本机验收按主人现场确认记录；仓库未附加新的逐项命令、原始日志、耗时或硬件数值，因此不补造未提供的细节。
+- P2-08 与 P2-09 状态更新为 `MERGED_AND_VALIDATED`，Issue #23 按 `completed` 关闭。
 
 ## 2026-07-21
 
