@@ -123,7 +123,7 @@ jobs:
         run: |
           ../../scripts/build_windows_sidecar.ps1 -TargetTriple x86_64-pc-windows-msvc
 
-      - name: Start packaged runtime and verify authenticated health
+      - name: Verify authenticated health and managed stop
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -144,7 +144,8 @@ jobs:
                 throw "Packaged runtime exited before becoming healthy: $($process.ExitCode)"
               }
               $tokenPath = Join-Path $dataRoot "storage/control_api_token"
-              if (-not (Test-Path $tokenPath)) { continue }
+              $statePath = Join-Path $dataRoot "runtime/sidecar-state.json"
+              if (-not (Test-Path $tokenPath) -or -not (Test-Path $statePath)) { continue }
               $token = (Get-Content $tokenPath -Raw -Encoding UTF8).Trim()
               if ([string]::IsNullOrWhiteSpace($token)) { continue }
               try {
@@ -162,6 +163,28 @@ jobs:
               }
             }
             if (-not $healthy) { throw "Packaged runtime did not pass authenticated health" }
+
+            $state = Get-Content (Join-Path $dataRoot "runtime/sidecar-state.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($state.mode -ne "packaged_sidecar" -or [string]::IsNullOrWhiteSpace($state.instance_id)) {
+              throw "Packaged runtime did not publish a valid identity"
+            }
+            $stopRequest = [ordered]@{
+              schema_version = 1
+              instance_id = [string]$state.instance_id
+              requested_at_ms = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+            }
+            $stopRequest | ConvertTo-Json | Set-Content `
+              -Path (Join-Path $dataRoot "runtime/sidecar-stop-request.json") `
+              -Encoding UTF8
+
+            for ($attempt = 0; $attempt -lt 80 -and -not $process.HasExited; $attempt++) {
+              Start-Sleep -Milliseconds 250
+              $process.Refresh()
+            }
+            if (-not $process.HasExited) { throw "Packaged runtime ignored the matching stop request" }
+            if (Test-Path (Join-Path $dataRoot "runtime/sidecar-state.json")) {
+              throw "Packaged runtime left stale identity after managed stop"
+            }
           } finally {
             if (-not $process.HasExited) {
               Stop-Process -Id $process.Id -Force
