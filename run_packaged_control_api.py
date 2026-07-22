@@ -27,9 +27,10 @@ def configure_packaged_environment(
 ) -> dict[str, str]:
     """Configure explicit owner-local paths before importing ``src.config``.
 
-    The normal repository runtime may use relative defaults. A packaged process
-    must never inherit its data authority from the install or current directory,
-    so every mutable root is made absolute here.
+    Mutable runtime and derived stores must never inherit their location from the
+    installation/current directory. Vault configuration is different: an owner
+    may explicitly keep the Obsidian Vault elsewhere, so an existing VAULT_DIR
+    is preserved and only receives an owner-local default when absent.
     """
 
     normalized_host = str(host or "").strip().lower()
@@ -39,12 +40,11 @@ def configure_packaged_environment(
         raise ValueError("Packaged LingJi control API port is out of range")
 
     root = _absolute_owner_root(data_root)
-    values = {
+    required_values = {
         "STORAGE_DIR": str(root / "storage"),
         "LOG_DIR": str(root / "logs"),
         "SNAPSHOT_DIR": str(root / "snapshots"),
         "BACKUP_DIR": str(root / "backups"),
-        "VAULT_DIR": str(root / "vault"),
         "WORKSPACE_ROOT": str(root / "workspaces"),
         "LINGJI_WORKSPACE_ROOT": str(root / "workspaces"),
         "PRODUCTION_STORAGE_DIR": str(root / "workspaces" / "production"),
@@ -55,10 +55,16 @@ def configure_packaged_environment(
         "LINGJI_OWNER_DATA_ROOT": str(root),
     }
     target = os.environ if environ is None else environ
-    target.update(values)
+    target.update(required_values)
+    target.setdefault("VAULT_DIR", str(root / "vault"))
+
     for directory in ("storage", "logs", "snapshots", "backups", "workspaces"):
         (root / directory).mkdir(parents=True, exist_ok=True)
-    return values
+
+    return {
+        **required_values,
+        "VAULT_DIR": target["VAULT_DIR"],
+    }
 
 
 def packaged_runtime_contract(
@@ -76,6 +82,8 @@ def packaged_runtime_contract(
         environ=scratch,
     )
     root = Path(values["LINGJI_OWNER_DATA_ROOT"])
+    default_vault = root / "vault"
+    configured_vault = Path(values["VAULT_DIR"]).expanduser().resolve(strict=False)
     return {
         "schema_version": 1,
         "mode": "packaged_sidecar",
@@ -86,6 +94,8 @@ def packaged_runtime_contract(
         "log_dir": values["LOG_DIR"],
         "workspace_root": values["WORKSPACE_ROOT"],
         "token_file": str(Path(values["STORAGE_DIR"]) / "control_api_token"),
+        "vault_dir": str(configured_vault),
+        "vault_uses_owner_local_default": configured_vault == default_vault,
         "owner_data_outside_install_dir": True,
         "automatic_model_download": False,
         "automatic_qdrant_rebuild": False,
