@@ -37,6 +37,19 @@ def test_packaged_environment_uses_absolute_owner_local_paths(tmp_path: Path):
     assert (root / "logs").is_dir()
 
 
+def test_packaged_environment_preserves_explicit_owner_vault(tmp_path: Path):
+    explicit_vault = (tmp_path / "My Obsidian Vault").resolve()
+    environ = {"VAULT_DIR": str(explicit_vault)}
+
+    values = configure_packaged_environment(tmp_path / "LingJi", environ=environ)
+
+    assert values["VAULT_DIR"] == str(explicit_vault)
+    assert environ["VAULT_DIR"] == str(explicit_vault)
+    contract = packaged_runtime_contract(tmp_path / "LingJi", environ=environ)
+    assert contract["vault_dir"] == str(explicit_vault)
+    assert contract["vault_uses_owner_local_default"] is False
+
+
 def test_packaged_environment_rejects_non_loopback_host(tmp_path: Path):
     with pytest.raises(ValueError, match="loopback"):
         configure_packaged_environment(tmp_path / "LingJi", host="0.0.0.0", environ={})
@@ -52,6 +65,7 @@ def test_packaged_contract_is_explicit_about_safety_boundaries(tmp_path: Path):
 
     assert contract["mode"] == "packaged_sidecar"
     assert contract["owner_data_outside_install_dir"] is True
+    assert contract["vault_uses_owner_local_default"] is True
     assert contract["automatic_model_download"] is False
     assert contract["automatic_qdrant_rebuild"] is False
     assert str(contract["token_file"]).endswith("storage/control_api_token") or str(
