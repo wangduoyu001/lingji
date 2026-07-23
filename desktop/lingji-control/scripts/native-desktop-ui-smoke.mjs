@@ -6,9 +6,10 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const source = (path) => readFile(resolve(here, path), "utf8");
 
-const [app, shell, api, connection, navigation, styles, tauri] = await Promise.all([
+const [app, shell, boundary, api, connection, navigation, styles, tauri] = await Promise.all([
   source("../src/App.tsx"),
   source("../src/components/DesktopShell.tsx"),
+  source("../src/components/RuntimeBoundary.tsx"),
   source("../src/api.ts"),
   source("../src/hooks/useLingJiConnection.ts"),
   source("../src/navigation.ts"),
@@ -17,8 +18,9 @@ const [app, shell, api, connection, navigation, styles, tauri] = await Promise.a
 ]);
 
 assert.match(app, /DesktopShell/);
-assert.match(app, /仅桌面端|DESKTOP ONLY/);
-assert.match(app, /不提供浏览器操作入口/);
+assert.match(app, /RuntimeBoundary/);
+assert.match(boundary, /仅桌面端|DESKTOP ONLY/);
+assert.match(boundary, /不提供浏览器操作入口/);
 assert.equal(app.includes("API 地址"), false);
 assert.equal(app.includes("connection-panel"), false);
 assert.equal(app.includes("setBaseUrl"), false);
