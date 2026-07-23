@@ -6,7 +6,7 @@ import type { PageId, Row } from "../types";
 import type { CodexCurrent } from "./codexWorkspaceTypes";
 
 type AttentionSnapshot = {
-  current: CodexCurrent | null;
+  current: CodexCurrent;
 };
 
 type AttentionItem = {
@@ -28,13 +28,9 @@ export default function AttentionPage({
   overview: Row | null;
   onNavigate: (page: PageId) => void;
 }) {
-  const load = useCallback(async (signal: AbortSignal): Promise<AttentionSnapshot> => {
-    try {
-      return { current: await api.get<CodexCurrent>("/api/codex/current", { signal }) };
-    } catch {
-      return { current: null };
-    }
-  }, [api]);
+  const load = useCallback(async (signal: AbortSignal): Promise<AttentionSnapshot> => ({
+    current: await api.get<CodexCurrent>("/api/codex/current", { signal }),
+  }), [api]);
 
   const resource = usePollingResource({
     fetcher: load,
@@ -54,8 +50,10 @@ export default function AttentionPage({
     const storageRoot = (data.storage ?? {}) as Record<string, unknown>;
     const storageAlerts = (storageRoot.alerts ?? {}) as Record<string, unknown>;
 
-    const pendingReview = Number(resource.data?.current?.pending_review_count ?? 0);
-    if (pendingReview > 0) {
+    const pendingReview = resource.data
+      ? Number(resource.data.current.pending_review_count ?? 0)
+      : null;
+    if (pendingReview !== null && pendingReview > 0) {
       result.push({
         id: "memory-review",
         title: `${pendingReview} 条候选记忆等待确认`,
@@ -111,25 +109,42 @@ export default function AttentionPage({
   }, [overview, resource.data]);
 
   if (!active) return <Empty text="灵机核心连接后会自动汇总需要主人处理的事项。" />;
+  if (resource.loading && !resource.data) return <Empty text="正在检查是否有事项需要主人处理…" />;
+
+  const attentionUnknown = Boolean(resource.error && !resource.data);
+  const hasAttention = items.length > 0;
+  const heroClass = hasAttention || attentionUnknown
+    ? "attention-hero attention-hero-warning"
+    : "attention-hero attention-hero-clear";
+  const heroTitle = attentionUnknown
+    ? "部分待办状态暂时未知"
+    : hasAttention
+      ? `${items.length} 项需要你处理`
+      : "暂时不需要你处理";
+  const heroDetail = attentionUnknown
+    ? "记忆审核状态读取失败，系统正在自动重试；不会把未知状态显示成一切正常。"
+    : hasAttention
+      ? "这里只显示系统不能自行决定、并且能确认仍未解决的事项。"
+      : "后台任务、重试、索引更新和状态同步会继续自动运行。";
 
   return (
     <div className="stack observation-page">
-      <section className={items.length ? "attention-hero attention-hero-warning" : "attention-hero attention-hero-clear"}>
+      <section className={heroClass}>
         <div>
           <span className="desktop-eyebrow">OWNER ATTENTION</span>
-          <h2>{items.length ? `${items.length} 项需要你处理` : "暂时不需要你处理"}</h2>
-          <p>{items.length ? "这里只显示系统不能自行决定、并且能确认仍未解决的事项。" : "后台任务、重试、索引更新和状态同步会继续自动运行。"}</p>
+          <h2>{heroTitle}</h2>
+          <p>{heroDetail}</p>
         </div>
         <div className="observation-live-state">
-          <span className={items.length ? "status-dot" : "status-dot online"} />
+          <span className={!hasAttention && !attentionUnknown ? "status-dot online" : "status-dot"} />
           <div>
-            <strong>{resource.refreshing ? "正在检查" : "自动检查中"}</strong>
+            <strong>{resource.refreshing ? "正在检查" : attentionUnknown ? "等待恢复" : "自动检查中"}</strong>
             <small>每 8 秒更新</small>
           </div>
         </div>
       </section>
 
-      {resource.error && <Notice kind="warning">部分待办来源暂不可用，系统会继续自动重试。</Notice>}
+      {resource.error && <Notice kind="warning">部分待办来源暂不可用，最近一次有效结果会被保留，系统将自动重试。</Notice>}
 
       {items.length ? (
         <div className="attention-list">
@@ -144,6 +159,11 @@ export default function AttentionPage({
             </article>
           ))}
         </div>
+      ) : attentionUnknown ? (
+        <section className="observation-empty-state observation-empty-large">
+          <strong>无法确认记忆审核待办</strong>
+          <p>其他已知异常仍会显示；待办来源恢复后，页面会自动更新。</p>
+        </section>
       ) : (
         <section className="observation-empty-state observation-empty-large">
           <strong>系统会自己继续工作</strong>
