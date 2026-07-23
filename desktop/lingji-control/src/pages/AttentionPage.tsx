@@ -3,12 +3,10 @@ import { Empty, Notice } from "../components/ui";
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { LingJiApi } from "../api";
 import type { PageId, Row } from "../types";
-import type { AutoReviewMetrics } from "./autoReviewTypes";
 import type { CodexCurrent } from "./codexWorkspaceTypes";
 
 type AttentionSnapshot = {
   current: CodexCurrent | null;
-  metrics: AutoReviewMetrics | null;
 };
 
 type AttentionItem = {
@@ -31,14 +29,11 @@ export default function AttentionPage({
   onNavigate: (page: PageId) => void;
 }) {
   const load = useCallback(async (signal: AbortSignal): Promise<AttentionSnapshot> => {
-    const [current, metrics] = await Promise.allSettled([
-      api.get<CodexCurrent>("/api/codex/current", { signal }),
-      api.get<AutoReviewMetrics>("/api/auto-review/metrics", { signal }),
-    ]);
-    return {
-      current: current.status === "fulfilled" ? current.value : null,
-      metrics: metrics.status === "fulfilled" ? metrics.value : null,
-    };
+    try {
+      return { current: await api.get<CodexCurrent>("/api/codex/current", { signal }) };
+    } catch {
+      return { current: null };
+    }
   }, [api]);
 
   const resource = usePollingResource({
@@ -67,18 +62,6 @@ export default function AttentionPage({
         detail: "只有主人能够批准、编辑或拒绝长期记忆。",
         target: "memory_review",
         severity: "warning",
-      });
-    }
-
-    const ownerReview = Number(resource.data?.metrics?.actions.requires_owner_review ?? 0);
-    const blocked = Number(resource.data?.metrics?.actions.blocked ?? 0);
-    if (ownerReview > 0 || blocked > 0) {
-      result.push({
-        id: "shadow-review",
-        title: `${ownerReview} 条 SHADOW 建议需要查看`,
-        detail: blocked > 0 ? `其中 ${blocked} 条被安全规则阻止，系统没有执行任何记忆变更。` : "系统只记录建议，没有执行变更。",
-        target: "auto_review",
-        severity: blocked > 0 ? "error" : "warning",
       });
     }
 
@@ -135,7 +118,7 @@ export default function AttentionPage({
         <div>
           <span className="desktop-eyebrow">OWNER ATTENTION</span>
           <h2>{items.length ? `${items.length} 项需要你处理` : "暂时不需要你处理"}</h2>
-          <p>{items.length ? "这里只显示系统不能自行决定的事项。" : "后台任务、重试、索引更新和状态同步会继续自动运行。"}</p>
+          <p>{items.length ? "这里只显示系统不能自行决定、并且能确认仍未解决的事项。" : "后台任务、重试、索引更新和状态同步会继续自动运行。"}</p>
         </div>
         <div className="observation-live-state">
           <span className={items.length ? "status-dot" : "status-dot online"} />
@@ -164,9 +147,13 @@ export default function AttentionPage({
       ) : (
         <section className="observation-empty-state observation-empty-large">
           <strong>系统会自己继续工作</strong>
-          <p>没有记忆审核、失败任务、索引冲突、空间告警或其他必须由主人决定的事项。</p>
+          <p>没有待审核记忆、失败任务、索引冲突、空间告警或其他能够确认仍需主人决定的事项。</p>
         </section>
       )}
+
+      <Notice>
+        SHADOW 决策目前是审计历史，不具备“未读/已处理”状态，因此不会被冒充为当前待办；需要时可在高级诊断中查看。
+      </Notice>
     </div>
   );
 }
