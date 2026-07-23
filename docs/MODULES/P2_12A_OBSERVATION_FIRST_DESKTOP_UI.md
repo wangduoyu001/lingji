@@ -59,17 +59,17 @@ The page refreshes automatically and does not require an owner refresh button.
 
 ## Owner attention
 
-`AttentionPage` only surfaces matters that the system cannot safely decide:
+`AttentionPage` only surfaces matters that the system cannot safely decide and can confirm are still unresolved:
 
 - candidate memories waiting for owner review;
-- SHADOW decisions requiring owner review;
-- blocked SHADOW decisions;
 - exhausted failed jobs;
-- health errors;
+- current health errors;
 - vector rebuild requirements;
 - low-disk alerts.
 
 Normal retries, queue processing and status synchronization are not presented as owner tasks.
+
+SHADOW metrics and decisions are audit history. The current backend contract does not expose an unresolved/read state, so cumulative SHADOW counts are deliberately not presented as current owner tasks. SHADOW history remains available through Advanced Diagnostics.
 
 ## Advanced diagnostics
 
@@ -187,6 +187,7 @@ P2-12A does not:
 - add a new backend activity database;
 - invent estimated completion times;
 - automatically resolve owner memory decisions;
+- invent an unresolved SHADOW state that the backend does not provide;
 - remove detailed feature pages;
 - merge the P2-11B Sidecar PR;
 - claim the missing local P2-11B acceptance report exists;
