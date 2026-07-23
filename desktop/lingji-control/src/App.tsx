@@ -31,6 +31,8 @@ export default function App() {
       releaseMetadata={release.metadata}
       runtimeStatus={connection.runtimeStatus}
       runtimeBusy={connection.runtimeBusy}
+      ownerStopped={connection.ownerStopped}
+      autoRecoveryActive={connection.autoRecoveryActive}
       onNavigate={setPage}
       onRetry={() => void connection.connect()}
       onStopRuntime={() => void connection.stopRuntime()}
@@ -54,27 +56,31 @@ export default function App() {
         <section className="desktop-runtime-card">
           <div className="desktop-spinner" aria-hidden="true" />
           <div>
-            <span className="desktop-eyebrow">PACKAGED RUNTIME</span>
+            <span className="desktop-eyebrow">AUTOMATIC RUNTIME</span>
             <h2>{runtimeStateLabel(connection.runtimeStatus)}</h2>
-            <p>桌面端正在检查本机8766服务；安装包包含核心时会自动启动并等待认证健康检查。</p>
+            <p>桌面端正在自动检查、启动并连接本机核心，不需要手动打开 PowerShell。</p>
           </div>
         </section>
       ) : (
         <>
           {!connection.connected && (
-            <section className="desktop-offline-banner" role="status">
+            <section className={connection.ownerStopped ? "desktop-offline-banner owner-stopped" : "desktop-offline-banner"} role="status">
               <div>
-                <span className="desktop-eyebrow">LOCAL CORE OFFLINE</span>
-                <strong>{connection.error || runtimeStateLabel(connection.runtimeStatus)}</strong>
+                <span className="desktop-eyebrow">{connection.ownerStopped ? "OWNER PAUSED" : "AUTO RECOVERY"}</span>
+                <strong>{connection.ownerStopped ? "灵机核心已由主人停止" : connection.error || "灵机正在自动恢复连接"}</strong>
                 <small>
-                  {connection.runtimeStatus?.binary_available === false
-                    ? "当前安装包没有核心 Sidecar，可以继续连接手动启动的8766服务。"
-                    : `核心日志：${connection.runtimeStatus?.log_path_display ?? "owner-local LingJi logs"}`}
+                  {connection.ownerStopped
+                    ? "后台自动恢复已暂停。恢复运行后，任务和状态同步会继续。"
+                    : connection.runtimeStatus?.binary_available === false
+                      ? "当前安装包没有核心 Sidecar，系统会继续检测外部8766服务。"
+                      : "系统会自动重新启动或连接核心，无需重复点击按钮。"}
                 </small>
               </div>
-              <button className="button primary" disabled={Boolean(connection.runtimeBusy)} onClick={() => void connection.connect()}>
-                {connection.runtimeBusy === "ensure" ? "启动中…" : "启动核心"}
-              </button>
+              {connection.ownerStopped && (
+                <button className="button primary" disabled={Boolean(connection.runtimeBusy)} onClick={() => void connection.connect()}>
+                  {connection.runtimeBusy === "ensure" ? "恢复中…" : "恢复运行"}
+                </button>
+              )}
             </section>
           )}
           <AppPages
@@ -82,9 +88,9 @@ export default function App() {
             api={connection.api}
             connected={connection.connected}
             overview={connection.overview}
-            refresh={connection.connect}
             inspectorTarget={inspectorTarget}
             onOpenInspector={openInspector}
+            onNavigate={setPage}
           />
         </>
       )}
