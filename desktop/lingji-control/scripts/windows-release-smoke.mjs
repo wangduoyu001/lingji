@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
-const [tauriText, packageText, cargo, buildRs, rustMain, hook, shell, packager, workflow, sidecarConfigText] = await Promise.all([
+const [tauriText, packageText, cargo, buildRs, rustMain, hook, shell, boundary, packager, workflow, sidecarConfigText] = await Promise.all([
   read("../src-tauri/tauri.conf.json"),
   read("../package.json"),
   read("../src-tauri/Cargo.toml"),
@@ -14,6 +14,7 @@ const [tauriText, packageText, cargo, buildRs, rustMain, hook, shell, packager, 
   read("../src-tauri/src/main.rs"),
   read("../src/hooks/useReleaseMetadata.ts"),
   read("../src/components/DesktopShell.tsx"),
+  read("../src/components/RuntimeBoundary.tsx"),
   read("package-windows-release.ps1"),
   read("../../../.github/workflows/windows-desktop-release.yml"),
   read("../src-tauri/tauri.sidecar.conf.json"),
@@ -52,7 +53,10 @@ assert.equal(hook.includes("token="), false, "Copied diagnostics must not expose
 assert.equal(hook.includes("vault_path"), false, "Copied diagnostics must not expose Vault paths");
 assert.match(shell, /复制诊断信息/);
 assert.match(shell, /releaseMetadata\?\.version/);
-assert.match(shell, /启动核心/);
+assert.match(shell, /desktop-runtime-tools/);
+assert.match(boundary, /AUTOMATIC RUNTIME/);
+assert.match(boundary, /恢复运行/);
+assert.equal(boundary.includes("启动核心"), false, "Installed Desktop startup must remain automatic");
 
 for (const token of [
   "Get-FileHash",
