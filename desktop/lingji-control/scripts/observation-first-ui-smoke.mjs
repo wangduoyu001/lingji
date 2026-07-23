@@ -49,8 +49,8 @@ assert.equal((primaryBlock.match(/id:/g) ?? []).length, 4, "Primary navigation m
 for (const label of ["运行状态", "活动记录", "需要我处理", "高级诊断"]) {
   assert.ok(primaryBlock.includes(label), `Primary navigation is missing ${label}`);
 }
-for (const forbidden of ["人工记忆审核", "向量中心", "系统与算力", "设置", "日志"]) {
-  assert.equal(primaryBlock.includes(forbidden), false, `${forbidden} must not remain a primary navigation entry`);
+for (const forbiddenId of ["memory_review", "auto_review", "vector_center", "system_compute", "settings", "logs"]) {
+  assert.equal(primaryBlock.includes(`id: "${forbiddenId}"`), false, `${forbiddenId} must not remain a primary navigation entry`);
 }
 
 assert.match(shell, /PRIMARY_NAVIGATION\.map/);
