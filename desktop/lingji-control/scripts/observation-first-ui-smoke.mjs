@@ -85,10 +85,13 @@ assert.equal(activity.includes("刷新看板"), false, "Activity page must not e
 
 assert.match(attention, /系统不能自行决定/);
 assert.match(attention, /暂时不需要你处理/);
+assert.match(attention, /部分待办状态暂时未知/);
+assert.match(attention, /不会把未知状态显示成一切正常/);
 assert.match(attention, /vector-rebuild/);
 assert.match(attention, /pending_review_count/);
 assert.match(attention, /SHADOW 决策目前是审计历史/);
 assert.equal(attention.includes("/api/auto-review/metrics"), false, "Cumulative SHADOW metrics must not masquerade as unresolved owner tasks");
+assert.equal(attention.includes("catch {\n      return { current: null }"), false, "Attention polling must not swallow unknown-state failures");
 
 assert.match(diagnostics, /日常不需要进入这里/);
 assert.match(diagnostics, /<details/);
