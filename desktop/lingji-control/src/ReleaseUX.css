@@ -29,10 +29,44 @@
   color: #d5b77f;
 }
 
+.desktop-runtime-tools {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255,255,255,.018);
+}
+
+.desktop-runtime-tools summary {
+  padding: 8px 9px;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+  font-size: 10px;
+}
+
+.desktop-runtime-tools summary::-webkit-details-marker {
+  display: none;
+}
+
+.desktop-runtime-tools summary::after {
+  content: "+";
+  float: right;
+  color: var(--muted-2);
+}
+
+.desktop-runtime-tools[open] summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.desktop-runtime-tools[open] summary::after {
+  content: "−";
+}
+
 .desktop-sidebar-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 7px;
+  padding: 8px;
 }
 
 .desktop-sidebar-actions:has(.desktop-diagnostics-button:only-child) {
