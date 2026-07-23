@@ -66,8 +66,8 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
       {resource.error && <p className="current-work-warning">最近一次同步失败，正在保留已有状态并自动重试。</p>}
 
       <div className="current-work-summary">
-        <div><span>项目</span><strong>{value(project?.name, "未绑定")}</strong></div>
-        <div><span>会话</span><strong>{value(session?.title, "无活动会话")}</strong></div>
+        <div><span>当前项目</span><strong>{value(project?.name, "未绑定")}</strong></div>
+        <div><span>当前会话</span><strong>{value(session?.title, "无活动会话")}</strong></div>
         <div><span>阶段</span><strong>{stageLabel(activity?.stage)}</strong></div>
         <div><span>待审核记忆</span><strong>{typeof current?.pending_review_count === "number" ? String(current.pending_review_count) : "未知"}</strong></div>
       </div>
