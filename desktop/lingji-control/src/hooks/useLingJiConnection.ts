@@ -19,7 +19,7 @@ function connectionMessage(error: unknown): string {
 function runtimeFailure(status: RuntimeStatus): string {
   if (status.last_error) return status.last_error;
   if (!status.binary_available) return "当前安装包不包含灵机核心 Sidecar。";
-  if (status.state === "starting") return "灵机核心仍在启动，请稍后重试。";
+  if (status.state === "starting") return "灵机核心仍在启动。";
   return "灵机核心没有通过本机健康检查。";
 }
 
@@ -29,6 +29,7 @@ export function useLingJiConnection() {
   const [overview, setOverview] = useState<Row | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
   const [runtimeBusy, setRuntimeBusy] = useState("");
+  const [ownerStopped, setOwnerStopped] = useState(false);
   const [error, setError] = useState("");
 
   const readOverview = useCallback(async () => {
@@ -39,13 +40,14 @@ export function useLingJiConnection() {
     setError("");
   }, [api]);
 
-  const connect = useCallback(async () => {
+  const ensureConnection = useCallback(async (resumeAfterOwnerStop: boolean) => {
     if (!isTauriDesktopRuntime()) {
       setState("unsupported");
       setOverview(null);
       setError("灵机控制中心只作为 Tauri 桌面应用运行，不提供浏览器操作入口。");
       return;
     }
+    if (resumeAfterOwnerStop) setOwnerStopped(false);
     setState("booting");
     setRuntimeBusy("ensure");
     try {
@@ -62,6 +64,10 @@ export function useLingJiConnection() {
     }
   }, [readOverview]);
 
+  const connect = useCallback(async () => {
+    await ensureConnection(true);
+  }, [ensureConnection]);
+
   const refreshRuntime = useCallback(async () => {
     if (!isTauriDesktopRuntime()) return null;
     try {
@@ -77,13 +83,15 @@ export function useLingJiConnection() {
   const stopRuntime = useCallback(async () => {
     if (!isTauriDesktopRuntime() || runtimeBusy) return;
     setRuntimeBusy("stop");
+    setOwnerStopped(true);
     try {
       const status = await invoke<RuntimeStatus>("runtime_stop");
       setRuntimeStatus(status);
       setOverview(null);
       setState("offline");
-      setError("灵机核心已由桌面端停止。主人数据没有被删除。");
+      setError("灵机核心已由主人停止。后台自动恢复已暂停，数据没有被删除。");
     } catch (reason) {
+      setOwnerStopped(false);
       setError(connectionMessage(reason));
     } finally {
       setRuntimeBusy("");
@@ -93,6 +101,7 @@ export function useLingJiConnection() {
   const restartRuntime = useCallback(async () => {
     if (!isTauriDesktopRuntime() || runtimeBusy) return;
     setRuntimeBusy("restart");
+    setOwnerStopped(false);
     setState("booting");
     try {
       const status = await invoke<RuntimeStatus>("runtime_restart");
@@ -109,8 +118,8 @@ export function useLingJiConnection() {
   }, [readOverview, runtimeBusy]);
 
   useEffect(() => {
-    void connect();
-  }, [connect]);
+    void ensureConnection(false);
+  }, [ensureConnection]);
 
   useEffect(() => {
     if (state !== "connected") return;
@@ -134,6 +143,12 @@ export function useLingJiConnection() {
   }, [api, state]);
 
   useEffect(() => {
+    if (state !== "offline" || ownerStopped || runtimeBusy || !isTauriDesktopRuntime()) return;
+    const timer = window.setTimeout(() => void ensureConnection(false), 12_000);
+    return () => window.clearTimeout(timer);
+  }, [ensureConnection, ownerStopped, runtimeBusy, state]);
+
+  useEffect(() => {
     if (state === "connected" || state === "unsupported") return;
     const timer = window.setInterval(() => void refreshRuntime(), 5_000);
     return () => window.clearInterval(timer);
@@ -146,6 +161,8 @@ export function useLingJiConnection() {
     overview,
     runtimeStatus,
     runtimeBusy,
+    ownerStopped,
+    autoRecoveryActive: state === "offline" && !ownerStopped,
     error,
     connect,
     refreshRuntime,
