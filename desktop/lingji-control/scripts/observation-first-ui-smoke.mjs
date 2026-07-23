@@ -87,6 +87,8 @@ assert.match(attention, /系统不能自行决定/);
 assert.match(attention, /暂时不需要你处理/);
 assert.match(attention, /vector-rebuild/);
 assert.match(attention, /pending_review_count/);
+assert.match(attention, /SHADOW 决策目前是审计历史/);
+assert.equal(attention.includes("/api/auto-review/metrics"), false, "Cumulative SHADOW metrics must not masquerade as unresolved owner tasks");
 
 assert.match(diagnostics, /日常不需要进入这里/);
 assert.match(diagnostics, /<details/);
