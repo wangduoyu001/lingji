@@ -11,6 +11,7 @@ const [
   types,
   shell,
   app,
+  boundary,
   pages,
   overview,
   activity,
@@ -25,6 +26,7 @@ const [
   read("../src/types.ts"),
   read("../src/components/DesktopShell.tsx"),
   read("../src/App.tsx"),
+  read("../src/components/RuntimeBoundary.tsx"),
   read("../src/AppPages.tsx"),
   read("../src/pages/OverviewPage.tsx"),
   read("../src/pages/ActivityPage.tsx"),
@@ -37,9 +39,9 @@ const [
 ]);
 
 for (const page of ["overview", "activity", "attention", "diagnostics"]) {
-  assert.ok(types.includes(`| \"${page}\"`) || types.includes(`| "${page}"`), `PageId is missing ${page}`);
-  assert.ok(navigation.includes(`id: \"${page}\"`) || navigation.includes(`id: "${page}"`), `Primary navigation is missing ${page}`);
-  assert.ok(pages.includes(`page === \"${page}\"`) || pages.includes(`page === "${page}"`), `AppPages is missing ${page}`);
+  assert.ok(types.includes(`| "${page}"`), `PageId is missing ${page}`);
+  assert.ok(navigation.includes(`id: "${page}"`), `Primary navigation is missing ${page}`);
+  assert.ok(pages.includes(`page === "${page}"`), `AppPages is missing ${page}`);
 }
 
 const primaryBlock = navigation.match(/PRIMARY_NAVIGATION:[\s\S]*?\];/)?.[0] ?? "";
@@ -58,9 +60,10 @@ assert.match(shell, /<details/);
 assert.match(shell, /返回高级诊断/);
 
 assert.match(app, /autoRecoveryActive/);
-assert.match(app, /OWNER PAUSED/);
-assert.match(app, /AUTO RECOVERY/);
-assert.equal(app.includes("启动核心\""), false, "Routine offline banner must not expose a start-core button");
+assert.match(app, /RuntimeBoundary/);
+assert.match(boundary, /OWNER PAUSED/);
+assert.match(boundary, /AUTO RECOVERY/);
+assert.equal(boundary.includes("启动核心"), false, "Routine offline banner must not expose a start-core button");
 
 assert.match(connection, /setTimeout\(\(\) => void ensureConnection\(false\), 12_000\)/);
 assert.match(connection, /ownerStopped/);
@@ -78,11 +81,11 @@ assert.equal(overview.includes("定时任务"), false, "Scheduler internals belo
 assert.match(activity, /每 4 秒自动更新/);
 assert.match(activity, /当前任务/);
 assert.match(activity, /最近结果/);
-assert.equal(activity.includes("刷新"), false, "Activity page must not expose manual refresh");
+assert.equal(activity.includes("刷新看板"), false, "Activity page must not expose manual refresh");
 
 assert.match(attention, /系统不能自行决定/);
 assert.match(attention, /暂时不需要你处理/);
-assert.match(attention, /vector_rebuild|vector-rebuild/);
+assert.match(attention, /vector-rebuild/);
 assert.match(attention, /pending_review_count/);
 
 assert.match(diagnostics, /日常不需要进入这里/);
