@@ -1,46 +1,22 @@
-﻿# ENVIRONMENT.md — LingJi Environment Setup
+# ENVIRONMENT.md — Environment Boundary
 
-> Generated: 2026-07-20
+The previous content was a machine snapshot, not a durable project contract. It copied one computer's GPU, model-installation state, virtual environment and obsolete PySide6 dependencies, so it must not be used as current setup guidance.
 
-## Development Machine
+Use these authorities instead:
 
-| Attribute | Value |
-|-----------|-------|
-| OS | Windows |
-| Python | 3.10+ (virtual env at .venv/) |
-| GPU | RTX 4060 Ti (8GB) |
-| Ollama | Running at http://127.0.0.1:11434 |
-| Obsidian | Installed (native CLI at Obsidian.com) |
+- General setup and validation entry: `README.md`
+- Dependency ownership: `requirements*.txt` and `constraints/`
+- Runtime defaults: `src/config.py::Settings`
+- Current verified state: `docs/PROJECT_STATUS.md`
+- Windows release environment: `.github/workflows/windows-desktop-release.yml`
 
-## Virtual Environment
+Durable environment rules:
 
-`powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-`
+- Supported CI Python versions are defined by current workflows, not copied here.
+- Desktop dependencies are owned by `desktop/lingji-control/package.json` and its lockfile.
+- Tauri/Rust dependencies are owned by `desktop/lingji-control/src-tauri/Cargo.toml` and `Cargo.lock`.
+- Models, databases, vectors, logs, caches and build helpers must use configurable locations, preferably under `D:\codex\` or an owner-selected path.
+- Never write new runtime data into `C:\Users\Administrator\Documents\New project-ai`.
+- Hardware and installed-model availability are runtime observations, not repository facts.
 
-## Dependency Files
-
-| File | Purpose | Key Packages |
-|------|---------|--------------|
-| requirements.txt | Base | pydantic-settings, requests |
-| requirements-second-brain.txt | Second brain API | fastapi, uvicorn, pydantic, qdrant-client |
-| requirements-desktop.txt | Desktop client | PySide6 |
-
-## Ollama Models
-
-| Model | Purpose | Status |
-|-------|---------|--------|
-| nomic-embed-text | Fallback embedding | Installed |
-| bge-m3 | Primary embedding | Pending installation |
-| qwen3:8b | Fallback LLM | Available |
-
-## DeepSeek
-
-API key stored in .env file for PEMIS v6 LLM access.
-The second brain does not directly use DeepSeek; it uses Ollama for embeddings.
-
-## OBSOLETE (from original PEMIS v4)
-
-The original project references Qdrant Docker service on port 6333. In this worktree,
-embedded Qdrant (file-based or :memory:) replaces Docker entirely.
+Historical machine details remain available in Git history.
