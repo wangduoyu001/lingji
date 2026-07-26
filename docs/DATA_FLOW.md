@@ -1,79 +1,41 @@
-﻿# DATA_FLOW.md — LingJi Data Flow
+# DATA_FLOW.md — Data Flow Authority
 
-> Generated: 2026-07-20
+The former dual-system diagram is obsolete. It described independent PEMIS and second-brain products, the old bounded watcher, the 8765 API and acceptance-header behavior as the primary architecture.
 
-## Overview
+The current stable data flow is maintained in:
 
-LingJi has two independent data flows:
+```text
+docs/ARCHITECTURE.md
+```
 
-1. **PEMIS v6** — Vault Markdown → Index → Analysis → Opportunities → Dashboard
-2. **Second Brain** — Inbox JSON/SQLite + Obsidian Markdown → Memories/Knowledge → Qdrant
+Current implementation entry points are maintained in:
 
-## PEMIS v6 Data Flow
+```text
+docs/MODULES/CODE_MAP.md
+```
 
-`	ext
-Obsidian Vault (Markdown)
-    │
-    ▼
-PEMISIndex (build_index / incremental)
-    │
-    ├──► pemis_index.json (storage/)
-    │
-    ▼
-DecisionEngine (top-6 opportunities)
-    │
-    ├──► OppGenerator (scan → generate)
-    │
-    ▼
-Dashboard (sync to vault)
-    │
-    ├──► PEMIS/opportunities/*.md
-    ├──► PEMIS/dashboard/Control Center.md
-    └──► PEMIS/status/ (system status)
+Current high-level flow:
 
-Scheduler Jobs:
-    read_feedback  ← Every 10 min ← Control Center feedback
-    daily_capture  ← Every 24h    ← Capture new files + scan
-    distill        ← Every 24h    ← Knowledge distillation
-    integrity      ← Every 24h    ← Integrity check
-    full_check     ← Every 24h    ← Update dashboard
-`
+```text
+Approved inputs
+-> src/capture contracts
+-> src/extraction adapters and persistent queue
+-> raw provenance snapshot
+-> Vault source documents and Structured Read Model
+-> lexical index + Qdrant semantic index
+-> HybridRetriever / ContextPackBuilder / MemoryGateway
+-> authenticated Local Control API, MCP and internal jobs
 
-## Second Brain Data Flow
+Tauri Desktop
+-> authenticated 127.0.0.1:8766 Local Control API
+-> shared Python Service Layer
+```
 
-`	ext
-Input Sources:
-    data/inbox/ai_chat/*.json
-    data/inbox/codex_tasks/*.json
-    Obsidian Knowledge Directory (configured)
+Data authority remains:
 
-    │
-    ▼
-BoundedWatcher (polls 3 roots every N seconds)
-    │
-    ▼
-FastAPI (ingest endpoints)
-    │
-    ├──► ChatConnector → SQLite (conversations, messages)
-    │   └──► DistillationService → Memory candidates → pending
-    │
-    ├──► CodexConnector → SQLite (memories)
-    │
-    └──► ObsidianConnector → SQLite (knowledge_documents)
-        └──► Embedding → Qdrant
+- Obsidian Vault + Git: formal knowledge and permanent-memory text.
+- Raw archive: original imported material.
+- SQLite: runtime state and rebuildable structured read/index data.
+- Qdrant: rebuildable semantic index.
 
-Retrieval:
-    Query → RetrievalService
-        ├──► SQLite keyword match (exact)
-        └──► Qdrant semantic search (vector)
-        └──► Combined ranked result
-`
-
-## Dual Workspace
-
-- Production: data/second_brain.sqlite3, data/qdrant, data/raw, data/inbox
-- Acceptance: data/acceptance/second_brain.sqlite3, data/acceptance/qdrant,
-  data/acceptance/raw, data/acceptance/inbox
-
-Workspace selected by X-LingJi-Workspace header.
-Desktop defaults to acceptance; headerless API traffic stays production.
+Do not copy module-level flows, scheduler intervals, workspace headers or database paths into this file. Historical diagrams remain available in Git history.
