@@ -1,0 +1,9 @@
+{
+  "id": "lingji-control",
+  "name": "LingJi Control",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.0",
+  "description": "LingJi extraction, memory and Skill management controls.",
+  "author": "LingJi",
+  "isDesktopOnly": false
+}

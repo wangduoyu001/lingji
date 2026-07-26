@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "LingJi Capture",
+  "version": "0.1.0",
+  "description": "将当前网页或选中文字主动投喂到本机灵机，不读取 Cookie。",
+  "permissions": ["activeTab", "contextMenus", "storage", "scripting"],
+  "host_permissions": ["http://127.0.0.1:8766/*", "http://localhost:8766/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "投喂到灵机",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html"
+}

@@ -1,0 +1,1 @@
+"""Reusable capability-test adapters."""

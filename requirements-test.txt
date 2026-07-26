@@ -1,0 +1,6 @@
+# Test and development dependencies for LingJi.
+# Install together with the target runtime requirements, for example:
+#   python -m pip install -r requirements.txt -r requirements-test.txt
+#   python -m pip install -r requirements-ui.txt -r requirements-test.txt
+# Optional media providers remain owned by requirements-media.txt.
+pytest>=8,<9

@@ -1,0 +1,50 @@
+{
+  "task_id": "LJ-TASK-EXAMPLE-001",
+  "project_id": "LingJi",
+  "title": "统一提取框架示例交付",
+  "repository": "wangduoyu001/lingji",
+  "branch": "feature/single-vault-memory-foundation",
+  "agent": "codex",
+  "summary": "完成统一提取框架、SQLite任务队列、ChatGPT导入器和Codex写回。",
+  "status": "completed",
+  "started_at": "2026-07-19T10:00:00",
+  "completed_at": "2026-07-19T11:00:00",
+  "changed_files": [
+    "src/extraction/queue.py",
+    "src/extraction/pipeline.py",
+    "src/extraction/adapters/chatgpt.py",
+    "src/extraction/adapters/codex.py"
+  ],
+  "tests": [
+    "python -m unittest discover -s tests -v",
+    "python -m compileall -q main.py run_service.py run_mcp_server.py run_extraction_worker.py src tests scripts"
+  ],
+  "test_result": "全部通过",
+  "commits": [],
+  "pull_requests": [
+    "https://github.com/wangduoyu001/lingji/pull/1"
+  ],
+  "errors": [
+    {
+      "title": "ChatGPT导出缺少conversations.json",
+      "message": "导入器会终止任务并进入重试或failed状态。",
+      "severity": "medium"
+    }
+  ],
+  "decisions": [
+    {
+      "title": "复用lingji_state.db",
+      "reason": "避免状态数据分裂为多个SQLite数据库。"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "title": "增加浏览器和手机采集适配器",
+      "priority": "medium"
+    }
+  ],
+  "artifacts": [
+    "docs/EXTRACTION_FRAMEWORK_REPORT.md"
+  ],
+  "notes": "决策和任务只生成待审核候选，不自动批准。"
+}

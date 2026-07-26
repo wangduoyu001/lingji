@@ -1,0 +1,7 @@
+# Optional free/local media providers. Core LingJi does not require this file.
+-r requirements.txt
+faster-whisper>=1.1,<2
+scenedetect[opencv-headless]>=0.7,<0.8
+# PaddleOCR requires a matching PaddlePaddle runtime. Install paddlepaddle or
+# paddlepaddle-gpu for the machine first, then install this package.
+paddleocr>=3.2,<4

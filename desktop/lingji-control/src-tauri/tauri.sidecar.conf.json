@@ -1,0 +1,16 @@
+{
+  "bundle": {
+    "externalBin": [
+      "binaries/lingji-core"
+    ],
+    "resources": {
+      "binaries/lingji_core_lib": "lingji_core_lib",
+      "binaries/lingji-core-manifest.json": "lingji-core-manifest.json"
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/sidecar-hooks.nsh"
+      }
+    }
+  }
+}

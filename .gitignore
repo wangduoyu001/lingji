@@ -1,10 +1,11 @@
-﻿# Python
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
 dist/
 build/
+.venv/
 
 # PEMIS data (rebuildable, not source code)
 storage/
@@ -15,6 +16,19 @@ backup/
 # Environment
 .env
 .env.local
+.env.second-brain
+
+# Isolated second-brain runtime data
+data/second_brain.sqlite3*
+data/qdrant/
+data/runtime/
+data/raw/ai_chat/*.json
+data/inbox/ai_chat/*.json
+data/inbox/codex_tasks/*.json
+logs/second_brain/
+data/acceptance/
+output/desktop-validation/
+output/validation/
 
 # Windows
 Thumbs.db
@@ -44,3 +58,21 @@ storage/pemis_index.json
 _D:*
 test_*
 _tmp_*
+!tests/test_*.py
+# Tauri / Desktop UI (regeneratable artifacts)
+node_modules/
+desktop/lingji-control/node_modules/
+desktop/lingji-control/src-tauri/target/
+desktop/lingji-control/src-tauri/gen/
+desktop/lingji-control/src-tauri/binaries/lingji-core-*.exe
+desktop/lingji-control/src-tauri/binaries/lingji_core_lib/
+desktop/lingji-control/src-tauri/binaries/lingji-core-manifest.json
+desktop/lingji-control/release/
+desktop/lingji-control/tsconfig.*.tsbuildinfo
+
+# E2E test runtimes
+_e2e_*/
+vault/
+scripts/_*.py
+
+!docs/TEST_REPORTS/

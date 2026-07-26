@@ -1,189 +1,193 @@
-import json, logging, shutil
-from pathlib import Path
+import json
+import logging
+import shutil
 from datetime import datetime
+from pathlib import Path
 
-logger = logging.getLogger('pemis.dashboard')
+logger = logging.getLogger("pemis.dashboard")
 
-# === Vector Store Interface (reserved for future Qdrant) ===
-# When Qdrant is enabled, this module will also:
-# 1. Send opportunity cards to vector store
-# 2. Provide semantic search over vault content
-# 3. Sync content_hash changes to vector index
-# === End Vector Store Interface ===
-
-OPP_VAULT_DIR = 'PEMIS/opportunities'
-DASH_VAULT_DIR = 'PEMIS/dashboard'
+OPP_VAULT_DIR = "04-Projects/Money-Experiments/Opportunities"
+DASH_VAULT_DIR = "00-System/Dashboard"
 
 
 def sync_opps_to_vault(core):
-    """Sync opportunities from storage to the Obsidian vault."""
-    src = core.settings.storage_path / 'opportunities'
-    dst = core.settings.vault_path / OPP_VAULT_DIR
-    if not src.exists():
-        logger.warning('Source opp dir not found: %s', src)
+    """Sync generated opportunity cards into the single Obsidian vault."""
+    source_dir = core.settings.storage_path / "opportunities"
+    target_dir = core.settings.vault_path / OPP_VAULT_DIR
+    if not source_dir.exists():
+        logger.warning("Source opportunity dir not found: %s", source_dir)
         return
-    dst.mkdir(parents=True, exist_ok=True)
+    target_dir.mkdir(parents=True, exist_ok=True)
     copied = 0
     removed = 0
-    for f in src.glob('*.md'):
+    for source_file in source_dir.glob("*.md"):
         try:
-            shutil.copy2(f, dst / f.name)
+            shutil.copy2(source_file, target_dir / source_file.name)
             copied += 1
-        except Exception as e:
-            logger.error('Copy error %s: %s', f.name, e)
-    # Remove files in dst that no longer exist in src
-    dst_files = {f.name for f in dst.glob('*.md')}
-    src_files = {f.name for f in src.glob('*.md')}
-    for name in dst_files - src_files:
+        except Exception as exc:
+            logger.error("Copy error %s: %s", source_file.name, exc)
+    target_files = {path.name for path in target_dir.glob("*.md")}
+    source_files = {path.name for path in source_dir.glob("*.md")}
+    for name in target_files - source_files:
         try:
-            (dst / name).unlink()
+            (target_dir / name).unlink()
             removed += 1
         except Exception:
             pass
     if copied or removed:
-        logger.info('Synced opportunities: %d copied, %d removed', copied, removed)
-
-
-def load_opp_summary(core, file_id):
-    opp_dir = core.settings.storage_path / 'opportunities'
-    if not opp_dir.exists():
-        return '', ''
-    for f in opp_dir.glob('*.md'):
-        try:
-            text = f.read_text(encoding='utf-8')
-            if 'id: ' + repr(file_id) in text or file_id in text[:200]:
-                title = ''
-                for line in text.splitlines():
-                    if line.startswith('# '):
-                        title = line[2:].strip()
-                        break
-                body = text.strip()
-                if body.startswith('---'):
-                    end = body.find('---', 3)
-                    if end != -1:
-                        body = body[end + 3:].strip()
-                summary_lines = []
-                found_title = False
-                for line in body.splitlines():
-                    if line.startswith('# '):
-                        found_title = True
-                        continue
-                    if found_title and line.strip() and not line.startswith('**Score'):
-                        summary_lines.append(line.strip())
-                        if len(''.join(summary_lines)) > 200:
-                            break
-                summary = ' '.join(summary_lines)[:300]
-                return title, summary
-        except Exception:
-            pass
-    return '', ''
+        logger.info("Synced opportunities: %d copied, %d removed", copied, removed)
 
 
 def get_opp_filename(core, opp_id):
-    opp_dir = core.settings.storage_path / 'opportunities'
+    opp_dir = core.settings.storage_path / "opportunities"
     if not opp_dir.exists():
-        return ''
-    for f in opp_dir.glob('*.md'):
+        return ""
+    for source_file in opp_dir.glob("*.md"):
         try:
-            txt = f.read_text(encoding='utf-8')
-            if 'id: ' + repr(opp_id) in txt or opp_id in txt[:200]:
-                return f.name
+            text = source_file.read_text(encoding="utf-8-sig")
+            if "id: " + repr(opp_id) in text or str(opp_id) in text[:500]:
+                return source_file.name
         except Exception:
             pass
-    return ''
+    return ""
 
 
 def update_dashboard(core):
-    """Compact Control Center: one screen, no scrolling needed."""
+    """Write a display-only control center; owner input lives in separate notes."""
     sync_opps_to_vault(core)
     decisions = core.decision.get_latest()
     now = datetime.now()
-    fmt = '%Y-%m-%d %H:%M'
-    vp = core.settings.vault_path
-    status = core.status() if hasattr(core, 'status') else {}
+    status = core.status() if hasattr(core, "status") else {}
 
-    lines = []
-    lines.append('---')
-    lines.append('类型: 看板')
-    lines.append('更新时间: ' + now.isoformat())
-    lines.append('---')
-    lines.append('')
-    lines.append('# 灵机控制中心')
-    lines.append('')
-    lines.append('> 更新时间: ' + now.strftime(fmt))
-    lines.append('')
-    lines.append('---')
-    lines.append('')
+    mode = status.get("mode", "NORMAL")
+    uptime = status.get("uptime", "刚刚启动")
+    entries = status.get("index_entries", 0)
+    feedback_time = status.get("feedback_read")
+    feedback_text = feedback_time.strftime("%H:%M") if feedback_time else "-"
+    layout = status.get("vault_layout", {})
+    layout_text = "完整" if layout.get("complete") else "未完成"
+    commands = status.get("manual_commands", {})
+    jobs = status.get("jobs", [])
+    failed_jobs = sum(1 for job in jobs if job.get("status") == "failed")
+    memory_index = status.get("memory_index", {})
+    memory_integrity = status.get("memory_integrity", {})
+    memory_health = "正常" if memory_integrity.get("healthy") else "异常"
 
-    # Line 1: System status (one line)
-    mode = status.get('mode', 'NORMAL')
-    uptime = status.get('uptime', '刚刚启动')
-    entries = status.get('index_entries', 0)
-    fb_time = status.get('feedback_read')
-    fb_str = fb_time.strftime('%H:%M') if fb_time else '-'
-    lines.append('🟢 **' + str(mode) + '** | 运行 ' + str(uptime) + ' | ' + str(entries) + ' 条 | 反馈读取: ' + fb_str)
-    lines.append('')
+    lines = [
+        "---",
+        "schema_version: 1",
+        "memory_type: dashboard",
+        "status: active",
+        "privacy: private",
+        "lingji_managed: true",
+        "updated_at: " + now.isoformat(timespec="seconds"),
+        "---",
+        "",
+        "# 灵机控制中心",
+        "",
+        "> 只负责展示。反馈、命令和正式内容分别写入独立文件，不在这里直接编辑。",
+        "",
+        "## 系统状态",
+        "",
+        f"- 模式：**{mode}**",
+        f"- 运行时间：{uptime}",
+        f"- 元数据索引：{entries} 条",
+        f"- 召回库：{memory_index.get('documents', 0)} 份文档 / {memory_index.get('chunks', 0)} 个分块",
+        f"- 核心记忆：{memory_index.get('core_memories', 0)} 条",
+        f"- 召回版本：{memory_index.get('revision', 0)}",
+        f"- FTS 分词：{memory_index.get('fts_tokenizer', '-')}",
+        f"- 召回健康：**{memory_health}**",
+        f"- 单仓库结构：{layout_text}",
+        f"- 调度失败：{failed_jobs}",
+        f"- 反馈最近读取：{feedback_text}",
+        f"- 命令：排队 {commands.get('queued', 0)} / 执行中 {commands.get('running', 0)} / 失败 {commands.get('failed', 0)}",
+        "",
+        "## 手动管理入口",
+        "",
+        "- [[00-System/Home|灵机管理首页]]",
+        "- [[00-System/Permanent-Memory|永久记忆中心]]",
+        "- [[00-System/Feedback/Feedback Inbox|填写反馈]]",
+        "- [[00-System/Bases/Inbox.base|管理收件箱]]",
+        "- [[00-System/Bases/Projects.base|管理项目]]",
+        "- [[00-System/Bases/Tasks.base|管理任务]]",
+        "- [[00-System/Bases/Commands.base|查看命令队列]]",
+        "- [[00-System/Bases/Memory Health.base|检查记忆健康]]",
+        "",
+        "---",
+        "",
+    ]
 
-    # Line 2: Today's top 3 (one line each, compact)
-    output = decisions.get('decisions', [])
+    if not memory_integrity.get("healthy", True):
+        lines.extend(
+            [
+                "## 召回异常",
+                "",
+                f"- SQLite 检查：{memory_integrity.get('quick_check', '-')}",
+                f"- 孤立分块：{memory_integrity.get('orphan_chunks', 0)}",
+                f"- FTS 行数：{memory_integrity.get('fts_rows', 0)}",
+                f"- 分块行数：{memory_integrity.get('chunk_rows', 0)}",
+                "",
+                "> 后台完整性任务会尝试自动重建召回库。正式记忆仍保存在 Obsidian，不会因索引损坏而丢失。",
+                "",
+                "---",
+                "",
+            ]
+        )
+
+    output = decisions.get("decisions", [])
+    lines.extend(["## 今天最值得关注的3个机会", ""])
     if output:
-        lines.append('**💰 今天最值得做的3件事**')
-        lines.append('')
-        for i, d in enumerate(output[:3], 1):
-            title = d['title'][:25]
-            score = str(d['decision_score'])
-            speed_icon = '⚡' if d.get('speed') == 'fast' else '🐢' if d.get('speed') == 'slow' else '➡️'
-            lines.append(str(i) + '. ' + speed_icon + ' **' + title + '**  (评分 ' + score + ')')
-            opp_filename = get_opp_filename(core, d['id'])
+        for index, decision in enumerate(output[:3], 1):
+            title = decision["title"][:40]
+            score = decision["decision_score"]
+            speed_icon = (
+                "⚡"
+                if decision.get("speed") == "fast"
+                else "🐢"
+                if decision.get("speed") == "slow"
+                else "➡️"
+            )
+            lines.append(f"{index}. {speed_icon} **{title}**（评分 {score}）")
+            opp_filename = get_opp_filename(core, decision["id"])
             if opp_filename:
-                target = OPP_VAULT_DIR + '/' + opp_filename
-                lines.append('   [[' + target.replace('.md', '') + '|查看详情 →]]')
-            lines.append('')
+                target = OPP_VAULT_DIR + "/" + opp_filename
+                lines.append("   [[" + target.replace(".md", "") + "|查看详情 →]]")
+            lines.append("")
     else:
-        lines.append('*暂无决策*')
-        lines.append('')
-    lines.append('---')
-    lines.append('')
+        lines.extend(["*暂无有效机会。*", ""])
 
-    # Line 3: Quick feedback
-    lines.append('**📝 反馈与备注**')
-    lines.append('')
-    lines.append('- 喜欢/感兴趣: ')
-    lines.append('- 不感兴趣/放弃: ')
-    lines.append('- 已开始执行: ')
-    lines.append('- 我想到的新方向: ')
-    lines.append('')
-    lines.append('*(填好后保存，灵机自动读取)*')
-    lines.append('')
-    lines.append('---')
-    lines.append('')
-
-    # Line 4: Last feedback record (compact)
-    prefs_path = Path(core.settings.storage_path) / 'user_preferences.json'
-    if prefs_path.exists():
+    preferences_path = Path(core.settings.storage_path) / "user_preferences.json"
+    lines.extend(["---", "", "## 最近反馈", ""])
+    if preferences_path.exists():
         try:
-            prefs = json.loads(prefs_path.read_text(encoding='utf-8'))
+            preferences = json.loads(preferences_path.read_text(encoding="utf-8-sig"))
             records = []
-            for key in ('liked', 'disliked', 'executed', 'failed'):
-                items = prefs.get(key, [])
+            label_map = {
+                "liked": "👍",
+                "disliked": "👎",
+                "executed": "✅",
+                "failed": "❌",
+                "new_ideas": "💡",
+            }
+            for key in ("liked", "disliked", "executed", "failed", "new_ideas"):
+                items = preferences.get(key, [])
                 if items:
-                    label_map = {'liked':'👍','disliked':'👎','executed':'✅','failed':'❌'}
-                    records.append(label_map.get(key, key) + ' ' + items[-1].get('content','')[:50])
+                    records.append(label_map[key] + " " + items[-1].get("content", "")[:80])
             if records:
-                lines.append('**最近反馈:**')
-                lines.append('')
-                for r in records[-3:]:
-                    lines.append('- ' + r)
-                lines.append('')
-                lines.append('---')
-                lines.append('')
+                lines.extend("- " + record for record in records[-5:])
+            else:
+                lines.append("*暂无反馈。*")
         except Exception:
-            pass
+            lines.append("*反馈状态读取失败，请查看日志。*")
+    else:
+        lines.append("*暂无反馈。*")
 
-    # Write file
-    dash_dir = vp / DASH_VAULT_DIR
-    dash_dir.mkdir(parents=True, exist_ok=True)
-    dash_file = dash_dir / 'Control Center.md'
-    with open(dash_file, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(lines))
-    logger.info('Control Center updated (compact)')
+    lines.extend(["", "---", "", f"> 更新时间：{now.strftime('%Y-%m-%d %H:%M:%S')}", ""])
+
+    dashboard_dir = core.settings.vault_path / DASH_VAULT_DIR
+    dashboard_dir.mkdir(parents=True, exist_ok=True)
+    dashboard_file = dashboard_dir / "Control Center.md"
+    temp_file = dashboard_file.with_suffix(".md.tmp")
+    temp_file.write_text("\n".join(lines), encoding="utf-8")
+    temp_file.replace(dashboard_file)
+    logger.info("Control Center updated: %s", dashboard_file)
