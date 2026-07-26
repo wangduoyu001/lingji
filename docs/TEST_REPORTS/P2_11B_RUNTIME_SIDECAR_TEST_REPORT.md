@@ -249,3 +249,60 @@ startup, authentication, or lifecycle failure.
 ```text
 LOCAL_VALIDATED_AWAITING_GITHUB_CI_ON_FINAL_FIX_COMMIT
 ```
+
+## 2026-07-26 PR #47 CI Closeout
+
+PR #47 was rechecked before merge after GitHub Actions reported one failing
+release-baseline job:
+
+```text
+Workflow: Windows Desktop Release Baseline
+Job: Build Windows Desktop and packaged runtime
+Failing step: Verify authenticated health and managed stop
+Run: https://github.com/wangduoyu001/lingji/actions/runs/30202713176
+```
+
+The CI log also exposed a hidden validation gap in the previous workflow:
+`python -m pytest ../../tests/test_packaged_control_api.py -q` ran in the
+sidecar build environment before `pytest` was installed. PowerShell did not
+check `$LASTEXITCODE`, so the step continued after `No module named pytest`.
+
+Workflow fix validated locally:
+
+- install `requirements-test.txt` before the packaged runtime Python tests;
+- explicitly fail after any non-zero native command exit;
+- use `curl.exe --fail --max-time 2` for the packaged `/api/health` probe;
+- extend the health polling window from 60 seconds to 90 seconds;
+- emit process, token, state-file and port diagnostics before throwing.
+
+Local Windows validation on the PR branch:
+
+```text
+D:\codex\.venvs\lingji-pr47-py312\Scripts\python.exe -m pytest tests\test_packaged_control_api.py -q
+PASS, 10/10
+
+cd desktop\lingji-control
+npm run test:smoke
+PASS, 18/18
+
+cd desktop\lingji-control
+npm run build
+PASS
+
+scripts\build_windows_sidecar.ps1 -TargetTriple x86_64-pc-windows-msvc
+PASS with LINGJI_SIDECAR_PYTHON=D:\codex\.venvs\lingji-pr47-py312\Scripts\python.exe
+```
+
+Local packaged executable acceptance:
+
+```text
+Detached lingji-core.exe launch: PASS
+Token file and sidecar-state.json publication: PASS
+GET http://127.0.0.1:8766/api/health with X-LingJi-Token: PASS, HTTP 200
+Matching sidecar-stop-request.json: PASS
+sidecar-state.json cleanup: PASS
+```
+
+The observed health payload remained `degraded` because optional local
+providers are unavailable in the isolated workspace; this is not a packaged
+runtime startup, authentication or lifecycle failure.

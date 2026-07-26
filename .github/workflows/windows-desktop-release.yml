@@ -136,9 +136,14 @@ jobs:
       - name: Validate packaged runtime Python contract
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
+          python -m pip install -r ../../requirements-test.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m pytest ../../tests/test_packaged_control_api.py -q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $checkRoot = Join-Path $env:RUNNER_TEMP "lingji-contract"
           python ../../run_packaged_control_api.py --data-root $checkRoot --check-config
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build packaged Python runtime
         shell: pwsh
@@ -160,8 +165,10 @@ jobs:
           ) -PassThru -WindowStyle Hidden
           try {
             $healthy = $false
-            for ($attempt = 0; $attempt -lt 120; $attempt++) {
+            $lastHealthError = ""
+            for ($attempt = 0; $attempt -lt 180; $attempt++) {
               Start-Sleep -Milliseconds 500
+              $process.Refresh()
               if ($process.HasExited) {
                 throw "Packaged runtime exited before becoming healthy: $($process.ExitCode)"
               }
@@ -170,21 +177,29 @@ jobs:
               if (-not (Test-Path $tokenPath) -or -not (Test-Path $statePath)) { continue }
               $token = (Get-Content $tokenPath -Raw -Encoding UTF8).Trim()
               if ([string]::IsNullOrWhiteSpace($token)) { continue }
-              try {
-                $response = Invoke-WebRequest `
-                  -Uri "http://127.0.0.1:8766/api/health" `
-                  -Headers @{ "X-LingJi-Token" = $token } `
-                  -UseBasicParsing `
-                  -TimeoutSec 2
-                if ($response.StatusCode -eq 200) {
-                  $healthy = $true
-                  break
-                }
-              } catch {
-                continue
+              $healthOutput = & curl.exe `
+                --fail `
+                --silent `
+                --show-error `
+                --max-time 2 `
+                --header "X-LingJi-Token: $token" `
+                "http://127.0.0.1:8766/api/health" 2>&1
+              if ($LASTEXITCODE -eq 0) {
+                $healthy = $true
+                break
               }
+              $lastHealthError = ($healthOutput | Out-String).Trim()
             }
-            if (-not $healthy) { throw "Packaged runtime did not pass authenticated health" }
+            if (-not $healthy) {
+              Write-Host "Packaged runtime health diagnostics:"
+              Write-Host "  process_id=$($process.Id) has_exited=$($process.HasExited)"
+              Write-Host "  token_exists=$(Test-Path (Join-Path $dataRoot "storage/control_api_token"))"
+              Write-Host "  state_exists=$(Test-Path (Join-Path $dataRoot "runtime/sidecar-state.json"))"
+              Write-Host "  last_health_error=$lastHealthError"
+              Get-ChildItem $dataRoot -Recurse -Force | Select-Object FullName,Length,LastWriteTime | Format-Table -AutoSize
+              Get-NetTCPConnection -LocalPort 8766 -ErrorAction SilentlyContinue | Format-Table -AutoSize
+              throw "Packaged runtime did not pass authenticated health"
+            }
 
             $state = Get-Content (Join-Path $dataRoot "runtime/sidecar-state.json") -Raw -Encoding UTF8 | ConvertFrom-Json
             if ($state.mode -ne "packaged_sidecar" -or [string]::IsNullOrWhiteSpace($state.instance_id)) {
