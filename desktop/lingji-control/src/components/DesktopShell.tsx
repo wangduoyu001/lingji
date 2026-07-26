@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { NAVIGATION, NAVIGATION_GROUPS } from "../navigation";
 import type { ReleaseMetadata } from "../hooks/useReleaseMetadata";
+import { runtimeStateLabel, type RuntimeStatus } from "../runtimeTypes";
 import type { NavigationItem, PageId } from "../types";
 import NavIcon from "./NavIcon";
 
@@ -10,24 +11,39 @@ type Props = {
   connected: boolean;
   connectionState: "booting" | "connected" | "offline" | "unsupported";
   releaseMetadata: ReleaseMetadata | null;
+  runtimeStatus: RuntimeStatus | null;
+  runtimeBusy: string;
   onNavigate: (page: PageId) => void;
   onRetry: () => void;
+  onStopRuntime: () => void;
+  onRestartRuntime: () => void;
   onCopyDiagnostics: () => Promise<void>;
   children: ReactNode;
 };
 
-const connectionText = {
-  booting: "正在连接本机服务",
-  connected: "本机服务正常",
-  offline: "本机服务未连接",
-  unsupported: "仅支持桌面应用",
-};
-
-export default function DesktopShell({ page, current, connected, connectionState, releaseMetadata, onNavigate, onRetry, onCopyDiagnostics, children }: Props) {
+export default function DesktopShell({
+  page,
+  current,
+  connected,
+  connectionState,
+  releaseMetadata,
+  runtimeStatus,
+  runtimeBusy,
+  onNavigate,
+  onRetry,
+  onStopRuntime,
+  onRestartRuntime,
+  onCopyDiagnostics,
+  children,
+}: Props) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const shortCommit = releaseMetadata?.commit && releaseMetadata.commit !== "development"
     ? releaseMetadata.commit.slice(0, 8)
     : "dev";
+  const runtimeHealthy = runtimeStatus?.healthy === true;
+  const managedRuntime = runtimeHealthy && runtimeStatus?.managed === true;
+  const externalRuntime = runtimeHealthy && runtimeStatus?.managed === false;
+  const runtimeAvailable = runtimeStatus?.binary_available !== false;
 
   const copyDiagnostics = async () => {
     try {
@@ -77,20 +93,43 @@ export default function DesktopShell({ page, current, connected, connectionState
 
         <div className="desktop-sidebar-status">
           <div className="desktop-status-line">
-            <span className={connected ? "status-dot online" : "status-dot"} />
+            <span className={runtimeHealthy ? "status-dot online" : "status-dot"} />
             <div>
-              <strong>{connectionText[connectionState]}</strong>
-              <small>{connected ? "127.0.0.1:8766" : "本机私有连接"}</small>
+              <strong>{runtimeStateLabel(runtimeStatus)}</strong>
+              <small>
+                {runtimeStatus
+                  ? `${runtimeStatus.host}:${runtimeStatus.port}${externalRuntime ? " · 外部进程" : managedRuntime ? ` · PID ${runtimeStatus.pid ?? "未知"}` : ""}`
+                  : "正在读取本机核心"}
+              </small>
             </div>
           </div>
+          {runtimeStatus?.last_error && <small className="desktop-runtime-error">{runtimeStatus.last_error}</small>}
+          {!runtimeAvailable && connectionState !== "unsupported" && (
+            <small className="desktop-runtime-warning">当前安装包未包含灵机核心，仍可连接手动启动的8766服务。</small>
+          )}
           <div className="desktop-release-line">
             <span>v{releaseMetadata?.version ?? "0.1.0"}</span>
             <span>{releaseMetadata?.channel ?? "development"}</span>
             <span>{shortCommit}</span>
           </div>
           <div className="desktop-sidebar-actions">
-            {!connected && connectionState !== "unsupported" && (
-              <button className="desktop-retry-button" onClick={onRetry}>重新连接</button>
+            {!runtimeHealthy && connectionState !== "unsupported" && (
+              <button className="desktop-retry-button" disabled={Boolean(runtimeBusy)} onClick={onRetry}>
+                {runtimeBusy === "ensure" ? "启动中…" : "启动核心"}
+              </button>
+            )}
+            {managedRuntime && (
+              <>
+                <button className="desktop-retry-button" disabled={Boolean(runtimeBusy)} onClick={onRestartRuntime}>
+                  {runtimeBusy === "restart" ? "重启中…" : "重启核心"}
+                </button>
+                <button className="desktop-stop-button" disabled={Boolean(runtimeBusy)} onClick={onStopRuntime}>
+                  {runtimeBusy === "stop" ? "停止中…" : "停止核心"}
+                </button>
+              </>
+            )}
+            {externalRuntime && !connected && (
+              <button className="desktop-retry-button" disabled={Boolean(runtimeBusy)} onClick={onRetry}>重新连接</button>
             )}
             {connectionState !== "unsupported" && (
               <button className="desktop-diagnostics-button" onClick={() => void copyDiagnostics()}>
@@ -110,7 +149,7 @@ export default function DesktopShell({ page, current, connected, connectionState
           </div>
           <div className={connected ? "desktop-connection-badge connected" : "desktop-connection-badge"}>
             <span className={connected ? "status-dot online" : "status-dot"} />
-            <span>{connected ? "运行中" : "离线"}</span>
+            <span>{connected ? "运行中" : connectionState === "booting" ? "启动中" : "离线"}</span>
           </div>
         </header>
         <div className="desktop-content">{children}</div>

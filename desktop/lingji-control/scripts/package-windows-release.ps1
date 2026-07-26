@@ -41,6 +41,18 @@ if ([string]::IsNullOrWhiteSpace($appExecutable)) {
   throw "Desktop executable was not produced"
 }
 
+$sidecarManifestPath = Join-Path $desktopRoot "src-tauri/binaries/lingji-core-manifest.json"
+if (-not (Test-Path $sidecarManifestPath)) {
+  throw "Packaged runtime manifest was not produced"
+}
+$sidecarManifest = Get-Content $sidecarManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($sidecarManifest.target_triple -ne $Target) {
+  throw "Runtime sidecar target does not match the Desktop target"
+}
+if ($sidecarManifest.pyinstaller_mode -ne "onedir") {
+  throw "Runtime sidecar must use the onedir packaging contract"
+}
+
 $output = Join-Path $desktopRoot $OutputDirectory
 if (Test-Path $output) {
   Remove-Item $output -Recurse -Force
@@ -51,10 +63,12 @@ $installerName = "LingJi_${version}_windows_x64_setup.exe"
 $executableName = "LingJi_${version}_windows_x64.exe"
 $installerOutput = Join-Path $output $installerName
 $executableOutput = Join-Path $output $executableName
+$sidecarManifestOutput = Join-Path $output "lingji-core-manifest.json"
 Copy-Item $installer.FullName $installerOutput -Force
 Copy-Item $appExecutable $executableOutput -Force
+Copy-Item $sidecarManifestPath $sidecarManifestOutput -Force
 
-$artifactFiles = @($installerOutput, $executableOutput)
+$artifactFiles = @($installerOutput, $executableOutput, $sidecarManifestOutput)
 $artifacts = foreach ($artifactPath in $artifactFiles) {
   $file = Get-Item $artifactPath
   if ($file.Length -le 0) {
@@ -69,7 +83,7 @@ $artifacts = foreach ($artifactPath in $artifactFiles) {
 }
 
 $metadata = [ordered]@{
-  schema_version = 1
+  schema_version = 2
   product_name = "LingJi"
   display_name = "灵机"
   version = $version
@@ -89,7 +103,14 @@ $metadata = [ordered]@{
   }
   runtime_boundary = [ordered]@{
     control_api = "http://127.0.0.1:8766"
-    python_sidecar_included = $false
+    python_sidecar_included = $true
+    pyinstaller_mode = [string]$sidecarManifest.pyinstaller_mode
+    sidecar_executable_bytes = [long]$sidecarManifest.executable.bytes
+    sidecar_executable_sha256 = [string]$sidecarManifest.executable.sha256
+    sidecar_runtime_file_count = [int]$sidecarManifest.runtime_directory.file_count
+    sidecar_runtime_bytes = [long]$sidecarManifest.runtime_directory.bytes
+    optional_media_providers_bundled = [bool]$sidecarManifest.optional_media_providers_bundled
+    owner_data_root = "%LOCALAPPDATA%\\LingJi"
     updater_included = $false
   }
 }
@@ -103,7 +124,7 @@ $sumLines = foreach ($artifact in $artifacts) {
 $sumLines | Set-Content -Path (Join-Path $output "SHA256SUMS.txt") -Encoding ASCII
 
 $notes = @"
-LingJi Windows Release Baseline
+LingJi Windows Desktop + Packaged Runtime
 
 Version: $version
 Commit: $Commit
@@ -113,14 +134,16 @@ Target: $Target
 Installer: NSIS current-user setup
 Code signed: no
 
-This P2-11A package contains the Tauri Desktop application only.
-The LingJi Python runtime sidecar and automatic service lifecycle are planned for P2-11B.
-Until then, the authenticated local control service on 127.0.0.1:8766 must be started separately.
+This P2-11B package contains the Tauri Desktop application and the fixed LingJi Python runtime Sidecar.
+The Desktop manages only the Sidecar process it started. A healthy external 8766 process is detected but is not stopped or restarted.
+Owner data is stored outside the installation directory under %LOCALAPPDATA%\LingJi by default.
+Optional media providers and large local models are not bundled or downloaded automatically.
+The automatic updater is not included yet.
 
 Installing, upgrading or uninstalling this Desktop package must not intentionally delete the Obsidian Vault,
 LingJi storage, runtime settings, SQLite state or Qdrant collections.
 "@
 $notes | Set-Content -Path (Join-Path $output "INSTALLATION-NOTES.txt") -Encoding UTF8
 
-Write-Host "Windows release baseline prepared at $output"
+Write-Host "Windows Desktop + Sidecar release prepared at $output"
 Get-ChildItem $output | Select-Object Name, Length | Format-Table -AutoSize

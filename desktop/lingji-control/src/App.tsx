@@ -7,6 +7,7 @@ import { useLingJiConnection } from "./hooks/useLingJiConnection";
 import { useReleaseMetadata } from "./hooks/useReleaseMetadata";
 import { NAVIGATION } from "./navigation";
 import type { CaptureInspectorTarget } from "./pages/captureCenterTypes";
+import { runtimeStateLabel } from "./runtimeTypes";
 import type { PageId } from "./types";
 
 export default function App() {
@@ -28,9 +29,17 @@ export default function App() {
       connected={connection.connected}
       connectionState={connection.state}
       releaseMetadata={release.metadata}
+      runtimeStatus={connection.runtimeStatus}
+      runtimeBusy={connection.runtimeBusy}
       onNavigate={setPage}
       onRetry={() => void connection.connect()}
-      onCopyDiagnostics={() => release.copyDiagnostics(connection.state, connection.connected)}
+      onStopRuntime={() => void connection.stopRuntime()}
+      onRestartRuntime={() => void connection.restartRuntime()}
+      onCopyDiagnostics={() => release.copyDiagnostics(
+        connection.state,
+        connection.connected,
+        connection.runtimeStatus,
+      )}
     >
       {connection.state === "unsupported" ? (
         <section className="desktop-runtime-card desktop-runtime-card-blocked">
@@ -45,9 +54,9 @@ export default function App() {
         <section className="desktop-runtime-card">
           <div className="desktop-spinner" aria-hidden="true" />
           <div>
-            <span className="desktop-eyebrow">LOCAL RUNTIME</span>
-            <h2>正在连接本机灵机服务</h2>
-            <p>桌面端正在读取本机凭据并检查 8766 控制服务。</p>
+            <span className="desktop-eyebrow">PACKAGED RUNTIME</span>
+            <h2>{runtimeStateLabel(connection.runtimeStatus)}</h2>
+            <p>桌面端正在检查本机8766服务；安装包包含核心时会自动启动并等待认证健康检查。</p>
           </div>
         </section>
       ) : (
@@ -55,11 +64,17 @@ export default function App() {
           {!connection.connected && (
             <section className="desktop-offline-banner" role="status">
               <div>
-                <span className="desktop-eyebrow">LOCAL SERVICE OFFLINE</span>
-                <strong>{connection.error || "本机控制服务暂时不可用"}</strong>
-                <small>启动灵机控制服务后，桌面端会使用本机凭据重新建立连接。</small>
+                <span className="desktop-eyebrow">LOCAL CORE OFFLINE</span>
+                <strong>{connection.error || runtimeStateLabel(connection.runtimeStatus)}</strong>
+                <small>
+                  {connection.runtimeStatus?.binary_available === false
+                    ? "当前安装包没有核心 Sidecar，可以继续连接手动启动的8766服务。"
+                    : `核心日志：${connection.runtimeStatus?.log_path_display ?? "owner-local LingJi logs"}`}
+                </small>
               </div>
-              <button className="button primary" onClick={() => void connection.connect()}>重新连接</button>
+              <button className="button primary" disabled={Boolean(connection.runtimeBusy)} onClick={() => void connection.connect()}>
+                {connection.runtimeBusy === "ensure" ? "启动中…" : "启动核心"}
+              </button>
             </section>
           )}
           <AppPages

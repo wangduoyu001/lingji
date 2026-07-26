@@ -11,11 +11,13 @@
     "test:memory-review": "tsx scripts/memory-review-smoke.mjs",
     "test:obsidian-operations": "tsx scripts/obsidian-operations-smoke.mjs",
     "test:release": "tsx scripts/windows-release-smoke.mjs",
+    "test:runtime": "tsx scripts/runtime-sidecar-smoke.mjs",
     "test:smoke": "tsx scripts/run-smoke-suite.mjs",
     "build": "npm run test:smoke && tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "tauri": "tauri",
-    "release:windows": "tauri build --bundles nsis --target x86_64-pc-windows-msvc",
+    "build:sidecar:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File ../../scripts/build_windows_sidecar.ps1",
+    "release:windows": "npm run build:sidecar:windows && tauri build --config src-tauri/tauri.sidecar.conf.json --bundles nsis --target x86_64-pc-windows-msvc",
     "test:obsidian": "tsx scripts/obsidian-smoke.mjs"
   },
   "dependencies": {

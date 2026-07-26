@@ -63,6 +63,10 @@ node_modules/
 desktop/lingji-control/node_modules/
 desktop/lingji-control/src-tauri/target/
 desktop/lingji-control/src-tauri/gen/
+desktop/lingji-control/src-tauri/binaries/lingji-core-*.exe
+desktop/lingji-control/src-tauri/binaries/lingji_core_lib/
+desktop/lingji-control/src-tauri/binaries/lingji-core-manifest.json
+desktop/lingji-control/release/
 desktop/lingji-control/tsconfig.*.tsbuildinfo
 
 # E2E test runtimes

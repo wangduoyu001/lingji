@@ -1,5 +1,11 @@
+mod runtime_manager;
+
+use runtime_manager::{
+    owner_data_root, runtime_ensure, runtime_restart, runtime_status, runtime_stop, RuntimeManager,
+};
 use serde::Serialize;
 use std::{env, fs, path::PathBuf};
+use tauri::Manager;
 
 #[derive(Serialize)]
 struct ControlCredentials {
@@ -37,6 +43,9 @@ fn control_credentials() -> Result<ControlCredentials, String> {
     let mut candidates = Vec::new();
     if let Some(path) = explicit {
         candidates.push(path);
+    }
+    if let Ok(root) = owner_data_root() {
+        candidates.push(root.join("storage").join("control_api_token"));
     }
 
     push_env_path(
@@ -92,9 +101,24 @@ fn release_metadata() -> ReleaseMetadata {
 }
 
 fn main() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![control_credentials, release_metadata])
-        .run(tauri::generate_context!())
-        .expect("error while running LingJi control center");
+        .manage(RuntimeManager::default())
+        .invoke_handler(tauri::generate_handler![
+            control_credentials,
+            release_metadata,
+            runtime_status,
+            runtime_ensure,
+            runtime_stop,
+            runtime_restart
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building LingJi control center");
+
+    app.run(|app_handle, event| match event {
+        tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+            app_handle.state::<RuntimeManager>().shutdown();
+        }
+        _ => {}
+    });
 }

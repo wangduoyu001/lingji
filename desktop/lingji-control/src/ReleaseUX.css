@@ -13,6 +13,22 @@
   color: #3f4857;
 }
 
+.desktop-runtime-error,
+.desktop-runtime-warning {
+  display: block;
+  overflow: hidden;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+}
+
+.desktop-runtime-error {
+  color: #efaaaa;
+}
+
+.desktop-runtime-warning {
+  color: #d5b77f;
+}
+
 .desktop-sidebar-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -24,7 +40,8 @@
 }
 
 .desktop-retry-button,
-.desktop-diagnostics-button {
+.desktop-diagnostics-button,
+.desktop-stop-button {
   min-height: 31px;
   padding: 6px 8px;
   color: var(--text-soft);
@@ -34,10 +51,24 @@
   font-size: 10px;
 }
 
+.desktop-stop-button {
+  color: #ffcaca;
+  border-color: rgba(241, 139, 139, .24);
+  background: var(--danger-soft);
+}
+
 .desktop-retry-button:hover,
-.desktop-diagnostics-button:hover {
+.desktop-diagnostics-button:hover,
+.desktop-stop-button:hover {
   border-color: var(--line-strong);
   background: var(--surface-hover);
+}
+
+.desktop-retry-button:disabled,
+.desktop-diagnostics-button:disabled,
+.desktop-stop-button:disabled {
+  opacity: .45;
+  cursor: default;
 }
 
 @media (max-width: 1240px) {
