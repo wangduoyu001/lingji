@@ -1,63 +1,58 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
 > Updated: 2026-07-26
-> Formal branch: `feature/second-brain-memory`
-> Formal head: `62cc55ac6e71ad14a1756c404beabf6ccb08d74e`
+> Target formal branch: `master`
+> Latest validated source head: `96084c49ada2adb33d2202690d3d7b98e5b695ca`
+> Mainline convergence branch: `work/master-mainline-convergence`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
 > Validation evidence: `docs/TEST_REPORTS/`
 
 ## 1. 当前结论
 
-LingJi 的第二大脑主线、Windows 打包 Sidecar、Observation-first Desktop UI 与第一轮仓库治理清理已进入正式功能分支。
+LingJi 的第二大脑主线、Windows 打包 Sidecar、Observation-first Desktop UI 和两轮仓库治理已经完成代码与 CI 验证。当前唯一进行中的治理任务是将正式代码历史正常合入 GitHub 默认分支 `master`，结束双主线状态。
 
 ```text
-PR #47  P2-11B Packaged Runtime Sidecar Manager   MERGED_AND_VALIDATED
-PR #48  P2-12A Observation-first Desktop UI       MERGED_AND_VALIDATED
-PR #49  Repository Governance Cleanup             MERGED_AND_VALIDATED
+PR #47  P2-11B Packaged Runtime Sidecar Manager    MERGED_AND_VALIDATED
+PR #48  P2-12A Observation-first Desktop UI        MERGED_AND_VALIDATED
+PR #49  Repository Governance Cleanup              MERGED_AND_VALIDATED
+PR #50  Context Routing and Local Validation       MERGED_AND_VALIDATED
 ```
 
-关键合并提交：
+关键提交：
 
 ```text
 PR #47: 6720d0cd76c8ff9e9bc38ef2df52793c0ab0f4c5
 PR #48: 7e53fc29fb308b73031b39f9a2a000122653674f
 PR #49: 62cc55ac6e71ad14a1756c404beabf6ccb08d74e
-```
-
-P2-11B/P2-12A 验收事实来源：
-
-```text
-docs/TEST_REPORTS/PR47_PR48_FINAL_ACCEPTANCE_REPORT.md
-docs/TEST_REPORTS/P2_11B_LOCAL_WINDOWS_ACCEPTANCE_REPORT.md
-docs/TEST_REPORTS/P2_11B_RUNTIME_SIDECAR_TEST_REPORT.md
-docs/TEST_REPORTS/P2_12A_OBSERVATION_FIRST_DESKTOP_UI_TEST_REPORT.md
+PR #50: 96084c49ada2adb33d2202690d3d7b98e5b695ca
 ```
 
 ## 2. 仓库治理状态
 
-状态：`MERGED_AND_VALIDATED`
+状态：`VALIDATED_MAINLINE_CONVERGENCE_IN_PROGRESS`
 
 已完成：
 
-- `npm run build` 收敛为纯构建命令，Desktop smoke 由测试入口显式执行，避免同一门禁重复运行。
-- Windows release workflow 保留显式 Desktop smoke、Sidecar 生命周期和 NSIS 产物验证。
-- 删除历史 `work/p0-engineering-hygiene` 分支的过期 push 门禁，保留手动与 PR Windows Gate。
-- `docs/ARCHITECTURE.md` 成为当前唯一架构权威。
-- `docs/PROJECT_STATUS.md` 只维护当前状态、风险、阻塞和下一步。
-- `docs/MODULES/CODE_MAP.md` 只维护代码入口与所有权。
-- `docs/DEVELOPMENT_RULES.md` 明确最小定向读取、现有文档优先和唯一测试入口。
-- 未新增长期文档、配置、依赖或平行业务实现。
+- `docs/ARCHITECTURE.md` 是唯一当前架构权威。
+- `docs/PROJECT_STATUS.md` 只维护当前状态、风险、阻塞与下一步。
+- `docs/MODULES/CODE_MAP.md` 只维护代码入口、所有权和局部验收。
+- `AGENTS.md` 是开发者与 AI 的最小执行入口。
+- `scripts/validate.ps1` 提供 focused/full/release 本机验收入口。
+- Desktop smoke 与 build 不再隐式重复执行。
+- 历史阶段文档保留为证据，不覆盖当前权威。
+- 过期 `.codex/context/`、PySide6/8765 和旧项目启动说明已从当前入口移除。
+- 新增根 `README.md` 作为唯一 GitHub 落地页，不复制详细架构或测试历史。
 
-验证结果：
+PR #50 验证：
 
 ```text
-tests workflow #749: SUCCESS
-P0 Windows Gate #120: SUCCESS
-Windows Desktop Release Baseline #11: SUCCESS
+tests workflow #753: SUCCESS
+P0 Windows Gate #122: SUCCESS
+Windows PowerShell 5.1 entry: SUCCESS
 Python 3.11 / 3.12 / Windows: SUCCESS
 Desktop smoke / build: SUCCESS
-Tauri Rust / packaged Sidecar / NSIS: SUCCESS
+Tauri Rust: SUCCESS
 MCP / Obsidian plugin / browser capture: SUCCESS
 ```
 
@@ -81,6 +76,7 @@ second_brain/
 - `second_brain/` 不接收新的正式产品能力。
 - Obsidian CLI 正式实现位于 `src/obsidian/`。
 - MCP 默认使用 stdio；可选 HTTP 使用 8767。
+- 8765 仅为迁移期兼容 API。
 
 ## 4. 数据权威
 
@@ -103,23 +99,7 @@ Qdrant
 
 SQLite 索引、Qdrant 和 Structured Read Model 均为派生数据，不得取代 Obsidian Vault + Git 的正式知识权威。
 
-## 5. 已验证能力
-
-```text
-P0 Workspace / Port / Engineering Hygiene
-P1 Unified Semantic Memory
-P2 Vector Center / Structured Read Model / Capture / Inspector
-P2 Obsidian CLI Formal Migration
-P2 Codex-first Local Memory Loop
-P2 Auto Review SHADOW
-P2 Runtime/Desktop Reliability
-P2 Owner-visible Settings Governance
-P2 Windows Packaged Runtime Sidecar
-P2 Observation-first Desktop UI
-Repository Governance Cleanup
-```
-
-当前安全边界：
+## 5. 当前安全边界
 
 - Auto Review 仅 OFF/SHADOW，ACTIVE 继续拒绝。
 - 不自动批准、拒绝、删除或覆盖正式记忆。
@@ -133,6 +113,7 @@ Repository Governance Cleanup
 
 ```text
 P0 blocking defects: none recorded
+Default branch convergence: in progress
 Updater: not implemented
 Code signing: not implemented
 second_brain retirement: not eligible until migration parity and rollback conditions pass
@@ -143,8 +124,10 @@ Historical acceptance report deletion: deferred because reports remain evidence
 ## 7. 下一步
 
 ```text
-冻结当前稳定基线
--> 不再继续仓库泛化清理
--> 只在出现明确证据时处理剩余 P2 项
--> 选择下一项正式产品开发任务
+将 work/master-mainline-convergence 正常合入 master
+-> 更新 Windows/P0 workflow 的 PR 目标为 master
+-> 在最终 master 树运行完整 CI 与 Windows release gate
+-> 将 feature/second-brain-memory 快进到最终 master 提交，停止作为开发主线
+-> 冻结稳定基线
+-> 再选择下一项正式产品开发任务
 ```
