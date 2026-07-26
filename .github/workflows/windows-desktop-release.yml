@@ -183,7 +183,7 @@ jobs:
                 --show-error `
                 --max-time 2 `
                 --header "X-LingJi-Token: $token" `
-                "http://127.0.0.1:8766/api/health" 2>&1
+                "http://127.0.0.1:8766/api/runtime/ping" 2>&1
               if ($LASTEXITCODE -eq 0) {
                 $healthy = $true
                 break

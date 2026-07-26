@@ -156,7 +156,7 @@ Responsibilities:
 
 - resolve the owner-local root;
 - locate the fixed packaged binary and adjacent runtime directory;
-- perform authenticated `/api/health` checks;
+- perform authenticated `/api/runtime/ping` liveness checks;
 - detect a healthy external 8766 service;
 - start one packaged core;
 - prevent duplicate start while an identified Sidecar is starting;
@@ -278,7 +278,7 @@ The P2-11A workflow is extended to:
 3. build the PyInstaller onedir Sidecar;
 4. launch the packaged executable;
 5. read the generated token;
-6. verify authenticated `/api/health`;
+6. verify authenticated `/api/runtime/ping`;
 7. read the published Sidecar identity;
 8. submit a matching stop request;
 9. verify the packaged process exits and clears stale identity;

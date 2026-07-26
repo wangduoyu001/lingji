@@ -54,7 +54,7 @@ The smoke verifies:
 - PyInstaller onedir contract;
 - optional media provider exclusion;
 - Rust fixed-binary process manager;
-- authenticated health check;
+- authenticated runtime liveness check;
 - bounded startup attempts;
 - external-service stop/restart refusal;
 - absence of general JavaScript shell execution;
@@ -81,7 +81,7 @@ The Windows release workflow performs a real executable test:
 PyInstaller build
 -> launch lingji-core.exe
 -> wait for token and sidecar-state.json
--> GET /api/health with X-LingJi-Token
+-> GET /api/runtime/ping with X-LingJi-Token
 -> verify HTTP 200
 -> write matching sidecar-stop-request.json
 -> verify process exits
@@ -129,7 +129,7 @@ React / TypeScript / Vite build
 Tauri Rust cargo check/test
 PyInstaller onedir build
 packaged executable config check
-authenticated 8766 health check
+authenticated 8766 runtime liveness check
 managed stop request check
 Tauri Sidecar bundle
 NSIS installer build
@@ -162,7 +162,7 @@ Obsidian plugin smoke
 General JS shell permission: no
 Arbitrary release executable command: no
 Loopback-only control API: yes
-Authenticated health check: yes
+Authenticated runtime liveness check: yes
 External process stop/restart: refused
 Owner data outside install directory: yes
 Explicit Vault preserved: yes
@@ -225,6 +225,7 @@ Installed Desktop starts: PASS
 Packaged lingji-core.exe starts automatically: PASS
 127.0.0.1:8766 listens: PASS
 Authenticated /api/health returns HTTP 200: PASS
+Authenticated /api/runtime/ping returns HTTP 200: PASS
 Matching sidecar stop request clears process/state/port: PASS
 Silent uninstall preserves owner data: PASS
 Reinstall after uninstall: PASS
@@ -271,7 +272,7 @@ Workflow fix validated locally:
 
 - install `requirements-test.txt` before the packaged runtime Python tests;
 - explicitly fail after any non-zero native command exit;
-- use `curl.exe --fail --max-time 2` for the packaged `/api/health` probe;
+- use `curl.exe --fail --max-time 2` for the packaged `/api/runtime/ping` probe;
 - extend the health polling window from 60 seconds to 90 seconds;
 - emit process, token, state-file and port diagnostics before throwing.
 
@@ -298,11 +299,13 @@ Local packaged executable acceptance:
 ```text
 Detached lingji-core.exe launch: PASS
 Token file and sidecar-state.json publication: PASS
-GET http://127.0.0.1:8766/api/health with X-LingJi-Token: PASS, HTTP 200
+GET http://127.0.0.1:8766/api/runtime/ping with X-LingJi-Token: PASS, HTTP 200
 Matching sidecar-stop-request.json: PASS
 sidecar-state.json cleanup: PASS
 ```
 
-The observed health payload remained `degraded` because optional local
-providers are unavailable in the isolated workspace; this is not a packaged
-runtime startup, authentication or lifecycle failure.
+The CI failure was caused by using full startup health as the lifecycle probe:
+`/api/health` may wait for optional provider checks such as Ollama, while the
+Rust manager and release workflow need only a fast authenticated liveness
+answer. Full `/api/health` remains the owner-visible diagnostic endpoint and
+may still return `degraded` when optional local providers are unavailable.

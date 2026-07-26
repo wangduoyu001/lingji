@@ -95,6 +95,7 @@ for (const token of [
 for (const token of [
   "Command::new(&binary)",
   "authenticated_health",
+  "/api/runtime/ping",
   "X-LingJi-Token",
   "STARTUP_ATTEMPTS",
   "spawn_blocking",

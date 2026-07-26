@@ -84,6 +84,12 @@ class ControlApiTests(unittest.TestCase):
     def test_token_is_required(self):
         self.assertEqual(self.client.get("/api/settings").status_code, 401)
         self.assertEqual(self.client.get("/api/vector/status").status_code, 401)
+        self.assertEqual(self.client.get("/api/runtime/ping").status_code, 401)
+
+    def test_runtime_ping_is_authenticated_and_lightweight(self):
+        response = self.client.get("/api/runtime/ping", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
 
     def test_settings_can_be_read_updated_and_reset(self):
         response = self.client.get("/api/settings", headers=self.headers)

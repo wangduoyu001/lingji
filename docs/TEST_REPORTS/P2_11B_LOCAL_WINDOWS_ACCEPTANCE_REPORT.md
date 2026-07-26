@@ -46,6 +46,7 @@ tests/test_packaged_control_api.py
 | NSIS cover install | `灵机_0.1.0_x64-setup.exe /S /D=E:\灵机` | PASS |
 | Installed desktop start | `E:\灵机\lingji-control-center.exe` | PASS |
 | Authenticated health | `GET http://127.0.0.1:8766/api/health` with owner token | PASS, HTTP 200 |
+| Authenticated runtime ping | `GET http://127.0.0.1:8766/api/runtime/ping` with owner token | PASS, HTTP 200 |
 | Managed stop cleanup | Stop desktop PID, write matching sidecar stop request | PASS; process, port, state file and stop request cleared |
 | Uninstall protection | `E:\灵机\uninstall.exe /S` | PASS; owner data retained |
 | Reinstall after uninstall | `灵机_0.1.0_x64-setup.exe /S /D=E:\灵机` | PASS |
@@ -80,6 +81,10 @@ The `degraded` health result is acceptable for this acceptance pass because
 the core service started, authenticated, and responded. The degraded checks
 were optional local capabilities such as ffmpeg/ffprobe/Ollama availability,
 not sidecar lifecycle failures.
+
+The Desktop runtime lifecycle uses `/api/runtime/ping` as the authenticated
+liveness probe. Full `/api/health` remains the owner-visible diagnostic report
+and may include slower optional-provider checks.
 
 ### Final conclusion
 

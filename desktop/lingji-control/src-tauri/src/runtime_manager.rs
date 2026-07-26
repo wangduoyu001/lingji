@@ -260,7 +260,7 @@ fn authenticated_health(root: &Path) -> bool {
     let _ = stream.set_read_timeout(Some(Duration::from_millis(650)));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(650)));
     let request = format!(
-        "GET /api/health HTTP/1.1\r\nHost: 127.0.0.1:{CONTROL_PORT}\r\nX-LingJi-Token: {token}\r\nConnection: close\r\n\r\n"
+        "GET /api/runtime/ping HTTP/1.1\r\nHost: 127.0.0.1:{CONTROL_PORT}\r\nX-LingJi-Token: {token}\r\nConnection: close\r\n\r\n"
     );
     if stream.write_all(request.as_bytes()).is_err() {
         return false;
