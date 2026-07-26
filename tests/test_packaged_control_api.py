@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from run_packaged_control_api import (
     configure_packaged_environment,
+    _ensure_standard_streams,
     install_runtime_lifecycle,
     main,
     packaged_runtime_contract,
@@ -149,3 +151,30 @@ def test_check_config_prints_json_without_starting_server(tmp_path: Path, capsys
     assert payload["host"] == "127.0.0.1"
     assert payload["port"] == 8766
     assert payload["mode"] == "packaged_sidecar"
+
+
+def test_check_config_writes_json_for_windowed_executable(tmp_path: Path):
+    output_path = tmp_path / "contract.json"
+
+    exit_code = main([
+        "--data-root", str(tmp_path / "LingJi"),
+        "--check-config",
+        "--check-config-output", str(output_path),
+    ])
+
+    assert exit_code == 0
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert payload["host"] == "127.0.0.1"
+    assert payload["port"] == 8766
+    assert payload["mode"] == "packaged_sidecar"
+
+
+def test_windowed_runtime_receives_devnull_standard_streams():
+    streams = SimpleNamespace(stdout=None, stderr=None)
+
+    _ensure_standard_streams(streams)
+
+    assert streams.stdout is not None
+    assert streams.stderr is not None
+    streams.stdout.close()
+    streams.stderr.close()

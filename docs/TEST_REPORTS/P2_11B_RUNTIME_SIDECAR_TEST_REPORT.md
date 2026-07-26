@@ -174,8 +174,78 @@ Production memory mutation in CI: no
 second_brain changes: no
 ```
 
+## 2026-07-26 Local NSIS Reinstall Closeout
+
+The final owner-machine acceptance pass was executed in the existing local
+repository and install path:
+
+```text
+Repository: D:\LingJi-Validation\P2-11B\lingji
+Install directory: E:\灵机
+Owner data directory: C:\Users\Administrator\AppData\Local\LingJi
+```
+
+Additional fixes validated in this pass:
+
+- the PyInstaller sidecar is built with `--windowed`;
+- `--check-config-output` validates the windowed executable contract without
+  relying on console stdout;
+- missing `stdout`/`stderr` streams are mapped to `os.devnull` before Uvicorn
+  startup;
+- `LINGJI_SIDECAR_PYTHON` allows the release command to use the prepared
+  Python 3.12 sidecar environment instead of the system default Python.
+
+Local commands and results:
+
+```text
+.venv-p2-11b\Scripts\python.exe -m pytest tests/test_packaged_control_api.py -v
+PASS, 10/10
+
+cd desktop\lingji-control && npm run test:smoke
+PASS, 18/18
+
+cd desktop\lingji-control && npm run build
+PASS
+
+cargo test --manifest-path src-tauri\Cargo.toml --target x86_64-pc-windows-msvc
+PASS, 3/3
+
+cargo check --manifest-path src-tauri\Cargo.toml --target x86_64-pc-windows-msvc
+PASS
+
+npm run release:windows
+PASS with LINGJI_SIDECAR_PYTHON=.venv-p2-11b\Scripts\python.exe
+```
+
+Installed runtime acceptance:
+
+```text
+NSIS cover install to E:\灵机: PASS
+Installed Desktop starts: PASS
+Packaged lingji-core.exe starts automatically: PASS
+127.0.0.1:8766 listens: PASS
+Authenticated /api/health returns HTTP 200: PASS
+Matching sidecar stop request clears process/state/port: PASS
+Silent uninstall preserves owner data: PASS
+Reinstall after uninstall: PASS
+```
+
+Artifact hashes:
+
+```text
+NSIS installer:
+2EA2A047480F19D94AD47EC0C0473F06F67BD06E27EC04CC0E37FE42AB075685
+
+Installed sidecar executable:
+F8BEC92FEB0F5238A542140DFD99E522D3B73F4F9E9FE5ED560C1FFE3415487E
+```
+
+The installed health endpoint returned `degraded` because optional local
+capabilities such as ffmpeg/ffprobe/Ollama were unavailable. This was not a
+startup, authentication, or lifecycle failure.
+
 ## Status
 
 ```text
-TESTS_ADDED_AWAITING_GITHUB_ACTIONS
+LOCAL_VALIDATED_AWAITING_GITHUB_CI_ON_FINAL_FIX_COMMIT
 ```

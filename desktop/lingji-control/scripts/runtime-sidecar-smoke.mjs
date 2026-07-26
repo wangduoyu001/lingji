@@ -43,6 +43,7 @@ for (const token of [
   "--data-root",
   "--check-config",
   "LINGJI_OWNER_DATA_ROOT",
+  "_ensure_standard_streams",
   "LINGJI_WORKSPACE_ROOT",
   "CONTROL_API_HOST",
   "127.0.0.1",
@@ -63,10 +64,15 @@ assert.match(pythonTests, /mismatched_stop_request/);
 for (const token of [
   "PyInstaller",
   "--onedir",
+  "--windowed",
   "--contents-directory",
   "lingji_core_lib",
   "lingji-core-$TargetTriple.exe",
   "--check-config",
+  "--check-config-output",
+  "LINGJI_SIDECAR_PYTHON",
+  "Start-Process",
+  "-Wait",
   "optional_media_providers_bundled = $false",
   "Get-FileHash",
 ]) assert.ok(buildScript.includes(token), `Sidecar builder is missing ${token}`);

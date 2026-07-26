@@ -15,6 +15,11 @@ $specRoot = Join-Path $buildRoot "spec"
 $tauriBinaries = Join-Path $repoRoot "desktop/lingji-control/src-tauri/binaries"
 $preparedExe = Join-Path $tauriBinaries "lingji-core-$TargetTriple.exe"
 $preparedRuntime = Join-Path $tauriBinaries "lingji_core_lib"
+$pythonExe = if ($env:LINGJI_SIDECAR_PYTHON) {
+  $env:LINGJI_SIDECAR_PYTHON
+} else {
+  "python"
+}
 
 foreach ($path in @($buildRoot, $tauriBinaries)) {
   New-Item -ItemType Directory -Path $path -Force | Out-Null
@@ -29,6 +34,7 @@ $arguments = @(
   "--noconfirm",
   "--clean",
   "--onedir",
+  "--windowed",
   "--name", "lingji-core",
   "--contents-directory", "lingji_core_lib",
   "--distpath", $distRoot,
@@ -46,7 +52,7 @@ $arguments = @(
 )
 
 Write-Host "Building LingJi runtime sidecar with PyInstaller..."
-& python @arguments
+& $pythonExe @arguments
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
 
 $bundleRoot = Join-Path $distRoot "lingji-core"
@@ -61,9 +67,15 @@ Copy-Item $sourceRuntime $preparedRuntime -Recurse -Force
 $checkRoot = Join-Path $buildRoot "contract-check"
 if (Test-Path $checkRoot) { Remove-Item $checkRoot -Recurse -Force }
 New-Item -ItemType Directory -Path $checkRoot -Force | Out-Null
-$contractJson = & $sourceExe --data-root $checkRoot --check-config
-if ($LASTEXITCODE -ne 0) { throw "Packaged sidecar contract check failed" }
-$contract = $contractJson | ConvertFrom-Json
+$contractPath = Join-Path $checkRoot "contract.json"
+$contractCheck = Start-Process -FilePath $sourceExe -ArgumentList @(
+  "--data-root", $checkRoot,
+  "--check-config",
+  "--check-config-output", $contractPath
+) -PassThru -Wait
+if ($contractCheck.ExitCode -ne 0) { throw "Packaged sidecar contract check failed" }
+if (-not (Test-Path $contractPath)) { throw "Packaged sidecar did not write a contract file" }
+$contract = Get-Content $contractPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($contract.mode -ne "packaged_sidecar") { throw "Unexpected packaged runtime mode" }
 if ($contract.host -ne "127.0.0.1") { throw "Packaged sidecar is not loopback-only" }
 if ($contract.owner_data_outside_install_dir -ne $true) { throw "Owner-data boundary is missing" }

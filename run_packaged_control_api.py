@@ -6,6 +6,7 @@ import json
 import os
 import secrets
 import signal
+import sys
 import threading
 import time
 from datetime import datetime, timezone
@@ -57,6 +58,14 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def _ensure_standard_streams(streams: Any = sys) -> None:
+    """Give Uvicorn writable streams when a windowed executable has none."""
+
+    for name in ("stdout", "stderr"):
+        if getattr(streams, name, None) is None:
+            setattr(streams, name, open(os.devnull, "w", encoding="utf-8"))
 
 
 def configure_packaged_environment(
@@ -223,6 +232,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the packaged runtime contract and exit without starting 8766",
     )
+    parser.add_argument(
+        "--check-config-output",
+        help="Optional JSON output path for --check-config, used by windowed build validation",
+    )
     return parser
 
 
@@ -230,11 +243,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     contract = packaged_runtime_contract(args.data_root, host=args.host, port=args.port)
     if args.check_config:
-        print(json.dumps(contract, ensure_ascii=False, sort_keys=True))
+        contract_json = json.dumps(contract, ensure_ascii=False, sort_keys=True)
+        if args.check_config_output:
+            output_path = Path(args.check_config_output).expanduser().resolve(strict=False)
+            _write_json_atomic(output_path, contract)
+        else:
+            print(contract_json)
         return 0
 
     configure_packaged_environment(args.data_root, host=args.host, port=args.port)
     install_runtime_lifecycle(args.data_root, host=args.host, port=args.port)
+    _ensure_standard_streams()
     from run_control_api import main as run_control_api
 
     run_control_api()
