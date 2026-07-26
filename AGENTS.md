@@ -1,6 +1,6 @@
 # LingJi（灵机）仓库执行入口
 
-> 正式主线：`feature/second-brain-memory`  
+> 正式主线：`master`  
 > 架构权威：`docs/ARCHITECTURE.md`  
 > 当前状态：`docs/PROJECT_STATUS.md`  
 > 代码导航：`docs/MODULES/CODE_MAP.md`  
@@ -93,8 +93,8 @@ Qdrant
 ```
 
 - `focused`：开发过程中运行模块测试。
-- `full`：最终合并前在最终树上执行一次完整门禁。
-- `release`：只有 Sidecar、Tauri、安装包或发布链路变化时执行。
+- `full`：最终合并前在最终树上执行一次完整本机门禁。
+- `release`：在 `full` 基础上构建并整理 Windows Sidecar/Tauri/NSIS 发布产物；正式发布仍以 GitHub Windows release workflow 和真机安装验收为准。
 - 成功时只读取摘要；失败时读取失败项和对应日志，不把完整成功日志送入模型上下文。
 - 不得删除测试、降低断言、把失败改成 skip、隐藏失败或把未执行测试写成通过。
 - 未完成真实本机验证时，只能标记为“代码完成，待本机验收”。
