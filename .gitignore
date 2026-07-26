@@ -28,6 +28,7 @@ data/inbox/codex_tasks/*.json
 logs/second_brain/
 data/acceptance/
 output/desktop-validation/
+output/validation/
 
 # Windows
 Thumbs.db
