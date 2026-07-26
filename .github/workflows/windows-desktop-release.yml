@@ -17,7 +17,7 @@ on:
       - "desktop-v*"
   pull_request:
     branches:
-      - feature/second-brain-memory
+      - master
     paths:
       - "desktop/lingji-control/**"
       - "src/**"
