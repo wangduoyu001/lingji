@@ -104,6 +104,9 @@ jobs:
       - name: Install exact frontend dependencies
         run: npm ci
 
+      - name: Run Desktop smoke tests
+        run: npm run test:smoke
+
       - name: Build Desktop frontend for Tauri context
         run: npm run build
 

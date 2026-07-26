@@ -1,7 +1,8 @@
 # DEVELOPMENT_RULES.md — LingJi Development Rules
 
-> Updated: 2026-07-20
-> Architecture authority: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
+> Updated: 2026-07-26
+> Architecture authority: `docs/ARCHITECTURE.md`
+> Current-state authority: `docs/PROJECT_STATUS.md`
 
 ## 1. Branch and Environment Isolation
 
@@ -57,21 +58,20 @@ Rules:
 4. Qdrant and `lingji_memory.db` must remain rebuildable.
 5. Compatibility SQLite data may be read during migration but must not become the final truth source.
 
-## 4. Development Understanding Requirement
+## 4. Minimal Context Requirement
 
-Before code changes:
+Before code changes, read only the smallest evidence set needed for the task:
 
-1. confirm branch, remote HEAD and workspace state
-2. read `AGENTS.md`, `AI_CONTEXT.md`, `PROJECT_STATUS.md`, `ARCHITECTURE.md` and the relevant module plan
-3. locate the real class/function entry point
-4. identify the data authority and whether the target is mainline or compatibility code
-5. confirm API registration and Tauri gateway
-6. confirm storage/workspace boundaries
-7. confirm test files and the required Markdown report
+1. confirm branch, upstream, recent commit and workspace status
+2. read the relevant section of `docs/PROJECT_STATUS.md`
+3. read the latest relevant section of `docs/CHANGELOG.md`
+4. inspect the directly affected workflow, build or test entry
+5. locate the real class/function entry point, direct callers and focused tests
+6. confirm data authority, API registration, storage boundary and primary/compatibility ownership
 
-Do not create files based only on feature names or assumptions.
+Do not repeatedly read all of `AGENTS.md`, `docs/AI_CONTEXT.md`, `docs/PROJECT_STATUS.md`, `docs/ARCHITECTURE.md` or this file. Read the governing file once, keep a short execution-constraint summary, and use targeted keyword or section lookup when a later decision depends on a specific rule.
 
-Prefer current code maps and verified analysis over repeated full-repository scanning, but re-check code when documents conflict.
+Do not perform an untargeted whole-repository scan. Do not create files based only on feature names or assumptions. Prefer current code maps and verified evidence, but re-check code when documents conflict.
 
 ## 5. Research Before Development
 
@@ -79,10 +79,12 @@ For design and development work:
 
 1. understand the user requirement and current code
 2. review relevant official documentation and reliable implementations when the technology is external or may have changed
-3. produce a detailed implementation plan
+3. produce a bounded implementation plan
 4. implement with minimal, maintainable code
 5. avoid repeated broad refactors
-6. create or update a Markdown report after each completed feature or substantial tested code section
+6. update an existing authoritative document or test report after a substantial tested change
+
+A new Markdown file is allowed only when no existing authority can carry the information and the new file has a unique, durable responsibility. Do not create duplicate optimization summaries, final summaries, supplemental notes or renamed copies of existing documents.
 
 ## 6. Task Routing
 
@@ -125,20 +127,15 @@ Target port map:
 8766 = authenticated Local Control API and Tauri gateway
 8767 = optional MCP Streamable HTTP
 stdio = default local MCP transport
+8765 = compatibility API during migration
 ```
-
-Current transition warning:
-
-- `second_brain` FastAPI currently uses `8765`
-- `src` MCP HTTP currently defaults to `8765`
-- the conflict is unresolved until code and tests change it
 
 Rules:
 
 1. Tauri must call only the Local Control API on `8766`.
 2. Do not add direct Tauri calls to `8765`.
-3. Do not assume an HTTP memory-context endpoint is available merely because the legacy API is running.
-4. Prefer stdio MCP for local Codex integration until the HTTP port change is implemented and tested.
+3. New primary product APIs must not be added to the compatibility API.
+4. Prefer stdio MCP for local Codex integration unless HTTP transport is explicitly required and tested.
 
 ## 9. Unified Desktop UI and Visibility
 
@@ -183,30 +180,51 @@ Rules:
 5. Keep layers clear: source/data, derived indexes, services/gateway, control/operations, UI.
 6. Avoid embedding business logic in API route handlers or React components.
 7. Do not duplicate SQL, ranking or status calculations across endpoints.
+8. Replace an obsolete implementation or document instead of copying it into a new parallel path.
 
 ## 13. Testing
 
-After code changes:
+Run focused tests first. Before a merge, use the existing authoritative gates once on the final tree:
 
-1. run relevant focused tests first
-2. run the existing Python suite when feasible
-3. run migration/provider contract tests for memory changes
-4. run Playwright/Tauri smoke or E2E tests for UI work
-5. test Qdrant available and unavailable modes
-6. test production/acceptance isolation
-7. test with compatibility runtime disabled before retirement claims
+```text
+Python full suite:
+python -m pytest -q --tb=short
 
-Never delete tests, reduce assertions, hide failures or report unexecuted tests as passed.
+Python compile gate:
+python -m compileall -q main.py run_service.py run_control_api.py run_mcp_server.py run_extraction_worker.py src second_brain tests scripts
+
+Desktop smoke:
+cd desktop/lingji-control
+npm run test:smoke
+
+Desktop build:
+npm run build
+
+Tauri Rust:
+cargo test --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc
+
+Obsidian plugin:
+node --check obsidian-plugin/lingji-control/main.js
+```
+
+`npm run build` is a build-only command. Smoke tests must be invoked explicitly so CI and local validation do not accidentally execute the same suite twice.
+
+Also test Qdrant available/unavailable modes, production/acceptance isolation and compatibility-runtime-disabled behavior when the changed module depends on those contracts.
+
+Never delete tests, reduce assertions, hide failures, rerun unchanged full gates without cause, or report unexecuted tests as passed.
 
 ## 14. Documentation and Delivery
 
-Each substantial task must update the relevant documents:
+One fact has one detailed authority:
 
-- architecture or module plan
-- code map when entry points change
-- project status
-- changelog or test report
-- migration matrix when compatibility behavior changes
+- `docs/ARCHITECTURE.md`: stable architecture, boundaries and core data flow
+- `docs/PROJECT_STATUS.md`: current stage, completion state, risks, blockers and next step
+- `docs/CHANGELOG.md`: user-facing or release-significant changes
+- `docs/TEST_REPORTS/`: commands, environment, results, limitations and validated commit
+- `docs/MODULES/CODE_MAP.md`: code entry points and ownership only; do not duplicate current status or CI history
+- `docs/DEVELOPMENT_RULES.md`: durable development and governance rules
+
+Update the existing authority instead of creating a parallel document. Historical module plans and implementation reports may remain as evidence but must not override the current architecture or project status.
 
 Final task output must distinguish:
 

@@ -2,18 +2,6 @@ name: P0 Windows Gate
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - work/p0-engineering-hygiene
-    paths:
-      - "requirements*.txt"
-      - "constraints/**"
-      - "src/**"
-      - "second_brain/**"
-      - "tests/**"
-      - "scripts/**"
-      - "desktop/lingji-control/**"
-      - ".github/workflows/p0-windows-gate.yml"
   pull_request:
     branches:
       - feature/second-brain-memory

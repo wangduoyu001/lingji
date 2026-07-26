@@ -1,52 +1,63 @@
-# PROJECT_STATUS.md — LingJi 项目实时状态
+# PROJECT_STATUS.md — LingJi 当前状态
 
-> Updated（更新时间）: 2026-07-26
-> Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Formal Head（正式提交）: `7e53fc29fb308b73031b39f9a2a000122653674f`
-> P2-08 Status: `MERGED_AND_VALIDATED`  
-> P2-09 Status: `MERGED_AND_VALIDATED`  
-> P2-10A Status: `MERGED_AND_CI_VALIDATED`
-> P2-11B Status: `MERGED_AND_CI_VALIDATED`
-> P2-12A Status: `MERGED_AND_CI_VALIDATED`
+> Updated: 2026-07-26
+> Formal branch: `feature/second-brain-memory`
+> Formal head: `363a2ada2bc2eb84489a721e901940cab441bb4b`
+> Architecture: `docs/ARCHITECTURE.md`
+> Code entry points: `docs/MODULES/CODE_MAP.md`
+> Validation evidence: `docs/TEST_REPORTS/`
 
 ## 1. 当前结论
 
-P2-08 Auto Review SHADOW、P2-09 Runtime/Desktop Reliability、P2-10A Owner-visible Settings Governance Core、P2-11B Packaged Python runtime Sidecar manager 与 P2-12A Observation-first Desktop UI 已进入正式功能分支。
+LingJi 的第二大脑主线、Windows 打包 Sidecar 和 Observation-first Desktop UI 已进入正式功能分支。
 
 ```text
-PR #24  P2-09A Runtime Truth                         MERGED
-PR #25  P2-09B Canonical Idempotency + MCP Queue     MERGED
-PR #26  P2-09C Desktop Polling Data Layer             MERGED
-PR #27  P2-08A Deterministic Auto Review Core         MERGED
-PR #28  P2-08B Local AI Reviewer + SHADOW API         MERGED
-PR #29  P2-09D Desktop UX + SHADOW Dashboard          MERGED
-PR #30  Combined Integration Verification             MERGED
-PR #31  P2-08/P2-09 Documentation Sync                MERGED
-PR #32  P2-08/P2-09 Local Acceptance Closeout         MERGED
-PR #33  P2-10A Settings Governance Core               MERGED
-PR #47  P2-11B Runtime Sidecar Manager                MERGED
-PR #48  P2-12A Observation-first Desktop UI           MERGED
+PR #47  P2-11B Packaged Runtime Sidecar Manager   MERGED_AND_VALIDATED
+PR #48  P2-12A Observation-first Desktop UI       MERGED_AND_VALIDATED
 ```
 
-P2-11B/P2-12A 最终门禁：
+关键合并提交：
 
 ```text
-PR #47 merge commit: 6720d0cd76c8ff9e9bc38ef2df52793c0ab0f4c5
-PR #48 merge commit: 7e53fc29fb308b73031b39f9a2a000122653674f
-PR #47 GitHub CI: SUCCESS
-PR #48 GitHub CI: SUCCESS
-Python full unittest: SUCCESS
-compileall: SUCCESS
-Desktop smoke: SUCCESS
-React/Vite build: SUCCESS
-Tauri Rust tests: SUCCESS
-Obsidian plugin smoke: SUCCESS
-Packaged runtime sidecar acceptance: SUCCESS
+PR #47: 6720d0cd76c8ff9e9bc38ef2df52793c0ab0f4c5
+PR #48: 7e53fc29fb308b73031b39f9a2a000122653674f
 ```
 
-P2-11B 完成 packaged runtime sidecar liveness 与 release gate 加固；P2-12A 完成 observation-first Desktop UI。最终验收记录见 `docs/TEST_REPORTS/PR47_PR48_FINAL_ACCEPTANCE_REPORT.md`。
+最终验收事实来源：
 
-## 2. 产品与代码主线
+```text
+docs/TEST_REPORTS/PR47_PR48_FINAL_ACCEPTANCE_REPORT.md
+docs/TEST_REPORTS/P2_11B_LOCAL_WINDOWS_ACCEPTANCE_REPORT.md
+docs/TEST_REPORTS/P2_11B_RUNTIME_SIDECAR_TEST_REPORT.md
+docs/TEST_REPORTS/P2_12A_OBSERVATION_FIRST_DESKTOP_UI_TEST_REPORT.md
+```
+
+## 2. 当前治理任务
+
+状态：`IN_PROGRESS`
+
+分支：
+
+```text
+work/repository-governance-cleanup
+```
+
+目标：
+
+- 删除确定的重复执行和过期触发入口。
+- 让架构、项目状态、代码地图、开发规则和测试证据各自只维护一种事实。
+- 不新增总结文档，不复制现有实现，不进行无证据的大重构。
+- 保持 P2-11B/P2-12A 行为和安全边界不变。
+
+完成条件：
+
+- 定向 Desktop smoke/build 通过。
+- Windows Sidecar release workflow 通过。
+- Python、Desktop、Rust 和插件完整门禁通过。
+- CI 必需检查全部通过。
+- 合并后更新本页的正式 head 与治理状态。
+
+## 3. 产品与代码主线
 
 ```text
 src/
@@ -62,12 +73,12 @@ second_brain/
 规则：
 
 - 新正式能力进入 `src/`。
-- Desktop 只通过认证的8766 Local Control API访问后端。
+- Desktop 只通过认证的 8766 Local Control API 访问后端。
 - `second_brain/` 不接收新的正式产品能力。
-- Obsidian CLI正式实现位于 `src/obsidian/`。
-- MCP默认使用stdio；可选HTTP使用8767。
+- Obsidian CLI 正式实现位于 `src/obsidian/`。
+- MCP 默认使用 stdio；可选 HTTP 使用 8767。
 
-## 3. 数据权威
+## 4. 数据权威
 
 ```text
 Obsidian Vault + Git
@@ -77,261 +88,59 @@ storage/raw
 = 原始导入材料
 
 lingji_state.db
-= 任务、Extraction Queue、Runtime State、Audit Event
+= 任务、队列、运行状态与审计事件
 
 lingji_memory.db
-= 可重建 Lexical/Metadata Index + Structured Read Model
+= 可重建 Lexical/Metadata Index 与 Structured Read Model
 
 Qdrant
 = 可重建 Semantic Index
 ```
 
-SQLite、Qdrant、向量和 Structured Read Model 均为派生数据，不得取代 Obsidian Vault + Git 的正式知识权威。
+SQLite 索引、Qdrant 和 Structured Read Model 均为派生数据，不得取代 Obsidian Vault + Git 的正式知识权威。
 
-## 4. 已完成阶段
+## 5. 已验证能力
 
 ```text
-P0 Workspace/Port Contract                         MERGED_AND_VALIDATED
-P0 Engineering Hygiene                            MERGED_AND_VALIDATED
-P1 Unified Semantic Memory                        MERGED_AND_VALIDATED
-P2-01 Vector Center                               MERGED_AND_VALIDATED
-P2-02 Collection Migration                        MERGED_AND_VALIDATED
-P2-03 Structured Read Model                       MERGED_AND_VALIDATED
-P2-03B Structured Ingestion Wiring                MERGED_AND_VALIDATED
-P2-03C Capture Sources Foundation                 MERGED_AND_VALIDATED
-P2-04 Memory Inspector UI                         MERGED_AND_VALIDATED
-P2-05 Manual Capture Center                       MERGED_AND_VALIDATED
-P2-06 Obsidian CLI Formal Migration               MERGED_AND_VALIDATED
-P2-07 Codex-first Local Memory Loop                MERGED_AND_VALIDATED
-P2-08 Auto Review SHADOW Layer                    MERGED_AND_VALIDATED
-P2-09 Runtime/Desktop Reliability                 MERGED_AND_VALIDATED
-P2-10A Owner-visible Settings Governance Core     MERGED_AND_CI_VALIDATED
+P0 Workspace / Port / Engineering Hygiene
+P1 Unified Semantic Memory
+P2 Vector Center / Structured Read Model / Capture / Inspector
+P2 Obsidian CLI Formal Migration
+P2 Codex-first Local Memory Loop
+P2 Auto Review SHADOW
+P2 Runtime/Desktop Reliability
+P2 Owner-visible Settings Governance
+P2 Windows Packaged Runtime Sidecar
+P2 Observation-first Desktop UI
 ```
 
-## 5. P2-10A 设置治理结论
+当前安全边界：
 
-后端正式权威：
+- Auto Review 仅 OFF/SHADOW，ACTIVE 继续拒绝。
+- 不自动批准、拒绝、删除或覆盖正式记忆。
+- 不自动删除或重建生产 Qdrant Collection。
+- 不自动下载大型模型。
+- 默认只绑定 `127.0.0.1`。
+- Desktop 不直连数据库、Qdrant、Ollama 或兼容 API。
+- Windows 打包版尚不宣称自动更新或代码签名。
+
+## 6. 当前风险与阻塞
 
 ```text
-src/control/runtime_settings.py
-= 兼容持久化与基础类型校验
-
-src/control/settings_governance.py::OwnerSettingsRegistry
-= 推荐值、影响、风险、能力状态、预览与确认合同
-
-src/control/settings_catalog.py::CompleteOwnerSettingsRegistry
-= 当前完整主人可见设置目录
-
-src/control/governed_service.py::GovernedLocalControlService
-= 正式8766运行服务
+P0 blocking defects: none recorded after PR #47/#48 acceptance
+Updater: not implemented
+Code signing: not implemented
+second_brain retirement: not eligible until migration parity and rollback conditions pass
+Repository governance cleanup: awaiting CI and merge
 ```
 
-Desktop 不再复制：
-
-- 设置默认值。
-- 分组标签。
-- 推荐值。
-- 风险等级。
-- 性能、存储、费用和隐私影响。
-- Provider可用性原因。
-
-这些内容全部由认证的 `/api/settings` 返回。
-
-## 6. 设置变更流程
-
-正式流程：
+## 7. 下一步
 
 ```text
-Desktop Draft
--> 只收集 dirty values
--> POST /api/settings/preview
--> 后端类型与跨字段校验
--> 返回当前值/目标值/默认值/推荐值/影响/风险
--> 高风险变更要求主人确认
--> POST /api/settings/commit
--> 写入既有 runtime_settings.json
--> 写入既有 Audit Event
-```
-
-新增认证接口：
-
-```text
-POST /api/settings/preview
-POST /api/settings/commit
-```
-
-既有接口继续保留：
-
-```text
-GET  /api/settings
-PATCH /api/settings
-POST /api/settings/reset
-```
-
-正式 Desktop 高风险流程不能绕过 Preview 与 Confirmation。
-
-## 7. 高风险设置合同
-
-当前高风险示例：
-
-- 开启自动清理。
-- 修改冷存储路径。
-- 修改明确的 Obsidian Vault 路径。
-
-高风险提交要求后端确认短语：
-
-```text
-CONFIRM_HIGH_RISK_SETTINGS
-```
-
-该短语只是交互确认合同，不是密钥，也不能替代8766 Token。
-
-## 8. 跨字段与能力校验
-
-当前阻止：
-
-- 自动转写开启但 ASR Provider 为 `off`。
-- 自动 OCR 开启但 OCR Provider 为 `off`。
-- 镜头检测开启但 Scene Provider 为 `off`。
-- 冷存储开启但未选择目录。
-
-能力不可用时设置仍可见，并返回：
-
-```text
-availability_state
-disabled_reason
-optional_requirements
-```
-
-加载设置页不会为了显示状态而执行耗时的外部 Obsidian CLI 命令。
-
-## 9. Auto Review 设置治理
-
-P2-08新增设置已进入主人可见 Registry：
-
-```text
-auto_review_mode
-auto_review_ai_enabled
-auto_review_timeout_seconds
-```
-
-`auto_review_mode` 只允许：
-
-```text
-OFF
-SHADOW
-```
-
-ACTIVE不进入选项。若环境配置错误写成ACTIVE，设置目录回落OFF；执行层仍继续拒绝ACTIVE。
-
-## 10. Desktop 设置代码结构
-
-```text
-desktop/lingji-control/src/pages/settingsTypes.ts
-= 后端合同类型
-
-desktop/lingji-control/src/pages/settingsApi.ts
-= API客户端
-
-desktop/lingji-control/src/pages/useSettingsController.ts
-= 草稿、预览、确认、提交、重置和离开保护
-
-desktop/lingji-control/src/pages/SettingsPage.tsx
-= 搜索、筛选和页面编排
-
-desktop/lingji-control/src/components/settings/SettingField.tsx
-= 单个设置项渲染
-```
-
-已实现：
-
-- 全局搜索。
-- 只显示已修改。
-- 只看高风险。
-- 只看不可用。
-- 单项恢复默认。
-- 分组恢复默认。
-- 未保存草稿离开提示。
-- 手动重新加载确认。
-- 重置单项时保留其他未保存草稿。
-- 只提交真实变化项。
-
-## 11. P2-09 Runtime Truth
-
-- Brain Status 不再把未知GPU利用率伪装成0。
-- 静态硬件信息与动态遥测分离。
-- 动态遥测不可用时返回 `null`、`unavailable`、`stale` 与错误摘要。
-- Embedding默认主模型为 `bge-m3`，备用为 `nomic-embed-text`。
-- Qdrant维度不一致时阻止写入并标记 `rebuild_required`。
-
-## 12. P2-08 Auto Review SHADOW
-
-模式合同：
-
-```text
-OFF
-SHADOW
-ACTIVE  # 仅枚举存在，当前实现拒绝
-```
-
-Auto Review不得：
-
-- 伪造 `owner_confirmed=True`。
-- 修改候选状态。
-- 写入Core Memory。
-- 写入Obsidian。
-- 写入Qdrant。
-- 执行批准、拒绝、删除或合并。
-
-## 13. 审核与写入权威
-
-```text
-MemoryReviewService
-= 主人审核入口
-
-MemoryLifecycleService
-= 唯一正式生命周期写入器
-
-Auto Review
-= 只生成SHADOW决策和Audit Event
-```
-
-## 14. 安全状态
-
-```text
-自动 Qdrant Collection 删除/重建: NO
-自动模型下载: NO
-数据库 Schema 修改: NO
-新数据库: NO
-第二套配置文件: NO
-第二套队列: NO
-第二套生命周期: NO
-第二套审计数据库: NO
-rebase: NO
-force push: NO
-master 修改: NO
-```
-
-## 15. 关键文档
-
-```text
-docs/MODULES/P2_10A_SETTINGS_GOVERNANCE_CORE.md
-docs/TEST_REPORTS/P2_10A_SETTINGS_GOVERNANCE_TEST_REPORT.md
-docs/MODULES/P2_09A_RUNTIME_TRUTH.md
-docs/MODULES/P2_09B_CANONICAL_IDEMPOTENCY.md
-docs/MODULES/P2_09C_DESKTOP_DATA_LAYER.md
-docs/MODULES/P2_09D_DESKTOP_UX_AUTO_REVIEW.md
-docs/MODULES/P2_08A_AUTO_REVIEW_CORE.md
-docs/MODULES/P2_08B_LOCAL_AI_REVIEWER.md
-docs/MODULES/P2_08B_SHADOW_API.md
-```
-
-## 16. 下一步
-
-```text
-P2-10B Desktop UI / Information Architecture Refinement
--> 基于稳定设置合同设计页面层级
--> 重做总览、设置中心和全局状态语义
--> 不复制后端默认值或风险规则
--> 不开发ACTIVE
+完成 repository governance cleanup
+-> 运行最终完整门禁
+-> 合并治理分支
+-> 更新正式 head
+-> 冻结稳定基线
+-> 再选择下一项产品开发任务
 ```

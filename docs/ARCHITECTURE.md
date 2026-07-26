@@ -1,9 +1,10 @@
 # ARCHITECTURE.md — LingJi Unified Architecture
 
-> Updated: 2026-07-21
+> Updated: 2026-07-26
 > Status: Active architecture contract
 > Formal branch: `feature/second-brain-memory`
-> Authoritative plan: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
+> Primary authority: this file
+> Historical migration detail: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
 
 ## 1. Product Definition
 
@@ -178,70 +179,3 @@ Before new product stages depend on a package or startup entry:
 - versions must be reproducible
 - clean-environment installation must be validated
 - startup tests must verify behavior, not compare whole files byte-for-byte
-- test count changes must be explained in the stage report
-- targeted stage gates and full-repository results must be reported separately
-
-## 10. Obsidian CLI Migration Contract
-
-The existing Obsidian CLI implementation in `second_brain/` is compatibility code.
-
-Target ownership:
-
-```text
-src/obsidian/
-  -> CLI discovery and configuration
-  -> typed command runner
-  -> capability/status service
-  -> Local Control API integration
-  -> Desktop settings and status
-```
-
-Current migration step is contract registration and path cleanup only. Full command migration follows the Manual Capture Center and stable 8766 API boundary.
-
-No new primary Obsidian CLI features may be added under `second_brain/`.
-
-## 11. Migration Rules
-
-1. Freeze new duplicate development in `second_brain/`.
-2. Keep Obsidian Vault + Git as permanent authority.
-3. Treat SQLite, Qdrant and read models as rebuildable derivatives.
-4. Complete engineering hygiene before P2-05 implementation branches begin.
-5. Build the Manual Capture Center on existing Capture, Extraction and Queue contracts.
-6. Migrate Obsidian CLI into `src` after the Capture Center boundary is stable.
-7. Add Schema v2 and Evidence Layer only after current read models and UI are stable.
-8. Add conflict review and knowledge update only after Evidence, Revision and owner-review contracts exist.
-9. Preserve read-only compatibility and rollback evidence before retiring legacy runtime.
-
-Direct deletion of `second_brain/` or its database is forbidden before parity, export and rollback checks pass.
-
-## 12. Current Execution Order
-
-```text
-P0 Engineering Hygiene
-  -> path cleanup
-  -> dependency and clean-install baseline
-  -> startup test repair
-  -> documentation authority alignment
-  -> Obsidian CLI migration registration
-
-P2-05 Manual Capture Center
-  -> Capture Control API
-  -> manual import wiring
-  -> Desktop Capture Center
-
-Obsidian CLI migration into src
-Schema v2 + Evidence Layer
-Knowledge revision, conflict and owner review
-Retrieval evaluation and relationship expansion
-Additional sources and active intelligence
-Legacy second_brain retirement
-```
-
-## 13. References
-
-- `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
-- `docs/MODULES/UNIFIED_DESKTOP_UI_PLAN.md`
-- `docs/MODULES/P0_ENGINEERING_HYGIENE_PLAN.md`
-- `docs/MODULES/P2_05_MANUAL_CAPTURE_CENTER_PLAN.md`
-- `docs/MEMORY_SYSTEM.md`
-- `docs/VECTOR_DATABASE.md`
