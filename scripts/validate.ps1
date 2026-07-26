@@ -12,6 +12,7 @@ param(
 $ErrorActionPreference = "Stop"
 $script:Results = @()
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$desktopRoot = Join-Path $repoRoot "desktop\lingji-control"
 Set-Location $repoRoot
 
 function Get-GitValue {
@@ -97,13 +98,20 @@ function Invoke-ValidationStep {
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][string]$WorkingDirectory,
         [Parameter(Mandatory = $true)][string]$Command,
-        [Parameter(Mandatory = $true)][string[]]$Arguments
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [hashtable]$Environment = @{}
     )
 
     $safeName = ($Name -replace "[^A-Za-z0-9_.-]", "-").ToLowerInvariant()
     $logPath = Join-Path $logsRoot ($safeName + ".log")
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $exitCode = 1
+    $previousEnvironment = @{}
+
+    foreach ($key in $Environment.Keys) {
+        $previousEnvironment[$key] = [Environment]::GetEnvironmentVariable($key, "Process")
+        [Environment]::SetEnvironmentVariable($key, [string]$Environment[$key], "Process")
+    }
 
     Push-Location $WorkingDirectory
     try {
@@ -119,6 +127,9 @@ function Invoke-ValidationStep {
     }
     finally {
         Pop-Location
+        foreach ($key in $Environment.Keys) {
+            [Environment]::SetEnvironmentVariable($key, $previousEnvironment[$key], "Process")
+        }
         $watch.Stop()
     }
 
@@ -164,7 +175,7 @@ function Invoke-DesktopScript {
 
     Invoke-ValidationStep `
         -Name $Name `
-        -WorkingDirectory (Join-Path $repoRoot "desktop\lingji-control") `
+        -WorkingDirectory $desktopRoot `
         -Command "npm" `
         -Arguments @("run", $ScriptName)
 }
@@ -195,7 +206,7 @@ function Invoke-FocusedValidation {
             Invoke-DesktopScript "desktop-runtime" "test:runtime"
             Invoke-ValidationStep `
                 -Name "tauri-runtime-tests" `
-                -WorkingDirectory (Join-Path $repoRoot "desktop\lingji-control") `
+                -WorkingDirectory $desktopRoot `
                 -Command "cargo" `
                 -Arguments @("test", "--manifest-path", "src-tauri/Cargo.toml", "--target", "x86_64-pc-windows-msvc")
         }
@@ -210,6 +221,18 @@ function Invoke-FocusedValidation {
 }
 
 function Invoke-FullValidation {
+    Invoke-ValidationStep `
+        -Name "git-diff-check" `
+        -WorkingDirectory $repoRoot `
+        -Command "git" `
+        -Arguments @("diff", "--check")
+
+    Invoke-ValidationStep `
+        -Name "clean-install-contracts" `
+        -WorkingDirectory $repoRoot `
+        -Command $PythonCommand `
+        -Arguments @("scripts/validate_clean_install.py", "--root", ".", "--import-check")
+
     Invoke-ValidationStep `
         -Name "python-full" `
         -WorkingDirectory $repoRoot `
@@ -227,7 +250,7 @@ function Invoke-FullValidation {
 
     Invoke-ValidationStep `
         -Name "tauri-rust-tests" `
-        -WorkingDirectory (Join-Path $repoRoot "desktop\lingji-control") `
+        -WorkingDirectory $desktopRoot `
         -Command "cargo" `
         -Arguments @("test", "--manifest-path", "src-tauri/Cargo.toml", "--target", "x86_64-pc-windows-msvc")
 
@@ -236,6 +259,56 @@ function Invoke-FullValidation {
         -WorkingDirectory $repoRoot `
         -Command "node" `
         -Arguments @("--check", "obsidian-plugin/lingji-control/main.js")
+
+    foreach ($scriptPath in @(
+        "browser-extension/lingji-capture/background.js",
+        "browser-extension/lingji-capture/popup.js",
+        "browser-extension/lingji-capture/options.js"
+    )) {
+        $scriptName = [IO.Path]::GetFileNameWithoutExtension($scriptPath)
+        Invoke-ValidationStep `
+            -Name ("browser-{0}-check" -f $scriptName) `
+            -WorkingDirectory $repoRoot `
+            -Command "node" `
+            -Arguments @("--check", $scriptPath)
+    }
+
+    Invoke-ValidationStep `
+        -Name "browser-manifest-check" `
+        -WorkingDirectory $repoRoot `
+        -Command "node" `
+        -Arguments @("-e", "const m=require('./browser-extension/lingji-capture/manifest.json'); if(m.manifest_version!==3||!m.background||!m.options_page) process.exit(1)")
+
+    $mcpRuntimeRoot = Join-Path $outputRoot "mcp-runtime"
+    Invoke-ValidationStep `
+        -Name "mcp-server-create" `
+        -WorkingDirectory $repoRoot `
+        -Command $PythonCommand `
+        -Arguments @("-c", "from src.mcp_server import create_mcp_server; assert create_mcp_server(default_agent_id='lingji-local') is not None") `
+        -Environment @{
+            VAULT_DIR = (Join-Path $mcpRuntimeRoot "vault")
+            STORAGE_DIR = (Join-Path $mcpRuntimeRoot "storage")
+            WATCHDOG_ENABLED = "false"
+        }
+}
+
+function Invoke-ReleaseValidation {
+    Invoke-DesktopScript "windows-release-build" "release:windows"
+
+    $buildTimeUtc = (Get-Date).ToUniversalTime().ToString("o")
+    Invoke-ValidationStep `
+        -Name "windows-release-package" `
+        -WorkingDirectory $desktopRoot `
+        -Command "powershell" `
+        -Arguments @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", "scripts/package-windows-release.ps1",
+            "-Commit", $commit,
+            "-BuildTimeUtc", $buildTimeUtc,
+            "-Channel", "local-validation",
+            "-Target", "x86_64-pc-windows-msvc"
+        )
 }
 
 $scopeText = ""
@@ -250,7 +323,7 @@ if ($Mode -eq "focused") {
 else {
     Invoke-FullValidation
     if ($Mode -eq "release") {
-        Invoke-DesktopScript "windows-release" "release:windows"
+        Invoke-ReleaseValidation
     }
 }
 
