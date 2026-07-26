@@ -2,6 +2,26 @@
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
 
+## 2026-07-26
+
+### P2-11B Packaged Python runtime Sidecar manager
+
+- 合并 PR #47，将 packaged Python runtime sidecar manager 纳入 `feature/second-brain-memory`。
+- 正式合并提交：`6720d0cd76c8ff9e9bc38ef2df52793c0ab0f4c5`。
+- 修复 Windows release gate 未安装测试依赖且未检查 pytest 退出码的问题。
+- 新增认证的 `GET /api/runtime/ping` 作为 runtime liveness 探针，避免 `/api/health` 的可选诊断耗时影响 sidecar 生命周期判断。
+- 本机验收通过：定向 Python 测试、Desktop smoke、Tauri Rust tests、compileall、sidecar build 与真实 packaged exe `/api/runtime/ping` / `/api/health` / stop acceptance。
+- GitHub CI：PR #47 合并前全部检查成功。
+
+### P2-12A Observation-first Desktop UI
+
+- Rebase 并合并 PR #48，base 更新为 `feature/second-brain-memory`。
+- 正式合并提交：`7e53fc29fb308b73031b39f9a2a000122653674f`。
+- Rebase 无冲突；未对 #48 追加非阻塞重构或扩展修复。
+- 本机验收通过：`npm run test:smoke`、`npm run build`、Python full unittest、compileall、Obsidian plugin `node --check`、Tauri Rust tests。
+- GitHub CI：PR #48 `unit-tests (3.11)`、`unit-tests (3.12)`、`windows-tests`、`desktop-ui-smoke`、`browser-capture-smoke`、`obsidian-plugin-smoke`、`mcp-smoke-test` 全部成功。
+- 新增最终验收报告：`docs/TEST_REPORTS/PR47_PR48_FINAL_ACCEPTANCE_REPORT.md`。
+
 ## 2026-07-22
 
 ### P2-10A Owner-visible Settings Governance Core

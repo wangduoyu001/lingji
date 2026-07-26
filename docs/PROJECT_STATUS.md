@@ -1,15 +1,17 @@
 # PROJECT_STATUS.md — LingJi 项目实时状态
 
-> Updated（更新时间）: 2026-07-22  
+> Updated（更新时间）: 2026-07-26
 > Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Formal Head（正式提交）: `325ad6e4a5f9d2c21bc4441039f32a28292b0f1d`  
+> Formal Head（正式提交）: `7e53fc29fb308b73031b39f9a2a000122653674f`
 > P2-08 Status: `MERGED_AND_VALIDATED`  
 > P2-09 Status: `MERGED_AND_VALIDATED`  
 > P2-10A Status: `MERGED_AND_CI_VALIDATED`
+> P2-11B Status: `MERGED_AND_CI_VALIDATED`
+> P2-12A Status: `MERGED_AND_CI_VALIDATED`
 
 ## 1. 当前结论
 
-P2-08 Auto Review SHADOW、P2-09 Runtime/Desktop Reliability 与 P2-10A Owner-visible Settings Governance Core 已进入正式功能分支。
+P2-08 Auto Review SHADOW、P2-09 Runtime/Desktop Reliability、P2-10A Owner-visible Settings Governance Core、P2-11B Packaged Python runtime Sidecar manager 与 P2-12A Observation-first Desktop UI 已进入正式功能分支。
 
 ```text
 PR #24  P2-09A Runtime Truth                         MERGED
@@ -22,25 +24,27 @@ PR #30  Combined Integration Verification             MERGED
 PR #31  P2-08/P2-09 Documentation Sync                MERGED
 PR #32  P2-08/P2-09 Local Acceptance Closeout         MERGED
 PR #33  P2-10A Settings Governance Core               MERGED
+PR #47  P2-11B Runtime Sidecar Manager                MERGED
+PR #48  P2-12A Observation-first Desktop UI           MERGED
 ```
 
-P2-10A 最终门禁：
+P2-11B/P2-12A 最终门禁：
 
 ```text
-tests workflow #709: SUCCESS
-P0 Windows Gate #102: SUCCESS
-Python 3.11: SUCCESS
-Python 3.12: SUCCESS
-Windows full tests: SUCCESS
-14-script Desktop smoke: SUCCESS
+PR #47 merge commit: 6720d0cd76c8ff9e9bc38ef2df52793c0ab0f4c5
+PR #48 merge commit: 7e53fc29fb308b73031b39f9a2a000122653674f
+PR #47 GitHub CI: SUCCESS
+PR #48 GitHub CI: SUCCESS
+Python full unittest: SUCCESS
+compileall: SUCCESS
+Desktop smoke: SUCCESS
 React/Vite build: SUCCESS
-Tauri Rust check: SUCCESS
-MCP smoke: SUCCESS
-Browser capture smoke: SUCCESS
+Tauri Rust tests: SUCCESS
 Obsidian plugin smoke: SUCCESS
+Packaged runtime sidecar acceptance: SUCCESS
 ```
 
-P2-10A 完成的是设置治理代码底座。完整 Desktop 视觉重设计与信息层级优化尚未开始，不得把“代码合同稳定”写成“UI 已完成”。
+P2-11B 完成 packaged runtime sidecar liveness 与 release gate 加固；P2-12A 完成 observation-first Desktop UI。最终验收记录见 `docs/TEST_REPORTS/PR47_PR48_FINAL_ACCEPTANCE_REPORT.md`。
 
 ## 2. 产品与代码主线
 
