@@ -2,7 +2,7 @@
 
 > Updated: 2026-07-26
 > Status: Active architecture contract
-> Formal branch: `feature/second-brain-memory`
+> Formal branch: `master`
 > Primary authority: this file
 > Historical migration detail: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
 
