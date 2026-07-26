@@ -1,61 +1,34 @@
-﻿# CONFIGURATION.md — LingJi Configuration Reference
+# CONFIGURATION.md — Configuration Authority
 
-> Generated: 2026-07-20
+This document no longer copies environment defaults. Copied defaults became stale and previously contradicted the running code, including the embedding model, backup path, ports and compatibility runtime.
 
-## PEMIS v6 Configuration (src/config.py)
+Current authorities:
 
-Configured via `.env` file and `Settings` class (pydantic-settings):
+```text
+src/config.py::Settings
+= code defaults and environment parsing
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| LLM_MODEL | qwen3:8b | Primary LLM model for PEMIS |
-| FALLBACK_LLM | qwen3:8b | Fallback LLM model |
-| EMBED_MODEL | nomic-embed-text | Embedding model |
-| FALLBACK_EMBED_MODEL | nomic-embed-text | Fallback embedding model |
-| OLLAMA_BASE_URL | http://127.0.0.1:11434 | Ollama server URL |
-| VAULT_DIR | vault | Obsidian vault directory |
-| STORAGE_DIR | storage | PEMIS working storage |
-| SNAPSHOT_DIR | snapshot | Snapshot storage |
-| BACKUP_DIR | D:/codex/backups/pemis | Backup destination |
-| LOG_DIR | logs | Log directory |
-| SAFETY_MODE | NORMAL | Operating mode |
-| TOPK_NORMAL | 10 | Results in NORMAL mode |
-| TOPK_DEGRADED | 6 | Results in DEGRADED mode |
-| TOPK_SAFE | 3 | Results in SAFE mode |
-| CACHE_MAX | 100 | Embedding cache size |
-| DECISION_HISTORY_DAYS | 90 | Decision history window |
-| WATCHDOG_ENABLED | True | File change watchdog |
+src/control/runtime_settings.py::RuntimeSettingsStore
+= persisted owner runtime settings
 
-## Second Brain Configuration (.env.second-brain)
+src/control/settings_governance.py::OwnerSettingsRegistry
+src/control/settings_catalog.py::CompleteOwnerSettingsRegistry
+= owner-visible metadata, recommendations, risk and capability state
 
-| Key | Default in Example | Description |
-|-----|-------------------|-------------|
-| SECOND_BRAIN_HOST | 127.0.0.1 | API bind address |
-| SECOND_BRAIN_PORT | 8765 | API port |
-| SECOND_BRAIN_DB | data/second_brain.sqlite3 | SQLite database path |
-| SECOND_BRAIN_RAW_DIR | data/raw/ai_chat | Raw chat archive |
-| SECOND_BRAIN_AI_INBOX | data/inbox/ai_chat | AI chat input |
-| SECOND_BRAIN_CODEX_INBOX | data/inbox/codex_tasks | Codex task input |
-| SECOND_BRAIN_QDRANT_PATH | data/qdrant | Embedded Qdrant path |
-| SECOND_BRAIN_QDRANT_COLLECTION | lingji_memories_v1 | Qdrant collection name |
-| SECOND_BRAIN_OLLAMA_URL | http://127.0.0.1:11434 | Ollama server |
-| SECOND_BRAIN_EMBED_MODEL | bge-m3 | Primary embed model |
-| SECOND_BRAIN_FALLBACK_EMBED_MODEL | nomic-embed-text | Fallback embed model |
-| SECOND_BRAIN_OBSIDIAN_DIR | (optional) | Obsidian knowledge directory |
-| SECOND_BRAIN_POLL_SECONDS | 5 | Watcher poll interval |
-| SECOND_BRAIN_LOG_DIR | logs/second_brain | Log directory |
-| SECOND_BRAIN_RUNTIME_DIR | data/runtime | Watcher state storage |
+Desktop Settings page
+= formal owner editing surface
+```
 
-## Obsidian CLI Environment Variables
+Stable contracts:
 
-| Key | Description |
-|-----|-------------|
-| OBSIDIAN_CLI_PATH | Path to Obsidian.com executable |
-| OBSIDIAN_VAULT_PATH | Vault directory path |
-| OBSIDIAN_VAULT_NAME | Vault display name |
-| OBSIDIAN_CLI_TIMEOUT | Command timeout (default 15s) |
-| OBSIDIAN_CLI_DRY_RUN | Set "1" to enable dry-run |
+- Local Control API: authenticated `127.0.0.1:8766`.
+- MCP: stdio by default; optional HTTP on 8767.
+- 8765: compatibility API only.
+- Primary embedding model and other defaults must be read from `Settings`, not repeated here.
+- Backup paths derive from explicit configuration or the selected storage root; no developer-specific absolute path is a valid default.
+- Production and acceptance paths must remain physically isolated.
+- Secrets belong in local environment files and must never be committed.
 
-## DeepSeek API
+Example environment templates may document available keys, but they do not override `Settings` or the governed runtime settings contract.
 
-Set `DEEPSEEK_API_KEY` in `.env` for PEMIS v6 LLM access.
+For code entry points and focused validation, use `docs/MODULES/CODE_MAP.md`.
