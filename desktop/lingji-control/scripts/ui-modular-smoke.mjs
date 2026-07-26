@@ -7,9 +7,13 @@ const requiredFiles = [
   "src/hooks/useLingJiConnection.ts",
   "src/components/ui.tsx",
   "src/components/DesktopShell.tsx",
+  "src/components/RuntimeBoundary.tsx",
   "src/components/NavIcon.tsx",
   "src/components/settings/SettingField.tsx",
   "src/pages/OverviewPage.tsx",
+  "src/pages/ActivityPage.tsx",
+  "src/pages/AttentionPage.tsx",
+  "src/pages/DiagnosticsPage.tsx",
   "src/pages/BrainStatusPage.tsx",
   "src/pages/VectorCenterPage.tsx",
   "src/pages/SystemComputePage.tsx",
@@ -37,13 +41,24 @@ const settings = fs.readFileSync("src/pages/SettingsPage.tsx", "utf8");
 const field = fs.readFileSync("src/components/settings/SettingField.tsx", "utf8");
 const navigation = fs.readFileSync("src/navigation.ts", "utf8");
 
-for (const token of ["NAVIGATION", "useLingJiConnection", "AppPages", "DesktopShell"]) {
+for (const token of ["NAVIGATION", "useLingJiConnection", "AppPages", "DesktopShell", "RuntimeBoundary"]) {
   if (!app.includes(token)) throw new Error(`App shell is missing ${token}`);
 }
-for (const token of ["desktop-sidebar", "desktop-toolbar", "NavIcon"]) {
+for (const token of ["desktop-sidebar", "desktop-toolbar", "NavIcon", "PRIMARY_NAVIGATION"]) {
   if (!shell.includes(token)) throw new Error(`Desktop shell is missing ${token}`);
 }
-for (const token of ["OverviewPage", "BrainStatusPage", "VectorCenterPage", "SystemComputePage", "ModelsPage", "SettingsPage", "AcceptancePage"]) {
+for (const token of [
+  "OverviewPage",
+  "ActivityPage",
+  "AttentionPage",
+  "DiagnosticsPage",
+  "BrainStatusPage",
+  "VectorCenterPage",
+  "SystemComputePage",
+  "ModelsPage",
+  "SettingsPage",
+  "AcceptancePage",
+]) {
   if (!routes.includes(token)) throw new Error(`Page router is missing ${token}`);
 }
 
@@ -65,7 +80,21 @@ for (const token of ["使用系统默认", "主人已修改", "为什么推荐",
   if (!field.includes(token)) throw new Error(`Setting field is missing ${token}`);
 }
 
-for (const token of ["脑状态", "向量中心", "系统与算力", "AI 与模型", "环境验收", "设置", "主动投喂", "媒体分析", "icon:"]) {
+for (const token of [
+  "运行状态",
+  "活动记录",
+  "需要我处理",
+  "高级诊断",
+  "脑状态",
+  "向量中心",
+  "系统与算力",
+  "AI 与模型",
+  "环境验收",
+  "设置",
+  "主动投喂",
+  "媒体分析",
+  "icon:",
+]) {
   if (!navigation.includes(token)) throw new Error(`Navigation is missing ${token}`);
 }
 

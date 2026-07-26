@@ -113,11 +113,21 @@ def test_desktop_uses_shared_polling_and_shadow_dashboard_without_execution_cont
     app_pages = read("desktop/lingji-control/src/AppPages.tsx")
     dashboard = read("desktop/lingji-control/src/pages/AutoReviewPage.tsx")
     polling = read("desktop/lingji-control/src/hooks/usePollingResource.ts")
+    attention = read("desktop/lingji-control/src/pages/AttentionPage.tsx")
+    diagnostics = read("desktop/lingji-control/src/pages/DiagnosticsPage.tsx")
 
-    for group in ("home", "memory", "ingestion", "runtime", "operations"):
-        assert f'id: "{group}"' in navigation
+    for page_id in ("overview", "activity", "attention", "diagnostics"):
+        assert f'id: "{page_id}"' in navigation
+    assert navigation.count('group: "observe"') == 4
+    assert "PRIMARY_NAVIGATION" in navigation
+    assert "ADVANCED_NAVIGATION" in navigation
     assert 'id: "auto_review"' in navigation
     assert 'page === "auto_review"' in app_pages
+    assert 'page === "attention"' in app_pages
+    assert "ADVANCED_NAVIGATION" in diagnostics
+    assert "pending_review_count" in attention
+    assert "/api/auto-review/metrics" not in attention
+    assert "SHADOW 决策目前是审计历史" in attention
     assert "usePollingResource" in dashboard
     assert "AbortController" in polling
     assert "inFlightRef" in polling

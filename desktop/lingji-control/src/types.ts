@@ -4,6 +4,9 @@ export type Row = Record<string, unknown>;
 
 export type PageId =
   | "overview"
+  | "activity"
+  | "attention"
+  | "diagnostics"
   | "brain_status"
   | "codex_workspace"
   | "memory_review"
@@ -23,7 +26,7 @@ export type PageId =
   | "settings"
   | "logs";
 
-export type NavigationGroupId = "home" | "memory" | "ingestion" | "runtime" | "operations";
+export type NavigationGroupId = "observe" | "advanced";
 
 export type NavigationIcon =
   | "home"

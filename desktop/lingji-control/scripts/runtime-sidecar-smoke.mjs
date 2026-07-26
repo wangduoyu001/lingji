@@ -18,6 +18,7 @@ const [
   connection,
   runtimeTypes,
   shell,
+  boundary,
   releaseHook,
 ] = await Promise.all([
   read("../../../run_packaged_control_api.py"),
@@ -31,6 +32,7 @@ const [
   read("../src/hooks/useLingJiConnection.ts"),
   read("../src/runtimeTypes.ts"),
   read("../src/components/DesktopShell.tsx"),
+  read("../src/components/RuntimeBoundary.tsx"),
   read("../src/hooks/useReleaseMetadata.ts"),
 ]);
 
@@ -115,12 +117,17 @@ for (const command of ["runtime_ensure", "runtime_status", "runtime_stop", "runt
   assert.ok(connection.includes(`"${command}"`), `Desktop connection hook is missing ${command}`);
 }
 assert.match(connection, /runtimeBusy/);
+assert.match(connection, /autoRecoveryActive/);
+assert.match(connection, /ensureConnection\(false\)/);
 assert.match(runtimeTypes, /RuntimeStatus/);
 assert.match(runtimeTypes, /runtimeStateLabel/);
-assert.match(shell, /启动核心/);
+assert.match(shell, /desktop-runtime-tools/);
 assert.match(shell, /停止核心/);
 assert.match(shell, /重启核心/);
 assert.match(shell, /外部进程/);
+assert.match(boundary, /恢复运行/);
+assert.match(boundary, /AUTO RECOVERY/);
+assert.equal(boundary.includes("启动核心"), false, "Routine Sidecar startup must be automatic");
 assert.match(releaseHook, /runtime_data_root/);
 assert.match(releaseHook, /runtime_log/);
 assert.equal(releaseHook.includes("control_token"), false);

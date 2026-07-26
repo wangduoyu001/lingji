@@ -15,10 +15,11 @@ const [app, shell, navigation, page, memoryReview] = await Promise.all([
 ]);
 
 assert.match(app, /DesktopShell/);
-assert.match(shell, /NAVIGATION_GROUPS/);
+assert.match(shell, /PRIMARY_NAVIGATION/);
 assert.match(shell, /connectionState/);
-assert.equal((navigation.match(/id: "(home|memory|ingestion|runtime|operations)"/g) ?? []).length, 5);
 assert.match(navigation, /id: "auto_review"/);
+assert.match(navigation, /ADVANCED_NAVIGATION/);
+assert.equal((navigation.match(/group: "observe"/g) ?? []).length, 4);
 
 for (const endpoint of [
   "/api/auto-review/status",
