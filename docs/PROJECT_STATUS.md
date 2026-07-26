@@ -2,7 +2,7 @@
 
 > Updated: 2026-07-26
 > Formal branch: `feature/second-brain-memory`
-> Formal head: `7e53fc29fb308b73031b39f9a2a000122653674f`
+> Formal head: `363a2ada2bc2eb84489a721e901940cab441bb4b`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
 > Validation evidence: `docs/TEST_REPORTS/`
