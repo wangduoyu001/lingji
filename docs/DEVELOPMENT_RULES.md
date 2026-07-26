@@ -6,7 +6,7 @@
 
 ## 1. Branch and Environment Isolation
 
-1. Current development branch: `feature/second-brain-memory`.
+1. Current development branch: `master`.
 2. Never modify or write runtime data into `C:\Users\Administrator\Documents\New project-ai`.
 3. Runtime data must never be silently written to the C: drive.
 4. Databases, vectors, logs, cache, uploads, generated assets and models must use configurable locations, preferably D: or a user-selected path.
@@ -69,7 +69,7 @@ Before code changes, read only the smallest evidence set needed for the task:
 5. locate the real class/function entry point, direct callers and focused tests
 6. confirm data authority, API registration, storage boundary and primary/compatibility ownership
 
-Do not repeatedly read all of `AGENTS.md`, `docs/AI_CONTEXT.md`, `docs/PROJECT_STATUS.md`, `docs/ARCHITECTURE.md` or this file. Read the governing file once, keep a short execution-constraint summary, and use targeted keyword or section lookup when a later decision depends on a specific rule.
+Do not repeatedly read all of `AGENTS.md`, `docs/PROJECT_STATUS.md`, `docs/ARCHITECTURE.md` or this file. Read the governing file once, keep a short execution-constraint summary, and use targeted keyword or section lookup when a later decision depends on a specific rule.
 
 Do not perform an untargeted whole-repository scan. Do not create files based only on feature names or assumptions. Prefer current code maps and verified evidence, but re-check code when documents conflict.
 
@@ -184,32 +184,19 @@ Rules:
 
 ## 13. Testing
 
-Run focused tests first. Before a merge, use the existing authoritative gates once on the final tree:
+Run focused tests first. Use the repository validation entry instead of inventing parallel command sets:
 
-```text
-Python full suite:
-python -m pytest -q --tb=short
-
-Python compile gate:
-python -m compileall -q main.py run_service.py run_control_api.py run_mcp_server.py run_extraction_worker.py src second_brain tests scripts
-
-Desktop smoke:
-cd desktop/lingji-control
-npm run test:smoke
-
-Desktop build:
-npm run build
-
-Tauri Rust:
-cargo test --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc
-
-Obsidian plugin:
-node --check obsidian-plugin/lingji-control/main.js
+```powershell
+.\scripts\validate.ps1 -Mode focused -Area <area>
+.\scripts\validate.ps1 -Mode full
+.\scripts\validate.ps1 -Mode release
 ```
 
-`npm run build` is a build-only command. Smoke tests must be invoked explicitly so CI and local validation do not accidentally execute the same suite twice.
-
-Also test Qdrant available/unavailable modes, production/acceptance isolation and compatibility-runtime-disabled behavior when the changed module depends on those contracts.
+- `focused` runs the mapped module tests during development.
+- `full` runs the complete local merge gate once on the final tree.
+- `release` adds Windows Sidecar/Tauri/NSIS build and release-artifact preparation; GitHub release CI and owner-machine installation remain the final release authority.
+- `npm run build` is build-only; Desktop smoke is invoked explicitly.
+- Also test Qdrant available/unavailable modes, production/acceptance isolation and compatibility-runtime-disabled behavior when the changed module depends on those contracts.
 
 Never delete tests, reduce assertions, hide failures, rerun unchanged full gates without cause, or report unexecuted tests as passed.
 
@@ -221,7 +208,7 @@ One fact has one detailed authority:
 - `docs/PROJECT_STATUS.md`: current stage, completion state, risks, blockers and next step
 - `docs/CHANGELOG.md`: user-facing or release-significant changes
 - `docs/TEST_REPORTS/`: commands, environment, results, limitations and validated commit
-- `docs/MODULES/CODE_MAP.md`: code entry points and ownership only; do not duplicate current status or CI history
+- `docs/MODULES/CODE_MAP.md`: code entry points, ownership and focused validation only; do not duplicate current status or CI history
 - `docs/DEVELOPMENT_RULES.md`: durable development and governance rules
 
 Update the existing authority instead of creating a parallel document. Historical module plans and implementation reports may remain as evidence but must not override the current architecture or project status.
