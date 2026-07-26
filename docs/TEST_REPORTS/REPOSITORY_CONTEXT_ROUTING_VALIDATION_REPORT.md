@@ -1,8 +1,9 @@
 # Repository Context Routing and Local Validation Report
 
 > Date: 2026-07-26  
-> Branch: `work/context-routing-validation`  
-> Status: `IMPLEMENTED_PENDING_CI`
+> Source branch: `work/context-routing-validation`  
+> Merge commit: `96084c49ada2adb33d2202690d3d7b98e5b695ca`  
+> Status: `MERGED_AND_CI_VALIDATED`
 
 ## Goal
 
@@ -38,19 +39,31 @@ focused
 = module tests during development
 
 full
-= complete merge gate on the final tree
+= complete local merge gate on the final tree
 
 release
-= full gate plus Windows Sidecar/Tauri/NSIS release build
+= full gate plus Windows Sidecar/Tauri/NSIS build and release-artifact preparation
 ```
+
+GitHub Windows release CI and owner-machine installation remain the final authority for packaged lifecycle and installation acceptance.
 
 Successful validation emits only concise suite status and summary paths. Full logs remain available per suite and are read only when a failure requires diagnosis.
 
-## Required Validation
+## GitHub Validation
+
+```text
+tests workflow #753: SUCCESS
+P0 Windows Gate #122: SUCCESS
+```
+
+Validated coverage:
 
 - Windows PowerShell 5.1 parses and executes `scripts/validate.ps1 -Mode focused -Area docs`.
-- `git diff --check` passes.
-- Existing Python, Desktop, Rust, MCP, Obsidian and release gates remain unchanged in coverage.
+- Python 3.11, Python 3.12 and Windows tests pass.
+- Python compile gate passes, including `run_packaged_control_api.py`.
+- Desktop smoke and production build pass.
+- Tauri Rust check passes.
+- MCP, Obsidian plugin and browser capture checks pass.
 - `npm run build` remains build-only and Desktop smoke remains explicit.
 
 ## Boundaries
@@ -61,6 +74,6 @@ Successful validation emits only concise suite status and summary paths. Full lo
 - No new architecture authority or parallel configuration map.
 - No change to `second_brain/` runtime behavior.
 
-## Current Limitation
+## Remaining Evidence Boundary
 
-CI and owner-machine full/release validation have not yet completed for this branch. Until those results exist, this change is implemented but not formally validated.
+No separate owner-machine invocation of `scripts/validate.ps1 -Mode full` or `-Mode release` is recorded in this report. The code and CI contracts are validated; a future release should still retain its own Windows workflow and installation evidence instead of treating this report as an installer acceptance record.
