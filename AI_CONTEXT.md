@@ -1,22 +1,13 @@
-# LingJi 项目入口
+# AI_CONTEXT.md — Deprecated
 
-开始任何开发、测试或评审前，先阅读：
+This compatibility pointer is retained only for older tooling.
 
-1. `AGENTS.md`
-2. `docs/AI_CONTEXT.md`
-3. `docs/PROJECT_STATUS.md`
-4. `docs/ARCHITECTURE.md`
-5. `docs/DEVELOPMENT_RULES.md`
+Use these current authorities instead:
 
-当前开发分支：`feature/second-brain-memory`
+1. `AGENTS.md` — repository execution entry
+2. `docs/PROJECT_STATUS.md` — current state
+3. `docs/MODULES/CODE_MAP.md` — code and focused validation routing
+4. `docs/ARCHITECTURE.md` — stable architecture, only when the task changes a boundary
+5. `docs/DEVELOPMENT_RULES.md` — durable governance rules
 
-核心要求：
-
-- 先完整理解仓库和相关代码，再搜索官方文档与优秀实现，最后制定方案并开发。
-- 使用最少代码完成任务，优先复用现有模块，避免无必要重构和依赖。
-- 所有功能必须有测试或明确的真机验收记录。
-- 开发状态、技术决策、测试结果和已知问题必须进入仓库文档并提交 Git。
-- 不得提交密钥、隐私数据、真实数据库、模型、缓存、日志、`node_modules` 或临时文件。
-- 本地真实环境未验证时，不得宣称完整验收通过。
-
-详细项目定位、架构、数据边界与禁止事项见 `docs/AI_CONTEXT.md`。
+Do not add current project state, architecture copies or mandatory full-reading chains to this file.
