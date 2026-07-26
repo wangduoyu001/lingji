@@ -10,7 +10,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$script:Results = New-Object System.Collections.Generic.List[object]
+$script:Results = @()
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $repoRoot
 
@@ -30,8 +30,16 @@ function Get-GitValue {
 }
 
 $commit = Get-GitValue -Arguments @("rev-parse", "HEAD") -Fallback "unknown"
-$shortCommit = if ($commit.Length -ge 8) { $commit.Substring(0, 8) } else { $commit }
+$shortCommit = $commit
+if ($commit.Length -ge 8) {
+    $shortCommit = $commit.Substring(0, 8)
+}
+
 $branch = Get-GitValue -Arguments @("rev-parse", "--abbrev-ref", "HEAD") -Fallback "unknown"
+if ($env:GITHUB_HEAD_REF) {
+    $branch = $env:GITHUB_HEAD_REF
+}
+
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $outputRoot = Join-Path $repoRoot ("output\validation\{0}-{1}-{2}" -f $stamp, $shortCommit, $Mode)
 $logsRoot = Join-Path $outputRoot "logs"
@@ -40,14 +48,18 @@ New-Item -ItemType Directory -Force -Path $logsRoot | Out-Null
 function Write-ValidationSummary {
     param([string]$Overall)
 
-    $endedAt = (Get-Date).ToString("o")
+    $areaValue = $null
+    if ($Mode -eq "focused") {
+        $areaValue = $Area
+    }
+
     $summary = [ordered]@{
         commit = $commit
         branch = $branch
         mode = $Mode
-        area = if ($Mode -eq "focused") { $Area } else { $null }
+        area = $areaValue
         overall = $Overall
-        ended_at = $endedAt
+        ended_at = (Get-Date).ToString("o")
         suites = @($script:Results)
     }
 
@@ -55,22 +67,25 @@ function Write-ValidationSummary {
     $markdownPath = Join-Path $outputRoot "summary.md"
     $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $jsonPath -Encoding UTF8
 
-    $lines = New-Object System.Collections.Generic.List[string]
-    $lines.Add("# LingJi Validation Summary")
-    $lines.Add("")
-    $lines.Add("- Commit: ``$commit``")
-    $lines.Add("- Branch: ``$branch``")
-    $lines.Add("- Mode: ``$Mode``")
+    $lines = @(
+        "# LingJi Validation Summary",
+        "",
+        "- Commit: ``$commit``",
+        "- Branch: ``$branch``",
+        "- Mode: ``$Mode``"
+    )
     if ($Mode -eq "focused") {
-        $lines.Add("- Area: ``$Area``")
+        $lines += "- Area: ``$Area``"
     }
-    $lines.Add("- Overall: ``$Overall``")
-    $lines.Add("")
-    $lines.Add("| Suite | Result | Seconds | Log |")
-    $lines.Add("|---|---:|---:|---|")
+    $lines += @(
+        "- Overall: ``$Overall``",
+        "",
+        "| Suite | Result | Seconds | Log |",
+        "|---|---:|---:|---|"
+    )
     foreach ($result in $script:Results) {
         $relativeLog = $result.log.Replace($repoRoot + "\", "")
-        $lines.Add("| $($result.name) | $($result.status) | $($result.duration_seconds) | ``$relativeLog`` |")
+        $lines += "| $($result.name) | $($result.status) | $($result.duration_seconds) | ``$relativeLog`` |"
     }
     $lines | Set-Content -Path $markdownPath -Encoding UTF8
 
@@ -107,14 +122,18 @@ function Invoke-ValidationStep {
         $watch.Stop()
     }
 
-    $status = if ($exitCode -eq 0) { "PASS" } else { "FAIL" }
-    $script:Results.Add([ordered]@{
+    $status = "FAIL"
+    if ($exitCode -eq 0) {
+        $status = "PASS"
+    }
+
+    $script:Results += [pscustomobject][ordered]@{
         name = $Name
         status = $status
         exit_code = $exitCode
         duration_seconds = [Math]::Round($watch.Elapsed.TotalSeconds, 2)
         log = $logPath
-    })
+    }
 
     if ($exitCode -ne 0) {
         Write-Host ("[FAIL] {0}" -f $Name) -ForegroundColor Red
@@ -181,25 +200,37 @@ function Invoke-FocusedValidation {
                 -Arguments @("test", "--manifest-path", "src-tauri/Cargo.toml", "--target", "x86_64-pc-windows-msvc")
         }
         "docs" {
-            Invoke-ValidationStep -Name "git-diff-check" -WorkingDirectory $repoRoot -Command "git" -Arguments @("diff", "--check")
+            Invoke-ValidationStep `
+                -Name "git-diff-check" `
+                -WorkingDirectory $repoRoot `
+                -Command "git" `
+                -Arguments @("diff", "--check")
         }
     }
 }
 
 function Invoke-FullValidation {
-    Invoke-ValidationStep -Name "python-full" -WorkingDirectory $repoRoot -Command $PythonCommand -Arguments @("-m", "pytest", "-q", "--tb=short")
+    Invoke-ValidationStep `
+        -Name "python-full" `
+        -WorkingDirectory $repoRoot `
+        -Command $PythonCommand `
+        -Arguments @("-m", "pytest", "-q", "--tb=short")
+
     Invoke-ValidationStep `
         -Name "python-compileall" `
         -WorkingDirectory $repoRoot `
         -Command $PythonCommand `
         -Arguments @("-m", "compileall", "-q", "main.py", "run_service.py", "run_control_api.py", "run_packaged_control_api.py", "run_mcp_server.py", "run_extraction_worker.py", "src", "second_brain", "tests", "scripts")
+
     Invoke-DesktopScript "desktop-smoke" "test:smoke"
     Invoke-DesktopScript "desktop-build" "build"
+
     Invoke-ValidationStep `
         -Name "tauri-rust-tests" `
         -WorkingDirectory (Join-Path $repoRoot "desktop\lingji-control") `
         -Command "cargo" `
         -Arguments @("test", "--manifest-path", "src-tauri/Cargo.toml", "--target", "x86_64-pc-windows-msvc")
+
     Invoke-ValidationStep `
         -Name "obsidian-plugin-check" `
         -WorkingDirectory $repoRoot `
@@ -207,7 +238,11 @@ function Invoke-FullValidation {
         -Arguments @("--check", "obsidian-plugin/lingji-control/main.js")
 }
 
-Write-Host ("LingJi validation: mode={0}{1}" -f $Mode, $(if ($Mode -eq "focused") { ", area=$Area" } else { "" }))
+$scopeText = ""
+if ($Mode -eq "focused") {
+    $scopeText = ", area=$Area"
+}
+Write-Host ("LingJi validation: mode={0}{1}" -f $Mode, $scopeText)
 
 if ($Mode -eq "focused") {
     Invoke-FocusedValidation
