@@ -98,10 +98,10 @@ for (const token of [
   ".manage(RuntimeManager::default())",
   "runtime_bootstrap_status",
   "runtime_configure",
-  "runtime_status",
-  "runtime_ensure",
-  "runtime_stop",
-  "runtime_restart",
+  "guarded_runtime_status",
+  "guarded_runtime_ensure",
+  "guarded_runtime_stop",
+  "guarded_runtime_restart",
   "require_configured",
 ]) assert.ok(rustMain.includes(token), `Rust app is missing ${token}`);
 
@@ -139,10 +139,10 @@ assert.equal(manager.includes("Command::new(command"), false, "Runtime manager m
 for (const command of [
   "runtime_bootstrap_status",
   "runtime_configure",
-  "runtime_ensure",
-  "runtime_status",
-  "runtime_stop",
-  "runtime_restart",
+  "guarded_runtime_ensure",
+  "guarded_runtime_status",
+  "guarded_runtime_stop",
+  "guarded_runtime_restart",
 ]) {
   assert.ok(connection.includes(`"${command}"`), `Desktop connection hook is missing ${command}`);
 }
