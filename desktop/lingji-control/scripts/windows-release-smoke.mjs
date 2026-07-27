@@ -58,6 +58,8 @@ for (const key of [
 assert.match(rustMain, /^#!\[cfg_attr\(not\(debug_assertions\), windows_subsystem = "windows"\)\]/m);
 assert.match(rustMain, /fn release_metadata/);
 assert.match(rustMain, /owner_data_root/);
+assert.match(rustMain, /runtime_bootstrap_status/);
+assert.match(rustMain, /runtime_configure/);
 assert.match(rustMain, /runtime_ensure/);
 assert.match(rustMain, /runtime_stop/);
 assert.match(rustMain, /runtime_restart/);
@@ -70,8 +72,9 @@ assert.match(shell, /复制诊断信息/);
 assert.match(shell, /releaseMetadata\?\.version/);
 assert.match(shell, /desktop-runtime-tools/);
 assert.match(boundary, /AUTOMATIC RUNTIME/);
+assert.match(boundary, /DATA ROOT REQUIRED/);
 assert.match(boundary, /恢复运行/);
-assert.equal(boundary.includes("启动核心"), false, "Installed Desktop startup must remain automatic");
+assert.equal(boundary.includes(">启动核心</button>"), false, "Routine installed startup must remain automatic");
 
 for (const token of [
   "Get-PeSubsystem",
