@@ -65,6 +65,8 @@ export function useReleaseMetadata() {
       `runtime_last_exit_code=${runtimeStatus?.last_exit_code ?? "none"}`,
       `runtime_binary_available=${runtimeStatus?.binary_available === true ? "true" : "false"}`,
       `bootstrap_configured=${bootstrapStatus?.configured === true ? "true" : "false"}`,
+      `bootstrap_source=${bootstrapStatus?.source ?? "unknown"}`,
+      `inherited_runtime_environment_ignored=${bootstrapStatus?.inherited_environment_ignored === true ? "true" : "false"}`,
       `workspace=${bootstrapStatus?.active_workspace ?? memoryRuntime.workspace ?? "unknown"}`,
       `runtime_data_root=${bootstrapStatus?.data_root_display ?? runtimeStatus?.data_root_display ?? "unknown"}`,
       `runtime_log=${runtimeStatus?.log_path_display ?? "unknown"}`,
