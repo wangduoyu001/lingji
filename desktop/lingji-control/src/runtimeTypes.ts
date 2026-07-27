@@ -15,6 +15,7 @@ export type RuntimeBootstrapStatus = {
   config_path_display: string;
   source: string;
   c_drive_write_detected: boolean;
+  inherited_environment_ignored: boolean;
   last_error: string | null;
 };
 
