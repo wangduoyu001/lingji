@@ -57,6 +57,40 @@ class StartupHealthTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             checker.ensure_startable(report)
 
+    def test_packaged_runtime_requires_explicit_data_root(self):
+        checker = StartupHealthChecker(self._settings())
+        with patch.dict(
+            "os.environ",
+            {"LINGJI_PACKAGED_RUNTIME": "1", "LINGJI_WORKSPACE": "acceptance"},
+            clear=False,
+        ), patch("src.health.requests.get", side_effect=requests.ConnectionError("offline")), patch(
+            "src.health.shutil.which", return_value="tool"
+        ):
+            report = checker.run()
+
+        policy = next(item for item in report["checks"] if item["name"] == "data_root_policy")
+        self.assertEqual(policy["status"], "error")
+        self.assertEqual(policy["workspace"], "acceptance")
+
+    def test_packaged_runtime_reports_non_system_drive_policy(self):
+        checker = StartupHealthChecker(self._settings())
+        with patch.dict(
+            "os.environ",
+            {
+                "LINGJI_PACKAGED_RUNTIME": "1",
+                "LINGJI_WORKSPACE": "acceptance",
+                "LINGJI_OWNER_DATA_ROOT": str(self.root),
+            },
+            clear=False,
+        ), patch("src.health.requests.get", side_effect=requests.ConnectionError("offline")), patch(
+            "src.health.shutil.which", return_value="tool"
+        ):
+            report = checker.run()
+
+        policy = next(item for item in report["checks"] if item["name"] == "data_root_policy")
+        self.assertEqual(policy["status"], "ok")
+        self.assertFalse(policy["c_drive_write_detected"])
+
 
 if __name__ == "__main__":
     unittest.main()
