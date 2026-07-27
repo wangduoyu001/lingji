@@ -5,18 +5,25 @@ use std::{
     io::Write,
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
+    sync::OnceLock,
     time::Duration,
 };
 
-const BOOTSTRAP_SCHEMA_VERSION: u32 = 1;
+const BOOTSTRAP_SCHEMA_VERSION: u32 = 2;
 const CONTROL_PORT: u16 = 8766;
 const SUPPORTED_WORKSPACES: [&str; 2] = ["production", "acceptance"];
+const OWNER_DATA_ROOT_ENV: &str = "LINGJI_OWNER_DATA_ROOT";
+const WORKSPACE_ENV: &str = "LINGJI_WORKSPACE";
+
+static INHERITED_ENVIRONMENT_IGNORED: OnceLock<bool> = OnceLock::new();
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct RuntimeBootstrapConfig {
     schema_version: u32,
     base_data_root: String,
     active_workspace: String,
+    #[serde(default)]
+    owner_confirmed: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -28,6 +35,7 @@ pub struct RuntimeBootstrapStatus {
     pub config_path_display: String,
     pub source: String,
     pub c_drive_write_detected: bool,
+    pub inherited_environment_ignored: bool,
     pub last_error: Option<String>,
 }
 
@@ -99,6 +107,45 @@ fn effective_data_root(base: &Path, workspace: &str) -> PathBuf {
     base.join(workspace)
 }
 
+fn inherited_environment_present() -> bool {
+    [OWNER_DATA_ROOT_ENV, WORKSPACE_ENV].iter().any(|name| {
+        env::var(name)
+            .ok()
+            .is_some_and(|value| !value.trim().is_empty())
+    })
+}
+
+pub fn quarantine_inherited_environment() -> bool {
+    if let Some(value) = INHERITED_ENVIRONMENT_IGNORED.get() {
+        return *value;
+    }
+    let detected = inherited_environment_present();
+    env::remove_var(OWNER_DATA_ROOT_ENV);
+    env::remove_var(WORKSPACE_ENV);
+    let _ = INHERITED_ENVIRONMENT_IGNORED.set(detected);
+    detected
+}
+
+fn inherited_environment_ignored() -> bool {
+    *INHERITED_ENVIRONMENT_IGNORED.get_or_init(|| false)
+}
+
+fn validate_config_contract(config: &RuntimeBootstrapConfig) -> Result<(), String> {
+    if config.schema_version != BOOTSTRAP_SCHEMA_VERSION {
+        return Err(
+            "LingJi data directory configuration must be confirmed again in the installed UI"
+                .to_string(),
+        );
+    }
+    if !config.owner_confirmed {
+        return Err(
+            "LingJi data directory configuration is missing explicit owner confirmation"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 fn read_saved_config() -> Result<RuntimeBootstrapConfig, String> {
     let path = config_path()?;
     let bytes = fs::read(&path).map_err(|error| {
@@ -110,9 +157,7 @@ fn read_saved_config() -> Result<RuntimeBootstrapConfig, String> {
     })?;
     let config: RuntimeBootstrapConfig = serde_json::from_slice(&bytes)
         .map_err(|error| format!("Invalid LingJi Desktop bootstrap configuration: {error}"))?;
-    if config.schema_version != BOOTSTRAP_SCHEMA_VERSION {
-        return Err("Unsupported LingJi Desktop bootstrap configuration version".to_string());
-    }
+    validate_config_contract(&config)?;
     Ok(config)
 }
 
@@ -120,6 +165,7 @@ fn status_from_config(
     config: RuntimeBootstrapConfig,
     source: &str,
 ) -> Result<RuntimeBootstrapStatus, String> {
+    validate_config_contract(&config)?;
     let workspace = validate_workspace(&config.active_workspace)?;
     let base = validate_base_root(&config.base_data_root, false)?;
     let effective = effective_data_root(&base, &workspace);
@@ -131,70 +177,40 @@ fn status_from_config(
         config_path_display: config_path_display(),
         source: source.to_string(),
         c_drive_write_detected: looks_like_windows_system_drive(&effective),
+        inherited_environment_ignored: inherited_environment_ignored(),
         last_error: None,
     })
 }
 
-fn environment_status() -> Result<Option<RuntimeBootstrapStatus>, String> {
-    let explicit = match env::var("LINGJI_OWNER_DATA_ROOT") {
-        Ok(value) if !value.trim().is_empty() => value,
-        _ => return Ok(None),
+fn unconfigured_status(error: String) -> RuntimeBootstrapStatus {
+    let source = if error.contains("confirmed again") || error.contains("owner confirmation") {
+        "reconfirmation_required"
+    } else {
+        "unconfigured"
     };
-    let workspace = validate_workspace(
-        &env::var("LINGJI_WORKSPACE").unwrap_or_else(|_| "production".to_string()),
-    )?;
-    let effective = validate_base_root(&explicit, false)?;
-    let base = effective
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| effective.clone());
-    Ok(Some(RuntimeBootstrapStatus {
-        configured: true,
-        active_workspace: Some(workspace),
-        base_data_root_display: Some(base.display().to_string()),
-        data_root_display: Some(effective.display().to_string()),
+    RuntimeBootstrapStatus {
+        configured: false,
+        active_workspace: None,
+        base_data_root_display: None,
+        data_root_display: None,
         config_path_display: config_path_display(),
-        source: "environment".to_string(),
-        c_drive_write_detected: looks_like_windows_system_drive(&effective),
-        last_error: None,
-    }))
+        source: source.to_string(),
+        c_drive_write_detected: false,
+        inherited_environment_ignored: inherited_environment_ignored(),
+        last_error: Some(error),
+    }
 }
 
 pub fn current_status() -> RuntimeBootstrapStatus {
-    match environment_status() {
-        Ok(Some(status)) => status,
-        Ok(None) => match read_saved_config()
-            .and_then(|config| status_from_config(config, "bootstrap_file"))
-        {
-            Ok(status) => status,
-            Err(error) => RuntimeBootstrapStatus {
-                configured: false,
-                active_workspace: None,
-                base_data_root_display: None,
-                data_root_display: None,
-                config_path_display: config_path_display(),
-                source: "unconfigured".to_string(),
-                c_drive_write_detected: false,
-                last_error: Some(error),
-            },
-        },
-        Err(error) => RuntimeBootstrapStatus {
-            configured: false,
-            active_workspace: None,
-            base_data_root_display: None,
-            data_root_display: None,
-            config_path_display: config_path_display(),
-            source: "invalid_environment".to_string(),
-            c_drive_write_detected: false,
-            last_error: Some(error),
-        },
+    quarantine_inherited_environment();
+    match read_saved_config().and_then(|config| status_from_config(config, "bootstrap_file")) {
+        Ok(status) => status,
+        Err(error) => unconfigured_status(error),
     }
 }
 
 pub fn apply_saved_environment() -> Result<RuntimeBootstrapStatus, String> {
-    if let Some(status) = environment_status()? {
-        return Ok(status);
-    }
+    quarantine_inherited_environment();
     let config = read_saved_config()?;
     let status = status_from_config(config, "bootstrap_file")?;
     let workspace = status
@@ -205,8 +221,8 @@ pub fn apply_saved_environment() -> Result<RuntimeBootstrapStatus, String> {
         .data_root_display
         .as_deref()
         .ok_or_else(|| "LingJi data directory is unavailable".to_string())?;
-    env::set_var("LINGJI_OWNER_DATA_ROOT", data_root);
-    env::set_var("LINGJI_WORKSPACE", workspace);
+    env::set_var(OWNER_DATA_ROOT_ENV, data_root);
+    env::set_var(WORKSPACE_ENV, workspace);
     Ok(status)
 }
 
@@ -223,10 +239,48 @@ fn control_port_in_use() -> bool {
     TcpStream::connect_timeout(&address, Duration::from_millis(250)).is_ok()
 }
 
+fn write_saved_config(path: &Path, config: &RuntimeBootstrapConfig) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Invalid LingJi Desktop bootstrap configuration path".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("Unable to create the Desktop bootstrap directory: {error}"))?;
+
+    let temporary = path.with_extension("json.tmp");
+    let backup = path.with_extension("json.bak");
+    let payload = serde_json::to_vec_pretty(config)
+        .map_err(|error| format!("Unable to encode LingJi Desktop bootstrap configuration: {error}"))?;
+    fs::write(&temporary, payload)
+        .map_err(|error| format!("Unable to write LingJi Desktop bootstrap configuration: {error}"))?;
+
+    let had_existing = path.exists();
+    if had_existing {
+        let _ = fs::remove_file(&backup);
+        fs::rename(path, &backup)
+            .map_err(|error| format!("Unable to stage the previous Desktop bootstrap configuration: {error}"))?;
+    }
+
+    if let Err(error) = fs::rename(&temporary, path) {
+        if had_existing {
+            let _ = fs::rename(&backup, path);
+        }
+        let _ = fs::remove_file(&temporary);
+        return Err(format!(
+            "Unable to activate LingJi Desktop bootstrap configuration: {error}"
+        ));
+    }
+
+    if had_existing {
+        let _ = fs::remove_file(&backup);
+    }
+    Ok(())
+}
+
 pub fn configure(
     base_data_root: String,
     workspace: String,
 ) -> Result<RuntimeBootstrapStatus, String> {
+    quarantine_inherited_environment();
     if control_port_in_use() {
         return Err("Stop the current LingJi runtime before changing its data directory".to_string());
     }
@@ -239,29 +293,27 @@ pub fn configure(
         schema_version: BOOTSTRAP_SCHEMA_VERSION,
         base_data_root: base.display().to_string(),
         active_workspace: workspace.clone(),
+        owner_confirmed: true,
     };
-    let path = config_path()?;
-    let parent = path
-        .parent()
-        .ok_or_else(|| "Invalid LingJi Desktop bootstrap configuration path".to_string())?;
-    fs::create_dir_all(parent)
-        .map_err(|error| format!("Unable to create the Desktop bootstrap directory: {error}"))?;
-    let temporary = path.with_extension("json.tmp");
-    let payload = serde_json::to_vec_pretty(&config)
-        .map_err(|error| format!("Unable to encode LingJi Desktop bootstrap configuration: {error}"))?;
-    fs::write(&temporary, payload)
-        .map_err(|error| format!("Unable to write LingJi Desktop bootstrap configuration: {error}"))?;
-    fs::rename(&temporary, &path)
-        .map_err(|error| format!("Unable to activate LingJi Desktop bootstrap configuration: {error}"))?;
+    write_saved_config(&config_path()?, &config)?;
 
-    env::set_var("LINGJI_OWNER_DATA_ROOT", &effective);
-    env::set_var("LINGJI_WORKSPACE", &workspace);
+    env::set_var(OWNER_DATA_ROOT_ENV, &effective);
+    env::set_var(WORKSPACE_ENV, &workspace);
     status_from_config(config, "bootstrap_file")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn config(schema_version: u32, owner_confirmed: bool) -> RuntimeBootstrapConfig {
+        RuntimeBootstrapConfig {
+            schema_version,
+            base_data_root: "unused".to_string(),
+            active_workspace: "acceptance".to_string(),
+            owner_confirmed,
+        }
+    }
 
     #[test]
     fn rejects_windows_system_drive_without_touching_it() {
@@ -282,5 +334,22 @@ mod tests {
     fn only_known_workspaces_are_allowed() {
         assert_eq!(validate_workspace("ACCEPTANCE").unwrap(), "acceptance");
         assert!(validate_workspace("shared").is_err());
+    }
+
+    #[test]
+    fn legacy_bootstrap_requires_owner_reconfirmation() {
+        let error = validate_config_contract(&config(1, false)).unwrap_err();
+        assert!(error.contains("confirmed again"));
+    }
+
+    #[test]
+    fn current_bootstrap_requires_explicit_owner_confirmation() {
+        let error = validate_config_contract(&config(BOOTSTRAP_SCHEMA_VERSION, false)).unwrap_err();
+        assert!(error.contains("owner confirmation"));
+    }
+
+    #[test]
+    fn current_owner_confirmed_bootstrap_is_accepted() {
+        validate_config_contract(&config(BOOTSTRAP_SCHEMA_VERSION, true)).unwrap();
     }
 }
