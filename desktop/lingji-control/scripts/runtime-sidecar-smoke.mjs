@@ -102,20 +102,31 @@ for (const token of [
   "guarded_runtime_ensure",
   "guarded_runtime_stop",
   "guarded_runtime_restart",
+  "quarantine_inherited_environment",
   "require_configured",
 ]) assert.ok(rustMain.includes(token), `Rust app is missing ${token}`);
 
 for (const token of [
   "desktop-bootstrap.json",
+  "BOOTSTRAP_SCHEMA_VERSION: u32 = 2",
   "base_data_root",
   "active_workspace",
+  "owner_confirmed",
   "production",
   "acceptance",
   "c_drive_write_detected",
+  "inherited_environment_ignored",
   "LINGJI_OWNER_DATA_ROOT",
   "LINGJI_WORKSPACE",
+  "env::remove_var(OWNER_DATA_ROOT_ENV)",
+  "env::remove_var(WORKSPACE_ENV)",
   "Stop the current LingJi runtime",
 ]) assert.ok(bootstrap.includes(token), `Runtime bootstrap is missing ${token}`);
+assert.equal(bootstrap.includes("fn environment_status"), false, "Ambient environment must never configure the installed Desktop");
+assert.match(bootstrap, /legacy_bootstrap_requires_owner_reconfirmation/);
+assert.match(bootstrap, /current_bootstrap_requires_explicit_owner_confirmation/);
+assert.match(bootstrap, /write_saved_config/);
+assert.match(bootstrap, /json\.bak/);
 
 for (const token of [
   "Command::new(&binary)",
@@ -151,6 +162,7 @@ assert.match(connection, /runtimeBusy/);
 assert.match(connection, /autoRecoveryActive/);
 assert.match(connection, /ensureConnection\(false\)/);
 assert.match(runtimeTypes, /RuntimeBootstrapStatus/);
+assert.match(runtimeTypes, /inherited_environment_ignored/);
 assert.match(runtimeTypes, /RuntimeStatus/);
 assert.match(runtimeTypes, /runtimeStateLabel/);
 assert.match(shell, /desktop-runtime-tools/);
@@ -167,6 +179,7 @@ assert.match(releaseHook, /runtime_data_root/);
 assert.match(releaseHook, /system_health/);
 assert.match(releaseHook, /vector_rebuild_required/);
 assert.match(releaseHook, /c_drive_write_detected/);
+assert.match(releaseHook, /inherited_runtime_environment_ignored/);
 assert.equal(releaseHook.includes("control_token"), false);
 
 console.log("runtime-sidecar-smoke: PASS");
