@@ -145,31 +145,35 @@ The Windows release and Desktop smoke contracts assert:
 - capability-level copied diagnostics without control tokens or Vault paths;
 - release metadata that identifies LocalAppData as bootstrap-only and the Runtime root as owner-selected non-system-drive storage.
 
-Final validated commit:
+Validated code and release-contract commit:
 
 ```text
 eeb2a0aa9c11d26a0f9926ebd42789a24e882a31
 ```
 
-Required PR checks:
+The PR report itself was then updated in documentation-only commit
+`b75127d899cfafb86dfb3597362031b8c2b00a9f`; CI rebuilt the same code tree from that exact PR HEAD.
+
+Required PR checks on final HEAD:
 
 ```text
-tests #791: SUCCESS
-P0 Windows Gate #152: SUCCESS
-Windows Desktop Release Baseline #41: SUCCESS
+tests #792: SUCCESS
+P0 Windows Gate #153: SUCCESS
+Windows Desktop Release Baseline #42: SUCCESS
 ```
 
 The Windows release workflow validated the real PyInstaller Sidecar build, authenticated
 `127.0.0.1:8766` ping, managed stop, Tauri release build, NSIS package, PE subsystem checks,
 checksums, metadata and artifact upload.
 
-Final CI artifact:
+Final CI artifact for exact PR HEAD:
 
 ```text
-name: lingji-windows-0.1.0-eeb2a0aa
-artifact id: 8654373629
-artifact digest: sha256:3ea862264c9d0306e361d2d1e908cf35b3447cd4cdf80d4aeb06e3f1396a4f10
-installer sha256: fac76f4b46d02067e19b0d483b7b8853a54e1a157f53dcf95727f76c1bcc2266
+head: b75127d899cfafb86dfb3597362031b8c2b00a9f
+name: lingji-windows-0.1.0-b75127d8
+artifact id: 8654621351
+artifact digest: sha256:98d26c05d8d5c5baeb153bb28f908cedf2a3e353c4a9ca3fec62b5ffe11da7bf
+installer sha256: bac23cbba4afe892b5325986a96e0ddbe5c8c17d19f007da485be6eb0aa86ebd
 ```
 
 ## Installed UI acceptance boundary
