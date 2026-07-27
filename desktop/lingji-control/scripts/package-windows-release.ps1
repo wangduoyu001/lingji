@@ -137,7 +137,7 @@ $artifacts = foreach ($artifactPath in $artifactFiles) {
 }
 
 $metadata = [ordered]@{
-  schema_version = 3
+  schema_version = 4
   product_name = "LingJi"
   display_name = "灵机"
   version = $version
@@ -154,6 +154,8 @@ $metadata = [ordered]@{
   data_preservation = [ordered]@{
     owner_data_bundled = $false
     uninstall_deletes_owner_data = $false
+    bootstrap_config = "%LOCALAPPDATA%\LingJi\desktop-bootstrap.json"
+    bootstrap_config_contains_runtime_data = $false
     protected_data = @("Obsidian Vault", "LingJi storage", "runtime settings", "SQLite state", "Qdrant collections")
   }
   runtime_boundary = [ordered]@{
@@ -166,7 +168,10 @@ $metadata = [ordered]@{
     sidecar_runtime_file_count = [int]$sidecarManifest.runtime_directory.file_count
     sidecar_runtime_bytes = [long]$sidecarManifest.runtime_directory.bytes
     optional_media_providers_bundled = [bool]$sidecarManifest.optional_media_providers_bundled
-    owner_data_root = "%LOCALAPPDATA%\LingJi"
+    owner_data_root = "owner-selected-non-system-drive\<workspace>"
+    workspace_profiles = @("production", "acceptance")
+    first_run_configuration_required = $true
+    c_drive_runtime_data_allowed = $false
     updater_included = $false
   }
 }
@@ -192,9 +197,11 @@ Desktop subsystem: Windows GUI
 Sidecar subsystem: Windows GUI
 Code signed: no
 
-This P2-11B package contains the Tauri Desktop application and the fixed LingJi Python runtime Sidecar.
+This package contains the Tauri Desktop application and the fixed LingJi Python runtime Sidecar.
 The Desktop manages only the Sidecar process it started. A healthy external 8766 process is detected but is not stopped or restarted.
-Owner data is stored outside the installation directory under %LOCALAPPDATA%\LingJi by default.
+On first launch, the owner must select a non-C base data directory and choose the production or acceptance workspace.
+Runtime databases, vectors, raw data, logs, cache, backups and generated data are stored under <selected base>\<workspace>.
+%LOCALAPPDATA%\LingJi\desktop-bootstrap.json stores only the small Desktop bootstrap pointer; it is not the Runtime data root.
 Optional media providers and large local models are not bundled or downloaded automatically.
 The automatic updater is not included yet.
 
