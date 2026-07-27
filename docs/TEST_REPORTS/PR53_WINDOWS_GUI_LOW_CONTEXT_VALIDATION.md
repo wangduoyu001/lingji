@@ -154,7 +154,7 @@ eeb2a0aa9c11d26a0f9926ebd42789a24e882a31
 The PR report itself was then updated in documentation-only commit
 `b75127d899cfafb86dfb3597362031b8c2b00a9f`; CI rebuilt the same code tree from that exact PR HEAD.
 
-Required PR checks on final HEAD:
+Required PR checks on final executable tree:
 
 ```text
 tests #792: SUCCESS
@@ -166,7 +166,7 @@ The Windows release workflow validated the real PyInstaller Sidecar build, authe
 `127.0.0.1:8766` ping, managed stop, Tauri release build, NSIS package, PE subsystem checks,
 checksums, metadata and artifact upload.
 
-Final CI artifact for exact PR HEAD:
+Owner-machine acceptance artifact:
 
 ```text
 head: b75127d899cfafb86dfb3597362031b8c2b00a9f
@@ -176,13 +176,16 @@ artifact digest: sha256:98d26c05d8d5c5baeb153bb28f908cedf2a3e353c4a9ca3fec62b5ff
 installer sha256: bac23cbba4afe892b5325986a96e0ddbe5c8c17d19f007da485be6eb0aa86ebd
 ```
 
+Later report-only commits do not change the executable tree and must not trigger a moving
+owner-machine acceptance target. Final PR merge checks still apply to the eventual PR HEAD.
+
 ## Installed UI acceptance boundary
 
 Automated checks do not replace owner-machine UI acceptance.
 
 Before completion, the agent must:
 
-1. install the PR artifact built from the exact final validated commit;
+1. install the owner-machine acceptance artifact identified above;
 2. launch the installed Tauri application, not Vite or a browser page;
 3. on first launch, select a non-C base directory and the `acceptance` workspace;
 4. confirm Core does not start before valid data-root configuration;
