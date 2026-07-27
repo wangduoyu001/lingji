@@ -14,6 +14,7 @@ const [
   hooks,
   cargo,
   rustMain,
+  bootstrap,
   manager,
   connection,
   runtimeTypes,
@@ -28,6 +29,7 @@ const [
   read("../src-tauri/windows/sidecar-hooks.nsh"),
   read("../src-tauri/Cargo.toml"),
   read("../src-tauri/src/main.rs"),
+  read("../src-tauri/src/runtime_bootstrap.rs"),
   read("../src-tauri/src/runtime_manager.rs"),
   read("../src/hooks/useLingJiConnection.ts"),
   read("../src/runtimeTypes.ts"),
@@ -43,13 +45,16 @@ assert.equal(sidecarConfig.bundle.windows.nsis.installerHooks, "./windows/sideca
 
 for (const token of [
   "--data-root",
+  "--workspace",
   "--check-config",
   "LINGJI_OWNER_DATA_ROOT",
+  "LINGJI_WORKSPACE",
   "_ensure_standard_streams",
   "LINGJI_WORKSPACE_ROOT",
   "CONTROL_API_HOST",
   "127.0.0.1",
   "owner_data_outside_install_dir",
+  "system_drive_runtime_data_allowed",
   "sidecar-state.json",
   "sidecar-stop-request.json",
   "install_runtime_lifecycle",
@@ -59,6 +64,8 @@ assert.equal(entrypoint.includes('"0.0.0.0"'), false);
 assert.match(entrypoint, /target\.setdefault\("VAULT_DIR"/);
 assert.match(pythonTests, /rejects_non_loopback_host/);
 assert.match(pythonTests, /rejects_filesystem_root/);
+assert.match(pythonTests, /rejects_windows_system_drive/);
+assert.match(pythonTests, /keeps_production_and_acceptance_separate/);
 assert.match(pythonTests, /preserves_explicit_owner_vault/);
 assert.match(pythonTests, /matching_stop_request/);
 assert.match(pythonTests, /mismatched_stop_request/);
@@ -86,13 +93,29 @@ assert.equal(hooks.includes("Obsidian"), false, "Installer hooks must not touch 
 assert.match(cargo, /serde_json = "1"/);
 
 for (const token of [
+  "mod runtime_bootstrap",
   "mod runtime_manager",
   ".manage(RuntimeManager::default())",
+  "runtime_bootstrap_status",
+  "runtime_configure",
   "runtime_status",
   "runtime_ensure",
   "runtime_stop",
   "runtime_restart",
+  "require_configured",
 ]) assert.ok(rustMain.includes(token), `Rust app is missing ${token}`);
+
+for (const token of [
+  "desktop-bootstrap.json",
+  "base_data_root",
+  "active_workspace",
+  "production",
+  "acceptance",
+  "c_drive_write_detected",
+  "LINGJI_OWNER_DATA_ROOT",
+  "LINGJI_WORKSPACE",
+  "Stop the current LingJi runtime",
+]) assert.ok(bootstrap.includes(token), `Runtime bootstrap is missing ${token}`);
 
 for (const token of [
   "Command::new(&binary)",
@@ -113,23 +136,37 @@ for (const token of [
 assert.equal(manager.includes("tauri_plugin_shell"), false, "Runtime manager must not expose general shell execution");
 assert.equal(manager.includes("Command::new(command"), false, "Runtime manager must not accept a user command");
 
-for (const command of ["runtime_ensure", "runtime_status", "runtime_stop", "runtime_restart"]) {
+for (const command of [
+  "runtime_bootstrap_status",
+  "runtime_configure",
+  "runtime_ensure",
+  "runtime_status",
+  "runtime_stop",
+  "runtime_restart",
+]) {
   assert.ok(connection.includes(`"${command}"`), `Desktop connection hook is missing ${command}`);
 }
+assert.match(connection, /configuration_required/);
 assert.match(connection, /runtimeBusy/);
 assert.match(connection, /autoRecoveryActive/);
 assert.match(connection, /ensureConnection\(false\)/);
+assert.match(runtimeTypes, /RuntimeBootstrapStatus/);
 assert.match(runtimeTypes, /RuntimeStatus/);
 assert.match(runtimeTypes, /runtimeStateLabel/);
 assert.match(shell, /desktop-runtime-tools/);
 assert.match(shell, /停止核心/);
 assert.match(shell, /重启核心/);
+assert.match(shell, /data_root_display/);
 assert.match(shell, /外部进程/);
+assert.match(boundary, /DATA ROOT REQUIRED/);
+assert.match(boundary, /保存配置并启动核心/);
 assert.match(boundary, /恢复运行/);
 assert.match(boundary, /AUTO RECOVERY/);
-assert.equal(boundary.includes("启动核心"), false, "Routine Sidecar startup must be automatic");
+assert.equal(boundary.includes(">启动核心</button>"), false, "Routine Sidecar startup must remain automatic");
 assert.match(releaseHook, /runtime_data_root/);
-assert.match(releaseHook, /runtime_log/);
+assert.match(releaseHook, /system_health/);
+assert.match(releaseHook, /vector_rebuild_required/);
+assert.match(releaseHook, /c_drive_write_detected/);
 assert.equal(releaseHook.includes("control_token"), false);
 
 console.log("runtime-sidecar-smoke: PASS");
