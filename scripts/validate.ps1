@@ -3,10 +3,13 @@ param(
     [ValidateSet("focused", "full", "release")]
     [string]$Mode = "focused",
 
-    [ValidateSet("retrieval", "capture", "control", "obsidian", "desktop", "sidecar", "docs")]
+    [ValidateSet("retrieval", "capture", "control", "obsidian", "desktop", "sidecar", "docs", "validation")]
     [string]$Area = "docs",
 
-    [string]$PythonCommand = "python"
+    [string]$PythonCommand = "python",
+
+    [ValidateRange(10, 200)]
+    [int]$FailureTailLines = 40
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,9 +45,22 @@ if ($env:GITHUB_HEAD_REF) {
 }
 
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$outputRoot = Join-Path $repoRoot ("output\validation\{0}-{1}-{2}" -f $stamp, $shortCommit, $Mode)
+$validationRoot = Join-Path $repoRoot "output\validation"
+$outputRoot = Join-Path $validationRoot ("{0}-{1}-{2}" -f $stamp, $shortCommit, $Mode)
 $logsRoot = Join-Path $outputRoot "logs"
 New-Item -ItemType Directory -Force -Path $logsRoot | Out-Null
+
+function Remove-StaleValidationRuns {
+    if (-not (Test-Path $validationRoot)) {
+        return
+    }
+
+    Get-ChildItem -Path $validationRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -ne $outputRoot } |
+        ForEach-Object { Remove-Item $_.FullName -Recurse -Force }
+}
+
+Remove-StaleValidationRuns
 
 function Write-ValidationSummary {
     param([string]$Overall)
@@ -61,11 +77,14 @@ function Write-ValidationSummary {
         area = $areaValue
         overall = $Overall
         ended_at = (Get-Date).ToString("o")
+        log_policy = "Read summary only on success; read only the failing log tail on failure."
         suites = @($script:Results)
     }
 
     $jsonPath = Join-Path $outputRoot "summary.json"
     $markdownPath = Join-Path $outputRoot "summary.md"
+    $latestJsonPath = Join-Path $validationRoot "latest-summary.json"
+    $latestMarkdownPath = Join-Path $validationRoot "latest-summary.md"
     $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $jsonPath -Encoding UTF8
 
     $lines = @(
@@ -80,6 +99,7 @@ function Write-ValidationSummary {
     }
     $lines += @(
         "- Overall: ``$Overall``",
+        "- Log policy: success reads this summary only; failure reads only the failing log tail.",
         "",
         "| Suite | Result | Seconds | Log |",
         "|---|---:|---:|---|"
@@ -90,7 +110,10 @@ function Write-ValidationSummary {
     }
     $lines | Set-Content -Path $markdownPath -Encoding UTF8
 
-    return $jsonPath
+    Copy-Item -Path $jsonPath -Destination $latestJsonPath -Force
+    Copy-Item -Path $markdownPath -Destination $latestMarkdownPath -Force
+
+    return $latestJsonPath
 }
 
 function Invoke-ValidationStep {
@@ -107,6 +130,7 @@ function Invoke-ValidationStep {
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $exitCode = 1
     $previousEnvironment = @{}
+    $previousErrorActionPreference = $ErrorActionPreference
 
     foreach ($key in $Environment.Keys) {
         $previousEnvironment[$key] = [Environment]::GetEnvironmentVariable($key, "Process")
@@ -115,6 +139,14 @@ function Invoke-ValidationStep {
 
     Push-Location $WorkingDirectory
     try {
+        $null = Get-Command $Command -ErrorAction Stop
+
+        # Windows PowerShell 5.1 promotes native stderr to its Error stream. Some
+        # successful tools, notably Vite, legitimately write warnings there. Keep
+        # stderr in the log and determine success exclusively from the native exit
+        # code instead of treating warning text as a terminating PowerShell error.
+        $ErrorActionPreference = "Continue"
+        $global:LASTEXITCODE = 0
         & $Command @Arguments *> $logPath
         $exitCode = $LASTEXITCODE
         if ($null -eq $exitCode) {
@@ -126,6 +158,7 @@ function Invoke-ValidationStep {
         $exitCode = 1
     }
     finally {
+        $ErrorActionPreference = $previousErrorActionPreference
         Pop-Location
         foreach ($key in $Environment.Keys) {
             [Environment]::SetEnvironmentVariable($key, $previousEnvironment[$key], "Process")
@@ -149,7 +182,7 @@ function Invoke-ValidationStep {
     if ($exitCode -ne 0) {
         Write-Host ("[FAIL] {0}" -f $Name) -ForegroundColor Red
         if (Test-Path $logPath) {
-            Get-Content -Path $logPath -Tail 80
+            Get-Content -Path $logPath -Tail $FailureTailLines
         }
         $summaryPath = Write-ValidationSummary -Overall "FAIL"
         Write-Host ("Failure log: {0}" -f $logPath)
@@ -216,6 +249,17 @@ function Invoke-FocusedValidation {
                 -WorkingDirectory $repoRoot `
                 -Command "git" `
                 -Arguments @("diff", "--check")
+        }
+        "validation" {
+            Invoke-ValidationStep `
+                -Name "native-stderr-warning-contract" `
+                -WorkingDirectory $repoRoot `
+                -Command "powershell" `
+                -Arguments @(
+                    "-NoProfile",
+                    "-Command",
+                    "[Console]::Error.WriteLine('expected validation warning'); exit 0"
+                )
         }
     }
 }
