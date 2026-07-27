@@ -60,9 +60,9 @@ assert.match(rustMain, /fn release_metadata/);
 assert.match(rustMain, /owner_data_root/);
 assert.match(rustMain, /runtime_bootstrap_status/);
 assert.match(rustMain, /runtime_configure/);
-assert.match(rustMain, /runtime_ensure/);
-assert.match(rustMain, /runtime_stop/);
-assert.match(rustMain, /runtime_restart/);
+assert.match(rustMain, /guarded_runtime_ensure/);
+assert.match(rustMain, /guarded_runtime_stop/);
+assert.match(rustMain, /guarded_runtime_restart/);
 
 assert.match(hook, /invoke<ReleaseMetadata>\("release_metadata"\)/);
 assert.match(hook, /copyDiagnostics/);
@@ -77,9 +77,16 @@ assert.match(boundary, /恢复运行/);
 assert.equal(boundary.includes(">启动核心</button>"), false, "Routine installed startup must remain automatic");
 
 for (const token of [
+  "schema_version = 4",
   "Get-PeSubsystem",
   "desktop_pe_subsystem = \"windows_gui\"",
   "sidecar_pe_subsystem = \"windows_gui\"",
+  "bootstrap_config = \"%LOCALAPPDATA%\\LingJi\\desktop-bootstrap.json\"",
+  "bootstrap_config_contains_runtime_data = $false",
+  "owner_data_root = \"owner-selected-non-system-drive\\<workspace>\"",
+  "workspace_profiles = @(\"production\", \"acceptance\")",
+  "first_run_configuration_required = $true",
+  "c_drive_runtime_data_allowed = $false",
   "Get-FileHash",
   "SHA256SUMS.txt",
   "build-metadata.json",
@@ -90,6 +97,11 @@ for (const token of [
   "updater_included = $false",
   "signed = $false",
 ]) assert.ok(packager.includes(token), `Release packager is missing ${token}`);
+assert.equal(
+  packager.includes('owner_data_root = "%LOCALAPPDATA%\\LingJi"'),
+  false,
+  "Release metadata must not claim LocalAppData is the Runtime data root",
+);
 
 for (const token of [
   "FailureTailLines = 40",
