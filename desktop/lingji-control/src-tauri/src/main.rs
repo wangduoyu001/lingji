@@ -132,6 +132,7 @@ async fn guarded_runtime_restart(
 }
 
 fn main() {
+    runtime_bootstrap::quarantine_inherited_environment();
     let _ = runtime_bootstrap::apply_saved_environment();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
