@@ -11,6 +11,13 @@ export type ConnectionState =
   | "offline"
   | "unsupported";
 
+const GUARDED_RUNTIME_COMMANDS = {
+  status: "guarded_runtime_status",
+  ensure: "guarded_runtime_ensure",
+  stop: "guarded_runtime_stop",
+  restart: "guarded_runtime_restart",
+} as const;
+
 function connectionMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === "CREDENTIALS_UNAVAILABLE") return "灵机核心尚未生成本机控制凭据。";
@@ -71,7 +78,7 @@ export function useLingJiConnection() {
         setError(bootstrap.last_error || "请先选择非 C 盘的数据目录。");
         return;
       }
-      const status = await invoke<RuntimeStatus>("runtime_ensure");
+      const status = await invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.ensure);
       setRuntimeStatus(status);
       if (!status.healthy) throw new Error(runtimeFailure(status));
       await readOverview();
@@ -113,7 +120,7 @@ export function useLingJiConnection() {
   const refreshRuntime = useCallback(async () => {
     if (!isTauriDesktopRuntime() || bootstrapStatus?.configured === false) return null;
     try {
-      const status = await invoke<RuntimeStatus>("runtime_status");
+      const status = await invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.status);
       setRuntimeStatus(status);
       return status;
     } catch (reason) {
@@ -127,7 +134,7 @@ export function useLingJiConnection() {
     setRuntimeBusy("stop");
     setOwnerStopped(true);
     try {
-      const status = await invoke<RuntimeStatus>("runtime_stop");
+      const status = await invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.stop);
       setRuntimeStatus(status);
       setOverview(null);
       setState("offline");
@@ -146,7 +153,7 @@ export function useLingJiConnection() {
     setOwnerStopped(false);
     setState("booting");
     try {
-      const status = await invoke<RuntimeStatus>("runtime_restart");
+      const status = await invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.restart);
       setRuntimeStatus(status);
       if (!status.healthy) throw new Error(runtimeFailure(status));
       await readOverview();
@@ -168,7 +175,7 @@ export function useLingJiConnection() {
     const timer = window.setInterval(() => {
       void Promise.all([
         api.get<Row>("/api/overview"),
-        invoke<RuntimeStatus>("runtime_status"),
+        invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.status),
       ])
         .then(([next, runtime]) => {
           setOverview(next);
