@@ -1,6 +1,8 @@
-import type { ReactNode } from "react";
-import { runtimeStateLabel, type RuntimeStatus } from "../runtimeTypes";
+import { useMemo, useState, type ReactNode } from "react";
+import { runtimeStateLabel, type RuntimeBootstrapStatus, type RuntimeStatus } from "../runtimeTypes";
 import type { ConnectionState } from "../hooks/useLingJiConnection";
+
+type WorkspaceName = "production" | "acceptance";
 
 type Props = {
   state: ConnectionState;
@@ -9,6 +11,8 @@ type Props = {
   runtimeBusy: string;
   error: string;
   runtimeStatus: RuntimeStatus | null;
+  bootstrapStatus: RuntimeBootstrapStatus | null;
+  onConfigure: (baseDataRoot: string, workspace: WorkspaceName) => Promise<void>;
   onResume: () => void;
   children: ReactNode;
 };
@@ -20,9 +24,33 @@ export default function RuntimeBoundary({
   runtimeBusy,
   error,
   runtimeStatus,
+  bootstrapStatus,
+  onConfigure,
   onResume,
   children,
 }: Props) {
+  const [baseDataRoot, setBaseDataRoot] = useState("");
+  const [workspace, setWorkspace] = useState<WorkspaceName>("acceptance");
+  const effectiveRoot = useMemo(() => {
+    const root = baseDataRoot.trim().replace(/[\\/]+$/, "");
+    return root ? `${root}\\${workspace}` : "";
+  }, [baseDataRoot, workspace]);
+
+  async function chooseDataRoot() {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        multiple: false,
+        directory: true,
+        title: "选择灵机基础数据目录（禁止选择 C 盘）",
+      });
+      if (typeof selected === "string") setBaseDataRoot(selected);
+    } catch {
+      // The installed Desktop has the dialog plugin. The text field remains a
+      // deliberate fallback for development bridges where the picker is absent.
+    }
+  }
+
   if (state === "unsupported") {
     return (
       <section className="desktop-runtime-card desktop-runtime-card-blocked">
@@ -31,6 +59,63 @@ export default function RuntimeBoundary({
           <span className="desktop-eyebrow">DESKTOP ONLY</span>
           <h2>请从灵机桌面应用启动</h2>
           <p>此控制中心不提供浏览器操作入口，也不会在浏览器中保存控制令牌或连接地址。</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (state === "configuration_required") {
+    return (
+      <section className="desktop-runtime-card desktop-runtime-card-blocked runtime-setup-card">
+        <div className="desktop-runtime-symbol">盘</div>
+        <div className="stack">
+          <div>
+            <span className="desktop-eyebrow">DATA ROOT REQUIRED</span>
+            <h2>先选择非 C 盘数据目录</h2>
+            <p>
+              数据库、向量、日志、缓存、原始材料和生成资产不会再静默写入 C 盘。
+              LocalAppData 只保存一个很小的启动指针文件。
+            </p>
+          </div>
+
+          <div className="settings-list">
+            <label>
+              验收环境
+              <select value={workspace} onChange={(event) => setWorkspace(event.target.value as WorkspaceName)}>
+                <option value="acceptance">验收环境 acceptance</option>
+                <option value="production">正式环境 production</option>
+              </select>
+            </label>
+            <label>
+              基础数据目录
+              <div className="toolbar">
+                <input
+                  value={baseDataRoot}
+                  onChange={(event) => setBaseDataRoot(event.target.value)}
+                  placeholder="例如 D:\\LingJiData"
+                />
+                <button className="button secondary" disabled={Boolean(runtimeBusy)} onClick={() => void chooseDataRoot()}>
+                  选择目录
+                </button>
+              </div>
+            </label>
+          </div>
+
+          <dl className="detail-list">
+            <div><dt>实际数据根</dt><dd>{effectiveRoot || "选择目录后显示"}</dd></div>
+            <div><dt>启动配置</dt><dd>{bootstrapStatus?.config_path_display || "%LOCALAPPDATA%\\LingJi\\desktop-bootstrap.json"}</dd></div>
+          </dl>
+
+          {error && <small className="desktop-runtime-error">{error}</small>}
+          <div className="toolbar">
+            <button
+              className="button primary"
+              disabled={!baseDataRoot.trim() || Boolean(runtimeBusy)}
+              onClick={() => onConfigure(baseDataRoot.trim(), workspace)}
+            >
+              {runtimeBusy === "configure" || runtimeBusy === "ensure" ? "配置并启动中…" : "保存配置并启动核心"}
+            </button>
+          </div>
         </div>
       </section>
     );
