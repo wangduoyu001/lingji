@@ -148,15 +148,15 @@ The Windows release and Desktop smoke contracts assert:
 Final validated commit:
 
 ```text
-b889bb2fb3fe9b76a949698eec9abfb228e5e8c7
+eeb2a0aa9c11d26a0f9926ebd42789a24e882a31
 ```
 
 Required PR checks:
 
 ```text
-tests #790: SUCCESS
-P0 Windows Gate #151: SUCCESS
-Windows Desktop Release Baseline #40: SUCCESS
+tests #791: SUCCESS
+P0 Windows Gate #152: SUCCESS
+Windows Desktop Release Baseline #41: SUCCESS
 ```
 
 The Windows release workflow validated the real PyInstaller Sidecar build, authenticated
@@ -166,10 +166,10 @@ checksums, metadata and artifact upload.
 Final CI artifact:
 
 ```text
-name: lingji-windows-0.1.0-b889bb2f
-artifact id: 8654077495
-artifact digest: sha256:cc142fb1e13bcd5551bdbeda76be551191658c3b1dfdc39c52e7480ca7096a61
-installer sha256: 20323a2cb04b233c7d815860dededa9295284db175452dce92fdf16ff5b5f3f6
+name: lingji-windows-0.1.0-eeb2a0aa
+artifact id: 8654373629
+artifact digest: sha256:3ea862264c9d0306e361d2d1e908cf35b3447cd4cdf80d4aeb06e3f1396a4f10
+installer sha256: fac76f4b46d02067e19b0d483b7b8853a54e1a157f53dcf95727f76c1bcc2266
 ```
 
 ## Installed UI acceptance boundary
