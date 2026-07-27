@@ -82,6 +82,10 @@ class StartupHealthTests(unittest.TestCase):
                 "LINGJI_OWNER_DATA_ROOT": str(self.root),
             },
             clear=False,
+        ), patch.object(
+            StartupHealthChecker,
+            "_is_windows_system_drive",
+            return_value=False,
         ), patch("src.health.requests.get", side_effect=requests.ConnectionError("offline")), patch(
             "src.health.shutil.which", return_value="tool"
         ):
@@ -90,6 +94,23 @@ class StartupHealthTests(unittest.TestCase):
         policy = next(item for item in report["checks"] if item["name"] == "data_root_policy")
         self.assertEqual(policy["status"], "ok")
         self.assertFalse(policy["c_drive_write_detected"])
+
+    def test_packaged_runtime_marks_c_drive_policy_as_error_without_io(self):
+        checker = StartupHealthChecker(self._settings())
+        checks = []
+        with patch.dict(
+            "os.environ",
+            {
+                "LINGJI_PACKAGED_RUNTIME": "1",
+                "LINGJI_WORKSPACE": "production",
+                "LINGJI_OWNER_DATA_ROOT": r"C:\LingJiData\production",
+            },
+            clear=False,
+        ):
+            checker._check_data_root_policy(checks)
+
+        self.assertEqual(checks[0]["status"], "error")
+        self.assertTrue(checks[0]["c_drive_write_detected"])
 
 
 if __name__ == "__main__":
