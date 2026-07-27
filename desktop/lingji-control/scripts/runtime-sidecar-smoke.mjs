@@ -16,10 +16,12 @@ const [
   rustMain,
   bootstrap,
   manager,
+  zeroShell,
   connection,
   runtimeTypes,
   shell,
   boundary,
+  acceptancePage,
   releaseHook,
 ] = await Promise.all([
   read("../../../run_packaged_control_api.py"),
@@ -31,10 +33,12 @@ const [
   read("../src-tauri/src/main.rs"),
   read("../src-tauri/src/runtime_bootstrap.rs"),
   read("../src-tauri/src/runtime_manager.rs"),
+  read("../src-tauri/src/windowless_acceptance.rs"),
   read("../src/hooks/useLingJiConnection.ts"),
   read("../src/runtimeTypes.ts"),
   read("../src/components/DesktopShell.tsx"),
   read("../src/components/RuntimeBoundary.tsx"),
+  read("../src/pages/AcceptancePage.tsx"),
   read("../src/hooks/useReleaseMetadata.ts"),
 ]);
 
@@ -44,21 +48,11 @@ assert.equal(sidecarConfig.bundle.resources["binaries/lingji_core_lib"], "lingji
 assert.equal(sidecarConfig.bundle.windows.nsis.installerHooks, "./windows/sidecar-hooks.nsh");
 
 for (const token of [
-  "--data-root",
-  "--workspace",
-  "--check-config",
-  "LINGJI_OWNER_DATA_ROOT",
-  "LINGJI_WORKSPACE",
-  "_ensure_standard_streams",
-  "LINGJI_WORKSPACE_ROOT",
-  "CONTROL_API_HOST",
-  "127.0.0.1",
-  "owner_data_outside_install_dir",
-  "system_drive_runtime_data_allowed",
-  "sidecar-state.json",
-  "sidecar-stop-request.json",
-  "install_runtime_lifecycle",
-  "instance_id",
+  "--data-root", "--workspace", "--check-config", "LINGJI_OWNER_DATA_ROOT",
+  "LINGJI_WORKSPACE", "_ensure_standard_streams", "LINGJI_WORKSPACE_ROOT",
+  "CONTROL_API_HOST", "127.0.0.1", "owner_data_outside_install_dir",
+  "system_drive_runtime_data_allowed", "sidecar-state.json", "sidecar-stop-request.json",
+  "install_runtime_lifecycle", "instance_id",
 ]) assert.ok(entrypoint.includes(token), `Packaged entrypoint is missing ${token}`);
 assert.equal(entrypoint.includes('"0.0.0.0"'), false);
 assert.match(entrypoint, /target\.setdefault\("VAULT_DIR"/);
@@ -71,19 +65,10 @@ assert.match(pythonTests, /matching_stop_request/);
 assert.match(pythonTests, /mismatched_stop_request/);
 
 for (const token of [
-  "PyInstaller",
-  "--onedir",
-  "--windowed",
-  "--contents-directory",
-  "lingji_core_lib",
-  "lingji-core-$TargetTriple.exe",
-  "--check-config",
-  "--check-config-output",
-  "LINGJI_SIDECAR_PYTHON",
-  "Start-Process",
-  "-Wait",
-  "optional_media_providers_bundled = $false",
-  "Get-FileHash",
+  "PyInstaller", "--onedir", "--windowed", "--contents-directory", "lingji_core_lib",
+  "lingji-core-$TargetTriple.exe", "--check-config", "--check-config-output",
+  "LINGJI_SIDECAR_PYTHON", "Start-Process", "-Wait",
+  "optional_media_providers_bundled = $false", "Get-FileHash",
 ]) assert.ok(buildScript.includes(token), `Sidecar builder is missing ${token}`);
 
 assert.match(hooks, /taskkill \/F \/IM lingji-core\.exe/);
@@ -93,34 +78,19 @@ assert.equal(hooks.includes("Obsidian"), false, "Installer hooks must not touch 
 assert.match(cargo, /serde_json = "1"/);
 
 for (const token of [
-  "mod runtime_bootstrap",
-  "mod runtime_manager",
-  ".manage(RuntimeManager::default())",
-  "runtime_bootstrap_status",
-  "runtime_configure",
-  "guarded_runtime_status",
-  "guarded_runtime_ensure",
-  "guarded_runtime_stop",
-  "guarded_runtime_restart",
-  "quarantine_inherited_environment",
+  "mod runtime_bootstrap", "mod runtime_manager", "mod windowless_acceptance",
+  ".manage(RuntimeManager::default())", "runtime_bootstrap_status", "runtime_configure",
+  "guarded_runtime_status", "guarded_runtime_ensure", "guarded_runtime_stop",
+  "guarded_runtime_restart", "run_windowless_acceptance", "quarantine_inherited_environment",
   "require_configured",
 ]) assert.ok(rustMain.includes(token), `Rust app is missing ${token}`);
 
 for (const token of [
-  "desktop-bootstrap.json",
-  "BOOTSTRAP_SCHEMA_VERSION: u32 = 2",
-  "base_data_root",
-  "active_workspace",
-  "owner_confirmed",
-  "production",
-  "acceptance",
-  "c_drive_write_detected",
-  "inherited_environment_ignored",
-  "LINGJI_OWNER_DATA_ROOT",
-  "LINGJI_WORKSPACE",
-  "env::remove_var(OWNER_DATA_ROOT_ENV)",
-  "env::remove_var(WORKSPACE_ENV)",
-  "Stop the current LingJi runtime",
+  "desktop-bootstrap.json", "BOOTSTRAP_SCHEMA_VERSION: u32 = 2", "base_data_root",
+  "active_workspace", "owner_confirmed", "production", "acceptance",
+  "c_drive_write_detected", "inherited_environment_ignored", "LINGJI_OWNER_DATA_ROOT",
+  "LINGJI_WORKSPACE", "env::remove_var(OWNER_DATA_ROOT_ENV)",
+  "env::remove_var(WORKSPACE_ENV)", "Stop the current LingJi runtime",
 ]) assert.ok(bootstrap.includes(token), `Runtime bootstrap is missing ${token}`);
 assert.equal(bootstrap.includes("fn environment_status"), false, "Ambient environment must never configure the installed Desktop");
 assert.match(bootstrap, /legacy_bootstrap_requires_owner_reconfirmation/);
@@ -129,34 +99,27 @@ assert.match(bootstrap, /write_saved_config/);
 assert.match(bootstrap, /json\.bak/);
 
 for (const token of [
-  "Command::new(&binary)",
-  "authenticated_health",
-  "/api/runtime/ping",
-  "X-LingJi-Token",
-  "STARTUP_ATTEMPTS",
-  "spawn_blocking",
-  "PackagedRuntimeIdentity",
-  "sidecar-state.json",
-  "sidecar-stop-request.json",
-  "write_stop_request",
-  "The healthy 8766 service was started outside this Desktop and will not be stopped",
-  "The healthy 8766 service is external and cannot be restarted",
-  "CREATE_NO_WINDOW",
-  "#[cfg(debug_assertions)]",
+  "Command::new(&binary)", "authenticated_health", "/api/runtime/ping", "X-LingJi-Token",
+  "STARTUP_ATTEMPTS", "spawn_blocking", "PackagedRuntimeIdentity", "sidecar-state.json",
+  "sidecar-stop-request.json", "write_stop_request", "CREATE_NO_WINDOW", "#[cfg(debug_assertions)]",
 ]) assert.ok(manager.includes(token), `Runtime manager is missing ${token}`);
 assert.equal(manager.includes("tauri_plugin_shell"), false, "Runtime manager must not expose general shell execution");
 assert.equal(manager.includes("Command::new(command"), false, "Runtime manager must not accept a user command");
 
+for (const token of [
+  "CreateToolhelp32Snapshot", "Process32FirstW", "Process32NextW",
+  '"powershell.exe"', '"pwsh.exe"', '"cmd.exe"', '"conhost.exe"',
+  "OBSERVATION_SECONDS: u64 = 60", "manager.restart(app)", "authenticated_before",
+  "authenticated_after", "forbidden_descendants", "external_shell_processes",
+  "reports", "desktop-acceptance", "detects_nested_descendants_without_cycles",
+]) assert.ok(zeroShell.includes(token), `Zero-shell acceptance is missing ${token}`);
+for (const forbidden of ["Command::new", "powershell -", "pwsh -", "wmic", "WMI"])
+  assert.equal(zeroShell.includes(forbidden), false, `Zero-shell acceptance must not invoke ${forbidden}`);
+
 for (const command of [
-  "runtime_bootstrap_status",
-  "runtime_configure",
-  "guarded_runtime_ensure",
-  "guarded_runtime_status",
-  "guarded_runtime_stop",
-  "guarded_runtime_restart",
-]) {
-  assert.ok(connection.includes(`"${command}"`), `Desktop connection hook is missing ${command}`);
-}
+  "runtime_bootstrap_status", "runtime_configure", "guarded_runtime_ensure",
+  "guarded_runtime_status", "guarded_runtime_stop", "guarded_runtime_restart",
+]) assert.ok(connection.includes(`"${command}"`), `Desktop connection hook is missing ${command}`);
 assert.match(connection, /configuration_required/);
 assert.match(connection, /runtimeBusy/);
 assert.match(connection, /autoRecoveryActive/);
@@ -175,6 +138,13 @@ assert.match(boundary, /保存配置并启动核心/);
 assert.match(boundary, /恢复运行/);
 assert.match(boundary, /AUTO RECOVERY/);
 assert.equal(boundary.includes(">启动核心</button>"), false, "Routine Sidecar startup must remain automatic");
+
+assert.match(acceptancePage, /run_windowless_acceptance/);
+assert.match(acceptancePage, /桌面零 Shell 验收/);
+assert.match(acceptancePage, /不调用 PowerShell、CMD、WMI 或批处理/);
+assert.match(acceptancePage, /外部 Shell/);
+assert.match(acceptancePage, /真实 Windows 安装版/);
+
 assert.match(releaseHook, /runtime_data_root/);
 assert.match(releaseHook, /system_health/);
 assert.match(releaseHook, /vector_rebuild_required/);
