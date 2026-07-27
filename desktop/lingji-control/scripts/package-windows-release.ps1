@@ -13,8 +13,46 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+function Get-PeSubsystem {
+  param([Parameter(Mandatory = $true)][string]$Path)
+
+  $stream = [System.IO.File]::OpenRead($Path)
+  $reader = New-Object System.IO.BinaryReader($stream)
+  try {
+    if ($stream.Length -lt 256) {
+      throw "PE file is too small: $Path"
+    }
+
+    $stream.Position = 0x3c
+    $peOffset = $reader.ReadInt32()
+    if ($peOffset -lt 0 -or ($peOffset + 94) -gt $stream.Length) {
+      throw "Invalid PE header offset: $Path"
+    }
+
+    $stream.Position = $peOffset
+    if ($reader.ReadUInt32() -ne 0x00004550) {
+      throw "Missing PE signature: $Path"
+    }
+
+    $optionalHeaderOffset = $peOffset + 24
+    $stream.Position = $optionalHeaderOffset
+    $magic = $reader.ReadUInt16()
+    if ($magic -ne 0x010b -and $magic -ne 0x020b) {
+      throw "Unsupported PE optional header: $Path"
+    }
+
+    $stream.Position = $optionalHeaderOffset + 68
+    return [int]$reader.ReadUInt16()
+  }
+  finally {
+    $reader.Dispose()
+    $stream.Dispose()
+  }
+}
+
 $desktopRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$tauriConfigPath = Join-Path $desktopRoot "src-tauri/tauri.conf.json"
+$tauriRoot = Join-Path $desktopRoot "src-tauri"
+$tauriConfigPath = Join-Path $tauriRoot "tauri.conf.json"
 $tauriConfig = Get-Content $tauriConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $version = [string]$tauriConfig.version
 if ([string]::IsNullOrWhiteSpace($version)) {
@@ -41,7 +79,7 @@ if ([string]::IsNullOrWhiteSpace($appExecutable)) {
   throw "Desktop executable was not produced"
 }
 
-$sidecarManifestPath = Join-Path $desktopRoot "src-tauri/binaries/lingji-core-manifest.json"
+$sidecarManifestPath = Join-Path $tauriRoot "binaries/lingji-core-manifest.json"
 if (-not (Test-Path $sidecarManifestPath)) {
   throw "Packaged runtime manifest was not produced"
 }
@@ -51,6 +89,22 @@ if ($sidecarManifest.target_triple -ne $Target) {
 }
 if ($sidecarManifest.pyinstaller_mode -ne "onedir") {
   throw "Runtime sidecar must use the onedir packaging contract"
+}
+
+$sidecarRelativePath = ([string]$sidecarManifest.executable.path).Replace("/", "\")
+$sidecarExecutable = Join-Path $tauriRoot $sidecarRelativePath
+if (-not (Test-Path $sidecarExecutable)) {
+  throw "Runtime sidecar executable was not produced: $sidecarExecutable"
+}
+
+$windowsGuiSubsystem = 2
+$desktopSubsystem = Get-PeSubsystem -Path $appExecutable
+$sidecarSubsystem = Get-PeSubsystem -Path $sidecarExecutable
+if ($desktopSubsystem -ne $windowsGuiSubsystem) {
+  throw "Desktop executable must use the Windows GUI subsystem; actual value: $desktopSubsystem"
+}
+if ($sidecarSubsystem -ne $windowsGuiSubsystem) {
+  throw "Runtime sidecar must use the Windows GUI subsystem; actual value: $sidecarSubsystem"
 }
 
 $output = Join-Path $desktopRoot $OutputDirectory
@@ -83,7 +137,7 @@ $artifacts = foreach ($artifactPath in $artifactFiles) {
 }
 
 $metadata = [ordered]@{
-  schema_version = 2
+  schema_version = 3
   product_name = "LingJi"
   display_name = "灵机"
   version = $version
@@ -94,6 +148,7 @@ $metadata = [ordered]@{
   installer_format = "nsis"
   installer_install_mode = "currentUser"
   webview_install_mode = "embedBootstrapper"
+  desktop_pe_subsystem = "windows_gui"
   signed = $false
   artifacts = $artifacts
   data_preservation = [ordered]@{
@@ -105,12 +160,13 @@ $metadata = [ordered]@{
     control_api = "http://127.0.0.1:8766"
     python_sidecar_included = $true
     pyinstaller_mode = [string]$sidecarManifest.pyinstaller_mode
+    sidecar_pe_subsystem = "windows_gui"
     sidecar_executable_bytes = [long]$sidecarManifest.executable.bytes
     sidecar_executable_sha256 = [string]$sidecarManifest.executable.sha256
     sidecar_runtime_file_count = [int]$sidecarManifest.runtime_directory.file_count
     sidecar_runtime_bytes = [long]$sidecarManifest.runtime_directory.bytes
     optional_media_providers_bundled = [bool]$sidecarManifest.optional_media_providers_bundled
-    owner_data_root = "%LOCALAPPDATA%\\LingJi"
+    owner_data_root = "%LOCALAPPDATA%\LingJi"
     updater_included = $false
   }
 }
@@ -132,6 +188,8 @@ Build time (UTC): $BuildTimeUtc
 Channel: $Channel
 Target: $Target
 Installer: NSIS current-user setup
+Desktop subsystem: Windows GUI
+Sidecar subsystem: Windows GUI
 Code signed: no
 
 This P2-11B package contains the Tauri Desktop application and the fixed LingJi Python runtime Sidecar.
