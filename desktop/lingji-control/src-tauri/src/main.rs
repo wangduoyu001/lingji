@@ -92,7 +92,7 @@ where
 }
 
 #[tauri::command]
-async fn runtime_status(
+async fn guarded_runtime_status(
     app: AppHandle,
     manager: State<'_, RuntimeManager>,
 ) -> Result<RuntimeStatus, String> {
@@ -102,7 +102,7 @@ async fn runtime_status(
 }
 
 #[tauri::command]
-async fn runtime_ensure(
+async fn guarded_runtime_ensure(
     app: AppHandle,
     manager: State<'_, RuntimeManager>,
 ) -> Result<RuntimeStatus, String> {
@@ -112,7 +112,7 @@ async fn runtime_ensure(
 }
 
 #[tauri::command]
-async fn runtime_stop(
+async fn guarded_runtime_stop(
     app: AppHandle,
     manager: State<'_, RuntimeManager>,
 ) -> Result<RuntimeStatus, String> {
@@ -122,7 +122,7 @@ async fn runtime_stop(
 }
 
 #[tauri::command]
-async fn runtime_restart(
+async fn guarded_runtime_restart(
     app: AppHandle,
     manager: State<'_, RuntimeManager>,
 ) -> Result<RuntimeStatus, String> {
@@ -141,10 +141,10 @@ fn main() {
             release_metadata,
             runtime_bootstrap_status,
             runtime_configure,
-            runtime_status,
-            runtime_ensure,
-            runtime_stop,
-            runtime_restart
+            guarded_runtime_status,
+            guarded_runtime_ensure,
+            guarded_runtime_stop,
+            guarded_runtime_restart
         ])
         .build(tauri::generate_context!())
         .expect("error while building LingJi control center");
