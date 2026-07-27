@@ -61,20 +61,23 @@ fn looks_like_windows_system_drive(path: &Path) -> bool {
     normalized == "c:" || normalized.starts_with("c:\\")
 }
 
-fn validate_base_root(value: &str, *, probe_write: bool) -> Result<PathBuf, String> {
+fn validate_base_root(value: &str, probe_write: bool) -> Result<PathBuf, String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return Err("A data directory is required".to_string());
     }
     let path = PathBuf::from(trimmed);
+    if looks_like_windows_system_drive(&path) {
+        return Err(
+            "LingJi databases, vectors, logs and generated data may not use the Windows C: drive"
+                .to_string(),
+        );
+    }
     if !path.is_absolute() {
         return Err("The LingJi data directory must be an absolute path".to_string());
     }
     if path.parent().is_none() {
         return Err("The LingJi data directory cannot be a filesystem root".to_string());
-    }
-    if looks_like_windows_system_drive(&path) {
-        return Err("LingJi databases, vectors, logs and generated data may not use the Windows C: drive".to_string());
     }
 
     if probe_write {
@@ -113,9 +116,12 @@ fn read_saved_config() -> Result<RuntimeBootstrapConfig, String> {
     Ok(config)
 }
 
-fn status_from_config(config: RuntimeBootstrapConfig, source: &str) -> Result<RuntimeBootstrapStatus, String> {
+fn status_from_config(
+    config: RuntimeBootstrapConfig,
+    source: &str,
+) -> Result<RuntimeBootstrapStatus, String> {
     let workspace = validate_workspace(&config.active_workspace)?;
-    let base = validate_base_root(&config.base_data_root, probe_write: false)?;
+    let base = validate_base_root(&config.base_data_root, false)?;
     let effective = effective_data_root(&base, &workspace);
     Ok(RuntimeBootstrapStatus {
         configured: true,
@@ -137,7 +143,7 @@ fn environment_status() -> Result<Option<RuntimeBootstrapStatus>, String> {
     let workspace = validate_workspace(
         &env::var("LINGJI_WORKSPACE").unwrap_or_else(|_| "production".to_string()),
     )?;
-    let effective = validate_base_root(&explicit, probe_write: false)?;
+    let effective = validate_base_root(&explicit, false)?;
     let base = effective
         .parent()
         .map(Path::to_path_buf)
@@ -157,7 +163,9 @@ fn environment_status() -> Result<Option<RuntimeBootstrapStatus>, String> {
 pub fn current_status() -> RuntimeBootstrapStatus {
     match environment_status() {
         Ok(Some(status)) => status,
-        Ok(None) => match read_saved_config().and_then(|config| status_from_config(config, "bootstrap_file")) {
+        Ok(None) => match read_saved_config()
+            .and_then(|config| status_from_config(config, "bootstrap_file"))
+        {
             Ok(status) => status,
             Err(error) => RuntimeBootstrapStatus {
                 configured: false,
@@ -215,14 +223,17 @@ fn control_port_in_use() -> bool {
     TcpStream::connect_timeout(&address, Duration::from_millis(250)).is_ok()
 }
 
-pub fn configure(base_data_root: String, workspace: String) -> Result<RuntimeBootstrapStatus, String> {
+pub fn configure(
+    base_data_root: String,
+    workspace: String,
+) -> Result<RuntimeBootstrapStatus, String> {
     if control_port_in_use() {
         return Err("Stop the current LingJi runtime before changing its data directory".to_string());
     }
     let workspace = validate_workspace(&workspace)?;
-    let base = validate_base_root(&base_data_root, probe_write: true)?;
+    let base = validate_base_root(&base_data_root, true)?;
     let effective = effective_data_root(&base, &workspace);
-    validate_base_root(&effective.to_string_lossy(), probe_write: true)?;
+    validate_base_root(effective.to_string_lossy().as_ref(), true)?;
 
     let config = RuntimeBootstrapConfig {
         schema_version: BOOTSTRAP_SCHEMA_VERSION,
@@ -254,16 +265,16 @@ mod tests {
 
     #[test]
     fn rejects_windows_system_drive_without_touching_it() {
-        let error = validate_base_root(r"C:\LingJiData", probe_write: false).unwrap_err();
+        let error = validate_base_root(r"C:\LingJiData", false).unwrap_err();
         assert!(error.contains("C: drive"));
     }
 
     #[test]
     fn workspace_is_part_of_the_effective_data_root() {
-        let base = PathBuf::from(r"D:\LingJiData");
+        let base = PathBuf::from("data-root");
         assert_eq!(
             effective_data_root(&base, "acceptance"),
-            PathBuf::from(r"D:\LingJiData\acceptance")
+            base.join("acceptance")
         );
     }
 
