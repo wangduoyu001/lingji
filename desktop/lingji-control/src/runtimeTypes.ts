@@ -7,6 +7,17 @@ export type RuntimeManagerState =
   | "failed"
   | string;
 
+export type RuntimeBootstrapStatus = {
+  configured: boolean;
+  active_workspace: "production" | "acceptance" | null;
+  base_data_root_display: string | null;
+  data_root_display: string | null;
+  config_path_display: string;
+  source: string;
+  c_drive_write_detected: boolean;
+  last_error: string | null;
+};
+
 export type RuntimeStatus = {
   state: RuntimeManagerState;
   healthy: boolean;
