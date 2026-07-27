@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import time
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,16 +21,34 @@ from run_packaged_control_api import (
 )
 
 
-def test_packaged_environment_uses_absolute_workspace_paths(tmp_path: Path):
+@pytest.fixture
+def runtime_tmp_path(tmp_path: Path):
+    """Use the repository drive on Windows so C-drive rejection remains real."""
+
+    if os.name != "nt":
+        yield tmp_path
+        return
+
+    parent = Path.cwd() / "output" / "test-runtime"
+    parent.mkdir(parents=True, exist_ok=True)
+    root = parent / uuid.uuid4().hex
+    root.mkdir(parents=True, exist_ok=False)
+    try:
+        yield root
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_packaged_environment_uses_absolute_workspace_paths(runtime_tmp_path: Path):
     environ: dict[str, str] = {}
 
     values = configure_packaged_environment(
-        tmp_path / "LingJi" / "acceptance",
+        runtime_tmp_path / "LingJi" / "acceptance",
         workspace="acceptance",
         environ=environ,
     )
 
-    root = (tmp_path / "LingJi" / "acceptance").resolve()
+    root = (runtime_tmp_path / "LingJi" / "acceptance").resolve()
     base = root.parent
     assert values["LINGJI_OWNER_DATA_ROOT"] == str(root)
     assert values["LINGJI_WORKSPACE"] == "acceptance"
@@ -58,8 +79,8 @@ def test_packaged_environment_uses_absolute_workspace_paths(tmp_path: Path):
     assert (root / "qdrant").is_dir()
 
 
-def test_packaged_environment_keeps_production_and_acceptance_separate(tmp_path: Path):
-    base = tmp_path / "LingJiData"
+def test_packaged_environment_keeps_production_and_acceptance_separate(runtime_tmp_path: Path):
+    base = runtime_tmp_path / "LingJiData"
     production = configure_packaged_environment(
         base / "production",
         workspace="production",
@@ -78,12 +99,12 @@ def test_packaged_environment_keeps_production_and_acceptance_separate(tmp_path:
     assert Path(acceptance["STORAGE_DIR"]).is_relative_to(base / "acceptance")
 
 
-def test_packaged_environment_preserves_explicit_owner_vault(tmp_path: Path):
-    explicit_vault = (tmp_path / "My Obsidian Vault").resolve()
+def test_packaged_environment_preserves_explicit_owner_vault(runtime_tmp_path: Path):
+    explicit_vault = (runtime_tmp_path / "My Obsidian Vault").resolve()
     environ = {"VAULT_DIR": str(explicit_vault)}
 
     values = configure_packaged_environment(
-        tmp_path / "LingJi" / "production",
+        runtime_tmp_path / "LingJi" / "production",
         workspace="production",
         environ=environ,
     )
@@ -91,7 +112,7 @@ def test_packaged_environment_preserves_explicit_owner_vault(tmp_path: Path):
     assert values["VAULT_DIR"] == str(explicit_vault)
     assert environ["VAULT_DIR"] == str(explicit_vault)
     contract = packaged_runtime_contract(
-        tmp_path / "LingJi" / "production",
+        runtime_tmp_path / "LingJi" / "production",
         workspace="production",
         environ=environ,
     )
@@ -99,9 +120,9 @@ def test_packaged_environment_preserves_explicit_owner_vault(tmp_path: Path):
     assert contract["vault_uses_owner_local_default"] is False
 
 
-def test_packaged_environment_rejects_non_loopback_host(tmp_path: Path):
+def test_packaged_environment_rejects_non_loopback_host(runtime_tmp_path: Path):
     with pytest.raises(ValueError, match="loopback"):
-        configure_packaged_environment(tmp_path / "LingJi", host="0.0.0.0", environ={})
+        configure_packaged_environment(runtime_tmp_path / "LingJi", host="0.0.0.0", environ={})
 
 
 def test_packaged_environment_rejects_filesystem_root():
@@ -114,14 +135,14 @@ def test_packaged_environment_rejects_windows_system_drive_without_touching_it()
         configure_packaged_environment(r"C:\LingJiData\acceptance", workspace="acceptance", environ={})
 
 
-def test_packaged_environment_rejects_unknown_workspace(tmp_path: Path):
+def test_packaged_environment_rejects_unknown_workspace(runtime_tmp_path: Path):
     with pytest.raises(ValueError, match="production or acceptance"):
-        configure_packaged_environment(tmp_path / "LingJi", workspace="shared", environ={})
+        configure_packaged_environment(runtime_tmp_path / "LingJi", workspace="shared", environ={})
 
 
-def test_packaged_contract_is_explicit_about_safety_boundaries(tmp_path: Path):
+def test_packaged_contract_is_explicit_about_safety_boundaries(runtime_tmp_path: Path):
     contract = packaged_runtime_contract(
-        tmp_path / "LingJi" / "acceptance",
+        runtime_tmp_path / "LingJi" / "acceptance",
         workspace="acceptance",
     )
 
@@ -134,17 +155,17 @@ def test_packaged_contract_is_explicit_about_safety_boundaries(tmp_path: Path):
     assert contract["automatic_qdrant_rebuild"] is False
     assert str(contract["token_file"]).endswith("storage/control_api_token") or str(
         contract["token_file"]
-    ).endswith("storage\control_api_token")
+    ).endswith(r"storage\control_api_token")
     assert str(contract["state_file"]).endswith("runtime/sidecar-state.json") or str(
         contract["state_file"]
-    ).endswith("runtime\sidecar-state.json")
+    ).endswith(r"runtime\sidecar-state.json")
 
 
 def test_runtime_lifecycle_writes_identity_and_accepts_matching_stop_request(
-    tmp_path: Path,
+    runtime_tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    root = tmp_path / "LingJi" / "acceptance"
+    root = runtime_tmp_path / "LingJi" / "acceptance"
     killed: list[tuple[int, int]] = []
     monkeypatch.setattr("run_packaged_control_api.os.kill", lambda pid, sig: killed.append((pid, sig)))
 
@@ -176,10 +197,10 @@ def test_runtime_lifecycle_writes_identity_and_accepts_matching_stop_request(
 
 
 def test_runtime_lifecycle_ignores_mismatched_stop_request(
-    tmp_path: Path,
+    runtime_tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    root = tmp_path / "LingJi" / "production"
+    root = runtime_tmp_path / "LingJi" / "production"
     killed: list[tuple[int, int]] = []
     monkeypatch.setattr("run_packaged_control_api.os.kill", lambda pid, sig: killed.append((pid, sig)))
 
@@ -203,10 +224,10 @@ def test_runtime_lifecycle_ignores_mismatched_stop_request(
     assert state["instance_id"]
 
 
-def test_check_config_prints_json_without_starting_server(tmp_path: Path, capsys):
+def test_check_config_prints_json_without_starting_server(runtime_tmp_path: Path, capsys):
     exit_code = main([
         "--data-root",
-        str(tmp_path / "LingJi" / "acceptance"),
+        str(runtime_tmp_path / "LingJi" / "acceptance"),
         "--workspace",
         "acceptance",
         "--check-config",
@@ -220,12 +241,12 @@ def test_check_config_prints_json_without_starting_server(tmp_path: Path, capsys
     assert payload["workspace"] == "acceptance"
 
 
-def test_check_config_writes_json_for_windowed_executable(tmp_path: Path):
-    output_path = tmp_path / "contract.json"
+def test_check_config_writes_json_for_windowed_executable(runtime_tmp_path: Path):
+    output_path = runtime_tmp_path / "contract.json"
 
     exit_code = main([
         "--data-root",
-        str(tmp_path / "LingJi" / "production"),
+        str(runtime_tmp_path / "LingJi" / "production"),
         "--workspace",
         "production",
         "--check-config",
