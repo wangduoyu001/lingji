@@ -4,6 +4,7 @@ import argparse
 import atexit
 import json
 import os
+import re
 import secrets
 import signal
 import sys
@@ -14,16 +15,28 @@ from pathlib import Path
 from typing import Any, Mapping, MutableMapping, Sequence
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+_WORKSPACES = {"production", "acceptance"}
+_WINDOWS_SYSTEM_DRIVE = re.compile(r"^c:[\\/]", re.IGNORECASE)
 _RUNTIME_SCHEMA_VERSION = 1
 
 
 def _absolute_owner_root(value: str | Path) -> Path:
-    root = Path(value).expanduser().resolve(strict=False)
+    text = str(value).strip()
+    if _WINDOWS_SYSTEM_DRIVE.match(text):
+        raise ValueError("Packaged LingJi data root may not use the Windows C: drive")
+    root = Path(text).expanduser().resolve(strict=False)
     if not root.is_absolute():
         raise ValueError("Packaged LingJi data root must be absolute")
     if root == Path(root.anchor):
         raise ValueError("Packaged LingJi data root cannot be a filesystem root")
     return root
+
+
+def _workspace_name(value: str | None) -> str:
+    workspace = str(value or "production").strip().lower()
+    if workspace not in _WORKSPACES:
+        raise ValueError("Packaged LingJi workspace must be production or acceptance")
+    return workspace
 
 
 def _runtime_dir(root: Path) -> Path:
@@ -73,14 +86,15 @@ def configure_packaged_environment(
     *,
     host: str = "127.0.0.1",
     port: int = 8766,
+    workspace: str | None = None,
     environ: MutableMapping[str, str] | None = None,
 ) -> dict[str, str]:
-    """Configure explicit owner-local paths before importing ``src.config``.
+    """Configure explicit paths before importing ``src.config``.
 
-    Mutable runtime and derived stores must never inherit their location from the
-    installation/current directory. Vault configuration is different: an owner
-    may explicitly keep the Obsidian Vault elsewhere, so an existing VAULT_DIR
-    is preserved and only receives an owner-local default when absent.
+    ``data_root`` is the active workspace root. The Desktop derives it from a
+    user-selected non-system-drive base directory plus ``production`` or
+    ``acceptance``. The two workspace profiles therefore remain physically
+    separate while the small bootstrap pointer may stay under LocalAppData.
     """
 
     normalized_host = str(host or "").strip().lower()
@@ -89,22 +103,35 @@ def configure_packaged_environment(
     if not 1024 <= int(port) <= 65535:
         raise ValueError("Packaged LingJi control API port is out of range")
 
+    target = os.environ if environ is None else environ
+    workspace_name = _workspace_name(
+        workspace or target.get("LINGJI_WORKSPACE") or target.get("WORKSPACE_NAME")
+    )
     root = _absolute_owner_root(data_root)
+    base_root = root.parent
+    production_root = root if workspace_name == "production" else base_root / "production"
+    acceptance_root = root if workspace_name == "acceptance" else base_root / "acceptance"
+
     required_values = {
         "STORAGE_DIR": str(root / "storage"),
         "LOG_DIR": str(root / "logs"),
         "SNAPSHOT_DIR": str(root / "snapshots"),
         "BACKUP_DIR": str(root / "backups"),
-        "WORKSPACE_ROOT": str(root / "workspaces"),
-        "LINGJI_WORKSPACE_ROOT": str(root / "workspaces"),
-        "PRODUCTION_STORAGE_DIR": str(root / "workspaces" / "production"),
-        "ACCEPTANCE_STORAGE_DIR": str(root / "workspaces" / "acceptance"),
+        "WORKSPACE_NAME": workspace_name,
+        "WORKSPACE_ROOT": str(base_root),
+        "LINGJI_WORKSPACE": workspace_name,
+        "LINGJI_WORKSPACE_ROOT": str(base_root),
+        "PRODUCTION_STORAGE_DIR": str(production_root / "storage"),
+        "PRODUCTION_RAW_DIR": str(production_root / "raw"),
+        "PRODUCTION_QDRANT_PATH": str(production_root / "qdrant"),
+        "ACCEPTANCE_STORAGE_DIR": str(acceptance_root / "storage"),
+        "ACCEPTANCE_RAW_DIR": str(acceptance_root / "raw"),
+        "ACCEPTANCE_QDRANT_PATH": str(acceptance_root / "qdrant"),
         "CONTROL_API_HOST": normalized_host,
         "CONTROL_API_PORT": str(int(port)),
         "LINGJI_PACKAGED_RUNTIME": "1",
         "LINGJI_OWNER_DATA_ROOT": str(root),
     }
-    target = os.environ if environ is None else environ
     target.update(required_values)
     target.setdefault("VAULT_DIR", str(root / "vault"))
 
@@ -114,7 +141,8 @@ def configure_packaged_environment(
         "runtime",
         "snapshots",
         "backups",
-        "workspaces",
+        "raw",
+        "qdrant",
     ):
         (root / directory).mkdir(parents=True, exist_ok=True)
 
@@ -129,6 +157,7 @@ def packaged_runtime_contract(
     *,
     host: str = "127.0.0.1",
     port: int = 8766,
+    workspace: str | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     scratch: dict[str, str] = dict(environ or {})
@@ -136,14 +165,16 @@ def packaged_runtime_contract(
         data_root,
         host=host,
         port=port,
+        workspace=workspace,
         environ=scratch,
     )
     root = Path(values["LINGJI_OWNER_DATA_ROOT"])
     default_vault = root / "vault"
     configured_vault = Path(values["VAULT_DIR"]).expanduser().resolve(strict=False)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "mode": "packaged_sidecar",
+        "workspace": values["LINGJI_WORKSPACE"],
         "host": values["CONTROL_API_HOST"],
         "port": int(values["CONTROL_API_PORT"]),
         "data_root": str(root),
@@ -157,6 +188,7 @@ def packaged_runtime_contract(
         "vault_dir": str(configured_vault),
         "vault_uses_owner_local_default": configured_vault == default_vault,
         "owner_data_outside_install_dir": True,
+        "system_drive_runtime_data_allowed": False,
         "automatic_model_download": False,
         "automatic_qdrant_rebuild": False,
     }
@@ -167,17 +199,20 @@ def install_runtime_lifecycle(
     *,
     host: str,
     port: int,
+    workspace: str | None = None,
     poll_seconds: float = 0.25,
 ) -> dict[str, Any]:
     """Write the packaged-process identity and monitor authenticated stop requests."""
 
     root = _absolute_owner_root(data_root)
+    workspace_name = _workspace_name(workspace or os.environ.get("LINGJI_WORKSPACE"))
     state_path = runtime_state_path(root)
     stop_path = runtime_stop_request_path(root)
     instance_id = secrets.token_urlsafe(24)
     state = {
         "schema_version": _RUNTIME_SCHEMA_VERSION,
         "mode": "packaged_sidecar",
+        "workspace": workspace_name,
         "pid": os.getpid(),
         "instance_id": instance_id,
         "started_at_ms": int(time.time() * 1000),
@@ -224,7 +259,8 @@ def install_runtime_lifecycle(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="LingJi packaged local control runtime")
-    parser.add_argument("--data-root", required=True, help="Absolute owner-local LingJi data root")
+    parser.add_argument("--data-root", required=True, help="Absolute active-workspace data root")
+    parser.add_argument("--workspace", choices=sorted(_WORKSPACES), default=None)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8766)
     parser.add_argument(
@@ -241,7 +277,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    contract = packaged_runtime_contract(args.data_root, host=args.host, port=args.port)
+    workspace = _workspace_name(args.workspace or os.environ.get("LINGJI_WORKSPACE"))
+    contract = packaged_runtime_contract(
+        args.data_root,
+        host=args.host,
+        port=args.port,
+        workspace=workspace,
+    )
     if args.check_config:
         contract_json = json.dumps(contract, ensure_ascii=False, sort_keys=True)
         if args.check_config_output:
@@ -251,8 +293,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(contract_json)
         return 0
 
-    configure_packaged_environment(args.data_root, host=args.host, port=args.port)
-    install_runtime_lifecycle(args.data_root, host=args.host, port=args.port)
+    configure_packaged_environment(
+        args.data_root,
+        host=args.host,
+        port=args.port,
+        workspace=workspace,
+    )
+    install_runtime_lifecycle(
+        args.data_root,
+        host=args.host,
+        port=args.port,
+        workspace=workspace,
+    )
     _ensure_standard_streams()
     from run_control_api import main as run_control_api
 
