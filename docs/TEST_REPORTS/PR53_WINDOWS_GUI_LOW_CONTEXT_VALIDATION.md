@@ -142,19 +142,35 @@ The Windows release and Desktop smoke contracts assert:
 - C-drive rejection without touching the rejected path;
 - physical production/acceptance path separation;
 - active workspace in Sidecar identity and contract;
-- capability-level copied diagnostics without control tokens or Vault paths.
+- capability-level copied diagnostics without control tokens or Vault paths;
+- release metadata that identifies LocalAppData as bootstrap-only and the Runtime root as owner-selected non-system-drive storage.
+
+Final validated commit:
+
+```text
+b889bb2fb3fe9b76a949698eec9abfb228e5e8c7
+```
 
 Required PR checks:
 
 ```text
-tests
-P0 Windows Gate
-Windows Desktop Release Baseline
+tests #790: SUCCESS
+P0 Windows Gate #151: SUCCESS
+Windows Desktop Release Baseline #40: SUCCESS
 ```
 
-The Windows release workflow remains responsible for the real PyInstaller Sidecar build,
-authenticated `127.0.0.1:8766` ping, managed stop, Tauri release build, NSIS package,
+The Windows release workflow validated the real PyInstaller Sidecar build, authenticated
+`127.0.0.1:8766` ping, managed stop, Tauri release build, NSIS package, PE subsystem checks,
 checksums, metadata and artifact upload.
+
+Final CI artifact:
+
+```text
+name: lingji-windows-0.1.0-b889bb2f
+artifact id: 8654077495
+artifact digest: sha256:cc142fb1e13bcd5551bdbeda76be551191658c3b1dfdc39c52e7480ca7096a61
+installer sha256: 20323a2cb04b233c7d815860dededa9295284db175452dce92fdf16ff5b5f3f6
+```
 
 ## Installed UI acceptance boundary
 
@@ -206,7 +222,6 @@ Owner-machine UI acceptance bypass: no
 ## Status
 
 ```text
-DATA_ROOT_AND_DIAGNOSTICS_FIX_IMPLEMENTED
-AUTOMATED_PR_VALIDATION_IN_PROGRESS
+AUTOMATED_VALIDATION_PASSED
 OWNER_MACHINE_REINSTALL_AND_UI_ACCEPTANCE_REQUIRED_BEFORE_MERGE
 ```
