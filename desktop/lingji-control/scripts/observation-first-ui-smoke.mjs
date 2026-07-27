@@ -63,7 +63,13 @@ assert.match(app, /autoRecoveryActive/);
 assert.match(app, /RuntimeBoundary/);
 assert.match(boundary, /OWNER PAUSED/);
 assert.match(boundary, /AUTO RECOVERY/);
-assert.equal(boundary.includes("启动核心"), false, "Routine offline banner must not expose a start-core button");
+assert.match(boundary, /DATA ROOT REQUIRED/);
+assert.match(boundary, /保存配置并启动核心/);
+assert.equal(
+  boundary.includes(">启动核心</button>"),
+  false,
+  "Routine offline banner must not expose a standalone start-core button",
+);
 
 assert.match(connection, /setTimeout\(\(\) => void ensureConnection\(false\), 12_000\)/);
 assert.match(connection, /ownerStopped/);
