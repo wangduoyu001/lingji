@@ -11,6 +11,7 @@ const scripts = [
   "models-smoke.mjs",
   "memory-inspector-smoke.mjs",
   "capture-center-smoke.mjs",
+  "drama-memory-smoke.mjs",
   "obsidian-smoke.mjs",
   "codex-workspace-smoke.mjs",
   "memory-review-smoke.mjs",
