@@ -6,7 +6,13 @@ from types import SimpleNamespace
 import pytest
 
 from src.control.drama_api import register_drama_routes
-from src.plugins.drama_intelligence import DramaService, ScannedPdfRequiresOcr, load_script
+from src.plugins.drama_intelligence import (
+    DramaSemanticIndex,
+    DramaService,
+    ScannedPdfRequiresOcr,
+    load_script,
+)
+from src.plugins.drama_intelligence.models import DramaChunk
 
 
 def _settings(tmp_path: Path) -> SimpleNamespace:
@@ -62,7 +68,8 @@ def test_import_parse_trace_and_hybrid_lexical_fallback(tmp_path: Path) -> None:
     assert drama["scene_count"] == 3
     assert drama["character_count"] >= 3
     assert Path(drama["raw_path"]).is_file()
-    assert Path(drama["normalized_path"]).is_file()
+    normalized_path = Path(drama["normalized_path"])
+    assert normalized_path.is_file()
 
     search = service.search("继承人", limit=5)
     assert search["results"]
@@ -71,10 +78,71 @@ def test_import_parse_trace_and_hybrid_lexical_fallback(tmp_path: Path) -> None:
     assert result["start_offset"] < result["end_offset"]
     assert "继承人" in result["text"]
     assert "关键词或原文命中" in result["match_reasons"]
+    normalized_text = normalized_path.read_text(encoding="utf-8")
+    assert normalized_text[result["start_offset"] : result["end_offset"]] == result["text"]
 
     duplicate = service.import_script(str(source))
     assert duplicate["duplicate"] is True
     assert service.status()["structured"]["dramas"] == 1
+
+
+def test_drama_semantic_index_uses_isolated_collection_payload_and_filters() -> None:
+    class FakeProvider:
+        collection = "lingji_drama_acceptance"
+
+        def __init__(self):
+            self.points = []
+            self.search_filters = None
+
+        def upsert_many(self, points):
+            self.points = list(points)
+            return [item.chunk_id for item in self.points]
+
+        def search(self, query, limit, filters):
+            self.search_filters = dict(filters)
+            return []
+
+        def status(self):
+            return {"ready": True, "collection": self.collection}
+
+    provider = FakeProvider()
+    index = DramaSemanticIndex(provider)  # type: ignore[arg-type]
+    chunk = DramaChunk(
+        chunk_id="drama_chunk_1",
+        drama_id="drama_001",
+        chunk_type="scene",
+        text="女主身份公开，反派失去话语权。",
+        source_ref="drama_001:e008:s004",
+        start_offset=120,
+        end_offset=136,
+        episode_number=8,
+        scene_number=4,
+        characters=("林晚", "赵明"),
+        tags=("scene", "身份反转"),
+    )
+
+    indexed = index.index([chunk], title="身份反转测试剧")
+    assert indexed == {
+        "state": "ready",
+        "indexed": 1,
+        "collection": "lingji_drama_acceptance",
+    }
+    point = provider.points[0]
+    assert point.payload["kind"] == "drama_chunk"
+    assert point.payload["project"] == "drama_001"
+    assert point.payload["memory_type"] == "scene"
+    assert point.payload["source_ref"] == "drama_001:e008:s004"
+
+    index.search(
+        "公开身份反转",
+        limit=10,
+        drama_id="drama_001",
+        chunk_type="scene",
+    )
+    assert provider.search_filters == {
+        "project": "drama_001",
+        "memory_types": ["scene"],
+    }
 
 
 def test_import_fifty_thousand_character_script(tmp_path: Path) -> None:
