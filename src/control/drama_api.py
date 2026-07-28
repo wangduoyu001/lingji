@@ -6,12 +6,19 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from src.plugins.drama_intelligence import DramaService
+from src.plugins.drama_intelligence import DramaService, import_directory
 
 
 class DramaImportRequest(BaseModel):
     source_path: str
     title: str | None = None
+    force: bool = False
+
+
+class DramaBatchImportRequest(BaseModel):
+    directory_path: str
+    recursive: bool = False
+    limit: int = Field(default=100, ge=1, le=500)
     force: bool = False
 
 
@@ -99,6 +106,19 @@ def register_drama_routes(
             return drama().import_script(
                 request.source_path,
                 title=request.title,
+                force=request.force,
+            )
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/drama/import-directory", dependencies=secured)
+    def drama_import_directory(request: DramaBatchImportRequest) -> dict[str, Any]:
+        try:
+            return import_directory(
+                drama(),
+                request.directory_path,
+                recursive=request.recursive,
+                limit=request.limit,
                 force=request.force,
             )
         except Exception as exc:
