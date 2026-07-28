@@ -39,13 +39,21 @@ def parse_script(source: DramaSource) -> DramaParseResult:
     mentions: Counter[str] = Counter()
     first_episode: dict[str, int] = {}
 
+    used_numbers: set[int] = set()
     for ordinal, item in enumerate(episode_ranges, start=1):
         number = _episode_number(item["header"], ordinal)
-        episode_text = source.text[item["start"] : item["end"]].strip()
-        scene_ranges = _scene_ranges(episode_text, item["start"])
+        while number in used_numbers:
+            number += 1
+        used_numbers.add(number)
+        episode_raw = source.text[int(item["start"]) : int(item["end"])]
+        episode_text = episode_raw.strip()
+        scene_ranges = _scene_ranges(episode_raw, int(item["start"]))
         scene_ids: list[str] = []
         for scene_ordinal, scene_range in enumerate(scene_ranges, start=1):
-            scene_text = source.text[scene_range["start"] : scene_range["end"]].strip()
+            scene_raw = source.text[int(scene_range["start"]) : int(scene_range["end"])]
+            scene_text = scene_raw.strip()
+            leading = len(scene_raw) - len(scene_raw.lstrip())
+            scene_start = int(scene_range["start"]) + leading
             names = _characters(scene_text)
             for name in names:
                 mentions[name] += len(re.findall(re.escape(name), scene_text)) or 1
@@ -58,10 +66,10 @@ def parse_script(source: DramaSource) -> DramaParseResult:
                     drama_id=drama_id,
                     episode_number=number,
                     scene_number=scene_ordinal,
-                    heading=scene_range["header"],
+                    heading=str(scene_range["header"]),
                     text=scene_text,
-                    start_offset=scene_range["start"],
-                    end_offset=scene_range["end"],
+                    start_offset=scene_start,
+                    end_offset=scene_start + len(scene_text),
                     characters=tuple(names),
                 )
             )
@@ -69,15 +77,17 @@ def parse_script(source: DramaSource) -> DramaParseResult:
             for name in _characters(episode_text):
                 mentions[name] += len(re.findall(re.escape(name), episode_text)) or 1
                 first_episode.setdefault(name, number)
+        leading = len(episode_raw) - len(episode_raw.lstrip())
+        episode_start = int(item["start"]) + leading
         episodes.append(
             DramaEpisode(
                 episode_id=f"{drama_id}:e{number:03d}",
                 drama_id=drama_id,
                 number=number,
-                title=item["title"] or item["header"] or f"第{number}集",
+                title=str(item["title"] or item["header"] or f"第{number}集"),
                 text=episode_text,
-                start_offset=item["start"],
-                end_offset=item["end"],
+                start_offset=episode_start,
+                end_offset=episode_start + len(episode_text),
                 scene_ids=tuple(scene_ids),
             )
         )
@@ -110,14 +120,11 @@ def _ranges(text: str, pattern: re.Pattern[str]) -> list[dict[str, object]]:
     if not matches:
         return [{"start": 0, "end": len(text), "header": "", "title": ""}]
     output: list[dict[str, object]] = []
-    if matches[0].start() > 0 and text[: matches[0].start()].strip():
-        output.append(
-            {"start": 0, "end": matches[0].start(), "header": "前言", "title": "前言"}
-        )
     for index, match in enumerate(matches):
+        start = 0 if index == 0 and text[: match.start()].strip() else match.start()
         output.append(
             {
-                "start": match.start(),
+                "start": start,
                 "end": matches[index + 1].start() if index + 1 < len(matches) else len(text),
                 "header": match.group("header").strip(),
                 "title": match.groupdict().get("title", "").strip(),
@@ -160,9 +167,8 @@ def _build_chunks(
     episodes: Iterable[DramaEpisode],
     scenes: Iterable[DramaScene],
 ) -> Iterable[DramaChunk]:
-    scene_list = list(scenes)
     scenes_by_episode: dict[int, list[DramaScene]] = {}
-    for scene in scene_list:
+    for scene in scenes:
         scenes_by_episode.setdefault(scene.episode_number, []).append(scene)
 
     for episode in episodes:
@@ -203,9 +209,11 @@ def _split_chunk(
     scene_number: int | None,
     characters: tuple[str, ...],
 ) -> Iterable[DramaChunk]:
+    leading = len(text) - len(text.lstrip())
     clean = text.strip()
     if not clean:
         return
+    base_offset = start_offset + leading
     cursor = 0
     part = 1
     while cursor < len(clean):
@@ -215,17 +223,19 @@ def _split_chunk(
             if newline > cursor:
                 end = newline
         body = clean[cursor:end].strip()
+        body_leading = len(clean[cursor:end]) - len(clean[cursor:end].lstrip())
+        body_start = base_offset + cursor + body_leading
         if body:
             ref = source_ref if part == 1 and end == len(clean) else f"{source_ref}:p{part:02d}"
-            raw_id = f"{drama_id}|{ref}|{start_offset + cursor}|{start_offset + end}"
+            raw_id = f"{drama_id}|{ref}|{body_start}|{body_start + len(body)}"
             yield DramaChunk(
                 chunk_id=f"drama_chunk_{sha1(raw_id.encode('utf-8')).hexdigest()[:20]}",
                 drama_id=drama_id,
                 chunk_type=chunk_type,
                 text=body,
                 source_ref=ref,
-                start_offset=start_offset + cursor,
-                end_offset=start_offset + end,
+                start_offset=body_start,
+                end_offset=body_start + len(body),
                 episode_number=episode_number,
                 scene_number=scene_number,
                 characters=characters,
