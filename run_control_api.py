@@ -6,6 +6,7 @@ from pathlib import Path
 from src.config import settings
 from src.control.api import create_control_app
 from src.control.auto_review_api import register_auto_review_routes
+from src.control.drama_api import register_drama_routes
 from src.control.governed_service import GovernedLocalControlService
 from src.control.p2_07_api import register_p2_07_routes
 from src.control.settings_api import register_settings_governance_routes
@@ -45,6 +46,7 @@ def main() -> None:
     register_p2_07_routes(app, settings, service, token=token)
     register_auto_review_routes(app, settings, service, token=token)
     register_settings_governance_routes(app, service, token=token)
+    register_drama_routes(app, settings, service, token=token)
     uvicorn.run(
         app,
         host=settings.control_api_host,
