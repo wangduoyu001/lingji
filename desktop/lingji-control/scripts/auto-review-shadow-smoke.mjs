@@ -18,8 +18,9 @@ assert.match(app, /DesktopShell/);
 assert.match(shell, /PRIMARY_NAVIGATION/);
 assert.match(shell, /connectionState/);
 assert.match(navigation, /id: "auto_review"/);
+assert.match(navigation, /id: "drama"/);
 assert.match(navigation, /ADVANCED_NAVIGATION/);
-assert.equal((navigation.match(/group: "observe"/g) ?? []).length, 4);
+assert.equal((navigation.match(/group: "observe"/g) ?? []).length, 5);
 
 for (const endpoint of [
   "/api/auto-review/status",
