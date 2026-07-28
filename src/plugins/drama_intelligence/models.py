@@ -89,13 +89,16 @@ class DramaChunk:
     end_offset: int
     episode_number: int | None = None
     scene_number: int | None = None
+    heading: str = ""
     characters: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
+    source_locator: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["characters"] = list(self.characters)
         payload["tags"] = list(self.tags)
+        payload["source_locator"] = dict(self.source_locator)
         return payload
 
 
