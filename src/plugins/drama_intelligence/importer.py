@@ -131,9 +131,7 @@ def _load_srt_or_vtt(raw: str) -> tuple[str, list[dict[str, object]]]:
         body: list[str] = []
         while index < len(lines):
             candidate = lines[index].strip()
-            if not candidate:
-                break
-            if _SUBTITLE_TIME.match(candidate):
+            if not candidate or _SUBTITLE_TIME.match(candidate):
                 break
             body.append(_HTML_TAG.sub("", candidate).strip())
             index += 1
@@ -152,7 +150,8 @@ def _load_srt_or_vtt(raw: str) -> tuple[str, list[dict[str, object]]]:
                     "text": text,
                 }
             )
-        index += 1
+        if index < len(lines) and not lines[index].strip():
+            index += 1
     return _assemble_units(units, separator="\n")
 
 
@@ -256,7 +255,7 @@ def _load_pdf(path: Path) -> tuple[str, list[dict[str, object]]]:
                 "text": text,
             }
         )
-    combined, mapped = _assemble_units(units, separator="\n\n", keep_empty=True)
+    combined, mapped = _assemble_units(units, separator="\n\n")
     if reader.pages and len(re.sub(r"\s+", "", combined)) < max(40, len(reader.pages) * 8):
         raise ScannedPdfRequiresOcr(
             "PDF appears to be scanned or lacks a usable text layer; OCR is required"
@@ -268,14 +267,13 @@ def _assemble_units(
     units: list[dict[str, Any]],
     *,
     separator: str,
-    keep_empty: bool = False,
 ) -> tuple[str, list[dict[str, object]]]:
     text_parts: list[str] = []
     mapped: list[dict[str, object]] = []
     cursor = 0
     for original in units:
         body = _normalize_text(str(original.get("text") or ""))
-        if not body and not keep_empty:
+        if not body:
             continue
         if text_parts:
             text_parts.append(separator)
@@ -292,7 +290,7 @@ def _assemble_units(
             }
         )
         mapped.append(metadata)
-    return "".join(text_parts).strip(), mapped
+    return "".join(text_parts), mapped
 
 
 def _extract_pdf_page_text(page: object) -> str:
