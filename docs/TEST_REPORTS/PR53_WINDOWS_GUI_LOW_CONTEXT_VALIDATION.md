@@ -1,244 +1,216 @@
-# PR #53 Windows GUI and Low-Context Validation Report
+# PR #53 Windows Desktop Acceptance Report
 
 ## Scope
 
-This report covers:
+This report is the current authority for PR #53 and covers:
 
 ```text
-Windows Desktop console-window suppression
-Windows Sidecar GUI-subsystem verification
-Windows PowerShell 5.1 native stderr handling
-low-context local validation output and cleanup
-explicit non-system-drive runtime data-root bootstrap
+Windows Desktop and Sidecar console-window suppression
+PowerShell 5.1 validation behavior
+low-context local validation
+owner-confirmed non-system-drive Runtime storage
 production / acceptance workspace isolation
-capability-level copied diagnostics
-mandatory installed-UI acceptance boundary
-owner-machine bootstrap-bypass regression and correction
+capability-level diagnostics
+in-application zero-Shell acceptance
+owner-machine UI acceptance boundary
 ```
 
 It does not replace the P2-11B Sidecar lifecycle report or the P2-12A Desktop UI report.
 
-## Branch and pull request
+## Pull request state
 
 ```text
 Branch: work/windows-gui-low-token-validation
 Pull request: #53
 Base: master
-State after owner-machine failure: draft / not mergeable by policy
+State: draft / open / unmerged
+Validated code commit: 83ae73a21161eebdf4bdb713a2d7ddf1c51a9864
 ```
 
-## Implemented contracts
+The PR must remain draft until the owner completes installed UI acceptance.
 
-### Desktop and Sidecar window behavior
+## Windows process and window contracts
 
-- Release builds of the Tauri executable use the Windows GUI subsystem:
+- Release Tauri builds use the Windows GUI subsystem.
+- The packaged Python Sidecar uses PyInstaller `--windowed`.
+- Rust starts `lingji-core.exe` directly with `CREATE_NO_WINDOW`.
+- Runtime startup does not use PowerShell, CMD, WMI, batch files or a general shell plugin.
+- Release packaging reads both executable PE headers and rejects a non-GUI Desktop or Sidecar.
+- `build-metadata.json` records both GUI-subsystem contracts.
+- Forced Sidecar termination uses a hidden `taskkill` process only as the final fallback after the owned stop-request contract and direct child termination fail.
 
-```rust
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-```
-
-- Debug builds retain normal debug behavior.
-- The packaged Python Sidecar remains a PyInstaller `--windowed` executable.
-- Rust starts the Sidecar directly with `CREATE_NO_WINDOW`; no `cmd.exe`, PowerShell or batch wrapper is introduced.
-- Release packaging reads the PE headers of both executables and rejects any package whose Desktop or Sidecar subsystem is not Windows GUI (`2`).
-- `build-metadata.json` records both subsystem contracts.
-
-### Windows PowerShell 5.1 validation behavior
-
-- Native stdout and stderr are written to the suite log.
-- Native stderr text is not treated as a build failure when the native exit code is zero.
-- A non-zero native exit code remains a hard failure.
-- A missing command remains a hard failure.
-- Failure output is limited to a configurable tail, defaulting to 40 lines.
-- The P0 Windows gate runs a real PowerShell 5.1 probe that writes an expected stderr warning and exits zero.
-
-### Low-context local acceptance
-
-The local validation entry enforces:
-
-```text
-success -> concise PASS lines + output/validation/latest-summary.json|md
-failure -> concise summary + only the failing log tail
-new run -> remove older validation run directories
-```
-
-Operational rules:
-
-- development uses the mapped `focused` area;
-- final release acceptance runs `-Mode release` once;
-- `release` already includes `full`, so running `full` immediately before `release` on the same tree is prohibited;
-- successful logs must not be loaded into an AI/Codex context;
-- a failing log is expanded only when its tail is insufficient.
-
-## Runtime data-root bootstrap
-
-### Intended storage contract
+## Runtime data-root contract
 
 ```text
 %LOCALAPPDATA%\LingJi\desktop-bootstrap.json
 = small Desktop bootstrap pointer only
 
 <owner-selected non-C base>\production
-= production databases, vectors, raw data, logs, cache, backups and runtime files
+= production Runtime data
 
 <owner-selected non-C base>\acceptance
-= physically separate acceptance equivalents
+= physically separate acceptance Runtime data
 ```
 
-The Desktop must not start Core until the owner has selected a non-C base directory and explicitly selected `production` or `acceptance` in the installed UI.
+Runtime databases, vectors, raw data, logs, cache, token files, lifecycle state and backups must not silently fall back to C.
 
-### Rejected owner-machine acceptance build
+Installed Desktop startup requires bootstrap schema `2` with `owner_confirmed=true`. Inherited `LINGJI_OWNER_DATA_ROOT` and `LINGJI_WORKSPACE` values are quarantined before bootstrap resolution and cannot satisfy first-run configuration.
 
-The owner-machine acceptance attempt used:
+The rejected owner-machine build `b75127d8` trusted an inherited `E:\lingji\acceptance` value, bypassed first-run UI and started Core before owner confirmation. That artifact remains permanently rejected.
 
-```text
-commit: b75127d899cfafb86dfb3597362031b8c2b00a9f
-artifact: lingji-windows-0.1.0-b75127d8
-installer sha256: bac23cbba4afe892b5325986a96e0ddbe5c8c17d19f007da485be6eb0aa86ebd
-```
-
-Observed result:
-
-```text
-first configuration UI: not shown
-requested acceptance base: D:\codex\lingji-acceptance-data
-observed effective data root: E:\lingji\acceptance
-Core before owner configuration: started
-8766: listening; authenticated acceptance intentionally stopped
-visible page/control acceptance: 0 / 0
-LocalAppData file count: increased from 9 to 10; file contents were not inspected
-UI: kept open during evidence collection, then stopped
-```
-
-This build is rejected for owner-machine acceptance and must not be reused.
-
-### Root cause
-
-The installed Desktop treated inherited process environment variables as authoritative bootstrap configuration:
-
-```text
-LINGJI_OWNER_DATA_ROOT
-LINGJI_WORKSPACE
-```
-
-The previous `current_status()` and `apply_saved_environment()` implementation checked those ambient variables before reading the owner-confirmed Desktop bootstrap file. A stale developer or machine-level environment value could therefore:
-
-1. mark bootstrap as configured;
-2. bypass the first-configuration UI;
-3. select an unintended effective data root;
-4. allow the guarded Runtime ensure command to start Core.
-
-The automated tests had verified path rejection and command guarding but had not prohibited ambient environment variables from satisfying the installed-Desktop bootstrap contract.
-
-### Corrective implementation
-
-The corrected contract is now:
-
-- inherited `LINGJI_OWNER_DATA_ROOT` and `LINGJI_WORKSPACE` values are quarantined before Desktop bootstrap resolution;
-- ambient environment variables can no longer configure the installed Desktop;
-- the saved Desktop bootstrap file is the only authoritative startup configuration;
-- bootstrap schema is upgraded from `1` to `2`;
-- schema `2` requires `owner_confirmed=true`;
-- schema `1` or unconfirmed files force the installed UI back to configuration-required state;
-- old bootstrap files can be replaced safely on Windows through temporary and backup files;
-- only after the owner saves a valid configuration does the Desktop set process-local Runtime environment values for the managed Sidecar;
-- copied diagnostics include `bootstrap_source` and `inherited_runtime_environment_ignored`;
-- all Runtime commands remain guarded by `require_configured()`.
-
-The source-of-truth invariant is:
-
-```text
-ambient process environment != Desktop configuration
-owner-confirmed desktop-bootstrap.json = Desktop configuration
-```
-
-## Capability-level status and diagnostics
-
-The backend exposes independent health, memory, vector, embedding, queue, storage, scheduler, provider and hardware facts through `/api/overview` and related endpoints.
+## Capability-level diagnostics
 
 Copied diagnostics distinguish:
 
 ```text
-control API and Runtime lifecycle
-bootstrap configuration source
-whether inherited Runtime environment was ignored
-active workspace
-actual Runtime data root and C-drive detection
+Desktop and Runtime lifecycle
+bootstrap source and ignored inherited environment
+active workspace and effective Runtime data root
+C-drive write detection
 system health errors and warnings
-memory state, document count and revision
+memory state, count and revision
 vector state, collection, count, dimension and rebuild requirement
-embedding configured/active model and state
-task pending/running/failed counts
-scheduler job count
+embedding configured and active model
+pending, running and failed task counts
+scheduler state
 storage free bytes
 ```
 
-A healthy Runtime process is not evidence that every optional capability is healthy.
+A healthy Runtime process is not treated as proof that every optional capability is healthy.
+
+## Low-context validation contract
+
+```text
+success -> concise PASS lines + output/validation/latest-summary.json|md
+failure -> concise summary + failing-log tail only
+new run -> remove older validation run directories
+```
+
+Rules:
+
+- development uses the mapped `focused` area;
+- final release runs `-Mode release` once because it already contains `full`;
+- successful logs are not loaded into AI context;
+- failure investigation starts from the bounded tail and expands only by relevant keywords;
+- local acceptance does not modify or rebuild code.
+
+## In-application zero-Shell acceptance
+
+The installed Desktop now exposes `桌面零 Shell 验收` on the existing `环境验收` page.
+
+The command runs entirely inside the Tauri application:
+
+1. require a managed, authenticated healthy Core;
+2. observe the Windows process table for 60 seconds;
+3. restart Core through `RuntimeManager`;
+4. observe for another 60 seconds;
+5. confirm Core is again managed and authenticated;
+6. classify forbidden Shell processes as LingJi descendants or unrelated external processes;
+7. save the JSON report under the active acceptance data root;
+8. render the result directly in the UI.
+
+The implementation uses the Windows Toolhelp process snapshot API. It does not invoke PowerShell, CMD, WMI or a batch file.
+
+Forbidden process names:
+
+```text
+powershell.exe
+pwsh.exe
+cmd.exe
+conhost.exe
+```
+
+Acceptance fails when any forbidden process is found in the LingJi Desktop descendant tree. Unrelated external Shell processes are reported separately so Codex or another program cannot be misclassified as LingJi.
+
+The UI refuses to present a browser or Vite preview as real Desktop evidence.
 
 ## Automated coverage
 
-The regression smoke contract now asserts:
+The smoke contract verifies:
 
-- bootstrap schema `2` exists;
-- explicit `owner_confirmed` is required;
-- legacy schema requires owner reconfirmation;
-- inherited Runtime environment variables are removed before bootstrap resolution;
-- no `environment_status` path can configure the installed Desktop;
-- Windows bootstrap replacement uses temporary and backup files;
-- diagnostics expose ignored inherited environment state;
-- Runtime commands remain guarded;
-- first-run configuration UI remains present;
-- no routine standalone start-core button is introduced;
-- C-drive paths are rejected without touching the rejected path;
-- production and acceptance paths remain physically separate;
-- no control token or Vault path is copied into diagnostics.
+- bootstrap schema and explicit owner confirmation;
+- inherited environment quarantine;
+- guarded Runtime commands;
+- first-run configuration UI;
+- C-drive rejection and workspace isolation;
+- Desktop and Sidecar GUI subsystem contracts;
+- absence of a general shell plugin or user-supplied runtime command;
+- `CreateToolhelp32Snapshot`, `Process32FirstW` and `Process32NextW` use;
+- two 60-second observation phases;
+- application-internal Core restart;
+- authenticated health verification;
+- forbidden descendant and external Shell separation;
+- acceptance report persistence;
+- real-Tauri UI gating.
 
-Validated corrective code commit:
+Validated code commit:
 
 ```text
-78c4e78f497a2f001e9bf5871490fa4326830954
+83ae73a21161eebdf4bdb713a2d7ddf1c51a9864
 ```
 
 Required checks:
 
 ```text
-tests #799: SUCCESS
-P0 Windows Gate #160: SUCCESS
-Windows Desktop Release Baseline #49: SUCCESS
+tests #805: SUCCESS
+P0 Windows Gate #166: SUCCESS
+Windows Desktop Release Baseline #55: SUCCESS
 ```
 
-The Windows release workflow also validated the real PyInstaller Sidecar build, authenticated `127.0.0.1:8766` ping, managed stop, Tauri release build, NSIS package, PE subsystem checks, checksums, metadata and artifact upload.
+The release workflow additionally validated the real PyInstaller Sidecar build, authenticated `127.0.0.1:8766` ping, managed stop, Rust tests, Tauri release build, NSIS package, PE subsystem checks, checksums, metadata and artifact upload.
 
-Automated success does not restore acceptance of the rejected `b75127d8` owner-machine build. A new artifact from the corrected PR head is required.
+## Validated artifact
 
-## Next owner-machine acceptance
+```text
+Artifact: lingji-windows-0.1.0-83ae73a2
+Artifact ID: 8673355000
+Artifact digest: sha256:010f82609244b2a531b84a1d08857ef736b26541904d6ff2a174894ec93cab6c
+Installer: LingJi_0.1.0_windows_x64_setup.exe
+Installer bytes: 33074243
+Installer sha256: 61ab31d095bf44584365f25d6592a0edaee6a79df8e86919614ac147c2a4ec50
+```
 
-Before completion, the agent must:
+Independent extraction verified `SHA256SUMS.txt` for the installer, Desktop executable and Sidecar manifest.
 
-1. use a new artifact built after the bootstrap-bypass correction;
-2. stop and uninstall the rejected build without deleting owner data;
-3. ensure no old LingJi Core owns port 8766;
-4. launch the installed Tauri application, not Vite or a browser page;
-5. confirm the configuration UI appears even when stale machine-level LingJi environment variables exist;
-6. select `D:\codex\lingji-acceptance-data` and `acceptance` in the real UI;
-7. confirm Core does not start before saving that configuration;
-8. confirm the effective Runtime root is exactly `D:\codex\lingji-acceptance-data\acceptance`;
-9. identify the exact LocalAppData file added or changed instead of reporting only a count;
-10. verify no new Runtime database, vector, raw, cache, log or token file appears under LocalAppData;
-11. verify startup and restart produce no visible PowerShell, cmd or console window;
-12. verify the managed Sidecar and authenticated `127.0.0.1:8766` connection;
-13. verify independent health, memory, vector, embedding, task and storage states are truthful;
-14. traverse every visible page and operate every visible control using isolated acceptance data;
-15. keep the installed UI open for the owner's final confirmation.
+`build-metadata.json` confirms:
 
-The PR must not be merged solely on automated evidence. Final completion requires the owner's explicit UI acceptance.
+```text
+commit = 83ae73a21161eebdf4bdb713a2d7ddf1c51a9864
+channel = pr
+target = x86_64-pc-windows-msvc
+desktop_pe_subsystem = windows_gui
+python_sidecar_included = true
+sidecar_pe_subsystem = windows_gui
+first_run_configuration_required = true
+c_drive_runtime_data_allowed = false
+signed = false
+```
+
+## Remaining owner-machine acceptance
+
+Automated evidence cannot prove visible-window behavior on the owner machine or replace human UI review.
+
+The remaining acceptance is deliberately small:
+
+1. install the validated artifact;
+2. launch LingJi from the Start menu or shortcut;
+3. complete owner-confirmed acceptance workspace configuration when required;
+4. close Codex and all command windows;
+5. open `环境验收`;
+6. click `开始桌面零 Shell 验收` once;
+7. wait for the application-generated result;
+8. confirm no visible blue PowerShell, CMD or black console window appeared;
+9. continue the separate full-page and control UI acceptance;
+10. keep the installed UI open for owner confirmation.
+
+Local Codex must not poll processes, ports or logs during this observation. It must not modify, rebuild or repair code. A serious failure stops acceptance and returns evidence to the primary developer.
 
 ## Release classification
 
 ```text
 Code signing: not implemented
 Updater: not implemented
-Current artifact class: internal acceptance / PR build
+Artifact class: internal acceptance / PR build
 Public production release: not approved
 ```
 
@@ -247,7 +219,7 @@ Public production release: not approved
 ```text
 Production Vault access: no
 Production SQLite/Qdrant mutation: no
-Legacy LocalAppData migration/deletion: no
+Legacy LocalAppData deletion or silent migration: no
 Automatic model download: no
 New runtime service: no
 New UI framework: no
@@ -258,9 +230,11 @@ Owner-machine UI acceptance bypass: no
 ## Status
 
 ```text
-REJECTED_OWNER_MACHINE_BUILD_B75127D8
+WINDOWLESS_DESKTOP_AND_SIDECAR_IMPLEMENTED
 BOOTSTRAP_BYPASS_CORRECTED
-AUTOMATED_REGRESSION_VALIDATION_PASSED
-NEW_INSTALLER_AND_OWNER_UI_ACCEPTANCE_REQUIRED
+IN_APPLICATION_ZERO_SHELL_ACCEPTANCE_IMPLEMENTED
+AUTOMATED_VALIDATION_PASSED_AT_83AE73A2
+INSTALLER_HASH_INDEPENDENTLY_VERIFIED
+OWNER_MACHINE_ZERO_SHELL_AND_FULL_UI_ACCEPTANCE_REQUIRED
 PR_DRAFT_AND_UNMERGED
 ```
