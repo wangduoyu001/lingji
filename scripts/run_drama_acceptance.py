@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Sequence
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from src.config import settings
 from src.plugins.drama_intelligence.acceptance import (
@@ -35,11 +40,6 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--retrieval-target", type=float, default=0.85)
     parser.add_argument("--character-target", type=float, default=0.90)
     parser.add_argument("--episode-target", type=float, default=0.85)
-    parser.add_argument(
-        "--allow-production",
-        action="store_true",
-        help="Explicitly allow a non-acceptance workspace. Not recommended.",
-    )
     return parser
 
 
@@ -47,7 +47,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     service = DramaService(settings)
     try:
-        if service.workspace != "acceptance" and not args.allow_production:
+        if service.workspace != "acceptance":
             raise DramaAcceptanceError(
                 "Owner-data acceptance must run in the acceptance workspace. "
                 f"Resolved workspace: {service.workspace!r}"
