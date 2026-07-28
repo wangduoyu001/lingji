@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from hashlib import sha1
-from typing import Iterable
+from typing import Any, Iterable, Sequence
 
 from .models import (
     DramaCharacter,
@@ -24,8 +24,8 @@ _CHARACTER_LINE = re.compile(
     r"(?m)^\s*[【\[]?(?P<name>[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9·._-]{1,15})[】\]]?\s*(?:（[^）\n]{0,16}）)?\s*[：:]"
 )
 _STOP_NAMES = {
-    "场景", "地点", "时间", "画面", "旁白", "字幕", "音效", "镜头", "内景", "外景",
-    "闪回", "回忆", "转场", "众人", "所有人", "工作人员", "电话", "画外音", "OS", "VO",
+    "人物简介", "角色简介", "人物小传", "场景", "地点", "时间", "画面", "旁白", "字幕", "音效", "镜头",
+    "内景", "外景", "闪回", "回忆", "转场", "众人", "所有人", "工作人员", "电话", "画外音", "OS", "VO",
 }
 _MAX_CHUNK_CHARS = 1800
 _CHUNK_OVERLAP = 160
@@ -96,7 +96,7 @@ def parse_script(source: DramaSource) -> DramaParseResult:
         DramaCharacter(name=name, mention_count=count, first_episode=first_episode.get(name))
         for name, count in sorted(mentions.items(), key=lambda pair: (-pair[1], pair[0]))
     )
-    chunks = tuple(_build_chunks(drama_id, episodes, scenes))
+    chunks = tuple(_build_chunks(drama_id, episodes, scenes, source.source_units))
     return DramaParseResult(
         drama_id=drama_id,
         title=source.title,
@@ -106,11 +106,12 @@ def parse_script(source: DramaSource) -> DramaParseResult:
         characters=characters,
         chunks=chunks,
         metadata={
-            "schema_version": 1,
+            "schema_version": 2,
             "character_count": len(characters),
             "episode_count": len(episodes),
             "scene_count": len(scenes),
             "chunk_count": len(chunks),
+            "source_unit_count": len(source.source_units),
         },
     )
 
@@ -153,9 +154,10 @@ def _scene_ranges(episode_text: str, base_offset: int) -> list[dict[str, object]
 
 def _characters(text: str) -> list[str]:
     names: list[str] = []
+    stop_upper = {item.upper() for item in _STOP_NAMES}
     for match in _CHARACTER_LINE.finditer(text):
         name = match.group("name").strip(" ._-\t")
-        if name.upper() in _STOP_NAMES or name in _STOP_NAMES or len(name) > 16:
+        if name.upper() in stop_upper or len(name) > 16:
             continue
         if name not in names:
             names.append(name)
@@ -166,6 +168,7 @@ def _build_chunks(
     drama_id: str,
     episodes: Iterable[DramaEpisode],
     scenes: Iterable[DramaScene],
+    source_units: Sequence[dict[str, Any]],
 ) -> Iterable[DramaChunk]:
     scenes_by_episode: dict[int, list[DramaScene]] = {}
     for scene in scenes:
@@ -178,23 +181,27 @@ def _build_chunks(
                 yield from _split_chunk(
                     drama_id=drama_id,
                     chunk_type="scene",
+                    heading=scene.heading,
                     text=scene.text,
                     source_ref=scene.source_ref,
                     start_offset=scene.start_offset,
                     episode_number=scene.episode_number,
                     scene_number=scene.scene_number,
                     characters=scene.characters,
+                    source_units=source_units,
                 )
             continue
         yield from _split_chunk(
             drama_id=drama_id,
             chunk_type="episode",
+            heading=episode.title,
             text=episode.text,
             source_ref=episode.source_ref,
             start_offset=episode.start_offset,
             episode_number=episode.number,
             scene_number=None,
             characters=tuple(_characters(episode.text)),
+            source_units=source_units,
         )
 
 
@@ -202,12 +209,14 @@ def _split_chunk(
     *,
     drama_id: str,
     chunk_type: str,
+    heading: str,
     text: str,
     source_ref: str,
     start_offset: int,
     episode_number: int | None,
     scene_number: int | None,
     characters: tuple[str, ...],
+    source_units: Sequence[dict[str, Any]],
 ) -> Iterable[DramaChunk]:
     leading = len(text) - len(text.lstrip())
     clean = text.strip()
@@ -222,12 +231,14 @@ def _split_chunk(
             newline = clean.rfind("\n", cursor + 500, end)
             if newline > cursor:
                 end = newline
-        body = clean[cursor:end].strip()
-        body_leading = len(clean[cursor:end]) - len(clean[cursor:end].lstrip())
+        body_window = clean[cursor:end]
+        body = body_window.strip()
+        body_leading = len(body_window) - len(body_window.lstrip())
         body_start = base_offset + cursor + body_leading
+        body_end = body_start + len(body)
         if body:
             ref = source_ref if part == 1 and end == len(clean) else f"{source_ref}:p{part:02d}"
-            raw_id = f"{drama_id}|{ref}|{body_start}|{body_start + len(body)}"
+            raw_id = f"{drama_id}|{ref}|{body_start}|{body_end}"
             yield DramaChunk(
                 chunk_id=f"drama_chunk_{sha1(raw_id.encode('utf-8')).hexdigest()[:20]}",
                 drama_id=drama_id,
@@ -235,16 +246,55 @@ def _split_chunk(
                 text=body,
                 source_ref=ref,
                 start_offset=body_start,
-                end_offset=body_start + len(body),
+                end_offset=body_end,
                 episode_number=episode_number,
                 scene_number=scene_number,
+                heading=heading,
                 characters=characters,
                 tags=(chunk_type,),
+                source_locator=_source_locator(source_units, body_start, body_end),
             )
         if end >= len(clean):
             break
         cursor = max(end - _CHUNK_OVERLAP, cursor + 1)
         part += 1
+
+
+def _source_locator(
+    source_units: Sequence[dict[str, Any]],
+    start_offset: int,
+    end_offset: int,
+) -> dict[str, Any]:
+    selected = [
+        unit
+        for unit in source_units
+        if int(unit.get("normalized_end") or 0) > start_offset
+        and int(unit.get("normalized_start") or 0) < end_offset
+    ]
+    if not selected:
+        return {"normalized_start": start_offset, "normalized_end": end_offset}
+
+    def compact(unit: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: unit.get(key)
+            for key in ("unit", "number", "locator", "start_time", "end_time", "style", "actor")
+            if unit.get(key) not in (None, "")
+        }
+
+    first = compact(selected[0])
+    last = compact(selected[-1])
+    payload: dict[str, Any] = {
+        "normalized_start": start_offset,
+        "normalized_end": end_offset,
+        "start": first,
+        "end": last,
+        "unit_count": len(selected),
+    }
+    if first == last:
+        payload["locator"] = first.get("locator")
+    else:
+        payload["locator"] = f"{first.get('locator', '?')}..{last.get('locator', '?')}"
+    return payload
 
 
 def _episode_number(header: object, fallback: int) -> int:
