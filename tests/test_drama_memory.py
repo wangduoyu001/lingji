@@ -14,6 +14,7 @@ from src.plugins.drama_intelligence import (
     load_script,
 )
 from src.plugins.drama_intelligence.models import DramaChunk
+from src.plugins.drama_intelligence.parser import parse_script
 
 
 def _settings(tmp_path: Path) -> SimpleNamespace:
@@ -71,6 +72,8 @@ def test_import_parse_trace_and_hybrid_lexical_fallback(tmp_path: Path) -> None:
     assert Path(drama["raw_path"]).is_file()
     normalized_path = Path(drama["normalized_path"])
     assert normalized_path.is_file()
+    assert "raw/drama" in str(Path(drama["raw_path"])).replace("\\", "/")
+    assert "derived/drama/normalized" in str(normalized_path).replace("\\", "/")
 
     search = service.search("继承人", limit=5)
     assert search["results"]
@@ -79,12 +82,28 @@ def test_import_parse_trace_and_hybrid_lexical_fallback(tmp_path: Path) -> None:
     assert result["start_offset"] < result["end_offset"]
     assert "继承人" in result["text"]
     assert "关键词或原文命中" in result["match_reasons"]
+    assert result["retrieval_channels"] == ["lexical"]
+    assert result["citation"]["normalized_path"] == str(normalized_path)
+    assert result["citation"]["source_locator"]["locator"].startswith("line:")
     normalized_text = normalized_path.read_text(encoding="utf-8")
     assert normalized_text[result["start_offset"] : result["end_offset"]] == result["text"]
 
     duplicate = service.import_script(str(source))
     assert duplicate["duplicate"] is True
     assert service.status()["structured"]["dramas"] == 1
+    assert service.status()["workspace"] == "acceptance"
+
+
+def test_long_chinese_query_uses_term_fallback_without_semantic_index(tmp_path: Path) -> None:
+    source = tmp_path / "semantic-like.txt"
+    source.write_text(_sample_script(), encoding="utf-8")
+    service = DramaService(_settings(tmp_path), runtime_values={"embedding_enabled": False})
+    service.import_script(str(source))
+
+    result = service.search("女主继承人身份被公开后完成地位反转", limit=5)
+    assert result["results"]
+    assert any("继承人" in item["text"] for item in result["results"])
+    assert result["warnings"][0]["code"] == "semantic_unavailable"
 
 
 def test_batch_import_ten_scripts_is_idempotent(tmp_path: Path) -> None:
@@ -120,10 +139,14 @@ def test_drama_semantic_index_uses_isolated_collection_payload_and_filters() -> 
         def __init__(self):
             self.points = []
             self.search_filters = None
+            self.deleted = []
 
         def upsert_many(self, points):
             self.points = list(points)
             return [item.chunk_id for item in self.points]
+
+        def delete_memory(self, memory_id):
+            self.deleted.append(memory_id)
 
         def search(self, query, limit, filters):
             self.search_filters = dict(filters)
@@ -144,8 +167,10 @@ def test_drama_semantic_index_uses_isolated_collection_payload_and_filters() -> 
         end_offset=136,
         episode_number=8,
         scene_number=4,
+        heading="第四场 董事会",
         characters=("林晚", "赵明"),
         tags=("scene", "身份反转"),
+        source_locator={"locator": "page:8"},
     )
 
     indexed = index.index([chunk], title="身份反转测试剧")
@@ -159,6 +184,11 @@ def test_drama_semantic_index_uses_isolated_collection_payload_and_filters() -> 
     assert point.payload["project"] == "drama_001"
     assert point.payload["memory_type"] == "scene"
     assert point.payload["source_ref"] == "drama_001:e008:s004"
+    assert point.payload["source_locator"] == {"locator": "page:8"}
+
+    replaced = index.replace([chunk], drama_id="drama_001", title="身份反转测试剧")
+    assert replaced["indexed"] == 1
+    assert provider.deleted == ["drama_001"]
 
     index.search(
         "公开身份反转",
@@ -184,7 +214,7 @@ def test_import_fifty_thousand_character_script(tmp_path: Path) -> None:
     assert service.get_drama(imported["drama"]["drama_id"])["title"] == "五万字测试剧"
 
 
-def test_subtitle_import_removes_timing_but_keeps_dialogue(tmp_path: Path) -> None:
+def test_subtitle_import_preserves_time_locator(tmp_path: Path) -> None:
     source = tmp_path / "episode.srt"
     source.write_text(
         "1\n00:00:01,000 --> 00:00:03,000\n林晚：你认错人了。\n\n"
@@ -195,6 +225,24 @@ def test_subtitle_import_removes_timing_but_keeps_dialogue(tmp_path: Path) -> No
     assert "00:00" not in loaded.text
     assert "欢迎大小姐" in loaded.text
     assert len(loaded.source_units) == 2
+    assert loaded.source_units[0]["start_time"] == "00:00:01.000"
+    parsed = parse_script(loaded)
+    assert parsed.chunks[0].source_locator["locator"] == "cue:1@00:00:01.000-00:00:03.000..cue:2@00:00:04.000-00:00:06.000"
+
+
+def test_docx_import_preserves_block_locator(tmp_path: Path) -> None:
+    docx = pytest.importorskip("docx")
+    source = tmp_path / "episode.docx"
+    document = docx.Document()
+    document.add_paragraph("第1集 身份公开")
+    document.add_paragraph("第一场")
+    document.add_paragraph("林晚：我是集团继承人。")
+    document.save(source)
+
+    loaded = load_script(source)
+    assert loaded.source_units[0]["locator"] == "block:1"
+    parsed = parse_script(loaded)
+    assert parsed.chunks[0].source_locator["start"]["unit"] == "block"
 
 
 def test_scanned_pdf_is_not_reported_as_success(tmp_path: Path) -> None:
@@ -245,7 +293,8 @@ def test_authenticated_drama_routes(tmp_path: Path) -> None:
     search = client.post(
         "/api/drama/search",
         headers=headers,
-        json={"query": "继承人", "drama_id": drama_id, "limit": 5},
+        json={"query": "继承人身份公开", "drama_id": drama_id, "limit": 5},
     )
     assert search.status_code == 200
     assert search.json()["results"]
+    assert search.json()["results"][0]["citation"]["source_locator"]
