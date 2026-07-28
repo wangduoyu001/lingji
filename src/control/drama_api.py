@@ -56,7 +56,15 @@ def register_drama_routes(
     def drama() -> DramaService:
         nonlocal service
         if service is None:
-            service = DramaService(settings, memory_gateway=getattr(control, "memory_gateway", None))
+            try:
+                runtime_values = dict(control.get_settings().get("values") or {})
+            except Exception:
+                runtime_values = {}
+            service = DramaService(
+                settings,
+                memory_gateway=getattr(control, "memory_gateway", None),
+                runtime_values=runtime_values,
+            )
         return service
 
     secured = [Depends(authorize)]
