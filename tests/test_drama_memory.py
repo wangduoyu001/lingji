@@ -79,7 +79,7 @@ def test_import_parse_trace_and_hybrid_lexical_fallback(tmp_path: Path) -> None:
 
 def test_import_fifty_thousand_character_script(tmp_path: Path) -> None:
     source = tmp_path / "long.md"
-    body = "第1集\n第一场\n林晚：我要查清真相。\n赵明：你没有资格。\n" + ("冲突升级，秘密尚未公开。\n" * 2600)
+    body = "第1集\n第一场\n林晚：我要查清真相。\n赵明：你没有资格。\n" + ("冲突升级，秘密尚未公开。\n" * 4200)
     assert len(body) > 50_000
     source.write_text(body, encoding="utf-8")
     service = DramaService(_settings(tmp_path), runtime_values={"embedding_enabled": False})
