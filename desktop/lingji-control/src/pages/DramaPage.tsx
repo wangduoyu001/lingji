@@ -18,9 +18,12 @@ type DramaSummary = {
 
 type DramaStatus = {
   state: string;
+  workspace: string;
   root: string;
   supported_extensions: string[];
   structured: {
+    schema_version?: number;
+    revision?: number;
     dramas: number;
     episodes: number;
     scenes: number;
@@ -37,24 +40,56 @@ type DramaStatus = {
   };
 };
 
+type SourceLocator = {
+  locator?: string;
+  normalized_start?: number;
+  normalized_end?: number;
+  unit_count?: number;
+  start?: { unit?: string; number?: number; locator?: string; start_time?: string; end_time?: string };
+  end?: { unit?: string; number?: number; locator?: string; start_time?: string; end_time?: string };
+};
+
+type SearchCitation = {
+  drama_id?: string;
+  title?: string;
+  raw_path?: string;
+  normalized_path?: string;
+  source_ref?: string;
+  source_locator?: SourceLocator;
+  start_offset?: number;
+  end_offset?: number;
+};
+
 type SearchResult = {
   chunk_id: string;
   drama_id: string;
   drama_title: string;
   chunk_type: string;
+  heading?: string;
   text: string;
   source_ref: string;
+  source_locator?: SourceLocator;
   episode_number?: number | null;
   scene_number?: number | null;
   characters?: string[];
   match_reasons?: string[];
+  retrieval_channels?: string[];
   score: number;
+  citation?: SearchCitation;
+};
+
+type SearchWarning = {
+  code: string;
+  message: string;
 };
 
 type SearchResponse = {
   count: number;
+  workspace?: string;
+  revision?: number;
   semantic_state: { state?: string; collection?: string | null };
   semantic_error?: string | null;
+  warnings?: SearchWarning[];
   results: SearchResult[];
 };
 
@@ -71,6 +106,14 @@ type BatchImportResponse = {
 const errorText = (reason: unknown): string =>
   reason instanceof ApiError ? reason.message : reason instanceof Error ? reason.message : String(reason);
 
+const sourceLocatorLabel = (item: SearchResult): string => {
+  const locator = item.citation?.source_locator?.locator ?? item.source_locator?.locator;
+  if (locator) return locator;
+  const start = item.citation?.start_offset ?? item.source_locator?.normalized_start;
+  const end = item.citation?.end_offset ?? item.source_locator?.normalized_end;
+  return typeof start === "number" && typeof end === "number" ? `offset:${start}-${end}` : "来源位置未识别";
+};
+
 export default function DramaPage({ api, active }: PageProps) {
   const [status, setStatus] = useState<DramaStatus | null>(null);
   const [library, setLibrary] = useState<DramaSummary[]>([]);
@@ -81,6 +124,7 @@ export default function DramaPage({ api, active }: PageProps) {
   const [query, setQuery] = useState("");
   const [chunkType, setChunkType] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [searchWarnings, setSearchWarnings] = useState<SearchWarning[]>([]);
   const [batchResult, setBatchResult] = useState<BatchImportResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -124,7 +168,9 @@ export default function DramaPage({ api, active }: PageProps) {
       const selected = await open({
         multiple: false,
         directory,
-        filters: directory ? undefined : [{ name: "短剧剧本", extensions: ["txt", "md", "docx", "pdf", "srt", "vtt", "ass"] }],
+        filters: directory
+          ? undefined
+          : [{ name: "短剧剧本", extensions: ["txt", "md", "docx", "pdf", "srt", "vtt", "ass"] }],
       });
       if (typeof selected !== "string") return;
       if (directory) setBatchDirectory(selected);
@@ -177,7 +223,9 @@ export default function DramaPage({ api, active }: PageProps) {
         { timeoutMs: 30 * 60 * 1000 },
       );
       setBatchResult(response);
-      setMessage(`批量处理 ${response.processed_count} 部：新增 ${response.imported_count}，重复 ${response.duplicate_count}，失败 ${response.failed_count}`);
+      setMessage(
+        `批量处理 ${response.processed_count} 部：新增 ${response.imported_count}，重复 ${response.duplicate_count}，失败 ${response.failed_count}`,
+      );
       await load();
     } catch (reason) {
       setError(errorText(reason));
@@ -190,6 +238,7 @@ export default function DramaPage({ api, active }: PageProps) {
     if (!query.trim() || searching) return;
     setSearching(true);
     setError("");
+    setSearchWarnings([]);
     try {
       const response = await api.post<SearchResponse>(
         "/api/drama/search",
@@ -202,8 +251,8 @@ export default function DramaPage({ api, active }: PageProps) {
         { timeoutMs: 2 * 60 * 1000 },
       );
       setResults(response.results ?? []);
-      if (response.semantic_error) setMessage(`语义检索降级，当前仅使用原文检索：${response.semantic_error}`);
-      else setMessage(`找到 ${response.count} 条参考，范围：${selectedTitle}`);
+      setSearchWarnings(response.warnings ?? []);
+      setMessage(`找到 ${response.count} 条参考，范围：${selectedTitle}`);
     } catch (reason) {
       setError(errorText(reason));
     } finally {
@@ -224,59 +273,133 @@ export default function DramaPage({ api, active }: PageProps) {
           <Metric title="原文索引" value={status?.structured?.fts_available ? "可用" : "降级"} />
           <Metric title="语义索引" value={status?.semantic?.state ?? "未知"} />
         </div>
+        <small>Workspace：{status?.workspace ?? "读取中"} · Revision：{status?.structured?.revision ?? 0}</small>
         <small>领域数据根：{status?.root ?? "读取中"}</small>
         <small>Drama Collection：{status?.semantic?.collection ?? "尚未创建"}</small>
-        {status?.semantic?.last_error && <Notice kind="warning">{status.semantic.last_error}</Notice>}
+        {(status?.semantic?.last_error || status?.semantic?.reason) && (
+          <Notice kind="warning">{status.semantic.last_error ?? status.semantic.reason}</Notice>
+        )}
       </Panel>
 
       <div className="drama-two-column">
         <Panel title="导入剧本">
           <div className="drama-form">
-            <label>单部剧本<div className="drama-path-row"><input value={sourcePath} onChange={(event) => setSourcePath(event.target.value)} placeholder="选择 txt / md / docx / pdf / srt / vtt / ass" /><button className="button secondary" onClick={() => void choosePath(false)}>选择文件</button></div></label>
+            <label>
+              单部剧本
+              <div className="drama-path-row">
+                <input value={sourcePath} onChange={(event) => setSourcePath(event.target.value)} placeholder="选择 txt / md / docx / pdf / srt / vtt / ass" />
+                <button className="button secondary" onClick={() => void choosePath(false)}>选择文件</button>
+              </div>
+            </label>
             <label>剧名（可选）<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="默认使用文件名" /></label>
-            <button className="button primary" disabled={!sourcePath.trim() || importing || batchImporting} onClick={() => void importDrama()}>{importing ? "正在解析并建立索引…" : "导入单部剧本"}</button>
+            <button className="button primary" disabled={!sourcePath.trim() || importing || batchImporting} onClick={() => void importDrama()}>
+              {importing ? "正在解析并建立索引…" : "导入单部剧本"}
+            </button>
             <div className="drama-divider" />
-            <label>批量剧本目录<div className="drama-path-row"><input value={batchDirectory} onChange={(event) => setBatchDirectory(event.target.value)} placeholder="选择包含10部剧本的目录" /><button className="button secondary" onClick={() => void choosePath(true)}>选择目录</button></div></label>
-            <button className="button primary" disabled={!batchDirectory.trim() || batchImporting || importing} onClick={() => void importBatch()}>{batchImporting ? "正在批量导入并建立索引…" : "批量导入目录"}</button>
+            <label>
+              批量剧本目录
+              <div className="drama-path-row">
+                <input value={batchDirectory} onChange={(event) => setBatchDirectory(event.target.value)} placeholder="选择包含10部剧本的目录" />
+                <button className="button secondary" onClick={() => void choosePath(true)}>选择目录</button>
+              </div>
+            </label>
+            <button className="button primary" disabled={!batchDirectory.trim() || batchImporting || importing} onClick={() => void importBatch()}>
+              {batchImporting ? "正在批量导入并建立索引…" : "批量导入目录"}
+            </button>
             <small>单个失败不会中断整批；扫描版 PDF 会明确标记需要 OCR。</small>
           </div>
         </Panel>
 
         <Panel title="精准参考检索">
           <div className="drama-form">
-            <label>要找的桥段或结构<textarea value={query} onChange={(event) => setQuery(event.target.value)} placeholder="例如：女主被公开羞辱后真实身份曝光，情绪从压抑转为爽感释放" /></label>
+            <label>
+              要找的桥段或结构
+              <textarea value={query} onChange={(event) => setQuery(event.target.value)} placeholder="例如：女主被公开羞辱后真实身份曝光，情绪从压抑转为爽感释放" />
+            </label>
             <div className="drama-filter-row">
-              <label>检索范围<select value={selectedDrama} onChange={(event) => setSelectedDrama(event.target.value)}><option value="">全部短剧</option>{library.map((item) => <option key={item.drama_id} value={item.drama_id}>{item.title}</option>)}</select></label>
-              <label>片段类型<select value={chunkType} onChange={(event) => setChunkType(event.target.value)}><option value="">全部</option><option value="episode">分集</option><option value="scene">场景</option></select></label>
+              <label>
+                检索范围
+                <select value={selectedDrama} onChange={(event) => setSelectedDrama(event.target.value)}>
+                  <option value="">全部短剧</option>
+                  {library.map((item) => <option key={item.drama_id} value={item.drama_id}>{item.title}</option>)}
+                </select>
+              </label>
+              <label>
+                片段类型
+                <select value={chunkType} onChange={(event) => setChunkType(event.target.value)}>
+                  <option value="">全部</option>
+                  <option value="episode">分集</option>
+                  <option value="scene">场景</option>
+                </select>
+              </label>
             </div>
-            <button className="button primary" disabled={!query.trim() || searching} onClick={() => void search()}>{searching ? "正在混合检索…" : "搜索剧本记忆"}</button>
+            <button className="button primary" disabled={!query.trim() || searching} onClick={() => void search()}>
+              {searching ? "正在混合检索…" : "搜索剧本记忆"}
+            </button>
           </div>
         </Panel>
       </div>
 
       {error && <Notice kind="error">{error}</Notice>}
       {message && <Notice>{message}</Notice>}
-      {batchResult?.failed_count ? <Notice kind="warning">失败文件：{batchResult.items.filter((item) => item.status === "failed").map((item) => `${item.relative_path}：${item.error ?? "未知错误"}`).join("；")}</Notice> : null}
+      {searchWarnings.map((warning) => (
+        <Notice key={`${warning.code}:${warning.message}`} kind="warning">
+          {warning.code === "semantic_unavailable" ? "语义检索暂不可用，已自动使用原文检索。" : warning.message}
+          {warning.code === "semantic_unavailable" && warning.message ? ` ${warning.message}` : ""}
+        </Notice>
+      ))}
+      {batchResult?.failed_count ? (
+        <Notice kind="warning">
+          失败文件：{batchResult.items.filter((item) => item.status === "failed").map((item) => `${item.relative_path}：${item.error ?? "未知错误"}`).join("；")}
+        </Notice>
+      ) : null}
 
       <Panel title={`短剧库 · ${library.length}`}>
         <div className="drama-library">
-          {library.length === 0 ? <Empty text="尚未导入剧本。先用一部结构清晰的短剧测试，不要一上来扔十部乱码 PDF。" /> : library.map((item) => (
-            <button key={item.drama_id} className={selectedDrama === item.drama_id ? "drama-library-card selected" : "drama-library-card"} onClick={() => setSelectedDrama(item.drama_id)}>
-              <strong>{item.title}</strong><span>{item.episode_count} 集 · {item.scene_count} 场 · {item.character_count} 人物</span><small>{item.source_format.toUpperCase()} · {item.chunk_count} 个检索片段</small>
+          {library.length === 0 ? (
+            <Empty text="尚未导入剧本。先用一部结构清晰的短剧测试，不要一上来扔十部乱码 PDF。" />
+          ) : library.map((item) => (
+            <button
+              key={item.drama_id}
+              className={selectedDrama === item.drama_id ? "drama-library-card selected" : "drama-library-card"}
+              onClick={() => setSelectedDrama(item.drama_id)}
+            >
+              <strong>{item.title}</strong>
+              <span>{item.episode_count} 集 · {item.scene_count} 场 · {item.character_count} 人物</span>
+              <small>{item.source_format.toUpperCase()} · {item.chunk_count} 个检索片段</small>
             </button>
           ))}
         </div>
-        <button className="button secondary" disabled={loading} onClick={() => void load()}>{loading ? "刷新中…" : "刷新短剧库"}</button>
+        <button className="button secondary" disabled={loading} onClick={() => void load()}>
+          {loading ? "刷新中…" : "刷新短剧库"}
+        </button>
       </Panel>
 
       <Panel title="检索结果">
-        {results.length === 0 ? <Empty text="检索后会显示剧名、集数、场次、原文位置、命中原因和正文片段。" /> : (
+        {results.length === 0 ? (
+          <Empty text="检索后会显示剧名、集数、场次、页码或时间码、原文偏移、命中原因和正文片段。" />
+        ) : (
           <div className="drama-results">
             {results.map((item) => (
               <article key={item.chunk_id} className="drama-result-card">
-                <header><div><strong>{item.drama_title}</strong><span>{item.source_ref}</span></div><small>{(item.match_reasons ?? []).join(" + ") || "结构召回"}</small></header>
+                <header>
+                  <div>
+                    <strong>{item.drama_title}</strong>
+                    <span>{item.heading || item.source_ref}</span>
+                  </div>
+                  <small>{(item.match_reasons ?? []).join(" + ") || "结构召回"}</small>
+                </header>
                 <p>{item.text}</p>
-                <footer><span>第 {item.episode_number ?? "?"} 集{item.scene_number ? ` · 第 ${item.scene_number} 场` : ""}</span><span>{item.characters?.length ? `人物：${item.characters.join("、")}` : "人物未识别"}</span></footer>
+                <footer>
+                  <span>第 {item.episode_number ?? "?"} 集{item.scene_number ? ` · 第 ${item.scene_number} 场` : ""}</span>
+                  <span>{sourceLocatorLabel(item)}</span>
+                  <span>{item.characters?.length ? `人物：${item.characters.join("、")}` : "人物未识别"}</span>
+                </footer>
+                <small>
+                  标准化原文：{item.citation?.start_offset ?? item.source_locator?.normalized_start ?? "?"}
+                  –{item.citation?.end_offset ?? item.source_locator?.normalized_end ?? "?"}
+                  · 通道：{(item.retrieval_channels ?? []).join(" + ") || "未知"}
+                </small>
               </article>
             ))}
           </div>
@@ -284,7 +407,9 @@ export default function DramaPage({ api, active }: PageProps) {
       </Panel>
 
       <Panel title="编剧 Agent">
-        <Notice kind="warning">第二阶段开放。先让剧本库能稳定找回原文、结构和来源，再给模型写剧权限。互联网已经有足够多的垃圾生成按钮。</Notice>
+        <Notice kind="warning">
+          第二阶段开放。先让剧本库能稳定找回原文、结构和来源，再给模型写剧权限。互联网已经有足够多的垃圾生成按钮。
+        </Notice>
         <button className="button secondary" disabled>等待检索验收通过</button>
       </Panel>
     </div>
