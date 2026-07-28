@@ -125,9 +125,9 @@ export default function AcceptancePage({ api, active }: PageProps) {
               <small>Desktop PID：{windowlessResult.desktop_pid}</small>
               <small>Core PID：{windowlessResult.initial_runtime_pid ?? "-"} → {windowlessResult.restarted_runtime_pid ?? "-"}</small>
               <small>报告：{windowlessResult.report_path}</small>
-              <Json value={windowlessResult.phases as React.ReactNode[][]} />
-              {windowlessResult.forbidden_descendants.length > 0 && <Json value={windowlessResult.forbidden_descendants as unknown as React.ReactNode[][]} />}
-              {windowlessResult.external_shell_processes.length > 0 && <Json value={windowlessResult.external_shell_processes as unknown as React.ReactNode[][]} />}
+              <Json value={windowlessResult.phases} />
+              {windowlessResult.forbidden_descendants.length > 0 && <Json value={windowlessResult.forbidden_descendants} />}
+              {windowlessResult.external_shell_processes.length > 0 && <Json value={windowlessResult.external_shell_processes} />}
             </div>
           ) : <Empty text="运行后显示 LingJi 进程树、Core 重启、认证健康和外部 Shell 证据。" />}
         </div>
@@ -149,7 +149,7 @@ export default function AcceptancePage({ api, active }: PageProps) {
           {error && <Notice kind="error">{error}</Notice>}
         </Panel>
         <Panel title="本次结果">
-          {report ? <div className="stack"><div className="metric-grid"><Metric title="状态" value={String(report.status || "未知")} /><Metric title="输入未变化" value={report.inputs_unchanged ? "是" : "否"} /><Metric title="错误" value={String(report.error_count || 0)} /><Metric title="警告" value={String(report.warning_count || 0)} /></div><small>JSON：{String(result?.json_path || "-")}</small><small>Markdown：{String(result?.markdown_path || "-")}</small><Json value={(report.checks ?? []) as React.ReactNode[][]} /></div> : <Empty text="运行后显示状态、输入完整性和报告路径。" />}
+          {report ? <div className="stack"><div className="metric-grid"><Metric title="状态" value={String(report.status || "未知")} /><Metric title="输入未变化" value={report.inputs_unchanged ? "是" : "否"} /><Metric title="错误" value={String(report.error_count || 0)} /><Metric title="警告" value={String(report.warning_count || 0)} /></div><small>JSON：{String(result?.json_path || "-")}</small><small>Markdown：{String(result?.markdown_path || "-")}</small><Json value={report.checks ?? []} /></div> : <Empty text="运行后显示状态、输入完整性和报告路径。" />}
         </Panel>
       </div>
       <Panel title="验收历史">
