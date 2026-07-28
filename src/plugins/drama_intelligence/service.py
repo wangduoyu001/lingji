@@ -4,9 +4,11 @@ import json
 import shutil
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
+from src.model_center import build_embedding_provider
 from src.retrieval import QdrantSemanticProvider, SemanticPoint
+from src.runtime.workspace import WorkspaceResolver
 
 from .importer import SUPPORTED_EXTENSIONS, load_script
 from .models import DramaChunk
@@ -15,36 +17,71 @@ from .repository import DramaRepository
 
 
 class DramaSemanticIndex:
-    """Reuses LingJi embedding/Qdrant runtime with a separate Drama collection."""
+    """Reuse LingJi embedding/Qdrant components with a separate Drama collection."""
 
-    def __init__(self, provider: QdrantSemanticProvider | None, *, reason: str | None = None):
+    def __init__(
+        self,
+        provider: QdrantSemanticProvider | None,
+        *,
+        reason: str | None = None,
+        closeables: Iterable[Any] = (),
+    ):
         self.provider = provider
         self.reason = reason
+        self._closeables = list(closeables)
 
     @classmethod
-    def from_memory_gateway(cls, memory_gateway: Any | None) -> "DramaSemanticIndex":
-        if memory_gateway is None:
-            return cls(None, reason="memory_gateway_unavailable")
+    def from_runtime(
+        cls,
+        settings: Any,
+        *,
+        memory_gateway: Any | None = None,
+        runtime_values: Mapping[str, Any] | None = None,
+    ) -> "DramaSemanticIndex":
         base = getattr(getattr(memory_gateway, "retriever", None), "semantic_provider", None)
         workspace = getattr(memory_gateway, "workspace", None)
-        if base is None or workspace is None:
-            return cls(None, reason="semantic_runtime_unavailable")
+        if base is not None and workspace is not None:
+            try:
+                workspace_name = getattr(getattr(workspace, "name", None), "value", None) or "production"
+                provider = QdrantSemanticProvider(
+                    replace(workspace, qdrant_collection=f"lingji_drama_{workspace_name}"),
+                    base.embedding_provider,
+                    client=base.client,
+                    distance=base.distance,
+                    timeout_seconds=base.timeout_seconds,
+                    collection_schema="drama-v1",
+                )
+                return cls(provider)
+            except Exception as exc:
+                return cls(None, reason=f"{type(exc).__name__}: {exc}"[:500])
+
+        embedding = None
+        provider = None
         try:
-            workspace_name = getattr(getattr(workspace, "name", None), "value", None) or "production"
-            drama_workspace = replace(
-                workspace,
-                qdrant_collection=f"lingji_drama_{workspace_name}",
-            )
+            values = dict(runtime_values or {})
+            workspace = WorkspaceResolver.resolve(settings)
+            workspace_name = getattr(workspace.name, "value", str(workspace.name))
+            embedding = build_embedding_provider(settings, values)
+            if embedding is None:
+                return cls(None, reason="embedding_disabled")
             provider = QdrantSemanticProvider(
-                drama_workspace,
-                base.embedding_provider,
-                client=base.client,
-                distance=base.distance,
-                timeout_seconds=base.timeout_seconds,
+                replace(workspace, qdrant_collection=f"lingji_drama_{workspace_name}"),
+                embedding,
+                distance=str(values.get("qdrant_distance", settings.qdrant_distance)),
+                timeout_seconds=float(
+                    values.get("qdrant_timeout_seconds", settings.qdrant_timeout_seconds)
+                ),
                 collection_schema="drama-v1",
             )
-            return cls(provider)
+            return cls(provider, closeables=(provider, embedding))
         except Exception as exc:
+            for resource in (provider, embedding):
+                close = getattr(resource, "close", None)
+                if callable(close):
+                    try:
+                        close()
+                    except Exception:
+                        pass
             return cls(None, reason=f"{type(exc).__name__}: {exc}"[:500])
 
     def index(self, chunks: Iterable[DramaChunk], *, title: str) -> dict[str, Any]:
@@ -99,11 +136,27 @@ class DramaSemanticIndex:
         payload["state"] = "ready" if payload.get("ready") else "degraded"
         return payload
 
+    def close(self) -> None:
+        for resource in reversed(self._closeables):
+            close = getattr(resource, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    pass
+        self._closeables.clear()
+
 
 class DramaService:
     """Application service for the isolated Drama Memory domain."""
 
-    def __init__(self, settings: Any, *, memory_gateway: Any | None = None):
+    def __init__(
+        self,
+        settings: Any,
+        *,
+        memory_gateway: Any | None = None,
+        runtime_values: Mapping[str, Any] | None = None,
+    ):
         self.settings = settings
         self.root = Path(settings.storage_path).expanduser().resolve(strict=False) / "drama"
         self.raw_root = self.root / "raw"
@@ -113,7 +166,11 @@ class DramaService:
         for path in (self.raw_root, self.normalized_root, self.knowledge_root, self.index_root):
             path.mkdir(parents=True, exist_ok=True)
         self.repository = DramaRepository(self.index_root / "drama_read_model.db")
-        self.semantic = DramaSemanticIndex.from_memory_gateway(memory_gateway)
+        self.semantic = DramaSemanticIndex.from_runtime(
+            settings,
+            memory_gateway=memory_gateway,
+            runtime_values=runtime_values,
+        )
 
     def import_script(
         self,
@@ -269,6 +326,9 @@ class DramaService:
             "semantic_error": semantic_error,
             "results": results,
         }
+
+    def close(self) -> None:
+        self.semantic.close()
 
     def _chunk_catalog(self, drama_id: str | None) -> dict[str, dict[str, Any]]:
         drama_ids = [drama_id] if drama_id else [
