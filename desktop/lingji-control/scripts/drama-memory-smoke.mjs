@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
-const [page, navigation, pages, types, api, service, batch, importer, parser, repository] = await Promise.all([
+const [page, navigation, pages, types, api, service, batch, importer, parser, repository, validation] = await Promise.all([
   read("../src/pages/DramaPage.tsx"),
   read("../src/navigation.ts"),
   read("../src/AppPages.tsx"),
@@ -17,6 +17,7 @@ const [page, navigation, pages, types, api, service, batch, importer, parser, re
   read("../../../src/plugins/drama_intelligence/importer.py"),
   read("../../../src/plugins/drama_intelligence/parser.py"),
   read("../../../src/plugins/drama_intelligence/repository.py"),
+  read("../../../scripts/validate.ps1"),
 ]);
 
 for (const token of [
@@ -86,6 +87,13 @@ for (const token of [
   "source_sha256 TEXT NOT NULL UNIQUE",
   "drama_meta",
 ]) assert.ok(repository.includes(token), `Drama repository is missing ${token}`);
+
+for (const token of [
+  '"drama"',
+  'tests/test_drama_memory.py',
+  '"desktop-drama"',
+  '"test:drama"',
+]) assert.ok(validation.includes(token), `Drama focused validation is missing ${token}`);
 
 assert.equal(page.includes("自动生成100集"), false, "V1 must not expose uncontrolled full-series generation");
 console.log("drama-memory-smoke: PASS");
