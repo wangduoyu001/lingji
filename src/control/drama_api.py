@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+import hmac
+import sqlite3
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -25,12 +27,31 @@ def register_drama_routes(
     settings: Any,
     control: Any,
     *,
-    dependencies: list[Any],
-    translate_error: Callable[[Exception], Exception],
+    token: str = "",
 ) -> None:
     """Register the isolated Drama Memory surface on authenticated 8766."""
 
+    try:
+        from fastapi import Depends, Header, HTTPException, Query
+    except ImportError as exc:  # pragma: no cover - startup dependency contract
+        raise RuntimeError("Install requirements-ui.txt before registering Drama routes") from exc
+
     service: DramaService | None = None
+
+    def authorize(x_lingji_token: str | None = Header(default=None)) -> None:
+        if token and not hmac.compare_digest(str(x_lingji_token or ""), token):
+            raise HTTPException(status_code=401, detail="Invalid local control token")
+
+    def translate(exc: Exception) -> HTTPException:
+        if isinstance(exc, LookupError):
+            return HTTPException(status_code=404, detail=str(exc))
+        if isinstance(exc, FileNotFoundError):
+            return HTTPException(status_code=404, detail=str(exc))
+        if isinstance(exc, PermissionError):
+            return HTTPException(status_code=403, detail=str(exc))
+        if isinstance(exc, sqlite3.Error):
+            return HTTPException(status_code=503, detail="Drama read model is unavailable")
+        return HTTPException(status_code=422, detail=str(exc))
 
     def drama() -> DramaService:
         nonlocal service
@@ -38,28 +59,33 @@ def register_drama_routes(
             service = DramaService(settings, memory_gateway=getattr(control, "memory_gateway", None))
         return service
 
-    @app.get("/api/drama/status", dependencies=dependencies)
+    secured = [Depends(authorize)]
+
+    @app.get("/api/drama/status", dependencies=secured)
     def drama_status() -> dict[str, Any]:
         try:
             return drama().status()
         except Exception as exc:
-            raise translate_error(exc) from exc
+            raise translate(exc) from exc
 
-    @app.get("/api/drama/library", dependencies=dependencies)
-    def drama_library(limit: int = 100, offset: int = 0) -> dict[str, Any]:
+    @app.get("/api/drama/library", dependencies=secured)
+    def drama_library(
+        limit: int = Query(default=100, ge=1, le=500),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
         try:
             return drama().list_dramas(limit=limit, offset=offset)
         except Exception as exc:
-            raise translate_error(exc) from exc
+            raise translate(exc) from exc
 
-    @app.get("/api/drama/library/{drama_id}", dependencies=dependencies)
+    @app.get("/api/drama/library/{drama_id}", dependencies=secured)
     def drama_detail(drama_id: str) -> dict[str, Any]:
         try:
             return drama().get_drama(drama_id)
         except Exception as exc:
-            raise translate_error(exc) from exc
+            raise translate(exc) from exc
 
-    @app.post("/api/drama/import", dependencies=dependencies)
+    @app.post("/api/drama/import", dependencies=secured)
     def drama_import(request: DramaImportRequest) -> dict[str, Any]:
         try:
             return drama().import_script(
@@ -68,9 +94,9 @@ def register_drama_routes(
                 force=request.force,
             )
         except Exception as exc:
-            raise translate_error(exc) from exc
+            raise translate(exc) from exc
 
-    @app.post("/api/drama/search", dependencies=dependencies)
+    @app.post("/api/drama/search", dependencies=secured)
     def drama_search(request: DramaSearchRequest) -> dict[str, Any]:
         try:
             return drama().search(
@@ -80,4 +106,4 @@ def register_drama_routes(
                 chunk_type=request.chunk_type,
             )
         except Exception as exc:
-            raise translate_error(exc) from exc
+            raise translate(exc) from exc
