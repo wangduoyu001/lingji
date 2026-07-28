@@ -58,6 +58,16 @@ type SearchResponse = {
   results: SearchResult[];
 };
 
+type BatchImportResponse = {
+  candidate_count: number;
+  processed_count: number;
+  imported_count: number;
+  duplicate_count: number;
+  failed_count: number;
+  truncated: boolean;
+  items: Array<{ relative_path: string; status: string; error?: string }>;
+};
+
 const errorText = (reason: unknown): string =>
   reason instanceof ApiError ? reason.message : reason instanceof Error ? reason.message : String(reason);
 
@@ -66,12 +76,15 @@ export default function DramaPage({ api, active }: PageProps) {
   const [library, setLibrary] = useState<DramaSummary[]>([]);
   const [selectedDrama, setSelectedDrama] = useState("");
   const [sourcePath, setSourcePath] = useState("");
+  const [batchDirectory, setBatchDirectory] = useState("");
   const [title, setTitle] = useState("");
   const [query, setQuery] = useState("");
   const [chunkType, setChunkType] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [batchResult, setBatchResult] = useState<BatchImportResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [batchImporting, setBatchImporting] = useState(false);
   const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -101,7 +114,7 @@ export default function DramaPage({ api, active }: PageProps) {
 
   useEffect(() => { void load(); }, [load]);
 
-  const chooseFile = async () => {
+  const choosePath = async (directory: boolean) => {
     if (!isTauriDesktopRuntime()) {
       setMessage("文件选择只在真实桌面安装版中可用");
       return;
@@ -110,17 +123,19 @@ export default function DramaPage({ api, active }: PageProps) {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const selected = await open({
         multiple: false,
-        directory: false,
-        filters: [{ name: "短剧剧本", extensions: ["txt", "md", "docx", "pdf", "srt", "vtt", "ass"] }],
+        directory,
+        filters: directory ? undefined : [{ name: "短剧剧本", extensions: ["txt", "md", "docx", "pdf", "srt", "vtt", "ass"] }],
       });
-      if (typeof selected === "string") setSourcePath(selected);
+      if (typeof selected !== "string") return;
+      if (directory) setBatchDirectory(selected);
+      else setSourcePath(selected);
     } catch (reason) {
       setMessage(errorText(reason));
     }
   };
 
   const importDrama = async () => {
-    if (!sourcePath.trim() || importing) return;
+    if (!sourcePath.trim() || importing || batchImporting) return;
     setImporting(true);
     setError("");
     setMessage("");
@@ -146,6 +161,28 @@ export default function DramaPage({ api, active }: PageProps) {
       setError(errorText(reason));
     } finally {
       setImporting(false);
+    }
+  };
+
+  const importBatch = async () => {
+    if (!batchDirectory.trim() || batchImporting || importing) return;
+    setBatchImporting(true);
+    setBatchResult(null);
+    setError("");
+    setMessage("");
+    try {
+      const response = await api.post<BatchImportResponse>(
+        "/api/drama/import-directory",
+        { directory_path: batchDirectory.trim(), recursive: false, limit: 100, force: false },
+        { timeoutMs: 30 * 60 * 1000 },
+      );
+      setBatchResult(response);
+      setMessage(`批量处理 ${response.processed_count} 部：新增 ${response.imported_count}，重复 ${response.duplicate_count}，失败 ${response.failed_count}`);
+      await load();
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setBatchImporting(false);
     }
   };
 
@@ -195,10 +232,13 @@ export default function DramaPage({ api, active }: PageProps) {
       <div className="drama-two-column">
         <Panel title="导入剧本">
           <div className="drama-form">
-            <label>剧本文件<div className="drama-path-row"><input value={sourcePath} onChange={(event) => setSourcePath(event.target.value)} placeholder="选择 txt / md / docx / pdf / srt / vtt / ass" /><button className="button secondary" onClick={() => void chooseFile()}>选择文件</button></div></label>
+            <label>单部剧本<div className="drama-path-row"><input value={sourcePath} onChange={(event) => setSourcePath(event.target.value)} placeholder="选择 txt / md / docx / pdf / srt / vtt / ass" /><button className="button secondary" onClick={() => void choosePath(false)}>选择文件</button></div></label>
             <label>剧名（可选）<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="默认使用文件名" /></label>
-            <button className="button primary" disabled={!sourcePath.trim() || importing} onClick={() => void importDrama()}>{importing ? "正在解析并建立索引…" : "导入并建立记忆"}</button>
-            <small>扫描版 PDF 会明确提示需要 OCR，不会把空白内容伪装成成功。</small>
+            <button className="button primary" disabled={!sourcePath.trim() || importing || batchImporting} onClick={() => void importDrama()}>{importing ? "正在解析并建立索引…" : "导入单部剧本"}</button>
+            <div className="drama-divider" />
+            <label>批量剧本目录<div className="drama-path-row"><input value={batchDirectory} onChange={(event) => setBatchDirectory(event.target.value)} placeholder="选择包含10部剧本的目录" /><button className="button secondary" onClick={() => void choosePath(true)}>选择目录</button></div></label>
+            <button className="button primary" disabled={!batchDirectory.trim() || batchImporting || importing} onClick={() => void importBatch()}>{batchImporting ? "正在批量导入并建立索引…" : "批量导入目录"}</button>
+            <small>单个失败不会中断整批；扫描版 PDF 会明确标记需要 OCR。</small>
           </div>
         </Panel>
 
@@ -216,6 +256,7 @@ export default function DramaPage({ api, active }: PageProps) {
 
       {error && <Notice kind="error">{error}</Notice>}
       {message && <Notice>{message}</Notice>}
+      {batchResult?.failed_count ? <Notice kind="warning">失败文件：{batchResult.items.filter((item) => item.status === "failed").map((item) => `${item.relative_path}：${item.error ?? "未知错误"}`).join("；")}</Notice> : null}
 
       <Panel title={`短剧库 · ${library.length}`}>
         <div className="drama-library">
