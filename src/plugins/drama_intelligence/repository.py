@@ -233,7 +233,7 @@ class DramaRepository:
 
         with self._connect() as connection:
             if self._fts_available(connection) and terms:
-                fts_query = " OR ".join(f'"{item.replace(chr(34), "")}"' for item in terms[:16])
+                fts_query = " OR ".join(f'"{item.replace(chr(34), "")}"' for item in terms[:32])
                 sql = """
                     SELECT c.*, bm25(chunks_fts) AS rank
                     FROM chunks_fts
@@ -252,7 +252,7 @@ class DramaRepository:
                 except sqlite3.OperationalError:
                     pass
 
-            fallback_terms = terms[:12] or [clean]
+            fallback_terms = terms[:32] or [clean]
             conditions: list[str] = []
             args = []
             for term in fallback_terms:
@@ -548,7 +548,7 @@ class DramaRepository:
             if token not in values:
                 values.append(token)
             if re.fullmatch(r"[\u4e00-\u9fff]+", token) and len(token) > 4:
-                for size in (4, 3, 2):
+                for size in (3, 4, 2):
                     for index in range(0, len(token) - size + 1):
                         value = token[index : index + size]
                         if value not in values:
