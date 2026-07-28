@@ -30,6 +30,8 @@ type WindowlessAcceptanceReport = {
   report_path: string;
 };
 
+const WINDOWLESS_ACCEPTANCE_TIMEOUT_MS = 4 * 60 * 1000;
+
 export default function AcceptancePage({ api, active }: PageProps) {
   const [form, setForm] = useState({ vault: "", chatgpt_export: "", media: "", deep_zip_check: true, hash_inputs: true });
   const [reports, setReports] = useState<Row[]>([]);
@@ -79,12 +81,23 @@ export default function AcceptancePage({ api, active }: PageProps) {
     setWindowlessRunning(true);
     setWindowlessError("");
     setWindowlessResult(null);
+    let timeoutId: number | undefined;
     try {
-      const payload = await invoke<WindowlessAcceptanceReport>("run_windowless_acceptance");
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timeoutId = window.setTimeout(
+          () => reject(new Error("桌面零 Shell 验收超过 4 分钟仍未返回，已在界面标记失败。请保留 Runtime 日志和验收证据。")),
+          WINDOWLESS_ACCEPTANCE_TIMEOUT_MS,
+        );
+      });
+      const payload = await Promise.race([
+        invoke<WindowlessAcceptanceReport>("run_windowless_acceptance"),
+        timeout,
+      ]);
       setWindowlessResult(payload);
     } catch (reason) {
       setWindowlessError(reason instanceof Error ? reason.message : String(reason));
     } finally {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
       setWindowlessRunning(false);
     }
   }
@@ -95,7 +108,7 @@ export default function AcceptancePage({ api, active }: PageProps) {
       <Panel title="桌面零 Shell 验收">
         <div className="stack">
           <Notice kind="warning">
-            本验收完全由 LingJi 桌面端内部执行，不调用 PowerShell、CMD、WMI 或批处理。过程为启动后静置 60 秒、应用内重启 Core、再静置 60 秒，预计约 2 分钟。
+            本验收完全由 LingJi 桌面端内部执行，不调用 PowerShell、CMD、WMI 或批处理。过程为启动后静置 60 秒、应用内重启 Core、再静置 60 秒，预计约 2 分钟；超过 4 分钟会明确显示失败，不再无限卡住。
           </Notice>
           <div className="toolbar">
             <button
