@@ -23,6 +23,8 @@ const [
   boundary,
   acceptancePage,
   releaseHook,
+  hardwareSystem,
+  hardwareRunner,
 ] = await Promise.all([
   read("../../../run_packaged_control_api.py"),
   read("../../../tests/test_packaged_control_api.py"),
@@ -40,6 +42,8 @@ const [
   read("../src/components/RuntimeBoundary.tsx"),
   read("../src/pages/AcceptancePage.tsx"),
   read("../src/hooks/useReleaseMetadata.ts"),
+  read("../../../src/hardware/system_detectors.py"),
+  read("../../../src/hardware/runner.py"),
 ]);
 
 const sidecarConfig = JSON.parse(sidecarConfigText);
@@ -106,6 +110,16 @@ for (const token of [
 assert.equal(manager.includes("tauri_plugin_shell"), false, "Runtime manager must not expose general shell execution");
 assert.equal(manager.includes("Command::new(command"), false, "Runtime manager must not accept a user command");
 
+for (const forbidden of ["Get-CimInstance", "Get-PhysicalDisk", 'runner.command(["powershell"', 'runner.command(["pwsh"']) {
+  assert.equal(hardwareSystem.includes(forbidden), false, `Hardware detection must not invoke ${forbidden}`);
+}
+for (const token of ["winreg.OpenKey", "ProcessorNameString", "model_source", "return []"]) {
+  assert.ok(hardwareSystem.includes(token), `Shell-free hardware detection is missing ${token}`);
+}
+for (const token of ["CREATE_NO_WINDOW", "STARTF_USESHOWWINDOW", "SW_HIDE"]) {
+  assert.ok(hardwareRunner.includes(token), `Windows diagnostic runner is missing ${token}`);
+}
+
 for (const token of [
   "CreateToolhelp32Snapshot", "Process32FirstW", "Process32NextW",
   '"powershell.exe"', '"pwsh.exe"', '"cmd.exe"', '"conhost.exe"',
@@ -140,6 +154,8 @@ assert.match(boundary, /AUTO RECOVERY/);
 assert.equal(boundary.includes(">启动核心</button>"), false, "Routine Sidecar startup must remain automatic");
 
 assert.match(acceptancePage, /run_windowless_acceptance/);
+assert.match(acceptancePage, /WINDOWLESS_ACCEPTANCE_TIMEOUT_MS/);
+assert.match(acceptancePage, /超过 4 分钟/);
 assert.match(acceptancePage, /桌面零 Shell 验收/);
 assert.match(acceptancePage, /不调用 PowerShell、CMD、WMI 或批处理/);
 assert.match(acceptancePage, /外部 Shell/);
