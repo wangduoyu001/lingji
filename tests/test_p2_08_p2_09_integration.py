@@ -116,14 +116,15 @@ def test_desktop_uses_shared_polling_and_shadow_dashboard_without_execution_cont
     attention = read("desktop/lingji-control/src/pages/AttentionPage.tsx")
     diagnostics = read("desktop/lingji-control/src/pages/DiagnosticsPage.tsx")
 
-    for page_id in ("overview", "activity", "attention", "diagnostics"):
+    for page_id in ("overview", "activity", "attention", "drama", "diagnostics"):
         assert f'id: "{page_id}"' in navigation
-    assert navigation.count('group: "observe"') == 4
+    assert navigation.count('group: "observe"') == 5
     assert "PRIMARY_NAVIGATION" in navigation
     assert "ADVANCED_NAVIGATION" in navigation
     assert 'id: "auto_review"' in navigation
     assert 'page === "auto_review"' in app_pages
     assert 'page === "attention"' in app_pages
+    assert 'page === "drama"' in app_pages
     assert "ADVANCED_NAVIGATION" in diagnostics
     assert "pending_review_count" in attention
     assert "/api/auto-review/metrics" not in attention
