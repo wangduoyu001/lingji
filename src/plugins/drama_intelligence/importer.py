@@ -133,6 +133,12 @@ def _load_srt_or_vtt(raw: str) -> tuple[str, list[dict[str, object]]]:
             candidate = lines[index].strip()
             if not candidate or _SUBTITLE_TIME.match(candidate):
                 break
+            if (
+                candidate.isdigit()
+                and index + 1 < len(lines)
+                and _SUBTITLE_TIME.match(lines[index + 1].strip())
+            ):
+                break
             body.append(_HTML_TAG.sub("", candidate).strip())
             index += 1
         text = "\n".join(item for item in body if item).strip()
