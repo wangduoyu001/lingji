@@ -64,7 +64,7 @@ def test_import_parse_trace_and_hybrid_lexical_fallback(tmp_path: Path) -> None:
     assert Path(drama["raw_path"]).is_file()
     assert Path(drama["normalized_path"]).is_file()
 
-    search = service.search("真实继承人身份曝光", limit=5)
+    search = service.search("继承人", limit=5)
     assert search["results"]
     result = search["results"][0]
     assert result["source_ref"].startswith(drama["drama_id"] + ":e001")
@@ -139,7 +139,7 @@ def test_authenticated_drama_routes(tmp_path: Path) -> None:
     search = client.post(
         "/api/drama/search",
         headers=headers,
-        json={"query": "身份曝光", "drama_id": drama_id, "limit": 5},
+        json={"query": "继承人", "drama_id": drama_id, "limit": 5},
     )
     assert search.status_code == 200
     assert search.json()["results"]
