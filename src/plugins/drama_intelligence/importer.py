@@ -144,10 +144,7 @@ def _load_pdf(path: Path) -> tuple[str, list[dict[str, object]]]:
     pages: list[str] = []
     units: list[dict[str, object]] = []
     for index, page in enumerate(reader.pages, start=1):
-        try:
-            text = page.extract_text(extraction_mode="layout") or ""
-        except TypeError:
-            text = page.extract_text() or ""
+        text = _extract_pdf_page_text(page)
         cleaned = _normalize_text(text)
         pages.append(cleaned)
         units.append({"unit": "page", "number": index, "characters": len(cleaned)})
@@ -157,6 +154,21 @@ def _load_pdf(path: Path) -> tuple[str, list[dict[str, object]]]:
             "PDF appears to be scanned or lacks a usable text layer; OCR is required"
         )
     return combined, units
+
+
+def _extract_pdf_page_text(page: object) -> str:
+    extractor = getattr(page, "extract_text", None)
+    if not callable(extractor):
+        return ""
+    try:
+        return str(extractor(extraction_mode="layout") or "")
+    except TypeError:
+        try:
+            return str(extractor() or "")
+        except (KeyError, AttributeError):
+            return ""
+    except (KeyError, AttributeError):
+        return ""
 
 
 def _normalize_text(text: str) -> str:
