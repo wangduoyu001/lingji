@@ -10,6 +10,7 @@ from src.plugins.drama_intelligence import (
     DramaSemanticIndex,
     DramaService,
     ScannedPdfRequiresOcr,
+    import_directory,
     load_script,
 )
 from src.plugins.drama_intelligence.models import DramaChunk
@@ -35,19 +36,19 @@ def _settings(tmp_path: Path) -> SimpleNamespace:
     )
 
 
-def _sample_script() -> str:
-    return """人物简介：林晚隐藏了集团继承人身份。
+def _sample_script(index: int = 1) -> str:
+    return f"""人物简介：林晚隐藏了第{index}家集团继承人身份。
 
 第1集 被羞辱
 第一场
-林晚：我只是来送文件。
+林晚：我只是来送第{index}份文件。
 赵明：保洁也配进董事会？
 旁白：众人哄笑，林晚保持沉默。
 
 第二场
 董事长：请大小姐上座。
 赵明：什么？她是真正的继承人？
-林晚：现在可以谈合同了吗？
+林晚：现在可以谈第{index}份合同了吗？
 
 第2集 新危机
 第一场
@@ -84,6 +85,32 @@ def test_import_parse_trace_and_hybrid_lexical_fallback(tmp_path: Path) -> None:
     duplicate = service.import_script(str(source))
     assert duplicate["duplicate"] is True
     assert service.status()["structured"]["dramas"] == 1
+
+
+def test_batch_import_ten_scripts_is_idempotent(tmp_path: Path) -> None:
+    directory = tmp_path / "ten-dramas"
+    directory.mkdir()
+    for index in range(1, 11):
+        (directory / f"drama-{index:02d}.txt").write_text(
+            _sample_script(index),
+            encoding="utf-8",
+        )
+    (directory / "notes.csv").write_text("not,a,script", encoding="utf-8")
+    service = DramaService(_settings(tmp_path), runtime_values={"embedding_enabled": False})
+
+    first = import_directory(service, directory, limit=20)
+    assert first["candidate_count"] == 10
+    assert first["processed_count"] == 10
+    assert first["imported_count"] == 10
+    assert first["duplicate_count"] == 0
+    assert first["failed_count"] == 0
+    assert service.status()["structured"]["dramas"] == 10
+
+    second = import_directory(service, directory, limit=20)
+    assert second["imported_count"] == 0
+    assert second["duplicate_count"] == 10
+    assert second["failed_count"] == 0
+    assert service.status()["structured"]["dramas"] == 10
 
 
 def test_drama_semantic_index_uses_isolated_collection_payload_and_filters() -> None:
@@ -186,6 +213,10 @@ def test_authenticated_drama_routes(tmp_path: Path) -> None:
     testclient = pytest.importorskip("fastapi.testclient")
     source = tmp_path / "api-script.txt"
     source.write_text(_sample_script(), encoding="utf-8")
+    batch_directory = tmp_path / "api-batch"
+    batch_directory.mkdir()
+    for index in range(1, 4):
+        (batch_directory / f"api-{index}.txt").write_text(_sample_script(index + 20), encoding="utf-8")
     settings = _settings(tmp_path)
 
     class Control:
@@ -204,6 +235,13 @@ def test_authenticated_drama_routes(tmp_path: Path) -> None:
     response = client.post("/api/drama/import", headers=headers, json={"source_path": str(source)})
     assert response.status_code == 200
     drama_id = response.json()["drama"]["drama_id"]
+    batch = client.post(
+        "/api/drama/import-directory",
+        headers=headers,
+        json={"directory_path": str(batch_directory), "limit": 10},
+    )
+    assert batch.status_code == 200
+    assert batch.json()["imported_count"] == 3
     search = client.post(
         "/api/drama/search",
         headers=headers,
