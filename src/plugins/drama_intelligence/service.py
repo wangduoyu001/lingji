@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -16,8 +16,18 @@ from .parser import parse_script
 from .repository import DramaRepository
 
 
+@dataclass(frozen=True)
+class _DramaPaths:
+    workspace: str
+    root: Path
+    raw_root: Path
+    normalized_root: Path
+    knowledge_root: Path
+    index_root: Path
+
+
 class DramaSemanticIndex:
-    """Reuse LingJi embedding/Qdrant components with a separate Drama collection."""
+    """Reuse LingJi embedding and Qdrant services with a separate Drama collection."""
 
     def __init__(
         self,
@@ -62,7 +72,7 @@ class DramaSemanticIndex:
             embedding = build_embedding_provider(settings, values)
             if embedding is None:
                 return cls(None, reason="embedding_disabled")
-            workspace = WorkspaceResolver.resolve(settings)
+            workspace = workspace or WorkspaceResolver.resolve(settings)
             workspace_name = getattr(workspace.name, "value", str(workspace.name))
             provider = QdrantSemanticProvider(
                 replace(workspace, qdrant_collection=f"lingji_drama_{workspace_name}"),
@@ -100,9 +110,11 @@ class DramaSemanticIndex:
                     "drama_id": item.drama_id,
                     "drama_title": title,
                     "chunk_type": item.chunk_type,
+                    "heading": item.heading,
                     "episode_number": item.episode_number,
                     "scene_number": item.scene_number,
                     "source_ref": item.source_ref,
+                    "source_locator": item.source_locator,
                     "characters": list(item.characters),
                     "tags": list(item.tags),
                 },
@@ -110,7 +122,21 @@ class DramaSemanticIndex:
             for item in selected
         ]
         self.provider.upsert_many(points)
-        return {"state": "ready", "indexed": len(points), "collection": self.provider.collection}
+        return {
+            "state": "ready",
+            "indexed": len(points),
+            "collection": self.provider.collection,
+        }
+
+    def replace(self, chunks: Iterable[DramaChunk], *, drama_id: str, title: str) -> dict[str, Any]:
+        if self.provider is None:
+            return {"state": "disabled", "indexed": 0, "reason": self.reason}
+        self.provider.delete_memory(drama_id)
+        return self.index(chunks, title=title)
+
+    def delete_drama(self, drama_id: str) -> None:
+        if self.provider is not None:
+            self.provider.delete_memory(drama_id)
 
     def search(
         self,
@@ -148,7 +174,7 @@ class DramaSemanticIndex:
 
 
 class DramaService:
-    """Application service for the isolated Drama Memory domain."""
+    """Application service for source-traceable Drama Memory."""
 
     def __init__(
         self,
@@ -158,11 +184,13 @@ class DramaService:
         runtime_values: Mapping[str, Any] | None = None,
     ):
         self.settings = settings
-        self.root = Path(settings.storage_path).expanduser().resolve(strict=False) / "drama"
-        self.raw_root = self.root / "raw"
-        self.normalized_root = self.root / "normalized"
-        self.knowledge_root = self.root / "knowledge"
-        self.index_root = self.root / "index"
+        self.paths = self._resolve_paths(settings, memory_gateway)
+        self.workspace = self.paths.workspace
+        self.root = self.paths.root
+        self.raw_root = self.paths.raw_root
+        self.normalized_root = self.paths.normalized_root
+        self.knowledge_root = self.paths.knowledge_root
+        self.index_root = self.paths.index_root
         for path in (self.raw_root, self.normalized_root, self.knowledge_root, self.index_root):
             path.mkdir(parents=True, exist_ok=True)
         self.repository = DramaRepository(self.index_root / "drama_read_model.db")
@@ -190,10 +218,12 @@ class DramaService:
             }
 
         parsed = parse_script(source)
-        raw_directory = self.raw_root / parsed.drama_id
-        normalized_directory = self.normalized_root / parsed.drama_id
-        raw_directory.mkdir(parents=True, exist_ok=True)
-        normalized_directory.mkdir(parents=True, exist_ok=True)
+        drama_id = str(existing.get("drama_id")) if existing else parsed.drama_id
+        raw_directory = self.raw_root / drama_id
+        normalized_directory = self.normalized_root / drama_id
+        knowledge_directory = self.knowledge_root / drama_id
+        for path in (raw_directory, normalized_directory, knowledge_directory):
+            path.mkdir(parents=True, exist_ok=True)
         raw_path = raw_directory / f"original{source.source_path.suffix.lower()}"
         normalized_path = normalized_directory / "full_text.md"
         shutil.copy2(source.source_path, raw_path)
@@ -201,8 +231,8 @@ class DramaService:
         (normalized_directory / "source_map.json").write_text(
             json.dumps(
                 {
-                    "schema_version": 1,
-                    "drama_id": parsed.drama_id,
+                    "schema_version": 2,
+                    "drama_id": drama_id,
                     "source_path": str(source.source_path),
                     "raw_path": str(raw_path),
                     "sha256": source.sha256,
@@ -213,7 +243,7 @@ class DramaService:
             ),
             encoding="utf-8",
         )
-        (self.knowledge_root / f"{parsed.drama_id}.json").write_text(
+        (knowledge_directory / "drama.json").write_text(
             json.dumps(parsed.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
@@ -225,7 +255,14 @@ class DramaService:
         )
         semantic_error = None
         try:
-            semantic = self.semantic.index(parsed.chunks, title=parsed.title)
+            if existing and force:
+                semantic = self.semantic.replace(
+                    parsed.chunks,
+                    drama_id=drama_id,
+                    title=parsed.title,
+                )
+            else:
+                semantic = self.semantic.index(parsed.chunks, title=parsed.title)
         except Exception as exc:
             semantic_error = f"{type(exc).__name__}: {exc}"[:500]
             semantic = {"state": "degraded", "indexed": 0, "error": semantic_error}
@@ -239,7 +276,14 @@ class DramaService:
     def status(self) -> dict[str, Any]:
         return {
             "state": "ready",
+            "workspace": self.workspace,
             "root": str(self.root),
+            "paths": {
+                "raw": str(self.raw_root),
+                "normalized": str(self.normalized_root),
+                "knowledge": str(self.knowledge_root),
+                "index": str(self.index_root),
+            },
             "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
             "structured": self.repository.status(),
             "semantic": self.semantic.status(),
@@ -263,9 +307,10 @@ class DramaService:
         if not clean:
             raise ValueError("query must not be empty")
         bounded = min(max(int(limit), 1), 50)
+        candidate_limit = max(bounded * 6, 30)
         lexical = self.repository.search_lexical(
             clean,
-            limit=max(bounded * 4, 20),
+            limit=candidate_limit,
             drama_id=drama_id,
             chunk_type=chunk_type,
         )
@@ -273,7 +318,7 @@ class DramaService:
         try:
             semantic = self.semantic.search(
                 clean,
-                limit=max(bounded * 4, 20),
+                limit=candidate_limit,
                 drama_id=drama_id,
                 chunk_type=chunk_type,
             )
@@ -281,29 +326,45 @@ class DramaService:
             semantic = []
             semantic_error = f"{type(exc).__name__}: {exc}"[:500]
 
-        catalog = self._chunk_catalog(drama_id)
         scores: dict[str, float] = {}
         evidence: dict[str, dict[str, Any]] = {}
+        catalog = {str(item["chunk_id"]): dict(item) for item in lexical}
         for rank, item in enumerate(lexical, start=1):
             chunk_id = str(item["chunk_id"])
-            scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (60 + rank)
-            evidence.setdefault(chunk_id, {})["lexical_rank"] = rank
-            catalog.setdefault(chunk_id, item)
+            lexical_score = float(item.get("lexical_score") or 0.0)
+            scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (60 + rank) + lexical_score * 0.002
+            evidence.setdefault(chunk_id, {}).update(
+                {"lexical_rank": rank, "lexical_score": lexical_score}
+            )
+
+        semantic_ids: list[str] = []
         for rank, item in enumerate(semantic, start=1):
             chunk_id = str(item.get("chunk_id") or "")
             if not chunk_id:
                 continue
-            scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (60 + rank)
+            semantic_ids.append(chunk_id)
+            semantic_score = float(item.get("score") or 0.0)
+            scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (60 + rank) + semantic_score * 0.002
             evidence.setdefault(chunk_id, {}).update(
-                {"semantic_rank": rank, "semantic_score": item.get("score")}
+                {"semantic_rank": rank, "semantic_score": semantic_score}
             )
+        missing_ids = [value for value in semantic_ids if value not in catalog]
+        catalog.update(self.repository.chunks_by_ids(missing_ids))
 
         ordered = sorted(scores, key=lambda value: (-scores[value], value))[:bounded]
+        drama_cache: dict[str, dict[str, Any]] = {}
         results: list[dict[str, Any]] = []
         for chunk_id in ordered:
             item = dict(catalog.get(chunk_id) or {})
             if not item:
                 continue
+            current_drama_id = str(item.get("drama_id") or "")
+            if current_drama_id not in drama_cache:
+                try:
+                    drama_cache[current_drama_id] = self.repository.get_drama(current_drama_id)
+                except LookupError:
+                    drama_cache[current_drama_id] = {}
+            drama = drama_cache[current_drama_id]
             signals = evidence.get(chunk_id, {})
             reasons = []
             if signals.get("lexical_rank"):
@@ -312,39 +373,103 @@ class DramaService:
                 reasons.append("语义结构相似")
             item.update(
                 {
+                    "drama_title": drama.get("title") or current_drama_id,
                     "score": round(scores[chunk_id], 8),
                     "signals": signals,
+                    "retrieval_channels": [
+                        channel
+                        for channel, key in (("lexical", "lexical_rank"), ("semantic", "semantic_rank"))
+                        if signals.get(key)
+                    ],
                     "match_reasons": reasons,
+                    "citation": {
+                        "drama_id": current_drama_id,
+                        "title": drama.get("title"),
+                        "raw_path": drama.get("raw_path"),
+                        "normalized_path": drama.get("normalized_path"),
+                        "source_ref": item.get("source_ref"),
+                        "source_locator": item.get("source_locator") or {},
+                        "start_offset": item.get("start_offset"),
+                        "end_offset": item.get("end_offset"),
+                    },
                 }
             )
             results.append(item)
+
+        semantic_state = self.semantic.status()
+        warnings: list[dict[str, str]] = []
+        if semantic_error:
+            warnings.append(
+                {
+                    "code": "semantic_search_failed",
+                    "message": semantic_error,
+                }
+            )
+        elif semantic_state.get("state") != "ready":
+            warnings.append(
+                {
+                    "code": "semantic_unavailable",
+                    "message": str(
+                        semantic_state.get("reason")
+                        or semantic_state.get("last_error")
+                        or "Drama semantic retrieval is unavailable; lexical results remain active"
+                    ),
+                }
+            )
         return {
             "query": clean,
+            "workspace": self.workspace,
+            "revision": self.repository.revision,
             "filters": {"drama_id": drama_id, "chunk_type": chunk_type},
             "count": len(results),
-            "semantic_state": self.semantic.status(),
+            "semantic_state": semantic_state,
             "semantic_error": semantic_error,
+            "warnings": warnings,
             "results": results,
         }
 
     def close(self) -> None:
         self.semantic.close()
 
-    def _chunk_catalog(self, drama_id: str | None) -> dict[str, dict[str, Any]]:
-        drama_ids = [drama_id] if drama_id else [
-            str(item["drama_id"])
-            for item in self.repository.list_dramas(limit=500, offset=0)["items"]
-        ]
-        output: dict[str, dict[str, Any]] = {}
-        for current in drama_ids:
-            if not current:
-                continue
+    @staticmethod
+    def _resolve_paths(settings: Any, memory_gateway: Any | None) -> _DramaPaths:
+        workspace = getattr(memory_gateway, "workspace", None)
+        if workspace is None:
             try:
-                drama = self.repository.get_drama(current)
-            except LookupError:
-                continue
-            title = str(drama.get("title") or current)
-            for chunk in self.repository.chunks(current):
-                chunk["drama_title"] = title
-                output[str(chunk["chunk_id"])] = chunk
-        return output
+                workspace = WorkspaceResolver.resolve(settings)
+            except Exception:
+                workspace = None
+        if workspace is not None:
+            name = getattr(getattr(workspace, "name", None), "value", None) or str(
+                getattr(workspace, "name", "production")
+            )
+            raw_root = Path(workspace.raw_path).resolve(strict=False) / "drama"
+            derived_root = Path(workspace.derived_path).resolve(strict=False) / "drama"
+            index_root = Path(workspace.storage_path).resolve(strict=False) / "index"
+            return _DramaPaths(
+                workspace=name,
+                root=derived_root,
+                raw_root=raw_root,
+                normalized_root=derived_root / "normalized",
+                knowledge_root=derived_root / "knowledge",
+                index_root=index_root,
+            )
+
+        name = str(getattr(settings, "workspace_name", "production") or "production")
+        storage = Path(settings.storage_path).expanduser().resolve(strict=False)
+        base = storage.parent if storage.name.lower() == "storage" else storage
+        raw_setting = getattr(settings, f"{name}_raw_dir", None)
+        raw_root = (
+            Path(raw_setting).expanduser().resolve(strict=False)
+            if raw_setting
+            else base / "raw"
+        ) / "drama"
+        derived_root = base / "derived" / "drama"
+        return _DramaPaths(
+            workspace=name,
+            root=derived_root,
+            raw_root=raw_root,
+            normalized_root=derived_root / "normalized",
+            knowledge_root=derived_root / "knowledge",
+            index_root=storage / "index",
+        )
