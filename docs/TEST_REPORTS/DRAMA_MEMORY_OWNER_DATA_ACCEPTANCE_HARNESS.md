@@ -30,7 +30,7 @@ The runner reuses `DramaService.search()`. It does not introduce another retriev
 
 ## 3. Safety boundary
 
-By default the CLI refuses every workspace except `acceptance`.
+The CLI hard-refuses every workspace except `acceptance`.
 
 ```text
 production data: not required
@@ -40,7 +40,7 @@ second_brain/: unchanged
 Writer Agent: unchanged and disabled
 ```
 
-`--allow-production` exists only as an explicit escape hatch and is not part of normal acceptance.
+There is no production override in the acceptance runner.
 
 ## 4. Question dataset
 
