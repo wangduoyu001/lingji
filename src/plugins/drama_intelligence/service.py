@@ -59,11 +59,11 @@ class DramaSemanticIndex:
         provider = None
         try:
             values = dict(runtime_values or {})
-            workspace = WorkspaceResolver.resolve(settings)
-            workspace_name = getattr(workspace.name, "value", str(workspace.name))
             embedding = build_embedding_provider(settings, values)
             if embedding is None:
                 return cls(None, reason="embedding_disabled")
+            workspace = WorkspaceResolver.resolve(settings)
+            workspace_name = getattr(workspace.name, "value", str(workspace.name))
             provider = QdrantSemanticProvider(
                 replace(workspace, qdrant_collection=f"lingji_drama_{workspace_name}"),
                 embedding,
