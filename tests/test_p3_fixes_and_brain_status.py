@@ -82,24 +82,20 @@ class P3FixesTests(unittest.TestCase):
             self.assertTrue(assignments["embedding_primary"]["installed"])
             self.assertEqual(assignments["embedding_primary"]["status"], "available")
 
-    # ---- P3-02: PowerShell CIM CPU model ----
-    def test_cpu_snapshot_uses_powershell_cim_on_windows(self):
-        """CPU model should use PowerShell Get-CimInstance on Windows for real product name."""
-        class MockRunner:
-            def __call__(self, args, timeout=3.0):
-                cmd = args[0].lower()
-                if cmd == "powershell":
-                    return {
-                        "returncode": 0,
-                        "stdout": "Intel(R) Core(TM) i7-9700 CPU @ 3.00GHz",
-                        "stderr": "",
-                    }
-                return {"returncode": 1, "stdout": "", "stderr": "unsupported"}
+    # ---- P3-02: shell-free Windows CPU model ----
+    def test_cpu_snapshot_uses_windows_registry_without_shell(self):
+        """CPU model uses the Windows registry and never starts PowerShell or WMI."""
+        class RejectRunner:
+            def command(self, args, timeout=3.0):
+                raise AssertionError(f"CPU detection must not launch a process: {args}")
 
-        runner = SafeRunner(command_runner=MockRunner())
-        with patch("src.hardware.system_detectors.platform.system", return_value="Windows"):
-            snapshot = cpu_snapshot(None, runner=runner)
+        with patch(
+            "src.hardware.system_detectors._windows_cpu_model",
+            return_value="Intel(R) Core(TM) i7-9700 CPU @ 3.00GHz",
+        ):
+            snapshot = cpu_snapshot(None, runner=RejectRunner())
         self.assertIn("i7-9700", snapshot["model"])
+        self.assertEqual(snapshot["model_source"], "windows_registry")
         self.assertNotIn("Family", snapshot["model"])
 
     # ---- P3-03: CUDA fallback ----
