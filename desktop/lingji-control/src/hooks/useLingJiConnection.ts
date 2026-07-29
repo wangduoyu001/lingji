@@ -1,10 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, LingJiApi, isTauriDesktopRuntime } from "../api";
-import type { RuntimeStatus } from "../runtimeTypes";
+import type { RuntimeBootstrapStatus, RuntimeStatus } from "../runtimeTypes";
 import type { Row } from "../types";
 
-export type ConnectionState = "booting" | "connected" | "offline" | "unsupported";
+export type ConnectionState =
+  | "booting"
+  | "configuration_required"
+  | "connected"
+  | "offline"
+  | "unsupported";
+
+const GUARDED_RUNTIME_COMMANDS = {
+  status: "guarded_runtime_status",
+  ensure: "guarded_runtime_ensure",
+  stop: "guarded_runtime_stop",
+  restart: "guarded_runtime_restart",
+} as const;
 
 function connectionMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -28,6 +40,7 @@ export function useLingJiConnection() {
   const [state, setState] = useState<ConnectionState>("booting");
   const [overview, setOverview] = useState<Row | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
+  const [bootstrapStatus, setBootstrapStatus] = useState<RuntimeBootstrapStatus | null>(null);
   const [runtimeBusy, setRuntimeBusy] = useState("");
   const [ownerStopped, setOwnerStopped] = useState(false);
   const [error, setError] = useState("");
@@ -40,6 +53,12 @@ export function useLingJiConnection() {
     setError("");
   }, [api]);
 
+  const readBootstrap = useCallback(async () => {
+    const status = await invoke<RuntimeBootstrapStatus>("runtime_bootstrap_status");
+    setBootstrapStatus(status);
+    return status;
+  }, []);
+
   const ensureConnection = useCallback(async (resumeAfterOwnerStop: boolean) => {
     if (!isTauriDesktopRuntime()) {
       setState("unsupported");
@@ -51,7 +70,15 @@ export function useLingJiConnection() {
     setState("booting");
     setRuntimeBusy("ensure");
     try {
-      const status = await invoke<RuntimeStatus>("runtime_ensure");
+      const bootstrap = await readBootstrap();
+      if (!bootstrap.configured || bootstrap.c_drive_write_detected) {
+        setOverview(null);
+        setRuntimeStatus(null);
+        setState("configuration_required");
+        setError(bootstrap.last_error || "请先选择非 C 盘的数据目录。");
+        return;
+      }
+      const status = await invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.ensure);
       setRuntimeStatus(status);
       if (!status.healthy) throw new Error(runtimeFailure(status));
       await readOverview();
@@ -62,30 +89,52 @@ export function useLingJiConnection() {
     } finally {
       setRuntimeBusy("");
     }
-  }, [readOverview]);
+  }, [readBootstrap, readOverview]);
+
+  const configureRuntime = useCallback(async (
+    baseDataRoot: string,
+    workspace: "production" | "acceptance",
+  ) => {
+    if (!isTauriDesktopRuntime() || runtimeBusy) return;
+    setRuntimeBusy("configure");
+    setError("");
+    try {
+      const status = await invoke<RuntimeBootstrapStatus>("runtime_configure", {
+        baseDataRoot,
+        workspace,
+      });
+      setBootstrapStatus(status);
+      await ensureConnection(false);
+    } catch (reason) {
+      setState("configuration_required");
+      setError(connectionMessage(reason));
+    } finally {
+      setRuntimeBusy("");
+    }
+  }, [ensureConnection, runtimeBusy]);
 
   const connect = useCallback(async () => {
     await ensureConnection(true);
   }, [ensureConnection]);
 
   const refreshRuntime = useCallback(async () => {
-    if (!isTauriDesktopRuntime()) return null;
+    if (!isTauriDesktopRuntime() || bootstrapStatus?.configured === false) return null;
     try {
-      const status = await invoke<RuntimeStatus>("runtime_status");
+      const status = await invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.status);
       setRuntimeStatus(status);
       return status;
     } catch (reason) {
       setError(connectionMessage(reason));
       return null;
     }
-  }, []);
+  }, [bootstrapStatus?.configured]);
 
   const stopRuntime = useCallback(async () => {
     if (!isTauriDesktopRuntime() || runtimeBusy) return;
     setRuntimeBusy("stop");
     setOwnerStopped(true);
     try {
-      const status = await invoke<RuntimeStatus>("runtime_stop");
+      const status = await invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.stop);
       setRuntimeStatus(status);
       setOverview(null);
       setState("offline");
@@ -104,7 +153,7 @@ export function useLingJiConnection() {
     setOwnerStopped(false);
     setState("booting");
     try {
-      const status = await invoke<RuntimeStatus>("runtime_restart");
+      const status = await invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.restart);
       setRuntimeStatus(status);
       if (!status.healthy) throw new Error(runtimeFailure(status));
       await readOverview();
@@ -126,7 +175,7 @@ export function useLingJiConnection() {
     const timer = window.setInterval(() => {
       void Promise.all([
         api.get<Row>("/api/overview"),
-        invoke<RuntimeStatus>("runtime_status"),
+        invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.status),
       ])
         .then(([next, runtime]) => {
           setOverview(next);
@@ -149,7 +198,7 @@ export function useLingJiConnection() {
   }, [ensureConnection, ownerStopped, runtimeBusy, state]);
 
   useEffect(() => {
-    if (state === "connected" || state === "unsupported") return;
+    if (["connected", "unsupported", "configuration_required"].includes(state)) return;
     const timer = window.setInterval(() => void refreshRuntime(), 5_000);
     return () => window.clearInterval(timer);
   }, [refreshRuntime, state]);
@@ -160,11 +209,13 @@ export function useLingJiConnection() {
     connected: state === "connected",
     overview,
     runtimeStatus,
+    bootstrapStatus,
     runtimeBusy,
     ownerStopped,
     autoRecoveryActive: state === "offline" && !ownerStopped,
     error,
     connect,
+    configureRuntime,
     refreshRuntime,
     stopRuntime,
     restartRuntime,

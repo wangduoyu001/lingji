@@ -20,6 +20,7 @@ class StartupHealthChecker:
 
     def run(self) -> dict[str, Any]:
         checks: list[dict[str, Any]] = []
+        self._check_data_root_policy(checks)
         self._check_directory(checks, "vault", self.settings.vault_path, create=self.settings.vault_auto_init)
         self._check_directory(checks, "storage", self.settings.storage_path, create=True)
         self._check_directory(checks, "logs", self.settings.log_path, create=True)
@@ -36,6 +37,7 @@ class StartupHealthChecker:
         return {
             "status": status,
             "read_only": self.read_only,
+            "workspace": str(os.environ.get("LINGJI_WORKSPACE") or self.settings.workspace_name),
             "checks": checks,
             "error_count": len(errors),
             "warning_count": len(warnings),
@@ -59,6 +61,67 @@ class StartupHealthChecker:
         **details: Any,
     ) -> None:
         checks.append({"name": name, "status": status, "message": message, **details})
+
+    @staticmethod
+    def _is_windows_system_drive(path: Path | str) -> bool:
+        normalized = str(path).strip().replace("/", "\\").lower()
+        return normalized == "c:" or normalized.startswith("c:\\")
+
+    def _check_data_root_policy(self, checks: list[dict[str, Any]]) -> None:
+        packaged = os.environ.get("LINGJI_PACKAGED_RUNTIME") == "1"
+        configured_root = str(os.environ.get("LINGJI_OWNER_DATA_ROOT") or "").strip()
+        workspace = str(os.environ.get("LINGJI_WORKSPACE") or self.settings.workspace_name)
+        mutable_paths = {
+            "storage": self.settings.storage_path,
+            "logs": self.settings.log_path,
+            "state_db": self.settings.state_db_path,
+            "memory_db": self.settings.memory_db_path,
+            "backup": self.settings.backup_path,
+        }
+        system_drive_paths = [
+            f"{name}={path}"
+            for name, path in mutable_paths.items()
+            if self._is_windows_system_drive(path)
+        ]
+
+        if packaged and not configured_root:
+            self._append(
+                checks,
+                "data_root_policy",
+                "error",
+                "安装版没有显式数据根，已阻止静默回落到系统盘",
+                workspace=workspace,
+                data_root=None,
+                c_drive_write_detected=False,
+            )
+            return
+        if configured_root and self._is_windows_system_drive(configured_root):
+            system_drive_paths.insert(0, f"data_root={configured_root}")
+        if system_drive_paths:
+            self._append(
+                checks,
+                "data_root_policy",
+                "error" if packaged else "warning",
+                "检测到运行数据位于 Windows C: 盘",
+                workspace=workspace,
+                data_root=configured_root or None,
+                c_drive_write_detected=True,
+                affected_paths=system_drive_paths,
+            )
+            return
+
+        self._append(
+            checks,
+            "data_root_policy",
+            "ok",
+            "运行数据根已显式配置且未使用 Windows C: 盘"
+            if configured_root
+            else "当前开发运行未检测到 C: 盘数据路径",
+            workspace=workspace,
+            data_root=configured_root or None,
+            c_drive_write_detected=False,
+            bootstrap_only_on_system_drive=packaged,
+        )
 
     def _check_directory(
         self,

@@ -1,7 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { NAVIGATION_GROUPS, PRIMARY_NAVIGATION } from "../navigation";
 import type { ReleaseMetadata } from "../hooks/useReleaseMetadata";
-import { runtimeStateLabel, type RuntimeStatus } from "../runtimeTypes";
+import type { ConnectionState } from "../hooks/useLingJiConnection";
+import {
+  runtimeStateLabel,
+  type RuntimeBootstrapStatus,
+  type RuntimeStatus,
+} from "../runtimeTypes";
 import type { NavigationItem, PageId } from "../types";
 import NavIcon from "./NavIcon";
 
@@ -9,9 +14,10 @@ type Props = {
   page: PageId;
   current: NavigationItem;
   connected: boolean;
-  connectionState: "booting" | "connected" | "offline" | "unsupported";
+  connectionState: ConnectionState;
   releaseMetadata: ReleaseMetadata | null;
   runtimeStatus: RuntimeStatus | null;
+  bootstrapStatus: RuntimeBootstrapStatus | null;
   runtimeBusy: string;
   ownerStopped: boolean;
   autoRecoveryActive: boolean;
@@ -30,6 +36,7 @@ export default function DesktopShell({
   connectionState,
   releaseMetadata,
   runtimeStatus,
+  bootstrapStatus,
   runtimeBusy,
   ownerStopped,
   autoRecoveryActive,
@@ -48,6 +55,7 @@ export default function DesktopShell({
   const managedRuntime = runtimeHealthy && runtimeStatus?.managed === true;
   const externalRuntime = runtimeHealthy && runtimeStatus?.managed === false;
   const runtimeAvailable = runtimeStatus?.binary_available !== false;
+  const runtimeConfigured = bootstrapStatus?.configured === true && !bootstrapStatus.c_drive_write_detected;
   const advancedPage = current.group === "advanced";
 
   const copyDiagnostics = async () => {
@@ -59,6 +67,10 @@ export default function DesktopShell({
     }
     window.setTimeout(() => setCopyState("idle"), 2200);
   };
+
+  const shellStateLabel = connectionState === "configuration_required"
+    ? "等待数据目录配置"
+    : runtimeStateLabel(runtimeStatus);
 
   return (
     <div className="desktop-frame">
@@ -96,19 +108,29 @@ export default function DesktopShell({
           <div className="desktop-status-line">
             <span className={runtimeHealthy ? "status-dot online" : "status-dot"} />
             <div>
-              <strong>{runtimeStateLabel(runtimeStatus)}</strong>
+              <strong>{shellStateLabel}</strong>
               <small>
                 {runtimeStatus
                   ? `${runtimeStatus.host}:${runtimeStatus.port}${externalRuntime ? " · 外部进程" : managedRuntime ? ` · PID ${runtimeStatus.pid ?? "未知"}` : ""}`
-                  : "正在读取本机核心"}
+                  : connectionState === "configuration_required"
+                    ? "核心尚未启动"
+                    : "正在读取本机核心"}
               </small>
             </div>
           </div>
 
+          {bootstrapStatus?.active_workspace && (
+            <small className="desktop-runtime-path">
+              {bootstrapStatus.active_workspace} · {bootstrapStatus.data_root_display || "数据根未知"}
+            </small>
+          )}
+          {bootstrapStatus?.c_drive_write_detected && (
+            <small className="desktop-runtime-error">检测到 C 盘运行数据路径，核心已阻止启动。</small>
+          )}
           {autoRecoveryActive && <small className="desktop-runtime-warning">连接中断，灵机会自动恢复，无需手动操作。</small>}
           {ownerStopped && <small className="desktop-runtime-warning">主人已停止核心，自动恢复暂时暂停。</small>}
           {runtimeStatus?.last_error && <small className="desktop-runtime-error">{runtimeStatus.last_error}</small>}
-          {!runtimeAvailable && connectionState !== "unsupported" && (
+          {!runtimeAvailable && runtimeConfigured && connectionState !== "unsupported" && (
             <small className="desktop-runtime-warning">当前安装包未包含灵机核心，仍可连接手动启动的8766服务。</small>
           )}
 
@@ -118,7 +140,7 @@ export default function DesktopShell({
             <span>{shortCommit}</span>
           </div>
 
-          {connectionState !== "unsupported" && (
+          {connectionState !== "unsupported" && connectionState !== "configuration_required" && (
             <details className="desktop-runtime-tools" open={ownerStopped}>
               <summary>{runtimeHealthy ? "运行详情" : ownerStopped ? "恢复与诊断" : "故障工具"}</summary>
               <div className="desktop-sidebar-actions">
@@ -161,7 +183,17 @@ export default function DesktopShell({
           </div>
           <div className={connected ? "desktop-connection-badge connected" : "desktop-connection-badge"}>
             <span className={connected ? "status-dot online" : "status-dot"} />
-            <span>{connected ? "运行中" : connectionState === "booting" ? "启动中" : ownerStopped ? "已暂停" : "自动恢复中"}</span>
+            <span>
+              {connected
+                ? "运行中"
+                : connectionState === "booting"
+                  ? "启动中"
+                  : connectionState === "configuration_required"
+                    ? "需要配置"
+                    : ownerStopped
+                      ? "已暂停"
+                      : "自动恢复中"}
+            </span>
           </div>
         </header>
         <div className="desktop-content">{children}</div>

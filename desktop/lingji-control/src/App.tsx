@@ -30,6 +30,7 @@ export default function App() {
       connectionState={connection.state}
       releaseMetadata={release.metadata}
       runtimeStatus={connection.runtimeStatus}
+      bootstrapStatus={connection.bootstrapStatus}
       runtimeBusy={connection.runtimeBusy}
       ownerStopped={connection.ownerStopped}
       autoRecoveryActive={connection.autoRecoveryActive}
@@ -37,7 +38,13 @@ export default function App() {
       onRetry={() => void connection.connect()}
       onStopRuntime={() => void connection.stopRuntime()}
       onRestartRuntime={() => void connection.restartRuntime()}
-      onCopyDiagnostics={() => release.copyDiagnostics(connection.state, connection.connected, connection.runtimeStatus)}
+      onCopyDiagnostics={() => release.copyDiagnostics(
+        connection.state,
+        connection.connected,
+        connection.runtimeStatus,
+        connection.bootstrapStatus,
+        connection.overview,
+      )}
     >
       <RuntimeBoundary
         state={connection.state}
@@ -46,6 +53,8 @@ export default function App() {
         runtimeBusy={connection.runtimeBusy}
         error={connection.error}
         runtimeStatus={connection.runtimeStatus}
+        bootstrapStatus={connection.bootstrapStatus}
+        onConfigure={connection.configureRuntime}
         onResume={() => void connection.connect()}
       >
         <AppPages

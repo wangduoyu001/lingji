@@ -1,11 +1,13 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod runtime_bootstrap;
 mod runtime_manager;
 
-use runtime_manager::{
-    owner_data_root, runtime_ensure, runtime_restart, runtime_status, runtime_stop, RuntimeManager,
-};
+use runtime_bootstrap::RuntimeBootstrapStatus;
+use runtime_manager::{owner_data_root, RuntimeManager, RuntimeStatus};
 use serde::Serialize;
 use std::{env, fs, path::PathBuf};
-use tauri::Manager;
+use tauri::{AppHandle, Manager, State};
 
 #[derive(Serialize)]
 struct ControlCredentials {
@@ -25,56 +27,20 @@ struct ReleaseMetadata {
     signed: bool,
 }
 
-fn push_env_path(candidates: &mut Vec<PathBuf>, variable: &str, suffix: &[&str]) {
-    if let Ok(root) = env::var(variable) {
-        let mut path = PathBuf::from(root);
-        for part in suffix {
-            path.push(part);
-        }
-        candidates.push(path);
-    }
-}
-
 #[tauri::command]
 fn control_credentials() -> Result<ControlCredentials, String> {
+    runtime_bootstrap::require_configured()?;
     let base_url = env::var("LINGJI_CONTROL_BASE_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8766".to_string());
-    let explicit = env::var("LINGJI_CONTROL_TOKEN_FILE").ok().map(PathBuf::from);
     let mut candidates = Vec::new();
-    if let Some(path) = explicit {
-        candidates.push(path);
-    }
-    if let Ok(root) = owner_data_root() {
-        candidates.push(root.join("storage").join("control_api_token"));
-    }
-
-    push_env_path(
-        &mut candidates,
-        "LOCALAPPDATA",
-        &["LingJi", "storage", "control_api_token"],
-    );
-    push_env_path(
-        &mut candidates,
-        "APPDATA",
-        &["LingJi", "storage", "control_api_token"],
-    );
-    push_env_path(
-        &mut candidates,
-        "USERPROFILE",
-        &[".lingji", "storage", "control_api_token"],
-    );
-
-    if let Ok(current) = env::current_dir() {
-        candidates.push(current.join("storage").join("control_api_token"));
-        candidates.push(current.join("..").join("storage").join("control_api_token"));
-        candidates.push(current.join("..").join("..").join("storage").join("control_api_token"));
-    }
-    if let Ok(executable) = env::current_exe() {
-        if let Some(parent) = executable.parent() {
-            candidates.push(parent.join("storage").join("control_api_token"));
-            candidates.push(parent.join("..").join("storage").join("control_api_token"));
+    if let Ok(value) = env::var("LINGJI_CONTROL_TOKEN_FILE") {
+        let path = PathBuf::from(value);
+        if path.is_absolute() {
+            candidates.push(path);
         }
     }
+    candidates.push(owner_data_root()?.join("storage").join("control_api_token"));
+
     for path in candidates {
         if let Ok(value) = fs::read_to_string(&path) {
             let token = value.trim().to_string();
@@ -83,7 +49,10 @@ fn control_credentials() -> Result<ControlCredentials, String> {
             }
         }
     }
-    Ok(ControlCredentials { base_url, token: String::new() })
+    Ok(ControlCredentials {
+        base_url,
+        token: String::new(),
+    })
 }
 
 #[tauri::command]
@@ -100,17 +69,83 @@ fn release_metadata() -> ReleaseMetadata {
     }
 }
 
+#[tauri::command]
+fn runtime_bootstrap_status() -> RuntimeBootstrapStatus {
+    runtime_bootstrap::current_status()
+}
+
+#[tauri::command]
+fn runtime_configure(
+    base_data_root: String,
+    workspace: String,
+) -> Result<RuntimeBootstrapStatus, String> {
+    runtime_bootstrap::configure(base_data_root, workspace)
+}
+
+async fn run_runtime<F>(operation: F) -> Result<RuntimeStatus, String>
+where
+    F: FnOnce() -> Result<RuntimeStatus, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(operation)
+        .await
+        .map_err(|error| format!("Runtime manager task failed: {error}"))?
+}
+
+#[tauri::command]
+async fn guarded_runtime_status(
+    app: AppHandle,
+    manager: State<'_, RuntimeManager>,
+) -> Result<RuntimeStatus, String> {
+    runtime_bootstrap::require_configured()?;
+    let manager = manager.inner().clone();
+    run_runtime(move || manager.status(&app)).await
+}
+
+#[tauri::command]
+async fn guarded_runtime_ensure(
+    app: AppHandle,
+    manager: State<'_, RuntimeManager>,
+) -> Result<RuntimeStatus, String> {
+    runtime_bootstrap::require_configured()?;
+    let manager = manager.inner().clone();
+    run_runtime(move || manager.ensure(&app)).await
+}
+
+#[tauri::command]
+async fn guarded_runtime_stop(
+    app: AppHandle,
+    manager: State<'_, RuntimeManager>,
+) -> Result<RuntimeStatus, String> {
+    runtime_bootstrap::require_configured()?;
+    let manager = manager.inner().clone();
+    run_runtime(move || manager.stop(&app)).await
+}
+
+#[tauri::command]
+async fn guarded_runtime_restart(
+    app: AppHandle,
+    manager: State<'_, RuntimeManager>,
+) -> Result<RuntimeStatus, String> {
+    runtime_bootstrap::require_configured()?;
+    let manager = manager.inner().clone();
+    run_runtime(move || manager.restart(&app)).await
+}
+
 fn main() {
+    runtime_bootstrap::quarantine_inherited_environment();
+    let _ = runtime_bootstrap::apply_saved_environment();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(RuntimeManager::default())
         .invoke_handler(tauri::generate_handler![
             control_credentials,
             release_metadata,
-            runtime_status,
-            runtime_ensure,
-            runtime_stop,
-            runtime_restart
+            runtime_bootstrap_status,
+            runtime_configure,
+            guarded_runtime_status,
+            guarded_runtime_ensure,
+            guarded_runtime_stop,
+            guarded_runtime_restart
         ])
         .build(tauri::generate_context!())
         .expect("error while building LingJi control center");

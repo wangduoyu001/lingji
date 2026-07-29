@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import json
 import os
 import platform
 import shutil
@@ -11,7 +10,26 @@ from typing import Any
 from .runner import SafeRunner
 
 
+def _windows_cpu_model() -> str:
+    """Read the Windows CPU display name without spawning a shell or WMI process."""
+
+    if platform.system().lower() != "windows":
+        return ""
+    try:
+        import winreg  # type: ignore[attr-defined]
+
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"HARDWARE\DESCRIPTION\System\CentralProcessor\0",
+        ) as key:
+            value, _value_type = winreg.QueryValueEx(key, "ProcessorNameString")
+    except (ImportError, OSError, TypeError, ValueError):
+        return ""
+    return " ".join(str(value or "").split())
+
+
 def cpu_snapshot(psutil_module: Any | None, runner: Any | None = None) -> dict[str, Any]:
+    del runner  # CPU detection must remain process-free in the installed runtime.
     logical = os.cpu_count()
     physical = None
     source = "stdlib"
@@ -22,22 +40,22 @@ def cpu_snapshot(psutil_module: Any | None, runner: Any | None = None) -> dict[s
             source = "psutil"
         except Exception:
             pass
-    model = platform.processor().strip() or os.environ.get("PROCESSOR_IDENTIFIER", "").strip() or "unknown"
-    if platform.system().lower() == "windows" and runner is not None:
-        try:
-            ps_result = runner.command(
-                ["powershell", "-NoProfile", "-Command",
-                 "Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name"],
-                timeout=3.0
-            )
-            if ps_result["returncode"] == 0:
-                ps_name = ps_result["stdout"].strip()
-                if ps_name:
-                    model = ps_name
-        except Exception:
-            pass
+
+    registry_model = _windows_cpu_model()
+    platform_model = platform.processor().strip()
+    environment_model = os.environ.get("PROCESSOR_IDENTIFIER", "").strip()
+    model = registry_model or platform_model or environment_model or "unknown"
+    if registry_model:
+        model_source = "windows_registry"
+    elif platform_model:
+        model_source = "platform.processor"
+    elif environment_model:
+        model_source = "environment"
+    else:
+        model_source = "unknown"
     return {
         "model": model,
+        "model_source": model_source,
         "physical_cores": int(physical) if physical is not None else None,
         "logical_threads": int(logical) if logical is not None else None,
         "source": source,
@@ -175,31 +193,12 @@ def gpu_snapshot(runner: SafeRunner) -> list[dict[str, Any]]:
     return output
 
 
-def physical_disks(runner: SafeRunner) -> list[dict[str, Any]]:
-    if platform.system().lower() != "windows":
-        return []
-    script = (
-        "Get-PhysicalDisk | Select-Object FriendlyName,MediaType,Size,HealthStatus "
-        "| ConvertTo-Json -Compress"
-    )
-    result = runner.command(["powershell", "-NoProfile", "-Command", script], timeout=5.0)
-    if result["returncode"] != 0 or not result["stdout"].strip():
-        result = runner.command(["pwsh", "-NoProfile", "-Command", script], timeout=5.0)
-    if result["returncode"] != 0 or not result["stdout"].strip():
-        return []
-    try:
-        payload = json.loads(result["stdout"])
-    except json.JSONDecodeError:
-        return []
-    rows = payload if isinstance(payload, list) else [payload]
-    return [
-        {
-            "name": row.get("FriendlyName") or "unknown",
-            "media_type": str(row.get("MediaType") or "unknown").lower(),
-            "size_bytes": int(row.get("Size") or 0),
-            "health_status": row.get("HealthStatus") or "unknown",
-            "source": "powershell_get_physicaldisk",
-        }
-        for row in rows
-        if isinstance(row, dict)
-    ]
+def physical_disks(_runner: SafeRunner) -> list[dict[str, Any]]:
+    """Return no physical-disk guess rather than launching PowerShell/WMI.
+
+    Logical disk capacity remains available through ``disk_snapshot``. A future
+    native Windows implementation may restore media type and health without
+    weakening the installed runtime's zero-Shell contract.
+    """
+
+    return []

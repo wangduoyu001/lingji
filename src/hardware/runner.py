@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import urllib.request
 from typing import Any, Callable
@@ -33,6 +34,13 @@ class SafeRunner:
 
     @staticmethod
     def _run_command(args: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
+        options: dict[str, Any] = {}
+        if os.name == "nt":
+            options["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+            options["startupinfo"] = startupinfo
         return subprocess.run(
             args,
             capture_output=True,
@@ -41,10 +49,11 @@ class SafeRunner:
             errors="replace",
             timeout=timeout,
             check=False,
+            **options,
         )
 
     @staticmethod
-    def _read_json_url(url: str, *, timeout: float) -> dict[str, Any]:
+    def _read_json_url(url: str, *, timeout: float = 3.0) -> dict[str, Any]:
         request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "LingJi/1.1"})
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))

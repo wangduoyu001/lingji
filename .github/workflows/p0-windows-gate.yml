@@ -32,9 +32,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Validate local entry with Windows PowerShell 5.1
+      - name: Validate native stderr handling with Windows PowerShell 5.1
         shell: powershell
-        run: .\scripts\validate.ps1 -Mode focused -Area docs
+        run: .\scripts\validate.ps1 -Mode focused -Area validation
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v6

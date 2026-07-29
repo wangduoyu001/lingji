@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import DataTable from "../components/DataTable";
 import { Empty, Json, Metric, Notice, Panel } from "../components/ui";
@@ -51,7 +51,7 @@ export default function AcceptancePage({ api, active }: PageProps) {
       <div className="two-column wide-left">
         <Panel title="真实环境只读验收">
           <form className="form-grid" onSubmit={(event) => void run(event)}>
-            <label className="span-2">Obsidian Vault<input required value={form.vault} onChange={(event) => setForm({ ...form, vault: event.target.value })} placeholder="E:\obsidian\本地知识库" /></label>
+            <label className="span-2">Obsidian Vault<input required value={form.vault} onChange={(event) => setForm({ ...form, vault: event.target.value })} placeholder="E:\\obsidian\\本地知识库" /></label>
             <label className="span-2">ChatGPT 导出 ZIP / JSON / 目录（可选）<input value={form.chatgpt_export} onChange={(event) => setForm({ ...form, chatgpt_export: event.target.value })} /></label>
             <label className="span-2">样例媒体（可选）<input value={form.media} onChange={(event) => setForm({ ...form, media: event.target.value })} /></label>
             <div className="checkbox-stack span-2">
@@ -63,7 +63,7 @@ export default function AcceptancePage({ api, active }: PageProps) {
           {error && <Notice kind="error">{error}</Notice>}
         </Panel>
         <Panel title="本次结果">
-          {report ? <div className="stack"><div className="metric-grid"><Metric title="状态" value={String(report.status || "未知")} /><Metric title="输入未变化" value={report.inputs_unchanged ? "是" : "否"} /><Metric title="错误" value={String(report.error_count || 0)} /><Metric title="警告" value={String(report.warning_count || 0)} /></div><small>JSON：{String(result?.json_path || "-")}</small><small>Markdown：{String(result?.markdown_path || "-")}</small><Json value={(report.checks ?? []) as React.ReactNode[][]} /></div> : <Empty text="运行后显示状态、输入完整性和报告路径。" />}
+          {report ? <div className="stack"><div className="metric-grid"><Metric title="状态" value={String(report.status || "未知")} /><Metric title="输入未变化" value={report.inputs_unchanged ? "是" : "否"} /><Metric title="错误" value={String(report.error_count || 0)} /><Metric title="警告" value={String(report.warning_count || 0)} /></div><small>JSON：{String(result?.json_path || "-")}</small><small>Markdown：{String(result?.markdown_path || "-")}</small><Json value={report.checks ?? []} /></div> : <Empty text="运行后显示状态、输入完整性和报告路径。" />}
         </Panel>
       </div>
       <Panel title="验收历史">

@@ -6,7 +6,20 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
-const [tauriText, packageText, cargo, buildRs, rustMain, hook, shell, boundary, packager, workflow, sidecarConfigText] = await Promise.all([
+const [
+  tauriText,
+  packageText,
+  cargo,
+  buildRs,
+  rustMain,
+  hook,
+  shell,
+  boundary,
+  packager,
+  workflow,
+  sidecarConfigText,
+  validationScript,
+] = await Promise.all([
   read("../src-tauri/tauri.conf.json"),
   read("../package.json"),
   read("../src-tauri/Cargo.toml"),
@@ -18,6 +31,7 @@ const [tauriText, packageText, cargo, buildRs, rustMain, hook, shell, boundary, 
   read("package-windows-release.ps1"),
   read("../../../.github/workflows/windows-desktop-release.yml"),
   read("../src-tauri/tauri.sidecar.conf.json"),
+  read("../../../scripts/validate.ps1"),
 ]);
 
 const tauri = JSON.parse(tauriText);
@@ -41,11 +55,14 @@ for (const key of [
   "LINGJI_BUILD_SIGNED",
 ]) assert.ok(buildRs.includes(key), `build.rs is missing ${key}`);
 
+assert.match(rustMain, /^#!\[cfg_attr\(not\(debug_assertions\), windows_subsystem = "windows"\)\]/m);
 assert.match(rustMain, /fn release_metadata/);
 assert.match(rustMain, /owner_data_root/);
-assert.match(rustMain, /runtime_ensure/);
-assert.match(rustMain, /runtime_stop/);
-assert.match(rustMain, /runtime_restart/);
+assert.match(rustMain, /runtime_bootstrap_status/);
+assert.match(rustMain, /runtime_configure/);
+assert.match(rustMain, /guarded_runtime_ensure/);
+assert.match(rustMain, /guarded_runtime_stop/);
+assert.match(rustMain, /guarded_runtime_restart/);
 
 assert.match(hook, /invoke<ReleaseMetadata>\("release_metadata"\)/);
 assert.match(hook, /copyDiagnostics/);
@@ -55,10 +72,21 @@ assert.match(shell, /复制诊断信息/);
 assert.match(shell, /releaseMetadata\?\.version/);
 assert.match(shell, /desktop-runtime-tools/);
 assert.match(boundary, /AUTOMATIC RUNTIME/);
+assert.match(boundary, /DATA ROOT REQUIRED/);
 assert.match(boundary, /恢复运行/);
-assert.equal(boundary.includes("启动核心"), false, "Installed Desktop startup must remain automatic");
+assert.equal(boundary.includes(">启动核心</button>"), false, "Routine installed startup must remain automatic");
 
 for (const token of [
+  "schema_version = 4",
+  "Get-PeSubsystem",
+  "desktop_pe_subsystem = \"windows_gui\"",
+  "sidecar_pe_subsystem = \"windows_gui\"",
+  "bootstrap_config = \"%LOCALAPPDATA%\\LingJi\\desktop-bootstrap.json\"",
+  "bootstrap_config_contains_runtime_data = $false",
+  "owner_data_root = \"owner-selected-non-system-drive\\<workspace>\"",
+  "workspace_profiles = @(\"production\", \"acceptance\")",
+  "first_run_configuration_required = $true",
+  "c_drive_runtime_data_allowed = $false",
   "Get-FileHash",
   "SHA256SUMS.txt",
   "build-metadata.json",
@@ -69,6 +97,20 @@ for (const token of [
   "updater_included = $false",
   "signed = $false",
 ]) assert.ok(packager.includes(token), `Release packager is missing ${token}`);
+assert.equal(
+  packager.includes('owner_data_root = "%LOCALAPPDATA%\\LingJi"'),
+  false,
+  "Release metadata must not claim LocalAppData is the Runtime data root",
+);
+
+for (const token of [
+  "FailureTailLines = 40",
+  "$ErrorActionPreference = \"Continue\"",
+  "$global:LASTEXITCODE = 0",
+  "latest-summary.json",
+  "native-stderr-warning-contract",
+  "Remove-StaleValidationRuns",
+]) assert.ok(validationScript.includes(token), `Validation entry is missing ${token}`);
 
 for (const token of [
   "workflow_dispatch:",
