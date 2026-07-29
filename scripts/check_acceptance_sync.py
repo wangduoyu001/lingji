@@ -48,7 +48,10 @@ class GitCommandError(RuntimeError):
 
 
 def normalize_path(path: str) -> str:
-    return path.strip().replace("\\", "/").lstrip("./")
+    normalized = path.strip().replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized.lstrip("/")
 
 
 def is_product_change(path: str) -> bool:
