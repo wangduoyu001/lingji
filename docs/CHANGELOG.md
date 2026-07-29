@@ -2,6 +2,30 @@
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
 
+## 2026-07-29
+
+### Windows Desktop 生命周期与控制台缺陷修复
+
+- Squash 合并 PR #53，正式合并提交为 `18b99a6909e929df432253686eeaeee3ed9f7024`。
+- 完成 Windows Runtime/Sidecar 生命周期、首次 DataRoot 配置、production/acceptance Workspace 隔离和非系统盘数据边界。
+- 移除 CPU 与物理磁盘 PowerShell/WMI 探测，Desktop、Sidecar 和诊断子进程采用 Windows GUI/隐藏窗口合同。
+- Owner 真机验证安装、应用重启、三轮 Core 重启、Windows 重启恢复、同版本覆盖安装和卸载数据保护。
+- Owner 确认启动与重启过程不再出现 PowerShell、CMD 或黑色控制台窗口。
+- PR #53 的测试、P0 Windows Gate 与 Windows Desktop Release Baseline 全部成功。
+
+### PR #56 UI 优先、新手引导与 AI 助手中心
+
+- 将 UI 可理解性提升为下一阶段最高优先级；Issue #57 Qdrant/Embedding 主线被明确阻塞到 PR #56 Owner 验收通过并合并之后。
+- 首页从工程状态入口调整为“开始使用”，第一步为扫描 AI、导入已有资料、查看处理并审核永久记忆。
+- 增加统一页面说明、全局“怎么使用”抽屉和首次设置流程。
+- 新增 `src/assistant_hub/discovery.py`，安全发现 Codex、Claude Code 与 WorkBuddy，只读取固定目录和文件元数据，不读取对话正文、Token、Cookie 或密码。
+- 新增认证的 `/api/assistant-hub/status` 与 `/api/assistant-hub/scan`，继续复用唯一 8766 Local Control API。
+- 新增 `AssistantHubPage`，支持 ChatGPT Export ZIP/JSON 和 Codex Report JSON 进入现有 Capture/Extraction Queue。
+- 明确 Claude Code 与 WorkBuddy 当前只完成检测，正文导入与自动同步仍为 planned，不显示为已连接。
+- 永久记忆继续执行“候选 → 主人审核 → 正式记忆”，禁止自动写入 Core Memory。
+- 新增 Assistant Hub Python/API/Desktop Smoke、模块文档、快速上手、代码地图和实施报告。
+- PR #56 保持 Draft；自动 CI 与新安装包完成后仍须 Owner 按陌生用户视角验收，不因按钮可点击而自动判定 PASS。
+
 ## 2026-07-26
 
 ### P2-11B Packaged Python runtime Sidecar manager
