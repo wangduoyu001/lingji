@@ -31,6 +31,43 @@ function stateLabel(value: unknown): string {
   return labels[state] ?? display(value);
 }
 
+const DAILY_FLOW: Array<{
+  number: string;
+  title: string;
+  detail: string;
+  label: string;
+  page: PageId;
+}> = [
+  {
+    number: "1",
+    title: "投喂资料",
+    detail: "把文字、网页、文件或媒体交给灵机。",
+    label: "打开投喂中心",
+    page: "capture_center",
+  },
+  {
+    number: "2",
+    title: "查看处理",
+    detail: "确认任务正在运行、完成或失败。",
+    label: "查看活动记录",
+    page: "activity",
+  },
+  {
+    number: "3",
+    title: "审核记忆",
+    detail: "决定哪些候选内容值得长期保留。",
+    label: "进入记忆审核",
+    page: "memory_review",
+  },
+  {
+    number: "4",
+    title: "处理异常",
+    detail: "只处理灵机无法安全替你决定的事项。",
+    label: "查看需要我处理",
+    page: "attention",
+  },
+];
+
 export default function OverviewPage({
   data,
   api,
@@ -69,7 +106,7 @@ export default function OverviewPage({
     <div className="stack overview-page observation-page">
       <section className={`overview-hero overview-hero-${stateTone(runtimeState) ?? "neutral"}`}>
         <div className="overview-hero-main">
-          <span className="desktop-eyebrow">SYSTEM POSTURE</span>
+          <span className="desktop-eyebrow">当前运行状态</span>
           <div className="overview-title-line">
             <h2>{stateLabel(runtimeState)}</h2>
             <span className={`pill ${stateTone(runtimeState) === "good" ? "ok" : stateTone(runtimeState) === "bad" ? "error" : "warning"}`}>
@@ -92,11 +129,34 @@ export default function OverviewPage({
 
       {stale && <Notice kind="warning">当前记忆和向量统计来自旧快照，系统正在自动刷新。</Notice>}
 
+      <section className="daily-flow" aria-label="灵机日常使用流程">
+        <div className="daily-flow-heading">
+          <div>
+            <span className="desktop-eyebrow">日常只需要这四步</span>
+            <h3>从这里开始使用灵机</h3>
+            <p>正常情况下按 1 → 2 → 3 使用；只有出现待办时才进入第 4 步。</p>
+          </div>
+          <button className="button secondary" onClick={() => onNavigate("capture_center")}>立即开始</button>
+        </div>
+        <div className="daily-flow-grid">
+          {DAILY_FLOW.map((item) => (
+            <button key={item.number} className="daily-flow-card" onClick={() => onNavigate(item.page)}>
+              <span className="daily-flow-number">{item.number}</span>
+              <span className="daily-flow-copy">
+                <strong>{item.title}</strong>
+                <small>{item.detail}</small>
+                <em>{item.label}</em>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <CurrentWorkPanel api={api} active={active} />
 
       <section className={attentionCount ? "attention-summary attention-summary-warning" : "attention-summary"}>
         <div>
-          <span className="desktop-eyebrow">OWNER ATTENTION</span>
+          <span className="desktop-eyebrow">需要主人决定</span>
           <h3>{attentionCount ? `${attentionCount} 类异常需要查看` : "暂时不需要你处理"}</h3>
           <p>{attentionCount ? "系统不能安全自行决定的事项已集中到待办页。" : "普通任务、重试和状态恢复由后台自动完成。"}</p>
         </div>
@@ -105,7 +165,7 @@ export default function OverviewPage({
 
       <section className="overview-section">
         <div className="overview-section-heading">
-          <div><span className="desktop-eyebrow">SYSTEM SIGNALS</span><h3>关键状态</h3></div>
+          <div><span className="desktop-eyebrow">关键状态</span><h3>系统现在怎么样</h3></div>
           <small>详细技术信息已移到高级诊断</small>
         </div>
         <div className="metric-grid observation-metric-grid">
