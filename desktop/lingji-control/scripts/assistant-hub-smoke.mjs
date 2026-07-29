@@ -6,11 +6,12 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
-const [types, navigation, pages, hub, css, captureApi, discovery] = await Promise.all([
+const [types, navigation, pages, hub, connectorPanel, css, captureApi, discovery] = await Promise.all([
   read("../src/types.ts"),
   read("../src/navigation.ts"),
   read("../src/AppPages.tsx"),
   read("../src/pages/AssistantHubPage.tsx"),
+  read("../src/components/AssistantConnectorPanel.tsx"),
   read("../src/pages/AssistantHubPage.css"),
   read("../../../src/control/capture_api.py"),
   read("../../../src/assistant_hub/discovery.py"),
@@ -25,7 +26,6 @@ assert.match(pages, /<AssistantHubPage/);
 for (const token of [
   "扫描我的 AI 软件",
   "第一次使用从这里开始",
-  "连接不等于导入历史",
   "ChatGPT 历史",
   "Codex 工作报告",
   "/api/assistant-hub/scan",
@@ -33,6 +33,13 @@ for (const token of [
   "进入人工记忆审核",
   "不允许 AI 直接写入 Core Memory",
 ]) assert.ok(hub.includes(token), `Assistant Hub is missing ${token}`);
+
+for (const token of [
+  "连接不等于导入历史",
+  "预览并连接",
+  "测试连接",
+  "断开并回滚",
+]) assert.ok(connectorPanel.includes(token), `Assistant connector panel is missing ${token}`);
 
 for (const token of [
   "/api/assistant-hub/status",
