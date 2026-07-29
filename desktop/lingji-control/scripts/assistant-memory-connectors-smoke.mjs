@@ -12,6 +12,7 @@ const [
   css,
   captureApi,
   connectors,
+  governed,
   mcpHttp,
   packaged,
   buildScript,
@@ -22,6 +23,7 @@ const [
   read("../src/pages/AssistantHubPage.css"),
   read("../../../src/control/capture_api.py"),
   read("../../../src/assistant_hub/connectors.py"),
+  read("../../../src/assistant_hub/governed.py"),
   read("../../../src/mcp_http.py"),
   read("../../../run_packaged_control_api.py"),
   read("../../../scripts/build_windows_sidecar.ps1"),
@@ -80,10 +82,13 @@ for (const token of [
   "CONFIG_CONFLICT",
   "tomllib.loads",
   "CREATE_NO_WINDOW",
-  "127.0.0.1:8767/mcp",
+  '_MCP_HOST = "127.0.0.1"',
+  "_MCP_PORT = 8767",
+  "_MCP_URL",
   "automatic_core_memory_write",
 ]) assert.ok(connectors.includes(token), `Connector service is missing ${token}`);
 assert.equal(connectors.includes("shell=True"), false, "Connector management must not execute shell strings");
+assert.match(governed, /payload\.pop\("copy_payload", None\)/);
 
 for (const token of [
   "BearerTokenMiddleware",
