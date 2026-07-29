@@ -6,7 +6,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from src.assistant_hub import AiAssistantDiscoveryService
+from src.assistant_hub import (
+    AiAssistantDiscoveryService,
+    AiMemoryConnectorService,
+    ConnectorError,
+)
 
 from .capture import (
     CAPTURE_SERVICE_UNAVAILABLE,
@@ -91,11 +95,16 @@ class CaptureShareRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ConnectorActionRequest(BaseModel):
+    confirmation: str = ""
+
+
 def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str) -> None:
     from fastapi import Depends, Header, HTTPException, Query
     from fastapi.responses import JSONResponse
 
     capture: CaptureControlService | None = None
+    connectors: AiMemoryConnectorService | None = None
 
     def authorize(x_lingji_token: str | None = Header(default=None)) -> None:
         if token and not hmac.compare_digest(str(x_lingji_token or ""), token):
@@ -145,7 +154,18 @@ def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str
                 status_code=503,
             ) from exc
 
+    def connector_control() -> AiMemoryConnectorService:
+        nonlocal connectors
+        if connectors is None:
+            connectors = AiMemoryConnectorService(storage_path=settings.storage_path)
+        return connectors
+
     def translate(exc: Exception) -> HTTPException:
+        if isinstance(exc, ConnectorError):
+            return HTTPException(
+                status_code=exc.status_code,
+                detail={"code": exc.code, "message": exc.message},
+            )
         if isinstance(exc, CaptureControlError):
             return HTTPException(
                 status_code=exc.status_code,
@@ -280,6 +300,47 @@ def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str
     @app.post("/api/assistant-hub/scan", dependencies=secured)
     def assistant_hub_scan() -> dict[str, Any]:
         return assistant_scan()
+
+    @app.get("/api/assistant-hub/connections", dependencies=secured)
+    def assistant_hub_connections(live: bool = Query(default=False)) -> dict[str, Any]:
+        try:
+            return connector_control().status(live=live)
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/assistant-hub/connections/{connector_id}/preview", dependencies=secured)
+    def assistant_hub_connection_preview(connector_id: str) -> dict[str, Any]:
+        try:
+            return connector_control().preview(connector_id)
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/assistant-hub/connections/{connector_id}/apply", dependencies=secured)
+    def assistant_hub_connection_apply(
+        connector_id: str,
+        request: ConnectorActionRequest,
+    ) -> dict[str, Any]:
+        try:
+            return connector_control().apply(connector_id, request.confirmation)
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/assistant-hub/connections/{connector_id}/test", dependencies=secured)
+    def assistant_hub_connection_test(connector_id: str) -> dict[str, Any]:
+        try:
+            return connector_control().test(connector_id)
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/assistant-hub/connections/{connector_id}/rollback", dependencies=secured)
+    def assistant_hub_connection_rollback(
+        connector_id: str,
+        request: ConnectorActionRequest,
+    ) -> dict[str, Any]:
+        try:
+            return connector_control().rollback(connector_id, request.confirmation)
+        except Exception as exc:
+            raise translate(exc) from exc
 
     @app.post("/api/share", dependencies=secured)
     def capture_share(request: CaptureShareRequest):
