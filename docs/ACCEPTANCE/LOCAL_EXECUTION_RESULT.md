@@ -15,12 +15,12 @@ verdict: PENDING
 repository: wangduoyu001/lingji
 product_pr: 60
 product_commit: 1c5148779624910f1c6072d95d6c6f6822f631e6
-task_instruction_commit: 9249dce0abe1fdd5b3274fe318c946c3c793d962
+task_instruction_commit: a31dc1a0cba26d1c9b55cc12f722dab5227c02eb
 report_branch: acceptance/pr60-owner-1c514877
 report_commit: PENDING
-report_path: docs/TEST_REPORTS/PR60_OWNER_CODEX_FULL_REACCEPTANCE_1c514877.md
-public_summary_path: docs/TEST_REPORTS/evidence/PR60_PUBLIC_REACCEPTANCE_SUMMARY_1c514877.json
-public_hashes_path: docs/TEST_REPORTS/evidence/PR60_PUBLIC_REACCEPTANCE_HASHES_1c514877.txt
+report_path: docs/TEST_REPORTS/PR60_OWNER_CODEX_FULL_ACCEPTANCE_1c514877.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR60_PUBLIC_ACCEPTANCE_SUMMARY_1c514877.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR60_PUBLIC_ACCEPTANCE_HASHES_1c514877.txt
 cleanup_before: NOT_RUN
 cleanup_after: NOT_RUN
 remote_branch_verified: false
