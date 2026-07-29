@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from src.assistant_hub import AiAssistantDiscoveryService
+
 from .capture import (
     CAPTURE_SERVICE_UNAVAILABLE,
     CaptureControlError,
@@ -161,6 +163,10 @@ def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str
     def response(payload: dict[str, Any]) -> JSONResponse:
         return JSONResponse(status_code=200 if payload.get("duplicate") else 202, content=payload)
 
+    def assistant_scan() -> dict[str, Any]:
+        workspace = str(getattr(settings, "workspace", "") or "")
+        return AiAssistantDiscoveryService(workspace=workspace).scan()
+
     app.router.routes[:] = [
         route
         for route in app.router.routes
@@ -266,6 +272,14 @@ def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str
             return capture_control().resume()
         except Exception as exc:
             raise translate(exc) from exc
+
+    @app.get("/api/assistant-hub/status", dependencies=secured)
+    def assistant_hub_status() -> dict[str, Any]:
+        return assistant_scan()
+
+    @app.post("/api/assistant-hub/scan", dependencies=secured)
+    def assistant_hub_scan() -> dict[str, Any]:
+        return assistant_scan()
 
     @app.post("/api/share", dependencies=secured)
     def capture_share(request: CaptureShareRequest):
