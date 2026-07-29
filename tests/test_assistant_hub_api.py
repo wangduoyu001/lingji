@@ -97,6 +97,33 @@ class AssistantHubApiTests(unittest.TestCase):
             {"codex", "claude_code", "workbuddy"},
         )
 
+    def test_workbuddy_preview_is_redacted_until_confirmed_apply(self) -> None:
+        preview = self.client.post(
+            "/api/assistant-hub/connections/workbuddy/preview",
+            headers=self.headers,
+        )
+        self.assertEqual(preview.status_code, 200)
+        payload = preview.json()
+        self.assertNotIn("copy_payload", payload)
+        self.assertIn("<本机令牌已隐藏>", payload["preview"])
+        self.assertNotIn("Bearer ey", payload["preview"])
+
+        rejected = self.client.post(
+            "/api/assistant-hub/connections/workbuddy/apply",
+            headers=self.headers,
+            json={"confirmation": "yes"},
+        )
+        self.assertEqual(rejected.status_code, 403)
+
+        applied = self.client.post(
+            "/api/assistant-hub/connections/workbuddy/apply",
+            headers=self.headers,
+            json={"confirmation": "COPY_WORKBUDDY_LINGJI_CONFIG"},
+        )
+        self.assertEqual(applied.status_code, 200)
+        self.assertIn("copy_payload", applied.json())
+        self.assertIn("Authorization", applied.json()["copy_payload"])
+
     def test_connector_management_rejects_unknown_clients_and_implicit_confirmation(self) -> None:
         unknown = self.client.post(
             "/api/assistant-hub/connections/random-ai/preview",
