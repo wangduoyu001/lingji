@@ -24,7 +24,7 @@ reliable UI input; no owner visual observation was provided.
 | ID | Name | Prerequisite | Method | Expected | Actual | Evidence | Conclusion |
 |---|---|---|---|---|---|---|---|
 | C1 | Old LingJi processes and ports | Existing installation | Stop only `lingji-control-center` and `lingji-core`; inspect 8766/8767 | No residual process/listener | No residual process or listener before install | Private process/port snapshot | PASS |
-| C2 | Old temporary acceptance directory | User-approved directory deletion | Shell and File Explorer control attempt | Old directory removed | Direct deletion was denied again by host policy; prior Explorer control returned a Windows interface error | Current directory inspection | NOT_TESTED |
+| C2 | Old temporary acceptance directory | User-approved directory deletion | Shell and File Explorer control attempt | Old directory removed | Direct deletion was denied again by host policy. After immediate confirmation, Explorer control could read its window but could not cache an actionable element or capture a screenshot, so no delete command was sent | Current directory inspection | NOT_TESTED |
 
 No Production DataRoot, Vault, formal memory, database or user configuration was
 deleted.
