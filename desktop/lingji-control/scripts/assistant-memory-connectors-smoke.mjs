@@ -34,11 +34,11 @@ for (const token of [
   "导入",
   "审核",
   "AssistantConnectorPanel",
-  "连接不等于导入历史",
   "不允许 AI 直接写入 Core Memory",
 ]) assert.ok(hub.includes(token), `Assistant workflow is missing ${token}`);
 
 for (const token of [
+  "连接不等于导入历史",
   "/api/assistant-hub/connections",
   "/preview",
   "/apply",
