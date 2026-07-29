@@ -17,10 +17,11 @@ product_branch: feature/unified-ai-memory-connectors
 product_commit: 1c5148779624910f1c6072d95d6c6f6822f631e6
 artifact_name: lingji-windows-0.1.0-1c514877
 artifact_id: 8723868744
+report_base: master
 report_branch: acceptance/pr60-owner-1c514877
-report_path: docs/TEST_REPORTS/PR60_OWNER_CODEX_FULL_REACCEPTANCE_1c514877.md
-public_summary_path: docs/TEST_REPORTS/evidence/PR60_PUBLIC_REACCEPTANCE_SUMMARY_1c514877.json
-public_hashes_path: docs/TEST_REPORTS/evidence/PR60_PUBLIC_REACCEPTANCE_HASHES_1c514877.txt
+report_path: docs/TEST_REPORTS/PR60_OWNER_CODEX_FULL_ACCEPTANCE_1c514877.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR60_PUBLIC_ACCEPTANCE_SUMMARY_1c514877.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR60_PUBLIC_ACCEPTANCE_HASHES_1c514877.txt
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
 cleanup_before_required: true
 cleanup_after_required: true
@@ -33,19 +34,34 @@ owner_confirmation_required: true
 Codex 开始前必须：
 
 1. 拉取远程最新状态，读取根目录 `AGENTS.md`、`docs/ACCEPTANCE/README.md`、本文件、`CODEX_ACCEPTANCE_INSTRUCTIONS.md`、`CHANGE_ACCEPTANCE_LOG.md` 当前任务条目和 `LOCAL_EXECUTION_RESULT.md`。
-2. 验证当前任务 `status: ACTIVE`；不是 ACTIVE 时立即停止。
-3. 验证产品 PR、产品 Commit、Artifact 名称、Artifact ID、报告分支和报告路径完全一致。
-4. 在非系统盘使用唯一临时根目录：
+2. 记录最后修改本任务单的远程 Commit：
+
+```powershell
+git log -1 --format=%H -- docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md
+```
+
+3. 验证当前任务 `status: ACTIVE`；不是 ACTIVE 时立即停止。
+4. 验证产品 PR、产品 Commit、Artifact 名称、Artifact ID、报告分支和报告路径完全一致。
+5. 使用两个隔离工作区：
+
+```text
+产品测试 worktree：精确检出 product_commit
+报告 worktree：从最新 report_base 创建 report_branch
+```
+
+报告分支从最新 `master` 治理主线创建，以确保包含当前任务单、结果回执和 CI 门禁。报告中固定记录被测 `product_commit`；不得修改或移动产品分支。
+
+6. 在非系统盘使用唯一临时根目录：
 
 ```text
 D:\codex\LingJiAcceptance\PR60-1c514877
 ```
 
-5. 如果该临时根目录存在，先确认不含主人正式数据，然后整体删除重建。
-6. 清理上一轮留下的安装包副本、解压目录、普通成功日志、普通成功截图、fixture、checkpoint、临时配置副本和临时 worktree。
-7. 正常退出 LingJi；只结束确认属于 LingJi 的残留进程；确认 8766、8767 已释放且没有孤儿 MCP。
-8. 不得删除 Production DataRoot、主人正式 Acceptance 数据、Obsidian Vault、正式记忆或用户自己的 AI 客户端配置。
-9. 把清理前后的目录、进程和端口结果写入私有证据，但不得提交隐私内容。
+7. 如果该临时根目录存在，先确认不含主人正式数据，然后整体删除重建。
+8. 清理上一轮留下的安装包副本、解压目录、普通成功日志、普通成功截图、fixture、checkpoint、临时配置副本和临时 worktree。
+9. 正常退出 LingJi；只结束确认属于 LingJi 的残留进程；确认 8766、8767 已释放且没有孤儿 MCP。
+10. 不得删除 Production DataRoot、主人正式 Acceptance 数据、Obsidian Vault、正式记忆或用户自己的 AI 客户端配置。
+11. 把清理前后的目录、进程和端口结果写入私有证据，但不得提交隐私内容。
 
 任一开始条件不满足，结果为：
 
@@ -83,19 +99,20 @@ BLOCKED_PRE_CLEANUP
 ```text
 完成测试
 → 生成报告与脱敏公开证据
-→ 从固定产品 Commit 创建报告分支
-→ 提交并 push
-→ 远程重新读取分支、报告、结果回执和 Commit
+→ 从最新 master 创建报告分支
+→ 提交报告正文和公开证据，记录 report_commit
+→ push
+→ 远程重新读取分支、report_commit 和报告
 → 在产品 PR 添加报告评论
 → 远程重新读取 PR 评论
 → 清理本地临时垃圾
 → 更新结果回执为最终状态
-→ 再次提交、push、远程读取
+→ 再次提交、push、远程读取结果回执
 → 删除临时 worktree 和临时根目录
 → 最后回复主人
 ```
 
-报告分支只能包含：
+报告分支相对 `master` 只能新增或修改：
 
 - 最终 Markdown 报告；
 - 脱敏公开证据 JSON；
@@ -113,7 +130,7 @@ git ls-remote --heads origin acceptance/pr60-owner-1c514877
 
 gh api repos/wangduoyu001/lingji/commits/<REPORT_COMMIT>
 
-gh api "repos/wangduoyu001/lingji/contents/docs/TEST_REPORTS/PR60_OWNER_CODEX_FULL_REACCEPTANCE_1c514877.md?ref=acceptance/pr60-owner-1c514877"
+gh api "repos/wangduoyu001/lingji/contents/docs/TEST_REPORTS/PR60_OWNER_CODEX_FULL_ACCEPTANCE_1c514877.md?ref=acceptance/pr60-owner-1c514877"
 
 gh api "repos/wangduoyu001/lingji/contents/docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md?ref=acceptance/pr60-owner-1c514877"
 
@@ -123,10 +140,10 @@ gh api repos/wangduoyu001/lingji/issues/60/comments
 只有以下事实全部成立，才允许写“已提交”：
 
 - 远程分支存在；
-- 远程分支 HEAD 等于报告 Commit；
+- `report_commit` 存在且属于远程报告分支历史；
 - 远程报告可读取；
 - 远程结果回执可读取；
-- 产品 PR 评论中包含 task_id、产品 Commit、报告分支、报告 Commit、报告路径和结论。
+- 产品 PR 评论中包含 task_id、产品 Commit、报告分支、report_commit、报告路径和结论。
 
 否则结果必须是：
 
@@ -140,10 +157,12 @@ BLOCKED_REPORT_NOT_VISIBLE_ON_GITHUB
 
 1. 删除本轮 Artifact、重复安装包、解压目录、fixture、checkpoint、临时配置副本、普通成功日志和普通成功截图。
 2. 删除带本轮测试前缀的 Acceptance 测试候选和测试资料，不碰其他主人数据。
-3. 删除临时 worktree。
-4. 删除 `D:\codex\LingJiAcceptance\PR60-1c514877`；若为提交最终回执暂时保留最小 Git 工作区，则最终 push 与远程复读完成后再删除。
-5. 重新检查临时根目录不存在、8766/8767 状态符合任务结束预期、没有孤儿 MCP、没有临时配置副本。
-6. 只保留远程报告、脱敏公开证据、哈希、报告 Commit，以及主人明确要求保留的失败证据。
+3. 删除产品测试 worktree。
+4. 更新并提交最终结果回执，push 后从 GitHub API 重新读取。
+5. 删除报告 worktree。
+6. 删除 `D:\codex\LingJiAcceptance\PR60-1c514877`。
+7. 重新检查临时根目录不存在、8766/8767 状态符合任务结束预期、没有孤儿 MCP、没有临时配置副本。
+8. 只保留远程报告、脱敏公开证据、哈希、报告 Commit，以及主人明确要求保留的失败证据。
 
 清理未完成不得回复“完成”，结果必须是：
 
