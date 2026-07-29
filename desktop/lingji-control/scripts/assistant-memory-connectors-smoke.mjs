@@ -92,7 +92,7 @@ assert.match(governed, /payload\.pop\("copy_payload", None\)/);
 
 for (const token of [
   "BearerTokenMiddleware",
-  "Authorization",
+  "authorization",
   "Bearer",
   "401",
   "streamable_http_app",
