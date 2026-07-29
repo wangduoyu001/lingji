@@ -42,7 +42,10 @@ $arguments = @(
   "--specpath", $specRoot,
   "--paths", $repoRoot,
   "--collect-submodules", "src",
-  "--collect-submodules", "mcp",
+  "--collect-submodules", "mcp.server",
+  "--collect-submodules", "mcp.shared",
+  "--hidden-import", "mcp.types",
+  "--exclude-module", "mcp.cli",
   "--exclude-module", "PySide6",
   "--exclude-module", "torch",
   "--exclude-module", "tensorflow",
@@ -106,6 +109,7 @@ $manifest = [ordered]@{
   contents_directory = "lingji_core_lib"
   optional_media_providers_bundled = $false
   mcp_runtime_bundled = $true
+  mcp_cli_bundled = $false
   contract = $contract
 }
 $manifestPath = Join-Path $tauriBinaries "lingji-core-manifest.json"
