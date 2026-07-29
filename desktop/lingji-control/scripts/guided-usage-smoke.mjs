@@ -22,7 +22,8 @@ assert.match(appPages, /<PageGuide page=\{page\} onNavigate=\{onNavigate\}/);
 for (const token of [
   "这页怎么用",
   "什么时候来",
-  "开始投喂内容",
+  "连接 AI 与导入记忆",
+  "扫描 Codex、Claude Code、WorkBuddy",
   "提交后查看进度",
   "审核候选记忆",
   "模型不可用",
@@ -33,23 +34,23 @@ assert.match(shell, /UsageGuideDrawer/);
 assert.match(shell, /不知道怎么用/);
 assert.match(shell, /打开灵机使用说明/);
 assert.match(shell, /怎么使用/);
-assert.match(shell, /日常使用/);
 
 for (const token of [
-  "灵机到底怎么用",
-  "日常使用只走四步",
-  "投喂资料",
+  "第一次打开灵机怎么做",
+  "扫描 AI 软件",
+  "导入已有资料",
   "查看处理",
-  "审核记忆",
-  "处理异常",
-  "高级诊断什么时候用",
+  "审核永久记忆",
+  "不会直接成为 Core Memory",
+  "高级诊断",
 ]) assert.ok(drawer.includes(token), `Usage drawer is missing ${token}`);
 
-assert.match(overview, /日常只需要这四步/);
-assert.match(overview, /从这里开始使用灵机/);
-assert.match(overview, /打开投喂中心/);
+assert.match(overview, /新用户按顺序完成/);
+assert.match(overview, /先把你的 AI 和已有记忆接进来/);
+assert.match(overview, /打开 AI 助手中心/);
 assert.match(overview, /进入记忆审核/);
-assert.match(overview, /正常情况下按 1 → 2 → 3 使用/);
+assert.match(overview, /开始连接 AI/);
+assert.match(overview, /第一次按 1 → 2 → 3 完成设置/);
 
 for (const cssToken of [
   ".page-guide",
