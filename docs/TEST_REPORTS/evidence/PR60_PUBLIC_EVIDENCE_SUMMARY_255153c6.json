@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "product_commit": "255153c6d5ecf65046089dc6b794e001422fcfa8",
+  "pr": 60,
+  "artifact": {
+    "id": 8720375948,
+    "name": "lingji-windows-0.1.0-255153c6",
+    "metadata_verified": true,
+    "download_status": "blocked_http_401"
+  },
+  "ci": {
+    "same_commit_verified": true,
+    "required_checks": "success"
+  },
+  "local_validation": {
+    "owner_environment_required_connector_tests": "18 passed, 2 failed",
+    "owner_environment_full_suite": "539 passed, 3 failed, 11 skipped",
+    "ci_like_full_suite": "541 passed, 1 failed, 11 skipped",
+    "desktop_smoke": "22 passed",
+    "desktop_build": "passed",
+    "tauri_tests": "9 passed",
+    "packaged_runtime_contract": "17 passed"
+  },
+  "verdict": "FAIL",
+  "secrets_or_private_content_included": false
+}
