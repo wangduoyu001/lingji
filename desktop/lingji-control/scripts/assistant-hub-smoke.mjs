@@ -25,18 +25,21 @@ assert.match(pages, /<AssistantHubPage/);
 for (const token of [
   "扫描我的 AI 软件",
   "第一次使用从这里开始",
+  "连接不等于导入历史",
   "ChatGPT 历史",
   "Codex 工作报告",
   "/api/assistant-hub/scan",
   "/api/capture/file",
   "进入人工记忆审核",
-  "不自动写入 Core Memory",
+  "不允许 AI 直接写入 Core Memory",
 ]) assert.ok(hub.includes(token), `Assistant Hub is missing ${token}`);
 
 for (const token of [
   "/api/assistant-hub/status",
   "/api/assistant-hub/scan",
+  "/api/assistant-hub/connections",
   "AiAssistantDiscoveryService",
+  "AiMemoryConnectorService",
 ]) assert.ok(captureApi.includes(token), `Assistant Hub API is missing ${token}`);
 
 for (const token of [
@@ -58,6 +61,7 @@ for (const cssToken of [
   ".assistant-onboarding-hero",
   ".assistant-setup-flow",
   ".assistant-card-grid",
+  ".assistant-connector-grid",
   ".assistant-import-grid",
   ".assistant-memory-policy",
 ]) assert.ok(css.includes(cssToken), `Assistant Hub styles are missing ${cssToken}`);
