@@ -7,7 +7,31 @@ from pathlib import Path
 
 import pytest
 
-from src.assistant_hub.connectors import AiMemoryConnectorService, ConnectorError
+from src.assistant_hub import AiMemoryConnectorService, ConnectorError
+
+
+def test_explicit_empty_environment_does_not_inherit_machine_codex_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner_codex_home = tmp_path / "owner-codex"
+    owner_config = owner_codex_home / "config.toml"
+    owner_config.parent.mkdir(parents=True)
+    owner_original = 'model = "owner-model"\n'
+    owner_config.write_text(owner_original, encoding="utf-8")
+
+    isolated_home = tmp_path / "isolated-home"
+    storage = tmp_path / "storage"
+    monkeypatch.setenv("CODEX_HOME", str(owner_codex_home))
+
+    service = AiMemoryConnectorService(storage_path=storage, home=isolated_home, env={})
+    service.apply("codex", "CONNECT_CODEX_TO_LINGJI")
+
+    isolated_config = isolated_home / ".codex" / "config.toml"
+    assert isolated_config.is_file()
+    assert "lingji-memory" in isolated_config.read_text(encoding="utf-8")
+    assert owner_config.read_text(encoding="utf-8") == owner_original
+    assert service.env == {}
 
 
 def test_codex_preview_apply_and_rollback_preserve_existing_config(tmp_path: Path) -> None:
@@ -83,6 +107,7 @@ def test_workbuddy_returns_copy_only_authenticated_http_config(tmp_path: Path) -
     preview = service.preview("workbuddy")
     assert preview["mode"] == "copy_configuration"
     assert "<本机令牌已隐藏>" in preview["preview"]
+    assert "copy_payload" not in preview
 
     result = service.apply("workbuddy", "COPY_WORKBUDDY_LINGJI_CONFIG")
     payload = json.loads(result["copy_payload"])
