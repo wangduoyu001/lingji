@@ -7,6 +7,7 @@ const scripts = [
   "runtime-sidecar-smoke.mjs",
   "observation-first-ui-smoke.mjs",
   "guided-usage-smoke.mjs",
+  "assistant-hub-smoke.mjs",
   "vector-center-smoke.mjs",
   "hardware-smoke.mjs",
   "models-smoke.mjs",
