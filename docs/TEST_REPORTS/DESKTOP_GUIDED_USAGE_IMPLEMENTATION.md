@@ -1,6 +1,6 @@
 # P0-A Start Center Implementation Report
 
-Status: `CODE_COMPLETE / CI_PENDING / OWNER_UI_ACCEPTANCE_PENDING`
+Status: `CODE_COMPLETE / STACKED_CI_VALIDATED / OWNER_UI_ACCEPTANCE_PENDING`
 
 Parent pull request: `#60`
 
@@ -31,6 +31,7 @@ desktop/lingji-control/src/pages/OverviewPage.tsx
 desktop/lingji-control/src/components/StartCenterPanel.tsx
 desktop/lingji-control/src/components/StartCenterPanel.css
 desktop/lingji-control/scripts/guided-usage-smoke.mjs
+desktop/lingji-control/scripts/observation-first-ui-smoke.mjs
 docs/TEST_REPORTS/DESKTOP_GUIDED_USAGE_IMPLEMENTATION.md
 ```
 
@@ -86,15 +87,17 @@ Updated:
 
 ```text
 desktop/lingji-control/scripts/guided-usage-smoke.mjs
+desktop/lingji-control/scripts/observation-first-ui-smoke.mjs
 ```
 
-It verifies:
+The contracts verify:
 
 - the start-center component and CSS are loaded;
 - all five supporting API paths are present;
 - Workspace, Vault, full-memory layers, AI summary, recent imports and known-issue sections exist;
 - unknown-state wording is retained;
 - Embedding uses truthful owner-facing wording;
+- observation-first automatic refresh remains intact;
 - responsive start-center style contracts exist.
 
 Required commands:
@@ -132,10 +135,13 @@ Acceptance data: not accessed
 ```text
 Code implementation: COMPLETE
 Static smoke contract: UPDATED
-GitHub CI: PENDING
+Stacked tests workflow #1072: SUCCESS
+Desktop smoke / TypeScript / Vite / Tauri config: SUCCESS
+Python 3.11 / 3.12 / Windows: SUCCESS
+MCP / Obsidian plugin / browser capture: SUCCESS
 Real installed UI: PENDING
 Owner acceptance: PENDING
-Merge into PR #60 branch: NOT ALLOWED UNTIL CI PASSES
+Merge into PR #60 branch: ALLOWED
 Merge into master: NOT ALLOWED UNTIL OWNER ACCEPTANCE
 ```
 
