@@ -63,20 +63,6 @@ def mcp_token_path(root: str | Path) -> Path:
     return _absolute_owner_root(root) / "storage" / "mcp_http_token"
 
 
-def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(dict(payload), ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(path)
-    try:
-        path.chmod(0o600)
-    except OSError:
-        pass
-
-
 def _write_text_atomic(path: Path, value: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -86,6 +72,13 @@ def _write_text_atomic(path: Path, value: str) -> None:
         path.chmod(0o600)
     except OSError:
         pass
+
+
+def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
+    _write_text_atomic(
+        path,
+        json.dumps(dict(payload), ensure_ascii=False, sort_keys=True) + "\n",
+    )
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -112,7 +105,7 @@ def configure_packaged_environment(
     workspace: str | None = None,
     environ: MutableMapping[str, str] | None = None,
 ) -> dict[str, str]:
-    """Configure explicit paths before importing ``src.config``."""
+    """Configure explicit owner paths before importing ``src.config``."""
 
     normalized_host = str(host or "").strip().lower()
     if normalized_host not in _LOOPBACK_HOSTS:
@@ -189,7 +182,7 @@ def packaged_runtime_contract(
     default_vault = root / "vault"
     configured_vault = Path(values["VAULT_DIR"]).expanduser().resolve(strict=False)
     return {
-        "schema_version": 3,
+        "schema_version": 2,
         "mode": "packaged_sidecar",
         "workspace": values["LINGJI_WORKSPACE"],
         "host": values["CONTROL_API_HOST"],
@@ -360,7 +353,11 @@ def _install_parent_watch(parent_pid: int, *, poll_seconds: float = 0.5) -> None
             time.sleep(max(0.1, poll_seconds))
         os._exit(0)
 
-    threading.Thread(target=monitor, name="lingji-mcp-parent-monitor", daemon=True).start()
+    threading.Thread(
+        target=monitor,
+        name="lingji-mcp-parent-monitor",
+        daemon=True,
+    ).start()
 
 
 def _install_mcp_state(root: Path, *, parent_pid: int, workspace: str) -> None:
