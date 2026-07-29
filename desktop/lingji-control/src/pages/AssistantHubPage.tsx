@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "../api";
+import AssistantConnectorPanel from "../components/AssistantConnectorPanel";
 import type { PageId, PageProps } from "../types";
 import "./AssistantHubPage.css";
 
@@ -102,7 +103,7 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
       });
       if (typeof selected === "string") setPaths((value) => ({ ...value, [mode]: selected }));
     } catch {
-      setResult("文件选择仅在安装版灵机中可用。请使用本轮 Windows 安装包验收。");
+      setResult("文件选择仅在安装版灵机中可用。请使用 Windows 安装包验收。");
     }
   };
 
@@ -134,14 +135,14 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
     }
   };
 
-  if (!active) return <div className="assistant-hub-state">连接本机核心后才能扫描和导入 AI 资料。</div>;
+  if (!active) return <div className="assistant-hub-state">连接本机核心后才能扫描、连接和导入 AI 资料。</div>;
 
   return <div className="assistant-hub-page">
     <section className="assistant-onboarding-hero">
       <div>
         <span className="desktop-eyebrow">第一次使用从这里开始</span>
         <h2>把你正在使用的 AI 接入灵机</h2>
-        <p>灵机先扫描已安装工具，再告诉你哪些能直接导入、哪些需要导出文件、哪些仍缺正式适配器。</p>
+        <p>先扫描本机工具，再连接今后的记忆调用，最后导入已有历史。三个动作含义不同，灵机不会混成一个绿色假状态。</p>
       </div>
       <button className="button primary" disabled={busy === "scan"} onClick={() => void load(true)}>
         {busy === "scan" ? "扫描中…" : "扫描我的 AI 软件"}
@@ -151,9 +152,10 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
     {error && <div className="assistant-hub-notice error">{error}</div>}
 
     <section className="assistant-setup-flow" aria-label="首次设置流程">
-      <div><strong>1</strong><span><b>扫描</b><small>只检查允许的本机目录和文件数量，不读取对话正文。</small></span></div>
-      <div><strong>2</strong><span><b>导入</b><small>ChatGPT Export 和 Codex Report 进入同一采集队列。</small></span></div>
-      <div><strong>3</strong><span><b>审核</b><small>处理完成后由你决定哪些内容成为正式永久记忆。</small></span></div>
+      <div><strong>1</strong><span><b>扫描</b><small>只确认安装和可用能力，不读取对话正文。</small></span></div>
+      <div><strong>2</strong><span><b>连接</b><small>让 AI 今后通过 MCP 读取灵机记忆、提交候选记忆。</small></span></div>
+      <div><strong>3</strong><span><b>导入</b><small>把 ChatGPT Export、Codex Report 等旧资料放进处理队列。</small></span></div>
+      <div><strong>4</strong><span><b>审核</b><small>只有你确认的候选才成为正式永久记忆。</small></span></div>
     </section>
 
     {scan && <>
@@ -173,7 +175,7 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
           </header>
           <p>{assistant.message}</p>
           <dl>
-            <div><dt>导入</dt><dd>{stateLabel(assistant.import_state)}</dd></div>
+            <div><dt>历史导入</dt><dd>{stateLabel(assistant.import_state)}</dd></div>
             <div><dt>自动同步</dt><dd>{stateLabel(assistant.sync_state)}</dd></div>
             <div><dt>候选文件</dt><dd>{assistant.candidate_count.toLocaleString()}</dd></div>
             <div><dt>最近活动</dt><dd>{time(assistant.latest_activity_at)}</dd></div>
@@ -186,9 +188,11 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
       </section>
     </>}
 
+    <AssistantConnectorPanel api={api} active={active} />
+
     <section className="assistant-import-section">
       <div className="assistant-section-heading">
-        <div><span className="desktop-eyebrow">一键导入已有记忆</span><h3>选择导出文件，剩下的交给采集队列</h3></div>
+        <div><span className="desktop-eyebrow">导入已有历史</span><h3>选择导出文件，剩下的交给采集队列</h3></div>
         <button className="button secondary" onClick={() => onNavigate("activity")}>查看导入进度</button>
       </div>
       <div className="assistant-import-grid">
@@ -216,14 +220,14 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
       <div>
         <span className="desktop-eyebrow">永久记忆规则</span>
         <h3>默认先审核，不把全部聊天直接写进核心记忆</h3>
-        <p>导入资料会保留来源并进入处理链。只有你在“人工记忆审核”中确认的候选，才成为正式长期记忆。</p>
+        <p>连接后的 AI 可以读取你批准的记忆，也可以提交候选；导入资料会保留来源并进入处理链。只有你在“人工记忆审核”中确认的内容，才成为正式长期记忆。</p>
       </div>
       <div className="assistant-policy-list">
-        <span>✓ 原始资料保留来源</span>
-        <span>✓ 自动去重并进入队列</span>
-        <span>✓ 主人审核后写入正式记忆</span>
+        <span>✓ AI 可读取主人批准的记忆</span>
+        <span>✓ AI 可提交候选记忆</span>
+        <span>✓ 原始资料保留来源并自动去重</span>
         <span>× 不读取账号 Token 或浏览器登录态</span>
-        <span>× 不自动写入 Core Memory</span>
+        <span>× 不允许 AI 直接写入 Core Memory</span>
       </div>
       <button className="button" onClick={() => onNavigate("memory_review")}>进入人工记忆审核</button>
     </section>
