@@ -1,8 +1,10 @@
 # 验收治理实施与测试报告
 
 日期：2026-07-29  
+PR：`#62`  
 分支：`docs/acceptance-governance`  
-目标：`master`
+目标：`master`  
+治理实现与门禁验证基线：`e43da870bc755321f5bd0db4a40aca31df91124d`
 
 ## 1. 目标
 
@@ -91,30 +93,45 @@ Codex 的最小读取顺序现在明确包含验收权威。PR 模板要求开�
 - 产品代码与增量验收记录同步时通过；
 - 只更新其他验收文件不能绕过；
 - Workflow 和依赖变化触发门禁；
+- `.github` 隐藏路径不被错误剥离；
 - Windows 路径标准化；
 - 纯测试变化不强制新增产品验收记录。
 
-## 7. 预期验证命令
+## 7. 精确基线验证结果
 
-```powershell
-python -m pytest -q tests/test_acceptance_sync.py
-python scripts/check_acceptance_sync.py
-.\scripts\validate.ps1 -Mode focused -Area docs
-```
-
-GitHub：
+治理实现与门禁验证基线：
 
 ```text
-acceptance-doc-sync
-现有 tests workflow
+e43da870bc755321f5bd0db4a40aca31df91124d
 ```
+
+GitHub Actions：
+
+```text
+acceptance-doc-sync #1: SUCCESS
+tests #1082: SUCCESS
+P0 Windows Gate #241: SUCCESS
+```
+
+通过内容：
+
+- acceptance sync checker 单元测试；
+- 产品变化与验收变更记录同步检查；
+- Python 3.11 / 3.12 / Windows 完整测试；
+- MCP、Obsidian Plugin、Browser Capture Smoke；
+- Desktop Smoke、React/Vite build；
+- Windows PowerShell 5.1 stderr 合同；
+- clean-install 合同；
+- Tauri Rust check。
+
+本报告之后的提交只更新验收记录和本测试报告，不改变已验证的同步检查实现。
 
 ## 8. 安全边界
 
 - 不读取或提交 Token、配置正文、私人聊天或数据库；
 - 不改变 LingJi Runtime、数据模型或产品行为；
 - 不修改 PR #60 产品 Head；
-- 不自动合并产品 PR；
+- 不自动合并任何产品 PR；
 - 报告与产品 Artifact 继续使用独立分支。
 
 ## 9. 当前结论
@@ -122,9 +139,10 @@ acceptance-doc-sync
 ```text
 DOCUMENT AUTHORITY: IMPLEMENTED
 SYNC CHECKER: IMPLEMENTED
-UNIT TESTS: ADDED
-CI WORKFLOW: ADDED
-LOCAL EXECUTION: NOT RUN IN GITHUB CONNECTOR ENVIRONMENT
-PR CI: PENDING
-MERGE: PENDING CI AND REVIEW
+UNIT TESTS: PASS
+ACCEPTANCE-DOC-SYNC CI: PASS
+FULL TESTS: PASS
+P0 WINDOWS GATE: PASS
+PRODUCT RUNTIME CHANGE: NONE
+MERGE INTO MASTER: ALLOWED AFTER FINAL DOC-ONLY HEAD CI
 ```
