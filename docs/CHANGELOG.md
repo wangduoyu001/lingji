@@ -24,7 +24,25 @@
 - 明确 Claude Code 与 WorkBuddy 当前只完成检测，正文导入与自动同步仍为 planned，不显示为已连接。
 - 永久记忆继续执行“候选 → 主人审核 → 正式记忆”，禁止自动写入 Core Memory。
 - 新增 Assistant Hub Python/API/Desktop Smoke、模块文档、快速上手、代码地图和实施报告。
-- PR #56 保持 Draft；自动 CI 与新安装包完成后仍须 Owner 按陌生用户视角验收，不因按钮可点击而自动判定 PASS。
+- PR #56 Head `8c69dfa3bc9562f80f190701244ece82896c7e17` 的 `tests #1023`、`P0 Windows Gate #233`、`Windows Desktop Release Baseline #122` 全部成功。
+- PR #56 保持 Draft，仍须 Owner 按陌生用户视角验收，不因按钮可点击而自动判定 PASS。
+
+### 统一 AI 记忆连接器产品化
+
+- 从 PR #56 Head 创建 stacked 分支 `feature/unified-ai-memory-connectors`，不直接修改 `master`。
+- 安装版 `lingji-core.exe` 新增受管 MCP 子进程，使用 authenticated Streamable HTTP `127.0.0.1:8767/mcp`。
+- MCP 子进程由 Control Runtime 托管，父进程停止或重启时同步退出；Token、状态和数据均保存在当前 Workspace 的 owner DataRoot。
+- 保持原 Runtime 合同 Schema 2，新增向后兼容 `mcp` 字段，不改变 8766、DataRoot、Workspace、Stop Request 或无黑窗合同。
+- 新增 `src/assistant_hub/connectors.py`，实现 Codex、Claude Code、WorkBuddy/CodeBuddy 的状态、预览、设置、测试和回滚能力。
+- Codex 只管理 `~/.codex/config.toml` 中带标记的 LingJi 区块，写入前验证 TOML、检测同名冲突并备份。
+- Claude Code 只调用官方 `claude mcp` CLI，使用 user scope、HTTP Transport 和 Bearer Header，并支持 get/remove。
+- WorkBuddy/CodeBuddy 不修改未公开的本地配置文件，只生成可复制的自定义 MCP JSON，由用户在官方页面完成设置和测试。
+- 新增认证的 8766 Connector 管理 API；所有写入需要精确 confirmation，不接受任意命令、任意客户端或任意配置路径。
+- 新增 8767 Bearer Token 中间件；未认证请求返回401，MCP 不绑定公网。
+- Desktop 首次流程扩展为“扫描 → 连接 → 导入 → 审核”，并明确连接与历史导入不是同一件事。
+- 新增 Codex/Claude/WorkBuddy 连接状态、改动预览、备份说明、连接测试和回滚 UI。
+- 第一版所有本机客户端使用同一 `lingji-local` owner-approved 记忆视图；每 AI 独立 Agent Scope、历史 Adapter 和 ChatGPT 实时连接仍未实现。
+- 新增 Python 测试、Desktop Smoke、Windows 打包合同、模块文档和实施报告；自动 CI 与主人真机验收尚未完成，禁止合并。
 
 ## 2026-07-26
 
@@ -238,4 +256,3 @@
 - 增加有边界的三目录 Watcher。
 - 增加 Ollama Embedding，`bge-m3` 为主模型，`nomic-embed-text` 为备用模型。
 - 增加 `AGENTS.md` 和磁盘安全规则。
-- 从上游 `lingji.git` master 分支建立初始 Worktree。
