@@ -21,7 +21,16 @@ Get-PhysicalDisk commands: 0
 CPU model source: windows_registry
 ```
 
-The result remains BLOCKED because the complete visible-control matrix, three UI-driven Core restart cycles and a real Windows reboot were not completed.
+Owner clarification on 2026-07-29: all visible UI controls responded to clicks. The owner did not report dead buttons or non-responsive controls. The unresolved UI finding is that the interface does not explain what many controls do or what operating sequence should be followed.
+
+Therefore the UI finding is classified as:
+
+```text
+Control responsiveness: PASS
+Operation comprehensibility / workflow guidance: FAIL (usability defect)
+```
+
+The overall result remains BLOCKED because three UI-driven Core restart cycles and a real Windows reboot were not completed with distinct evidence.
 
 ## Evidence identity
 
@@ -59,6 +68,27 @@ The raw ZIP should not be attached publicly unchanged because it contains local 
 
 Duplicate screenshots do not establish deliberate fabrication. They are consistent with the recorded Tauri WebView automation failure, but they cannot be used as stage-specific evidence.
 
+## UI usability finding
+
+The owner can click the controls, but cannot reliably understand:
+
+- what each page is for;
+- which action should be performed first;
+- what result a button is expected to produce;
+- whether an action succeeded;
+- what should be done after a warning or empty state.
+
+This is not a control-function failure. It is a product usability and documentation defect. Recommended classification: `P1` for the current owner-facing Desktop because the interface is operational but not self-explanatory enough for normal use.
+
+Required product remediation should include:
+
+1. page-level purpose text;
+2. one clear primary action per page;
+3. inline descriptions for technical fields;
+4. visible success, failure and next-step feedback;
+5. a first-run guided path from DataRoot configuration to healthy Runtime and daily use;
+6. a short in-application user guide using the actual page names and buttons.
+
 ## Completed checks
 
 | Check | Result |
@@ -72,7 +102,8 @@ Duplicate screenshots do not establish deliberate fabrication. They are consiste
 | Application restart | PASS |
 | Same-version reinstall | PASS |
 | Uninstall data protection | PASS |
-| Complete UI matrix | BLOCKED |
+| Visible control responsiveness | PASS |
+| UI operation comprehensibility | FAIL / P1 |
 | Three UI Core restarts | BLOCKED |
 | Windows reboot | BLOCKED |
 | Production mutation | UNKNOWN |
@@ -85,7 +116,8 @@ DO NOT MERGE
 
 Minimum remaining acceptance:
 
-1. complete the visible-page and visible-control matrix;
-2. perform three UI-driven Core restart cycles with PID and managed/authenticated recovery evidence;
-3. perform a real Windows reboot, system-compute check and one additional Core restart;
-4. classify production mutation as `NONE` only when supported by evidence.
+1. perform three UI-driven Core restart cycles with PID and managed/authenticated recovery evidence;
+2. perform a real Windows reboot, system-compute check and one additional Core restart;
+3. classify production mutation as `NONE` only when supported by evidence.
+
+The complete UI control matrix is no longer blocked on click responsiveness. Its remaining finding is tracked as a usability defect requiring product guidance improvements.
