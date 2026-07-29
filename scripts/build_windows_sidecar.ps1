@@ -42,6 +42,7 @@ $arguments = @(
   "--specpath", $specRoot,
   "--paths", $repoRoot,
   "--collect-submodules", "src",
+  "--collect-submodules", "mcp",
   "--exclude-module", "PySide6",
   "--exclude-module", "torch",
   "--exclude-module", "tensorflow",
@@ -79,6 +80,12 @@ $contract = Get-Content $contractPath -Raw -Encoding UTF8 | ConvertFrom-Json
 if ($contract.mode -ne "packaged_sidecar") { throw "Unexpected packaged runtime mode" }
 if ($contract.host -ne "127.0.0.1") { throw "Packaged sidecar is not loopback-only" }
 if ($contract.owner_data_outside_install_dir -ne $true) { throw "Owner-data boundary is missing" }
+if ($contract.mcp.managed -ne $true) { throw "Packaged MCP runtime is not managed" }
+if ($contract.mcp.host -ne "127.0.0.1") { throw "Packaged MCP runtime is not loopback-only" }
+if ($contract.mcp.port -ne 8767) { throw "Unexpected packaged MCP port" }
+if ($contract.mcp.transport -ne "streamable-http") { throw "Unexpected packaged MCP transport" }
+if ($contract.mcp.authentication -ne "bearer_token") { throw "Packaged MCP authentication is missing" }
+if ($contract.mcp.automatic_core_memory_write -ne $false) { throw "Packaged MCP may not auto-write Core Memory" }
 
 $runtimeFiles = Get-ChildItem $preparedRuntime -Recurse -File
 $exeHash = (Get-FileHash $preparedExe -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -98,6 +105,7 @@ $manifest = [ordered]@{
   pyinstaller_mode = "onedir"
   contents_directory = "lingji_core_lib"
   optional_media_providers_bundled = $false
+  mcp_runtime_bundled = $true
   contract = $contract
 }
 $manifestPath = Join-Path $tauriBinaries "lingji-core-manifest.json"
