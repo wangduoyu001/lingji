@@ -113,12 +113,17 @@ for (const token of [
 ]) assert.ok(packaged.includes(token), `Packaged runtime is missing ${token}`);
 
 for (const token of [
-  '"--collect-submodules", "mcp"',
+  '"--collect-submodules", "mcp.server"',
+  '"--collect-submodules", "mcp.shared"',
+  '"--hidden-import", "mcp.types"',
+  '"--exclude-module", "mcp.cli"',
   "contract.mcp.managed",
   "contract.mcp.authentication",
   "contract.mcp.automatic_core_memory_write",
   "mcp_runtime_bundled = $true",
+  "mcp_cli_bundled = $false",
 ]) assert.ok(buildScript.includes(token), `Sidecar builder is missing ${token}`);
+assert.equal(buildScript.includes('"--collect-submodules", "mcp",'), false, "Packaging must not import optional MCP CLI modules");
 assert.match(sidecarRequirements, /requirements-mcp\.txt/);
 
 console.log("assistant-memory-connectors-smoke: PASS");
