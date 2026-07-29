@@ -8,6 +8,7 @@ const scripts = [
   "observation-first-ui-smoke.mjs",
   "guided-usage-smoke.mjs",
   "assistant-hub-smoke.mjs",
+  "assistant-memory-connectors-smoke.mjs",
   "vector-center-smoke.mjs",
   "hardware-smoke.mjs",
   "models-smoke.mjs",
