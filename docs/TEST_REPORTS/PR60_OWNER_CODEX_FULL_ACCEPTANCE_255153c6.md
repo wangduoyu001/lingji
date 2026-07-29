@@ -47,14 +47,19 @@ workflows.
 | ID | Name | Prerequisite | Method | Expected | Actual | Evidence | Conclusion |
 |---|---|---|---|---|---|---|---|
 | T1 | Required connector and MCP modules | Isolated Python 3.12 | Four mandated test files | Pass | 20 passed | Private log | PASS |
-| T2 | Full Python suite | Isolated Python 3.12 | `pytest -q --tb=short` | Pass | 541 passed, 1 failed, 11 skipped | Private log | FAIL |
+| T2 | Full Python suite | Isolated Python 3.12 | `pytest -q --tb=short` | Pass | Initial run: 541 passed, 1 failed, 11 skipped. Venv-PATH retry: 541 passed, 2 failed, 10 skipped | Private logs | FAIL |
 | T3 | Desktop Smoke | npm dependencies | `npm run test:smoke` | Pass | 22 scripts passed | Private log | PASS |
 | T4 | React/TypeScript/Vite build | npm dependencies | `npm run build` | Pass | Pass | Private log | PASS |
 | T5 | Tauri Rust | Rust toolchain | `cargo check`; `cargo test` | Pass | Check passed; 9 tests passed | Private log | PASS |
 
-The full-suite failure was
+The initial full-suite failure was
 `SecondBrainTests.test_second_brain_is_not_in_original_start_chain`, whose child
-`python` process exited non-zero. No source code or test was changed.
+`python` process exited non-zero. A controlled retry with the test venv first
+on `PATH` still failed: the test's bare `python` child resolved to the
+system-global interpreter, which has no `pydantic`. The retry also failed
+`TestBrainStatusApiContract.test_frontend_dist_exists`: the actual Desktop build
+contained one JavaScript bundle while the test requires at least two. No source
+code or test was changed.
 
 ## 7. Installation
 
@@ -165,7 +170,10 @@ operation.
 
 ## 26. Blocking Defects
 
-1. The required Python full suite failed (541 passed, 1 failed, 11 skipped).
+1. The required Python full suite failed on both runs. The controlled venv-PATH
+   retry produced 541 passed, 2 failed and 10 skipped; one failure is the
+   test's bare-Python child resolving to an interpreter without `pydantic`, and
+   one is the frontend-bundle-count assertion against the actual build output.
 2. Mandatory owner/UI, Codex-client, import, review and lifecycle acceptance
    remains unexecuted.
 
