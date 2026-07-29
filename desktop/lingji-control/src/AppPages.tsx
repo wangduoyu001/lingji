@@ -1,4 +1,5 @@
 import type { LingJiApi } from "./api";
+import PageGuide from "./components/PageGuide";
 import AcceptancePage from "./pages/AcceptancePage";
 import ActivityPage from "./pages/ActivityPage";
 import AttentionPage from "./pages/AttentionPage";
@@ -38,6 +39,7 @@ type AppPagesProps = {
 export default function AppPages(props: AppPagesProps) {
   const { page, api, connected, overview, inspectorTarget, onOpenInspector, onNavigate } = props;
   return <section className="page-content">
+    <PageGuide page={page} onNavigate={onNavigate} />
     {page === "overview" && <OverviewPage data={overview} api={api} active={connected} onNavigate={onNavigate} />}
     {page === "activity" && <ActivityPage api={api} active={connected} />}
     {page === "attention" && <AttentionPage api={api} active={connected} overview={overview} onNavigate={onNavigate} />}
