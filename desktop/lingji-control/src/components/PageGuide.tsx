@@ -16,11 +16,18 @@ type Guide = {
 
 const GUIDES: Partial<Record<PageId, Guide>> = {
   overview: {
-    purpose: "先确认灵机是否正常，再从投喂、查看进度或处理待办开始日常使用。",
-    when: "每次打开灵机先看这里。状态正常时，不需要进入技术页面。",
-    steps: ["确认右上角显示“运行中”", "查看“需要我处理”是否有待办", "选择投喂内容或查看最近活动"],
-    primary: { label: "开始投喂内容", page: "capture_center" },
+    purpose: "先完成 AI 连接和记忆导入，再查看灵机是否正常、正在处理什么。",
+    when: "第一次打开灵机，或者需要导入新的 AI 历史时从这里开始。",
+    steps: ["打开 AI 助手与记忆导入", "扫描本机 AI 软件", "导入资料后查看处理进度和记忆审核"],
+    primary: { label: "连接 AI 与导入记忆", page: "assistant_hub" },
     secondary: { label: "查看活动记录", page: "activity" },
+  },
+  assistant_hub: {
+    purpose: "扫描 Codex、Claude Code、WorkBuddy，并把支持的 AI 历史导入灵机。",
+    when: "第一次设置灵机、换电脑、安装新的 AI 工具或需要补导历史记录时。",
+    steps: ["先点击扫描我的 AI 软件", "查看每个工具的真实支持状态", "选择导出文件并提交到采集队列"],
+    primary: { label: "导入后查看进度", page: "activity" },
+    secondary: { label: "进入记忆审核", page: "memory_review" },
   },
   activity: {
     purpose: "查看灵机正在处理什么、哪些任务已经完成、哪些任务失败。",
@@ -135,13 +142,13 @@ const GUIDES: Partial<Record<PageId, Guide>> = {
     purpose: "对真实资料执行只读诊断，确认系统不会误写生产数据。",
     when: "新版本安装、路径迁移、重大模块调整或合并前验收时。",
     steps: ["确认当前是 acceptance workspace", "执行只读检查", "保存报告后再决定是否进入生产"],
-    primary: { label: "查看运行状态", page: "overview" },
+    primary: { label: "返回开始使用", page: "overview" },
   },
   settings: {
     purpose: "查看默认值、推荐值和主人覆盖项。",
     when: "路径、模型、任务策略或启动行为确实需要调整时。",
     steps: ["先读推荐值和影响", "一次只修改一组相关设置", "保存后按提示重启或执行任务"],
-    primary: { label: "查看运行状态", page: "overview" },
+    primary: { label: "返回开始使用", page: "overview" },
   },
   logs: {
     purpose: "查看错误和运行记录，用于定位具体故障。",
