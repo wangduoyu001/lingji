@@ -1,4 +1,5 @@
 import CurrentWorkPanel from "../components/CurrentWorkPanel";
+import StartCenterPanel from "../components/StartCenterPanel";
 import { Empty, Metric, Notice, bytes } from "../components/ui";
 import type { LingJiApi } from "../api";
 import type { PageId, Row } from "../types";
@@ -20,7 +21,7 @@ function stateLabel(value: unknown): string {
     healthy: "运行正常",
     ready: "已就绪",
     available: "可用",
-    degraded: "降级运行",
+    degraded: "部分能力待处理",
     warning: "需要关注",
     stale: "数据过期",
     failed: "运行失败",
@@ -94,6 +95,9 @@ export default function OverviewPage({
   const computePolicy = (hardware.compute_policy ?? {}) as Record<string, unknown>;
   const runtimeState = memoryRuntime.state ?? health.status;
   const stale = Boolean(memoryRuntime.stale);
+  const embeddingReady = ["healthy", "ready", "available"].includes(
+    String(embedding.state ?? "").toLowerCase(),
+  );
 
   const attentionCount = [
     Number(health.error_count ?? 0) > 0,
@@ -106,7 +110,7 @@ export default function OverviewPage({
     <div className="stack overview-page observation-page">
       <section className={`overview-hero overview-hero-${stateTone(runtimeState) ?? "neutral"}`}>
         <div className="overview-hero-main">
-          <span className="desktop-eyebrow">灵机已经启动</span>
+          <span className="desktop-eyebrow">灵机开始中心</span>
           <div className="overview-title-line">
             <h2>{stateLabel(runtimeState)}</h2>
             <span className={`pill ${stateTone(runtimeState) === "good" ? "ok" : stateTone(runtimeState) === "bad" ? "error" : "warning"}`}>
@@ -114,20 +118,22 @@ export default function OverviewPage({
             </span>
           </div>
           <p>
-            第一次使用先连接 AI 和导入已有资料；之后灵机会自动处理队列、更新索引和恢复连接。
+            第一次使用先看唯一推荐下一步，再连接 AI、导入已有资料并审核候选记忆。
             {memoryRuntime.as_of ? ` · 状态时间 ${display(memoryRuntime.as_of)}` : ""}
           </p>
         </div>
         <div className="observation-live-state">
           <span className={stateTone(runtimeState) === "good" ? "status-dot online" : "status-dot"} />
           <div>
-            <strong>{Number(queue.running ?? 0) > 0 ? `${display(queue.running)} 个任务运行中` : "等待你连接或投喂资料"}</strong>
+            <strong>{Number(queue.running ?? 0) > 0 ? `${display(queue.running)} 个任务运行中` : "等待你的下一步"}</strong>
             <small>状态每 10 秒自动更新</small>
           </div>
         </div>
       </section>
 
       {stale && <Notice kind="warning">当前记忆和向量统计来自旧快照，系统正在自动刷新。</Notice>}
+
+      <StartCenterPanel api={api} active={active} overview={data} onNavigate={onNavigate} />
 
       <section className="daily-flow" aria-label="灵机首次设置和日常使用流程">
         <div className="daily-flow-heading">
@@ -188,10 +194,10 @@ export default function OverviewPage({
             tone={vector.rebuild_required ? "bad" : stateTone(vector.state)}
           />
           <Metric
-            title="本地模型"
+            title="Embedding"
             value={display(embedding.active_model ?? embedding.configured_model)}
-            detail={stateLabel(embedding.state)}
-            tone={stateTone(embedding.state)}
+            detail={embeddingReady ? "已激活" : "暂未激活，进入向量中心查看原因"}
+            tone={embeddingReady ? "good" : "warn"}
           />
           <Metric
             title="算力模式"

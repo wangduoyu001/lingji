@@ -77,7 +77,8 @@ assert.match(connection, /autoRecoveryActive/);
 assert.match(connection, /后台自动恢复已暂停/);
 
 assert.match(overview, /状态每 10 秒自动更新/);
-assert.match(overview, /等待你连接或投喂资料/);
+assert.match(overview, /等待你的下一步/);
+assert.match(overview, /StartCenterPanel/);
 assert.match(overview, /查看待办/);
 assert.equal(overview.includes("刷新本机状态"), false, "Overview must not require manual refresh");
 assert.equal(overview.includes("健康检查"), false, "Detailed health checks belong in diagnostics");

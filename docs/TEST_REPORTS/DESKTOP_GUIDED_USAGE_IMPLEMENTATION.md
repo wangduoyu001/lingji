@@ -1,85 +1,114 @@
-# Desktop Guided Usage Implementation Report
+# P0-A Start Center Implementation Report
 
-Status: CODE_COMPLETE / CI_PENDING / OWNER_UI_ACCEPTANCE_PENDING
+Status: `CODE_COMPLETE / STACKED_CI_VALIDATED / OWNER_UI_ACCEPTANCE_PENDING`
 
-Pull request: `#56`
+Parent pull request: `#60`
 
-Branch: `feature/desktop-guided-usage`
+Implementation branch: `work/p0-a-start-center`
 
-Base: `master@18b99a6909e929df432253686eeaeee3ed9f7024`
+Base: `feature/unified-ai-memory-connectors@97a6ae217eb4063af2be1a579518c2c56fe2d44e`
 
 ## 1. Goal
 
-Make the installed LingJi Desktop understandable before adding more backend capability.
+Close the P0-A start-center gap without introducing another backend authority.
 
-The owner confirmed that controls were responsive but the operating sequence was unclear. The implementation therefore treats comprehensibility as the primary acceptance target.
+The installed Desktop must let a first-time owner answer:
 
-## 2. Modified files
+1. Which Workspace is active?
+2. Which Vault, sources, conversations, messages and memory layers exist?
+3. Which AI clients and import sources are available?
+4. What was imported recently?
+5. What is the single recommended next action?
+6. Which known issues are fixed, and which remain open?
+
+## 2. Implementation
+
+Modified or added:
 
 ```text
 desktop/lingji-control/src/App.tsx
-desktop/lingji-control/src/AppPages.tsx
-desktop/lingji-control/src/components/DesktopShell.tsx
-desktop/lingji-control/src/components/PageGuide.tsx
-desktop/lingji-control/src/components/UsageGuideDrawer.tsx
 desktop/lingji-control/src/pages/OverviewPage.tsx
-desktop/lingji-control/src/GuidedUsage.css
+desktop/lingji-control/src/components/StartCenterPanel.tsx
+desktop/lingji-control/src/components/StartCenterPanel.css
 desktop/lingji-control/scripts/guided-usage-smoke.mjs
-desktop/lingji-control/scripts/run-smoke-suite.mjs
+desktop/lingji-control/scripts/observation-first-ui-smoke.mjs
+docs/TEST_REPORTS/DESKTOP_GUIDED_USAGE_IMPLEMENTATION.md
 ```
 
-## 3. Delivered behavior
+`OverviewPage` remains the owner-facing start page. Detailed aggregation and routing logic is isolated in `StartCenterPanel` so the page does not become another oversized control component.
 
-- every Desktop page shows a shared usage guide;
-- each guide explains purpose, when to use the page, three operating steps and next actions;
-- Overview shows a four-step daily workflow;
-- sidebar and toolbar expose a persistent “怎么使用” entry;
-- the slide-in guide routes common problems to the correct advanced page;
-- Overview engineering headings were replaced with owner-facing Chinese labels;
-- guidance data is centralized and does not duplicate business logic;
-- no backend or data mutation is introduced.
+## 3. Data ownership
 
-## 4. Data and API impact
+No database, queue, API or status authority was added.
+
+The start center composes existing authenticated read-only contracts:
 
 ```text
-Database schema: unchanged
-Runtime API: unchanged
-Qdrant: unchanged
-Embedding: unchanged
-Production data: not accessed
-Acceptance data: not accessed
+/api/overview
+/api/memory/inspector/status
+/api/assistant-hub/status
+/api/assistant-hub/connections
+/api/codex/current
+/api/obsidian/status
 ```
 
-## 5. Test contract
+Authorities remain unchanged:
 
-New static smoke contract:
+```text
+Workspace and memory/vector state -> Memory Statistics / Inspector
+Sources, conversations, messages -> Structured Read Model
+AI discovery and connections -> Assistant Hub
+Pending memory review -> Codex Current / Memory Review
+Vault identity -> Obsidian Service
+Recent imports and failures -> Extraction Queue
+```
+
+Partial request failure remains visible. Unknown values are not converted to zero, healthy, connected or production.
+
+## 4. Delivered behavior
+
+The first screen now shows:
+
+- Production / Acceptance / unknown Workspace truthfully;
+- formal Vault identity and display path;
+- sources, conversations, messages, indexed permanent knowledge, Core Memory and vector counts;
+- detected AI tools, import-ready sources, configured clients and live-tested clients;
+- recent ChatGPT/Codex/import jobs and their real queue state;
+- exactly one recommended next action based on current facts;
+- pending-review routing;
+- verified Windows/runtime/data-protection fixes;
+- live Embedding status using owner-facing wording.
+
+`degraded` is displayed as `部分能力待处理`. An inactive Embedding does not turn the whole Desktop into a frightening fake catastrophe; lexical retrieval remains explicitly usable.
+
+## 5. Validation contract
+
+Updated:
 
 ```text
 desktop/lingji-control/scripts/guided-usage-smoke.mjs
+desktop/lingji-control/scripts/observation-first-ui-smoke.mjs
 ```
 
-The contract verifies:
+The contracts verify:
 
-- `GuidedUsage.css` is loaded;
-- `PageGuide` wraps formal pages;
-- daily-flow language and actions exist;
-- persistent help exists in the Desktop shell;
-- usage drawer contains daily and advanced flows;
-- required style tokens exist;
-- the smoke is part of `run-smoke-suite.mjs`.
+- the start-center component and CSS are loaded;
+- all five supporting API paths are present;
+- Workspace, Vault, full-memory layers, AI summary, recent imports and known-issue sections exist;
+- unknown-state wording is retained;
+- Embedding uses truthful owner-facing wording;
+- observation-first automatic refresh remains intact;
+- responsive start-center style contracts exist.
 
-## 6. Test commands
-
-Expected CI commands:
+Required commands:
 
 ```text
 cd desktop/lingji-control
-npm ci
 npm run test:smoke
 npm run build
 ```
 
-Repository workflows:
+Repository gates:
 
 ```text
 tests
@@ -87,37 +116,48 @@ P0 Windows Gate
 Windows Desktop Release Baseline
 ```
 
+## 6. Boundaries
+
+```text
+Database schema: unchanged
+Runtime API: unchanged
+Queue behavior: unchanged
+Memory lifecycle: unchanged
+Qdrant mutation: none
+Core Memory mutation: none
+Connector write behavior: unchanged
+Production data: not accessed
+Acceptance data: not accessed
+```
+
 ## 7. Current result
 
 ```text
 Code implementation: COMPLETE
-Smoke contract: ADDED
-GitHub CI: PENDING
+Static smoke contract: UPDATED
+Stacked tests workflow #1072: SUCCESS
+Desktop smoke / TypeScript / Vite / Tauri config: SUCCESS
+Python 3.11 / 3.12 / Windows: SUCCESS
+MCP / Obsidian plugin / browser capture: SUCCESS
 Real installed UI: PENDING
 Owner acceptance: PENDING
-Merge: NOT ALLOWED YET
+Merge into PR #60 branch: ALLOWED
+Merge into master: NOT ALLOWED UNTIL OWNER ACCEPTANCE
 ```
 
-This report must be updated with exact workflow run numbers and artifact identity after CI completes.
+## 8. Owner-machine acceptance
 
-## 8. Known limitations
+The exact packaged artifact must demonstrate:
 
-- guidance text may require owner wording adjustments after real use;
-- this PR does not redesign every detailed feature form;
-- it does not repair the separate unavailable `bge-m3` acceptance-environment condition;
-- it does not begin Unified Qdrant SemanticProvider work;
-- help state is intentionally not persisted because the entry should remain discoverable.
+1. the active Workspace is obvious;
+2. official Vault and memory-layer counts are understandable;
+3. detected/configured/tested AI states are not confused;
+4. recent imports and failures are visible;
+5. only one recommended next step is emphasized;
+6. Production and Acceptance are visually distinguishable;
+7. inactive Embedding is explained without hiding the limitation;
+8. all start-center actions route to working pages.
 
 ## 9. Rollback
 
-The implementation is UI-only. Reverting the PR removes the guidance components and CSS without data migration, index rebuild or Runtime rollback.
-
-## 10. Next step
-
-1. wait for CI;
-2. fix any smoke or TypeScript failure without reducing assertions;
-3. build the exact Windows artifact;
-4. perform owner-machine UI acceptance;
-5. revise wording where the owner still cannot understand the workflow;
-6. merge only after explicit owner confirmation;
-7. start Unified Qdrant SemanticProvider Integration from the merged master.
+This patch is presentation-only. Reverting the component, CSS, Overview wiring and smoke assertions removes the start center without data migration, index rebuild or connector rollback.
