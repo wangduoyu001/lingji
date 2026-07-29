@@ -40,31 +40,31 @@ const DAILY_FLOW: Array<{
 }> = [
   {
     number: "1",
-    title: "投喂资料",
-    detail: "把文字、网页、文件或媒体交给灵机。",
-    label: "打开投喂中心",
-    page: "capture_center",
+    title: "连接与导入",
+    detail: "扫描 Codex、Claude、WorkBuddy，导入已有 AI 历史。",
+    label: "打开 AI 助手中心",
+    page: "assistant_hub",
   },
   {
     number: "2",
     title: "查看处理",
-    detail: "确认任务正在运行、完成或失败。",
+    detail: "确认导入和采集任务正在运行、完成或失败。",
     label: "查看活动记录",
     page: "activity",
   },
   {
     number: "3",
     title: "审核记忆",
-    detail: "决定哪些候选内容值得长期保留。",
+    detail: "决定哪些候选内容值得成为长期记忆。",
     label: "进入记忆审核",
     page: "memory_review",
   },
   {
     number: "4",
-    title: "处理异常",
-    detail: "只处理灵机无法安全替你决定的事项。",
-    label: "查看需要我处理",
-    page: "attention",
+    title: "继续投喂",
+    detail: "日常把新的文字、网页、文件或媒体交给灵机。",
+    label: "打开投喂中心",
+    page: "capture_center",
   },
 ];
 
@@ -106,7 +106,7 @@ export default function OverviewPage({
     <div className="stack overview-page observation-page">
       <section className={`overview-hero overview-hero-${stateTone(runtimeState) ?? "neutral"}`}>
         <div className="overview-hero-main">
-          <span className="desktop-eyebrow">当前运行状态</span>
+          <span className="desktop-eyebrow">灵机已经启动</span>
           <div className="overview-title-line">
             <h2>{stateLabel(runtimeState)}</h2>
             <span className={`pill ${stateTone(runtimeState) === "good" ? "ok" : stateTone(runtimeState) === "bad" ? "error" : "warning"}`}>
@@ -114,14 +114,14 @@ export default function OverviewPage({
             </span>
           </div>
           <p>
-            灵机会自动检查服务、处理队列、更新索引和恢复连接。
+            第一次使用先连接 AI 和导入已有资料；之后灵机会自动处理队列、更新索引和恢复连接。
             {memoryRuntime.as_of ? ` · 状态时间 ${display(memoryRuntime.as_of)}` : ""}
           </p>
         </div>
         <div className="observation-live-state">
           <span className={stateTone(runtimeState) === "good" ? "status-dot online" : "status-dot"} />
           <div>
-            <strong>{Number(queue.running ?? 0) > 0 ? `${display(queue.running)} 个任务运行中` : "后台自动运行"}</strong>
+            <strong>{Number(queue.running ?? 0) > 0 ? `${display(queue.running)} 个任务运行中` : "等待你连接或投喂资料"}</strong>
             <small>状态每 10 秒自动更新</small>
           </div>
         </div>
@@ -129,14 +129,14 @@ export default function OverviewPage({
 
       {stale && <Notice kind="warning">当前记忆和向量统计来自旧快照，系统正在自动刷新。</Notice>}
 
-      <section className="daily-flow" aria-label="灵机日常使用流程">
+      <section className="daily-flow" aria-label="灵机首次设置和日常使用流程">
         <div className="daily-flow-heading">
           <div>
-            <span className="desktop-eyebrow">日常只需要这四步</span>
-            <h3>从这里开始使用灵机</h3>
-            <p>正常情况下按 1 → 2 → 3 使用；只有出现待办时才进入第 4 步。</p>
+            <span className="desktop-eyebrow">新用户按顺序完成</span>
+            <h3>先把你的 AI 和已有记忆接进来</h3>
+            <p>第一次按 1 → 2 → 3 完成设置；以后主要使用第 4 步继续投喂新资料。</p>
           </div>
-          <button className="button secondary" onClick={() => onNavigate("capture_center")}>立即开始</button>
+          <button className="button" onClick={() => onNavigate("assistant_hub")}>开始连接 AI</button>
         </div>
         <div className="daily-flow-grid">
           {DAILY_FLOW.map((item) => (
