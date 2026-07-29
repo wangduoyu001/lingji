@@ -6,9 +6,9 @@
 
 The fixed artifact and installed Runtime were verified, but the required local
 Python full suite failed. Several mandatory UI, Codex-client, import, review and
-lifecycle observations were also not completed because the Windows UI automation
-interface could not operate the installer or Desktop window, and no owner visual
-observation was provided.
+lifecycle observations were also not completed. A later retry recovered
+read-only accessibility inspection of the Desktop window, but did not establish
+reliable UI input; no owner visual observation was provided.
 
 ## 2. Product and Artifact Identity
 
@@ -24,7 +24,7 @@ observation was provided.
 | ID | Name | Prerequisite | Method | Expected | Actual | Evidence | Conclusion |
 |---|---|---|---|---|---|---|---|
 | C1 | Old LingJi processes and ports | Existing installation | Stop only `lingji-control-center` and `lingji-core`; inspect 8766/8767 | No residual process/listener | No residual process or listener before install | Private process/port snapshot | PASS |
-| C2 | Old temporary acceptance directory | User-approved directory deletion | Shell and File Explorer control attempt | Old directory removed | Shell deletion was denied by host policy; Explorer automation returned a Windows interface error | Current directory inspection | NOT_TESTED |
+| C2 | Old temporary acceptance directory | User-approved directory deletion | Shell and File Explorer control attempt | Old directory removed | Direct deletion was denied again by host policy; prior Explorer control returned a Windows interface error | Current directory inspection | NOT_TESTED |
 
 No Production DataRoot, Vault, formal memory, database or user configuration was
 deleted.
@@ -74,8 +74,12 @@ The full-suite failure was
 
 ## 9. P0-A Start Center
 
-NOT_TESTED. The UI automation helper could not operate the Desktop window, and
-owner visual observation was not supplied.
+NOT_TESTED. On 2026-07-29, a fresh desktop-control retry read the installed
+window's accessibility tree and verified the acceptance DataRoot, fixed product
+commit, running Core status, and the visible Start Center navigation labels.
+The control wrapper then rejected element-index input immediately after a fresh
+state capture (reporting that a state capture was required), so this did not
+prove navigation or button behavior. Owner visual observation was not supplied.
 
 ## 10. First-Time User Experience
 
