@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from src.assistant_hub import AiAssistantDiscoveryService
+
+
+class AiAssistantDiscoveryTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.root = Path(self.temp_dir.name)
+        self.home = self.root / "home"
+        self.local_app_data = self.root / "local"
+        self.home.mkdir(parents=True)
+        self.local_app_data.mkdir(parents=True)
+
+    def test_scan_reports_truthful_support_without_reading_content(self) -> None:
+        codex = self.home / ".codex" / "sessions"
+        codex.mkdir(parents=True)
+        (codex / "session.jsonl").write_text("SECRET_CODEX_CONTENT", encoding="utf-8")
+
+        claude_projects = self.home / ".claude" / "projects" / "project-a"
+        claude_projects.mkdir(parents=True)
+        (self.home / ".claude" / "CLAUDE.md").write_text("SECRET_CLAUDE_MEMORY", encoding="utf-8")
+        (claude_projects / "session.jsonl").write_text("SECRET_CLAUDE_CONTENT", encoding="utf-8")
+
+        workbuddy = self.local_app_data / "Programs" / "WorkBuddy"
+        workbuddy.mkdir(parents=True)
+
+        payload = AiAssistantDiscoveryService(
+            home=self.home,
+            env={"LOCALAPPDATA": str(self.local_app_data)},
+            platform_name="windows",
+            workspace="acceptance",
+        ).scan()
+
+        self.assertEqual(payload["workspace"], "acceptance")
+        self.assertTrue(payload["safety"]["read_only"])
+        self.assertFalse(payload["safety"]["content_read"])
+        self.assertFalse(payload["safety"]["automatic_core_memory_write"])
+        self.assertTrue(payload["safety"]["review_required_for_permanent_memory"])
+
+        assistants = {item["id"]: item for item in payload["assistants"]}
+        self.assertEqual(set(assistants), {"chatgpt", "codex", "claude_code", "workbuddy"})
+
+        self.assertEqual(assistants["chatgpt"]["detection_state"], "manual_export")
+        self.assertEqual(assistants["chatgpt"]["import_state"], "manual_export")
+
+        self.assertEqual(assistants["codex"]["detection_state"], "detected")
+        self.assertEqual(assistants["codex"]["import_state"], "available")
+        self.assertEqual(assistants["codex"]["candidate_count"], 1)
+        self.assertIn("~/.codex", assistants["codex"]["discovered_paths"])
+
+        self.assertEqual(assistants["claude_code"]["detection_state"], "detected")
+        self.assertEqual(assistants["claude_code"]["import_state"], "planned")
+        self.assertTrue(assistants["claude_code"]["capabilities"]["user_memory_detected"])
+        self.assertEqual(assistants["claude_code"]["candidate_count"], 1)
+
+        self.assertEqual(assistants["workbuddy"]["detection_state"], "detected")
+        self.assertEqual(assistants["workbuddy"]["import_state"], "planned")
+        self.assertFalse(assistants["workbuddy"]["capabilities"]["stable_export_location_known"])
+
+        encoded = json.dumps(payload, ensure_ascii=False)
+        self.assertNotIn(str(self.root), encoded)
+        self.assertNotIn("SECRET_CODEX_CONTENT", encoded)
+        self.assertNotIn("SECRET_CLAUDE_MEMORY", encoded)
+        self.assertNotIn("SECRET_CLAUDE_CONTENT", encoded)
+
+    def test_scan_handles_missing_tools_without_claiming_connection(self) -> None:
+        payload = AiAssistantDiscoveryService(
+            home=self.home,
+            env={"LOCALAPPDATA": str(self.local_app_data)},
+            platform_name="windows",
+            workspace="production",
+        ).scan()
+        assistants = {item["id"]: item for item in payload["assistants"]}
+
+        self.assertEqual(assistants["codex"]["detection_state"], "not_found")
+        self.assertEqual(assistants["claude_code"]["detection_state"], "not_found")
+        self.assertEqual(assistants["workbuddy"]["detection_state"], "not_found")
+        for assistant_id in ("codex", "claude_code", "workbuddy"):
+            self.assertNotEqual(assistants[assistant_id]["connection_state"], "connected")
+
+    def test_codex_home_override_is_supported_and_redacted(self) -> None:
+        custom = self.root / "custom-codex"
+        custom.mkdir()
+        (custom / "report.json").write_text("{}", encoding="utf-8")
+
+        payload = AiAssistantDiscoveryService(
+            home=self.home,
+            env={"CODEX_HOME": str(custom), "LOCALAPPDATA": str(self.local_app_data)},
+            platform_name="windows",
+        ).scan()
+        codex = next(item for item in payload["assistants"] if item["id"] == "codex")
+
+        self.assertEqual(codex["candidate_count"], 1)
+        self.assertEqual(codex["discovered_paths"], ["<local>/custom-codex"])
+        self.assertNotIn(str(self.root), json.dumps(codex))
+
+
+if __name__ == "__main__":
+    unittest.main()
