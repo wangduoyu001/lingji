@@ -16,12 +16,10 @@ const [
   rustMain,
   bootstrap,
   manager,
-  zeroShell,
   connection,
   runtimeTypes,
   shell,
   boundary,
-  acceptancePage,
   releaseHook,
   hardwareSystem,
   hardwareRunner,
@@ -35,12 +33,10 @@ const [
   read("../src-tauri/src/main.rs"),
   read("../src-tauri/src/runtime_bootstrap.rs"),
   read("../src-tauri/src/runtime_manager.rs"),
-  read("../src-tauri/src/windowless_acceptance.rs"),
   read("../src/hooks/useLingJiConnection.ts"),
   read("../src/runtimeTypes.ts"),
   read("../src/components/DesktopShell.tsx"),
   read("../src/components/RuntimeBoundary.tsx"),
-  read("../src/pages/AcceptancePage.tsx"),
   read("../src/hooks/useReleaseMetadata.ts"),
   read("../../../src/hardware/system_detectors.py"),
   read("../../../src/hardware/runner.py"),
@@ -82,12 +78,13 @@ assert.equal(hooks.includes("Obsidian"), false, "Installer hooks must not touch 
 assert.match(cargo, /serde_json = "1"/);
 
 for (const token of [
-  "mod runtime_bootstrap", "mod runtime_manager", "mod windowless_acceptance",
+  "mod runtime_bootstrap", "mod runtime_manager",
   ".manage(RuntimeManager::default())", "runtime_bootstrap_status", "runtime_configure",
   "guarded_runtime_status", "guarded_runtime_ensure", "guarded_runtime_stop",
-  "guarded_runtime_restart", "run_windowless_acceptance", "quarantine_inherited_environment",
-  "require_configured",
+  "guarded_runtime_restart", "quarantine_inherited_environment", "require_configured",
 ]) assert.ok(rustMain.includes(token), `Rust app is missing ${token}`);
+assert.equal(rustMain.includes("run_windowless_acceptance"), false, "Desktop must not expose the removed zero-shell gate");
+assert.equal(rustMain.includes("mod windowless_acceptance"), false, "Desktop must not compile the removed zero-shell module");
 
 for (const token of [
   "desktop-bootstrap.json", "BOOTSTRAP_SCHEMA_VERSION: u32 = 2", "base_data_root",
@@ -114,21 +111,11 @@ for (const forbidden of ["Get-CimInstance", "Get-PhysicalDisk", 'runner.command(
   assert.equal(hardwareSystem.includes(forbidden), false, `Hardware detection must not invoke ${forbidden}`);
 }
 for (const token of ["winreg.OpenKey", "ProcessorNameString", "model_source", "return []"]) {
-  assert.ok(hardwareSystem.includes(token), `Shell-free hardware detection is missing ${token}`);
+  assert.ok(hardwareSystem.includes(token), `Windowless hardware detection is missing ${token}`);
 }
 for (const token of ["CREATE_NO_WINDOW", "STARTF_USESHOWWINDOW", "SW_HIDE"]) {
   assert.ok(hardwareRunner.includes(token), `Windows diagnostic runner is missing ${token}`);
 }
-
-for (const token of [
-  "CreateToolhelp32Snapshot", "Process32FirstW", "Process32NextW",
-  '"powershell.exe"', '"pwsh.exe"', '"cmd.exe"', '"conhost.exe"',
-  "OBSERVATION_SECONDS: u64 = 60", "manager.restart(app)", "authenticated_before",
-  "authenticated_after", "forbidden_descendants", "external_shell_processes",
-  "reports", "desktop-acceptance", "detects_nested_descendants_without_cycles",
-]) assert.ok(zeroShell.includes(token), `Zero-shell acceptance is missing ${token}`);
-for (const forbidden of ["Command::new", "powershell -", "pwsh -", "wmic", "WMI"])
-  assert.equal(zeroShell.includes(forbidden), false, `Zero-shell acceptance must not invoke ${forbidden}`);
 
 for (const command of [
   "runtime_bootstrap_status", "runtime_configure", "guarded_runtime_ensure",
@@ -152,14 +139,6 @@ assert.match(boundary, /保存配置并启动核心/);
 assert.match(boundary, /恢复运行/);
 assert.match(boundary, /AUTO RECOVERY/);
 assert.equal(boundary.includes(">启动核心</button>"), false, "Routine Sidecar startup must remain automatic");
-
-assert.match(acceptancePage, /run_windowless_acceptance/);
-assert.match(acceptancePage, /WINDOWLESS_ACCEPTANCE_TIMEOUT_MS/);
-assert.match(acceptancePage, /超过 4 分钟/);
-assert.match(acceptancePage, /桌面零 Shell 验收/);
-assert.match(acceptancePage, /不调用 PowerShell、CMD、WMI 或批处理/);
-assert.match(acceptancePage, /外部 Shell/);
-assert.match(acceptancePage, /真实 Windows 安装版/);
 
 assert.match(releaseHook, /runtime_data_root/);
 assert.match(releaseHook, /system_health/);
