@@ -95,7 +95,35 @@ The report branch is created from current `master` governance so it contains the
 
 ## Validation
 
-Required commands:
+Validation PR:
+
+```text
+PR #64
+Head: 013ac29f147ac0ef497c05194a9b996c84db7ee0
+Merge: 5ebf4a7554386ca499539824cccc5ec42365a857
+```
+
+Exact-head GitHub checks:
+
+```text
+local-execution-handoff #11: SUCCESS
+acceptance-doc-sync #21: SUCCESS
+tests #1102: SUCCESS
+```
+
+The full `tests` workflow passed:
+
+- Python 3.11 unit suite;
+- Python 3.12 unit suite;
+- Windows Python suite;
+- Desktop Smoke and production build;
+- MCP Smoke;
+- Obsidian Plugin Smoke;
+- Browser Capture Smoke.
+
+The dedicated handoff workflow successfully parsed the current ACTIVE task and PENDING result receipt, then ran `tests/test_local_execution_handoff.py`.
+
+Required local commands remain:
 
 ```powershell
 python scripts/check_local_execution_handoff.py --ref-name master
@@ -103,20 +131,14 @@ python -m pytest -q tests/test_local_execution_handoff.py
 python scripts/check_acceptance_sync.py
 ```
 
-Required GitHub workflows:
-
-```text
-local-execution-handoff
-acceptance-doc-sync
-tests
-```
-
 ## Conclusion
 
 ```text
-TASK MAILBOX: IMPLEMENTED
-RESULT RECEIPT: IMPLEMENTED
-REMOTE RE-READ GATE: IMPLEMENTED
-CLEANUP BEFORE/AFTER GATE: IMPLEMENTED
+TASK MAILBOX: IMPLEMENTED AND VALIDATED
+RESULT RECEIPT: IMPLEMENTED AND VALIDATED
+REMOTE RE-READ GATE: IMPLEMENTED AND VALIDATED
+CLEANUP BEFORE/AFTER GATE: IMPLEMENTED AND VALIDATED
+ACCEPTANCE BRANCH COMPLETION GATE: IMPLEMENTED AND VALIDATED
 OWNER GIT RESPONSIBILITY: NONE
+PR #64: MERGED
 ```
