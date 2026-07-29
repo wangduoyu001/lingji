@@ -2,54 +2,57 @@
 
 ## Scope
 
-This report is the current authority for PR #53 and covers:
+This report is the authority for the PR #53 product-code and automated-validation boundary. The detailed owner-machine result and evidence audit are maintained in:
+
+`docs/TEST_REPORTS/PR53_WINDOWS_OWNER_ACCEPTANCE_ad4bc02e.md`
+
+PR #53 remains Draft, open and unmerged.
+
+## Product revision identity
 
 ```text
-Windows Desktop and Sidecar console-window suppression
-LingJi hardware detection PowerShell regression
-owner-confirmed non-system-drive Runtime storage
-production / acceptance workspace isolation
-capability-level diagnostics
-low-context validation
-owner-machine installed UI acceptance
+Product commit: ad4bc02ee2ea996492efe136c71fda901a8eebd3
+Artifact: lingji-windows-0.1.0-ad4bc02e
+Artifact ID: 8710133143
+Artifact ZIP SHA256: 558db826c79260b589a392c9dcf25c10655154243323c8873b4b985b45726667
+Installer SHA256: f51884dc37c1aac428a36aab03a111fcfe2b685111d7dab0baa65baec2bf9658
 ```
 
-PR #53 remains Draft, open and unmerged until the installed Windows build is accepted by the owner.
+The report commit after `ad4bc02e` changes Markdown only and does not change the validated installer.
 
-## Owner decision: zero-Shell gate removed
+## LingJi PowerShell defect
 
-On 2026-07-29 the owner removed the in-application `桌面零 Shell 验收` requirement.
+The rejected earlier build showed LingJi launching:
 
-The removed feature attempted to:
+```text
+lingji-control-center.exe
+-> lingji-core.exe
+-> powershell.exe
+-> conhost.exe
+```
 
-- classify `powershell.exe`, `pwsh.exe`, `cmd.exe` and `conhost.exe` by process ancestry;
-- observe the process tree for two 60-second phases;
-- restart Core inside the observation window;
-- block acceptance when the generated report did not pass.
-
-That mechanism was not required for the product and itself became an unusable UI blocker. It has therefore been deleted from the Desktop UI, Tauri command registry, Rust module and smoke contracts.
-
-The removal does **not** revert the real PowerShell defect fix. LingJi had launched this command during routine hardware detection:
+Command:
 
 ```text
 Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name
 ```
 
-That behavior belonged to LingJi and was a product defect. CPU model detection now reads Windows `ProcessorNameString` through `winreg`, physical-disk PowerShell/WMI probing remains removed, and permitted diagnostic executables use hidden/no-window flags on Windows.
+The fixed product commit retains these remediations:
 
-## Current Windows window contracts
+- CPU model detection reads Windows registry `ProcessorNameString` through Python `winreg`;
+- physical-disk PowerShell/WMI probing is removed;
+- permitted diagnostic executables use hidden/no-window Windows flags;
+- Desktop and packaged Sidecar use the Windows GUI subsystem;
+- Rust starts the packaged Core with `CREATE_NO_WINDOW`;
+- regression tests reject the removed hardware PowerShell probes.
 
-- Release Tauri builds use the Windows GUI subsystem.
-- The packaged Python Sidecar uses PyInstaller `--windowed`.
-- Rust starts `lingji-core.exe` directly with `CREATE_NO_WINDOW`.
-- Static CPU and disk detection does not launch PowerShell, pwsh or CMD.
-- Permitted diagnostic executables such as `nvidia-smi`, `ffmpeg`, `ffprobe` and `nvcc` use `CREATE_NO_WINDOW`, `STARTF_USESHOWWINDOW` and `SW_HIDE`.
-- Release packaging reads Desktop and Sidecar PE headers and rejects a non-GUI binary.
-- Forced Sidecar termination may use hidden `taskkill` only as the final owned-process fallback.
+## Zero-Shell gate removal
 
-The product no longer claims that every Shell process is forbidden. The actual product requirement is narrower and useful: routine LingJi startup, hardware inspection and managed runtime lifecycle must not open visible console windows or invoke unnecessary PowerShell probes.
+By owner decision, the separate in-application zero-Shell gate was deleted. There is no zero-Shell button, process blacklist, two-phase observer, Tauri command, Rust module or zero-Shell merge requirement.
 
-## Runtime data-root contract
+The actual product requirement is narrower: normal LingJi startup, hardware inspection and managed Runtime lifecycle must not open visible console windows or invoke unnecessary PowerShell probes.
+
+## Runtime and storage boundary
 
 ```text
 %LOCALAPPDATA%\LingJi\desktop-bootstrap.json
@@ -66,95 +69,88 @@ Runtime databases, vectors, raw data, logs, cache, token files, lifecycle state 
 
 Installed Desktop startup requires bootstrap schema `2` with `owner_confirmed=true`. Inherited `LINGJI_OWNER_DATA_ROOT` and `LINGJI_WORKSPACE` values are quarantined and cannot satisfy first-run configuration.
 
-## Capability diagnostics
-
-Copied diagnostics distinguish:
+## Automated validation
 
 ```text
-Desktop and Runtime lifecycle
-bootstrap source and ignored inherited environment
-active workspace and effective Runtime data root
-C-drive write detection
-system health errors and warnings
-memory state, count and revision
-vector state, collection, count, dimension and rebuild requirement
-embedding configured and active model
-pending, running and failed task counts
-scheduler state
-storage free bytes
+tests #933: SUCCESS
+P0 Windows Gate #183: SUCCESS
+Windows Desktop Release Baseline #72: SUCCESS
 ```
 
-A healthy Runtime process is not treated as proof that every optional capability is healthy.
+Automated validation covered repository tests, Desktop smoke/build, Rust check/tests, packaged Runtime health/managed-stop, Windows GUI PE checks, NSIS packaging, metadata and checksums.
 
-## Code changes after owner-machine findings
+## Owner-machine result
 
 ```text
-8b4af260  remove CPU and physical-disk PowerShell probes
-020fbbfb  hide permitted Windows diagnostic subprocesses
-7da1796a  add hardware regression tests
-f663de5c  replace obsolete PowerShell CPU expectation
-34f6a2d4  remove zero-Shell acceptance UI
-4bec5460  remove zero-Shell Tauri command registration
-05a70939  remove zero-Shell smoke contract
-b93e1d78  delete zero-Shell Rust module
-37335ae9  rename regression coverage around windowless hardware behavior
+BLOCKED
+MERGE ALLOWED: NO
 ```
 
-The prior artifact `lingji-windows-0.1.0-f663de5c` is obsolete because it still contains the removed zero-Shell UI and command. A new artifact must be built from the final PR head before owner acceptance.
-
-## Automated coverage required at final head
-
-- Python 3.11 and 3.12 repository tests;
-- Windows Python tests;
-- Desktop smoke and production frontend build;
-- Tauri Rust check/tests;
-- packaged Python Runtime contract;
-- authenticated `127.0.0.1:8766` health and managed stop;
-- Windows GUI PE-subsystem verification;
-- NSIS build, metadata and checksum verification;
-- hardware regression proving CPU/disk detection does not invoke PowerShell probes;
-- hidden-window flags for permitted diagnostic subprocesses;
-- smoke assertion proving the removed zero-Shell command and module are absent.
-
-Automated validation is pending for the new final head.
-
-## Remaining owner-machine acceptance
-
-After a new artifact is produced:
-
-1. uninstall the obsolete PR #53 build;
-2. install the new exact-head artifact;
-3. confirm first-run non-C DataRoot selection and acceptance workspace isolation;
-4. confirm Runtime becomes connected, healthy and managed;
-5. inspect normal startup, diagnostics loading and managed Core restart for visible PowerShell, CMD or console flashes;
-6. traverse every visible page and control against real behavior;
-7. restart the application and Windows;
-8. verify same-version reinstall and uninstall data preservation;
-9. keep the installed UI open for owner confirmation.
-
-There is no longer a zero-Shell button, process-name blacklist, two-minute process observation or zero-Shell report requirement.
-
-## Safety boundaries
+Original evidence package:
 
 ```text
-Production Vault access: no
-Production SQLite/Qdrant mutation: no
-Legacy LocalAppData deletion or silent migration: no
-Automatic model download: no
-New runtime service: no
-New UI framework: no
-Test deletion or assertion reduction: no
-Owner-machine UI acceptance bypass: no
+PR53_WINDOWS_ACCEPTANCE_EVIDENCE_ad4bc02e_20260729-114932.zip
+SHA256: 2FC937DECC5B382B4D64B361EC8CEAB563EC2C8E95C161A8045D54DDE6E153EA
+Entries: 48
 ```
+
+The supplied ZIP was independently audited and its calculated SHA256 matches the owner-machine record.
+
+Supported by the audited package:
+
+- exact artifact identity and package metadata;
+- installation;
+- first-run `DATA ROOT REQUIRED` boundary and no pre-confirmation Core/8766 listener;
+- managed Runtime and isolated acceptance DataRoot;
+- CPU source `windows_registry` and no physical-disk PowerShell probe;
+- 706 parsed process-start events with zero LingJi ancestor-chain Shell events;
+- no recorded `Get-CimInstance Win32_Processor` or `Get-PhysicalDisk` command;
+- read-only acceptance with `error_count=0` and unchanged inputs;
+- application restart;
+- same-version reinstall;
+- uninstall marker preservation with matching SHA256.
+
+Evidence limitations:
+
+- the visible-page/control matrix was incomplete;
+- the visible DataRoot configuration path was not fully exercised;
+- three UI-driven Core restart cycles were not completed;
+- a real Windows reboot was not performed;
+- production mutation remains `UNKNOWN`;
+- 21 screenshot filenames contain only 8 unique PNG payloads;
+- Core-restart screenshots are byte-identical;
+- Windows-reboot screenshots are byte-identical to a non-reboot UI capture;
+- several overview, compute, diagnostics, read-only and app-restart screenshot names are also byte-identical.
+
+The duplicate screenshots do not establish deliberate fabrication. They are consistent with the recorded Tauri WebView automation failure, but they cannot prove the named stages.
+
+The raw ZIP contains local machine identity, absolute paths, full-desktop screenshots and copied acceptance-Vault files. It should not be attached publicly without redaction. No API key, GitHub token or LingJi control-token value was found in the audited text files.
+
+A public-safe summary derivative was generated outside GitHub:
+
+```text
+PR53_PUBLIC_EVIDENCE_SUMMARY_ad4bc02e.zip
+SHA256: 8E88465B60244E0A3ED752AE8D3D4A6EAD7F3A9C1E6B07EC35A9F08033EBA263
+Bytes: 9240
+```
+
+The derivative is intentionally not committed as a binary repository file.
+
+## Remaining acceptance
+
+1. complete the visible-page and visible-control matrix;
+2. perform three UI-driven Core restart cycles with PID and managed/authenticated recovery evidence;
+3. perform a real Windows reboot, system-compute check and one additional Core restart;
+4. classify production mutation as `NONE` only when supported by evidence.
 
 ## Status
 
 ```text
 LINGJI_POWERSHELL_ROOT_CAUSE_FIXED
-WINDOWLESS_DESKTOP_AND_SIDECAR_PRESERVED
-ZERO_SHELL_PRODUCT_GATE_REMOVED_BY_OWNER_DECISION
-OBSOLETE_F663DE5C_ARTIFACT_REJECTED
-NEW_EXACT_HEAD_AUTOMATED_VALIDATION_PENDING
-NEW_INSTALLER_AND_OWNER_UI_ACCEPTANCE_REQUIRED
+ZERO_SHELL_PRODUCT_GATE_REMOVED
+PRODUCT_COMMIT_AD4BC02E_AUTOMATED_VALIDATION_PASSED
+OWNER_EVIDENCE_PACKAGE_INDEPENDENTLY_AUDITED
+OWNER_MACHINE_COMPLETED_PHASES_DID_NOT_REPRODUCE_POWERSHELL
+OWNER_MACHINE_ACCEPTANCE_BLOCKED
 PR_DRAFT_AND_UNMERGED
 ```
