@@ -1,6 +1,6 @@
 # CODE_MAP.md — LingJi 代码地图
 
-> Updated: 2026-07-26  
+> Updated: 2026-07-29  
 > Scope: code entry points, ownership and focused validation only  
 > Architecture: `docs/ARCHITECTURE.md`  
 > Current status: `docs/PROJECT_STATUS.md`  
@@ -126,11 +126,14 @@ cd desktop/lingji-control
 npm run test:inspector
 ```
 
-## 5. 来源、Capture 与 Extraction
+## 5. 来源、Capture、AI 助手发现与 Extraction
 
 ```text
 src/sources/read_model.py::SourceReadModel
 src/sources/service.py::SourceQueryService
+
+src/assistant_hub/discovery.py::AiAssistantDiscoveryService
+= Codex / Claude Code / WorkBuddy 安全只读发现与能力分级
 
 src/capture/models.py
 src/capture/policy.py
@@ -152,7 +155,10 @@ src/extraction/structured_sink.py
 正式链路：
 
 ```text
-Capture Input
+Assistant scan
+-> authenticated 8766 metadata-only discovery
+
+Capture Input / Assistant Import
 -> CaptureService
 -> ExtractionPipeline.enqueue
 -> SQLite extraction_jobs
@@ -161,20 +167,29 @@ Capture Input
 -> VaultExtractionSink / StructuredReadModelSink
 -> MemoryIndexCoordinator
 -> MemoryGateway
+-> Human Memory Review
 ```
+
+AI 助手发现只检查固定候选路径和文件元数据，不读取对话正文，不跟随符号链接，不返回真实绝对路径。ChatGPT Export 与 Codex Report 继续复用正式 Capture 链路；Claude Code 与 WorkBuddy 未完成正式 Adapter 时必须显示为 `planned`，不得冒充已连接。
 
 重点测试：
 
 ```text
+tests/test_assistant_hub_discovery.py
+tests/test_assistant_hub_api.py
 tests/test_extraction_idempotency.py
 tests/test_mcp_extraction_submission.py
+desktop/lingji-control/scripts/assistant-hub-smoke.mjs
 desktop/lingji-control/scripts/capture-center-smoke.mjs
 ```
 
 局部验收：
 
 ```powershell
+python -m pytest -q tests/test_assistant_hub_discovery.py tests/test_assistant_hub_api.py
 .\scripts\validate.ps1 -Mode focused -Area capture
+cd desktop/lingji-control
+node scripts/assistant-hub-smoke.mjs
 ```
 
 ## 6. 记忆审核与 Auto Review
@@ -220,6 +235,7 @@ src/control/service.py::LocalControlService
 src/control/governed_service.py::GovernedLocalControlService
 src/control/settings_api.py::register_settings_governance_routes
 src/control/capture_api.py::register_capture_routes
+= Capture API + authenticated Assistant Hub status/scan routes
 src/control/auto_review_api.py::register_auto_review_routes
 src/control/memory_inspector.py::build_memory_inspector
 
@@ -262,6 +278,16 @@ desktop/lingji-control/src/navigation.ts
 desktop/lingji-control/src/components/DesktopShell.tsx
 desktop/lingji-control/src/components/RuntimeBoundary.tsx
 desktop/lingji-control/src/components/CurrentWorkPanel.tsx
+```
+
+新手引导与 AI 记忆入口：
+
+```text
+desktop/lingji-control/src/pages/AssistantHubPage.tsx
+desktop/lingji-control/src/pages/AssistantHubPage.css
+desktop/lingji-control/src/components/PageGuide.tsx
+desktop/lingji-control/src/components/UsageGuideDrawer.tsx
+desktop/lingji-control/src/pages/OverviewPage.tsx
 ```
 
 Observation-first 页面：
@@ -355,6 +381,7 @@ scripts/validate_clean_install.py
 
 desktop/lingji-control/package.json
 desktop/lingji-control/scripts/run-smoke-suite.mjs
+desktop/lingji-control/scripts/assistant-hub-smoke.mjs
 desktop/lingji-control/scripts/runtime-sidecar-smoke.mjs
 desktop/lingji-control/scripts/windows-release-smoke.mjs
 
