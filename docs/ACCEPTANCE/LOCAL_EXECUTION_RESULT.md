@@ -2,7 +2,7 @@
 
 > 本文件是本机 Codex 向 ChatGPT / 主开发代理提交结果的唯一固定回执。
 >
-> Codex 必须在任务单指定的报告分支更新本文件。聊天中的“完成了”不构成结果，只有远程报告分支中的本文件、最终报告、报告 Commit 和 PR 评论能够被重新读取，任务才算提交成功。
+> Codex 必须在任务单指定的报告分支更新本文件。聊天中的“完成了”不构成结果，只有远程报告分支中的本文件、最终报告、报告内容 Commit 和 PR 评论能够被重新读取，任务才算提交成功。
 >
 > 用户不负责填写、上传、推送、核对或解释本文件。
 
@@ -59,7 +59,8 @@ BLOCKED
 当 `status: COMPLETED` 时必须同时满足：
 
 - `verdict` 为 PASS、FAIL 或 BLOCKED；
-- `report_commit` 为远程可读取的 40 位 Git SHA；
+- `report_commit` 为第一次成功推送且远程可读取的“报告正文 + 公开证据”Commit；
+- 最终回执 Commit 可以晚于 `report_commit`，因为它记录远程复读和结束清理结果；
 - `cleanup_before: PASS`；
 - `cleanup_after: PASS`；
 - 所有 `remote_*_verified` 为 `true`；
@@ -67,7 +68,7 @@ BLOCKED
 - `local_temp_root_absent: true`；
 - `owner_observation` 为 PASS、FAIL 或 NOT_REQUIRED；
 - `started_at` 和 `finished_at` 为带时区的 ISO 8601 时间；
-- 报告分支 HEAD 必须等于 `report_commit`；
+- 报告分支最终 HEAD 必须包含 `report_commit`，并包含当前回执的最终版本；
 - 远程报告、公开证据和本回执必须能够通过 GitHub API 重新读取。
 
 任何远程读取失败时：
@@ -104,7 +105,8 @@ Production 是否被污染：PENDING
 公开摘要：PENDING
 公开哈希：PENDING
 PR 评论 URL：PENDING
-远程分支 HEAD：PENDING
+远程分支最终 HEAD：PENDING
+报告内容 Commit：PENDING
 私有证据归档 SHA256：PENDING / NOT_RETAINED
 ```
 
