@@ -46,10 +46,10 @@ for (const page of ["overview", "activity", "attention", "diagnostics"]) {
 
 const primaryBlock = navigation.match(/PRIMARY_NAVIGATION:[\s\S]*?\];/)?.[0] ?? "";
 assert.equal((primaryBlock.match(/id:/g) ?? []).length, 4, "Primary navigation must contain exactly four entries");
-for (const label of ["运行状态", "活动记录", "需要我处理", "高级诊断"]) {
+for (const label of ["开始使用", "活动记录", "需要我处理", "高级诊断"]) {
   assert.ok(primaryBlock.includes(label), `Primary navigation is missing ${label}`);
 }
-for (const forbiddenId of ["memory_review", "auto_review", "vector_center", "system_compute", "settings", "logs"]) {
+for (const forbiddenId of ["assistant_hub", "memory_review", "auto_review", "vector_center", "system_compute", "settings", "logs"]) {
   assert.equal(primaryBlock.includes(`id: "${forbiddenId}"`), false, `${forbiddenId} must not remain a primary navigation entry`);
 }
 
@@ -77,7 +77,7 @@ assert.match(connection, /autoRecoveryActive/);
 assert.match(connection, /后台自动恢复已暂停/);
 
 assert.match(overview, /状态每 10 秒自动更新/);
-assert.match(overview, /后台自动运行/);
+assert.match(overview, /等待你连接或投喂资料/);
 assert.match(overview, /查看待办/);
 assert.equal(overview.includes("刷新本机状态"), false, "Overview must not require manual refresh");
 assert.equal(overview.includes("健康检查"), false, "Detailed health checks belong in diagnostics");
