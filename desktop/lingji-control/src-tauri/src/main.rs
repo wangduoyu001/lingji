@@ -2,14 +2,12 @@
 
 mod runtime_bootstrap;
 mod runtime_manager;
-mod windowless_acceptance;
 
 use runtime_bootstrap::RuntimeBootstrapStatus;
 use runtime_manager::{owner_data_root, RuntimeManager, RuntimeStatus};
 use serde::Serialize;
 use std::{env, fs, path::PathBuf};
 use tauri::{AppHandle, Manager, State};
-use windowless_acceptance::WindowlessAcceptanceReport;
 
 #[derive(Serialize)]
 struct ControlCredentials {
@@ -133,18 +131,6 @@ async fn guarded_runtime_restart(
     run_runtime(move || manager.restart(&app)).await
 }
 
-#[tauri::command]
-async fn run_windowless_acceptance(
-    app: AppHandle,
-    manager: State<'_, RuntimeManager>,
-) -> Result<WindowlessAcceptanceReport, String> {
-    runtime_bootstrap::require_configured()?;
-    let manager = manager.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || windowless_acceptance::run(&app, &manager))
-        .await
-        .map_err(|error| format!("桌面零 Shell 验收任务失败：{error}"))?
-}
-
 fn main() {
     runtime_bootstrap::quarantine_inherited_environment();
     let _ = runtime_bootstrap::apply_saved_environment();
@@ -159,8 +145,7 @@ fn main() {
             guarded_runtime_status,
             guarded_runtime_ensure,
             guarded_runtime_stop,
-            guarded_runtime_restart,
-            run_windowless_acceptance
+            guarded_runtime_restart
         ])
         .build(tauri::generate_context!())
         .expect("error while building LingJi control center");
