@@ -51,6 +51,59 @@
 
 ---
 
+## 2026-07-30 · 本机任务信箱与结果回执硬门禁
+
+- 产品分支：`master`
+- 产品 Commit：`governance-only`
+- 影响模块：仓库治理、Codex 本机执行交接、报告提交、远程复读、本地垃圾清理、GitHub Actions
+- 风险等级：P1
+- 用户可感知变化：用户只需告诉 Codex 去看任务单，或告诉 ChatGPT Codex 已完成；不再复制长指令、解释 Git、上传报告或排查分支。
+- 数据或安全边界变化：不改变产品数据；明确禁止清理主人 DataRoot、Vault、正式记忆和用户 AI 配置，只清理本轮临时验收垃圾。
+
+### 新增或修改的自动验收
+
+- [ ] `python scripts/check_local_execution_handoff.py`：校验任务单、结果回执、身份一致性、开始/结束清理、远程确认和报告 Commit 字段。
+- [ ] `python -m pytest -q tests/test_local_execution_handoff.py`：覆盖 PENDING、COMPLETED、远程确认缺失、清理失败、身份不一致和阻塞提交。
+- [ ] `local-execution-handoff` Workflow：在 `master`、开发分支和 `acceptance/**` 报告分支执行；报告分支结果不是 `COMPLETED` 时失败。
+
+### 新增或修改的真机验收
+
+- [ ] Codex 只读取 `docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md` 中 `status: ACTIVE` 的任务，不从聊天或本机残留推断。
+- [ ] 每次开始前整体清理上一轮临时验收目录、Artifact、日志、截图、fixture、checkpoint、临时配置副本和 worktree，再释放 8766/8767。
+- [ ] 报告 push 后使用 `git ls-remote` 和 GitHub API 重新读取远程分支、Commit、报告、结果回执和 PR 评论。
+- [ ] 第一次远程确认后清理本轮本地垃圾，更新结果回执，再次 push 和远程复读。
+
+### 主人肉眼确认
+
+- [x] 用户只负责下达“去看任务单干活”或“Codex 已完成”，不负责 Git、上传、报告路径和清理操作。
+
+### 回归项
+
+- [ ] 禁止把本机生成报告误写成已经上传。
+- [ ] 禁止 `git push` 命令执行后未复读远程就宣布完成。
+- [ ] 禁止长期堆积旧验收目录、重复安装包、日志、截图、fixture、checkpoint、配置副本和 worktree。
+- [ ] 禁止清理主人正式数据或其他任务数据。
+
+### 清理与回滚
+
+- 临时数据前缀：由 `LOCAL_EXECUTION_TASK.md` 每个任务单独声明。
+- 覆盖安装或迁移方式：本次为治理变更，不涉及产品安装。
+- 临时备份删除条件：远程报告第一次确认后删除；只保留哈希。
+- 测试数据清理方式：本机任务结束时删除任务单指定临时根目录和带任务前缀的数据。
+
+### 不在范围
+
+- 不改变 LingJi 产品 Runtime、UI、数据库、记忆或连接器功能。
+- 不代替具体任务的真机验收标准。
+- 不要求用户学习 Git 或参与报告提交。
+
+### 最终报告
+
+- 规则权威：`docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md` 与 `docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md`
+- 自动门禁：`.github/workflows/local-execution-handoff.yml`
+
+---
+
 ## 2026-07-29 · PR #60 · P0-A 与统一 AI 记忆连接器重新真机验收
 
 - 产品分支：`feature/unified-ai-memory-connectors`
@@ -128,7 +181,7 @@
 
 ### 最终报告
 
-- 报告路径：`docs/TEST_REPORTS/PR60_OWNER_CODEX_FULL_ACCEPTANCE_1c514877.md`
+- 报告路径：`docs/TEST_REPORTS/PR60_OWNER_CODEX_FULL_REACCEPTANCE_1c514877.md`
 - 报告分支：`acceptance/pr60-owner-1c514877`
 - 产品 PR 必须保持 Draft 且不得合并，直到该报告为 PASS 并由主人确认。
 
