@@ -9,6 +9,7 @@ export const PRIMARY_NAVIGATION: NavigationItem[] = [
   { id: "overview", label: "运行状态", hint: "系统是否正常、现在正在做什么", group: "observe", icon: "home" },
   { id: "activity", label: "活动记录", hint: "当前任务、最近完成与失败记录", group: "observe", icon: "logs" },
   { id: "attention", label: "需要我处理", hint: "只显示必须由主人决定的事项", group: "observe", icon: "review" },
+  { id: "drama", label: "短剧编剧", hint: "导入、检索和调用短剧剧本记忆", group: "observe", icon: "project" },
   { id: "diagnostics", label: "高级诊断", hint: "模型、向量、存储、设置与日志", group: "observe", icon: "settings" },
 ];
 

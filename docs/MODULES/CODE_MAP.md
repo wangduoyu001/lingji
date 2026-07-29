@@ -1,6 +1,6 @@
 # CODE_MAP.md — LingJi 代码地图
 
-> Updated: 2026-07-26  
+> Updated: 2026-07-28  
 > Scope: code entry points, ownership and focused validation only  
 > Architecture: `docs/ARCHITECTURE.md`  
 > Current status: `docs/PROJECT_STATUS.md`  
@@ -105,7 +105,7 @@ src/retrieval/hybrid.py::HybridRetriever
 
 src/model_center/embedding.py::OllamaEmbeddingProvider
 src/model_center/inventory.py::LocalModelInventoryService
-src/gateway/memory.py::MemoryGateway
+src/gateway/memory_gateway.py::MemoryGateway
 src/gateway/bootstrap.py::build_memory_gateway
 src/gateway/memory_statistics.py::MemoryStatisticsService
 src/gateway/memory_inspector.py::MemoryInspectorFacade
@@ -221,6 +221,7 @@ src/control/governed_service.py::GovernedLocalControlService
 src/control/settings_api.py::register_settings_governance_routes
 src/control/capture_api.py::register_capture_routes
 src/control/auto_review_api.py::register_auto_review_routes
+src/control/drama_api.py::register_drama_routes
 src/control/memory_inspector.py::build_memory_inspector
 
 src/mcp_server.py
@@ -315,7 +316,73 @@ Tauri Desktop
 .\scripts\validate.ps1 -Mode release
 ```
 
-## 9. Obsidian
+## 9. Drama Intelligence
+
+正式领域插件：
+
+```text
+src/plugins/drama_intelligence/models.py
+= Drama / Episode / Scene / Character / Chunk 合同
+
+src/plugins/drama_intelligence/importer.py
+= txt / md / docx / pdf / srt / vtt / ass 导入与来源映射
+
+src/plugins/drama_intelligence/parser.py
+= 分集、场景、人物与稳定 chunk 解析
+
+src/plugins/drama_intelligence/repository.py::DramaRepository
+= Drama SQLite 结构化读模型、FTS5 与中文回退
+
+src/plugins/drama_intelligence/service.py::DramaService
+= 导入、workspace 路径、Qdrant、混合检索与引用
+
+src/plugins/drama_intelligence/batch.py::import_directory
+= 有界批量导入
+
+src/control/drama_api.py::register_drama_routes
+= 认证的 8766 Drama API
+```
+
+正式 Desktop：
+
+```text
+desktop/lingji-control/src/pages/DramaPage.tsx
+desktop/lingji-control/src/pages/DramaPage.css
+desktop/lingji-control/scripts/drama-memory-smoke.mjs
+```
+
+数据边界：
+
+```text
+<workspace>/raw/drama
+= 原始剧本
+
+<workspace>/derived/drama
+= 标准化文本、来源映射与结构化导出
+
+<workspace>/storage/index/drama_read_model.db
+= 可重建词法/结构化读模型
+
+lingji_drama_<workspace>
+= 可重建语义索引
+```
+
+Drama 不写入通用个人永久记忆，不修改通用 Memory Engine schema。
+
+重点测试：
+
+```text
+tests/test_drama_memory.py
+desktop/lingji-control/scripts/drama-memory-smoke.mjs
+```
+
+局部低上下文验收：
+
+```powershell
+.\scripts\validate.ps1 -Mode focused -Area drama
+```
+
+## 10. Obsidian
 
 正式实现：
 
@@ -342,7 +409,7 @@ second_brain/obsidian_cli.py
 .\scripts\validate.ps1 -Mode focused -Area obsidian
 ```
 
-## 10. 构建、测试与 CI 入口
+## 11. 构建、测试与 CI 入口
 
 ```text
 scripts/validate.ps1
@@ -366,9 +433,9 @@ desktop/lingji-control/scripts/windows-release-smoke.mjs
 使用规则：
 
 ```text
-开发中      -> focused
+开发中       -> focused
 合并前最终树 -> full，一次
-正式发布    -> release
+正式发布     -> release
 ```
 
 成功时只读取 `output/validation/.../summary.json` 或 `summary.md`；失败时再读取对应日志。具体历史通过结果只记录在 `docs/TEST_REPORTS/` 和 `docs/PROJECT_STATUS.md`。

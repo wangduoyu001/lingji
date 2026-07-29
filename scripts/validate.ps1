@@ -3,7 +3,7 @@ param(
     [ValidateSet("focused", "full", "release")]
     [string]$Mode = "focused",
 
-    [ValidateSet("retrieval", "capture", "control", "obsidian", "desktop", "sidecar", "docs", "validation")]
+    [ValidateSet("retrieval", "capture", "drama", "control", "obsidian", "desktop", "sidecar", "docs", "validation")]
     [string]$Area = "docs",
 
     [string]$PythonCommand = "python",
@@ -221,6 +221,14 @@ function Invoke-FocusedValidation {
         "capture" {
             Invoke-PythonFocused "capture or extraction or idempotency"
             Invoke-DesktopScript "desktop-capture" "test:capture"
+        }
+        "drama" {
+            Invoke-ValidationStep `
+                -Name "python-drama" `
+                -WorkingDirectory $repoRoot `
+                -Command $PythonCommand `
+                -Arguments @("-m", "pytest", "-q", "--tb=short", "tests/test_drama_memory.py")
+            Invoke-DesktopScript "desktop-drama" "test:drama"
         }
         "control" {
             Invoke-PythonFocused "control or settings_governance or runtime_truth"

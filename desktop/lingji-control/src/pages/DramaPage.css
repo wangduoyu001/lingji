@@ -1,0 +1,156 @@
+.drama-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.drama-two-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.drama-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.drama-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.drama-form input,
+.drama-form textarea,
+.drama-form select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.drama-form textarea {
+  min-height: 112px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.drama-path-row,
+.drama-filter-row {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.drama-path-row input,
+.drama-filter-row > label {
+  flex: 1;
+}
+
+.drama-divider {
+  height: 1px;
+  margin: 2px 0;
+  background: var(--border);
+}
+
+.drama-library {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.drama-library-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.drama-library-card:hover,
+.drama-library-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.drama-library-card span,
+.drama-library-card small,
+.drama-result-card header span,
+.drama-result-card header small,
+.drama-result-card footer,
+.drama-page small {
+  color: var(--text-muted);
+}
+
+.drama-results {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.drama-result-card {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.drama-result-card header,
+.drama-result-card footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.drama-result-card header div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.drama-result-card header span,
+.drama-result-card header small,
+.drama-result-card footer {
+  font-size: 12px;
+}
+
+.drama-result-card p {
+  max-height: 260px;
+  margin: 12px 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+.drama-page small {
+  display: block;
+  margin-top: 5px;
+}
+
+@media (max-width: 980px) {
+  .drama-two-column {
+    grid-template-columns: 1fr;
+  }
+
+  .drama-path-row,
+  .drama-filter-row,
+  .drama-result-card header,
+  .drama-result-card footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

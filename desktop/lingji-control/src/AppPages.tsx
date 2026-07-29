@@ -9,6 +9,7 @@ import CaptureCenterPage from "./pages/CaptureCenterPage";
 import CapturePage from "./pages/CapturePage";
 import CodexWorkspacePage from "./pages/CodexWorkspacePage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
+import DramaPage from "./pages/DramaPage";
 import JobsPage from "./pages/JobsPage";
 import LogsPage from "./pages/LogsPage";
 import MediaPage from "./pages/MediaPage";
@@ -42,6 +43,7 @@ export default function AppPages(props: AppPagesProps) {
     {page === "activity" && <ActivityPage api={api} active={connected} />}
     {page === "attention" && <AttentionPage api={api} active={connected} overview={overview} onNavigate={onNavigate} />}
     {page === "diagnostics" && <DiagnosticsPage onNavigate={onNavigate} />}
+    {page === "drama" && <DramaPage api={api} active={connected} />}
     {page === "brain_status" && <BrainStatusPage api={api} active={connected} />}
     {page === "memory_inspector" && <MemoryInspectorLoopPage api={api} active={connected} target={inspectorTarget} />}
     {page === "codex_workspace" && <CodexWorkspacePage api={api} active={connected} onOpenInspector={onOpenInspector} />}

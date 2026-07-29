@@ -2,6 +2,26 @@
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
 
+## 2026-07-28
+
+### Drama Memory V1（Draft PR #54）
+
+- 新增正式领域插件 `src/plugins/drama_intelligence/`，不修改通用 Memory Engine schema，不写入个人永久记忆。
+- 支持 `txt`、`md`、`docx`、`pdf`、`srt`、`vtt`、`ass` 剧本导入。
+- 原始剧本保存到 active workspace 的 `raw/drama`；标准化正文、来源映射和结构化导出保存到 `derived/drama`。
+- 新增可重建 `drama_read_model.db`，保存 Drama、Episode、Scene、Character、Chunk 与 FTS5 词法索引。
+- 新增文本行、PDF 页、DOCX 段落/表格行、字幕序号与时间码来源定位。
+- 增加稳定 Drama/episode/scene/chunk ID、SHA256 重复导入幂等和读模型 revision。
+- 复用统一 Embedding 与 Qdrant Provider，使用独立 `lingji_drama_<workspace>` Collection。
+- 检索支持 FTS5、中文长句 n-gram 回退、语义召回、metadata 过滤和 RRF。
+- Embedding 或 Qdrant 不可用时继续词法检索，并返回明确 `semantic_unavailable` warning。
+- 强制重建 Drama 时先删除该 Drama 的旧语义 points，防止残留幽灵桥段。
+- 新增认证的 8766 Drama API、单部导入、目录批量导入、剧本库和精准参考检索。
+- Tauri 新增 `短剧编剧` 工作台，显示 workspace、索引状态、来源定位、检索通道和语义降级。
+- Writer Agent 保持禁用，等待十部真实剧本与100题检索准确率验收。
+- 新增低上下文命令：`.\scripts\validate.ps1 -Mode focused -Area drama`。
+- PR #54 仍为 Draft，堆叠在未合并 PR #53 上；不得先于 PR #53 合并。
+
 ## 2026-07-26
 
 ### P2-11B Packaged Python runtime Sidecar manager
@@ -116,7 +136,6 @@
 - 建立核心、UI、媒体、MCP、测试依赖所有权。
 - 增加 `constraints/python-3.12-windows.txt` 和 `constraints/python-3.13-linux.txt`。
 - 新增 `scripts/validate_clean_install.py`，检查依赖归属、精确约束、敏感源、本机路径和前端锁文件。
-- 删除启动文件逐字源码比较测试，改为 AST、Settings、main guard 和端口所有权合同测试。
 - 增加 Windows 测试专用 Workspace 临时根 Fixture，同时保留生产 `C:\` 系统盘拒绝保护。
 - Qdrant 单元测试改为确定性的 in-memory 合同，不依赖生产 Qdrant Server。
 - Brain Status API 测试改为 FastAPI 应用级合同，不再通过真实端口和 `nvidia-smi` 超时碰运气。
