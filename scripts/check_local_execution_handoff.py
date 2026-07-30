@@ -13,6 +13,8 @@ TASK_PATH = ROOT / "docs" / "ACCEPTANCE" / "LOCAL_EXECUTION_TASK.md"
 RESULT_PATH = ROOT / "docs" / "ACCEPTANCE" / "LOCAL_EXECUTION_RESULT.md"
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 ISO_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$")
+TRIAL_MODE = "DAY0_THEN_REAL_DATA_TRIAL"
+STAGE_RESULTS = {"PASS", "FAIL", "BLOCKED", "NOT_RUN"}
 
 
 class HandoffError(ValueError):
@@ -70,10 +72,61 @@ def expect_equal(field: str, task: dict[str, object], result: dict[str, object])
         )
 
 
+def as_int(values: dict[str, object], field: str) -> int:
+    try:
+        return int(str(values[field]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HandoffError(f"{field} must be an integer") from exc
+
+
+def as_float(values: dict[str, object], field: str) -> float:
+    try:
+        return float(str(values[field]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HandoffError(f"{field} must be numeric") from exc
+
+
+def validate_trial_task(task: dict[str, object]) -> None:
+    required = {
+        "trial_protocol_path",
+        "day0_required",
+        "real_data_requires_day0_pass",
+        "real_data_authorization_required",
+        "minimum_quality_questions",
+        "minimum_owner_sample_questions",
+        "minimum_quality_score_percent",
+        "minimum_source_accuracy_percent",
+        "maximum_false_positive_percent",
+    }
+    require_fields("trial task", task, required)
+    for field in (
+        "day0_required",
+        "real_data_requires_day0_pass",
+        "real_data_authorization_required",
+    ):
+        if task[field] is not True:
+            raise HandoffError(f"trial task {field} must be true")
+
+    protocol = ROOT / str(task["trial_protocol_path"])
+    if not protocol.is_file():
+        raise HandoffError(f"missing trial protocol: {task['trial_protocol_path']}")
+    if as_int(task, "minimum_quality_questions") < 20:
+        raise HandoffError("minimum_quality_questions must be at least 20")
+    if as_int(task, "minimum_owner_sample_questions") < 10:
+        raise HandoffError("minimum_owner_sample_questions must be at least 10")
+    if as_float(task, "minimum_quality_score_percent") < 90:
+        raise HandoffError("minimum_quality_score_percent must be at least 90")
+    if as_float(task, "minimum_source_accuracy_percent") < 95:
+        raise HandoffError("minimum_source_accuracy_percent must be at least 95")
+    if as_float(task, "maximum_false_positive_percent") > 5:
+        raise HandoffError("maximum_false_positive_percent must be at most 5")
+
+
 def validate_task(task: dict[str, object]) -> None:
     required = {
         "task_id",
         "status",
+        "execution_mode",
         "repository",
         "product_pr",
         "product_branch",
@@ -109,6 +162,70 @@ def validate_task(task: dict[str, object]) -> None:
         raise HandoffError("task report_branch must start with acceptance/")
     if not str(task["report_path"]).startswith("docs/TEST_REPORTS/"):
         raise HandoffError("task report_path must be under docs/TEST_REPORTS/")
+    if task["execution_mode"] == TRIAL_MODE:
+        validate_trial_task(task)
+
+
+def validate_trial_result(task: dict[str, object], result: dict[str, object]) -> None:
+    required = {
+        "trial_protocol_path",
+        "day0_result",
+        "stage1_result",
+        "stage2_result",
+        "real_data_authorized",
+        "quality_questions_total",
+        "owner_sample_questions",
+        "quality_score_percent",
+        "source_accuracy_percent",
+        "false_positive_percent",
+        "codex_mcp_success_percent",
+        "duplicate_formal_content_count",
+        "production_pollution_count",
+        "owner_config_preserved",
+    }
+    require_fields("trial result", result, required)
+    expect_equal("trial_protocol_path", task, result)
+
+    for field in ("day0_result", "stage1_result", "stage2_result"):
+        if result[field] not in STAGE_RESULTS:
+            raise HandoffError(f"{field} has invalid result {result[field]!r}")
+
+    if result["day0_result"] != "PASS":
+        if result["stage1_result"] != "NOT_RUN" or result["stage2_result"] != "NOT_RUN":
+            raise HandoffError("Stage 1/2 must remain NOT_RUN until Day 0 passes")
+        if result["real_data_authorized"] is True:
+            raise HandoffError("real data cannot be authorized before Day 0 passes")
+
+    if result["status"] in {"PENDING", "RUNNING"}:
+        return
+
+    if result["verdict"] == "PASS":
+        if result["day0_result"] != "PASS" or result["stage1_result"] != "PASS":
+            raise HandoffError("PASS requires Day 0 and Stage 1 PASS")
+        if result["real_data_authorized"] is not True:
+            raise HandoffError("PASS requires explicit real-data authorization")
+        if as_int(result, "quality_questions_total") < as_int(task, "minimum_quality_questions"):
+            raise HandoffError("PASS requires enough quality questions")
+        if as_int(result, "owner_sample_questions") < as_int(task, "minimum_owner_sample_questions"):
+            raise HandoffError("PASS requires enough owner-sampled questions")
+        if as_float(result, "quality_score_percent") < as_float(task, "minimum_quality_score_percent"):
+            raise HandoffError("PASS quality_score_percent is below threshold")
+        if as_float(result, "source_accuracy_percent") < as_float(
+            task, "minimum_source_accuracy_percent"
+        ):
+            raise HandoffError("PASS source_accuracy_percent is below threshold")
+        if as_float(result, "false_positive_percent") > as_float(
+            task, "maximum_false_positive_percent"
+        ):
+            raise HandoffError("PASS false_positive_percent exceeds threshold")
+        if as_float(result, "codex_mcp_success_percent") < 95:
+            raise HandoffError("PASS requires codex_mcp_success_percent >= 95")
+        if as_int(result, "duplicate_formal_content_count") != 0:
+            raise HandoffError("PASS requires zero duplicate formal content")
+        if as_int(result, "production_pollution_count") != 0:
+            raise HandoffError("PASS requires zero Production pollution")
+        if result["owner_config_preserved"] != "PASS":
+            raise HandoffError("PASS requires owner_config_preserved PASS")
 
 
 def validate_result(task: dict[str, object], result: dict[str, object]) -> None:
@@ -116,6 +233,7 @@ def validate_result(task: dict[str, object], result: dict[str, object]) -> None:
         "task_id",
         "status",
         "verdict",
+        "execution_mode",
         "repository",
         "product_pr",
         "product_commit",
@@ -145,6 +263,7 @@ def validate_result(task: dict[str, object], result: dict[str, object]) -> None:
 
     for field in (
         "task_id",
+        "execution_mode",
         "repository",
         "product_pr",
         "product_commit",
@@ -156,15 +275,21 @@ def validate_result(task: dict[str, object], result: dict[str, object]) -> None:
         expect_equal(field, task, result)
 
     instruction_commit = result["task_instruction_commit"]
-    if not isinstance(instruction_commit, str) or not SHA40.fullmatch(instruction_commit):
-        raise HandoffError("result task_instruction_commit must be a lowercase 40-character SHA")
+    if result["status"] in {"PENDING", "RUNNING"}:
+        if instruction_commit != "PENDING" and (
+            not isinstance(instruction_commit, str) or not SHA40.fullmatch(instruction_commit)
+        ):
+            raise HandoffError("pending task_instruction_commit must be PENDING or a 40-character SHA")
+    elif not isinstance(instruction_commit, str) or not SHA40.fullmatch(instruction_commit):
+        raise HandoffError("final result requires a lowercase 40-character task_instruction_commit")
+
+    if task["execution_mode"] == TRIAL_MODE:
+        validate_trial_result(task, result)
 
     if result["status"] in {"PENDING", "RUNNING"}:
         return
-
     if result["verdict"] == "PENDING":
         raise HandoffError("final result cannot keep verdict PENDING")
-
     if result["status"] == "BLOCKED_SUBMISSION":
         if result["verdict"] != "BLOCKED":
             raise HandoffError("BLOCKED_SUBMISSION requires verdict BLOCKED")
@@ -175,7 +300,6 @@ def validate_result(task: dict[str, object], result: dict[str, object]) -> None:
         raise HandoffError("COMPLETED result requires the pushed report-content commit SHA")
     if result["cleanup_before"] != "PASS" or result["cleanup_after"] != "PASS":
         raise HandoffError("COMPLETED result requires cleanup_before and cleanup_after PASS")
-
     for field in (
         "remote_branch_verified",
         "remote_commit_verified",
@@ -186,7 +310,6 @@ def validate_result(task: dict[str, object], result: dict[str, object]) -> None:
     ):
         if result[field] is not True:
             raise HandoffError(f"COMPLETED result requires {field}: true")
-
     if result["owner_observation"] not in {"PASS", "FAIL", "NOT_REQUIRED"}:
         raise HandoffError("COMPLETED result requires owner_observation PASS, FAIL or NOT_REQUIRED")
     for field in ("started_at", "finished_at"):
