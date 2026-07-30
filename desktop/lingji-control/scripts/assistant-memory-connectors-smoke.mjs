@@ -63,6 +63,7 @@ for (const token of [
   "Bearer Token 认证",
   "配置已复制到剪贴板",
 ]) assert.ok(panel.includes(token), `Connector panel is missing ${token}`);
+assert.equal(panel.includes("已设置，等待测试"), false, "Connector UI must not expose the old ambiguous configured state");
 
 for (const cssToken of [
   ".assistant-connector-section",
