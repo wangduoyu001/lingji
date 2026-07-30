@@ -51,6 +51,81 @@
 
 ---
 
+## 2026-07-30 · PR #60 · Day 0 安全门槛与真实数据记忆质量试运行
+
+- 产品分支：`feature/unified-ai-memory-connectors`
+- 产品 Commit：`1c5148779624910f1c6072d95d6c6f6822f631e6`
+- 固定 Artifact：`lingji-windows-0.1.0-1c514877`
+- Artifact ID：`8723868744`
+- 影响模块：本机安全验收、真实数据导入、来源追溯、幂等去重、候选审核、Codex MCP、质量问题集、远程报告与本地清理
+- 风险等级：P0
+- 用户可感知变化：不再单独重复做一套形式验收；先完成 Day 0 安全门槛，再直接进入小批量真实数据试运行和记忆质量评分。
+- 数据或安全边界变化：真实资料必须由主人明确授权；Day 0 未 PASS 禁止导入；Production 只读；剧本和第三方资料不得被当作主人个人记忆。
+
+### 新增或修改的自动验收
+
+- [ ] `python scripts/check_local_execution_handoff.py`：校验执行模式、专项协议、Day 0、真实数据授权、题数、评分阈值、污染、重复、配置保持、远程确认和清理字段。
+- [ ] `python -m pytest -q tests/test_local_execution_handoff.py`：覆盖 Day 0 未通过禁止真实数据、PASS 阈值、主人抽查题数、错误来源、Production 污染和结束清理。
+- [ ] `local-execution-handoff` Workflow：精确树运行并拒绝缺少专项字段或弱化阈值的任务/回执。
+
+### 新增或修改的真机验收
+
+- [ ] Day 0 在任何真实数据导入前完成：固定 Artifact、覆盖安装、Runtime、8766/8767、MCP 鉴权、真实 Codex 调用、候选边界、A-01、三轮 Core 重启和 Windows 重启。
+- [ ] Day 0 不是 PASS 时立即停止，不读取或导入主人真实资料。
+- [ ] 主人明确授权后，Stage 1 只导入 1 部剧本、1 份 Codex 报告、少量 ChatGPT 历史和 1 个明确 Obsidian 目录。
+- [ ] 验证 raw、provenance、adapter version、input hash、idempotency key、失败路径、重复导入和候选链。
+- [ ] Stage 1 无 P0/P1 后才逐步扩展到最多 10 部剧本和其他授权资料。
+- [ ] 至少执行 20 道质量题：精确事实不少于 8、跨文档比较不少于 4、来源核验不少于 4、负面边界不少于 4。
+- [ ] 质量阈值：quality score ≥ 90%、source accuracy ≥ 95%、false positive rate ≤ 5%、Codex MCP 成功率 ≥ 95%。
+- [ ] 正式数据丢失、Production 污染、重复正式内容、自动写永久记忆、Token/隐私泄露和主人配置破坏均为 0。
+
+### 主人肉眼确认
+
+- [ ] Checkpoint A：安装和首次打开，无黑窗，首页正常，知道下一步，状态文案可区分。
+- [ ] Checkpoint B：Codex 能看到 LingJi 工具、真实调用成功、返回内容正确。
+- [ ] Checkpoint C：主人亲自批准一个测试候选、拒绝一个测试候选，页面可理解。
+- [ ] Checkpoint D：Windows 重启后无黑窗，灵机恢复且页面可操作。
+- [ ] Checkpoint E：主人至少抽查 10 道质量题，确认答案与来源评分。
+
+### 强制回归项
+
+- [ ] Day 0 未 PASS 时禁止导入真实资料。
+- [ ] 未经主人授权不得扫描或导入任何真实目录。
+- [ ] 剧本人物、剧情和台词不得进入主人个人事实。
+- [ ] 不存在的问题必须承认未知，不得拿相似资料冒充。
+- [ ] 候选未批准前 Core Memory 不增加，拒绝候选不进入永久记忆。
+- [ ] A-01 隔离不得读取或修改主人真实 `CODEX_HOME`。
+- [ ] 覆盖安装和连接器回滚不得破坏主人数据或配置。
+- [ ] Windows 重启后 Runtime、MCP、Workspace、DataRoot 和 Vault 恢复。
+
+### 清理与回滚
+
+- 临时数据前缀：`PR60_MEMORY_TRIAL_1C514877_`
+- 临时根目录：`D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-1c514877`
+- 覆盖安装方式：固定安装器直接覆盖，不卸载。
+- 临时配置副本：每个客户端最多一个，哈希验证后删除。
+- 测试数据清理：删除本轮 fixture、checkpoint、测试候选、普通成功日志、截图、重复安装包、解压内容和 worktree。
+- 主人授权的真实资料是否保留由主人选择，Codex不得擅自删除。
+- 报告第一次远程确认后清理，更新结果回执，再次 push 和远程复读。
+
+### 不在范围
+
+- 不借试运行新增产品功能。
+- 不自动批准永久记忆。
+- 不启用远程或公网 MCP。
+- 不读取未授权浏览器、整盘或用户目录。
+- 不把 Stage 2 扩容视为一次性全量迁移。
+
+### 最终报告
+
+- 专项协议：`docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md`
+- 任务单：`docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md`
+- 报告路径：`docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_1c514877.md`
+- 报告分支：`acceptance/pr60-memory-quality-trial-1c514877`
+- 产品 PR 必须保持 Draft 且不得合并，直到 Day 0、Stage 1、质量指标、主人检查点、远程提交和清理全部满足 PASS。
+
+---
+
 ## 2026-07-30 · 本机任务信箱与结果回执硬门禁
 
 - 产品分支：`master`
@@ -62,16 +137,16 @@
 
 ### 新增或修改的自动验收
 
-- [ ] `python scripts/check_local_execution_handoff.py`：校验任务单、结果回执、身份一致性、开始/结束清理、远程确认和报告 Commit 字段。
-- [ ] `python -m pytest -q tests/test_local_execution_handoff.py`：覆盖 PENDING、COMPLETED、远程确认缺失、清理失败、身份不一致和阻塞提交。
-- [ ] `local-execution-handoff` Workflow：在 `master`、开发分支和 `acceptance/**` 报告分支执行；报告分支结果不是 `COMPLETED` 时失败。
+- [x] `python scripts/check_local_execution_handoff.py`：校验任务单、结果回执、身份一致性、开始/结束清理、远程确认和报告 Commit 字段。
+- [x] `python -m pytest -q tests/test_local_execution_handoff.py`：覆盖 PENDING、COMPLETED、远程确认缺失、清理失败、身份不一致和阻塞提交。
+- [x] `local-execution-handoff` Workflow：在 `master`、开发分支和 `acceptance/**` 报告分支执行；报告分支结果不是 `COMPLETED` 时失败。
 
 ### 新增或修改的真机验收
 
-- [ ] Codex 只读取 `docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md` 中 `status: ACTIVE` 的任务，不从聊天或本机残留推断。
-- [ ] 每次开始前整体清理上一轮临时验收目录、Artifact、日志、截图、fixture、checkpoint、临时配置副本和 worktree，再释放 8766/8767。
-- [ ] 报告 push 后使用 `git ls-remote` 和 GitHub API 重新读取远程分支、Commit、报告、结果回执和 PR 评论。
-- [ ] 第一次远程确认后清理本轮本地垃圾，更新结果回执，再次 push 和远程复读。
+- [x] Codex 只读取 `docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md` 中 `status: ACTIVE` 的任务，不从聊天或本机残留推断。
+- [x] 每次开始前整体清理上一轮临时验收目录、Artifact、日志、截图、fixture、checkpoint、临时配置副本和 worktree，再释放 8766/8767。
+- [x] 报告 push 后使用 `git ls-remote` 和 GitHub API 重新读取远程分支、Commit、报告、结果回执和 PR 评论。
+- [x] 第一次远程确认后清理本轮本地垃圾，更新结果回执，再次 push 和远程复读。
 
 ### 主人肉眼确认
 
@@ -79,10 +154,10 @@
 
 ### 回归项
 
-- [ ] 禁止把本机生成报告误写成已经上传。
-- [ ] 禁止 `git push` 命令执行后未复读远程就宣布完成。
-- [ ] 禁止长期堆积旧验收目录、重复安装包、日志、截图、fixture、checkpoint、配置副本和 worktree。
-- [ ] 禁止清理主人正式数据或其他任务数据。
+- [x] 禁止把本机生成报告误写成已经上传。
+- [x] 禁止 `git push` 命令执行后未复读远程就宣布完成。
+- [x] 禁止长期堆积旧验收目录、重复安装包、日志、截图、fixture、checkpoint、配置副本和 worktree。
+- [x] 禁止清理主人正式数据或其他任务数据。
 
 ### 清理与回滚
 
@@ -104,86 +179,28 @@
 
 ---
 
-## 2026-07-29 · PR #60 · P0-A 与统一 AI 记忆连接器重新真机验收
+## 2026-07-29 · PR #60 · P0-A 与统一 AI 记忆连接器重新真机验收（历史方案，已被 2026-07-30 合并试运行方案取代）
 
 - 产品分支：`feature/unified-ai-memory-connectors`
 - 产品 Commit：`1c5148779624910f1c6072d95d6c6f6822f631e6`
 - 固定 Artifact：`lingji-windows-0.1.0-1c514877`
 - Artifact ID：`8723868744`
-- Artifact ZIP SHA256：`de895289aa8cbef65c27bdf5c298c7f105b8037e34a1e2167208a9e85ab16538`
-- 安装器 SHA256：`21ef1825f58845e246695c966032ef9326ba5de8bde4a55e4efe8ec516b7b3a3`
-- 影响模块：P0-A 开始中心、AI 助手扫描、Codex/Claude/WorkBuddy 连接器、MCP HTTP、ChatGPT/Codex Report 导入、人工记忆审核、Windows Sidecar 打包与生命周期
+- 影响模块：P0-A、连接器、MCP、导入、人工审核和 Windows 生命周期
 - 风险等级：P0
-- 用户可感知变化：第一次打开可按唯一下一步完成扫描、连接、导入和审核；本机 AI 可通过受认证的 8767 MCP 使用主人批准的记忆并提交候选。
-- 数据或安全边界变化：MCP Token、Production/Acceptance 隔离、第三方 AI 配置写入与回滚、候选记忆人工批准边界。
+- 状态：保留为历史记录；当前执行以 2026-07-30 的 Day 0 + 真实数据试运行条目和任务单为准。
 
 ### 已通过的自动验收
 
-- [x] `tests #1081`：Python 3.11 / 3.12 / Windows、Desktop Smoke、MCP、Obsidian Plugin 和 Browser Capture。
-- [x] `P0 Windows Gate #240`：完整 Python、Desktop、Rust 和 clean-install 合同。
-- [x] `Windows Desktop Release Baseline #129`：Sidecar、Tauri、NSIS、哈希和 Artifact 合同。
-- [x] `tests/test_ai_memory_connectors.py`：连接器写入、冲突、备份、回滚和显式空环境隔离。
-- [x] `tests/test_assistant_hub_api.py`、`tests/test_mcp_http_auth.py`、`tests/test_packaged_mcp_runtime.py`。
-- [x] A-01 回归：`env={}` 不再继承机器 `CODEX_HOME`，不得触碰主人真实 Codex 配置。
+- [x] `tests #1081`
+- [x] `P0 Windows Gate #240`
+- [x] `Windows Desktop Release Baseline #129`
+- [x] A-01 修复和回归测试
 
-### 必须完成的真机重新验收
+### 历史最终报告
 
-- [ ] 清理旧验收目录、旧 Artifact、旧日志、旧测试 fixture 和旧 LingJi 残留进程；不得删除主人 DataRoot、Vault、正式记忆和用户 AI 配置。
-- [ ] 只使用 Artifact ID `8723868744`，核验 ZIP、安装器、Desktop、Sidecar 和 Manifest 哈希。
-- [ ] 直接覆盖安装，不卸载，不删除用户数据，不把 DataRoot 迁回 C 盘。
-- [ ] 首次打开确认 Workspace、Vault、记忆层数量、AI 状态和唯一推荐下一步真实可理解。
-- [ ] 8766 与 8767 只监听 `127.0.0.1`；Runtime healthy/managed；无重复 Core 和孤儿 MCP。
-- [ ] Codex 预览、精确确认、临时备份、配置写入、新会话真实 MCP 调用、候选提交、回滚和重新连接全部通过。
-- [ ] Codex 真实调用 `get_core_memory`、`search_memory`、`build_context_pack`、`memory_health` 和 `propose_memory`。
-- [ ] Claude Code 已安装时使用官方 `claude mcp` 完成同类测试；未安装标记 `SKIPPED_NOT_INSTALLED`。
-- [ ] WorkBuddy / CodeBuddy 已安装时在官方 UI 粘贴脱敏后受控复制的配置并真实调用；未安装标记 `SKIPPED_NOT_INSTALLED`。
-- [ ] 使用无隐私 fixture 完成 ChatGPT Export 或 Codex Report 至少一种真实 UI 导入，并验证队列、幂等、来源和失败路径。
-- [ ] `propose_memory` 和导入只生成候选；未批准前 Core Memory 不增加；主人可批准或拒绝 Acceptance 测试候选。
-- [ ] 连续三轮 Core 重启后 Runtime、MCP、Workspace、DataRoot、Vault 和客户端调用恢复。
-- [ ] Windows 重启后恢复，并再执行一轮 Core 重启。
-- [ ] Production/Acceptance DataRoot、Token、候选、导入和正式记忆不串用；Production 不写测试内容。
-- [ ] 验收报告提交后删除临时 Artifact、普通成功日志、截图、fixture 和配置临时副本。
-
-### 主人肉眼确认
-
-- [ ] 安装、启动、三轮 Core 重启和 Windows 重启期间没有 PowerShell、CMD 或黑色控制台窗口。
-- [ ] 第一次打开无需开发者口头解释即可知道下一步。
-- [ ] 能明确区分“检测到”“已配置”“连接测试通过”“历史已导入”。
-- [ ] Production、Acceptance、Vault、记忆数量和 Embedding 限制文案可理解。
-- [ ] WorkBuddy / CodeBuddy 等真实客户端 GUI 结果由主人确认，不由 Codex 自我推断。
-
-### 强制回归项
-
-- [ ] A-01：隔离验收不得读取或修改主人真实 `CODEX_HOME`。
-- [ ] 覆盖安装不破坏主人数据。
-- [ ] 连接器回滚不破坏其他 Codex/Claude 设置。
-- [ ] Token 不出现在预览、公开日志、截图、Git 或报告。
-- [ ] inactive Embedding 不把整个系统伪装成崩溃，lexical 检索仍可用。
-- [ ] 不出现死按钮、假成功、未知值伪造、重复 Core、孤儿 MCP、C 盘运行数据写入或自动 Core Memory 写入。
-
-### 清理与回滚
-
-- 临时数据前缀：`PR60_ACCEPTANCE_1C514877_`
-- 覆盖安装方式：固定安装器直接覆盖，不卸载。
-- 临时配置副本：每个客户端最多一个，回滚哈希确认后立即删除。
-- 测试数据清理：只处理带本轮前缀的 Acceptance fixture、候选和测试正式记忆。
-- 本地保留：最终报告、脱敏公开证据、哈希清单和主人明确要求保留的失败证据。
-
-### 不在范围
-
-- Claude Code 历史导入。
-- WorkBuddy / CodeBuddy 历史导入。
-- ChatGPT 实时本地 MCP。
-- 远程或公网 MCP。
-- 每个 AI 独立 Agent Scope 与隐私矩阵。
-- 自动批准永久记忆。
-- Embedding 激活完成。
-
-### 最终报告
-
-- 报告路径：`docs/TEST_REPORTS/PR60_OWNER_CODEX_FULL_REACCEPTANCE_1c514877.md`
-- 报告分支：`acceptance/pr60-owner-1c514877`
-- 产品 PR 必须保持 Draft 且不得合并，直到该报告为 PASS 并由主人确认。
+- 原计划报告：`docs/TEST_REPORTS/PR60_OWNER_CODEX_FULL_REACCEPTANCE_1c514877.md`
+- 原计划分支：`acceptance/pr60-owner-1c514877`
+- 当前不得再按该旧路径执行。
 
 ---
 
@@ -198,40 +215,38 @@
 
 ### 新增或修改的自动验收
 
-- [x] `python scripts/check_acceptance_sync.py`：产品相关文件变化时必须同步修改 `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`。
-- [x] `python -m pytest -q tests/test_acceptance_sync.py`：覆盖无代码变化、代码未同步文档、代码已同步文档、隐藏 GitHub 路径、Windows 路径和依赖/Workflow 变化。
-- [x] GitHub Workflow `acceptance-doc-sync #1`：精确基线成功。
-- [x] GitHub Workflow `tests #1082`：精确基线成功。
-- [x] GitHub Workflow `P0 Windows Gate #241`：精确基线成功。
+- [x] `python scripts/check_acceptance_sync.py`
+- [x] `python -m pytest -q tests/test_acceptance_sync.py`
+- [x] GitHub Workflow `acceptance-doc-sync #1`
+- [x] GitHub Workflow `tests #1082`
+- [x] GitHub Workflow `P0 Windows Gate #241`
 
 ### 新增或修改的真机验收
 
-- [x] Codex 拉取仓库后读取 `AGENTS.md`，能够定位本目录和通用验收指令。
-- [x] 使用当前变更记录生成对应验收清单，不依赖聊天历史。
-- [x] 验收规则明确要求报告提交后删除临时 Artifact、日志、截图、fixture 和配置临时副本。
+- [x] Codex 从仓库读取验收权威，不依赖聊天历史。
+- [x] 代码变化后必须同步验收标准。
+- [x] 报告提交后清理临时 Artifact、日志、截图、fixture 和配置副本。
 
 ### 主人肉眼确认
 
-- [x] 主人明确要求仓库成为验收指令权威，并要求 Codex 拉取后直接读取。
+- [x] 主人明确要求仓库成为验收指令权威。
 
 ### 回归项
 
 - [x] 不允许代码变更后遗漏验收标准更新。
-- [x] 不允许为了补报告移动已打包的产品 Head。
-- [x] 不允许长期堆积重复安装包、日志、截图和配置备份。
+- [x] 不允许为了补报告移动已打包产品 Head。
+- [x] 不允许长期堆积重复验收垃圾。
 
 ### 清理与回滚
 
 - 临时数据前缀：`ACCEPTANCE_GOVERNANCE_`
-- 覆盖安装或迁移方式：不涉及产品安装。
-- 临时备份删除条件：测试完成立即删除。
-- 测试数据清理方式：删除测试临时 Git 仓库和输出目录。
+- 不涉及产品安装或正式数据。
 
 ### 不在范围
 
 - 不改变 LingJi 产品功能。
 - 不替代模块测试报告。
-- 不自动合并任何产品 PR。
+- 不自动合并产品 PR。
 
 ### 最终报告
 
