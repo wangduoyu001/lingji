@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
 
-from scripts.cleanup_acceptance_workspace import (
-    CleanupError,
-    cleanup_workspace,
-    initialize_workspace,
+MODULE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "docs"
+    / "ACCEPTANCE"
+    / "tools"
+    / "cleanup_acceptance_workspace.py"
 )
+SPEC = importlib.util.spec_from_file_location("cleanup_acceptance_workspace", MODULE_PATH)
+assert SPEC is not None and SPEC.loader is not None
+cleanup_module = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(cleanup_module)
+CleanupError = cleanup_module.CleanupError
+cleanup_workspace = cleanup_module.cleanup_workspace
+initialize_workspace = cleanup_module.initialize_workspace
 
 
 def test_initialize_and_itemized_cleanup(tmp_path: Path) -> None:
