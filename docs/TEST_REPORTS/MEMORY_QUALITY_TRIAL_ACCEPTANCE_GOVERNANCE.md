@@ -98,21 +98,45 @@ The tests cover:
 - rejection of Stage 1 before Day 0 PASS;
 - valid FAIL report that stops after Day 0 without touching real data.
 
-## Required CI
+## Exact-head validation
+
+Validated PR:
 
 ```text
-local-execution-handoff
-acceptance-doc-sync
-tests
+PR #65
+Head: 5990c10c84e74decadd2a05ece9ead4c31e5267f
 ```
+
+Exact-head GitHub checks:
+
+```text
+local-execution-handoff #15: SUCCESS
+acceptance-doc-sync #25: SUCCESS
+tests #1106: SUCCESS
+P0 Windows Gate #244: SUCCESS
+```
+
+Validated coverage includes:
+
+- the current ACTIVE task and PENDING result receipt;
+- memory-trial-specific threshold enforcement;
+- Python 3.11 and 3.12 suites;
+- Windows Python suite;
+- Desktop Smoke and frontend build;
+- MCP Smoke;
+- Obsidian Plugin Smoke;
+- Browser Capture Smoke;
+- Windows PowerShell clean-install contracts;
+- Rust/Tauri checks.
 
 ## Status
 
 ```text
-DOCUMENTS: IMPLEMENTED
-TASK: UPDATED
-RESULT RECEIPT: UPDATED
-HARD GATE: UPDATED
-UNIT TESTS: ADDED
-EXACT-HEAD CI: PENDING
+DOCUMENTS: IMPLEMENTED AND VALIDATED
+TASK: UPDATED AND VALIDATED
+RESULT RECEIPT: UPDATED AND VALIDATED
+HARD GATE: UPDATED AND VALIDATED
+UNIT TESTS: PASS
+EXACT-HEAD CI: PASS
+PR #65: READY TO MERGE
 ```
