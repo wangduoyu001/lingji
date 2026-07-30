@@ -167,3 +167,67 @@ def test_unsupported_connector_is_rejected(tmp_path: Path) -> None:
         service.preview("random-ai")
     assert error.value.code == "UNSUPPORTED_CONNECTOR"
     assert error.value.status_code == 404
+
+
+def test_codex_config_without_command_is_blocked_not_connected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.assistant_hub.connectors.shutil.which", lambda name, path=None: None)
+    monkeypatch.setattr("src.assistant_hub.governed.shutil.which", lambda name, path=None: None)
+    service = AiMemoryConnectorService(
+        storage_path=tmp_path / "storage",
+        home=tmp_path / "home",
+        env={},
+    )
+    monkeypatch.setattr(service, "_runtime_ready", lambda: True)
+    service.apply("codex", "CONNECT_CODEX_TO_LINGJI")
+
+    result = service.test("codex")
+    assert result["ok"] is False
+    assert result["state"] == "blocked"
+    assert "找不到 codex 命令" in result["message"]
+
+    status = service.status()["connectors"][0]
+    assert status["configuration_state"] == "configured"
+    assert status["status_state"] == "blocked"
+    assert status["client_available"] is False
+    assert status["live_test"] is False
+    assert "配置文件已写入" in status["blocking_reason"]
+
+
+def test_codex_is_ready_only_after_real_cli_verification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def runner(command, timeout):
+        return subprocess.CompletedProcess(command, 0, "lingji-memory http://127.0.0.1:8767/mcp", "")
+
+    monkeypatch.setattr(
+        "src.assistant_hub.connectors.shutil.which",
+        lambda name, path=None: "C:/Tools/codex.exe" if name == "codex" else None,
+    )
+    monkeypatch.setattr(
+        "src.assistant_hub.governed.shutil.which",
+        lambda name, path=None: "C:/Tools/codex.exe" if name == "codex" else None,
+    )
+    service = AiMemoryConnectorService(
+        storage_path=tmp_path / "storage",
+        home=tmp_path / "home",
+        env={"PATH": "C:/Tools"},
+        runner=runner,
+    )
+    monkeypatch.setattr(service, "_runtime_ready", lambda: True)
+    service.apply("codex", "CONNECT_CODEX_TO_LINGJI")
+
+    before = service.status()["connectors"][0]
+    assert before["status_state"] == "verification_required"
+    assert before["live_test"] is not True
+
+    tested = service.test("codex")
+    assert tested["ok"] is True
+
+    after = service.status()["connectors"][0]
+    assert after["status_state"] == "ready"
+    assert after["live_test"] is True
+    assert after["client_available"] is True
