@@ -10,6 +10,7 @@ const [
   hub,
   panel,
   css,
+  directorCss,
   captureApi,
   connectors,
   governed,
@@ -21,6 +22,7 @@ const [
   read("../src/pages/AssistantHubPage.tsx"),
   read("../src/components/AssistantConnectorPanel.tsx"),
   read("../src/pages/AssistantHubPage.css"),
+  read("../src/components/AssistantSetupDirector.css"),
   read("../../../src/control/capture_api.py"),
   read("../../../src/assistant_hub/connectors.py"),
   read("../../../src/assistant_hub/governed.py"),
@@ -40,8 +42,16 @@ for (const token of [
 ]) assert.ok(hub.includes(token), `Assistant workflow is missing ${token}`);
 
 for (const token of [
-  "连接不等于导入历史",
+  "配置、客户端命令、真实测试分开显示",
+  "配置文件存在不等于客户端可用",
+  "发现可处理的历史资料",
+  "扫描只读元数据；读取正文和导入必须再次确认",
+  "Embedding / Qdrant",
+  "status_state",
+  "blocking_reason",
   "/api/assistant-hub/connections",
+  "/api/assistant-hub/status",
+  "/api/vector/status",
   "/preview",
   "/apply",
   "/test",
@@ -62,6 +72,14 @@ for (const cssToken of [
   ".assistant-connector-preview",
   ".assistant-preview-close",
 ]) assert.ok(css.includes(cssToken), `Connector styles are missing ${cssToken}`);
+
+for (const cssToken of [
+  ".assistant-setup-director",
+  ".assistant-readiness-grid",
+  ".assistant-import-consent",
+  ".assistant-connector-facts",
+  ".assistant-connector-problem",
+]) assert.ok(directorCss.includes(cssToken), `Guided setup styles are missing ${cssToken}`);
 
 for (const route of [
   "/api/assistant-hub/connections",
@@ -88,7 +106,15 @@ for (const token of [
   "automatic_core_memory_write",
 ]) assert.ok(connectors.includes(token), `Connector service is missing ${token}`);
 assert.equal(connectors.includes("shell=True"), false, "Connector management must not execute shell strings");
-assert.match(governed, /payload\.pop\("copy_payload", None\)/);
+
+for (const token of [
+  "status_state",
+  "client_available",
+  "last_test_detail",
+  "配置文件已写入，但系统找不到 codex 命令",
+  "last_test_ok",
+  'payload.pop("copy_payload", None)',
+]) assert.ok(governed.includes(token), `Governed connector truth state is missing ${token}`);
 
 for (const token of [
   "BearerTokenMiddleware",
