@@ -10,20 +10,20 @@
 
 ```yaml
 task_id: PR60-MEMORY-QUALITY-TRIAL-1C514877
-status: PENDING
-verdict: PENDING
+status: RUNNING
+verdict: FAIL
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
 product_commit: 1c5148779624910f1c6072d95d6c6f6822f631e6
-task_instruction_commit: PENDING
+task_instruction_commit: 715c8fe73126227beb9a5378e5fd8e63d742941c
 trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
 report_branch: acceptance/pr60-memory-quality-trial-1c514877
 report_commit: PENDING
 report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_1c514877.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_1c514877.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_1c514877.txt
-day0_result: NOT_RUN
+day0_result: FAIL
 stage1_result: NOT_RUN
 stage2_result: NOT_RUN
 real_data_authorized: false
@@ -35,8 +35,8 @@ false_positive_percent: NOT_RUN
 codex_mcp_success_percent: NOT_RUN
 duplicate_formal_content_count: NOT_RUN
 production_pollution_count: NOT_RUN
-owner_config_preserved: PENDING
-cleanup_before: NOT_RUN
+owner_config_preserved: PASS
+cleanup_before: PASS
 cleanup_after: NOT_RUN
 remote_branch_verified: false
 remote_commit_verified: false
@@ -44,8 +44,8 @@ remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
 local_temp_root_absent: false
-owner_observation: PENDING
-started_at: PENDING
+owner_observation: FAIL
+started_at: 2026-07-30T21:02:59+08:00
 finished_at: PENDING
 ```
 
@@ -141,8 +141,8 @@ Codex不得替主人填写肉眼、理解程度或真实资料正确性结论。
 ## 4. 最终结果摘要
 
 ```text
-自动测试：PENDING
-Day 0：NOT_RUN
+自动测试：PASS
+Day 0：FAIL
 Stage 1：NOT_RUN
 Stage 2：NOT_RUN
 质量题：0
@@ -151,10 +151,10 @@ quality_score：NOT_RUN
 source_accuracy：NOT_RUN
 false_positive_rate：NOT_RUN
 Codex MCP 成功率：NOT_RUN
-阻塞缺陷：PENDING
-未覆盖数据源或客户端：PENDING
-Production 是否被污染：PENDING
-主人配置是否保持：PENDING
+阻塞缺陷：D0-UX-001, D0-CODEX-002
+未覆盖数据源或客户端：真实 Codex、Claude Code、WorkBuddy / CodeBuddy；Stage 1/2 未运行
+Production 是否被污染：0 (executed scope)
+主人配置是否保持：PASS
 临时垃圾是否清理：PENDING
 远程报告是否复读成功：PENDING
 ```
