@@ -51,6 +51,72 @@
 
 ---
 
+## 2026-07-30 · PR #60 · AI 助手中心主动引导与真实状态修复
+
+- 产品分支：`feature/unified-ai-memory-connectors`
+- 产品 Commit：`pending`
+- 来源缺陷：`D0-UX-001`、`D0-CODEX-002`
+- 影响模块：AI 助手中心、Codex/Claude 连接状态、历史导入说明、Embedding/Qdrant 状态说明、Desktop Smoke
+- 风险等级：P0
+- 用户可感知变化：扫描后页面必须主动说明发现了什么、能导入什么、不会读取什么，并只给出一个明确下一步；配置文件存在不得再显示为连接可用。
+- 数据或安全边界变化：扫描继续只读元数据；真实正文读取和导入仍需主人确认；不新增自动永久记忆写入，不扫描未知目录。
+
+### 新增或修改的自动验收
+
+- [ ] `python -m pytest -q tests/test_ai_memory_connectors.py`：Codex 配置存在但命令缺失时必须为 BLOCKED，只有真实 CLI 验证后才能 READY。
+- [ ] `node desktop/lingji-control/scripts/assistant-memory-connectors-smoke.mjs`：页面必须包含统一准备度、主动导入提示、Embedding/Qdrant 原因和真实连接三段状态。
+- [ ] `npm run build`：新状态面板和样式必须通过 TypeScript/React 生产构建。
+- [ ] `P0 Windows Gate`：Windows PowerShell、Desktop、Rust/Tauri 和完整 Python 回归通过。
+
+### 新增或修改的真机验收
+
+- [ ] 扫描完成后，顶部只显示一个当前最优先动作，不能让主人自行在扫描、连接、导入、审核之间猜测。
+- [ ] 检测到 Codex 目录时，主动显示脱敏目录、候选文件数量、当前支持的 Codex Report JSON，以及“未读取原始 Session 正文”。
+- [ ] 主人未确认前不得读取或导入真实正文；点击“暂不处理”后不得创建采集任务。
+- [ ] Codex 配置已写入但 `codex` 命令缺失时，统一显示“已阻塞”，并说明配置存在不等于连接可用。
+- [ ] Codex 只有配置、命令和真实 MCP 测试全部通过后才能显示绿色“连接可用”。
+- [ ] Embedding/Qdrant 不可用时，在同一页面显示配置模型、实际激活状态、最近错误或重建要求，不能只写“后续处理”。
+- [ ] 连接、导入和向量异常必须各有明确原因，不允许多个卡片给出互相矛盾的结论。
+
+### 主人肉眼确认
+
+- [ ] Checkpoint A 重测：扫描完成后能在 5 秒内指出下一步，不需要开发者解释。
+- [ ] 能一眼区分“发现本地目录”“配置文件已写入”“客户端命令可用”“真实连接测试通过”。
+- [ ] 能看懂准备导入的资料类型、来源和安全边界。
+- [ ] 能一眼看到 Embedding/Qdrant 为什么不可用，以及全文检索是否仍可用。
+
+### 强制回归项
+
+- [ ] A-01：显式空环境不得继承主人真实 `CODEX_HOME`。
+- [ ] 配置冲突继续拒绝覆盖，连接配置继续备份并可回滚。
+- [ ] Token 不得出现在 UI、日志、报告或配置预览。
+- [ ] 扫描不读取正文、不跟随符号链接、不扫描未知路径。
+- [ ] `propose_memory` 仍只生成候选，不自动写 Core Memory。
+- [ ] WorkBuddy 无稳定官方配置接口时仍使用复制配置，不伪造自动连接成功。
+
+### 清理与回滚
+
+- 临时数据前缀：`PR60_GUIDED_SETUP_`
+- 覆盖安装方式：新 Artifact 直接覆盖旧安装，不卸载主人数据。
+- 临时配置副本：连接测试完成并验证回滚后删除。
+- 测试数据清理：删除临时 Artifact、日志、截图、fixture、worktree 和测试候选；不删除主人授权保留的真实资料。
+
+### 不在范围
+
+- 不新增 Claude Code 历史导入。
+- 不新增 WorkBuddy 历史导入。
+- 不自动读取 Codex 原始 Session、JSONL 或 Markdown 正文。
+- 不在本次修复中自动安装 Embedding 模型或静默重建 Production Qdrant Collection。
+- 不改变远程/public MCP 边界。
+
+### 最终报告
+
+- 缺陷记录：`docs/TEST_REPORTS/PR60_ASSISTANT_HUB_GUIDED_FLOW_PLAN.md`
+- 实施报告：`docs/TEST_REPORTS/PR60_ASSISTANT_HUB_GUIDED_FLOW_IMPLEMENTATION.md`
+- 新 Artifact 和复验任务：代码 CI 与 Release 通过后更新 `LOCAL_EXECUTION_TASK.md`。
+
+---
+
 ## 2026-07-30 · PR #60 · Day 0 安全门槛与真实数据记忆质量试运行
 
 - 产品分支：`feature/unified-ai-memory-connectors`
