@@ -43,7 +43,9 @@ clear. No real data was read or imported; Stage 1 and Stage 2 were not run.
 - No old LingJi process, orphan MCP process, or listener on 8766/8767 was present before startup.
 - Fixed installer performed a direct cover install with exit code 0; no uninstall was run.
 - Production data, owner Vault, formal memory and owner AI-client configuration were not deleted or edited.
-- End cleanup is pending remote report confirmation.
+- End cleanup is blocked: the host execution policy rejected the scoped recursive
+  deletion of the acceptance-only temporary directories. No deletion fallback was
+  used, and no Production or owner-data location was targeted.
 
 ## 5. Environment and Workspace
 
@@ -235,7 +237,7 @@ Required clients covered: MCP protocol verification only
 Skipped clients: Claude Code, WorkBuddy / CodeBuddy
 Blocking defects: D0-UX-001, D0-CODEX-002
 Acceptance docs synchronized: YES
-Temporary evidence cleaned: PENDING remote confirmation
+Temporary evidence cleaned: BLOCKED_POST_CLEANUP (host policy rejected the scoped cleanup)
 ```
 
 ## 24. Sign-off

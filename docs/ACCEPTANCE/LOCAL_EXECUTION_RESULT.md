@@ -10,8 +10,8 @@
 
 ```yaml
 task_id: PR60-MEMORY-QUALITY-TRIAL-1C514877
-status: RUNNING
-verdict: FAIL
+status: BLOCKED_SUBMISSION
+verdict: BLOCKED
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
@@ -19,7 +19,7 @@ product_commit: 1c5148779624910f1c6072d95d6c6f6822f631e6
 task_instruction_commit: 715c8fe73126227beb9a5378e5fd8e63d742941c
 trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
 report_branch: acceptance/pr60-memory-quality-trial-1c514877
-report_commit: PENDING
+report_commit: cb24c542306bf06bd3918a1dae18afed6e0712f8
 report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_1c514877.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_1c514877.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_1c514877.txt
@@ -37,16 +37,16 @@ duplicate_formal_content_count: NOT_RUN
 production_pollution_count: NOT_RUN
 owner_config_preserved: PASS
 cleanup_before: PASS
-cleanup_after: NOT_RUN
-remote_branch_verified: false
-remote_commit_verified: false
-remote_report_verified: false
-remote_result_verified: false
-pr_comment_verified: false
+cleanup_after: BLOCKED_POST_CLEANUP
+remote_branch_verified: true
+remote_commit_verified: true
+remote_report_verified: true
+remote_result_verified: true
+pr_comment_verified: true
 local_temp_root_absent: false
 owner_observation: FAIL
 started_at: 2026-07-30T21:02:59+08:00
-finished_at: PENDING
+finished_at: 2026-07-30T21:05:37+08:00
 ```
 
 ## 2. Codex 回填规则
@@ -155,8 +155,8 @@ Codex MCP 成功率：NOT_RUN
 未覆盖数据源或客户端：真实 Codex、Claude Code、WorkBuddy / CodeBuddy；Stage 1/2 未运行
 Production 是否被污染：0 (executed scope)
 主人配置是否保持：PASS
-临时垃圾是否清理：PENDING
-远程报告是否复读成功：PENDING
+临时垃圾是否清理：BLOCKED_POST_CLEANUP（宿主策略拒绝对验收临时目录执行递归删除）
+远程报告是否复读成功：PASS（首次报告 Commit 已复读；本次最终回执待推送后复读）
 ```
 
 ## 5. 证据索引
@@ -164,12 +164,12 @@ Production 是否被污染：0 (executed scope)
 只填写脱敏信息：
 
 ```text
-最终报告：PENDING
-公开摘要：PENDING
-公开哈希：PENDING
-PR 评论 URL：PENDING
-远程分支最终 HEAD：PENDING
-报告内容 Commit：PENDING
+最终报告：docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_1c514877.md
+公开摘要：docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_1c514877.json
+公开哈希：docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_1c514877.txt
+PR 评论 URL：https://github.com/wangduoyu001/lingji/pull/60#issuecomment-5131166762
+远程分支最终 HEAD：待本次最终回执推送
+报告内容 Commit：cb24c542306bf06bd3918a1dae18afed6e0712f8
 问题集摘要 SHA256：PENDING / NOT_RUN
 私有证据归档 SHA256：PENDING / NOT_RETAINED
 ```
