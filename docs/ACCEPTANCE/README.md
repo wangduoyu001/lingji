@@ -1,6 +1,6 @@
 # LingJi 验收权威入口
 
-> 本目录是灵机所有开发、优化、修复、发布和本机执行的统一验收权威。
+> 本目录是灵机所有开发、优化、修复、发布、本机执行和真实数据试运行的统一验收权威。
 >
 > Codex 拉取仓库后，先读根目录 `AGENTS.md`，再读本文件。聊天记录不得作为本机任务或验收结果的权威来源。
 
@@ -11,6 +11,7 @@
 | `README.md` | 验收治理、更新规则和读取顺序 |
 | `LOCAL_EXECUTION_TASK.md` | ChatGPT / 主开发代理下达给本机 Codex 的唯一当前任务单 |
 | `LOCAL_EXECUTION_RESULT.md` | Codex 提交给 ChatGPT / 主开发代理的唯一固定结果回执 |
+| `MEMORY_QUALITY_TRIAL.md` | Day 0 安全门槛、真实数据试运行、记忆质量问题集与评分标准 |
 | `CODEX_ACCEPTANCE_INSTRUCTIONS.md` | Codex 可直接执行的通用真机验收基线 |
 | `CHANGE_ACCEPTANCE_LOG.md` | 每次代码变更对应的新增、删除和回归验收项 |
 | `REPORT_TEMPLATE.md` | 最终验收报告固定结构 |
@@ -27,6 +28,8 @@
 告诉 ChatGPT：Codex 已经完成
 ```
 
+真实数据试运行开始前，用户还负责明确授权允许导入的数据范围，并在固定检查点提供肉眼或内容正确性判断。
+
 用户不负责：
 
 - 复制长指令；
@@ -34,9 +37,10 @@
 - 选择报告路径；
 - 上传报告；
 - 检查远程分支；
-- 清理本机验收垃圾。
+- 清理本机验收垃圾；
+- 查看底层数据库、日志或配置文件。
 
-ChatGPT / 主开发代理负责更新 `LOCAL_EXECUTION_TASK.md`，写清唯一任务身份、被测 Commit、Artifact、执行范围、报告分支、报告路径和清理规则。
+ChatGPT / 主开发代理负责更新 `LOCAL_EXECUTION_TASK.md`，写清唯一任务身份、被测 Commit、Artifact、执行模式、试运行协议、报告分支、报告路径和清理规则。
 
 Codex 负责读取任务单、执行、生成报告、提交远程、重新读取远程结果、更新 `LOCAL_EXECUTION_RESULT.md`、清理本机垃圾，然后才允许向用户回复完成。
 
@@ -49,6 +53,7 @@ AGENTS.md
 → docs/ACCEPTANCE/README.md
 → docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md
 → docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
+→ 任务单指定的专项协议（当前为 MEMORY_QUALITY_TRIAL.md）
 → docs/ACCEPTANCE/CODEX_ACCEPTANCE_INSTRUCTIONS.md
 → docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md 当前任务条目
 → docs/ACCEPTANCE/REPORT_TEMPLATE.md
@@ -71,6 +76,7 @@ status: ACTIVE
 → 修改代码和测试
 → 同步 CHANGE_ACCEPTANCE_LOG.md
 → 必要时更新 CODEX_ACCEPTANCE_INSTRUCTIONS.md
+→ 需要真实数据试运行时更新 MEMORY_QUALITY_TRIAL.md
 → 需要本机执行时更新 LOCAL_EXECUTION_TASK.md
 → 运行 focused 验证
 → 最终树运行 full 或 release
@@ -104,6 +110,12 @@ docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md
 - 新增必须由主人肉眼确认的行为；
 - 新增安全、隐私或回滚风险；
 - 发布 Artifact、安装器或构建合同变化。
+
+需要真实数据试运行时必须更新或明确引用：
+
+```text
+docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
+```
 
 需要本机执行时还必须更新：
 
@@ -146,7 +158,32 @@ SKIPPED_NOT_INSTALLED
 
 禁止写“应该可以”“大致正常”“代码上没问题”。
 
-## 7. 开始前清理硬门禁
+## 7. 真实数据试运行硬门禁
+
+采用 `DAY0_THEN_REAL_DATA_TRIAL` 模式时：
+
+```text
+Day 0 安全门槛 PASS
+→ 主人明确授权数据范围
+→ Stage 1 小批量真实数据
+→ Stage 2 逐步扩容
+→ 质量问题集和主人抽查
+→ 报告、远程复读和清理
+```
+
+强制规则：
+
+- Day 0 未 PASS，禁止导入真实数据；
+- 未经主人明确授权，禁止读取或导入真实资料；
+- PASS 至少执行 20 道质量题，主人至少抽查 10 题；
+- quality score 不低于 90%；
+- source accuracy 不低于 95%；
+- false positive rate 不高于 5%；
+- Codex MCP 真实调用成功率不低于 95%；
+- Production 污染、重复正式内容、自动写永久记忆和配置破坏必须为 0；
+- 详细规则以 `MEMORY_QUALITY_TRIAL.md` 为准。
+
+## 8. 开始前清理硬门禁
 
 每次本机任务开始前必须：
 
@@ -173,7 +210,7 @@ SKIPPED_NOT_INSTALLED
 
 开始前清理未通过时，结果必须为 `BLOCKED_PRE_CLEANUP`，不得继续验收。
 
-## 8. 报告提交与远程确认硬门禁
+## 9. 报告提交与远程确认硬门禁
 
 执行 `git push` 不代表提交成功。Codex 必须从 GitHub 远程重新读取并确认：
 
@@ -192,7 +229,7 @@ BLOCKED_REPORT_NOT_VISIBLE_ON_GITHUB
 
 不得对用户声称“已上传”或“已完成”。用户不需要也不应该参与排查 Git 提交。
 
-## 9. 完成后清理硬门禁
+## 10. 完成后清理硬门禁
 
 远程报告第一次确认后，Codex 必须清理：
 
@@ -204,6 +241,8 @@ BLOCKED_REPORT_NOT_VISIBLE_ON_GITHUB
 - 临时 worktree；
 - 带本轮前缀的 Acceptance 测试数据；
 - 本轮临时验收根目录。
+
+主人授权导入的真实资料是否保留，必须按任务单和主人选择处理，Codex不得擅自删除。
 
 清理后更新 `LOCAL_EXECUTION_RESULT.md`，再次提交、push 并从远程复读。
 
@@ -230,7 +269,7 @@ local_temp_root_absent: true
 - 远程报告 Commit；
 - 主人明确要求保留的失败证据。
 
-## 10. 自动验收与主人验收边界
+## 11. 自动验收与主人验收边界
 
 Codex 可以自动完成：
 
@@ -239,8 +278,8 @@ Codex 可以自动完成：
 - 进程、端口、文件、配置差异和 API 检查；
 - MCP 工具调用；
 - 导入、队列、候选和审计链检查；
-- 报告和脱敏证据生成；
-- Git 提交、push、远程复读和本地清理。
+- 问题集执行、指标统计和脱敏证据；
+- 报告生成、Git 提交、push、远程复读和本地清理。
 
 必须由主人最终确认：
 
@@ -248,12 +287,14 @@ Codex 可以自动完成：
 - 第一次打开是否知道下一步；
 - 页面是否能看懂；
 - 真实客户端 GUI 的连接结果；
+- 候选批准和拒绝操作；
 - Windows 重启后的主观窗口行为；
-- 任何无法被自动证据可靠证明的 UI 体验。
+- 抽查真实资料问题的答案和来源是否正确；
+- 任何无法被自动证据可靠证明的 UI 或内容质量。
 
-Codex 只能记录主人结论，不能替主人声称“肉眼已确认”。
+Codex 只能记录主人结论，不能替主人声称“肉眼已确认”或“真实内容全部正确”。
 
-## 11. 自动门禁
+## 12. 自动门禁
 
 仓库必须运行：
 
@@ -264,17 +305,19 @@ python -m pytest -q tests/test_acceptance_sync.py
 python -m pytest -q tests/test_local_execution_handoff.py
 ```
 
-`local-execution-handoff` CI 在 `acceptance/**` 报告分支上要求最终回执为 `COMPLETED`。缺少清理、远程确认或报告 Commit 时必须失败。
+`local-execution-handoff` CI 必须验证 Day 0、真实数据授权、质量题数量、评分阈值、远程确认和清理字段。`acceptance/**` 报告分支上的最终回执不是 `COMPLETED` 时必须失败。
 
-## 12. 合并边界
+## 13. 合并边界
 
 以下条件全部满足前不得合并产品 PR：
 
 - 精确产品 Commit 的 CI 通过；
 - 精确 Artifact 身份和哈希通过；
-- 自动验收通过；
-- 必须的真机验收通过；
-- 主人观察项已确认；
+- Day 0 安全门槛通过；
+- Stage 1 小批量真实数据通过；
+- 强制记忆质量指标通过；
+- 主人观察和内容抽查已确认；
+- 没有 Production 污染、数据丢失、自动永久记忆或配置破坏；
 - 最终报告已提交并远程复读；
 - 结果回执为 `COMPLETED`；
 - 开始前和结束后清理均通过；
