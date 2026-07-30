@@ -1,8 +1,9 @@
 # DEVELOPMENT_RULES.md — LingJi Development Rules
 
-> Updated: 2026-07-26
+> Updated: 2026-07-29
 > Architecture authority: `docs/ARCHITECTURE.md`
 > Current-state authority: `docs/PROJECT_STATUS.md`
+> Acceptance authority: `docs/ACCEPTANCE/README.md`
 
 ## 1. Branch and Environment Isolation
 
@@ -64,10 +65,11 @@ Before code changes, read only the smallest evidence set needed for the task:
 
 1. confirm branch, upstream, recent commit and workspace status
 2. read the relevant section of `docs/PROJECT_STATUS.md`
-3. read the latest relevant section of `docs/CHANGELOG.md`
-4. inspect the directly affected workflow, build or test entry
-5. locate the real class/function entry point, direct callers and focused tests
-6. confirm data authority, API registration, storage boundary and primary/compatibility ownership
+3. read the relevant module in `docs/MODULES/CODE_MAP.md`
+4. read `docs/ACCEPTANCE/README.md` and the latest relevant entry in `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`
+5. inspect the directly affected workflow, build or test entry
+6. locate the real class/function entry point, direct callers and focused tests
+7. confirm data authority, API registration, storage boundary and primary/compatibility ownership
 
 Do not repeatedly read all of `AGENTS.md`, `docs/PROJECT_STATUS.md`, `docs/ARCHITECTURE.md` or this file. Read the governing file once, keep a short execution-constraint summary, and use targeted keyword or section lookup when a later decision depends on a specific rule.
 
@@ -79,10 +81,12 @@ For design and development work:
 
 1. understand the user requirement and current code
 2. review relevant official documentation and reliable implementations when the technology is external or may have changed
-3. produce a bounded implementation plan
-4. implement with minimal, maintainable code
-5. avoid repeated broad refactors
-6. update an existing authoritative document or test report after a substantial tested change
+3. define the change-specific automatic tests, real-machine tests, owner observations, regressions, cleanup and rollback in `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`
+4. produce a bounded implementation plan
+5. implement with minimal, maintainable code
+6. avoid repeated broad refactors
+7. update an existing authoritative document or test report after a substantial tested change
+8. update `docs/ACCEPTANCE/CODEX_ACCEPTANCE_INSTRUCTIONS.md` when user flow, runtime, install, data, connector, security or release behavior changes
 
 A new Markdown file is allowed only when no existing authority can carry the information and the new file has a unique, durable responsibility. Do not create duplicate optimization summaries, final summaries, supplemental notes or renamed copies of existing documents.
 
@@ -148,6 +152,7 @@ Rules:
 7. Vector visibility is mandatory: mode, collection, readiness, model, dimension, counts, failures and per-item existence.
 8. The UI must never fabricate success, zero counts, GPU use, vector readiness or task completion.
 9. Brain Status, Memory Inspector, Vector Center and MCP must use shared statistics providers.
+10. Every changed page must be exercised in the real packaged Desktop; all visible controls require a real effect or an explicit unavailable state.
 
 ## 10. Data and Ingestion Boundaries
 
@@ -190,6 +195,7 @@ Run focused tests first. Use the repository validation entry instead of inventin
 .\scripts\validate.ps1 -Mode focused -Area <area>
 .\scripts\validate.ps1 -Mode full
 .\scripts\validate.ps1 -Mode release
+python scripts/check_acceptance_sync.py
 ```
 
 - `focused` runs the mapped module tests during development.
@@ -197,21 +203,38 @@ Run focused tests first. Use the repository validation entry instead of inventin
 - `release` adds Windows Sidecar/Tauri/NSIS build and release-artifact preparation; GitHub release CI and owner-machine installation remain the final release authority.
 - `npm run build` is build-only; Desktop smoke is invoked explicitly.
 - Also test Qdrant available/unavailable modes, production/acceptance isolation and compatibility-runtime-disabled behavior when the changed module depends on those contracts.
+- Product-affecting changes must update `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`; the acceptance sync CI gate must fail otherwise.
 
 Never delete tests, reduce assertions, hide failures, rerun unchanged full gates without cause, or report unexecuted tests as passed.
 
-## 14. Documentation and Delivery
+## 14. Acceptance Governance
+
+1. `docs/ACCEPTANCE/README.md` is the durable acceptance authority.
+2. `CODEX_ACCEPTANCE_INSTRUCTIONS.md` contains the common executable baseline for Codex.
+3. `CHANGE_ACCEPTANCE_LOG.md` records the exact incremental acceptance required by every product-affecting change.
+4. `REPORT_TEMPLATE.md` defines the final evidence format.
+5. Every product-affecting PR must update `CHANGE_ACCEPTANCE_LOG.md` in the same PR.
+6. A change to user flow, install, runtime, lifecycle, storage, API, MCP, connector, security or release behavior must also update `CODEX_ACCEPTANCE_INSTRUCTIONS.md`.
+7. Chat messages and historical reports may not override the current acceptance authority.
+8. Real-machine acceptance uses direct overwrite installation by default. Do not uninstall or delete owner data unless the task explicitly requires and authorizes it.
+9. Old acceptance directories, duplicate artifacts, ordinary successful logs, screenshots, fixtures and temporary config copies are removed after the report is committed.
+10. Product Head remains fixed once its Artifact is selected. Final acceptance reports are committed on a separate report branch.
+11. Owner-only observations, including console-window behavior and first-time comprehension, cannot be self-certified by Codex.
+12. A PR is not mergeable in practice merely because GitHub reports `mergeable=true`; required owner acceptance and report evidence must also pass.
+
+## 15. Documentation and Delivery
 
 One fact has one detailed authority:
 
 - `docs/ARCHITECTURE.md`: stable architecture, boundaries and core data flow
 - `docs/PROJECT_STATUS.md`: current stage, completion state, risks, blockers and next step
 - `docs/CHANGELOG.md`: user-facing or release-significant changes
+- `docs/ACCEPTANCE/`: current acceptance rules, executable instructions, change-specific requirements and report template
 - `docs/TEST_REPORTS/`: commands, environment, results, limitations and validated commit
 - `docs/MODULES/CODE_MAP.md`: code entry points, ownership and focused validation only; do not duplicate current status or CI history
 - `docs/DEVELOPMENT_RULES.md`: durable development and governance rules
 
-Update the existing authority instead of creating a parallel document. Historical module plans and implementation reports may remain as evidence but must not override the current architecture or project status.
+Update the existing authority instead of creating a parallel document. Historical module plans and implementation reports may remain as evidence but must not override the current architecture, project status or acceptance authority.
 
 Final task output must distinguish:
 
