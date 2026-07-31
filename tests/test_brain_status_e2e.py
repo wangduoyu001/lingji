@@ -1,4 +1,7 @@
 import os
+import re
+from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,6 +12,10 @@ from src.control.api import create_control_app
 
 TOKEN = "e2e-test"
 AUTH_HEADERS = {"X-LingJi-Token": TOKEN}
+_SCRIPT_SRC_PATTERN = re.compile(
+    r"<script\b[^>]*\bsrc=[\"']([^\"']+)[\"'][^>]*>",
+    flags=re.IGNORECASE,
+)
 
 
 class _DeterministicControlService:
@@ -80,13 +87,34 @@ class TestBrainStatusApiContract:
         assert response.status_code == 401
 
     def test_frontend_dist_exists(self):
-        """Frontend dist directory has compiled JS bundles when a build ran first."""
-        dist = os.path.join("desktop", "lingji-control", "dist")
-        if not os.path.isdir(dist):
+        """A built frontend references at least one real, non-empty JS entry asset."""
+        dist = Path("desktop") / "lingji-control" / "dist"
+        if not dist.is_dir():
             pytest.skip("Frontend dist not built – run UI build first")
-        index = os.path.join(dist, "index.html")
-        assert os.path.isfile(index), "index.html missing"
-        assets_dir = os.path.join(dist, "assets")
-        assert os.path.isdir(assets_dir), "assets dir missing"
-        js_files = [name for name in os.listdir(assets_dir) if name.endswith(".js")]
-        assert len(js_files) >= 2, f"Expected >=2 JS bundles, got {len(js_files)}"
+
+        index = dist / "index.html"
+        assert index.is_file(), "index.html missing"
+        assets_dir = dist / "assets"
+        assert assets_dir.is_dir(), "assets dir missing"
+
+        index_text = index.read_text(encoding="utf-8")
+        script_sources = _SCRIPT_SRC_PATTERN.findall(index_text)
+        javascript_sources = [
+            source
+            for source in script_sources
+            if urlsplit(source).path.lower().endswith(".js")
+        ]
+        assert javascript_sources, "index.html does not reference a JavaScript entry asset"
+
+        dist_root = dist.resolve()
+        for source in javascript_sources:
+            relative_path = urlsplit(source).path.lstrip("/")
+            bundle = (dist / relative_path).resolve()
+            try:
+                bundle.relative_to(dist_root)
+            except ValueError as exc:
+                raise AssertionError(
+                    f"JavaScript asset escapes dist directory: {source}"
+                ) from exc
+            assert bundle.is_file(), f"Referenced JavaScript asset missing: {source}"
+            assert bundle.stat().st_size > 0, f"Referenced JavaScript asset is empty: {source}"
