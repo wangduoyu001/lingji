@@ -2,27 +2,27 @@
 
 > 本文件是本机 Codex 向 ChatGPT / 主开发代理提交结果的唯一固定回执。
 >
-> Codex 必须在任务单指定的报告分支更新本文件。聊天中的“完成了”不构成结果，只有远程报告分支中的本文件、最终报告、报告内容 Commit 和 PR 评论能够被重新读取，任务才算提交成功。
+> Codex 必须在任务单指定的报告分支更新本文件。聊天中的“完成了”不构成结果，只有远程报告、公开证据、结果回执、报告 Commit 和 PR 评论都能够重新读取，任务才算提交成功。
 >
 > 用户不负责填写、上传、推送、核对或解释本文件。
 
 ## 1. 当前回执
 
 ```yaml
-task_id: PR60-MEMORY-QUALITY-TRIAL-1C514877
+task_id: PR60-MEMORY-QUALITY-TRIAL-D69874AF
 status: PENDING
 verdict: PENDING
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
-product_commit: 1c5148779624910f1c6072d95d6c6f6822f631e6
-task_instruction_commit: PENDING
+product_commit: d69874afd8def42a40c4a5cc5e678a71921d44b5
+task_instruction_commit: a9dc01d3bf8672b7bdf63c88ce1bd62b85a0f7bb
 trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
-report_branch: acceptance/pr60-memory-quality-trial-1c514877
+report_branch: acceptance/pr60-memory-quality-trial-d69874af
 report_commit: PENDING
-report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_1c514877.md
-public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_1c514877.json
-public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_1c514877.txt
+report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_d69874af.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_d69874af.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_d69874af.txt
 day0_result: NOT_RUN
 stage1_result: NOT_RUN
 stage2_result: NOT_RUN
@@ -49,7 +49,7 @@ started_at: PENDING
 finished_at: PENDING
 ```
 
-## 2. Codex 回填规则
+## 2. 阶段规则
 
 允许的 `status`：
 
@@ -69,7 +69,7 @@ FAIL
 BLOCKED
 ```
 
-阶段字段允许：
+允许的阶段结果：
 
 ```text
 PASS
@@ -78,59 +78,69 @@ BLOCKED
 NOT_RUN
 ```
 
-### Day 0 规则
-
-- `day0_result` 不是 PASS 时，`stage1_result` 和 `stage2_result` 必须为 NOT_RUN；
+- Day 0 不是 PASS 时，Stage 1 和 Stage 2 必须为 NOT_RUN；
 - Day 0 未 PASS 时不得把 `real_data_authorized` 写为 true；
-- Day 0 FAIL 或 BLOCKED 时，最终 verdict 不得为 PASS。
+- 进入 Stage 1 前必须获得主人明确授权；
+- Day 0 FAIL 或 BLOCKED 时最终 verdict 不得为 PASS。
 
-### 真实数据规则
+## 3. PASS 硬门槛
 
-- 进入 Stage 1 前必须 `real_data_authorized: true`；
-- PASS 报告至少执行 20 道质量题；
-- 主人至少抽查 10 题；
-- PASS 要求 `quality_score_percent >= 90`；
-- PASS 要求 `source_accuracy_percent >= 95`；
-- PASS 要求 `false_positive_percent <= 5`；
-- PASS 要求 `codex_mcp_success_percent >= 95`；
-- PASS 要求 `duplicate_formal_content_count = 0`；
-- PASS 要求 `production_pollution_count = 0`；
-- PASS 要求 `owner_config_preserved: PASS`。
+PASS 至少要求：
 
-### 完成规则
+```text
+day0_result: PASS
+stage1_result: PASS
+real_data_authorized: true
+quality_questions_total >= 20
+owner_sample_questions >= 10
+quality_score_percent >= 90
+source_accuracy_percent >= 95
+false_positive_percent <= 5
+codex_mcp_success_percent >= 95
+duplicate_formal_content_count = 0
+production_pollution_count = 0
+owner_config_preserved: PASS
+```
+
+还必须确认：
+
+- 上次 `D0-UX-001` 回归通过；
+- 上次 `D0-CODEX-002` 回归通过；
+- Embedding / Qdrant 状态和下一步可理解；
+- 主人五个检查点完成；
+- 开始前和结束后清理通过；
+- 远程报告、公开证据、回执和 PR 评论复读成功。
+
+## 4. 完成规则
 
 当 `status: COMPLETED` 时必须同时满足：
 
 - `verdict` 为 PASS、FAIL 或 BLOCKED；
-- `task_instruction_commit` 为远程可读取的 40 位 Git SHA；
-- `report_commit` 为第一次成功推送且远程可读取的“报告正文 + 公开证据”Commit；
-- 最终回执 Commit 可以晚于 `report_commit`；
+- `task_instruction_commit` 为远程可读取的 40 位 SHA；
+- `report_commit` 为第一次成功推送且远程可读取的报告正文与公开证据 Commit；
 - `cleanup_before: PASS`；
 - `cleanup_after: PASS`；
-- 所有 `remote_*_verified` 为 `true`；
-- `pr_comment_verified: true`；
-- `local_temp_root_absent: true`；
+- `remote_branch_verified`、`remote_commit_verified`、`remote_report_verified`、`remote_result_verified`、`pr_comment_verified` 和 `local_temp_root_absent` 全部为 true；
 - `owner_observation` 为 PASS、FAIL 或 NOT_REQUIRED；
 - `started_at` 和 `finished_at` 为带时区的 ISO 8601 时间；
-- 报告分支最终 HEAD 包含 `report_commit` 和当前回执最终版本；
-- 远程报告、公开证据和本回执能够通过 GitHub API 重新读取。
+- 报告分支最终 HEAD 包含报告 Commit 和当前回执最终版本。
 
-任何远程读取失败时：
+远程读取失败时：
 
 ```yaml
 status: BLOCKED_SUBMISSION
 verdict: BLOCKED
 ```
 
-任何结束清理失败时不得写 `COMPLETED`。
+结束清理失败时不得写 `COMPLETED`，必须记录 `BLOCKED_POST_CLEANUP` 和剩余相对路径。
 
-## 3. 主人检查点
+## 5. 主人检查点
 
 Codex 回填：
 
 ```text
-Checkpoint A 安装与首次打开：PENDING
-Checkpoint B Codex 真实连接：PENDING
+Checkpoint A 安装、首页、唯一下一步与状态理解：PENDING
+Checkpoint B Codex 命令、工具、真实连接与返回内容：PENDING
 Checkpoint C 候选批准与拒绝：PENDING
 Checkpoint D Windows 重启后：PENDING
 Checkpoint E 质量题抽查：PENDING
@@ -138,10 +148,13 @@ Checkpoint E 质量题抽查：PENDING
 
 Codex不得替主人填写肉眼、理解程度或真实资料正确性结论。
 
-## 4. 最终结果摘要
+## 6. 最终结果摘要
 
 ```text
 自动测试：PENDING
+D0-UX-001 回归：NOT_RUN
+D0-CODEX-002 回归：NOT_RUN
+Embedding / Qdrant 诊断：NOT_RUN
 Day 0：NOT_RUN
 Stage 1：NOT_RUN
 Stage 2：NOT_RUN
@@ -152,14 +165,13 @@ source_accuracy：NOT_RUN
 false_positive_rate：NOT_RUN
 Codex MCP 成功率：NOT_RUN
 阻塞缺陷：PENDING
-未覆盖数据源或客户端：PENDING
 Production 是否被污染：PENDING
 主人配置是否保持：PENDING
 临时垃圾是否清理：PENDING
 远程报告是否复读成功：PENDING
 ```
 
-## 5. 证据索引
+## 7. 证据索引
 
 只填写脱敏信息：
 
