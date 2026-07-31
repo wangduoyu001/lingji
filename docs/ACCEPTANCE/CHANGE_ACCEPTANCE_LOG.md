@@ -51,37 +51,44 @@
 
 ---
 
-## 2026-07-30 · PR #60 · Day 0 安全门槛与真实数据记忆质量试运行
+## 2026-07-31 · PR #60 · d69874af 引导修复复验与真实数据记忆质量试运行
 
 - 产品分支：`feature/unified-ai-memory-connectors`
-- 产品 Commit：`1c5148779624910f1c6072d95d6c6f6822f631e6`
-- 固定 Artifact：`lingji-windows-0.1.0-1c514877`
-- Artifact ID：`8723868744`
-- 影响模块：本机安全验收、真实数据导入、来源追溯、幂等去重、候选审核、Codex MCP、质量问题集、远程报告与本地清理
+- 产品 Commit：`d69874afd8def42a40c4a5cc5e678a71921d44b5`
+- 固定 Artifact：`lingji-windows-0.1.0-d69874af`
+- Artifact ID：`8762312712`
+- Artifact ZIP SHA256：`6bf1f591502617c400ce482f6beb0d5e430a172cd036137bb4a39cae2cbf4cb4`
+- 安装器 SHA256：`d62867b7b7c90bee8273b3cf5720f53099c266897ce95d0e42224deae31bf262`
+- 影响模块：首次使用引导、AI 软件与历史目录发现、Codex 连接状态机、Embedding/Qdrant 诊断、Day 0、真实数据试运行、报告提交和本地清理
 - 风险等级：P0
-- 用户可感知变化：不再单独重复做一套形式验收；先完成 Day 0 安全门槛，再直接进入小批量真实数据试运行和记忆质量评分。
-- 数据或安全边界变化：真实资料必须由主人明确授权；Day 0 未 PASS 禁止导入；Production 只读；剧本和第三方资料不得被当作主人个人记忆。
+- 用户可感知变化：页面必须给出唯一当前动作，主动解释扫描结果和可导入范围，不再同时显示“配置正常”和“命令不存在”，向量问题必须展示具体原因与处理入口。
+- 数据或安全边界变化：Day 0 未 PASS 禁止读取真实资料；历史目录只读取元数据，读取内容前必须获得主人授权；Production 保持只读和物理隔离。
 
-### 新增或修改的自动验收
+### 已通过的自动验收
 
-- [ ] `python scripts/check_local_execution_handoff.py`：校验执行模式、专项协议、Day 0、真实数据授权、题数、评分阈值、污染、重复、配置保持、远程确认和清理字段。
-- [ ] `python -m pytest -q tests/test_local_execution_handoff.py`：覆盖 Day 0 未通过禁止真实数据、PASS 阈值、主人抽查题数、错误来源、Production 污染和结束清理。
-- [ ] `local-execution-handoff` Workflow：精确树运行并拒绝缺少专项字段或弱化阈值的任务/回执。
+- [x] `acceptance-doc-sync #43`
+- [x] `local-execution-handoff #35`
+- [x] `tests #1138`
+- [x] `P0 Windows Gate #258`
+- [x] `Windows Desktop Release Baseline #142`
+- [x] 旧模糊文案“已设置，等待测试”回归断言。
+- [x] 配置文件、客户端命令和真实连接三个状态分离。
 
 ### 新增或修改的真机验收
 
+- [ ] 开始前使用 `scripts/cleanup_acceptance_workspace.py` 清理旧任务专用临时目录；脚本必须先 dry-run，再显式 `--execute`，且只能操作任务单允许的精确目录。
 - [ ] Day 0 在任何真实数据导入前完成：固定 Artifact、覆盖安装、Runtime、8766/8767、MCP 鉴权、真实 Codex 调用、候选边界、A-01、三轮 Core 重启和 Windows 重启。
-- [ ] Day 0 不是 PASS 时立即停止，不读取或导入主人真实资料。
+- [ ] 页面始终只有一个明确主要动作；扫描完成后主动说明发现的软件和历史目录元数据。
+- [ ] 发现历史目录后主动询问是否查看或导入，明确说明当前支持与不支持的格式。
+- [ ] 配置文件存在、`codex` 命令可用和真实 MCP 连接必须分别显示；缺少命令时不得显示 ready。
+- [ ] Embedding/Qdrant 必须显示配置模型、激活模型、缺失模型、最近错误、Qdrant 状态、是否需要重建和当前可执行入口。
 - [ ] 主人明确授权后，Stage 1 只导入 1 部剧本、1 份 Codex 报告、少量 ChatGPT 历史和 1 个明确 Obsidian 目录。
-- [ ] 验证 raw、provenance、adapter version、input hash、idempotency key、失败路径、重复导入和候选链。
-- [ ] Stage 1 无 P0/P1 后才逐步扩展到最多 10 部剧本和其他授权资料。
+- [ ] Stage 1 无 P0/P1 后才逐步扩展到最多 10 部授权剧本和其他授权资料。
 - [ ] 至少执行 20 道质量题：精确事实不少于 8、跨文档比较不少于 4、来源核验不少于 4、负面边界不少于 4。
-- [ ] 质量阈值：quality score ≥ 90%、source accuracy ≥ 95%、false positive rate ≤ 5%、Codex MCP 成功率 ≥ 95%。
-- [ ] 正式数据丢失、Production 污染、重复正式内容、自动写永久记忆、Token/隐私泄露和主人配置破坏均为 0。
 
 ### 主人肉眼确认
 
-- [ ] Checkpoint A：安装和首次打开，无黑窗，首页正常，知道下一步，状态文案可区分。
+- [ ] Checkpoint A：安装和首次打开，无黑窗，首页正常，唯一下一步清楚，状态文案能区分。
 - [ ] Checkpoint B：Codex 能看到 LingJi 工具、真实调用成功、返回内容正确。
 - [ ] Checkpoint C：主人亲自批准一个测试候选、拒绝一个测试候选，页面可理解。
 - [ ] Checkpoint D：Windows 重启后无黑窗，灵机恢复且页面可操作。
@@ -90,39 +97,70 @@
 ### 强制回归项
 
 - [ ] Day 0 未 PASS 时禁止导入真实资料。
-- [ ] 未经主人授权不得扫描或导入任何真实目录。
+- [ ] 未经主人授权不得读取或导入任何真实目录内容。
 - [ ] 剧本人物、剧情和台词不得进入主人个人事实。
 - [ ] 不存在的问题必须承认未知，不得拿相似资料冒充。
 - [ ] 候选未批准前 Core Memory 不增加，拒绝候选不进入永久记忆。
 - [ ] A-01 隔离不得读取或修改主人真实 `CODEX_HOME`。
 - [ ] 覆盖安装和连接器回滚不得破坏主人数据或配置。
 - [ ] Windows 重启后 Runtime、MCP、Workspace、DataRoot 和 Vault 恢复。
+- [ ] 开始前和结束后临时目录必须清理；清理失败时只能 BLOCKED，不得绕过安全策略。
+
+### 质量阈值
+
+```text
+quality_score >= 90%
+source_accuracy >= 95%
+false_positive_rate <= 5%
+Codex MCP 真实调用成功率 >= 95%
+重复正式内容 = 0
+Production 污染 = 0
+人工审核链成功率 = 100%
+Windows 重启后恢复 = 100%
+```
 
 ### 清理与回滚
 
-- 临时数据前缀：`PR60_MEMORY_TRIAL_1C514877_`
-- 临时根目录：`D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-1c514877`
+- 当前临时数据前缀：`PR60_MEMORY_TRIAL_D69874AF_`
+- 当前临时根目录：`D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-d69874af`
+- 必须清理的历史临时目录：`D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-1c514877`、`D:\codex\LingJiAcceptance\PR60-1c514877`
+- 安全清理入口：`python scripts/cleanup_acceptance_workspace.py --task-id PR60-MEMORY-QUALITY-TRIAL-D69874AF --target <精确目录>`；确认 dry-run 后追加 `--execute`。
+- 清理工具拒绝验收根目录本身、根目录外路径、非白名单目录和不匹配任务身份；不跟随符号链接或 Windows reparse point。
 - 覆盖安装方式：固定安装器直接覆盖，不卸载。
 - 临时配置副本：每个客户端最多一个，哈希验证后删除。
-- 测试数据清理：删除本轮 fixture、checkpoint、测试候选、普通成功日志、截图、重复安装包、解压内容和 worktree。
 - 主人授权的真实资料是否保留由主人选择，Codex不得擅自删除。
 - 报告第一次远程确认后清理，更新结果回执，再次 push 和远程复读。
 
 ### 不在范围
 
-- 不借试运行新增产品功能。
-- 不自动批准永久记忆。
-- 不启用远程或公网 MCP。
-- 不读取未授权浏览器、整盘或用户目录。
-- 不把 Stage 2 扩容视为一次性全量迁移。
+- Codex 原始 Session / JSONL 自动导入。
+- Claude Code 和 WorkBuddy 历史导入。
+- 自动下载 Embedding 模型。
+- 自动重建 Production Qdrant。
+- 自动批准永久记忆。
+- 远程或公网 MCP。
 
 ### 最终报告
 
 - 专项协议：`docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md`
 - 任务单：`docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md`
-- 报告路径：`docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_1c514877.md`
-- 报告分支：`acceptance/pr60-memory-quality-trial-1c514877`
+- 报告路径：`docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_d69874af.md`
+- 报告分支：`acceptance/pr60-memory-quality-trial-d69874af`
 - 产品 PR 必须保持 Draft 且不得合并，直到 Day 0、Stage 1、质量指标、主人检查点、远程提交和清理全部满足 PASS。
+
+---
+
+## 2026-07-30 · PR #60 · 1c514877 首轮试运行（历史失败，禁止重跑）
+
+- 产品分支：`feature/unified-ai-memory-connectors`
+- 产品 Commit：`1c5148779624910f1c6072d95d6c6f6822f631e6`
+- 固定 Artifact：`lingji-windows-0.1.0-1c514877`
+- Artifact ID：`8723868744`
+- 状态：历史 `FAIL / BLOCKED_SUBMISSION`，已被 2026-07-31 的 d69874af 条目取代。
+- 已知缺陷：`D0-UX-001` 页面缺少统一引导；`D0-CODEX-002` 配置状态和命令状态矛盾；`BLOCKED_POST_CLEANUP` 旧临时目录未清理。
+- 历史报告：`docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_1c514877.md`
+- 历史报告分支：`acceptance/pr60-memory-quality-trial-1c514877`
+- 当前不得再按该产品 Commit、Artifact 或报告路径执行。
 
 ---
 
@@ -179,25 +217,14 @@
 
 ---
 
-## 2026-07-29 · PR #60 · P0-A 与统一 AI 记忆连接器重新真机验收（历史方案，已被 2026-07-30 合并试运行方案取代）
+## 2026-07-29 · PR #60 · P0-A 与统一 AI 记忆连接器重新真机验收（历史方案）
 
 - 产品分支：`feature/unified-ai-memory-connectors`
 - 产品 Commit：`1c5148779624910f1c6072d95d6c6f6822f631e6`
 - 固定 Artifact：`lingji-windows-0.1.0-1c514877`
 - Artifact ID：`8723868744`
-- 影响模块：P0-A、连接器、MCP、导入、人工审核和 Windows 生命周期
-- 风险等级：P0
-- 状态：保留为历史记录；当前执行以 2026-07-30 的 Day 0 + 真实数据试运行条目和任务单为准。
-
-### 已通过的自动验收
-
-- [x] `tests #1081`
-- [x] `P0 Windows Gate #240`
-- [x] `Windows Desktop Release Baseline #129`
-- [x] A-01 修复和回归测试
-
-### 历史最终报告
-
+- 状态：被后续真实数据试运行方案取代，保留为历史记录。
+- 已通过自动验收：`tests #1081`、`P0 Windows Gate #240`、`Windows Desktop Release Baseline #129`、A-01 回归。
 - 原计划报告：`docs/TEST_REPORTS/PR60_OWNER_CODEX_FULL_REACCEPTANCE_1c514877.md`
 - 原计划分支：`acceptance/pr60-owner-1c514877`
 - 当前不得再按该旧路径执行。
