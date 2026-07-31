@@ -1,0 +1,34 @@
+{
+  "task_id": "PR60-MEMORY-QUALITY-TRIAL-D69874AF",
+  "product_commit": "d69874afd8def42a40c4a5cc5e678a71921d44b5",
+  "artifact_id": 8762312712,
+  "verdict": "FAIL",
+  "day0_result": "FAIL",
+  "stage1_result": "NOT_RUN",
+  "stage2_result": "NOT_RUN",
+  "real_data_authorized": false,
+  "quality_questions_total": 0,
+  "owner_sample_questions": 0,
+  "quality_score_percent": "NOT_RUN",
+  "source_accuracy_percent": "NOT_RUN",
+  "false_positive_percent": "NOT_RUN",
+  "codex_mcp_success_percent": "NOT_RUN",
+  "production_pollution_count": 0,
+  "blocking_defects": [
+    {
+      "id": "D0-AUTO-001",
+      "scope": "mandatory release validation",
+      "actual": "frontend bundle-count assertion expected at least 2 JavaScript bundles and observed 1"
+    }
+  ],
+  "release_validation": {
+    "result": "FAIL",
+    "python_full": {
+      "failed": 1,
+      "passed": 575,
+      "skipped": 10,
+      "subtests_passed": 3
+    }
+  },
+  "owner_observation": "NOT_REQUIRED"
+}
