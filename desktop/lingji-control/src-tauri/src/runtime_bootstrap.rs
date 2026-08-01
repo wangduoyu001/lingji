@@ -53,6 +53,7 @@ struct RuntimeBindingContract {
 #[derive(Clone, Debug, Deserialize)]
 struct RuntimePing {
     status: String,
+    binding_contract_version: u32,
     data_root: String,
     workspace: String,
 }
@@ -102,6 +103,12 @@ fn startup_contract_error() -> Option<String> {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .clone()
+}
+
+pub fn startup_contract_requested() -> bool {
+    env::var(STARTUP_CONTRACT_ENV)
+        .ok()
+        .is_some_and(|value| !value.trim().is_empty())
 }
 
 fn config_path() -> Result<PathBuf, String> {
@@ -270,18 +277,16 @@ fn status_from_config(config: RuntimeBootstrapConfig) -> Result<RuntimeBootstrap
         binding_locked: config.binding_locked,
         c_drive_write_detected: looks_like_windows_system_drive(&effective),
         inherited_environment_ignored: inherited_environment_ignored(),
-        startup_contract_detected: env::var(STARTUP_CONTRACT_ENV)
-            .ok()
-            .is_some_and(|value| !value.trim().is_empty()),
+        startup_contract_detected: startup_contract_requested(),
         last_error: startup_contract_error(),
     })
 }
 
 fn unconfigured_status(error: String) -> RuntimeBootstrapStatus {
-    let source = if error.contains("confirmed again") || error.contains("activation policy") {
-        "reconfirmation_required"
-    } else if startup_contract_error().is_some() {
+    let source = if startup_contract_requested() {
         "startup_contract_error"
+    } else if error.contains("confirmed again") || error.contains("activation policy") {
+        "reconfirmation_required"
     } else {
         "unconfigured"
     };
@@ -296,9 +301,7 @@ fn unconfigured_status(error: String) -> RuntimeBootstrapStatus {
         binding_locked: false,
         c_drive_write_detected: false,
         inherited_environment_ignored: inherited_environment_ignored(),
-        startup_contract_detected: env::var(STARTUP_CONTRACT_ENV)
-            .ok()
-            .is_some_and(|value| !value.trim().is_empty()),
+        startup_contract_detected: startup_contract_requested(),
         last_error: startup_contract_error().or(Some(error)),
     }
 }
@@ -361,40 +364,33 @@ fn activate_config(config: RuntimeBootstrapConfig) -> Result<RuntimeBootstrapSta
     Ok(status)
 }
 
-pub fn apply_startup_contract() -> Result<Option<RuntimeBootstrapStatus>, String> {
-    let contract_path = match env::var(STARTUP_CONTRACT_ENV) {
-        Ok(value) if !value.trim().is_empty() => PathBuf::from(value.trim()),
-        _ => return Ok(None),
-    };
+fn build_startup_contract_config() -> Result<RuntimeBootstrapConfig, String> {
+    let contract_value = env::var(STARTUP_CONTRACT_ENV)
+        .map_err(|_| "LingJi startup binding contract was requested but its path is unavailable".to_string())?;
+    let contract_path = PathBuf::from(contract_value.trim());
     if !contract_path.is_absolute() {
-        let error = "LingJi startup binding contract path must be absolute".to_string();
-        set_startup_contract_error(Some(error.clone()));
-        return Err(error);
+        return Err("LingJi startup binding contract path must be absolute".to_string());
     }
     let bytes = fs::read(&contract_path)
         .map_err(|error| format!("Unable to read LingJi startup binding contract: {error}"))?;
     let contract: RuntimeBindingContract = serde_json::from_slice(&bytes)
         .map_err(|error| format!("Invalid LingJi startup binding contract: {error}"))?;
     if contract.schema_version != STARTUP_CONTRACT_SCHEMA_VERSION {
-        let error = "Unsupported LingJi startup binding contract schema".to_string();
-        set_startup_contract_error(Some(error.clone()));
-        return Err(error);
+        return Err("Unsupported LingJi startup binding contract schema".to_string());
     }
     if !valid_binding_id(&contract.binding_id) {
-        let error = "LingJi startup binding contract has an invalid binding id".to_string();
-        set_startup_contract_error(Some(error.clone()));
-        return Err(error);
+        return Err("LingJi startup binding contract has an invalid binding id".to_string());
     }
     if control_port_in_use() {
-        let error = "Refusing to change LingJi startup binding while port 8766 is already in use"
-            .to_string();
-        set_startup_contract_error(Some(error.clone()));
-        return Err(error);
+        return Err(
+            "Refusing to change LingJi startup binding while port 8766 is already in use"
+                .to_string(),
+        );
     }
 
     let workspace = validate_workspace(&contract.workspace)?;
     let data_root = validate_base_root(&contract.data_root, true)?;
-    let config = RuntimeBootstrapConfig {
+    Ok(RuntimeBootstrapConfig {
         schema_version: BOOTSTRAP_SCHEMA_VERSION,
         base_data_root: data_root.display().to_string(),
         active_workspace: workspace,
@@ -403,13 +399,34 @@ pub fn apply_startup_contract() -> Result<Option<RuntimeBootstrapStatus>, String
         binding_id: contract.binding_id,
         binding_source: "startup_contract".to_string(),
         binding_locked: true,
-    };
-    set_startup_contract_error(None);
-    activate_config(config).map(Some)
+    })
+}
+
+pub fn apply_startup_contract() -> Result<Option<RuntimeBootstrapStatus>, String> {
+    if !startup_contract_requested() {
+        return Ok(None);
+    }
+    match build_startup_contract_config().and_then(activate_config) {
+        Ok(status) => {
+            set_startup_contract_error(None);
+            Ok(Some(status))
+        }
+        Err(error) => {
+            env::remove_var(OWNER_DATA_ROOT_ENV);
+            env::remove_var(WORKSPACE_ENV);
+            set_startup_contract_error(Some(error.clone()));
+            Err(error)
+        }
+    }
 }
 
 pub fn current_status() -> RuntimeBootstrapStatus {
     quarantine_inherited_environment();
+    if startup_contract_requested() {
+        if let Some(error) = startup_contract_error() {
+            return unconfigured_status(error);
+        }
+    }
     match read_saved_config().and_then(status_from_config) {
         Ok(status) => status,
         Err(error) => unconfigured_status(error),
@@ -418,6 +435,12 @@ pub fn current_status() -> RuntimeBootstrapStatus {
 
 pub fn apply_saved_environment() -> Result<RuntimeBootstrapStatus, String> {
     quarantine_inherited_environment();
+    if startup_contract_requested() {
+        return Err(startup_contract_error().unwrap_or_else(|| {
+            "A startup binding contract was requested and must be applied before saved configuration"
+                .to_string()
+        }));
+    }
     let config = read_saved_config()?;
     let status = status_from_config(config)?;
     let workspace = status
@@ -434,10 +457,27 @@ pub fn apply_saved_environment() -> Result<RuntimeBootstrapStatus, String> {
 }
 
 pub fn require_configured() -> Result<RuntimeBootstrapStatus, String> {
-    let status = apply_saved_environment()?;
-    if !status.configured || status.c_drive_write_detected {
-        return Err("LingJi requires an explicitly configured non-C: data directory".to_string());
+    if startup_contract_requested() {
+        if let Some(error) = startup_contract_error() {
+            return Err(error);
+        }
     }
+    let status = current_status();
+    if !status.configured || status.c_drive_write_detected {
+        return Err(status
+            .last_error
+            .unwrap_or_else(|| "LingJi requires an explicitly configured non-C: data directory".to_string()));
+    }
+    let workspace = status
+        .active_workspace
+        .as_deref()
+        .ok_or_else(|| "LingJi workspace is unavailable".to_string())?;
+    let data_root = status
+        .data_root_display
+        .as_deref()
+        .ok_or_else(|| "LingJi data directory is unavailable".to_string())?;
+    env::set_var(OWNER_DATA_ROOT_ENV, data_root);
+    env::set_var(WORKSPACE_ENV, workspace);
     Ok(status)
 }
 
@@ -446,6 +486,12 @@ pub fn configure(
     workspace: String,
 ) -> Result<RuntimeBootstrapStatus, String> {
     quarantine_inherited_environment();
+    if startup_contract_requested() {
+        return Err(
+            "The current LingJi startup contract owns DataRoot selection; manual override is disabled"
+                .to_string(),
+        );
+    }
     if control_port_in_use() {
         return Err("Stop the current LingJi runtime before changing its data directory".to_string());
     }
@@ -488,6 +534,12 @@ fn automatic_base_candidates() -> Vec<PathBuf> {
 }
 
 pub fn auto_configure() -> Result<RuntimeBootstrapStatus, String> {
+    if startup_contract_requested() {
+        return Err(startup_contract_error().unwrap_or_else(|| {
+            "Automatic DataRoot selection is disabled while a startup contract is requested"
+                .to_string()
+        }));
+    }
     if let Ok(config) = read_saved_config() {
         return status_from_config(config);
     }
@@ -565,6 +617,13 @@ fn read_runtime_ping() -> Result<RuntimePing, String> {
         .map_err(|error| format!("Invalid Runtime binding verification payload: {error}"))
 }
 
+fn ping_matches(expected_root: &Path, expected_workspace: &str, actual: &RuntimePing) -> bool {
+    actual.binding_contract_version == STARTUP_CONTRACT_SCHEMA_VERSION
+        && actual.status.eq_ignore_ascii_case("ok")
+        && normalized_identity(expected_root) == normalized_identity(Path::new(&actual.data_root))
+        && expected_workspace.eq_ignore_ascii_case(&actual.workspace)
+}
+
 pub fn verify_runtime_binding() -> RuntimeBindingVerification {
     let status = match require_configured() {
         Ok(status) => status,
@@ -590,15 +649,12 @@ pub fn verify_runtime_binding() -> RuntimeBindingVerification {
 
     match read_runtime_ping() {
         Ok(actual) => {
-            let root_matches = expected_data_root.as_deref().is_some_and(|expected| {
-                normalized_identity(Path::new(expected))
-                    == normalized_identity(Path::new(&actual.data_root))
-            });
-            let workspace_matches = expected_workspace
+            let verified = expected_data_root
                 .as_deref()
-                .is_some_and(|expected| expected.eq_ignore_ascii_case(&actual.workspace));
-            let status_ok = actual.status.eq_ignore_ascii_case("ok");
-            let verified = root_matches && workspace_matches && status_ok;
+                .zip(expected_workspace.as_deref())
+                .is_some_and(|(root, workspace)| {
+                    ping_matches(Path::new(root), workspace, &actual)
+                });
             RuntimeBindingVerification {
                 verified,
                 expected_data_root,
@@ -609,7 +665,7 @@ pub fn verify_runtime_binding() -> RuntimeBindingVerification {
                 binding_id,
                 binding_locked,
                 error: (!verified).then_some(
-                    "Runtime responded from a different DataRoot or workspace; Desktop refused to adopt it"
+                    "Runtime identity contract, DataRoot or workspace did not match; Desktop refused to adopt it"
                         .to_string(),
                 ),
             }
@@ -653,6 +709,15 @@ mod tests {
             binding_id: String::new(),
             binding_source: "owner_selection".to_string(),
             binding_locked: false,
+        }
+    }
+
+    fn ping(version: u32, root: &str, workspace: &str) -> RuntimePing {
+        RuntimePing {
+            status: "ok".to_string(),
+            binding_contract_version: version,
+            data_root: root.to_string(),
+            workspace: workspace.to_string(),
         }
     }
 
@@ -715,6 +780,36 @@ mod tests {
             normalized_identity(Path::new(r"D:\LingJi\acceptance\\")),
             normalized_identity(Path::new("d:/lingji/acceptance"))
         );
+    }
+
+    #[test]
+    fn runtime_ping_requires_current_identity_contract() {
+        let expected = Path::new(r"D:\Task\product");
+        assert!(ping_matches(
+            expected,
+            "acceptance",
+            &ping(STARTUP_CONTRACT_SCHEMA_VERSION, r"d:/task/product", "ACCEPTANCE")
+        ));
+        assert!(!ping_matches(
+            expected,
+            "acceptance",
+            &ping(99, r"D:\Task\product", "acceptance")
+        ));
+    }
+
+    #[test]
+    fn runtime_ping_rejects_wrong_root_or_workspace() {
+        let expected = Path::new(r"D:\Task\product");
+        assert!(!ping_matches(
+            expected,
+            "acceptance",
+            &ping(STARTUP_CONTRACT_SCHEMA_VERSION, r"D:\Other", "acceptance")
+        ));
+        assert!(!ping_matches(
+            expected,
+            "acceptance",
+            &ping(STARTUP_CONTRACT_SCHEMA_VERSION, r"D:\Task\product", "production")
+        ));
     }
 
     #[test]
