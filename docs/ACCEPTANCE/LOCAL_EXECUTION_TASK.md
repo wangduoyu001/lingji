@@ -2,122 +2,236 @@
 
 > 本文件是 ChatGPT / 主开发代理向本机 Codex 下达任务的唯一权威入口。
 >
-> Codex 只执行 `status: ACTIVE` 的任务。`status: IDLE` 表示当前没有可执行任务，不得根据旧聊天、旧报告、本机残留目录或旧 Artifact 自行继续。
+> Codex 只执行第一段 YAML 中 `status: ACTIVE` 的任务，不得从聊天、旧报告、本机残留目录或旧 Artifact 推断任务。
 
 ## 1. 当前任务元数据
 
 ```yaml
-task_id: PR60-MEMORY-QUALITY-TRIAL-D69874AF
-status: IDLE
-execution_mode: DAY0_THEN_REAL_DATA_TRIAL
+task_id: PR60-CODE-RELEASE-VALIDATION-A90A18A6
+status: ACTIVE
+execution_mode: CODE_RELEASE_VALIDATION
 repository: wangduoyu001/lingji
 product_pr: 60
 product_branch: feature/unified-ai-memory-connectors
-product_commit: d69874afd8def42a40c4a5cc5e678a71921d44b5
-artifact_name: lingji-windows-0.1.0-d69874af
-artifact_id: 8762312712
-artifact_zip_sha256: 6bf1f591502617c400ce482f6beb0d5e430a172cd036137bb4a39cae2cbf4cb4
-installer_name: LingJi_0.1.0_windows_x64_setup.exe
-installer_sha256: d62867b7b7c90bee8273b3cf5720f53099c266897ce95d0e42224deae31bf262
-portable_exe_sha256: a852079b43b2f4020cb66942f44f1a5035633b65d3ff4122c2613c5ea7440a69
-sidecar_exe_sha256: 20fe548e1be5cff5d1a34852f4fc0e223abb218eef1e51418724a6723e180599
-manifest_sha256: d78a91153b62bcf641bcbbdbc41819283fe0dbc5deff2cdab64cdffcea3e6c87
-trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
+product_commit: a90a18a66ffba157c01367ba70bfec98f58798e2
+artifact_name: NOT_APPLICABLE_PENDING_NEW_ARTIFACT
+artifact_id: NOT_APPLICABLE
 report_base: master
-report_branch: acceptance/pr60-memory-quality-trial-d69874af
-report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_d69874af.md
-public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_d69874af.json
-public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_d69874af.txt
+report_branch: acceptance/pr60-code-release-validation-a90a18a6
+report_path: docs/TEST_REPORTS/PR60_CODE_RELEASE_VALIDATION_a90a18a6.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_SUMMARY_a90a18a6.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_HASHES_a90a18a6.txt
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
-day0_required: true
-real_data_requires_day0_pass: true
-real_data_authorization_required: true
-minimum_quality_questions: 20
-minimum_owner_sample_questions: 10
-minimum_quality_score_percent: 90
-minimum_source_accuracy_percent: 95
-maximum_false_positive_percent: 5
 cleanup_before_required: true
 cleanup_after_required: true
 remote_verification_required: true
 owner_confirmation_required: true
 ```
 
-## 2. 当前状态
+## 2. 任务性质
 
-本任务已暂停，禁止执行。
-
-原因：
+本任务只验证导致 `D0-AUTO-001` 的代码修复和完整发布链。
 
 ```text
-产品提交 d69874afd8def42a40c4a5cc5e678a71921d44b5
+不安装灵机
+不启动桌面 UI
+不启动 Production Runtime
+不读取或导入真实资料
+不修改 Vault、正式数据库、Qdrant 或用户 AI 客户端配置
+```
+
+旧身份继续禁止执行：
+
+```text
+d69874afd8def42a40c4a5cc5e678a71921d44b5
 Artifact 8762312712
-在本机 release 门禁中触发 D0-AUTO-001，已形成远程 FAIL 报告。
 ```
 
-该产品提交、安装包、报告分支和所有哈希仅作为历史失败身份保留，不得再次下载、安装或验收。
+## 3. 验证目标
 
-## 3. 正在准备的新身份
+必须证明：
 
-PR #60 当前代码修复方向：
+1. `tests/test_brain_status_e2e.py` 不再依赖仓库残留 `dist`；
+2. 合法的单 JavaScript bundle 可以通过；
+3. 缺失、空文件、远程脚本和越界路径必须失败；
+4. `npm run build` 每次都验证本次刚生成的 `dist`；
+5. 干净构建和已有 `dist` 的重复构建结果一致；
+6. 完整 Python、Desktop、Rust/Tauri 和 Windows release 链通过；
+7. 本地 release 产物的 Commit 必须精确为 `a90a18a66ffba157c01367ba70bfec98f58798e2`。
 
-```text
-移除依赖残留 dist 的顺序相关 Python 断言
-增加独立 frontend dist 验证器
-允许合法的单 bundle 或多 bundle 输出
-拒绝缺失、空文件、远程脚本和越界路径
-在 Vite build 后立即验证本次真实产物
-```
-
-实现记录：
+实现依据：
 
 ```text
 docs/TEST_REPORTS/PR60_FRONTEND_DIST_GATE_FIX.md
+scripts/validate_frontend_dist.py
+tests/test_validate_frontend_dist.py
+tests/test_brain_status_e2e.py
+desktop/lingji-control/package.json
 ```
 
-候选代码 Head：
+## 4. 开始前门禁
+
+Codex 必须：
+
+1. 拉取远程最新 `master` 并读取本任务单和结果回执；
+2. 确认 PR #60 远程 Head 精确等于 `product_commit`；
+3. 从精确 Commit 创建隔离 product worktree；
+4. 使用唯一临时根：
 
 ```text
-a90a18a66ffba157c01367ba70bfec98f58798e2
+D:\codex\LingJiValidation\PR60-CODE-a90a18a6
 ```
 
-候选 Head 不是本机验收身份。只有完成以下全部条件后，才允许重新把本文件改为 `ACTIVE`：
+5. 只清理该目录和本任务创建的 worktree、构建缓存、测试日志及本地 release 产物；
+6. 不删除或修改任何主人数据、正式 Acceptance 数据和旧失败报告；
+7. 若身份不一致、目录清理被拒绝或依赖无法安装，立即 BLOCKED，不得绕过。
 
-1. 精确 Head 的完整 Python、Desktop、Rust/Tauri 和 Windows P0 检查通过；
-2. 本地或 CI `scripts/validate.ps1 -Mode release` 从干净环境通过；
-3. 生成新的 Windows Artifact；
-4. Artifact 名称、ID、ZIP、Installer、Portable、Sidecar 和 Manifest 哈希全部固定；
-5. `CHANGE_ACCEPTANCE_LOG.md`、本任务单和结果回执身份完全一致；
-6. 新报告分支和路径使用新短 SHA，不复用 `d69874af`。
+## 5. 必跑验证
 
-## 4. Codex 当前行为
+### A. 精确修复测试
 
-Codex读取本文件后只能回复：
-
-```text
-当前没有 ACTIVE 本机任务。
-旧 d69874af / Artifact 8762312712 已暂停并禁止执行。
-等待新 Artifact 和新的 ACTIVE 任务单。
+```powershell
+python -m pytest -q tests/test_brain_status_e2e.py tests/test_validate_frontend_dist.py
 ```
 
-Codex不得：
+预期：全部 PASS，不允许 skip。
 
-- 下载或安装 Artifact 8762312712；
-- 继续旧 Day 0；
-- 读取真实资料；
-- 使用旧报告分支补写新结论；
-- 根据 PR Head 自行构建并替代固定 Artifact；
-- 修改 Production DataRoot、Vault、Qdrant、正式记忆或用户 AI 客户端配置。
+### B. Python 全量回归
 
-## 5. 下一次激活要求
+```powershell
+python -m pytest -q --tb=short
+python -m compileall -q main.py run_service.py run_control_api.py run_packaged_control_api.py run_mcp_server.py run_extraction_worker.py src second_brain tests scripts
+```
 
-新任务激活时必须同时更新：
+### C. Desktop 干净构建
+
+```powershell
+Set-Location desktop\lingji-control
+npm ci --no-audit --no-fund
+if (Test-Path dist) { Remove-Item dist -Recurse -Force }
+npm run test:smoke
+npm run build
+```
+
+必须记录 `validate:dist` 的 PASS 输出和实际 JavaScript 入口数量。
+
+### D. 重复构建回归
+
+不得删除第一次构建生成的 `dist`，直接再次执行：
+
+```powershell
+npm run build
+```
+
+预期仍为 PASS。随后回到仓库根目录。
+
+### E. Rust/Tauri
+
+```powershell
+cargo test --manifest-path desktop/lingji-control/src-tauri/Cargo.toml --target x86_64-pc-windows-msvc
+```
+
+### F. 完整本地发布门禁
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate.ps1 -Mode release
+```
+
+必须从头执行完整 full + release，不允许只重跑失败测试，不允许修改断言、skip、mock 或关闭校验。
+
+### G. 本地 release 身份
+
+验证本地生成的：
 
 ```text
-docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md
+Installer
+Portable EXE
+Sidecar
+build-metadata.json
+lingji-core-manifest.json
+SHA256SUMS.txt
+```
+
+要求：
+
+- 文件存在且非空；
+- metadata Commit 精确等于任务 Commit；
+- 计算并记录全部 SHA256；
+- 不把本地产物当作正式 GitHub Artifact；
+- 不安装、不启动 UI。
+
+## 6. 判定
+
+PASS 必须同时满足：
+
+```text
+精确修复测试 PASS
+Python 全量 PASS
+Desktop smoke PASS
+干净 build PASS
+重复 build PASS
+frontend dist validator PASS
+Rust/Tauri PASS
+validate.ps1 -Mode release PASS
+本地 release 身份与哈希 PASS
+无真实数据读取
+清理 PASS
+远程报告可读
+```
+
+任一失败，结论为 FAIL；环境或远程提交无法完成，结论为 BLOCKED。
+
+## 7. 报告与回执
+
+Codex 从最新 `master` 创建：
+
+```text
+acceptance/pr60-code-release-validation-a90a18a6
+```
+
+提交：
+
+```text
+docs/TEST_REPORTS/PR60_CODE_RELEASE_VALIDATION_a90a18a6.md
+docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_SUMMARY_a90a18a6.json
+docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_HASHES_a90a18a6.txt
 docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
-docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md
-PR #60 精确身份与 Artifact 评论
 ```
 
-在上述身份全部远程可读前，不进行本机安装和真实数据试运行。
+报告必须包含：
+
+- 环境和精确 Commit；
+- 每条命令、退出码、通过/失败数量；
+- 两次 build 结果；
+- validator 入口数量；
+- release 汇总；
+- 本地产物哈希；
+- 失败日志尾部；
+- 数据安全声明；
+- 清理结果。
+
+不得提交安装包、node_modules、target、dist、数据库、Token、私人资料、完整本机路径或未脱敏日志。
+
+## 8. 结束清理
+
+远程报告和回执复读成功后：
+
+- 删除本任务 product/report worktree；
+- 删除 npm 缓存副本、dist、target、本地 release 产物和普通成功日志；
+- 删除 `D:\codex\LingJiValidation\PR60-CODE-a90a18a6`；
+- 确认没有启动 LingJi、8766/8767 进程或孤儿 MCP；
+- 安全策略拒绝删除时写 BLOCKED_POST_CLEANUP，不得强制绕过。
+
+## 9. 最终回复
+
+```text
+代码发布链验证完成
+task_id: PR60-CODE-RELEASE-VALIDATION-A90A18A6
+结论: PASS / FAIL / BLOCKED
+产品 Commit: a90a18a66ffba157c01367ba70bfec98f58798e2
+完整 release: PASS / FAIL / BLOCKED
+报告分支: acceptance/pr60-code-release-validation-a90a18a6
+报告 Commit: <40位 SHA>
+远程确认: PASS
+本地清理: PASS
+```
