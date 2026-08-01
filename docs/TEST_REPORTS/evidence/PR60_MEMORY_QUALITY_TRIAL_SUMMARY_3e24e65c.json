@@ -1,0 +1,22 @@
+{
+  "task_id": "PR60-MEMORY-QUALITY-TRIAL-3E24E65C",
+  "status": "RUNNING_REPORT_READBACK_AND_CLEANUP",
+  "verdict": "FAIL",
+  "blocking_defect": "FAIL_DATA_ROOT_ISOLATION",
+  "product_commit": "3e24e65ce12bfa22b5c9193d65500648ebf45729",
+  "artifact": {
+    "id": 8820695386,
+    "name": "lingji-windows-0.1.0-3e24e65c",
+    "zip_sha256": "649de2e03bde0ec491f8c828fdfac73d1a9539877c72ecd5199c7be407ee0e98"
+  },
+  "identity_checks": "PASS",
+  "real_data_body_reads": 0,
+  "real_data_authorized": false,
+  "day0_result": "FAIL_DATA_ROOT_ISOLATION",
+  "stage1_result": "NOT_RUN",
+  "stage2_result": "NOT_RUN",
+  "bootstrap_hash_unchanged": true,
+  "post_stop_ports_clear": true,
+  "post_stop_lingji_processes_clear": true,
+  "external_acceptance_side_effects": "NOT_ASSERTED"
+}
