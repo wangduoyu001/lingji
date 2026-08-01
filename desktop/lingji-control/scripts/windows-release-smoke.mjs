@@ -12,6 +12,7 @@ const [
   cargo,
   buildRs,
   rustMain,
+  runtimeBootstrap,
   hook,
   shell,
   boundary,
@@ -25,6 +26,7 @@ const [
   read("../src-tauri/Cargo.toml"),
   read("../src-tauri/build.rs"),
   read("../src-tauri/src/main.rs"),
+  read("../src-tauri/src/runtime_bootstrap.rs"),
   read("../src/hooks/useReleaseMetadata.ts"),
   read("../src/components/DesktopShell.tsx"),
   read("../src/components/RuntimeBoundary.tsx"),
@@ -56,13 +58,27 @@ for (const key of [
 ]) assert.ok(buildRs.includes(key), `build.rs is missing ${key}`);
 
 assert.match(rustMain, /^#!\[cfg_attr\(not\(debug_assertions\), windows_subsystem = "windows"\)\]/m);
-assert.match(rustMain, /fn release_metadata/);
-assert.match(rustMain, /owner_data_root/);
-assert.match(rustMain, /runtime_bootstrap_status/);
-assert.match(rustMain, /runtime_configure/);
-assert.match(rustMain, /guarded_runtime_ensure/);
-assert.match(rustMain, /guarded_runtime_stop/);
-assert.match(rustMain, /guarded_runtime_restart/);
+for (const token of [
+  "fn release_metadata",
+  "runtime_bootstrap_status",
+  "runtime_binding_verification",
+  "runtime_auto_configure",
+  "require_verified_runtime",
+  "guarded_runtime_ensure",
+  "guarded_runtime_stop",
+  "guarded_runtime_restart",
+]) assert.ok(rustMain.includes(token), `Tauri entrypoint is missing ${token}`);
+
+for (const token of [
+  "LINGJI_BOOTSTRAP_CONTRACT_FILE",
+  "binding_locked",
+  "startup_contract",
+  "automatic_safe_default",
+  "verify_runtime_binding",
+  "require_verified_runtime",
+  "automatic_base_candidates",
+  "Runtime responded from a different DataRoot or workspace",
+]) assert.ok(runtimeBootstrap.includes(token), `Runtime bootstrap is missing ${token}`);
 
 assert.match(hook, /invoke<ReleaseMetadata>\("release_metadata"\)/);
 assert.match(hook, /copyDiagnostics/);
@@ -71,21 +87,27 @@ assert.equal(hook.includes("vault_path"), false, "Copied diagnostics must not ex
 assert.match(shell, /复制诊断信息/);
 assert.match(shell, /releaseMetadata\?\.version/);
 assert.match(shell, /desktop-runtime-tools/);
-assert.match(boundary, /AUTOMATIC RUNTIME/);
-assert.match(boundary, /DATA ROOT REQUIRED/);
+assert.match(boundary, /LINGJI AUTOPILOT/);
+assert.match(boundary, /MANUAL FALLBACK/);
+assert.match(boundary, /灵机没有找到可自动使用的非 C 盘目录/);
 assert.match(boundary, /恢复运行/);
 assert.equal(boundary.includes(">启动核心</button>"), false, "Routine installed startup must remain automatic");
 
 for (const token of [
-  "schema_version = 4",
+  "schema_version = 5",
   "Get-PeSubsystem",
   "desktop_pe_subsystem = \"windows_gui\"",
   "sidecar_pe_subsystem = \"windows_gui\"",
   "bootstrap_config = \"%LOCALAPPDATA%\\LingJi\\desktop-bootstrap.json\"",
   "bootstrap_config_contains_runtime_data = $false",
-  "owner_data_root = \"owner-selected-non-system-drive\\<workspace>\"",
+  "owner_data_root = \"startup-contract-or-automatic-non-system-drive\"",
   "workspace_profiles = @(\"production\", \"acceptance\")",
-  "first_run_configuration_required = $true",
+  "first_run_configuration_required = $false",
+  "automatic_safe_non_system_drive_selection = $true",
+  "startup_binding_contract_supported = $true",
+  "runtime_binding_identity_required = $true",
+  "external_runtime_adoption_allowed = $false",
+  "owner_authorization_required_for_real_content = $true",
   "c_drive_runtime_data_allowed = $false",
   "Get-FileHash",
   "SHA256SUMS.txt",
@@ -102,6 +124,9 @@ assert.equal(
   false,
   "Release metadata must not claim LocalAppData is the Runtime data root",
 );
+assert.match(packager, /automatically selects the first writable non-C drive/);
+assert.match(packager, /LINGJI_BOOTSTRAP_CONTRACT_FILE/);
+assert.match(packager, /actual DataRoot and workspace/);
 
 for (const token of [
   "FailureTailLines = 40",
