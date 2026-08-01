@@ -1,21 +1,38 @@
 {
   "task_id": "PR60-MASTER-SYNC-A90A18A6",
-  "verdict": "BLOCKED_WRONG_IDENTITY",
-  "expected": {
-    "product_commit": "a90a18a66ffba157c01367ba70bfec98f58798e2",
-    "source_master_commit": "c349131d1aa22d2630b57df4d01d43a1088a1529"
-  },
-  "observed": {
-    "product_commit": "a90a18a66ffba157c01367ba70bfec98f58798e2",
-    "origin_master_commit": "4eb3a1078ef85ef2691d85e13026ad66b2a4f390"
-  },
-  "operations_performed": {
-    "backup_branch": false,
-    "merge": false,
-    "tests": false,
-    "build": false,
-    "release": false,
-    "artifact": false,
-    "real_data_read": 0
-  }
+  "status": "RUNNING_REPORT_READBACK_AND_CLEANUP",
+  "retry_verdict": "PASS_PENDING_REPORT_READBACK_AND_CLEANUP",
+  "attempt_history": [
+    {
+      "verdict": "BLOCKED_WRONG_IDENTITY",
+      "expected_source_master_commit": "c349131d1aa22d2630b57df4d01d43a1088a1529",
+      "observed_origin_master_commit": "4eb3a1078ef85ef2691d85e13026ad66b2a4f390",
+      "operations_performed": false
+    },
+    {
+      "fixed_sync_source_branch": "sync-base/pr60-master-4eb3a107",
+      "fixed_sync_source_commit": "4eb3a1078ef85ef2691d85e13026ad66b2a4f390",
+      "fixed_source_is_ancestor_of_latest_master": true,
+      "direct_origin_master_merge": false,
+      "product_baseline": "a90a18a66ffba157c01367ba70bfec98f58798e2",
+      "backup_branch": "backup/pr60-pre-master-sync-a90a18a6",
+      "backup_branch_remote_sha": "a90a18a66ffba157c01367ba70bfec98f58798e2",
+      "merged_product_head": "3e24e65ce12bfa22b5c9193d65500648ebf45729",
+      "merge_parents": [
+        "a90a18a66ffba157c01367ba70bfec98f58798e2",
+        "4eb3a1078ef85ef2691d85e13026ad66b2a4f390"
+      ],
+      "focused_python": "51 passed, 2 warnings",
+      "acceptance_sync": "PASS",
+      "latest_master_handoff": "PASS",
+      "desktop_smoke_scripts": 22,
+      "desktop_build": "PASS",
+      "pr_draft": true,
+      "pr_mergeable": true,
+      "remote_actions_started": true,
+      "release_rerun": false,
+      "artifact_reused": false,
+      "real_data_read": 0
+    }
+  ]
 }

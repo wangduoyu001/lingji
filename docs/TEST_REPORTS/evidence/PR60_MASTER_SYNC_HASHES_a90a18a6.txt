@@ -1,2 +1,14 @@
-# No artifact or local release output was created.
-# BLOCKED_WRONG_IDENTITY before backup, merge, test, build, or release.
+# PR60-MASTER-SYNC-A90A18A6 fixed-source retry public identity ledger
+# Historical attempt: BLOCKED_WRONG_IDENTITY before any mutation (retained in report and summary).
+product_baseline_sha=a90a18a66ffba157c01367ba70bfec98f58798e2
+fixed_sync_source_branch=sync-base/pr60-master-4eb3a107
+fixed_sync_source_sha=4eb3a1078ef85ef2691d85e13026ad66b2a4f390
+latest_master_task_copy_sha=ad542daf68396601b998ebc3af0eba9f0d6d612a
+backup_branch=backup/pr60-pre-master-sync-a90a18a6
+backup_branch_remote_sha=a90a18a66ffba157c01367ba70bfec98f58798e2
+merged_product_head=3e24e65ce12bfa22b5c9193d65500648ebf45729
+merge_parent_product=a90a18a66ffba157c01367ba70bfec98f58798e2
+merge_parent_fixed_source=4eb3a1078ef85ef2691d85e13026ad66b2a4f390
+old_artifact_8762312712_reused=false
+artifact_created=false
+release_rerun=false
