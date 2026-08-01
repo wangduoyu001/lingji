@@ -1,8 +1,8 @@
 {
   "task_id": "PR60-CODE-RELEASE-VALIDATION-A90A18A6",
-  "verdict": "BLOCKED",
+  "verdict": "PASS",
   "product_commit": "a90a18a66ffba157c01367ba70bfec98f58798e2",
-  "task_instruction_commit": "218c64d8969b5a37ba612cadd42e225aa2f2dea5",
+  "task_instruction_commit": "932d1c159cddec6b79742bed43f7b30f651eb15f",
   "data_safety": {
     "real_data_read": 0,
     "installation_or_ui_launch": 0,
@@ -16,9 +16,13 @@
     "clean_frontend_build": "PASS (1 JavaScript entry)",
     "repeat_frontend_build": "PASS (1 JavaScript entry)",
     "rust_tauri": "PASS (9 passed)",
-    "release": "PASS (15 suites)",
-    "cleanup": "BLOCKED_POST_CLEANUP (task root not allowlisted by safety cleanup tool)"
+    "release": "PASS (15 suites; retained, not rerun during recovery)",
+    "cleanup_tool_focused_test": "PASS (10 passed)",
+    "cleanup": "PASS (safe dry-run and explicit approved cleanup)"
   },
   "release_metadata_commit": "a90a18a66ffba157c01367ba70bfec98f58798e2",
-  "local_artifact_only": true
+  "local_artifact_only": true,
+  "recovery_only": true,
+  "release_rerun": false,
+  "cleanup_fix_commit": "0f9bb6421bceea815bfe8c5d26b59728c0f49fb6"
 }

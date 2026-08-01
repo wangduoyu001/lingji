@@ -4,8 +4,8 @@
 
 ```text
 Task: PR60-CODE-RELEASE-VALIDATION-A90A18A6
-Verdict: BLOCKED
-Merge recommendation: DO NOT MERGE
+Verdict: PASS
+Merge recommendation: ALLOW
 Product commit: a90a18a66ffba157c01367ba70bfec98f58798e2
 Artifact: local validation output only (not a GitHub Artifact)
 ```
@@ -14,7 +14,7 @@ Artifact: local validation output only (not a GitHub Artifact)
 
 This validation covers the frontend `dist` gate repair and the full Windows release chain. It did not install LingJi, start the Desktop UI or Production Runtime, read or import real material, or modify Vault, production databases, Qdrant, or owner AI-client settings. No listener was present on 8766 or 8767 before execution.
 
-The remote PR #60 head was read before execution and matched the product commit exactly. Validation used an isolated worktree at the required commit; the report branch is based on task-instruction commit `218c64d8969b5a37ba612cadd42e225aa2f2dea5` from `master`.
+The remote PR #60 head was read before execution and matched the product commit exactly. Validation used an isolated worktree at the required commit. The recovery-only task instruction is `932d1c159cddec6b79742bed43f7b30f651eb15f` from `master`.
 
 ## Environment and preparation
 
@@ -68,15 +68,13 @@ All required local files existed and were non-empty. `build-metadata.json` recor
 ## Final status
 
 ```text
-Release validation: PASS (all required code/build/release checks)
+Release validation: PASS (all required code/build/release checks; not rerun during recovery)
 Owner observation: NOT_REQUIRED (this task expressly prohibits installation and UI launch)
-Temporary evidence cleanup: BLOCKED_POST_CLEANUP
+Temporary evidence cleanup: PASS
 ```
 
-The first remote read-back of the report branch, commit, report and receipt succeeded. The required safety cleanup entry then rejected the task's own temporary-root name as not allowlisted. The task prohibits bypassing a refused safety cleanup, so no manual deletion was attempted. This prevents the task from reaching its required final `PASS` state despite successful release validation.
+## Cleanup recovery
 
-```text
-Cleanup command: `python scripts/cleanup_acceptance_workspace.py --task-id PR60-CODE-RELEASE-VALIDATION-A90A18A6 --target <task root> --root <validation root>`
-Result: BLOCKED - target name is not allowlisted: PR60-CODE-a90a18a6
-Required remediation: add this current task's exact temporary-root naming rule to the approved cleanup policy, then rerun the cleanup and remote read-back.
-```
+The prior `BLOCKED_POST_CLEANUP` outcome was caused solely by the cleanup-policy allowlist. `master` commit `0f9bb6421bceea815bfe8c5d26b59728c0f49fb6` corrected that policy. This recovery ran only the focused cleanup-tool test (10 passed), a safe dry-run, registered-worktree removal, and the explicit approved cleanup. The task-specific temporary root was removed successfully; the cleanup tool reported 13,245 files and 2,130 directories removed with no remaining entries.
+
+No product test, Desktop build, Rust/Tauri test, release command, artifact generation, installation, UI launch, or real-data operation was rerun during recovery. The release results and all hashes above are retained unchanged.
