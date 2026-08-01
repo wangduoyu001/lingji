@@ -71,7 +71,7 @@ PASS 必须满足任务单全部代码、构建、release、身份、远程确�
 公开哈希：docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_HASHES_a90a18a6.txt
 首次报告内容 Commit：3aecaa06ec3a2a504a170fae28996b37854beb4c
 当前报告分支 HEAD：808bcfb30aff04ac1cd05ce9fcf2fe3c48eaf59d
-最终报告分支 HEAD：PENDING_REMOTE_READBACK
+最终报告内容 HEAD：11904e2a7b0a60c189085523e6f5ddb439ca0393
 清理修复 Commit：0f9bb6421bceea815bfe8c5d26b59728c0f49fb6
 结束清理状态：PASS（原任务根与任务专属恢复 worktree 已清理；共享恢复父目录允许保留）
 本地 release metadata SHA256：5cdb8c334497465807f948bc562c84896264ad1c7cf41db400bd6495d98f6ffe
