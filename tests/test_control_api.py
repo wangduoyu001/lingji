@@ -17,6 +17,7 @@ class ControlApiTests(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         root = Path(self.temp_dir.name)
+        self.runtime_root = root.resolve()
         self.settings = Settings(
             _env_file=None,
             vault_dir=str(root / "vault"),
@@ -86,10 +87,18 @@ class ControlApiTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/vector/status").status_code, 401)
         self.assertEqual(self.client.get("/api/runtime/ping").status_code, 401)
 
-    def test_runtime_ping_is_authenticated_and_lightweight(self):
+    def test_runtime_ping_is_authenticated_and_proves_binding_identity(self):
         response = self.client.get("/api/runtime/ping", headers=self.headers)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"status": "ok"})
+        self.assertEqual(
+            response.json(),
+            {
+                "status": "ok",
+                "binding_contract_version": 1,
+                "data_root": str(self.runtime_root),
+                "workspace": "production",
+            },
+        )
 
     def test_settings_can_be_read_updated_and_reset(self):
         response = self.client.get("/api/settings", headers=self.headers)
