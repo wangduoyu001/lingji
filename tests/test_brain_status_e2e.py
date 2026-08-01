@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -31,13 +33,23 @@ class _DeterministicControlService:
 
 
 @pytest.fixture
-def control_client() -> TestClient:
+def runtime_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    root = (tmp_path / "acceptance-runtime").resolve()
+    root.mkdir()
+    monkeypatch.setenv("LINGJI_OWNER_DATA_ROOT", str(root))
+    monkeypatch.setenv("LINGJI_WORKSPACE", "acceptance")
+    return root
+
+
+@pytest.fixture
+def control_client(runtime_root: Path) -> TestClient:
     settings = Settings(
         _env_file=None,
-        vault_dir="_e2e_vault",
-        storage_dir="_e2e_storage",
-        backup_dir="_e2e_backups",
-        log_dir="_e2e_logs",
+        vault_dir=str(runtime_root / "vault"),
+        storage_dir=str(runtime_root / "storage"),
+        backup_dir=str(runtime_root / "backups"),
+        log_dir=str(runtime_root / "logs"),
+        workspace_name="acceptance",
         llm_model="qwen3:8b",
         embed_model="bge-m3",
         startup_min_free_gb=0,
@@ -72,7 +84,22 @@ class TestBrainStatusApiContract:
         assert response.status_code == 200
         assert response.json()["health"]["status"] == "healthy"
 
-    def test_local_control_token_is_required(self, control_client: TestClient):
-        response = control_client.get("/api/brain/status")
+    def test_runtime_ping_proves_actual_data_root(
+        self,
+        control_client: TestClient,
+        runtime_root: Path,
+    ):
+        response = control_client.get("/api/runtime/ping", headers=AUTH_HEADERS)
 
-        assert response.status_code == 401
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "ok",
+            "binding_contract_version": 1,
+            "data_root": str(runtime_root),
+            "workspace": "acceptance",
+        }
+
+    def test_local_control_token_is_required(self, control_client: TestClient):
+        for endpoint in ("/api/brain/status", "/api/runtime/ping"):
+            response = control_client.get(endpoint)
+            assert response.status_code == 401
