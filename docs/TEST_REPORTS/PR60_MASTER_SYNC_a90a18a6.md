@@ -62,3 +62,17 @@ The focused Python suite emitted two dependency deprecation warnings (Starlette 
 PR [#60](https://github.com/wangduoyu001/lingji/pull/60) is still Draft, has Head `3e24e65ce12bfa22b5c9193d65500648ebf45729`, and GitHub reports `mergeable: MERGEABLE` with no conflict. Workflows for that exact new Head have been launched, including `local-execution-handoff`, `acceptance-doc-sync`, `P0 Windows Gate`, `Windows Desktop Release Baseline`, and `tests`. Their final CI and Windows Artifact outcomes are deliberately outside this task's local PASS condition and are not asserted here.
 
 No installation, UI launch, real-data access, release rerun, Artifact download, or reuse of Artifact `8762312712` occurred in this retry.
+
+### Report readback and cleanup
+
+The initial retry report commit `9f6e97946e1160549ceb7d7fa5912f5d49c4228e`, its `RUNNING` receipt, and PR comment [`#5152200341`](https://github.com/wangduoyu001/lingji/pull/60#issuecomment-5152200341) were reread remotely. The product worktree was then unregistered and removed, which also removed the task-local `node_modules` and `dist`; the exact task root `D:\codex\LingJiSync\PR60-a90a18a6` is absent. The shared parent `D:\codex\LingJiSync` was retained. A report-only worktree remains temporarily only to commit this final receipt and is unregistered after its final remote readback.
+
+The post-cleanup check found no listener on `8766` or `8767` and no LingJi, LingJi Core, Desktop, or MCP process. The only initial process match was the inspection PowerShell itself because its command line contained the word `LingJi`; it was excluded by its own PID and was not a product process.
+
+```text
+Final retry verdict: PASS
+Merge recommendation: DEFER_TO_REMOTE_CI_AND_OWNER
+Temporary product worktree and dependencies cleaned: PASS
+Task root removed: PASS
+Remote report / receipt / PR comment readable: PASS
+```

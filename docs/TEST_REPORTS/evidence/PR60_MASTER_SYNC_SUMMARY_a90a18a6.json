@@ -1,7 +1,7 @@
 {
   "task_id": "PR60-MASTER-SYNC-A90A18A6",
-  "status": "RUNNING_REPORT_READBACK_AND_CLEANUP",
-  "retry_verdict": "PASS_PENDING_REPORT_READBACK_AND_CLEANUP",
+  "status": "COMPLETED",
+  "retry_verdict": "PASS",
   "attempt_history": [
     {
       "verdict": "BLOCKED_WRONG_IDENTITY",
@@ -32,7 +32,15 @@
       "remote_actions_started": true,
       "release_rerun": false,
       "artifact_reused": false,
-      "real_data_read": 0
+      "real_data_read": 0,
+      "initial_report_commit": "9f6e97946e1160549ceb7d7fa5912f5d49c4228e",
+      "initial_report_remote_readback": true,
+      "pr_comment_id": 5152200341,
+      "pr_comment_remote_readback": true,
+      "product_worktree_removed": true,
+      "task_root_removed": true,
+      "ports_8766_8767_listening": false,
+      "lingji_processes_remaining": false
     }
   ]
 }
