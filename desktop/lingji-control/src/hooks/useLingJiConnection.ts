@@ -1,7 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, LingJiApi, isTauriDesktopRuntime } from "../api";
-import type { RuntimeBootstrapStatus, RuntimeStatus } from "../runtimeTypes";
+import type {
+  AutopilotStatus,
+  RuntimeBindingVerification,
+  RuntimeBootstrapStatus,
+  RuntimeStatus,
+} from "../runtimeTypes";
 import type { Row } from "../types";
 
 export type ConnectionState =
@@ -17,6 +22,14 @@ const GUARDED_RUNTIME_COMMANDS = {
   stop: "guarded_runtime_stop",
   restart: "guarded_runtime_restart",
 } as const;
+
+const INITIAL_AUTOPILOT: AutopilotStatus = {
+  state: "idle",
+  current_action: "等待核心连接",
+  completed_actions: [],
+  failed_actions: [],
+  last_run_at: null,
+};
 
 function connectionMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -37,10 +50,13 @@ function runtimeFailure(status: RuntimeStatus): string {
 
 export function useLingJiConnection() {
   const api = useMemo(() => new LingJiApi(), []);
+  const autopilotRunning = useRef(false);
   const [state, setState] = useState<ConnectionState>("booting");
   const [overview, setOverview] = useState<Row | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
   const [bootstrapStatus, setBootstrapStatus] = useState<RuntimeBootstrapStatus | null>(null);
+  const [bindingVerification, setBindingVerification] = useState<RuntimeBindingVerification | null>(null);
+  const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus>(INITIAL_AUTOPILOT);
   const [runtimeBusy, setRuntimeBusy] = useState("");
   const [ownerStopped, setOwnerStopped] = useState(false);
   const [error, setError] = useState("");
@@ -59,6 +75,56 @@ export function useLingJiConnection() {
     return status;
   }, []);
 
+  const readBindingVerification = useCallback(async () => {
+    const verification = await invoke<RuntimeBindingVerification>("runtime_binding_verification");
+    setBindingVerification(verification);
+    return verification;
+  }, []);
+
+  const runSafeAutopilot = useCallback(async () => {
+    if (autopilotRunning.current) return;
+    autopilotRunning.current = true;
+    setAutopilotStatus({
+      state: "running",
+      current_action: "自动扫描本机 AI、模型与运行环境",
+      completed_actions: [],
+      failed_actions: [],
+      last_run_at: null,
+    });
+
+    const actions = [
+      {
+        label: "扫描 AI 软件与历史目录元数据",
+        run: () => api.post("/api/assistant-hub/scan"),
+      },
+      {
+        label: "刷新本机模型状态",
+        run: () => api.post("/api/models/refresh"),
+      },
+      {
+        label: "刷新硬件与运行能力",
+        run: () => api.post("/api/hardware/refresh"),
+      },
+    ];
+    const results = await Promise.allSettled(actions.map((action) => action.run()));
+    const completed = actions
+      .filter((_, index) => results[index].status === "fulfilled")
+      .map((action) => action.label);
+    const failed = actions
+      .filter((_, index) => results[index].status === "rejected")
+      .map((action) => action.label);
+    setAutopilotStatus({
+      state: failed.length ? "degraded" : "completed",
+      current_action: failed.length
+        ? "安全自动任务已完成，部分状态等待后台重试"
+        : "安全自动任务已完成，等待需要主人授权的操作",
+      completed_actions: completed,
+      failed_actions: failed,
+      last_run_at: new Date().toISOString(),
+    });
+    autopilotRunning.current = false;
+  }, [api]);
+
   const ensureConnection = useCallback(async (resumeAfterOwnerStop: boolean) => {
     if (!isTauriDesktopRuntime()) {
       setState("unsupported");
@@ -70,18 +136,35 @@ export function useLingJiConnection() {
     setState("booting");
     setRuntimeBusy("ensure");
     try {
-      const bootstrap = await readBootstrap();
+      let bootstrap = await readBootstrap();
+      if (!bootstrap.configured || bootstrap.c_drive_write_detected) {
+        if (!bootstrap.startup_contract_detected) {
+          try {
+            bootstrap = await invoke<RuntimeBootstrapStatus>("runtime_auto_configure");
+            setBootstrapStatus(bootstrap);
+          } catch {
+            // The manual directory menu is the final fallback when no writable
+            // non-C drive can be selected automatically.
+          }
+        }
+      }
       if (!bootstrap.configured || bootstrap.c_drive_write_detected) {
         setOverview(null);
         setRuntimeStatus(null);
+        setBindingVerification(null);
         setState("configuration_required");
-        setError(bootstrap.last_error || "请先选择非 C 盘的数据目录。");
+        setError(bootstrap.last_error || "灵机没有找到可写的非 C 盘，请选择一次数据目录。");
         return;
       }
       const status = await invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.ensure);
       setRuntimeStatus(status);
       if (!status.healthy) throw new Error(runtimeFailure(status));
+      const verification = await readBindingVerification();
+      if (!verification.verified) {
+        throw new Error(verification.error || "Runtime DataRoot绑定未通过验证。");
+      }
       await readOverview();
+      void runSafeAutopilot();
     } catch (reason) {
       setOverview(null);
       setState("offline");
@@ -89,7 +172,7 @@ export function useLingJiConnection() {
     } finally {
       setRuntimeBusy("");
     }
-  }, [readBootstrap, readOverview]);
+  }, [readBindingVerification, readBootstrap, readOverview, runSafeAutopilot]);
 
   const configureRuntime = useCallback(async (
     baseDataRoot: string,
@@ -122,12 +205,19 @@ export function useLingJiConnection() {
     try {
       const status = await invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.status);
       setRuntimeStatus(status);
+      if (status.healthy) {
+        const verification = await readBindingVerification();
+        if (!verification.verified) {
+          setState("offline");
+          setError(verification.error || "Runtime DataRoot绑定漂移，已停止自动接管。");
+        }
+      }
       return status;
     } catch (reason) {
       setError(connectionMessage(reason));
       return null;
     }
-  }, [bootstrapStatus?.configured]);
+  }, [bootstrapStatus?.configured, readBindingVerification]);
 
   const stopRuntime = useCallback(async () => {
     if (!isTauriDesktopRuntime() || runtimeBusy) return;
@@ -156,7 +246,12 @@ export function useLingJiConnection() {
       const status = await invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.restart);
       setRuntimeStatus(status);
       if (!status.healthy) throw new Error(runtimeFailure(status));
+      const verification = await readBindingVerification();
+      if (!verification.verified) {
+        throw new Error(verification.error || "Runtime DataRoot绑定未通过验证。");
+      }
       await readOverview();
+      void runSafeAutopilot();
     } catch (reason) {
       setOverview(null);
       setState("offline");
@@ -164,7 +259,7 @@ export function useLingJiConnection() {
     } finally {
       setRuntimeBusy("");
     }
-  }, [readOverview, runtimeBusy]);
+  }, [readBindingVerification, readOverview, runSafeAutopilot, runtimeBusy]);
 
   useEffect(() => {
     void ensureConnection(false);
@@ -176,10 +271,17 @@ export function useLingJiConnection() {
       void Promise.all([
         api.get<Row>("/api/overview"),
         invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.status),
+        invoke<RuntimeBindingVerification>("runtime_binding_verification"),
       ])
-        .then(([next, runtime]) => {
+        .then(([next, runtime, verification]) => {
           setOverview(next);
           setRuntimeStatus(runtime);
+          setBindingVerification(verification);
+          if (!verification.verified) {
+            setState("offline");
+            setError(verification.error || "Runtime DataRoot绑定漂移，已拒绝继续连接。");
+            return;
+          }
           setError("");
           if (!runtime.healthy) setState("offline");
         })
@@ -210,6 +312,8 @@ export function useLingJiConnection() {
     overview,
     runtimeStatus,
     bootstrapStatus,
+    bindingVerification,
+    autopilotStatus,
     runtimeBusy,
     ownerStopped,
     autoRecoveryActive: state === "offline" && !ownerStopped,
@@ -217,6 +321,7 @@ export function useLingJiConnection() {
     connect,
     configureRuntime,
     refreshRuntime,
+    runSafeAutopilot,
     stopRuntime,
     restartRuntime,
   };
