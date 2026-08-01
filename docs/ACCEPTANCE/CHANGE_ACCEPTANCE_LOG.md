@@ -51,6 +51,73 @@
 
 ---
 
+## 2026-08-02 · PR #71 / PR #60 后续 · Runtime DataRoot 强绑定与 UI 观察台自治改造
+
+- 产品分支：`fix/pr60-autonomous-runtime-binding`
+- 产品 Commit：`pending`
+- 来源缺陷：`FAIL_DATA_ROOT_ISOLATION`
+- 影响模块：Desktop bootstrap、RuntimeManager、打包 Runtime 身份接口、桌面自动恢复、AI 助手元数据扫描、首页观察台、Day 0 隔离验收
+- 风险等级：P0
+- 用户可感知变化：灵机主动选择安全非 C 盘、启动和恢复核心、扫描 AI 与来源元数据、刷新模型和硬件状态；UI 主要展示正在做什么、进度、阻塞和授权边界，不再要求主人逐项驱动流程。
+- 数据或安全边界变化：Runtime 必须反向证明实际 DataRoot 和 workspace；不匹配或未托管 Runtime 不得显示健康；自动扫描仍只读元数据，读取真实正文、修改外部客户端配置和写入永久记忆仍需主人授权。
+
+### 新增或修改的自动验收
+
+- [ ] `python -m pytest -q tests/test_brain_status_e2e.py tests/test_assistant_hub_api.py tests/test_assistant_hub_discovery.py tests/test_packaged_mcp_runtime.py`：验证鉴权 Runtime ping 返回实际 DataRoot/workspace，并保持发现扫描不读正文。
+- [ ] `npm run test:smoke`：验证自动 DataRoot、绑定核验、自动扫描/模型/硬件刷新、UI 观察台语义和授权边界。
+- [ ] `npm run build`：验证新增 Autopilot 状态组件与 TypeScript 生产构建。
+- [ ] `cargo test`：验证启动契约、精确有效根、锁定绑定、路径归一化和非 C 盘自动候选。
+- [ ] `scripts/validate.ps1 -Mode release`：验证完整 Desktop、Sidecar、Tauri、NSIS 和发布合同。
+
+### 新增或修改的真机验收
+
+- [ ] 使用任务专属 `LINGJI_BOOTSTRAP_CONTRACT_FILE` 启动，Desktop 在 Runtime 启动前显示固定任务根、workspace、绑定来源和 binding id。
+- [ ] `/api/runtime/ping` 必须返回与启动契约逐字一致的实际 DataRoot 和 workspace。
+- [ ] 机器上存在其他有效 bootstrap 或 acceptance Runtime 时，Desktop 必须拒绝复用，不得显示 ready。
+- [ ] 无启动契约和旧配置时，灵机自动选择首个可写非 C 盘；仅在没有安全候选时显示手动目录备用入口。
+- [ ] 连接后无需主人点击，自动执行 AI 元数据扫描、模型刷新、硬件刷新和状态轮询。
+- [ ] 自动扫描只读取安装、路径类型、候选数量和支持状态，不读取聊天、剧本、Vault 或 Session 正文。
+- [ ] 读取真实正文、应用外部客户端配置、永久记忆批准/拒绝前必须明确请求主人授权。
+
+### 主人肉眼确认
+
+- [ ] 首页能直接看到灵机当前自动动作、完成项、失败重试项、精确 DataRoot、workspace 和绑定验证结果。
+- [ ] 菜单完整保留，但日常按钮表达为“查看进度/查看授权/手动干预”，而不是要求主人按流程逐项操作。
+- [ ] AI 助手页默认自动扫描，主人无需点击“扫描我的 AI 软件”。
+- [ ] 主人能一眼区分“灵机正在自动处理”和“现在确实需要我授权或决定”。
+
+### 强制回归项
+
+- [ ] HTTP 200 或 Token 匹配不能单独证明 Runtime 身份；实际根和 workspace 必须同时匹配。
+- [ ] 锁定启动契约不能在 UI 中被旧 bootstrap 或手动选择覆盖。
+- [ ] 端口 8766 已占用时不得静默改绑或接管外部 Runtime。
+- [ ] 未托管外部 Runtime 不得被 Desktop 停止，只能拒绝接管并报告。
+- [ ] 自动发现不得读取正文、不得跟随符号链接、不得扫描未知目录。
+- [ ] 禁止恢复模糊文案“配置存在但尚未激活；全文检索仍可用，后续从向量中心处理”。
+- [ ] 候选未批准前 Core Memory 不增加，外部客户端配置未授权前不修改。
+
+### 清理与回滚
+
+- 临时数据前缀：由新的精确 Head Day 0 任务声明。
+- 覆盖安装方式：新 Artifact 覆盖安装，不卸载主人数据。
+- 启动契约：任务结束后删除任务专属 JSON，恢复原 bootstrap 哈希或原不存在状态。
+- 测试数据清理：只删除任务专属 DataRoot、Artifact、安装包、日志、fixture、临时配置和 worktree；共享父目录允许保留。
+- 回滚：回退本次启动契约、Runtime身份核验和 Autopilot UI提交；不得恢复“只凭健康端口信任Runtime”的旧行为。
+
+### 不在范围
+
+- 不自动读取 Codex原始 Session/JSONL、ChatGPT正文、剧本或 Obsidian正文。
+- 不自动批准永久记忆。
+- 不自动修改未经授权的 Codex、Claude Code 或 WorkBuddy配置。
+- 不自动下载 Embedding模型或重建 Production Qdrant。
+
+### 最终报告
+
+- 实施报告：`docs/TEST_REPORTS/PR60_AUTONOMOUS_RUNTIME_BINDING_AND_UI_OBSERVABILITY.md`
+- 新 Artifact 和复验任务：代码、完整 release 和精确 Head Windows Artifact 全部通过后更新。
+
+---
+
 ## 2026-07-30 · PR #60 · AI 助手中心主动引导与真实状态修复
 
 - 产品分支：`feature/unified-ai-memory-connectors`
@@ -99,7 +166,7 @@
 - 临时数据前缀：`PR60_GUIDED_SETUP_`
 - 覆盖安装方式：新 Artifact 直接覆盖旧安装，不卸载主人数据。
 - 临时配置副本：连接测试完成并验证回滚后删除。
-- 测试数据清理：删除临时 Artifact、日志、截图、fixture、worktree 和测试候选；不删除主人授权保留的真实资料。
+- 测试数据清理：删除临时 Artifact、日志、截图、fixture、checkpoint、配置副本、worktree 和测试候选；不删除主人授权保留的真实资料。
 
 ### 不在范围
 
