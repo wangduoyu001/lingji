@@ -5,12 +5,15 @@ import type {
 } from "../runtimeTypes";
 import "./AutopilotStatusBar.css";
 
-const sourceLabel = (source: string): string => ({
+const SOURCE_LABELS: Record<string, string> = {
   startup_contract: "启动契约锁定",
   automatic_safe_default: "灵机自动选择",
   owner_selection: "主人指定",
   unconfigured: "尚未配置",
-}[source] ?? source || "未知来源");
+};
+
+const sourceLabel = (source: string): string =>
+  (SOURCE_LABELS[source] ?? source) || "未知来源";
 
 export default function AutopilotStatusBar({
   autopilot,
