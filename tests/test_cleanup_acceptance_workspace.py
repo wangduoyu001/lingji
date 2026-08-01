@@ -7,23 +7,63 @@ import pytest
 from scripts.cleanup_acceptance_workspace import CleanupError, cleanup, validate_target
 
 
-def test_refuses_acceptance_root_itself(tmp_path: Path) -> None:
-    with pytest.raises(CleanupError):
-        validate_target(tmp_path, tmp_path, "PR60-MEMORY-QUALITY-TRIAL-D69874AF")
+def test_refuses_cleanup_root_itself(tmp_path: Path) -> None:
+    root = tmp_path / "LingJiAcceptance"
+    with pytest.raises(CleanupError, match="root itself"):
+        validate_target(root, root, "PR60-MEMORY-QUALITY-TRIAL-D69874AF")
 
 
 def test_refuses_target_outside_root(tmp_path: Path) -> None:
-    root = tmp_path / "root"
+    root = tmp_path / "LingJiAcceptance"
     target = tmp_path / "other" / "PR60-MEMORY-TRIAL-1c514877"
-    with pytest.raises(CleanupError):
+    with pytest.raises(CleanupError, match="outside"):
         validate_target(root, target, "PR60-MEMORY-QUALITY-TRIAL-D69874AF")
 
 
-def test_refuses_non_allowlisted_target(tmp_path: Path) -> None:
-    root = tmp_path / "root"
+def test_refuses_non_authorized_target(tmp_path: Path) -> None:
+    root = tmp_path / "LingJiAcceptance"
     target = root / "Production"
-    with pytest.raises(CleanupError):
+    with pytest.raises(CleanupError, match="not authorized"):
         validate_target(root, target, "PR60-MEMORY-QUALITY-TRIAL-D69874AF")
+
+
+def test_refuses_unsupported_task_id(tmp_path: Path) -> None:
+    root = tmp_path / "LingJiValidation"
+    target = root / "PR60-CODE-a90a18a6"
+    with pytest.raises(CleanupError, match="unsupported cleanup task id"):
+        validate_target(root, target, "PR60-UNKNOWN-A90A18A6")
+
+
+def test_refuses_wrong_root_family(tmp_path: Path) -> None:
+    root = tmp_path / "LingJiAcceptance"
+    target = root / "PR60-CODE-a90a18a6"
+    with pytest.raises(CleanupError, match="LingJiValidation"):
+        validate_target(root, target, "PR60-CODE-RELEASE-VALIDATION-A90A18A6")
+
+
+def test_code_release_validation_target_is_authorized(tmp_path: Path) -> None:
+    root = tmp_path / "LingJiValidation"
+    target = root / "PR60-CODE-a90a18a6"
+
+    resolved_root, resolved_target = validate_target(
+        root,
+        target,
+        "PR60-CODE-RELEASE-VALIDATION-A90A18A6",
+    )
+
+    assert resolved_root == root.resolve()
+    assert resolved_target == target.resolve()
+
+
+def test_code_release_validation_requires_matching_identity(tmp_path: Path) -> None:
+    root = tmp_path / "LingJiValidation"
+    target = root / "PR60-CODE-a90a18a6"
+    with pytest.raises(CleanupError, match="not authorized"):
+        validate_target(
+            root,
+            target,
+            "PR60-CODE-RELEASE-VALIDATION-FFFFFFFF",
+        )
 
 
 def test_dry_run_reports_without_deleting(tmp_path: Path) -> None:
@@ -43,9 +83,9 @@ def test_dry_run_reports_without_deleting(tmp_path: Path) -> None:
     assert "PR60-MEMORY-TRIAL-1c514877/logs/run.log" in result.remaining
 
 
-def test_execute_removes_only_allowlisted_target(tmp_path: Path) -> None:
-    root = tmp_path / "LingJiAcceptance"
-    target = root / "PR60-MEMORY-TRIAL-1c514877"
+def test_execute_removes_only_authorized_validation_target(tmp_path: Path) -> None:
+    root = tmp_path / "LingJiValidation"
+    target = root / "PR60-CODE-a90a18a6"
     protected = root / "unrelated-owner-data"
     (target / "artifact").mkdir(parents=True)
     (target / "artifact" / "build.zip").write_bytes(b"zip")
@@ -53,7 +93,9 @@ def test_execute_removes_only_allowlisted_target(tmp_path: Path) -> None:
     (protected / "keep.txt").write_text("keep", encoding="utf-8")
 
     resolved_root, resolved_target = validate_target(
-        root, target, "PR60-MEMORY-QUALITY-TRIAL-D69874AF"
+        root,
+        target,
+        "PR60-CODE-RELEASE-VALIDATION-A90A18A6",
     )
     result = cleanup(resolved_root, resolved_target, execute=True)
 
@@ -63,8 +105,8 @@ def test_execute_removes_only_allowlisted_target(tmp_path: Path) -> None:
     assert (protected / "keep.txt").read_text(encoding="utf-8") == "keep"
 
 
-def test_current_target_requires_matching_task_identity(tmp_path: Path) -> None:
+def test_memory_target_requires_matching_task_identity(tmp_path: Path) -> None:
     root = tmp_path / "LingJiAcceptance"
     target = root / "PR60-MEMORY-TRIAL-d69874af"
-    with pytest.raises(CleanupError):
+    with pytest.raises(CleanupError, match="not authorized"):
         validate_target(root, target, "PR60-MEMORY-QUALITY-TRIAL-1C514877")
