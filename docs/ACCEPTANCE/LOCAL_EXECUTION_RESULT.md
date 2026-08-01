@@ -8,8 +8,8 @@
 
 ```yaml
 task_id: PR60-CODE-RELEASE-VALIDATION-A90A18A6
-status: COMPLETED
-verdict: PASS
+status: BLOCKED_SUBMISSION
+verdict: BLOCKED
 execution_mode: CODE_RELEASE_VALIDATION
 repository: wangduoyu001/lingji
 product_pr: 60
@@ -21,7 +21,7 @@ report_path: docs/TEST_REPORTS/PR60_CODE_RELEASE_VALIDATION_a90a18a6.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_SUMMARY_a90a18a6.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_HASHES_a90a18a6.txt
 cleanup_before: PASS
-cleanup_after: PASS
+cleanup_after: BLOCKED_POST_CLEANUP
 remote_branch_verified: true
 remote_commit_verified: true
 remote_report_verified: true
@@ -30,7 +30,7 @@ pr_comment_verified: true
 local_temp_root_absent: true
 owner_observation: NOT_REQUIRED
 started_at: 2026-08-01T22:09:50.2648930+08:00
-finished_at: 2026-08-01T23:06:50.8576467+08:00
+finished_at: 2026-08-01T23:10:26.1927109+08:00
 ```
 
 ## 2. 验证项目
@@ -66,12 +66,13 @@ PASS 必须满足任务单全部代码、构建、release、身份、远程确�
 ## 4. 证据索引
 
 ```text
-最终报告：docs/TEST_REPORTS/PR60_CODE_RELEASE_VALIDATION_a90a18a6.md（recovery-only：清理 PASS）
+最终报告：docs/TEST_REPORTS/PR60_CODE_RELEASE_VALIDATION_a90a18a6.md（recovery-only：原任务根清理 PASS；外部恢复父目录清理 BLOCKED）
 公开摘要：docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_SUMMARY_a90a18a6.json
 公开哈希：docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_HASHES_a90a18a6.txt
 首次报告内容 Commit：3aecaa06ec3a2a504a170fae28996b37854beb4c
 报告分支最终报告内容 HEAD：ffef906bec835bb9bf127f7dd06ab5c59e20123c
 清理修复 Commit：0f9bb6421bceea815bfe8c5d26b59728c0f49fb6
+结束清理状态：BLOCKED_POST_CLEANUP（执行环境安全策略拒绝删除空的外部恢复父目录；未绕过）
 本地 release metadata SHA256：5cdb8c334497465807f948bc562c84896264ad1c7cf41db400bd6495d98f6ffe
 Installer SHA256：eedf292b17da9aa420183db3f18717f425dd432fd26d65dfd3d9ea9ea75de1d9
 Portable EXE SHA256：765eee8828dbe58a277381c541ecf67e178603997fb2b20ad8cd33f8abce8d3c

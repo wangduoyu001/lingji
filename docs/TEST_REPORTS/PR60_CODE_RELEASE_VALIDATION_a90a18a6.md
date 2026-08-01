@@ -4,8 +4,8 @@
 
 ```text
 Task: PR60-CODE-RELEASE-VALIDATION-A90A18A6
-Verdict: PASS
-Merge recommendation: ALLOW
+Verdict: BLOCKED
+Merge recommendation: DO NOT MERGE
 Product commit: a90a18a66ffba157c01367ba70bfec98f58798e2
 Artifact: local validation output only (not a GitHub Artifact)
 ```
@@ -70,7 +70,7 @@ All required local files existed and were non-empty. `build-metadata.json` recor
 ```text
 Release validation: PASS (all required code/build/release checks; not rerun during recovery)
 Owner observation: NOT_REQUIRED (this task expressly prohibits installation and UI launch)
-Temporary evidence cleanup: PASS
+Temporary evidence cleanup: BLOCKED_POST_CLEANUP
 ```
 
 ## Cleanup recovery
@@ -78,3 +78,5 @@ Temporary evidence cleanup: PASS
 The prior `BLOCKED_POST_CLEANUP` outcome was caused solely by the cleanup-policy allowlist. `master` commit `0f9bb6421bceea815bfe8c5d26b59728c0f49fb6` corrected that policy. This recovery ran only the focused cleanup-tool test (10 passed), a safe dry-run, registered-worktree removal, and the explicit approved cleanup. The task-specific temporary root was removed successfully; the cleanup tool reported 13,245 files and 2,130 directories removed with no remaining entries.
 
 No product test, Desktop build, Rust/Tauri test, release command, artifact generation, installation, UI launch, or real-data operation was rerun during recovery. The release results and all hashes above are retained unchanged.
+
+The task additionally required deletion of the external recovery-worktree parent after remote read-back. Its sole remaining empty parent directory was explicitly targeted, but the execution environment safety policy refused that deletion. No bypass or manual alternative was used. Therefore the product release evidence remains PASS, but this recovery task cannot claim final completion and is `BLOCKED_POST_CLEANUP`.
