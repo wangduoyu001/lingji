@@ -180,10 +180,20 @@ async fn guarded_runtime_restart(
     verify_or_stop(app, manager, status).await
 }
 
-fn main() {
+fn initialize_runtime_binding() {
     runtime_bootstrap::quarantine_inherited_environment();
-    let _ = runtime_bootstrap::apply_startup_contract();
-    let _ = runtime_bootstrap::apply_saved_environment();
+    if runtime_bootstrap::startup_contract_requested() {
+        // A declared startup contract is authoritative. Any parse, path,
+        // workspace, port or write-probe failure remains visible as a blocking
+        // contract error. It must never fall back to a previous global bootstrap.
+        let _ = runtime_bootstrap::apply_startup_contract();
+    } else {
+        let _ = runtime_bootstrap::apply_saved_environment();
+    }
+}
+
+fn main() {
+    initialize_runtime_binding();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(RuntimeManager::default())
