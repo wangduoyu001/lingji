@@ -26,170 +26,150 @@ cleanup_before_required: true
 cleanup_after_required: true
 remote_verification_required: true
 owner_confirmation_required: true
+recovery_only: true
+release_rerun_forbidden: true
+validated_release_suites: 15
+blocked_report_head: e654b283c53b986aa64c2974c37d8c0cb231b366
+cleanup_fix_commit: 0f9bb6421bceea815bfe8c5d26b59728c0f49fb6
 ```
 
-## 2. 任务性质
+## 2. 当前任务性质
 
-本任务只验证导致 `D0-AUTO-001` 的代码修复和完整发布链。
+这不是新的代码发布验证。产品 Commit `a90a18a6` 的完整发布链已经通过：
 
 ```text
-不安装灵机
-不启动桌面 UI
-不启动 Production Runtime
-不读取或导入真实资料
-不修改 Vault、正式数据库、Qdrant 或用户 AI 客户端配置
+精确修复测试：PASS（11 passed）
+Python 全量：PASS（583 passed，10 skipped，3 subtests）
+Desktop smoke：PASS（22 scripts）
+干净 build：PASS
+重复 build：PASS
+frontend dist validator：PASS
+Rust/Tauri：PASS（9 passed）
+validate.ps1 -Mode release：PASS（15 suites）
+本地 release 身份与哈希：PASS
+真实数据读取：0
+安装或 UI 启动：0
 ```
 
-旧身份继续禁止执行：
-
-```text
-d69874afd8def42a40c4a5cc5e678a71921d44b5
-Artifact 8762312712
-```
-
-## 3. 验证目标
-
-必须证明：
-
-1. `tests/test_brain_status_e2e.py` 不再依赖仓库残留 `dist`；
-2. 合法的单 JavaScript bundle 可以通过；
-3. 缺失、空文件、远程脚本和越界路径必须失败；
-4. `npm run build` 每次都验证本次刚生成的 `dist`；
-5. 干净构建和已有 `dist` 的重复构建结果一致；
-6. 完整 Python、Desktop、Rust/Tauri 和 Windows release 链通过；
-7. 本地 release 产物的 Commit 必须精确为 `a90a18a66ffba157c01367ba70bfec98f58798e2`。
-
-实现依据：
-
-```text
-docs/TEST_REPORTS/PR60_FRONTEND_DIST_GATE_FIX.md
-scripts/validate_frontend_dist.py
-tests/test_validate_frontend_dist.py
-tests/test_brain_status_e2e.py
-desktop/lingji-control/package.json
-```
-
-## 4. 开始前门禁
-
-Codex 必须：
-
-1. 拉取远程最新 `master` 并读取本任务单和结果回执；
-2. 确认 PR #60 远程 Head 精确等于 `product_commit`；
-3. 从精确 Commit 创建隔离 product worktree；
-4. 使用唯一临时根：
+远程报告分支和阻塞回执已经可读。唯一剩余问题是旧清理工具不认识：
 
 ```text
 D:\codex\LingJiValidation\PR60-CODE-a90a18a6
 ```
 
-5. 只清理该目录和本任务创建的 worktree、构建缓存、测试日志及本地 release 产物；
-6. 不删除或修改任何主人数据、正式 Acceptance 数据和旧失败报告；
-7. 若身份不一致、目录清理被拒绝或依赖无法安装，立即 BLOCKED，不得绕过。
-
-## 5. 必跑验证
-
-### A. 精确修复测试
-
-```powershell
-python -m pytest -q tests/test_brain_status_e2e.py tests/test_validate_frontend_dist.py
-```
-
-预期：全部 PASS，不允许 skip。
-
-### B. Python 全量回归
-
-```powershell
-python -m pytest -q --tb=short
-python -m compileall -q main.py run_service.py run_control_api.py run_packaged_control_api.py run_mcp_server.py run_extraction_worker.py src second_brain tests scripts
-```
-
-### C. Desktop 干净构建
-
-```powershell
-Set-Location desktop\lingji-control
-npm ci --no-audit --no-fund
-if (Test-Path dist) { Remove-Item dist -Recurse -Force }
-npm run test:smoke
-npm run build
-```
-
-必须记录 `validate:dist` 的 PASS 输出和实际 JavaScript 入口数量。
-
-### D. 重复构建回归
-
-不得删除第一次构建生成的 `dist`，直接再次执行：
-
-```powershell
-npm run build
-```
-
-预期仍为 PASS。随后回到仓库根目录。
-
-### E. Rust/Tauri
-
-```powershell
-cargo test --manifest-path desktop/lingji-control/src-tauri/Cargo.toml --target x86_64-pc-windows-msvc
-```
-
-### F. 完整本地发布门禁
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate.ps1 -Mode release
-```
-
-必须从头执行完整 full + release，不允许只重跑失败测试，不允许修改断言、skip、mock 或关闭校验。
-
-### G. 本地 release 身份
-
-验证本地生成的：
+清理策略已在 PR #69 修复并合并到 `master`：
 
 ```text
-Installer
-Portable EXE
-Sidecar
-build-metadata.json
-lingji-core-manifest.json
-SHA256SUMS.txt
+0f9bb6421bceea815bfe8c5d26b59728c0f49fb6
 ```
 
-要求：
+## 3. 绝对禁止
 
-- 文件存在且非空；
-- metadata Commit 精确等于任务 Commit；
-- 计算并记录全部 SHA256；
-- 不把本地产物当作正式 GitHub Artifact；
-- 不安装、不启动 UI。
-
-## 6. 判定
-
-PASS 必须同时满足：
+Codex 不得重新执行：
 
 ```text
-精确修复测试 PASS
-Python 全量 PASS
-Desktop smoke PASS
-干净 build PASS
-重复 build PASS
-frontend dist validator PASS
-Rust/Tauri PASS
-validate.ps1 -Mode release PASS
-本地 release 身份与哈希 PASS
-无真实数据读取
-清理 PASS
-远程报告可读
+Python 全量测试
+Desktop smoke 或 build
+Rust/Tauri 测试
+validate.ps1 -Mode release
+重新生成本地安装包
+安装或启动 LingJi
+读取或导入真实资料
 ```
 
-任一失败，结论为 FAIL；环境或远程提交无法完成，结论为 BLOCKED。
+不得修改产品分支、产品 Commit、原测试结果或原产物哈希。不得把本次恢复称为新的产品验证。
 
-## 7. 报告与回执
+## 4. 恢复工作区
 
-Codex 从最新 `master` 创建：
+原任务目录内包含 product 和 report worktree，Windows 无法在当前工作目录内部删除其父目录。因此必须从目标目录之外执行恢复。
+
+1. 拉取远程最新 `master`，确认包含清理修复 Commit `0f9bb642...`。
+2. 在目标目录之外创建一次性恢复 worktree，例如：
+
+```text
+D:\codex\LingJiRecovery\PR60-CODE-a90a18a6-report
+```
+
+3. 在该 worktree 检出远程现有报告分支：
 
 ```text
 acceptance/pr60-code-release-validation-a90a18a6
 ```
 
-提交：
+4. 复读并记录：
+
+```text
+报告分支当前 HEAD: e654b283c53b986aa64c2974c37d8c0cb231b366
+首次报告内容 Commit: 3aecaa06ec3a2a504a170fae28996b37854beb4c
+Release validation: PASS
+Cleanup after: BLOCKED_POST_CLEANUP
+```
+
+5. 不得覆盖或删除原报告证据。
+
+## 5. 安全清理
+
+必须从最新 `master` 的仓库副本、且当前目录位于目标根之外执行。
+
+### A. 运行清理工具测试
+
+只运行本次工具的聚焦测试：
+
+```powershell
+python -m pytest -q tests/test_cleanup_acceptance_workspace.py
+```
+
+预期：PASS。不得运行产品 release 套件。
+
+### B. Dry-run
+
+```powershell
+python scripts/cleanup_acceptance_workspace.py `
+  --task-id PR60-CODE-RELEASE-VALIDATION-A90A18A6 `
+  --root D:\codex\LingJiValidation `
+  --target D:\codex\LingJiValidation\PR60-CODE-a90a18a6
+```
+
+必须确认：
+
+- 状态不是 `BLOCKED`；
+- 目标只有一个直接子目录；
+- 清单仅包含本任务创建的 product、report、release、依赖缓存、日志和证据；
+- 不含 Vault、Production DataRoot、正式 Acceptance 数据、用户 AI 配置或相邻任务目录。
+
+### C. 解除 worktree 占用
+
+在执行删除前：
+
+- 确认 product/report 分支所需提交均已远程存在；
+- 从外部仓库执行 `git worktree remove` 或 `git worktree prune`，解除原目标内两个 worktree 的 Git 登记；
+- 当前 shell、编辑器、Python、Node、Cargo 和日志进程不得占用目标目录；
+- 不得结束无关进程。
+
+### D. 显式执行
+
+```powershell
+python scripts/cleanup_acceptance_workspace.py `
+  --task-id PR60-CODE-RELEASE-VALIDATION-A90A18A6 `
+  --root D:\codex\LingJiValidation `
+  --target D:\codex\LingJiValidation\PR60-CODE-a90a18a6 `
+  --execute
+```
+
+执行后必须确认：
+
+```text
+cleanup_after: PASS
+local_temp_root_absent: true
+D:\codex\LingJiValidation\PR60-CODE-a90a18a6 不存在
+相邻目录和主人数据未变化
+```
+
+工具若仍拒绝或操作系统返回占用/权限错误，继续 `BLOCKED_POST_CLEANUP`，不得强删或放宽安全规则。
+
+## 6. 更新原报告，不创建新报告
+
+清理成功后，在外部恢复 worktree中更新原分支：
 
 ```text
 docs/TEST_REPORTS/PR60_CODE_RELEASE_VALIDATION_a90a18a6.md
@@ -198,40 +178,72 @@ docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_HASHES_a90a18a6.txt
 docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
 ```
 
-报告必须包含：
+最终回执必须写为：
 
-- 环境和精确 Commit；
-- 每条命令、退出码、通过/失败数量；
-- 两次 build 结果；
-- validator 入口数量；
-- release 汇总；
-- 本地产物哈希；
-- 失败日志尾部；
-- 数据安全声明；
-- 清理结果。
+```yaml
+status: COMPLETED
+verdict: PASS
+cleanup_before: PASS
+cleanup_after: PASS
+remote_branch_verified: true
+remote_commit_verified: true
+remote_report_verified: true
+remote_result_verified: true
+pr_comment_verified: true
+local_temp_root_absent: true
+owner_observation: NOT_REQUIRED
+```
 
-不得提交安装包、node_modules、target、dist、数据库、Token、私人资料、完整本机路径或未脱敏日志。
+`report_commit` 保留首次成功推送的报告内容 Commit：
 
-## 8. 结束清理
+```text
+3aecaa06ec3a2a504a170fae28996b37854beb4c
+```
 
-远程报告和回执复读成功后：
+另在证据索引记录最终报告分支 HEAD。
 
-- 删除本任务 product/report worktree；
-- 删除 npm 缓存副本、dist、target、本地 release 产物和普通成功日志；
-- 删除 `D:\codex\LingJiValidation\PR60-CODE-a90a18a6`；
-- 确认没有启动 LingJi、8766/8767 进程或孤儿 MCP；
-- 安全策略拒绝删除时写 BLOCKED_POST_CLEANUP，不得强制绕过。
+## 7. PR #60 评论和远程复读
+
+在 PR #60 添加或更新评论，明确：
+
+```text
+产品 Commit a90a18a6 的 15 套 release 验证此前已 PASS。
+BLOCKED 仅由清理工具策略缺口造成。
+PR #69 / master 0f9bb642 修复清理策略后，目标目录已安全删除。
+最终代码发布链验证结论：PASS。
+这不是正式 GitHub Artifact，也尚未进入 Day 0 或 UI 验收。
+```
+
+随后远程复读：
+
+- 报告分支最终 HEAD；
+- 首次报告内容 Commit；
+- 最终报告正文；
+- 公开摘要和哈希；
+- 最终结果回执；
+- PR #60 评论。
+
+## 8. 恢复 worktree 清理
+
+最终 push 和远程复读成功后：
+
+- 删除外部恢复 worktree；
+- 删除其空父目录；
+- 确认没有孤儿 worktree、LingJi进程、8766/8767监听或 MCP；
+- 不删除任何远程报告分支或历史证据。
 
 ## 9. 最终回复
 
 ```text
-代码发布链验证完成
+代码发布链验证恢复完成
 task_id: PR60-CODE-RELEASE-VALIDATION-A90A18A6
-结论: PASS / FAIL / BLOCKED
+最终结论: PASS / BLOCKED
 产品 Commit: a90a18a66ffba157c01367ba70bfec98f58798e2
-完整 release: PASS / FAIL / BLOCKED
+完整 release: PASS（沿用已验证的15 suites，不重跑）
+清理修复 Commit: 0f9bb6421bceea815bfe8c5d26b59728c0f49fb6
 报告分支: acceptance/pr60-code-release-validation-a90a18a6
-报告 Commit: <40位 SHA>
+首次报告内容 Commit: 3aecaa06ec3a2a504a170fae28996b37854beb4c
+报告分支最终 HEAD: <40位 SHA>
 远程确认: PASS
 本地清理: PASS
 ```
