@@ -16,28 +16,28 @@ type Guide = {
 
 const GUIDES: Partial<Record<PageId, Guide>> = {
   overview: {
-    purpose: "先完成 AI 连接和记忆导入，再查看灵机是否正常、正在处理什么。",
-    when: "第一次打开灵机，或者需要导入新的 AI 历史时从这里开始。",
-    steps: ["打开 AI 助手与记忆导入", "扫描本机 AI 软件", "导入资料后查看处理进度和记忆审核"],
-    primary: { label: "连接 AI 与导入记忆", page: "assistant_hub" },
-    secondary: { label: "查看活动记录", page: "activity" },
+    purpose: "观察灵机当前状态、自动工作进度、阻塞原因和需要主人授权的边界。",
+    when: "日常打开灵机先看这里；多数情况下只需了解进度，不需要按流程逐项操作。",
+    steps: ["查看灵机当前自动动作", "确认 DataRoot 与工作空间绑定", "只处理明确标记为需要授权或最终决定的事项"],
+    primary: { label: "查看自动处理进度", page: "activity" },
+    secondary: { label: "查看待授权事项", page: "attention" },
   },
   assistant_hub: {
-    purpose: "扫描 Codex、Claude Code、WorkBuddy，并把支持的 AI 历史导入灵机。",
-    when: "第一次设置灵机、换电脑、安装新的 AI 工具或需要补导历史记录时。",
-    steps: ["先点击扫描我的 AI 软件", "查看每个工具的真实支持状态", "选择导出文件并提交到采集队列"],
-    primary: { label: "导入后查看进度", page: "activity" },
-    secondary: { label: "进入记忆审核", page: "memory_review" },
+    purpose: "观察灵机自动发现的 Codex、Claude Code、WorkBuddy 及可用历史来源。",
+    when: "想了解 AI 连接状态、发现结果，或灵机提示需要授权读取真实导出文件时。",
+    steps: ["灵机会自动扫描安全元数据", "查看配置、命令和真实连接三层状态", "只有读取正文或修改外部配置时才确认授权"],
+    primary: { label: "查看自动处理进度", page: "activity" },
+    secondary: { label: "查看候选记忆", page: "memory_review" },
   },
   activity: {
     purpose: "查看灵机正在处理什么、哪些任务已经完成、哪些任务失败。",
-    when: "提交内容后想确认处理进度，或者怀疑某项工作没有完成时。",
-    steps: ["先看当前任务", "再看最近结果", "失败任务转到“需要我处理”判断是否重试"],
+    when: "想了解后台进度，或者怀疑某项工作没有完成时。",
+    steps: ["先看当前任务", "再看最近结果", "只有失败需要人工判断时转到“需要我处理”"],
     primary: { label: "查看需要我处理", page: "attention" },
   },
   attention: {
     purpose: "这里只放灵机无法安全替你决定的事项。",
-    when: "首页提示有异常、记忆需要审核、任务需要人工决定时。",
+    when: "首页提示需要授权、记忆需要审核或高风险操作等待决定时。",
     steps: ["先看风险说明", "确认影响范围", "只处理你理解并认可的操作"],
     primary: { label: "审核候选记忆", page: "memory_review" },
   },
@@ -49,21 +49,21 @@ const GUIDES: Partial<Record<PageId, Guide>> = {
     secondary: { label: "查看日志", page: "logs" },
   },
   capture_center: {
-    purpose: "把文字、网页、文件或媒体正式交给灵机处理。",
-    when: "你希望灵机记住、整理、分析或后续检索某项资料时。",
-    steps: ["选择来源类型", "确认内容和隐私范围", "提交后去活动记录看处理结果"],
-    primary: { label: "提交后查看进度", page: "activity" },
+    purpose: "授权文字、网页、文件或媒体进入灵机的自动处理链。",
+    when: "你希望灵机读取一项新的真实资料时。",
+    steps: ["确认来源和隐私范围", "完成一次读取授权", "后续解析、去重、排队和重试由灵机自动完成"],
+    primary: { label: "查看自动处理进度", page: "activity" },
   },
   capture: {
-    purpose: "快速提交单条文字、网页或本地文件。",
-    when: "只需要一次简单投喂，不需要查看完整采集队列时。",
-    steps: ["选择输入方式", "确认来源信息", "提交后检查任务状态"],
+    purpose: "快速授权单条文字、网页或本地文件进入灵机。",
+    when: "只需提交一次资料，不需要查看完整采集队列时。",
+    steps: ["选择输入方式", "确认读取范围", "提交后由灵机自动处理"],
     primary: { label: "查看任务队列", page: "jobs" },
   },
   media: {
     purpose: "查看音频、视频和图片的转写、OCR、镜头与摘要结果。",
-    when: "已提交媒体文件，需要确认分析结果或失败原因时。",
-    steps: ["选择媒体任务", "查看处理阶段", "需要长期保留时再进入记忆审核"],
+    when: "已授权媒体文件，需要确认自动分析结果或失败原因时。",
+    steps: ["查看处理阶段", "检查自动生成结果", "需要长期保留时再进入记忆审核"],
     primary: { label: "查看活动记录", page: "activity" },
   },
   memory_review: {
@@ -86,8 +86,8 @@ const GUIDES: Partial<Record<PageId, Guide>> = {
   },
   obsidian: {
     purpose: "确认 Obsidian Vault 连接、路径和安全操作状态。",
-    when: "正式知识没有同步、Vault 路径变化或需要执行只读检查时。",
-    steps: ["确认 Vault 和 CLI 状态", "先执行只读检查", "写入前确认目标文件和影响"],
+    when: "正式知识没有同步、Vault 路径变化或灵机请求真实正文授权时。",
+    steps: ["确认 Vault 和 CLI 状态", "先查看只读检查结果", "写入前确认目标文件和影响"],
     primary: { label: "查看存储状态", page: "storage" },
   },
   brain_status: {
@@ -97,9 +97,9 @@ const GUIDES: Partial<Record<PageId, Guide>> = {
     primary: { label: "查看向量中心", page: "vector_center" },
   },
   vector_center: {
-    purpose: "查看 Qdrant、向量数量、维度、覆盖率和重建需求。",
+    purpose: "查看 Qdrant、向量数量、维度、覆盖率和自动修复进度。",
     when: "语义检索不可用、向量数量异常或模型切换后需要核对索引时。",
-    steps: ["确认 collection 和 workspace", "核对模型与维度", "仅在明确提示时执行重建"],
+    steps: ["确认 collection 和 workspace", "核对模型与维度", "仅在明确提示时批准重建"],
     primary: { label: "查看 AI 与模型", page: "models" },
   },
   models: {
@@ -117,13 +117,13 @@ const GUIDES: Partial<Record<PageId, Guide>> = {
   jobs: {
     purpose: "查看提取、索引、重试和失败任务的明细。",
     when: "活动记录只能看到结果，但你需要更详细的任务阶段和错误时。",
-    steps: ["按状态筛选任务", "查看失败阶段和重试次数", "确认原因后再重试或取消"],
+    steps: ["按状态筛选任务", "查看失败阶段和自动重试次数", "只有系统不能安全处理时再人工干预"],
     primary: { label: "返回活动记录", page: "activity" },
   },
   auto_review: {
-    purpose: "查看自动审查建议、风险和解释；这里不会自动执行变更。",
+    purpose: "查看自动审查建议、风险和解释；这里不会自动执行不可逆变更。",
     when: "需要审计系统建议或判断规则是否可靠时。",
-    steps: ["查看建议依据", "核对风险", "需要修改记忆时转到人工审核"],
+    steps: ["查看建议依据", "核对风险", "需要修改永久记忆时转到人工审核"],
     primary: { label: "进入人工记忆审核", page: "memory_review" },
   },
   storage: {
@@ -135,19 +135,19 @@ const GUIDES: Partial<Record<PageId, Guide>> = {
   backups: {
     purpose: "查看备份、校验结果和隔离恢复入口。",
     when: "升级、迁移、重建索引或处理重大故障之前。",
-    steps: ["确认备份范围", "执行校验", "恢复时优先使用隔离目录验证"],
+    steps: ["确认备份范围", "查看自动校验结果", "恢复时优先使用隔离目录验证"],
     primary: { label: "查看存储", page: "storage" },
   },
   acceptance: {
     purpose: "对真实资料执行只读诊断，确认系统不会误写生产数据。",
     when: "新版本安装、路径迁移、重大模块调整或合并前验收时。",
-    steps: ["确认当前是 acceptance workspace", "执行只读检查", "保存报告后再决定是否进入生产"],
+    steps: ["确认当前是 acceptance workspace", "查看自动只读检查", "保存报告后再决定是否进入生产"],
     primary: { label: "返回开始使用", page: "overview" },
   },
   settings: {
     purpose: "查看默认值、推荐值和主人覆盖项。",
     when: "路径、模型、任务策略或启动行为确实需要调整时。",
-    steps: ["先读推荐值和影响", "一次只修改一组相关设置", "保存后按提示重启或执行任务"],
+    steps: ["先读推荐值和影响", "一次只修改一组相关设置", "保存后由灵机按提示重启或执行任务"],
     primary: { label: "返回开始使用", page: "overview" },
   },
   logs: {
@@ -168,14 +168,14 @@ export default function PageGuide({
   const navigation = NAVIGATION.find((item) => item.id === page);
   const guide = GUIDES[page] ?? {
     purpose: navigation?.hint ?? "查看当前模块状态和可用操作。",
-    when: "只有在日常流程或异常处理需要时进入。",
-    steps: ["先阅读页面说明", "确认当前状态", "理解影响后再执行操作"],
+    when: "只有在日常观察、授权或异常处理需要时进入。",
+    steps: ["先阅读页面说明", "确认当前状态", "只有需要授权或干预时再执行操作"],
   };
 
   return (
     <section className="page-guide" aria-label={`${navigation?.label ?? "当前页面"}使用说明`}>
       <div className="page-guide-copy">
-        <span className="desktop-eyebrow">这页怎么用</span>
+        <span className="desktop-eyebrow">这页怎么看</span>
         <h2>{navigation?.label ?? "当前页面"}</h2>
         <p>{guide.purpose}</p>
         <small><strong>什么时候来：</strong>{guide.when}</small>

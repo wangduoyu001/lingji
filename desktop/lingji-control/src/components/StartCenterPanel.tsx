@@ -49,6 +49,7 @@ type Recommendation = {
   detail: string;
   label: string;
   page: PageId;
+  requiresOwner: boolean;
 };
 
 const display = (value: unknown): string =>
@@ -95,12 +96,12 @@ const stateLabel = (value: unknown): string => {
 
 const workspaceCopy = (workspace: string | null) => {
   if (workspace === "production") {
-    return { label: "正式空间", detail: "你的正式记忆与知识工作区", tone: "ok" };
+    return { label: "正式空间", detail: "灵机正在维护你的正式记忆与知识工作区", tone: "ok" };
   }
   if (workspace === "acceptance") {
     return { label: "验收空间", detail: "与正式数据物理隔离，仅用于测试", tone: "warning" };
   }
-  return { label: "工作空间未知", detail: "系统不会把未知状态冒充为正式空间", tone: "warning" };
+  return { label: "工作空间未知", detail: "灵机不会把未知状态冒充为正常", tone: "warning" };
 };
 
 function chooseRecommendation(values: {
@@ -114,42 +115,47 @@ function chooseRecommendation(values: {
 }): Recommendation {
   if (values.unavailableCount >= 4) {
     return {
-      title: "先恢复开始中心状态",
-      detail: "多个只读状态来源暂不可用，先查看诊断，避免在未知状态下继续配置。",
-      label: "打开高级诊断",
+      title: "灵机正在恢复状态来源",
+      detail: "多个只读状态来源暂不可用。后台会继续重试，你可以查看诊断过程和失败原因。",
+      label: "查看自动诊断",
       page: "diagnostics",
-    };
-  }
-  if (values.vaultConfigured === false) {
-    return {
-      title: "先连接正式 Obsidian Vault",
-      detail: "Vault 是永久知识正文的权威入口，连接后再导入和审核长期记忆。",
-      label: "连接 Obsidian",
-      page: "obsidian",
-    };
-  }
-  if (values.configuredClients === 0) {
-    return {
-      title: "连接一个正在使用的 AI",
-      detail: "先扫描 Codex、Claude Code 或 WorkBuddy，再预览、备份并应用连接配置。",
-      label: "开始连接 AI",
-      page: "assistant_hub",
-    };
-  }
-  if (values.runningJobs > 0) {
-    return {
-      title: "查看正在处理的导入",
-      detail: `当前有 ${values.runningJobs} 个任务运行或等待处理，先确认进度和失败原因。`,
-      label: "查看活动记录",
-      page: "activity",
+      requiresOwner: false,
     };
   }
   if (values.pendingReview > 0) {
     return {
-      title: "审核候选记忆",
-      detail: `当前有 ${values.pendingReview} 条候选等待主人确认，不会静默写入 Core Memory。`,
-      label: "进入人工记忆审核",
+      title: "有候选记忆等待主人定稿",
+      detail: `灵机已完成提取和整理，当前有 ${values.pendingReview} 条候选等待批准或拒绝。`,
+      label: "处理待批准候选",
       page: "memory_review",
+      requiresOwner: true,
+    };
+  }
+  if (values.vaultConfigured === false) {
+    return {
+      title: "已发现知识库配置缺口",
+      detail: "灵机可以继续运行和扫描；连接正式 Vault 涉及读取真实正文，因此等待主人授权。",
+      label: "查看待授权知识库",
+      page: "obsidian",
+      requiresOwner: true,
+    };
+  }
+  if (values.configuredClients === 0) {
+    return {
+      title: "灵机正在检查 AI 客户端连接",
+      detail: "安装和目录元数据会自动扫描；真正修改客户端配置前才会请求主人确认。",
+      label: "查看 AI 连接进度",
+      page: "assistant_hub",
+      requiresOwner: false,
+    };
+  }
+  if (values.runningJobs > 0) {
+    return {
+      title: "灵机正在处理导入任务",
+      detail: `当前有 ${values.runningJobs} 个任务运行、排队或重试，后台会继续推进。`,
+      label: "查看自动处理进度",
+      page: "activity",
+      requiresOwner: false,
     };
   }
   if (
@@ -157,17 +163,19 @@ function chooseRecommendation(values: {
     || !["healthy", "ready", "available"].includes(values.embeddingState)
   ) {
     return {
-      title: "检查语义检索状态",
-      detail: "全文检索仍可使用；Embedding 或向量尚未就绪，请查看真实原因和修复入口。",
-      label: "打开向量中心",
+      title: "灵机正在诊断语义检索",
+      detail: "全文检索继续可用；后台会持续检查模型、Qdrant、索引和重建条件。",
+      label: "查看修复进度",
       page: "vector_center",
+      requiresOwner: false,
     };
   }
   return {
-    title: "继续投喂新资料",
-    detail: "基础连接和索引状态已就绪，可以继续提交文字、网页、文件或媒体。",
-    label: "打开投喂中心",
-    page: "capture_center",
+    title: "灵机运行正常，当前没有阻塞",
+    detail: "自动扫描、状态刷新、任务维护和故障恢复正在后台运行。",
+    label: "查看运行记录",
+    page: "activity",
+    requiresOwner: false,
   };
 }
 
@@ -266,17 +274,18 @@ export default function StartCenterPanel({
     <>
       {(resource.error || resource.stale || (snapshot?.unavailableCount ?? 0) > 0) && (
         <Notice kind="warning">
-          部分开始中心数据暂不可用或来自旧快照。系统保留最近有效结果，不会把未知状态显示成一切正常。
+          部分观察数据暂不可用或来自旧快照。灵机会继续重试，不会把未知状态显示成一切正常。
         </Notice>
       )}
 
       <section className="start-center-recommendation">
         <div>
-          <span className="desktop-eyebrow">唯一推荐下一步</span>
+          <span className="desktop-eyebrow">灵机当前处理重点</span>
           <h3>{recommendation.title}</h3>
           <p>{recommendation.detail}</p>
+          <small>{recommendation.requiresOwner ? "此步骤涉及授权或永久记忆，需要主人确认。" : "这是查看入口，不影响后台继续运行。"}</small>
         </div>
-        <button className="button primary" onClick={() => onNavigate(recommendation.page)}>
+        <button className={recommendation.requiresOwner ? "button primary" : "button secondary"} onClick={() => onNavigate(recommendation.page)}>
           {recommendation.label}
         </button>
       </section>
@@ -292,11 +301,11 @@ export default function StartCenterPanel({
         <div className="start-center-memory-grid" aria-label="全量记忆总览">
           <Metric
             title="正式 Vault"
-            value={snapshot?.obsidian?.vault_name || (vaultConfigured ? "已连接" : vaultConfigured === false ? "未连接" : "未知")}
+            value={snapshot?.obsidian?.vault_name || (vaultConfigured ? "已连接" : vaultConfigured === false ? "等待授权" : "未知")}
             detail={snapshot?.obsidian?.vault_path_display || "Obsidian Vault + Git 是永久知识权威"}
             tone={vaultConfigured === true ? "good" : vaultConfigured === false ? "warn" : undefined}
           />
-          <Metric title="来源" value={display(sources.sources)} detail="导入或采集来源" />
+          <Metric title="来源" value={display(sources.sources)} detail="自动识别的导入或采集来源" />
           <Metric title="对话" value={display(sources.conversations)} detail="结构化会话记录" />
           <Metric title="消息" value={display(sources.messages)} detail="可追溯消息记录" />
           <Metric title="永久知识" value={display(memory.documents)} detail="Vault 中已建立索引的文档" />
@@ -312,19 +321,19 @@ export default function StartCenterPanel({
 
       <section className="start-center-section">
         <div className="overview-section-heading">
-          <div><span className="desktop-eyebrow">已接入什么</span><h3>来源与 AI 客户端摘要</h3></div>
+          <div><span className="desktop-eyebrow">灵机自动发现</span><h3>来源与 AI 客户端摘要</h3></div>
           <button className="button secondary" onClick={() => onNavigate("assistant_hub")}>
-            扫描或管理连接
+            查看连接与授权
           </button>
         </div>
         <div className="start-center-connection-grid">
-          <Metric title="检测到 AI" value={display(detectedAssistants)} detail="只读扫描，不读取对话正文" />
-          <Metric title="可导入来源" value={display(importReady)} detail="ChatGPT 导出、Codex Report 等" />
+          <Metric title="检测到 AI" value={display(detectedAssistants)} detail="自动只读扫描，不读取对话正文" />
+          <Metric title="等待授权来源" value={display(importReady)} detail="发现后停在读取正文之前" />
           <Metric title="已配置客户端" value={display(configuredClients)} detail="LingJi 管理或确认的连接" />
           <Metric
-            title="连接测试通过"
+            title="真实连接通过"
             value={display(verifiedClients)}
-            detail="真实客户端已确认可用"
+            detail="客户端真实调用已验证"
             tone={verifiedClients > 0 ? "good" : undefined}
           />
         </div>
@@ -332,7 +341,7 @@ export default function StartCenterPanel({
 
       <section className="start-center-section">
         <div className="overview-section-heading">
-          <div><span className="desktop-eyebrow">最近导入</span><h3>最近提交到灵机的历史资料</h3></div>
+          <div><span className="desktop-eyebrow">自动处理记录</span><h3>最近提交到灵机的历史资料</h3></div>
           <button className="button secondary" onClick={() => onNavigate("activity")}>查看全部进度</button>
         </div>
         {importJobs.length ? (
@@ -354,26 +363,28 @@ export default function StartCenterPanel({
           </div>
         ) : (
           <div className="observation-empty-state">
-            <strong>还没有可确认的导入记录</strong>
-            <p>扫描并导入 ChatGPT Export 或 Codex Report 后，这里会显示真实处理状态。</p>
+            <strong>当前没有导入任务</strong>
+            <p>灵机会继续自动扫描来源元数据；发现可读取资料后，会在真正打开正文前请求授权。</p>
           </div>
         )}
       </section>
 
       <section className="start-center-section">
         <div className="overview-section-heading">
-          <div><span className="desktop-eyebrow">系统与已知问题</span><h3>哪些已经修复，哪些仍需处理</h3></div>
+          <div><span className="desktop-eyebrow">系统与已知问题</span><h3>自动维护状态</h3></div>
           <small>只展示有验收证据或实时状态支持的结论</small>
         </div>
         <div className="start-center-issue-grid">
-          <KnownIssue title="PowerShell、CMD 与黑窗口">安装版已使用 Windows GUI 子系统和隐藏子进程。</KnownIssue>
-          <KnownIssue title="Runtime 重启与 Windows 重启恢复">打包 Runtime 生命周期和自动恢复已有验收记录。</KnownIssue>
-          <KnownIssue title="非 C 盘 DataRoot 隔离">Production 与 Acceptance 使用独立数据根。</KnownIssue>
-          <KnownIssue title="覆盖安装与卸载数据保护">安装目录与主人数据分离，不会清理正式数据。</KnownIssue>
+          <KnownIssue title="PowerShell、CMD 与黑窗口">安装版使用 Windows GUI 子系统和隐藏子进程。</KnownIssue>
+          <KnownIssue title="Runtime 与 Windows 重启恢复">打包 Runtime 生命周期和自动恢复已有验收记录。</KnownIssue>
+          <KnownIssue title="非 C 盘 DataRoot 隔离">Desktop会核验Runtime实际根，不接管身份不一致的外部进程。</KnownIssue>
+          <KnownIssue title="覆盖安装与卸载数据保护">安装目录与主人数据分离，不清理正式数据。</KnownIssue>
           <article className={`start-center-issue ${embeddingReady ? "start-center-issue-fixed" : "start-center-issue-open"}`}>
-            <span className={`pill ${embeddingReady ? "ok" : "warning"}`}>{embeddingReady ? "当前正常" : "待处理"}</span>
+            <span className={`pill ${embeddingReady ? "ok" : "warning"}`}>{embeddingReady ? "当前正常" : "后台诊断中"}</span>
             <strong>Embedding 与语义检索</strong>
-            <p>{embeddingReady ? "Embedding 已激活，语义检索状态由后端确认。" : "配置存在但尚未激活；全文检索仍可用，后续从向量中心处理。"}</p>
+            <p>{embeddingReady
+              ? "Embedding 已激活，语义检索状态由后端确认。"
+              : "灵机已识别语义检索阻塞；向量中心会显示配置模型、实际模型、Qdrant状态、最近错误和修复进度。全文检索继续可用。"}</p>
           </article>
         </div>
       </section>
@@ -384,7 +395,7 @@ export default function StartCenterPanel({
 function KnownIssue({ title, children }: { title: string; children: string }) {
   return (
     <article className="start-center-issue start-center-issue-fixed">
-      <span className="pill ok">已修复并验收</span>
+      <span className="pill ok">自动维护</span>
       <strong>{title}</strong>
       <p>{children}</p>
     </article>

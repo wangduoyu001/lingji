@@ -137,7 +137,7 @@ $artifacts = foreach ($artifactPath in $artifactFiles) {
 }
 
 $metadata = [ordered]@{
-  schema_version = 4
+  schema_version = 5
   product_name = "LingJi"
   display_name = "灵机"
   version = $version
@@ -168,9 +168,14 @@ $metadata = [ordered]@{
     sidecar_runtime_file_count = [int]$sidecarManifest.runtime_directory.file_count
     sidecar_runtime_bytes = [long]$sidecarManifest.runtime_directory.bytes
     optional_media_providers_bundled = [bool]$sidecarManifest.optional_media_providers_bundled
-    owner_data_root = "owner-selected-non-system-drive\<workspace>"
+    owner_data_root = "startup-contract-or-automatic-non-system-drive"
     workspace_profiles = @("production", "acceptance")
-    first_run_configuration_required = $true
+    first_run_configuration_required = $false
+    automatic_safe_non_system_drive_selection = $true
+    startup_binding_contract_supported = $true
+    runtime_binding_identity_required = $true
+    external_runtime_adoption_allowed = $false
+    owner_authorization_required_for_real_content = $true
     c_drive_runtime_data_allowed = $false
     updater_included = $false
   }
@@ -198,10 +203,14 @@ Sidecar subsystem: Windows GUI
 Code signed: no
 
 This package contains the Tauri Desktop application and the fixed LingJi Python runtime Sidecar.
-The Desktop manages only the Sidecar process it started. A healthy external 8766 process is detected but is not stopped or restarted.
-On first launch, the owner must select a non-C base data directory and choose the production or acceptance workspace.
-Runtime databases, vectors, raw data, logs, cache, backups and generated data are stored under <selected base>\<workspace>.
+The Desktop manages only the Sidecar process it started. An external 8766 process is never silently adopted.
+When no saved configuration or startup contract exists, LingJi automatically selects the first writable non-C drive under <drive>:\LingJiData\production.
+If no safe automatic location exists, the Desktop asks the owner to select a non-C base directory once.
+A task or deployment can pin an exact effective DataRoot and workspace with LINGJI_BOOTSTRAP_CONTRACT_FILE.
+The authenticated Runtime identity endpoint must report the same actual DataRoot and workspace before the Desktop exposes control credentials.
+Runtime databases, vectors, raw data, logs, cache, backups and generated data remain outside the Windows C: drive.
 %LOCALAPPDATA%\LingJi\desktop-bootstrap.json stores only the small Desktop bootstrap pointer; it is not the Runtime data root.
+Routine discovery, status refresh and managed recovery are automatic. Real-content reads, external-client changes and permanent-memory decisions require owner authorization.
 Optional media providers and large local models are not bundled or downloaded automatically.
 The automatic updater is not included yet.
 

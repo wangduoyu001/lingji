@@ -3,8 +3,8 @@
 mod runtime_bootstrap;
 mod runtime_manager;
 
-use runtime_bootstrap::RuntimeBootstrapStatus;
-use runtime_manager::{owner_data_root, RuntimeManager, RuntimeStatus};
+use runtime_bootstrap::{RuntimeBindingVerification, RuntimeBootstrapStatus};
+use runtime_manager::{RuntimeManager, RuntimeStatus};
 use serde::Serialize;
 use std::{env, fs, path::PathBuf};
 use tauri::{AppHandle, Manager, State};
@@ -29,7 +29,8 @@ struct ReleaseMetadata {
 
 #[tauri::command]
 fn control_credentials() -> Result<ControlCredentials, String> {
-    runtime_bootstrap::require_configured()?;
+    let bootstrap = runtime_bootstrap::require_configured()?;
+    runtime_bootstrap::require_verified_runtime()?;
     let base_url = env::var("LINGJI_CONTROL_BASE_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8766".to_string());
     let mut candidates = Vec::new();
@@ -39,7 +40,9 @@ fn control_credentials() -> Result<ControlCredentials, String> {
             candidates.push(path);
         }
     }
-    candidates.push(owner_data_root()?.join("storage").join("control_api_token"));
+    if let Some(root) = bootstrap.data_root_display {
+        candidates.push(PathBuf::from(root).join("storage").join("control_api_token"));
+    }
 
     for path in candidates {
         if let Ok(value) = fs::read_to_string(&path) {
@@ -75,11 +78,21 @@ fn runtime_bootstrap_status() -> RuntimeBootstrapStatus {
 }
 
 #[tauri::command]
+fn runtime_binding_verification() -> RuntimeBindingVerification {
+    runtime_bootstrap::verify_runtime_binding()
+}
+
+#[tauri::command]
 fn runtime_configure(
     base_data_root: String,
     workspace: String,
 ) -> Result<RuntimeBootstrapStatus, String> {
     runtime_bootstrap::configure(base_data_root, workspace)
+}
+
+#[tauri::command]
+fn runtime_auto_configure() -> Result<RuntimeBootstrapStatus, String> {
+    runtime_bootstrap::auto_configure()
 }
 
 async fn run_runtime<F>(operation: F) -> Result<RuntimeStatus, String>
@@ -91,6 +104,33 @@ where
         .map_err(|error| format!("Runtime manager task failed: {error}"))?
 }
 
+async fn verify_or_stop(
+    app: AppHandle,
+    manager: RuntimeManager,
+    status: RuntimeStatus,
+) -> Result<RuntimeStatus, String> {
+    if !status.healthy {
+        return Ok(status);
+    }
+    let verification = runtime_bootstrap::verify_runtime_binding();
+    if verification.verified && status.managed {
+        return Ok(status);
+    }
+
+    if status.managed {
+        let stop_manager = manager.clone();
+        let stop_app = app.clone();
+        let _ = run_runtime(move || stop_manager.stop(&stop_app)).await;
+    }
+    if !verification.verified {
+        return Err(verification.error.unwrap_or_else(|| {
+            "LingJi Runtime responded from an unverified DataRoot; Desktop refused to adopt it"
+                .to_string()
+        }));
+    }
+    Err("LingJi found an external Runtime and refused to adopt an unmanaged process".to_string())
+}
+
 #[tauri::command]
 async fn guarded_runtime_status(
     app: AppHandle,
@@ -98,7 +138,10 @@ async fn guarded_runtime_status(
 ) -> Result<RuntimeStatus, String> {
     runtime_bootstrap::require_configured()?;
     let manager = manager.inner().clone();
-    run_runtime(move || manager.status(&app)).await
+    let operation_manager = manager.clone();
+    let operation_app = app.clone();
+    let status = run_runtime(move || operation_manager.status(&operation_app)).await?;
+    verify_or_stop(app, manager, status).await
 }
 
 #[tauri::command]
@@ -108,7 +151,10 @@ async fn guarded_runtime_ensure(
 ) -> Result<RuntimeStatus, String> {
     runtime_bootstrap::require_configured()?;
     let manager = manager.inner().clone();
-    run_runtime(move || manager.ensure(&app)).await
+    let operation_manager = manager.clone();
+    let operation_app = app.clone();
+    let status = run_runtime(move || operation_manager.ensure(&operation_app)).await?;
+    verify_or_stop(app, manager, status).await
 }
 
 #[tauri::command]
@@ -128,12 +174,26 @@ async fn guarded_runtime_restart(
 ) -> Result<RuntimeStatus, String> {
     runtime_bootstrap::require_configured()?;
     let manager = manager.inner().clone();
-    run_runtime(move || manager.restart(&app)).await
+    let operation_manager = manager.clone();
+    let operation_app = app.clone();
+    let status = run_runtime(move || operation_manager.restart(&operation_app)).await?;
+    verify_or_stop(app, manager, status).await
+}
+
+fn initialize_runtime_binding() {
+    runtime_bootstrap::quarantine_inherited_environment();
+    if runtime_bootstrap::startup_contract_requested() {
+        // A declared startup contract is authoritative. Any parse, path,
+        // workspace, port or write-probe failure remains visible as a blocking
+        // contract error. It must never fall back to a previous global bootstrap.
+        let _ = runtime_bootstrap::apply_startup_contract();
+    } else {
+        let _ = runtime_bootstrap::apply_saved_environment();
+    }
 }
 
 fn main() {
-    runtime_bootstrap::quarantine_inherited_environment();
-    let _ = runtime_bootstrap::apply_saved_environment();
+    initialize_runtime_binding();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(RuntimeManager::default())
@@ -141,7 +201,9 @@ fn main() {
             control_credentials,
             release_metadata,
             runtime_bootstrap_status,
+            runtime_binding_verification,
             runtime_configure,
+            runtime_auto_configure,
             guarded_runtime_status,
             guarded_runtime_ensure,
             guarded_runtime_stop,

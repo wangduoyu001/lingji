@@ -6,11 +6,11 @@ type Props = {
   onNavigate: (page: PageId) => void;
 };
 
-const FIRST_USE_STEPS: Array<{ title: string; detail: string; page: PageId }> = [
-  { title: "1. 扫描 AI 软件", detail: "检测 Codex、Claude Code、WorkBuddy 的安全本机痕迹。", page: "assistant_hub" },
-  { title: "2. 导入已有资料", detail: "选择 ChatGPT Export 或 Codex Report，提交到统一采集队列。", page: "assistant_hub" },
-  { title: "3. 查看处理", detail: "在活动记录确认导入是否完成或失败。", page: "activity" },
-  { title: "4. 审核永久记忆", detail: "只批准真正值得长期保留的候选内容。", page: "memory_review" },
+const AUTONOMY_STEPS: Array<{ title: string; detail: string; page: PageId }> = [
+  { title: "1. 灵机自动发现", detail: "自动检测 AI 软件、已知目录元数据、模型和硬件状态，不读取正文。", page: "assistant_hub" },
+  { title: "2. 灵机自动处理", detail: "已授权资料自动解析、去重、排队、重试并记录进度。", page: "activity" },
+  { title: "3. 需要时请求授权", detail: "读取真实正文或修改外部客户端配置前才会询问主人。", page: "attention" },
+  { title: "4. 主人最终定稿", detail: "只有你批准的候选才会成为永久记忆。", page: "memory_review" },
 ];
 
 export default function UsageGuideDrawer({ open, onClose, onNavigate }: Props) {
@@ -32,17 +32,17 @@ export default function UsageGuideDrawer({ open, onClose, onNavigate }: Props) {
       >
         <header className="usage-guide-header">
           <div>
-            <span className="desktop-eyebrow">使用说明</span>
-            <h2>第一次打开灵机怎么做</h2>
-            <p>先连接 AI 和导入资料，再查看处理并审核永久记忆。高级诊断只在故障时进入。</p>
+            <span className="desktop-eyebrow">运行说明</span>
+            <h2>灵机会主动工作，你主要负责观察和授权</h2>
+            <p>菜单用于查看状态、进度和手动干预。普通扫描、检测、处理、重试和恢复不需要逐项点击。</p>
           </div>
           <button className="usage-guide-close" onClick={onClose} aria-label="关闭使用说明">×</button>
         </header>
 
         <section className="usage-guide-section">
-          <h3>首次设置流程</h3>
+          <h3>自动运行与主人边界</h3>
           <div className="usage-guide-step-list">
-            {FIRST_USE_STEPS.map((step) => (
+            {AUTONOMY_STEPS.map((step) => (
               <button key={step.title} onClick={() => navigate(step.page)}>
                 <strong>{step.title}</strong>
                 <small>{step.detail}</small>
@@ -52,23 +52,25 @@ export default function UsageGuideDrawer({ open, onClose, onNavigate }: Props) {
         </section>
 
         <section className="usage-guide-section usage-guide-rules">
-          <h3>永久记忆不会自动乱写</h3>
+          <h3>哪些事情不会擅自做</h3>
           <ol>
-            <li>扫描只读取允许目录和文件元数据，不读取账号密码、Token 或浏览器登录态。</li>
-            <li>导入内容先进入采集队列，不会直接成为 Core Memory。</li>
+            <li>自动扫描只读取允许目录的存在性、类型和数量元数据，不读取账号密码、Token、登录态或真实正文。</li>
+            <li>读取 ChatGPT、Codex、剧本、Vault 等真实内容前必须获得主人授权。</li>
+            <li>修改外部客户端配置、删除数据、重建 Production Qdrant 等高影响操作不会静默执行。</li>
+            <li>导入内容先进入采集与候选链，不会直接成为 Core Memory。</li>
             <li>只有在“人工记忆审核”中确认的候选，才成为正式长期记忆。</li>
           </ol>
         </section>
 
         <section className="usage-guide-section usage-guide-advanced">
-          <h3>接下来常用入口</h3>
+          <h3>常用观察与干预入口</h3>
           <div className="usage-guide-links">
-            <button onClick={() => navigate("assistant_hub")}>连接 AI / 导入历史</button>
-            <button onClick={() => navigate("capture_center")}>继续投喂新资料</button>
-            <button onClick={() => navigate("activity")}>查看处理进度</button>
+            <button onClick={() => navigate("assistant_hub")}>查看 AI 发现与连接</button>
+            <button onClick={() => navigate("activity")}>查看自动处理进度</button>
+            <button onClick={() => navigate("attention")}>查看待授权与异常</button>
             <button onClick={() => navigate("memory_review")}>审核候选记忆</button>
-            <button onClick={() => navigate("attention")}>处理异常</button>
-            <button onClick={() => navigate("diagnostics")}>高级诊断</button>
+            <button onClick={() => navigate("capture_center")}>授权新的资料来源</button>
+            <button onClick={() => navigate("diagnostics")}>高级诊断与手动干预</button>
           </div>
         </section>
       </aside>

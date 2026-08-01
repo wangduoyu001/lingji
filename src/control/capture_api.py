@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hmac
 import logging
+import os
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -187,15 +189,50 @@ def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str
         workspace = str(getattr(settings, "workspace", "") or "")
         return AiAssistantDiscoveryService(workspace=workspace).scan()
 
+    def runtime_identity() -> dict[str, Any]:
+        workspace = str(
+            os.environ.get("LINGJI_WORKSPACE")
+            or getattr(settings, "workspace", "")
+            or getattr(settings, "workspace_name", "")
+            or "unknown"
+        ).strip().lower()
+        configured_root = str(os.environ.get("LINGJI_OWNER_DATA_ROOT") or "").strip()
+        if configured_root:
+            root = Path(configured_root).expanduser().resolve(strict=False)
+        else:
+            storage = Path(
+                str(
+                    getattr(settings, "storage_path", "")
+                    or getattr(settings, "storage_dir", "")
+                    or ""
+                )
+            ).expanduser().resolve(strict=False)
+            root = storage.parent if storage.name.lower() == "storage" else storage
+        return {
+            "status": "ok",
+            "binding_contract_version": 1,
+            "data_root": str(root),
+            "workspace": workspace,
+        }
+
+    replaced_routes = {
+        ("/api/share", "POST"),
+        ("/api/runtime/ping", "GET"),
+    }
     app.router.routes[:] = [
         route
         for route in app.router.routes
-        if not (
-            getattr(route, "path", None) == "/api/share"
-            and "POST" in (getattr(route, "methods", set()) or set())
+        if not any(
+            getattr(route, "path", None) == path
+            and method in (getattr(route, "methods", set()) or set())
+            for path, method in replaced_routes
         )
     ]
     secured = [Depends(authorize)]
+
+    @app.get("/api/runtime/ping", dependencies=secured)
+    def runtime_ping() -> dict[str, Any]:
+        return runtime_identity()
 
     @app.post("/api/capture/text", dependencies=secured)
     def capture_text(request: CaptureTextRequest):

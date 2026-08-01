@@ -30,7 +30,7 @@ export default function RuntimeBoundary({
   children,
 }: Props) {
   const [baseDataRoot, setBaseDataRoot] = useState("");
-  const [workspace, setWorkspace] = useState<WorkspaceName>("acceptance");
+  const [workspace, setWorkspace] = useState<WorkspaceName>("production");
   const effectiveRoot = useMemo(() => {
     const root = baseDataRoot.trim().replace(/[\\/]+$/, "");
     return root ? `${root}\\${workspace}` : "";
@@ -70,20 +70,20 @@ export default function RuntimeBoundary({
         <div className="desktop-runtime-symbol">盘</div>
         <div className="stack">
           <div>
-            <span className="desktop-eyebrow">DATA ROOT REQUIRED</span>
-            <h2>先选择非 C 盘数据目录</h2>
+            <span className="desktop-eyebrow">MANUAL FALLBACK</span>
+            <h2>灵机没有找到可自动使用的非 C 盘目录</h2>
             <p>
-              数据库、向量、日志、缓存、原始材料和生成资产不会再静默写入 C 盘。
-              LocalAppData 只保存一个很小的启动指针文件。
+              灵机已经自动检查可写磁盘，但没有找到安全默认位置。这里只需要确认一次备用目录；
+              之后核心启动、扫描、恢复和状态维护都由灵机自动完成。
             </p>
           </div>
 
           <div className="settings-list">
             <label>
-              验收环境
+              工作空间
               <select value={workspace} onChange={(event) => setWorkspace(event.target.value as WorkspaceName)}>
-                <option value="acceptance">验收环境 acceptance</option>
                 <option value="production">正式环境 production</option>
+                <option value="acceptance">验收环境 acceptance</option>
               </select>
             </label>
             <label>
@@ -103,6 +103,7 @@ export default function RuntimeBoundary({
 
           <dl className="detail-list">
             <div><dt>实际数据根</dt><dd>{effectiveRoot || "选择目录后显示"}</dd></div>
+            <div><dt>自动选择结果</dt><dd>{bootstrapStatus?.last_error || "未找到可用默认目录"}</dd></div>
             <div><dt>启动配置</dt><dd>{bootstrapStatus?.config_path_display || "%LOCALAPPDATA%\\LingJi\\desktop-bootstrap.json"}</dd></div>
           </dl>
 
@@ -113,7 +114,7 @@ export default function RuntimeBoundary({
               disabled={!baseDataRoot.trim() || Boolean(runtimeBusy)}
               onClick={() => onConfigure(baseDataRoot.trim(), workspace)}
             >
-              {runtimeBusy === "configure" || runtimeBusy === "ensure" ? "配置并启动中…" : "保存配置并启动核心"}
+              {runtimeBusy === "configure" || runtimeBusy === "ensure" ? "绑定并启动中…" : "确认备用目录"}
             </button>
           </div>
         </div>
@@ -126,9 +127,9 @@ export default function RuntimeBoundary({
       <section className="desktop-runtime-card">
         <div className="desktop-spinner" aria-hidden="true" />
         <div>
-          <span className="desktop-eyebrow">AUTOMATIC RUNTIME</span>
+          <span className="desktop-eyebrow">LINGJI AUTOPILOT</span>
           <h2>{runtimeStateLabel(runtimeStatus)}</h2>
-          <p>桌面端正在自动检查、启动并连接本机核心，不需要手动打开 PowerShell。</p>
+          <p>灵机正在自动绑定 DataRoot、启动核心、核验身份并扫描本机环境，不需要手动打开 PowerShell或逐项点击。</p>
         </div>
       </section>
     );
@@ -145,8 +146,8 @@ export default function RuntimeBoundary({
               {ownerStopped
                 ? "后台自动恢复已暂停。恢复运行后，任务和状态同步会继续。"
                 : runtimeStatus?.binary_available === false
-                  ? "当前安装包没有核心 Sidecar，系统会继续检测外部8766服务。"
-                  : "系统会自动重新启动或连接核心，无需重复点击按钮。"}
+                  ? "当前安装包没有核心 Sidecar，系统会继续检测并报告阻塞。"
+                  : "系统会自动重新启动、核验DataRoot并连接核心，无需重复点击按钮。"}
             </small>
           </div>
           {ownerStopped && (

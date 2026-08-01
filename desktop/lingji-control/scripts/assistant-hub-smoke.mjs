@@ -24,15 +24,21 @@ assert.match(pages, /page === "assistant_hub"/);
 assert.match(pages, /<AssistantHubPage/);
 
 for (const token of [
-  "扫描我的 AI 软件",
-  "第一次使用从这里开始",
+  "自动运行观察台",
+  "灵机正在主动发现和维护 AI 连接",
+  "立即重新扫描",
+  "等待授权来源",
   "ChatGPT 历史",
   "Codex 工作报告",
   "/api/assistant-hub/scan",
   "/api/capture/file",
-  "进入人工记忆审核",
+  "授权并交给灵机",
   "不允许 AI 直接写入 Core Memory",
 ]) assert.ok(hub.includes(token), `Assistant Hub is missing ${token}`);
+
+assert.equal(hub.includes("扫描我的 AI 软件"), false, "Assistant scanning must not be a required primary owner action");
+assert.match(hub, /useEffect\(\(\) => \{ void load\(true\); \}, \[load\]\)/);
+assert.match(hub, /owner_authorized: true/);
 
 for (const token of [
   "连接不等于导入历史",
@@ -45,6 +51,8 @@ for (const token of [
   "/api/assistant-hub/status",
   "/api/assistant-hub/scan",
   "/api/assistant-hub/connections",
+  "/api/runtime/ping",
+  "binding_contract_version",
   "AiAssistantDiscoveryService",
   "AiMemoryConnectorService",
 ]) assert.ok(captureApi.includes(token), `Assistant Hub API is missing ${token}`);

@@ -48,12 +48,12 @@ type CaptureSubmission = { job_id?: string; duplicate?: boolean; status?: string
 type Props = PageProps & { onNavigate: (page: PageId) => void };
 
 const stateLabel = (state: string): string => ({
-  detected: "已检测到",
+  detected: "已自动检测",
   not_found: "未检测到",
-  manual_export: "需要导出文件",
-  available: "可导入",
+  manual_export: "等待主人提供导出文件",
+  available: "可在授权后导入",
   planned: "适配中",
-  configuration_required: "需要设置",
+  configuration_required: "等待配置授权",
   unavailable: "暂不可用",
 }[state] ?? state);
 
@@ -88,7 +88,7 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
     }
   }, [active, api]);
 
-  useEffect(() => { void load(false); }, [load]);
+  useEffect(() => { void load(true); }, [load]);
 
   const chooseFile = async (mode: ImportMode) => {
     try {
@@ -96,21 +96,21 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
       const selected = await open({
         multiple: false,
         directory: false,
-        title: mode === "chatgpt_export" ? "选择 ChatGPT 导出文件" : "选择 Codex Report",
+        title: mode === "chatgpt_export" ? "授权灵机读取 ChatGPT 导出文件" : "授权灵机读取 Codex Report",
         filters: mode === "chatgpt_export"
           ? [{ name: "ChatGPT Export", extensions: ["zip", "json"] }]
           : [{ name: "Codex Report", extensions: ["json"] }],
       });
       if (typeof selected === "string") setPaths((value) => ({ ...value, [mode]: selected }));
     } catch {
-      setResult("文件选择仅在安装版灵机中可用。请使用 Windows 安装包验收。");
+      setResult("文件授权仅在安装版灵机中可用。请使用 Windows 安装包验收。");
     }
   };
 
   const submitImport = async (mode: ImportMode) => {
     const inputPath = paths[mode];
     if (!inputPath) {
-      setResult("请先选择导出文件。");
+      setResult("请先授权一个导出文件。");
       return;
     }
     setBusy(`import:${mode}`);
@@ -122,11 +122,11 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
         adapter_name: mode === "chatgpt_export" ? "chatgpt_export" : "codex_work_report",
         privacy: "private",
         process_later: true,
-        metadata: { origin: "assistant_hub" },
+        metadata: { origin: "assistant_hub", owner_authorized: true },
       });
       setResult(response.duplicate
-        ? "这份内容已经提交过，没有重复创建任务。"
-        : `已进入采集队列${response.job_id ? `：${response.job_id}` : ""}。处理完成后到“人工记忆审核”确认长期记忆。`);
+        ? "这份内容已经提交过，灵机没有重复创建任务。"
+        : `授权已记录，灵机已接管后续处理${response.job_id ? `：${response.job_id}` : ""}。候选长期记忆仍需主人最终确认。`);
     } catch (reason) {
       const apiError = reason instanceof ApiError ? reason : new ApiError(0, "UNKNOWN", "导入失败");
       setResult(`导入失败：${apiError.message}`);
@@ -135,36 +135,39 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
     }
   };
 
-  if (!active) return <div className="assistant-hub-state">连接本机核心后才能扫描、连接和导入 AI 资料。</div>;
+  if (!active) return <div className="assistant-hub-state">灵机核心连接后会自动扫描、连接和汇总 AI 来源。</div>;
 
   return <div className="assistant-hub-page">
     <section className="assistant-onboarding-hero">
       <div>
-        <span className="desktop-eyebrow">第一次使用从这里开始</span>
-        <h2>把你正在使用的 AI 接入灵机</h2>
-        <p>先扫描本机工具，再连接今后的记忆调用，最后导入已有历史。三个动作含义不同，灵机不会混成一个绿色假状态。</p>
+        <span className="desktop-eyebrow">自动运行观察台</span>
+        <h2>灵机正在主动发现和维护 AI 连接</h2>
+        <p>
+          安装检测、历史目录元数据扫描、状态刷新和失败重试由灵机自动执行。
+          这里只有读取真实正文、修改外部客户端配置和写入永久记忆时才需要你的授权。
+        </p>
       </div>
-      <button className="button primary" disabled={busy === "scan"} onClick={() => void load(true)}>
-        {busy === "scan" ? "扫描中…" : "扫描我的 AI 软件"}
+      <button className="button secondary" disabled={busy === "scan"} onClick={() => void load(true)}>
+        {busy === "scan" ? "自动扫描中…" : "立即重新扫描"}
       </button>
     </section>
 
     {error && <div className="assistant-hub-notice error">{error}</div>}
 
-    <section className="assistant-setup-flow" aria-label="首次设置流程">
-      <div><strong>1</strong><span><b>扫描</b><small>只确认安装和可用能力，不读取对话正文。</small></span></div>
-      <div><strong>2</strong><span><b>连接</b><small>让 AI 今后通过 MCP 读取灵机记忆、提交候选记忆。</small></span></div>
-      <div><strong>3</strong><span><b>导入</b><small>把 ChatGPT Export、Codex Report 等旧资料放进处理队列。</small></span></div>
-      <div><strong>4</strong><span><b>审核</b><small>只有你确认的候选才成为正式永久记忆。</small></span></div>
+    <section className="assistant-setup-flow" aria-label="灵机自动处理流程">
+      <div><strong>1</strong><span><b>自动发现</b><small>确认安装和可用能力，不读取对话正文。</small></span></div>
+      <div><strong>2</strong><span><b>自动检查</b><small>验证命令、配置状态和连接条件，失败会后台重试。</small></span></div>
+      <div><strong>3</strong><span><b>授权读取</b><small>发现可导入资料后，只在读取正文前请求主人确认。</small></span></div>
+      <div><strong>4</strong><span><b>主人定稿</b><small>只有你确认的候选才成为正式永久记忆。</small></span></div>
     </section>
 
     {scan && <>
       <section className="assistant-scan-summary">
         <div><span>当前工作空间</span><strong>{scan.workspace || "未知"}</strong></div>
-        <div><span>检测到工具</span><strong>{scan.summary.detected}</strong></div>
-        <div><span>当前可导入</span><strong>{scan.summary.import_ready + scan.summary.requires_manual_export}</strong></div>
+        <div><span>自动检测到工具</span><strong>{scan.summary.detected}</strong></div>
+        <div><span>等待授权来源</span><strong>{scan.summary.import_ready + scan.summary.requires_manual_export}</strong></div>
         <div><span>待开发适配器</span><strong>{scan.summary.planned}</strong></div>
-        <small>扫描时间：{time(scan.scanned_at)}</small>
+        <small>最近自动扫描：{time(scan.scanned_at)}</small>
       </section>
 
       <section className="assistant-card-grid">
@@ -181,6 +184,7 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
             <div><dt>最近活动</dt><dd>{time(assistant.latest_activity_at)}</dd></div>
           </dl>
           {assistant.discovered_paths.length > 0 && <div className="assistant-path-list">
+            <small>已发现以下来源，仅读取了路径和数量元数据：</small>
             {assistant.discovered_paths.map((path) => <code key={path}>{path}</code>)}
           </div>}
           <footer>{assistant.next_action}</footer>
@@ -192,13 +196,16 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
 
     <section className="assistant-import-section">
       <div className="assistant-section-heading">
-        <div><span className="desktop-eyebrow">导入已有历史</span><h3>选择导出文件，剩下的交给采集队列</h3></div>
-        <button className="button secondary" onClick={() => onNavigate("activity")}>查看导入进度</button>
+        <div>
+          <span className="desktop-eyebrow">需要主人授权的边界</span>
+          <h3>选择一次来源，后续解析、去重、入队和进度维护由灵机完成</h3>
+        </div>
+        <button className="button secondary" onClick={() => onNavigate("activity")}>查看自动处理进度</button>
       </div>
       <div className="assistant-import-grid">
         <ImportCard
           title="ChatGPT 历史"
-          detail="支持官方导出的 ZIP 或 conversations JSON。"
+          detail="授权读取官方导出的 ZIP 或 conversations JSON。"
           path={paths.chatgpt_export}
           busy={busy === "import:chatgpt_export"}
           onChoose={() => void chooseFile("chatgpt_export")}
@@ -206,7 +213,7 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
         />
         <ImportCard
           title="Codex 工作报告"
-          detail="支持灵机/Codex 生成的结构化 JSON 工作报告。"
+          detail="授权读取灵机/Codex 生成的结构化 JSON 工作报告。"
           path={paths.codex_report}
           busy={busy === "import:codex_report"}
           onChoose={() => void chooseFile("codex_report")}
@@ -219,17 +226,17 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
     <section className="assistant-memory-policy">
       <div>
         <span className="desktop-eyebrow">永久记忆规则</span>
-        <h3>默认先审核，不把全部聊天直接写进核心记忆</h3>
-        <p>连接后的 AI 可以读取你批准的记忆，也可以提交候选；导入资料会保留来源并进入处理链。只有你在“人工记忆审核”中确认的内容，才成为正式长期记忆。</p>
+        <h3>灵机自动整理，主人只负责最终批准</h3>
+        <p>连接后的 AI 可以读取你批准的记忆，也可以提交候选；导入资料会自动保留来源、去重和进入处理链。只有你在“人工记忆审核”中确认的内容，才成为正式长期记忆。</p>
       </div>
       <div className="assistant-policy-list">
-        <span>✓ AI 可读取主人批准的记忆</span>
-        <span>✓ AI 可提交候选记忆</span>
-        <span>✓ 原始资料保留来源并自动去重</span>
-        <span>× 不读取账号 Token 或浏览器登录态</span>
+        <span>✓ 自动扫描安装和历史目录元数据</span>
+        <span>✓ 自动检测连接、模型和运行状态</span>
+        <span>✓ 自动解析、去重、排队和失败重试</span>
+        <span>× 未授权不读取真实正文</span>
         <span>× 不允许 AI 直接写入 Core Memory</span>
       </div>
-      <button className="button" onClick={() => onNavigate("memory_review")}>进入人工记忆审核</button>
+      <button className="button secondary" onClick={() => onNavigate("memory_review")}>查看待批准候选</button>
     </section>
   </div>;
 }
@@ -251,10 +258,10 @@ function ImportCard({
 }) {
   return <article className="assistant-import-card">
     <div><h4>{title}</h4><p>{detail}</p></div>
-    <code>{path || "尚未选择文件"}</code>
+    <code>{path || "尚未授权文件"}</code>
     <div>
-      <button className="button secondary" onClick={onChoose}>选择文件</button>
-      <button className="button" disabled={!path || busy} onClick={onSubmit}>{busy ? "提交中…" : "导入到灵机"}</button>
+      <button className="button secondary" onClick={onChoose}>授权文件</button>
+      <button className="button" disabled={!path || busy} onClick={onSubmit}>{busy ? "灵机接管中…" : "授权并交给灵机"}</button>
     </div>
   </article>;
 }
