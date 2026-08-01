@@ -1,6 +1,6 @@
 {
   "task_id": "PR60-MEMORY-QUALITY-TRIAL-3E24E65C",
-  "status": "RUNNING_REPORT_READBACK_AND_CLEANUP",
+  "status": "COMPLETED",
   "verdict": "FAIL",
   "blocking_defect": "FAIL_DATA_ROOT_ISOLATION",
   "product_commit": "3e24e65ce12bfa22b5c9193d65500648ebf45729",
@@ -18,5 +18,13 @@
   "bootstrap_hash_unchanged": true,
   "post_stop_ports_clear": true,
   "post_stop_lingji_processes_clear": true,
-  "external_acceptance_side_effects": "NOT_ASSERTED"
+  "external_acceptance_side_effects": "NOT_ASSERTED",
+  "initial_report_commit": "b201dc9edeae8c178ae17c04530f409dbd5ebd16",
+  "initial_report_remote_readback": true,
+  "pr_comment_id": 5152376424,
+  "pr_comment_remote_readback": true,
+  "cleanup_dry_run_entries": 317,
+  "cleanup_files_removed": 217,
+  "cleanup_directories_removed": 100,
+  "task_root_removed": true
 }

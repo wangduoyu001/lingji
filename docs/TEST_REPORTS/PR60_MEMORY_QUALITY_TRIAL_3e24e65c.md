@@ -72,3 +72,9 @@ Stage 1 / Stage 2: NOT_RUN
 Production body reads: 0
 Merge recommendation: DO NOT MERGE
 ```
+
+## Report readback and cleanup
+
+The initial failure report commit `b201dc9edeae8c178ae17c04530f409dbd5ebd16` and PR #60 comment [`#5152376424`](https://github.com/wangduoyu001/lingji/pull/60#issuecomment-5152376424) were remotely reread before cleanup. The approved task cleanup then removed the exact current task root after a dry-run whose 317 entries were all under that root; it removed 217 files and 100 directories. The shared parent directory was retained.
+
+After cleanup there was no listener on `8766` or `8767`, and no LingJi Desktop, Sidecar, or MCP process. The report-only worktree is retained just long enough to push and reread this final receipt, then is unregistered.
