@@ -14,7 +14,7 @@ execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
 product_commit: 3e24e65ce12bfa22b5c9193d65500648ebf45729
-task_instruction_commit: PENDING
+task_instruction_commit: 7839caf29846f6b4cc14a4a49d8da88b565b3aa2
 report_branch: acceptance/pr60-memory-quality-trial-3e24e65c
 report_commit: PENDING
 report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_3e24e65c.md
