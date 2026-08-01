@@ -27,7 +27,7 @@ for (const token of [
   "自动运行观察台",
   "灵机正在主动发现和维护 AI 连接",
   "立即重新扫描",
-  "等待主人授权来源",
+  "等待授权来源",
   "ChatGPT 历史",
   "Codex 工作报告",
   "/api/assistant-hub/scan",
