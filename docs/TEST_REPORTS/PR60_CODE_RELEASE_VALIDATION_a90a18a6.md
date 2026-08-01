@@ -76,7 +76,7 @@ Temporary evidence cleanup: BLOCKED_POST_CLEANUP
 The first remote read-back of the report branch, commit, report and receipt succeeded. The required safety cleanup entry then rejected the task's own temporary-root name as not allowlisted. The task prohibits bypassing a refused safety cleanup, so no manual deletion was attempted. This prevents the task from reaching its required final `PASS` state despite successful release validation.
 
 ```text
-Cleanup command: python scripts/cleanup_acceptance_workspace.py --task-id PR60-CODE-RELEASE-VALIDATION-A90A18A6 --target <task root> --root D:\codex\LingJiValidation
+Cleanup command: `python scripts/cleanup_acceptance_workspace.py --task-id PR60-CODE-RELEASE-VALIDATION-A90A18A6 --target <task root> --root <validation root>`
 Result: BLOCKED - target name is not allowlisted: PR60-CODE-a90a18a6
 Required remediation: add this current task's exact temporary-root naming rule to the approved cleanup policy, then rerun the cleanup and remote read-back.
 ```
