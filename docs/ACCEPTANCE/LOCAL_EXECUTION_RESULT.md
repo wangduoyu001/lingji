@@ -8,29 +8,29 @@
 
 ```yaml
 task_id: PR60-MASTER-SYNC-A90A18A6
-status: PENDING
-verdict: PENDING
+status: BLOCKED_SUBMISSION
+verdict: BLOCKED
 execution_mode: BRANCH_SYNC_AND_ARTIFACT_PREPARATION
 repository: wangduoyu001/lingji
 product_pr: 60
 product_commit: a90a18a66ffba157c01367ba70bfec98f58798e2
-task_instruction_commit: PENDING
+task_instruction_commit: 4eb3a1078ef85ef2691d85e13026ad66b2a4f390
 report_branch: acceptance/pr60-master-sync-a90a18a6
 report_commit: PENDING
 report_path: docs/TEST_REPORTS/PR60_MASTER_SYNC_a90a18a6.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_MASTER_SYNC_SUMMARY_a90a18a6.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MASTER_SYNC_HASHES_a90a18a6.txt
-cleanup_before: NOT_RUN
+cleanup_before: PASS
 cleanup_after: NOT_RUN
 remote_branch_verified: false
 remote_commit_verified: false
 remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
-local_temp_root_absent: false
+local_temp_root_absent: true
 owner_observation: NOT_REQUIRED
-started_at: PENDING
-finished_at: PENDING
+started_at: 2026-08-01T23:36:00.8363453+08:00
+finished_at: 2026-08-01T23:36:00.8363453+08:00
 source_master_commit: c349131d1aa22d2630b57df4d01d43a1088a1529
 backup_branch_verified: false
 merged_product_commit: PENDING
@@ -43,7 +43,7 @@ remote_actions_started: false
 ## 2. 待验证项目
 
 ```text
-远程身份确认：NOT_RUN
+远程身份确认：FAIL（BLOCKED_WRONG_IDENTITY：origin/master 与任务指定 source_master_commit 不一致）
 备份分支：NOT_RUN
 标准非快进merge：NOT_RUN
 冲突范围核验：NOT_RUN
@@ -77,15 +77,15 @@ CI和正式Windows Artifact的最终结论由后续远程核验决定，不属�
 ## 4. 证据索引
 
 ```text
-最终报告：PENDING
-公开摘要：PENDING
-公开哈希：PENDING
-备份分支远程SHA：PENDING
-新产品Head：PENDING
+最终报告：docs/TEST_REPORTS/PR60_MASTER_SYNC_a90a18a6.md
+公开摘要：docs/TEST_REPORTS/evidence/PR60_MASTER_SYNC_SUMMARY_a90a18a6.json
+公开哈希：docs/TEST_REPORTS/evidence/PR60_MASTER_SYNC_HASHES_a90a18a6.txt
+备份分支远程SHA：NOT_CREATED_BLOCKED_WRONG_IDENTITY
+新产品Head：UNCHANGED_a90a18a66ffba157c01367ba70bfec98f58798e2
 合并父提交：a90a18a6 + c349131d
-PR #60状态：PENDING
-远程Actions：PENDING
-报告分支最终HEAD：PENDING
+PR #60状态：DRAFT_UNCHANGED
+远程Actions：NOT_STARTED
+报告分支最终HEAD：PENDING_REMOTE_READBACK
 ```
 
 禁止提交安装包、数据库、Token、私人内容、node_modules、dist或未脱敏日志。

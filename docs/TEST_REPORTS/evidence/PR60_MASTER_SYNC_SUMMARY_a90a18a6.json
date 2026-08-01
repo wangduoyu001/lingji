@@ -1,0 +1,21 @@
+{
+  "task_id": "PR60-MASTER-SYNC-A90A18A6",
+  "verdict": "BLOCKED_WRONG_IDENTITY",
+  "expected": {
+    "product_commit": "a90a18a66ffba157c01367ba70bfec98f58798e2",
+    "source_master_commit": "c349131d1aa22d2630b57df4d01d43a1088a1529"
+  },
+  "observed": {
+    "product_commit": "a90a18a66ffba157c01367ba70bfec98f58798e2",
+    "origin_master_commit": "4eb3a1078ef85ef2691d85e13026ad66b2a4f390"
+  },
+  "operations_performed": {
+    "backup_branch": false,
+    "merge": false,
+    "tests": false,
+    "build": false,
+    "release": false,
+    "artifact": false,
+    "real_data_read": 0
+  }
+}
