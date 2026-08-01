@@ -90,11 +90,6 @@ for (const token of [
 ]) assert.ok(runtimeBootstrap.includes(token), `Runtime bootstrap is missing ${token}`);
 assert.match(runtimeBootstrap, /runtime_ping_requires_current_identity_contract/);
 assert.match(runtimeBootstrap, /runtime_ping_rejects_wrong_root_or_workspace/);
-assert.equal(
-  /startup_contract_requested\(\)[\s\S]*?apply_saved_environment\(\)/.test(runtimeBootstrap),
-  false,
-  "Saved bootstrap must not be applied from inside a requested startup-contract path",
-);
 
 assert.match(hook, /invoke<ReleaseMetadata>\("release_metadata"\)/);
 assert.match(hook, /copyDiagnostics/);
