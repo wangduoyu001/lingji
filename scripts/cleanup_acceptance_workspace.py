@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Safely remove one task-scoped LingJi acceptance workspace.
+"""Safely remove one task-scoped LingJi acceptance or validation workspace.
 
 The command is intentionally narrow. It refuses paths outside the configured
-acceptance root, refuses the root itself, never follows reparse points, and
-requires both an exact task id and explicit --execute before deletion.
+root, refuses the root itself, never follows reparse points, and requires an
+exact supported task identity plus explicit --execute before deletion.
 """
 
 from __future__ import annotations
@@ -11,21 +11,43 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import stat
-import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 DEFAULT_ROOT = Path(r"D:\codex\LingJiAcceptance")
-ALLOWED_TARGETS = {
-    "PR60-MEMORY-TRIAL-1c514877",
-    "PR60-1c514877",
-    "PR60-MEMORY-TRIAL-d69874af",
+_CODE_VALIDATION_TASK = re.compile(
+    r"^PR(?P<pr>\d+)-CODE-RELEASE-VALIDATION-(?P<sha>[0-9A-F]{8})$",
+    flags=re.IGNORECASE,
+)
+_MEMORY_TRIAL_TASK = re.compile(
+    r"^PR(?P<pr>\d+)-MEMORY-QUALITY-TRIAL-(?P<sha>[0-9A-F]{8})$",
+    flags=re.IGNORECASE,
+)
+_LEGACY_TARGETS_BY_TASK = {
+    "PR60-MEMORY-QUALITY-TRIAL-D69874AF": frozenset(
+        {
+            "PR60-MEMORY-TRIAL-1c514877",
+            "PR60-1c514877",
+        }
+    ),
 }
 
 
 class CleanupError(RuntimeError):
     """Raised when a cleanup request violates the safety contract."""
+
+
+@dataclass(frozen=True)
+class CleanupPolicy:
+    root_name: str
+    current_target: str
+    extra_targets: frozenset[str] = frozenset()
+
+    @property
+    def allowed_targets(self) -> frozenset[str]:
+        return frozenset({self.current_target, *self.extra_targets})
 
 
 @dataclass(frozen=True)
@@ -40,6 +62,32 @@ class CleanupResult:
     remaining: list[str]
 
 
+def resolve_policy(task_id: str) -> CleanupPolicy:
+    normalized_task_id = task_id.strip().upper()
+
+    match = _CODE_VALIDATION_TASK.fullmatch(normalized_task_id)
+    if match:
+        return CleanupPolicy(
+            root_name="LingJiValidation",
+            current_target=f"PR{match.group('pr')}-CODE-{match.group('sha').lower()}",
+        )
+
+    match = _MEMORY_TRIAL_TASK.fullmatch(normalized_task_id)
+    if match:
+        return CleanupPolicy(
+            root_name="LingJiAcceptance",
+            current_target=(
+                f"PR{match.group('pr')}-MEMORY-TRIAL-{match.group('sha').lower()}"
+            ),
+            extra_targets=_LEGACY_TARGETS_BY_TASK.get(
+                normalized_task_id,
+                frozenset(),
+            ),
+        )
+
+    raise CleanupError(f"unsupported cleanup task id: {task_id}")
+
+
 def _norm(path: Path) -> Path:
     return Path(os.path.abspath(os.path.normpath(str(path))))
 
@@ -47,24 +95,30 @@ def _norm(path: Path) -> Path:
 def validate_target(root: Path, target: Path, task_id: str) -> tuple[Path, Path]:
     root = _norm(root)
     target = _norm(target)
+    policy = resolve_policy(task_id)
+
+    if root.name.casefold() != policy.root_name.casefold():
+        raise CleanupError(
+            f"task requires cleanup root {policy.root_name}, got {root.name}"
+        )
     if target == root:
-        raise CleanupError("refusing to delete the acceptance root itself")
+        raise CleanupError("refusing to delete the cleanup root itself")
     try:
         relative = target.relative_to(root)
     except ValueError as exc:
-        raise CleanupError("target is outside the acceptance root") from exc
+        raise CleanupError("target is outside the cleanup root") from exc
     if len(relative.parts) != 1:
-        raise CleanupError("target must be one direct child of the acceptance root")
-    if target.name not in ALLOWED_TARGETS:
-        raise CleanupError(f"target name is not allowlisted: {target.name}")
-    expected_suffix = task_id.rsplit("-", 1)[-1].lower()
-    if target.name.lower().endswith("d69874af") and expected_suffix != "d69874af":
-        raise CleanupError("task id does not match the current target identity")
-    if target.name.lower().endswith("1c514877") and expected_suffix not in {
-        "d69874af",
-        "1c514877",
-    }:
-        raise CleanupError("task id is not authorized to clean the historical target")
+        raise CleanupError("target must be one direct child of the cleanup root")
+
+    allowed_by_casefold = {
+        candidate.casefold(): candidate for candidate in policy.allowed_targets
+    }
+    if target.name.casefold() not in allowed_by_casefold:
+        allowed = ", ".join(sorted(policy.allowed_targets))
+        raise CleanupError(
+            f"target name is not authorized for {task_id}: {target.name}; "
+            f"expected one of: {allowed}"
+        )
     return root, target
 
 
@@ -127,7 +181,8 @@ def cleanup(root: Path, target: Path, *, execute: bool) -> CleanupResult:
     directories_removed = 0
     links_removed = 0
 
-    for item in sorted((Path(root, entry) for entry in manifest), key=lambda p: len(p.parts), reverse=True):
+    items = (Path(root, entry) for entry in manifest)
+    for item in sorted(items, key=lambda path: len(path.parts), reverse=True):
         if not item.exists() and not _is_reparse_or_link(item):
             continue
         try:
