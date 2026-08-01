@@ -16,16 +16,16 @@ product_pr: 60
 product_commit: a90a18a66ffba157c01367ba70bfec98f58798e2
 task_instruction_commit: 4eb3a1078ef85ef2691d85e13026ad66b2a4f390
 report_branch: acceptance/pr60-master-sync-a90a18a6
-report_commit: PENDING
+report_commit: 5213b39d539c08eb3fa52c346aeaf18f890c53a1
 report_path: docs/TEST_REPORTS/PR60_MASTER_SYNC_a90a18a6.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_MASTER_SYNC_SUMMARY_a90a18a6.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MASTER_SYNC_HASHES_a90a18a6.txt
 cleanup_before: PASS
 cleanup_after: NOT_RUN
-remote_branch_verified: false
-remote_commit_verified: false
-remote_report_verified: false
-remote_result_verified: false
+remote_branch_verified: true
+remote_commit_verified: true
+remote_report_verified: true
+remote_result_verified: true
 pr_comment_verified: false
 local_temp_root_absent: true
 owner_observation: NOT_REQUIRED
@@ -85,7 +85,7 @@ CI和正式Windows Artifact的最终结论由后续远程核验决定，不属�
 合并父提交：a90a18a6 + c349131d
 PR #60状态：DRAFT_UNCHANGED
 远程Actions：NOT_STARTED
-报告分支最终HEAD：PENDING_REMOTE_READBACK
+报告分支最终报告内容 HEAD：5213b39d539c08eb3fa52c346aeaf18f890c53a1
 ```
 
 禁止提交安装包、数据库、Token、私人内容、node_modules、dist或未脱敏日志。
