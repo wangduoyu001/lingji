@@ -1,0 +1,23 @@
+{
+  "task_id": "PR60-CODE-RELEASE-VALIDATION-A90A18A6",
+  "verdict": "PASS",
+  "product_commit": "a90a18a66ffba157c01367ba70bfec98f58798e2",
+  "task_instruction_commit": "218c64d8969b5a37ba612cadd42e225aa2f2dea5",
+  "data_safety": {
+    "real_data_read": 0,
+    "installation_or_ui_launch": 0,
+    "production_runtime_started": 0
+  },
+  "results": {
+    "exact_fix_tests": "PASS (11 passed)",
+    "python_full": "PASS (583 passed, 10 skipped, 3 subtests passed)",
+    "python_compileall": "PASS",
+    "desktop_smoke": "PASS (22 scripts)",
+    "clean_frontend_build": "PASS (1 JavaScript entry)",
+    "repeat_frontend_build": "PASS (1 JavaScript entry)",
+    "rust_tauri": "PASS (9 passed)",
+    "release": "PASS (15 suites)"
+  },
+  "release_metadata_commit": "a90a18a66ffba157c01367ba70bfec98f58798e2",
+  "local_artifact_only": true
+}
