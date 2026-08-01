@@ -51,6 +51,64 @@
 
 ---
 
+## 2026-08-01 · PR #60 后续 · 代码发布验证临时目录安全清理修复
+
+- 产品分支：`fix/cleanup-code-validation-workspace`
+- 产品 Commit：`pending`
+- 来源阻塞：`PR60-CODE-RELEASE-VALIDATION-A90A18A6 / BLOCKED_POST_CLEANUP`
+- 影响模块：本机任务治理、安全清理工具、代码发布链结果回执
+- 风险等级：P1
+- 用户可感知变化：不需要重跑已通过的 15 套 release 验证；修复后只补做安全清理、最终回执和远程复读。
+- 数据或安全边界变化：不触碰产品 Runtime、UI、Vault、数据库、Qdrant、真实资料或用户 AI 配置；仍只允许删除任务 ID 推导出的精确临时目录。
+
+### 新增或修改的自动验收
+
+- [x] `python -m pytest -q tests/test_cleanup_acceptance_workspace.py`：本地隔离验证 `10 passed`。
+- [ ] GitHub `tests`：验证 Python 3.11、3.12、Windows 和完整仓库回归。
+- [ ] `acceptance-doc-sync`：验证脚本变化已同步本记录。
+
+### 新增或修改的真机验收
+
+- [ ] 使用 `PR60-CODE-RELEASE-VALIDATION-A90A18A6` 对 `D:\codex\LingJiValidation\PR60-CODE-a90a18a6` 先 dry-run。
+- [ ] dry-run 清单必须只包含该任务创建的 product、report、release、日志、缓存和证据目录。
+- [ ] 显式 `--execute` 后目标目录必须不存在，相邻目录和主人数据保持不变。
+- [ ] 更新原报告与结果回执为最终 `PASS`，再次 push 并远程复读。
+
+### 主人肉眼确认
+
+- [x] 不需要主人参与；本任务不安装、不启动 UI、不读取真实数据。
+
+### 回归项
+
+- [ ] 不允许通配符删除。
+- [ ] 不允许删除清理根目录本身。
+- [ ] 不允许删除根目录外或非直接子目录。
+- [ ] 任务类型、PR号和 8 位 Commit 身份必须与目录名精确匹配。
+- [ ] 旧 `D69874AF` 记忆质量任务仍能清理两个明确登记的 `1c514877` 历史目录。
+- [ ] 不跟随符号链接或 Windows reparse point。
+
+### 清理与回滚
+
+- 当前清理根：`D:\codex\LingJiValidation`
+- 当前目标：`PR60-CODE-a90a18a6`
+- 安全入口：`scripts/cleanup_acceptance_workspace.py`
+- 回滚：回退本次策略和测试；不得恢复宽泛白名单或手工强删。
+
+### 不在范围
+
+- 不重跑产品代码、Desktop、Rust/Tauri 或 Windows release 验证。
+- 不生成或安装正式 GitHub Artifact。
+- 不解决 PR #60 与 master 的后续合并冲突。
+- 不进入 Day 0、UI 或真实数据验收。
+
+### 最终报告
+
+- 修复报告：`docs/TEST_REPORTS/PR60_CODE_VALIDATION_CLEANUP_POLICY_FIX.md`
+- 原验证报告：`docs/TEST_REPORTS/PR60_CODE_RELEASE_VALIDATION_a90a18a6.md`
+- 原报告分支：`acceptance/pr60-code-release-validation-a90a18a6`
+
+---
+
 ## 2026-07-31 · PR #60 · d69874af 引导修复复验与真实数据记忆质量试运行
 
 - 产品分支：`feature/unified-ai-memory-connectors`
