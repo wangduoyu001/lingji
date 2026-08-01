@@ -8,29 +8,29 @@
 
 ```yaml
 task_id: PR60-CODE-RELEASE-VALIDATION-A90A18A6
-status: RUNNING
-verdict: PASS
+status: BLOCKED_SUBMISSION
+verdict: BLOCKED
 execution_mode: CODE_RELEASE_VALIDATION
 repository: wangduoyu001/lingji
 product_pr: 60
 product_commit: a90a18a66ffba157c01367ba70bfec98f58798e2
 task_instruction_commit: 218c64d8969b5a37ba612cadd42e225aa2f2dea5
 report_branch: acceptance/pr60-code-release-validation-a90a18a6
-report_commit: PENDING
+report_commit: 3aecaa06ec3a2a504a170fae28996b37854beb4c
 report_path: docs/TEST_REPORTS/PR60_CODE_RELEASE_VALIDATION_a90a18a6.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_SUMMARY_a90a18a6.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_HASHES_a90a18a6.txt
 cleanup_before: PASS
-cleanup_after: RUNNING
-remote_branch_verified: false
-remote_commit_verified: false
-remote_report_verified: false
-remote_result_verified: false
+cleanup_after: BLOCKED_POST_CLEANUP
+remote_branch_verified: true
+remote_commit_verified: true
+remote_report_verified: true
+remote_result_verified: true
 pr_comment_verified: false
 local_temp_root_absent: false
 owner_observation: NOT_REQUIRED
 started_at: 2026-08-01T22:09:50.2648930+08:00
-finished_at: PENDING
+finished_at: 2026-08-01T22:31:00+08:00
 ```
 
 ## 2. 验证项目

@@ -1,6 +1,6 @@
 {
   "task_id": "PR60-CODE-RELEASE-VALIDATION-A90A18A6",
-  "verdict": "PASS",
+  "verdict": "BLOCKED",
   "product_commit": "a90a18a66ffba157c01367ba70bfec98f58798e2",
   "task_instruction_commit": "218c64d8969b5a37ba612cadd42e225aa2f2dea5",
   "data_safety": {
@@ -16,7 +16,8 @@
     "clean_frontend_build": "PASS (1 JavaScript entry)",
     "repeat_frontend_build": "PASS (1 JavaScript entry)",
     "rust_tauri": "PASS (9 passed)",
-    "release": "PASS (15 suites)"
+    "release": "PASS (15 suites)",
+    "cleanup": "BLOCKED_POST_CLEANUP (task root not allowlisted by safety cleanup tool)"
   },
   "release_metadata_commit": "a90a18a66ffba157c01367ba70bfec98f58798e2",
   "local_artifact_only": true
