@@ -4,4 +4,4 @@ dec11548ee835ba11f9ac8d515ba5dfefb8a31e1e087d656e736225f94bf0731  lingji-core-x8
 5cdb8c334497465807f948bc562c84896264ad1c7cf41db400bd6495d98f6ffe  build-metadata.json
 6a532313b4faf0bab1ccbbf9575f008d998bcfd05d6332393db0f2e278115c34  lingji-core-manifest.json
 af7451120f56d15d382249d66c8ef0687338da60b54669430815258a247cd2df  SHA256SUMS.txt
-# Recovery-only cleanup completed; the retained release hashes above were not regenerated or changed.
+# Finalization-only update: the retained release hashes above were not regenerated or changed; the shared recovery parent is intentionally retained.

@@ -1,8 +1,8 @@
 {
   "task_id": "PR60-CODE-RELEASE-VALIDATION-A90A18A6",
-  "verdict": "BLOCKED",
+  "verdict": "PASS",
   "product_commit": "a90a18a66ffba157c01367ba70bfec98f58798e2",
-  "task_instruction_commit": "932d1c159cddec6b79742bed43f7b30f651eb15f",
+  "task_instruction_commit": "c349131d1aa22d2630b57df4d01d43a1088a1529",
   "data_safety": {
     "real_data_read": 0,
     "installation_or_ui_launch": 0,
@@ -18,12 +18,13 @@
     "rust_tauri": "PASS (9 passed)",
     "release": "PASS (15 suites; retained, not rerun during recovery)",
     "cleanup_tool_focused_test": "PASS (10 passed)",
-    "cleanup": "PARTIAL_PASS (original task root safely deleted)",
-    "recovery_worktree_cleanup": "BLOCKED_POST_CLEANUP (environment safety policy refused empty parent removal)"
+    "cleanup": "PASS (original task root and task-specific recovery worktree absent)",
+    "shared_recovery_parent": "RETAINED_BY_DESIGN (outside task cleanup contract)"
   },
   "release_metadata_commit": "a90a18a66ffba157c01367ba70bfec98f58798e2",
   "local_artifact_only": true,
   "recovery_only": true,
   "release_rerun": false,
-  "cleanup_fix_commit": "0f9bb6421bceea815bfe8c5d26b59728c0f49fb6"
+  "cleanup_fix_commit": "0f9bb6421bceea815bfe8c5d26b59728c0f49fb6",
+  "finalization_only": true
 }
