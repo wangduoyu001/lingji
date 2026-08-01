@@ -64,10 +64,15 @@ for (const token of [
   "runtime_binding_verification",
   "runtime_auto_configure",
   "require_verified_runtime",
+  "startup_contract_requested",
+  "initialize_runtime_binding",
   "guarded_runtime_ensure",
   "guarded_runtime_stop",
   "guarded_runtime_restart",
 ]) assert.ok(rustMain.includes(token), `Tauri entrypoint is missing ${token}`);
+assert.match(rustMain, /if runtime_bootstrap::startup_contract_requested\(\)/);
+assert.match(rustMain, /apply_startup_contract/);
+assert.match(rustMain, /else \{\s*let _ = runtime_bootstrap::apply_saved_environment\(\)/s);
 
 for (const token of [
   "LINGJI_BOOTSTRAP_CONTRACT_FILE",
@@ -77,8 +82,19 @@ for (const token of [
   "verify_runtime_binding",
   "require_verified_runtime",
   "automatic_base_candidates",
-  "Runtime responded from a different DataRoot or workspace",
+  "binding_contract_version",
+  "ping_matches",
+  "startup_contract_requested",
+  "Automatic DataRoot selection is disabled while a startup contract is requested",
+  "Runtime identity contract, DataRoot or workspace did not match",
 ]) assert.ok(runtimeBootstrap.includes(token), `Runtime bootstrap is missing ${token}`);
+assert.match(runtimeBootstrap, /runtime_ping_requires_current_identity_contract/);
+assert.match(runtimeBootstrap, /runtime_ping_rejects_wrong_root_or_workspace/);
+assert.equal(
+  /startup_contract_requested\(\)[\s\S]*?apply_saved_environment\(\)/.test(runtimeBootstrap),
+  false,
+  "Saved bootstrap must not be applied from inside a requested startup-contract path",
+);
 
 assert.match(hook, /invoke<ReleaseMetadata>\("release_metadata"\)/);
 assert.match(hook, /copyDiagnostics/);
