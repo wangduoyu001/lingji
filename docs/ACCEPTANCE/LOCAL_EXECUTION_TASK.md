@@ -14,11 +14,17 @@ repository: wangduoyu001/lingji
 product_pr: 60
 product_branch: feature/unified-ai-memory-connectors
 product_commit: a90a18a66ffba157c01367ba70bfec98f58798e2
+artifact_name: NOT_APPLICABLE_LOCAL_VALIDATION_ONLY
+artifact_id: NOT_APPLICABLE
 report_branch: acceptance/pr60-code-release-validation-a90a18a6
 report_path: docs/TEST_REPORTS/PR60_CODE_RELEASE_VALIDATION_a90a18a6.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_SUMMARY_a90a18a6.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_CODE_RELEASE_VALIDATION_HASHES_a90a18a6.txt
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
+cleanup_before_required: true
+cleanup_after_required: true
+remote_verification_required: true
+owner_confirmation_required: true
 recovery_only: true
 release_rerun_forbidden: true
 validated_release_suites: 15
