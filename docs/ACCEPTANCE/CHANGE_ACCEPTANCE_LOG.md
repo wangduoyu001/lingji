@@ -1,5 +1,32 @@
 # 验收要求变更记录
 
+## 2026-08-02 · PR #60 · MCP-owned packaged extraction recovery
+
+- Product branch: `feature/unified-ai-memory-connectors`
+- Product commit: `pending (qdrant-owner recovery branch)`
+- Affected modules: packaged MCP runtime, durable extraction worker, and MCP extraction pipeline.
+- Risk level: P0
+- User-visible change: authorized imports keep processing automatically while the MCP process remains the single semantic-index owner.
+- Data and security boundary: only the MCP process opens the embedded Qdrant path; Control API continues reading the published snapshot.
+
+### Automated acceptance
+
+- [x] `python -m pytest -q tests/test_packaged_control_api.py tests/test_mcp_http_auth.py tests/test_mcp_server.py tests/test_assistant_hub_imports.py tests/test_assistant_hub_api.py` (40 passed)
+- [x] `python scripts/check_acceptance_sync.py`
+
+### Real-machine acceptance
+
+- [ ] A new isolated Artifact imports one synthetic export and proves queue completion, a healthy MCP snapshot, and no embedded-store lock.
+
+### Regression items
+
+- [ ] Parent Sidecar must not start a second extraction worker.
+- [ ] MCP worker must stop with its owner process and preserve queue completion semantics.
+
+### Out of scope
+
+- No real owner data, external AI-client configuration, or automatic Core Memory approval.
+
 ## 2026-08-02 · PR #60 · autonomous import recovery release
 
 - Product branch: `feature/unified-ai-memory-connectors`

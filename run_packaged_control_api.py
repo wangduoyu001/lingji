@@ -340,30 +340,6 @@ def _start_managed_mcp_process(root: Path, workspace: str) -> subprocess.Popen[A
     return process
 
 
-def start_packaged_extraction_worker(
-    settings: Any,
-    *,
-    pipeline_builder: Any | None = None,
-    worker_factory: Any | None = None,
-) -> Any:
-    """Start the durable extraction worker for the packaged Sidecar queue."""
-
-    if pipeline_builder is None or worker_factory is None:
-        from src.extraction import ExtractionWorker, build_extraction_pipeline
-
-        pipeline_builder = pipeline_builder or build_extraction_pipeline
-        worker_factory = worker_factory or ExtractionWorker
-    pipeline = pipeline_builder(settings)
-    worker = worker_factory(
-        pipeline,
-        poll_seconds=settings.extraction_poll_seconds,
-        batch_size=settings.extraction_batch_size,
-        worker_id="packaged-sidecar",
-    )
-    worker.start()
-    return worker
-
-
 def _install_parent_watch(parent_pid: int, *, poll_seconds: float = 0.5) -> None:
     if parent_pid <= 0:
         return
@@ -484,17 +460,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     _ensure_mcp_token(root)
     mcp_process = _start_managed_mcp_process(root, workspace)
-    extraction_worker = None
     try:
-        from src.config import settings
-
-        extraction_worker = start_packaged_extraction_worker(settings)
         from run_control_api import main as run_control_api
 
         run_control_api()
     finally:
-        if extraction_worker is not None:
-            extraction_worker.stop()
         if mcp_process.poll() is None:
             try:
                 mcp_process.terminate()

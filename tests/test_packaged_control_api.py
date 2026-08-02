@@ -18,8 +18,8 @@ from run_packaged_control_api import (
     packaged_runtime_contract,
     runtime_state_path,
     runtime_stop_request_path,
-    start_packaged_extraction_worker,
 )
+from src.mcp_http import start_mcp_extraction_worker
 
 
 @pytest.fixture
@@ -274,7 +274,7 @@ def test_windowed_runtime_receives_devnull_standard_streams():
     streams.stderr.close()
 
 
-def test_packaged_runtime_starts_owned_extraction_worker() -> None:
+def test_mcp_runtime_starts_owned_extraction_worker() -> None:
     pipeline = object()
     started: list[object] = []
     received: dict[str, object] = {}
@@ -288,9 +288,9 @@ def test_packaged_runtime_starts_owned_extraction_worker() -> None:
             started.append(self)
 
     settings = SimpleNamespace(extraction_poll_seconds=0.25, extraction_batch_size=3)
-    worker = start_packaged_extraction_worker(
+    worker = start_mcp_extraction_worker(
         settings,
-        pipeline_builder=lambda supplied_settings: pipeline,
+        pipeline,
         worker_factory=FakeWorker,
     )
 
@@ -299,5 +299,5 @@ def test_packaged_runtime_starts_owned_extraction_worker() -> None:
         "pipeline": pipeline,
         "poll_seconds": 0.25,
         "batch_size": 3,
-        "worker_id": "packaged-sidecar",
+        "worker_id": "packaged-mcp",
     }

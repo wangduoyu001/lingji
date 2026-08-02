@@ -38,6 +38,33 @@ def build_codex_session_service(
     )
 
 
+def build_mcp_extraction_pipeline(memory_gateway: Any) -> Any:
+    """Build the queue pipeline inside the MCP-owned semantic runtime."""
+
+    indexer = PEMISIndex(
+        settings.vault_path,
+        settings.storage_path,
+        include_private=settings.index_private,
+    )
+    chunker = MarkdownChunker(
+        settings.memory_chunk_max_chars,
+        settings.memory_chunk_overlap_chars,
+    )
+
+    def sync_written(result: dict[str, Any]) -> None:
+        changed = False
+        for path_text in result.get("paths") or []:
+            path = Path(path_text)
+            if not path.exists() or not indexer.layout.should_index(path, include_private=False):
+                continue
+            if indexer.incremental_add(path):
+                changed = True
+        if changed:
+            memory_gateway.rebuild(indexer.get_all(), settings.vault_path, chunker)
+
+    return build_extraction_pipeline(settings, on_documents_written=sync_written)
+
+
 def register_codex_mcp_tools(mcp: Any, codex_service: CodexSessionService) -> None:
     """Register the explicit Codex project/session bridge. No Core Memory writes."""
 
@@ -126,31 +153,7 @@ def create_mcp_server(
         ) from exc
 
     memory_gateway = gateway or build_memory_gateway(settings)
-    indexer = PEMISIndex(
-        settings.vault_path,
-        settings.storage_path,
-        include_private=settings.index_private,
-    )
-    chunker = MarkdownChunker(
-        settings.memory_chunk_max_chars,
-        settings.memory_chunk_overlap_chars,
-    )
-
-    def sync_written(result: dict[str, Any]) -> None:
-        changed = False
-        for path_text in result.get("paths") or []:
-            path = Path(path_text)
-            if not path.exists() or not indexer.layout.should_index(path, include_private=False):
-                continue
-            if indexer.incremental_add(path):
-                changed = True
-        if changed:
-            memory_gateway.rebuild(indexer.get_all(), settings.vault_path, chunker)
-
-    pipeline = extraction_pipeline or build_extraction_pipeline(
-        settings,
-        on_documents_written=sync_written,
-    )
+    pipeline = extraction_pipeline or build_mcp_extraction_pipeline(memory_gateway)
     skill_registry = SkillRegistry(indexer.layout, memory_gateway.state_db)
     default_agent = default_agent_id or settings.mcp_default_agent_id
     mcp = FastMCP(settings.mcp_server_name)
