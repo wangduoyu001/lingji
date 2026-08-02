@@ -8,7 +8,7 @@ Merge recommendation: DO NOT MERGE
 Product commit: 053769965cf767cfe5221ffa4334b189bedb4d7d
 Artifact: lingji-windows-0.1.0-05376996
 Artifact ID: 8832376546
-Report commit: PENDING
+Report content commit: ea50050fa32c9d8981522c8cee565db759d2ffca
 ```
 
 Day 0 stopped before fixtures, imports, Codex client registration, candidate lifecycle, reboot, or any real-data read.  The isolated runtime started with an already healthy embedded collection containing 11 vectors, although no synthetic source had been created.  This violates the empty-store truth gate and is a P0 blocker.
@@ -86,5 +86,5 @@ Merge recommendation: DO NOT MERGE
 Owner observation complete: NO (not requested after P0 stop)
 Blocking defects: LJ-05376996-P0-NONEMPTY-DAY0-STORE
 Acceptance docs synchronized: YES
-Temporary evidence cleaned: PENDING_REMOTE_CONFIRMATION
+Temporary evidence cleaned: YES
 ```
