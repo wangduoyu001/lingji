@@ -12,6 +12,12 @@
 - 新增 fresh-gateway 回归，要求未导入任何资料时为 0 文档、0 分块、0 Core Memory、0 向量，并明确报告 `empty / collection_empty`；语义检索不可用、全文检索可用。
 - 固定旧 Artifact `8832376546` 已由独立本机 Day 0 判定 FAIL；只有新 Head、新 Artifact 和重新 Day 0 才能形成通过结论。
 
+### 本地 Release 精确 Git 身份修复
+
+- 修复 PowerShell 原生命令退出码被后续管道状态覆盖时，统一验证摘要和 Windows 发布元数据错误写入 `commit: unknown`、`branch: unknown` 的问题。
+- Git 输出先完整捕获，并在任何 PowerShell 管道处理前保存原生命令退出码；真实失败仍回落到明确的 `unknown`。
+- 新增 Windows 回归测试，主动注入陈旧非零 `$LASTEXITCODE`，确认实际 Git commit/branch 仍被精确读取。
+
 ## 2026-07-29
 
 ### Windows Desktop 生命周期与控制台缺陷修复
