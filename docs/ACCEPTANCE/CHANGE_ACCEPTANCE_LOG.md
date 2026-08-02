@@ -3,7 +3,7 @@
 ## 2026-08-02 · PR #60 · fresh Day 0 generated-scaffold truth recovery
 
 - Product branch: `codex/pr60-vector-snapshot-truth-05376996`
-- Product commit: `pending (local final-closeout Phase 2 repair)`
+- Product commit: `d82f23517eb537473f141955173aba82d26f1ddc` (integrated local release-validation commit)
 - Affected modules: single-Vault retrieval eligibility, fresh memory-gateway bootstrap, and MCP-published empty-store status.
 - Risk level: P0
 - User-visible change: a newly created LingJi DataRoot no longer reports generated permanent-memory UI scaffolding as owner knowledge, Core Memory, or healthy semantic vectors before any authorized import.
@@ -12,10 +12,10 @@
 ### Automated acceptance
 
 - [x] `python -m pytest -q tests/test_vault_layout.py tests/test_semantic_runtime_wiring.py tests/test_permanent_memory_gateway.py` (18 passed): generated permanent-memory UI files exist but are excluded from retrieval, an owner-created System rule remains indexable, and a fresh gateway publishes 0 documents/chunks/vectors with `collection_empty` truth.
-- [x] `python -m pytest -q --tb=short` (623 passed, 10 skipped, 3 subtests passed): complete Python regression suite.
+- [x] `python -m pytest -q --tb=short` (623 passed, 10 skipped, 3 subtests passed before the acceptance-contract merge; combined tree passed again inside unified release validation): complete Python regression suite.
 - [x] `python scripts/check_acceptance_sync.py`: product changes carry the incremental acceptance contract. Final handoff check remains part of the exact committed release tree.
 - [x] `npm ci --no-audit --no-fund`, `npm run test:smoke` (22 scripts), and `npm run build` in `desktop/lingji-control`.
-- [ ] Rust/Tauri tests and Windows release validation from the exact repair tree.
+- [x] `scripts/validate.ps1 -Mode release` on integrated commit `d82f23517eb537473f141955173aba82d26f1ddc`: all 15 suites passed, including clean install, full Python, Desktop smoke/build, Rust/Tauri, Sidecar, NSIS, and Windows package generation; summary and package metadata both reread the exact commit.
 
 ### Real-machine acceptance
 
@@ -25,9 +25,9 @@
 
 ### Regression items
 
-- [ ] `00-System/Permanent-Memory.md` and everything under `00-System/Templates` must never become retrieval documents.
-- [ ] `00-System/Rules` and formal knowledge/Core Memory paths remain indexable.
-- [ ] Permanent-memory dashboard, Base, and template files remain generated for owner operation.
+- [x] `00-System/Permanent-Memory.md` and everything under `00-System/Templates` are excluded by the authoritative retrieval eligibility rule.
+- [x] `00-System/Rules` and formal knowledge/Core Memory paths remain indexable in regression coverage.
+- [x] Permanent-memory dashboard, Base, and template files remain generated for owner operation.
 
 ### Out of scope
 
