@@ -2,7 +2,7 @@
 
 > 本文件是 ChatGPT / 主开发代理向本机 Codex 下达任务的唯一权威入口。
 >
-> Codex 只执行第一段 YAML 中 `status: ACTIVE` 的任务。不得从旧聊天、旧报告、本机残留目录或旧 Artifact 推断额外要求。
+> 本轮起，本机 Codex 不再只是执行一次验收，而是负责 PR #60 剩余开发、测试、发包、真机复验、主线收敛、文档、报告和清理。具体总控见 `docs/ACCEPTANCE/LOCAL_FINAL_CLOSEOUT_PLAN.md`。
 
 ## 1. 当前任务元数据
 
@@ -26,6 +26,7 @@ manifest_sha256: c9778ddd6f4f782be2bcc43aa6d573b3a76518416aa718529f17fa2a627f73a
 build_metadata_sha256: 167cd2dadddf8d2e3f822729d5d08a1f81080f0fb37a3da9d23b353c5b76721e
 artifact_workflow_run_id: 30744178349
 trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
+closeout_plan_path: docs/ACCEPTANCE/LOCAL_FINAL_CLOSEOUT_PLAN.md
 report_branch: acceptance/pr60-memory-quality-trial-05376996
 report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_05376996.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_05376996.json
@@ -43,116 +44,72 @@ cleanup_before_required: true
 cleanup_after_required: true
 remote_verification_required: true
 owner_confirmation_required: true
+local_discovery_required: true
+local_closeout_owner: true
+continue_after_actionable_failure: true
+pr60_draft_required: true
 ```
 
-## 2. 当前唯一产品身份
-
-只允许使用：
+## 2. 当前远程基线
 
 ```text
-Product Head：053769965cf767cfe5221ffa4334b189bedb4d7d
-Artifact：lingji-windows-0.1.0-05376996
-Artifact ID：8832376546
-Workflow：Windows Desktop Release Baseline / run 30744178349
+master = dff85844ced40c42cd1becb5a15747e85eff3b33
+product Head = 053769965cf767cfe5221ffa4334b189bedb4d7d
+product branch ahead of master = 185 commits
+product branch behind master = 21 commits
+PR #60 = Draft / Do not merge
 ```
 
-精确 Head 已通过：
+当前产品提交修复了 Control API 创建第二个嵌入式 Qdrant 客户端的问题。只允许 MCP Runtime 实时拥有 SQLite/Qdrant；Control API 只能使用词法读取并消费 MCP 发布的状态快照。
+
+旧 `24f35704 / 8832010437`、`3739c42f / 8831573426`、`1860fa17 / 8830371064`、`4161807c / 8821878623`、`b68711fd / 8830090726` 及更早身份均禁止使用。
+
+## 3. 第一步：读取本机最新提交并保护现场
+
+在任何安装、清理或代码修改前，严格执行 `LOCAL_FINAL_CLOSEOUT_PLAN.md` 的 Phase 0。
+
+必须记录：
 
 ```text
-local-execution-handoff / run 30744178323
-acceptance-doc-sync / run 30744178310
-tests / run 30744178312
-P0 Windows Gate / run 30744178337
-Windows Desktop Release Baseline / run 30744178349
+本机仓库根
+当前分支
+本机 HEAD
+origin/master
+origin/feature/unified-ai-memory-connectors
+未推送提交
+未提交修改
+worktree
+reflog
+本机与远程的领先/落后关系
 ```
 
-旧提交和 Artifact，包括 `24f35704 / 8832010437`、`3739c42f / 8831573426`、`1860fa17 / 8830371064`、`4161807c / 8821878623`、`b68711fd / 8830090726` 以及更早版本，均为失败或被替代身份，禁止下载、安装、复验或从其报告推断行为。
-
-PR #60 必须保持 Draft，不得合并到 master。
-
-## 3. 产品工作方式
-
-本轮不是让主人逐项点击菜单。验收目标是：
+必须生成：
 
 ```text
-灵机主动发现
-→ 主动检查
-→ 自动执行低风险可逆动作
-→ 自动入队、去重、刷新、重试和恢复
-→ UI 展示状态、证据、进度、阻塞与授权边界
-→ 只在读取真实正文、修改外部客户端、永久记忆或不可逆操作时请求主人决定
+docs/TEST_REPORTS/LOCAL_FINAL_CLOSEOUT_DISCOVERY_<local-short-sha>.md
 ```
 
-Codex负责安装、启动、窗口操作、API调用、截图、日志、重启、报告、Git提交、远程复读和清理。主人只负责：
+禁止 `reset --hard`、`clean -fdx`、force push、删除未知 worktree或覆盖未提交修改。
 
-1. 观察 UI 是否一眼可懂；
-2. 明确授权读取任务生成的合成导出包；
-3. 指定一个合成候选批准、一个合成候选拒绝；
-4. 明确允许 Windows 重启；
-5. Day 0 全部 PASS 后，另行授权具体真实资料范围。
-
-主人不得被要求手工填写路径、手工刷新状态、手工执行命令、手工上传报告或手工清理目录。
-
-## 4. 开始前清理
-
-### 4.1 使用修复后的清理工具
-
-先建立精确产品 Commit 的只读/隔离 worktree，并从该 worktree调用：
+若存在未推送提交，先创建并推送：
 
 ```text
-scripts/cleanup_acceptance_workspace.py
+backup/local-closeout-<timestamp>-<shortsha>
 ```
 
-禁止使用旧 master 中可能尚未包含 `DRY_RUN_READY` 修复的脚本。
+Phase 0未完成，不得进入 Day 0。
 
-### 4.2 清理上一轮失败根
+## 4. 当前立即任务：05376996 Day 0
 
-目标：
+只下载和使用：
 
 ```text
-D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-24f35704
+Artifact: lingji-windows-0.1.0-05376996
+Artifact ID: 8832376546
+Release run: 30744178349
 ```
 
-任务身份：
-
-```text
-PR60-MEMORY-QUALITY-TRIAL-24F35704
-```
-
-先 dry-run。合法结果必须是：
-
-```text
-status = DRY_RUN_READY
-authorized = true
-next_action = rerun_with_execute
-```
-
-确认清单只在该唯一任务根下后，自动追加 `--execute`。最终必须：
-
-```text
-status = PASS
-next_action = cleanup_complete 或 nothing_to_remove
-目标目录不存在
-相邻目录与主人数据未变化
-```
-
-不得因为 dry-run列出待删除项就标记 `BLOCKED`，也不得绕过脚本手工强删。
-
-### 4.3 环境保护
-
-开始前必须：
-
-- 关闭旧 LingJi Desktop；
-- 清空遗留 LingJi、Sidecar、MCP进程；
-- 确认 8766、8767 空闲；
-- 记录现有安装版本；
-- 备份全局 bootstrap并记录哈希或“不存在”；
-- 不读取主人真实 `CODEX_HOME`、ChatGPT、剧本、Vault或其他私人正文；
-- 不修改 Production DataRoot、Production Vault、SQLite或 Qdrant。
-
-## 5. 当前任务隔离环境
-
-唯一任务根：
+任务根：
 
 ```text
 D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-05376996
@@ -175,232 +132,122 @@ HOME         = <任务根>\profile\User
 CODEX_HOME   = <任务根>\profile\CodexHome
 ```
 
-使用任务专属启动绑定契约，必须锁定：
-
-- 精确 DataRoot；
-- `acceptance` workspace；
-- 唯一 binding id；
-- 非 C盘；
-- 不允许 UI覆盖；
-- 不允许回退全局 bootstrap；
-- 不允许接管外部 Runtime。
-
-## 6. Artifact核验与覆盖安装
-
-只下载 Artifact `8832376546`，依次验证任务 YAML 中全部哈希。
-
-`build-metadata.json` 必须显示：
+开始前从当前产品提交的隔离 worktree调用 `scripts/cleanup_acceptance_workspace.py`，清理上一轮 `24f35704` 任务根。合法 dry-run必须返回：
 
 ```text
-schema_version = 5
-version = 0.1.0
-commit = 053769965cf767cfe5221ffa4334b189bedb4d7d
-channel = pr
-target = x86_64-pc-windows-msvc
-installer_format = nsis
-signed = false
-first_run_configuration_required = false
-automatic_safe_non_system_drive_selection = true
-startup_binding_contract_supported = true
-runtime_binding_identity_required = true
-external_runtime_adoption_allowed = false
-owner_authorization_required_for_real_content = true
-c_drive_runtime_data_allowed = false
+status = DRY_RUN_READY
+authorized = true
+next_action = rerun_with_execute
 ```
 
-覆盖安装，不卸载主人数据。身份不符立即 `BLOCKED_WRONG_IDENTITY`。
+随后由 Codex自动执行 `--execute`。不得要求主人手工删除。
 
-## 7. Day 0 自动执行与门禁
-
-### 7.1 首次恢复
-
-Codex启动 Desktop并计时。必须在 45 秒内同时满足：
-
-- 8766鉴权健康；
-- 8767 MCP可用；
-- Desktop显示 Runtime ready；
-- Runtime ping反向证明精确 DataRoot和 workspace；
-- 无黑色控制台窗口；
-- 无 Production路径；
-- 无第二个 MCP/Qdrant拥有者。
-
-超过45秒、第一轮失败后依赖第二轮人工重试，均记 Day 0 FAIL。
-
-### 7.2 合成导出包和自动发现
-
-只在隔离 `USERPROFILE\Downloads` 创建：
-
-1. 一个格式有效、内容明确的合成 ChatGPT Export；
-2. 一个格式有效、内容明确的合成 Codex Work Report；
-3. 一个无关 JSON 和一个无关 ZIP作为负面样本。
-
-合成内容不得复制主人真实资料，只能包含虚构项目、虚构偏好和确定性答案。
-
-灵机必须自动扫描元数据：
-
-- 只识别两个受支持导出包；
-- 不把无关 JSON/ZIP列为候选；
-- 不向前端暴露绝对路径；
-- 不跟随符号链接；
-- 未授权前正文读取数为0。
-
-### 7.3 一步导入
-
-发现候选后 UI必须只提供一个主要动作：
+## 5. Day 0 必须证明
 
 ```text
-授权最近导出包并开始导入
+首次恢复 <= 45 秒
+8766鉴权健康，8767 MCP可用
+精确 DataRoot / workspace / binding一致
+真实资料正文读取数 = 0
+合成 ChatGPT/Codex 导出包自动发现
+一次授权后立即入队，无路径输入、无二次提交
+队列任务完成或给出真实可解释错误
+只有 MCP Runtime 持有 SQLite/Qdrant
+Control API 不打开第二个 Qdrant
+向量状态 empty/locked/stale/rebuilding/healthy一致
+全文检索与语义检索分别真实显示
+Codex跳过不可启动WindowsApps别名
+真实 codex mcp list 列出 lingji-memory
+真实 Codex MCP调用命中 acceptance Runtime
+合成候选批准一个、拒绝一个
+Core/MCP/Desktop多轮重启恢复
+Windows重启恢复
+Production污染 = 0
+清理 dry-run = DRY_RUN_READY
+execute后任务根不存在
+报告、回执、PR评论远程复读通过
 ```
 
-主人在聊天中明确授权合成包后，Codex代为触发 UI或受控 API。必须：
+## 6. 主人边界
 
-- 一次授权后立即进入正式采集队列；
-- 不再出现路径输入；
-- 不再出现第二个“提交导入”；
-- 自动展示处理、去重、完成或失败重试；
-- 不自动写 Core Memory。
-
-另用一个受支持但未被自动发现的合成文件验证：选择文件后立即入队，不得二次提交。
-
-Claude Code和 WorkBuddy等无正式历史适配器的来源只显示边界说明，不得展示无效导入按钮。
-
-### 7.4 Codex命令与真实 MCP
-
-必须在隔离环境下验证：
-
-1. 枚举确定性 PATH/PATHEXT/npm候选；
-2. 若 `WindowsApps\codex.exe` 返回 Access Denied，自动跳过；
-3. 继续选择可启动的 `codex.cmd`、`codex.exe`或其他合法 PATH候选；
-4. UI分别显示：
-   - 配置状态；
-   - 候选存在；
-   - 实际命令可启动；
-   - 最终选中命令；
-   - 真实客户端注册状态；
-5. 真实执行 `codex mcp list`，必须列出 `lingji-memory`；
-6. 完成至少一次真实 Codex MCP调用，命中当前验收 Runtime并返回合成资料中的确定答案。
-
-没有可启动候选、真实命令被拒绝、未列出 `lingji-memory`、错误端口、错误 DataRoot或鉴权失败，均为 Day 0 FAIL。不得用配置文件存在代替真实成功。
-
-### 7.5 Qdrant与检索真相
-
-必须验证 MCP是 SQLite/Qdrant唯一实时拥有者：
+主人只参与：
 
 ```text
-runtime/memory-owner.lock = OS互斥
-runtime/memory-owner.json = 可读诊断
+A：观察首启、DataRoot和UI
+B：授权读取任务生成的合成导出包
+C：确认一键导入、Codex MCP和Qdrant证据
+D：指定一个合成候选批准、一个拒绝
+E：允许Windows重启
+F：确认重启、清理和远程报告结果
 ```
 
-Control API只能读取 MCP发布的 `memory_status.json`，不得再次打开同一嵌入式 Qdrant目录。
+不得要求主人填写路径、刷新状态、执行命令、启停服务、上传报告或删除目录。
 
-状态必须一致：
+## 7. Day 0失败后的本地修复责任
 
-- 尚无向量：`empty / collection_empty`；
-- `semantic_search_available = false`；
-- `lexical_search_available = true`；
-- 不得显示 healthy；
-- 导入和索引完成后，向量数量、Collection、覆盖率、Embedding和语义检索可用性必须相互一致；
-- 不得出现 `ready + 0 vectors`；
-- 不得出现 Control显示正常、MCP显示目录被锁；
-- 快照过期不得宣称语义检索可用。
+Day 0失败时：
 
-### 7.6 合成候选审核
+1. 立即保持 `stage1_result = NOT_RUN`、`stage2_result = NOT_RUN`、`real_data_authorized = false`；
+2. 完成失败报告和远程复读；
+3. 不等待云端零散修改；
+4. 按 `LOCAL_FINAL_CLOSEOUT_PLAN.md` Phase 2建立最小修复分支；
+5. 添加能够覆盖真实失败路径的回归测试；
+6. 完成焦点测试、完整 Python、Desktop smoke/build、Rust/Tauri、release验证；
+7. 每个功能或大段代码新增 Markdown报告并更新 Code Map、Project Status、Changelog；
+8. PR只合入产品分支，PR #60继续保持Draft；
+9. 精确新Head五套门禁通过后生成新Artifact并核验全部哈希；
+10. 通过docs PR更新本任务和回执；
+11. 清理旧任务根并重新执行Day 0。
 
-从合成资料生成至少两个候选：
+同一缺陷重复出现时，必须先补足缺失的真实回归测试或修复验收合同，禁止只换Artifact。
 
-- 主人明确指定一个批准；
-- 主人明确指定一个拒绝；
-- Codex代为执行 UI动作；
-- 批准前 Core Memory不增加；
-- 拒绝项不得进入永久记忆；
-- UI显示来源、候选内容、目标层级和后果。
+## 8. Day 0通过后的后续阶段
 
-### 7.7 生命周期
-
-自动验证：
-
-- Core/Sidecar/MCP连续重启3次；
-- Desktop关闭再打开；
-- 每轮在预算内恢复；
-- 8766/8767、DataRoot、workspace、binding、owner lock和候选状态正确；
-- 无孤儿进程；
-- 无 Production污染。
-
-在 Windows重启前只向主人请求一次许可。重启后自动继续并验证同一状态。
-
-## 8. 主人检查点
-
-Codex只在以下位置暂停：
+严格按 `LOCAL_FINAL_CLOSEOUT_PLAN.md` 执行：
 
 ```text
-A：首启在45秒内恢复，UI状态、DataRoot和当前动作清楚。
-B：合成导出包已自动发现；请求主人授权读取并导入。
-C：一键导入、Codex真实MCP和Qdrant状态一致；展示证据。
-D：请求主人指定一个候选批准、一个拒绝。
-E：请求主人允许 Windows重启。
-F：重启恢复、清理和远程报告完成；展示最终证据。
+Phase 3：主人具名授权后的Stage 1小范围真实资料质量试运行
+Phase 4：Stage 1通过后的Stage 2扩展验证
+Phase 5：产品分支与master收敛
+Phase 6：最终精确Head发布候选全量验证
+Phase 7：文档、回滚、清理、PR #60收尾
 ```
 
-主人未明确确认 A-F 前：
+Stage 1至少20道质量题、主人抽查至少10道，并满足任务YAML中的质量阈值。
+
+## 9. 架构与开发硬边界
 
 ```text
-day0_result 不得为 PASS
-real_data_authorized 必须为 false
-stage1_result = NOT_RUN
-stage2_result = NOT_RUN
+src/ = 唯一长期正式主线
+second_brain/ = 迁移、兼容、只读、诊断来源
+Tauri + React = 唯一正式UI
+Obsidian Vault + Git = 永久记忆权威
+lingji_state.db = 运行状态
+lingji_memory.db = 可重建全文/元数据索引
+Qdrant = 可重建语义索引
+MCP Runtime = 嵌入式Qdrant唯一实时拥有者
+Control API = 只读MCP状态快照，不实时打开Qdrant
 ```
 
-## 9. Stage 1边界
+禁止新增平行系统、第二事实源、第二正式UI或第二Qdrant拥有者。
 
-Day 0与主人检查点全部 PASS 后，Codex必须停止。只有主人另行给出**明确命名的真实资料范围**，才可进入 Stage 1。
+## 10. 最终门禁
 
-未经授权，禁止读取真实剧本、ChatGPT内容、Codex Session/JSONL、Obsidian正文或其他私人正文。
-
-质量阈值仍按 YAML执行：至少20道质量题、主人抽查至少10道、质量分不低于90%、来源准确率不低于95%、误报率不高于5%、Codex MCP成功率不低于95%、重复正式内容0、Production污染0。
-
-## 10. 结束清理
-
-报告第一次远程确认后，使用精确产品 Commit中的修复脚本清理：
+PR #60只有在以下全部完成后才可转Ready：
 
 ```text
-D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-05376996
+最终精确Head CI全绿
+最终Artifact哈希核验
+最终合成Day 0 PASS
+Stage 1 PASS
+主人质量抽查PASS
+Production污染0
+重复正式内容0
+主人配置保留PASS
+安全清理PASS
+远程报告复读PASS
+master收敛完成
+回滚验证完成
 ```
 
-先 dry-run，必须为 `DRY_RUN_READY`；随后自动 `--execute`，最终目标不存在。不得让主人手工删除。
-
-同时删除本轮 Artifact副本、安装包、日志、截图、fixture、checkpoint、临时配置、worktree和合成导出包；恢复原 bootstrap哈希或原不存在状态。不得删除主人正式数据或其他任务目录。
-
-## 11. 提交与远程复读
-
-Codex必须：
-
-1. 创建 `acceptance/pr60-memory-quality-trial-05376996`；
-2. 写入报告、公开摘要、公开哈希和结果回执；
-3. push；
-4. 使用远程 API重新读取分支、Commit、报告、回执和 PR #60评论；
-5. 完成清理；
-6. 更新回执并再次 push；
-7. 再次远程复读；
-8. PR #60保持 Draft。
-
-报告不得包含 Token、私人正文、完整主人路径清单、数据库、安装包、node_modules、dist或未脱敏日志。
-
-## 12. 最终判定
-
-Day 0 PASS至少要求：
-
-- 新 Artifact身份和全部哈希一致；
-- 首次恢复不超过45秒；
-- DataRoot绑定正确；
-- 自动发现和一步导入成立；
-- Codex选到可启动命令并完成真实 MCP调用；
-- Qdrant单一所有权和状态一致；
-- 合成候选批准/拒绝边界正确；
-- Windows重启恢复；
-- Production污染0；
-- 真实资料读取0；
-- 清理前后PASS；
-- 主人检查点A-F明确PASS；
-- 远程报告、回执和评论全部复读确认。
-
-任一P0失败立即停止。不得进入 Stage 1，不得把“最终恢复了”替代首轮时限失败，也不得把“状态解释得更清楚”替代功能真正可用。
+合并PR #60、创建版本标签或公开Release前，仍需主人明确批准。
