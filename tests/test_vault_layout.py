@@ -40,6 +40,15 @@ class VaultLayoutTests(unittest.TestCase):
         self.assertFalse(self.layout.should_index(private_note))
         self.assertTrue(self.layout.should_index(private_note, include_private=True))
 
+    def test_generated_permanent_memory_ui_is_not_retrieval_content(self):
+        dashboard = self.root / "00-System" / "Permanent-Memory.md"
+        template = self.root / "00-System" / "Templates" / "核心记忆模板.md"
+        owner_rule = self.root / "00-System" / "Rules" / "AI-Policy.md"
+
+        self.assertFalse(self.layout.should_index(dashboard))
+        self.assertFalse(self.layout.should_index(template))
+        self.assertTrue(self.layout.should_index(owner_rule))
+
     def test_inbox_service_writes_traceable_note(self):
         self.layout.ensure()
         result = InboxService(self.layout).create_text_item(

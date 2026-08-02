@@ -104,20 +104,25 @@ src/retrieval/qdrant_provider.py::QdrantSemanticProvider
 src/retrieval/hybrid.py::HybridRetriever
 = Lexical + Semantic + RRF
 
+src/memory/vault_layout.py::VaultLayout.should_index
+= 单一 Vault 的检索资格权威；生成的 Dashboard/Template 不进入正式记忆索引
+
 src/model_center/embedding.py::OllamaEmbeddingProvider
 src/model_center/inventory.py::LocalModelInventoryService
-src/gateway/memory.py::MemoryGateway
+src/gateway/memory_gateway.py::MemoryGateway
 src/gateway/bootstrap.py::build_memory_gateway
 src/gateway/memory_statistics.py::MemoryStatisticsService
 src/gateway/memory_inspector.py::MemoryInspectorFacade
 ```
 
 Qdrant 失败时 Lexical 检索继续工作；维度不匹配只标记 `rebuild_required`，不得自动删除生产 Collection。
+新 DataRoot 中自动生成的 `00-System/Permanent-Memory.md` 和 `00-System/Templates/**` 仅服务主人操作界面，不得计入文档、Core Memory、分块或向量；`00-System/Rules` 与正式知识路径继续按统一资格规则索引。
 
 局部验收：
 
 ```powershell
 .\scripts\validate.ps1 -Mode focused -Area retrieval
+python -m pytest -q tests/test_vault_layout.py tests/test_semantic_runtime_wiring.py tests/test_permanent_memory_gateway.py
 ```
 
 Desktop Inspector 变化额外运行：

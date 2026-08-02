@@ -2,6 +2,16 @@
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
 
+## 2026-08-02
+
+### Fresh Day 0 空索引真实性修复
+
+- 修复新 DataRoot 首启时把灵机自动生成的永久记忆仪表盘与核心记忆模板计入正式知识、Core Memory 和向量索引的问题。
+- `00-System/Permanent-Memory.md` 与 `00-System/Templates/**` 继续在 Obsidian 中生成供主人操作，但不再进入可重建检索索引。
+- `00-System/Rules`、正式知识和主人批准的 Core Memory 仍按原统一规则索引，没有新增数据库、向量库或事实源。
+- 新增 fresh-gateway 回归，要求未导入任何资料时为 0 文档、0 分块、0 Core Memory、0 向量，并明确报告 `empty / collection_empty`；语义检索不可用、全文检索可用。
+- 固定旧 Artifact `8832376546` 已由独立本机 Day 0 判定 FAIL；只有新 Head、新 Artifact 和重新 Day 0 才能形成通过结论。
+
 ## 2026-07-29
 
 ### Windows Desktop 生命周期与控制台缺陷修复
