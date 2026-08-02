@@ -7,19 +7,19 @@
 ## 1. 当前回执
 
 ```yaml
-task_id: PR60-MEMORY-QUALITY-TRIAL-3739C42F
+task_id: PR60-MEMORY-QUALITY-TRIAL-24F35704
 status: PENDING
 verdict: PENDING
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
-product_commit: 3739c42ffc44b5524a3231bc2fd7279ae43c11b1
-task_instruction_commit: 56c8de00d1a9bf2c5b1c92e73683577dc88de75f
-report_branch: acceptance/pr60-memory-quality-trial-3739c42f
+product_commit: 24f3570440437f57b6a62e54d409577ed40b6c14
+task_instruction_commit: PENDING
+report_branch: acceptance/pr60-memory-quality-trial-24f35704
 report_commit: PENDING
-report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_3739c42f.md
-public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_3739c42f.json
-public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_3739c42f.txt
+report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_24f35704.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_24f35704.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_24f35704.txt
 cleanup_before: NOT_RUN
 cleanup_after: NOT_RUN
 remote_branch_verified: false
@@ -45,14 +45,14 @@ codex_mcp_success_percent: 0
 duplicate_formal_content_count: 0
 production_pollution_count: 0
 owner_config_preserved: NOT_RUN
-artifact_name: lingji-windows-0.1.0-3739c42f
-artifact_id: 8831573426
-artifact_zip_sha256: 96c106cd2107b6247d53ceaa6305499af9d0c185a0086a2d2cb1020c6246d387
-installer_sha256: 4faa7b2bc558870fa5b864603a7d44db706ee4fdf7ac853084ac003b70e79823
-portable_exe_sha256: 38f2324be22dcaaaa5c4cb9e57ce5fb53dd4eb2656a6907a303405dcf55dda26
-sidecar_exe_sha256: 2a45a7217cd5c55fda05ef7de80dc9c6057e66da5d649ec0a11828eafd672311
-manifest_sha256: 25ca10303b881bc44547a3185c3361ea8239358a799e3f227c0ec542dd89d290
-build_metadata_sha256: 33dcaefe4b1eac885fa692ba0529f459fada105532cbf793e80a638576c8a7d5
+artifact_name: lingji-windows-0.1.0-24f35704
+artifact_id: 8832010437
+artifact_zip_sha256: ac3c329e85e35b17fa35c92f68f415a58905e544b8325de42e557171f35fcd45
+installer_sha256: e89a10c12d08d0ddb910233d6c7d366f50e509a975ce6506f0cf3b80772368ce
+portable_exe_sha256: 5139cef2771124c6609c85acc154a10d9db1c77b06e0ed4deefd5fac16d8341f
+sidecar_exe_sha256: 4cbf0a62a1f5667ec22e36c2e347f4a113c05eb4217eaa48801c960450061b03
+manifest_sha256: 077e07851431d4eeece773a1734a98c0816fe62067dbe78487d1276e6b46e182
+build_metadata_sha256: fd32179b943ed88fe6d3ebb09f345846913b2f7b956cb55fc9dedb26248fb6c0
 ```
 
 ## 2. 当前阶段
@@ -106,13 +106,13 @@ F：重启、清理和远程报告最终确认
 ## 5. 固定身份
 
 ```text
-产品 Head：1860fa17c5de26b0ff4d54ace48158a6e343505a
-Artifact：lingji-windows-0.1.0-1860fa17
-Artifact ID：8830371064
-Release run：30738090397
+产品 Head：24f3570440437f57b6a62e54d409577ed40b6c14
+Artifact：lingji-windows-0.1.0-24f35704
+Artifact ID：8832010437
+Release run：30743102197
 ```
 
-旧 `4161807c / 8821878623`、`b68711fd / 8830090726` 及更早身份禁止使用。
+旧 `3739c42f / 8831573426`、`4161807c / 8821878623`、`b68711fd / 8830090726` 及更早身份禁止使用。
 
 ## 6. 最终状态规则
 
