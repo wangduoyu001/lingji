@@ -342,12 +342,12 @@ class MemoryStatisticsService:
         elif not ready:
             state = "unavailable"
             reason_code = "vector_service_unavailable"
-        elif not embedding_available:
-            state = "degraded"
-            reason_code = "embedding_unavailable"
         elif not collection_exists or vectors in {None, 0}:
             state = "empty"
             reason_code = "collection_empty"
+        elif not embedding_available:
+            state = "degraded"
+            reason_code = "embedding_unavailable"
         elif coverage.get("state") == "degraded":
             state = "degraded"
             reason_code = "vector_coverage_incomplete"
