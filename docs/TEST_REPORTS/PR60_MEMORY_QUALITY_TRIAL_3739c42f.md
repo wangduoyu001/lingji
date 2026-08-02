@@ -8,7 +8,7 @@ Merge recommendation: DO NOT MERGE
 Product commit: 3739c42ffc44b5524a3231bc2fd7279ae43c11b1
 Artifact: lingji-windows-0.1.0-3739c42f
 Artifact ID: 8831573426
-Report commit: PENDING
+Report commit: 067cdf31d7a47d5a4a2419a097a3eb78c22738a2
 ```
 
 Day 0 的“一次授权后自动入队并完成”已通过；但运行时报告 Qdrant 嵌入式目录被另一实例占用，语义检索为不可用状态。这违反 MCP 为 SQLite/Qdrant 唯一实时拥有者的硬门禁，故立即停止后续步骤。Codex 真实 MCP 调用亦未执行：发现的 WindowsApps 可执行入口返回 Access Denied，未找到可启动替代命令。
