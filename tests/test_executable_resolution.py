@@ -10,6 +10,11 @@ from src.assistant_hub.executable_resolution import (
 )
 
 
+def _is_named_under(path: str, parent: str, name: str) -> bool:
+    value = Path(path)
+    return value.name.casefold() == name.casefold() and value.parent.name.casefold() == parent.casefold()
+
+
 def test_windows_candidate_order_keeps_alias_then_finds_npm_cmd(tmp_path: Path) -> None:
     windows_apps = tmp_path / "WindowsApps"
     npm = tmp_path / "Roaming" / "npm"
@@ -33,8 +38,8 @@ def test_windows_candidate_order_keeps_alias_then_finds_npm_cmd(tmp_path: Path) 
         preferred_candidates=[str(alias)],
     )
 
-    assert candidates[0].casefold().endswith("windowsapps/codex.exe")
-    assert any(item.casefold().endswith("npm/codex.cmd") for item in candidates)
+    assert _is_named_under(candidates[0], "WindowsApps", "codex.exe")
+    assert any(_is_named_under(item, "npm", "codex.cmd") for item in candidates)
 
 
 def test_resolver_skips_access_denied_alias_and_selects_cmd_shim(tmp_path: Path) -> None:
@@ -74,9 +79,10 @@ def test_resolver_skips_access_denied_alias_and_selects_cmd_shim(tmp_path: Path)
 
     assert resolution.state == "verified"
     assert resolution.launchable is True
-    assert resolution.selected.casefold().endswith("npm/codex.cmd")
+    assert _is_named_under(resolution.selected, "npm", "codex.cmd")
     assert [item.state for item in resolution.attempts] == ["access_denied", "verified"]
-    assert calls[1][0].casefold().endswith("system32/cmd.exe")
+    assert Path(calls[1][0]).name.casefold() == "cmd.exe"
+    assert Path(calls[1][0]).parent.name.casefold() == "system32"
     assert calls[1][1:4] == ["/d", "/s", "/c"]
 
 
