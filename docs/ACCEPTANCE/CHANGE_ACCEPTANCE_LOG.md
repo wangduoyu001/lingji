@@ -1,5 +1,34 @@
 # 验收要求变更记录
 
+## 2026-08-02 · PR #60 · exact release Git identity recovery
+
+- Product branch: `codex/pr60-validation-git-identity-05376996`
+- Product commit: `pending (local final-closeout acceptance-contract repair)`
+- Affected modules: unified local validation entrypoint, release metadata, and validation regression coverage.
+- Risk level: P0
+- User-visible change: local Windows release summaries and package metadata identify the exact repair commit and branch instead of `unknown`.
+- Data and security boundary: no owner data or runtime path changes; only repository identity collection before validation is affected.
+
+### Automated acceptance
+
+- [x] `python -m pytest -q tests/test_validation_git_identity.py tests/test_acceptance_sync.py tests/test_local_execution_handoff.py` (33 passed): stale PowerShell native exit state cannot hide a successful Git identity read.
+- [ ] `python -m pytest -q --tb=short`: complete Python regression suite.
+- [ ] Desktop smoke/build and Rust/Tauri tests.
+- [ ] `scripts/validate.ps1 -Mode release`: `latest-summary.json` and `build-metadata.json` contain the exact 40-character validation commit, never `unknown`.
+
+### Real-machine acceptance
+
+- [ ] Build one local Windows release with an isolated D-drive PyInstaller environment and verify summary/package commit identity plus artifact hashes.
+
+### Regression items
+
+- [ ] Capture `$LASTEXITCODE` immediately after native Git execution, before any PowerShell pipeline command can change it.
+- [ ] Git absence or a real nonzero Git exit still returns the explicit fallback.
+
+### Out of scope
+
+- No product runtime, UI, memory, Qdrant, import, owner data, or release publishing change.
+
 ## 2026-08-02 · PR #60 · Control-only Qdrant ownership recovery
 
 - Product branch: `feature/unified-ai-memory-connectors`

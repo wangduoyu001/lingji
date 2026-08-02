@@ -18,20 +18,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $desktopRoot = Join-Path $repoRoot "desktop\lingji-control"
 Set-Location $repoRoot
 
-function Get-GitValue {
-    param([string[]]$Arguments, [string]$Fallback)
-
-    try {
-        $value = (& git @Arguments 2>$null | Select-Object -First 1)
-        if ($LASTEXITCODE -eq 0 -and $value) {
-            return $value.Trim()
-        }
-    }
-    catch {
-        return $Fallback
-    }
-    return $Fallback
-}
+. (Join-Path $PSScriptRoot "validation_git.ps1")
 
 $commit = Get-GitValue -Arguments @("rev-parse", "HEAD") -Fallback "unknown"
 $shortCommit = $commit

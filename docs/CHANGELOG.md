@@ -2,6 +2,14 @@
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
 
+## 2026-08-02
+
+### 本地 Release 精确 Git 身份修复
+
+- 修复 PowerShell 原生命令退出码被后续管道状态覆盖时，统一验证摘要和 Windows 发布元数据错误写入 `commit: unknown`、`branch: unknown` 的问题。
+- Git 输出先完整捕获，并在任何 PowerShell 管道处理前保存原生命令退出码；真实失败仍回落到明确的 `unknown`。
+- 新增 Windows 回归测试，主动注入陈旧非零 `$LASTEXITCODE`，确认实际 Git commit/branch 仍被精确读取。
+
 ## 2026-07-29
 
 ### Windows Desktop 生命周期与控制台缺陷修复
