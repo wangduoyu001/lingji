@@ -423,6 +423,10 @@ constraints/python-3.12-windows.txt
 scripts/validate_clean_install.py
 tests/test_validation_git_identity.py
 
+scripts/cleanup_acceptance_workspace.py
+tests/test_cleanup_acceptance_workspace.py
+= 精确 task-id/root/单层目标的本机验收清理；Windows 普通只读目录删除前解除只读属性，链接不跟随
+
 desktop/lingji-control/package.json
 desktop/lingji-control/scripts/run-smoke-suite.mjs
 desktop/lingji-control/scripts/assistant-hub-smoke.mjs

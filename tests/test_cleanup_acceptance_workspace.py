@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import stat
 from pathlib import Path
 
 import pytest
@@ -139,6 +140,35 @@ def test_execute_removes_only_authorized_validation_target(tmp_path: Path) -> No
     assert payload["status"] == "PASS"
     assert payload["next_action"] == "cleanup_complete"
     assert (protected / "keep.txt").read_text(encoding="utf-8") == "keep"
+
+
+def test_execute_removes_read_only_directories_created_by_installer(tmp_path: Path) -> None:
+    root = tmp_path / "LingJiAcceptance"
+    target = root / "PR60-MEMORY-TRIAL-623d3c9d"
+    programs = (
+        target
+        / "profile"
+        / "User"
+        / "AppData"
+        / "Roaming"
+        / "Microsoft"
+        / "Windows"
+        / "Start Menu"
+        / "Programs"
+    )
+    programs.mkdir(parents=True)
+    programs.chmod(stat.S_IREAD)
+
+    resolved_root, resolved_target = validate_target(
+        root,
+        target,
+        "PR60-MEMORY-QUALITY-TRIAL-623D3C9D",
+    )
+    result = cleanup(resolved_root, resolved_target, execute=True)
+
+    assert result.executed is True
+    assert result.remaining == []
+    assert not target.exists()
 
 
 def test_memory_target_requires_matching_task_identity(tmp_path: Path) -> None:

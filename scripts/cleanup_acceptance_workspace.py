@@ -198,6 +198,7 @@ def cleanup(root: Path, target: Path, *, execute: bool) -> CleanupResult:
                     os.unlink(item)
                 links_removed += 1
             elif item.is_dir():
+                _make_writable(item)
                 os.rmdir(item)
                 directories_removed += 1
             else:
