@@ -66,3 +66,47 @@ remain visible as unsupported rather than being falsely marked connected.
 The only remaining validation blocker is a configured Rust/Cargo toolchain for
 the isolated Tauri Desktop run. Installing one requires a separate user choice
 because it changes the local development environment.
+
+## Continued isolated Desktop and data verification
+
+The installed Rust/Cargo toolchain was made visible to the isolated development
+process without changing it. A current-source Sidecar was built only under
+`D:\codex\LingJiRepairFixture\sidecar-build\worker-r1`; no installer or
+checked-in Sidecar was overwritten.
+
+The first live run exposed two real conditions:
+
+1. The older checked-in Sidecar lacked the current Runtime binding ping fields.
+   Desktop correctly refused to treat that response as healthy.
+2. The Sidecar accepted governed imports but did not start an extraction worker,
+   leaving authorised imports queued.
+
+The repair starts one `ExtractionWorker`, owned by the packaged Sidecar and
+using the existing durable queue. It does not add a queue, database, or memory
+authority.
+
+Live fixture-only evidence:
+
+- Desktop verified the locked `D:\codex\LingJiRepairFixture\acceptance`
+  DataRoot and reported all three automatic low-risk actions complete.
+- Metadata-only scan found the synthetic `chatgpt-export.json` without reading
+  its content; unsupported Claude Code and WorkBuddy remained non-importable.
+- One explicit fixture authorization queued `LJ-JOB-1DFD358EADB6`; the worker
+  moved the intentionally malformed sample to automatic retry.
+- A valid synthetic ChatGPT export was authorized once as
+  `LJ-JOB-ABB1A43FD2F8` and completed automatically on its first attempt.
+- The live Desktop then showed one completed import, one retrying import,
+  one synthetic source, one structured conversation, and no real source.
+
+Regression after the worker repair:
+
+```text
+57 focused Python tests: PASS
+acceptance sync: PASS
+Desktop smoke suite: PASS (22 scripts)
+Desktop production build: PASS
+```
+
+The real Desktop remains open on the isolated fixture workspace. This is a
+development/local acceptance result, not a release or owner approval for a
+production installation.

@@ -2,8 +2,8 @@
 
 ```yaml
 task_id: PR60-AUTONOMOUS-MEMORY-REPAIR-1860FA1
-status: BLOCKED_SUBMISSION
-verdict: BLOCKED
+status: RUNNING
+verdict: PENDING
 execution_mode: DEVELOPMENT_REPAIR_AND_LOCAL_ACCEPTANCE
 repository: wangduoyu001/lingji
 product_pr: 60
@@ -15,14 +15,14 @@ real_data_read: false
 production_data_mutated: false
 release_reexecuted: false
 deletion_performed: false
-focused_python_tests: PASS_39
+focused_python_tests: PASS_57
 acceptance_sync: PASS
 desktop_smoke: PASS_22
 desktop_build: PASS
-isolated_desktop_ui: BLOCKED_NO_RUST_DEFAULT_TOOLCHAIN
+isolated_desktop_ui: PASS_FIXTURE_ONLY
 started_at: 2026-08-02T00:00:00+08:00
 finished_at: 2026-08-02T00:00:00+08:00
-blocker_code: BLOCKED_NO_RUST_DEFAULT_TOOLCHAIN
+blocker_code: OWNER_AND_RELEASE_ACCEPTANCE_PENDING
 ```
 
 ## Completion receipt
@@ -31,4 +31,6 @@ blocker_code: BLOCKED_NO_RUST_DEFAULT_TOOLCHAIN
 - The old release trial was not rerun.
 - The historical cleanup root was not touched.
 - No real source, permanent memory, third-party AI configuration, release, reboot, or deletion was performed.
-- The isolated Tauri Desktop observation remains blocked until a Rust/Cargo default toolchain is explicitly made available.
+- Isolated Desktop DataRoot identity, automatic discovery, one-action authorization, durable queue processing and retry were verified using synthetic fixtures only.
+- The live Desktop is intentionally left open on the fixture workspace for owner observation.
+- This is not a release or production acceptance: no installer, Artifact, real owner data, third-party configuration write, permanent-memory approval, or deletion was performed.

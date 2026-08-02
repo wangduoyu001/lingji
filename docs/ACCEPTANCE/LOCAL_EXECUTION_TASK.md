@@ -20,6 +20,7 @@ real_data_access: FORBIDDEN
 production_data_mutation: FORBIDDEN
 release_or_installer_execution: FORBIDDEN
 deletion: FORBIDDEN
+isolated_sidecar_build: ALLOWED_UNDER_D_CODEX_LINGJIREPAIRFIXTURE_ONLY
 ```
 
 ## Goal
@@ -42,14 +43,26 @@ Repair the existing assistant-hub experience without rebuilding the product or r
 ```text
 src/assistant_hub/**
 src/control/capture_api.py
+run_packaged_control_api.py
 desktop/lingji-control/src/pages/AssistantHubPage.tsx
 desktop/lingji-control/src/components/AssistantConnectorPanel.tsx
 desktop/lingji-control/src/pages/AssistantImportFlow.css
 direct tests and Desktop smoke scripts for these modules
 docs/ACCEPTANCE/** and the task report
+D:\codex\LingJiRepairFixture\sidecar-build\** (generated isolated test Sidecar only)
 ```
 
 Use the existing one-action importer, evidence-based connector readiness, and launchable Codex command resolver. Make only a confirmed, minimal repair; do not create a second import system, memory store, or connector registry.
+
+The packaged Sidecar must own an `ExtractionWorker` for its existing durable
+queue. This task may add that lifecycle wiring and a direct regression test;
+it must not add another queue or worker service.
+
+The existing checked-in Sidecar may not be overwritten. If the current binary
+does not expose the current Runtime ping contract, build a fresh Sidecar only
+under `D:\codex\LingJiRepairFixture\sidecar-build`, point the debug Desktop to
+that exact binary, and preserve its test evidence. Do not run an installer or
+release bundle.
 
 ## Required verification
 

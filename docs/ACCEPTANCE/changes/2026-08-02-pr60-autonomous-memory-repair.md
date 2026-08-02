@@ -2,7 +2,7 @@
 
 - 产品分支：`feature/unified-ai-memory-connectors`
 - 产品 Commit：`pending`
-- 影响模块：AI 助手元数据发现、受控导入计划、Codex 命令解析、连接器环境隔离、Assistant Hub。
+- 影响模块：AI 助手元数据发现、受控导入计划、Codex 命令解析、连接器环境隔离、Assistant Hub、打包 Sidecar 提取 Worker 生命周期。
 - 风险等级：P0
 - 用户可感知变化：自动扫描和命令状态在隔离运行中不再误用主机环境；找不到可启动 Codex 命令时，页面会如实显示“未找到”，不会误报权限问题或假装已连接。
 - 数据与安全边界：只有调用方没有提供环境时才使用系统环境；显式 `env={}` 现在是严格隔离边界。修复不读取聊天、导出正文、凭据、浏览器配置、Vault 或永久记忆；不写第三方 AI 配置。
@@ -10,6 +10,7 @@
 ## 自动验收
 
 - [ ] `python -m pytest -q tests/test_assistant_hub_imports.py tests/test_assistant_hub_discovery.py tests/test_ai_memory_connectors.py tests/test_ai_connector_readiness.py tests/test_executable_resolution.py`：验证空环境不继承主机 Profile/PATH/CODEX_HOME，且“未发现、不可启动、已验证”状态保持分层。
+- [ ] `python -m pytest -q tests/test_packaged_control_api.py`：验证打包 Sidecar 会为既有持久队列启动受控 ExtractionWorker，授权后的合成导入不会永久停在 `queued`。
 - [ ] `python -m pytest -q tests/test_assistant_hub_api.py tests/test_vector_truth_contract.py tests/test_memory_owner_lock.py`：验证一动作导入、显式授权和永久记忆所有权未回归。
 - [ ] `python scripts/check_acceptance_sync.py`：验证变更条目与验收任务同步。
 - [ ] `npm run test:smoke` 与 `npm run build`（`desktop/lingji-control`）：验证 Assistant Hub 页面与生产构建。
