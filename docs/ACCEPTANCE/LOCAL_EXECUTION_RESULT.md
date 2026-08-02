@@ -14,7 +14,7 @@ execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
 product_commit: 623d3c9da49b385c6a2f3687d34b9e80599f7ae1
-task_instruction_commit: PENDING
+task_instruction_commit: 619cb9c370cdf1e733f65e65f1f4bdd6ef6574d1
 report_branch: acceptance/pr60-memory-quality-trial-623d3c9d
 report_commit: PENDING
 report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_623d3c9d.md
@@ -138,7 +138,7 @@ master基线：ae80f0e86639ffba9ddf1cab1ec70c30484d146e
 Artifact：lingji-windows-0.1.0-623d3c9d
 Artifact ID：8834121370
 Release run：30749826622
-任务指令提交：PENDING
+任务指令提交：619cb9c370cdf1e733f65e65f1f4bdd6ef6574d1
 ```
 
 ## 7. 主人边界
