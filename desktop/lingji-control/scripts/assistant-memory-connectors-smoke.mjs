@@ -11,10 +11,13 @@ const [
   panel,
   css,
   directorCss,
+  flowCss,
   captureApi,
   connectors,
   governed,
   mcpHttp,
+  memoryStatistics,
+  ownerLock,
   packaged,
   buildScript,
   sidecarRequirements,
@@ -23,47 +26,55 @@ const [
   read("../src/components/AssistantConnectorPanel.tsx"),
   read("../src/pages/AssistantHubPage.css"),
   read("../src/components/AssistantSetupDirector.css"),
+  read("../src/pages/AssistantImportFlow.css"),
   read("../../../src/control/capture_api.py"),
   read("../../../src/assistant_hub/connectors.py"),
   read("../../../src/assistant_hub/governed.py"),
   read("../../../src/mcp_http.py"),
+  read("../../../src/gateway/memory_statistics.py"),
+  read("../../../src/runtime/memory_owner_lock.py"),
   read("../../../run_packaged_control_api.py"),
   read("../../../scripts/build_windows_sidecar.ps1"),
   read("../../../requirements-sidecar-build.txt"),
 ]);
 
 for (const token of [
-  "扫描",
-  "连接",
-  "导入",
-  "审核",
+  "自动发现",
+  "一次授权",
+  "自动处理",
   "AssistantConnectorPanel",
   "不允许 AI 直接写入 Core Memory",
 ]) assert.ok(hub.includes(token), `Assistant workflow is missing ${token}`);
 
 for (const token of [
-  "配置、客户端命令、真实测试分开显示",
-  "配置文件存在不等于客户端可用",
-  "发现可处理的历史资料",
-  "扫描只读元数据；读取正文和导入必须再次确认",
-  "Embedding / Qdrant",
+  "配置、命令启动和真实注册分开显示",
+  "路径存在不再代替命令启动",
+  "client_launch_blocked",
+  "readiness?.configuration",
+  "readiness?.client",
+  "readiness?.real_connection",
+  "Qdrant 唯一状态来源",
+  "全文检索",
+  "语义检索",
+  "semantic_search_available",
+  "lexical_search_available",
   "status_state",
   "blocking_reason",
   "/api/assistant-hub/connections",
-  "/api/assistant-hub/status",
   "/api/vector/status",
   "/preview",
   "/apply",
   "/test",
   "/rollback",
-  "预览并连接",
-  "测试连接",
+  "查看并授权连接",
+  "立即验证",
   "断开并回滚",
-  "本机 127.0.0.1:8767",
-  "Bearer Token 认证",
+  "127.0.0.1:8767",
+  "Bearer Token",
   "配置已复制到剪贴板",
 ]) assert.ok(panel.includes(token), `Connector panel is missing ${token}`);
 assert.equal(panel.includes("已设置，等待测试"), false, "Connector UI must not expose the old ambiguous configured state");
+assert.equal(panel.includes("发现可处理的历史资料"), false, "Import guidance belongs to the one-action import surface, not connector state");
 
 for (const cssToken of [
   ".assistant-connector-section",
@@ -77,10 +88,14 @@ for (const cssToken of [
 for (const cssToken of [
   ".assistant-setup-director",
   ".assistant-readiness-grid",
-  ".assistant-import-consent",
   ".assistant-connector-facts",
   ".assistant-connector-problem",
 ]) assert.ok(directorCss.includes(cssToken), `Guided setup styles are missing ${cssToken}`);
+
+for (const cssToken of [
+  ".assistant-vector-truth",
+  ".assistant-evidence-method",
+]) assert.ok(flowCss.includes(cssToken), `Truth status styles are missing ${cssToken}`);
 
 for (const route of [
   "/api/assistant-hub/connections",
@@ -109,11 +124,13 @@ for (const token of [
 assert.equal(connectors.includes("shell=True"), false, "Connector management must not execute shell strings");
 
 for (const token of [
-  "status_state",
-  "client_available",
+  "readiness",
+  "client_launch_blocked",
+  "CLIENT_ACCESS_DENIED",
+  "real_connection",
+  "last_test_code",
   "last_test_detail",
-  "配置文件已写入，但系统找不到 codex 命令",
-  "last_test_ok",
+  "last_test_at",
   'payload.pop("copy_payload", None)',
 ]) assert.ok(governed.includes(token), `Governed connector truth state is missing ${token}`);
 
@@ -124,8 +141,27 @@ for (const token of [
   "401",
   "streamable_http_app",
   "127.0.0.1",
+  "MemoryOwnerLock",
+  "publish_statistics",
+  "lingji-memory-status-publisher",
 ]) assert.ok(mcpHttp.includes(token), `Authenticated MCP runtime is missing ${token}`);
 assert.equal(mcpHttp.includes('host="0.0.0.0"'), false, "MCP runtime must remain loopback-only");
+
+for (const token of [
+  "semantic_search_available",
+  "lexical_search_available",
+  "collection_empty",
+  "embedded_store_locked",
+  "status_snapshot_stale",
+  "producer",
+]) assert.ok(memoryStatistics.includes(token), `Memory/vector truth contract is missing ${token}`);
+
+for (const token of [
+  "MemoryOwnerLock",
+  "msvcrt.locking",
+  "fcntl.flock",
+  "Another LingJi memory runtime owns",
+]) assert.ok(ownerLock.includes(token), `Memory ownership lock is missing ${token}`);
 
 for (const token of [
   "--service",
