@@ -6,6 +6,7 @@
 > Current UI work: PR #56 `feature/desktop-guided-usage`
 > Current stacked connector work: PR #60 `feature/unified-ai-memory-connectors`
 > Current local closeout repair: `codex/pr60-vector-snapshot-truth-05376996`
+> Current cleanup repair: `codex/pr60-cleanup-readonly-dir-623d3c9d`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
 > Validation evidence: `docs/TEST_REPORTS/`

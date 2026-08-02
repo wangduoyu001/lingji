@@ -1,5 +1,32 @@
 # 验收要求变更记录
 
+## 2026-08-02 · PR #60 · read-only installer directory cleanup recovery
+
+- Product branch: `codex/pr60-cleanup-readonly-dir-623d3c9d`
+- Product commit: `018e7d25327846cce08bb9f25cd3faf1db13c2ac`
+- Affected modules: task-scoped acceptance cleanup execution and Windows installer-profile cleanup regression coverage.
+- Risk level: P0
+- User-visible change: final acceptance cleanup completes when NSIS has left an empty Start Menu directory with the Windows read-only attribute.
+- Data and security boundary: the existing exact task-id/root/one-direct-child authorization remains unchanged; reparse points are still not traversed or chmod-followed.
+
+### Automated acceptance
+
+- [x] `python -m pytest -q tests/test_cleanup_acceptance_workspace.py`: `13 passed`; an authorized task root containing a read-only installer directory is fully removed, while unrelated targets remain protected.
+- [x] Unified `scripts/validate.ps1 -Mode release`: `15/15 PASS` on exact commit `018e7d25327846cce08bb9f25cd3faf1db13c2ac`, including Python full, Desktop smoke/build, Rust/Tauri, Sidecar and Windows release packaging.
+
+### Real-machine acceptance
+
+- [ ] Use the repaired script on the exact partially cleaned `PR60-MEMORY-TRIAL-05376996` root: dry-run authorized; execute completes; old root absent; new `623d3c9d` task root preserved.
+
+### Regression items
+
+- [x] Only normal directories receive writable attributes immediately before `os.rmdir`; reparse/link handling remains separate.
+- [x] No wildcard, parent-root, neighbor, production, Vault, or unknown-worktree deletion is authorized.
+
+### Out of scope
+
+- No runtime, UI, import, memory, Qdrant, installer, or owner-data behavior change.
+
 ## 2026-08-02 · PR #60 · fresh Day 0 generated-scaffold truth recovery
 
 - Product branch: `codex/pr60-vector-snapshot-truth-05376996`
