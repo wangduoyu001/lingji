@@ -18,9 +18,18 @@ class Embedding:
         }
 
 
+class UnavailableEmbedding:
+    def status(self):
+        return {
+            "available": False,
+            "active_model": None,
+            "dimension": None,
+        }
+
+
 class Semantic:
-    def __init__(self, status):
-        self.embedding_provider = Embedding()
+    def __init__(self, status, *, embedding=None):
+        self.embedding_provider = embedding or Embedding()
         self.collection = "lingji_memory_acceptance_test"
         self.workspace = SimpleNamespace(qdrant_mode="embedded")
         self._status = status
@@ -83,6 +92,28 @@ class VectorTruthContractTests(unittest.TestCase):
         self.assertTrue(vector["lexical_search_available"])
         self.assertEqual(payload["state"], "degraded")
 
+    def test_empty_collection_precedes_unverified_embedding_state(self):
+        payload = self._snapshot(
+            Semantic(
+                {
+                    "ready": True,
+                    "collection_exists": False,
+                    "vectors": 0,
+                    "dimension": None,
+                    "rebuild_required": False,
+                    "last_error": None,
+                },
+                embedding=UnavailableEmbedding(),
+            )
+        )
+
+        vector = payload["vector"]
+        self.assertEqual(vector["state"], "empty")
+        self.assertEqual(vector["reason_code"], "collection_empty")
+        self.assertFalse(vector["semantic_search_available"])
+        self.assertTrue(vector["lexical_search_available"])
+        self.assertFalse(payload["embedding"]["available"])
+
     def test_embedded_lock_is_unavailable_with_single_owner_recovery(self):
         payload = self._snapshot(
             Semantic(
@@ -104,6 +135,64 @@ class VectorTruthContractTests(unittest.TestCase):
         self.assertTrue(vector["lexical_search_available"])
         self.assertEqual(vector["recovery"]["state"], "waiting_for_single_owner")
         self.assertIn("唯一 MCP Runtime", vector["recovery"]["action"])
+
+    def test_rebuild_required_precedes_empty_collection(self):
+        payload = self._snapshot(
+            Semantic(
+                {
+                    "ready": True,
+                    "collection_exists": False,
+                    "vectors": 0,
+                    "dimension": None,
+                    "rebuild_required": True,
+                    "last_error": None,
+                },
+                embedding=UnavailableEmbedding(),
+            )
+        )
+
+        vector = payload["vector"]
+        self.assertEqual(vector["state"], "degraded")
+        self.assertEqual(vector["reason_code"], "vector_rebuild_required")
+
+    def test_service_unavailable_precedes_empty_collection(self):
+        payload = self._snapshot(
+            Semantic(
+                {
+                    "ready": False,
+                    "collection_exists": False,
+                    "vectors": 0,
+                    "dimension": None,
+                    "rebuild_required": False,
+                    "last_error": "connection refused",
+                },
+                embedding=UnavailableEmbedding(),
+            )
+        )
+
+        vector = payload["vector"]
+        self.assertEqual(vector["state"], "unavailable")
+        self.assertEqual(vector["reason_code"], "vector_service_unavailable")
+
+    def test_nonempty_index_still_requires_available_embedding(self):
+        payload = self._snapshot(
+            Semantic(
+                {
+                    "ready": True,
+                    "collection_exists": True,
+                    "vectors": 2,
+                    "dimension": 1024,
+                    "rebuild_required": False,
+                    "last_error": None,
+                },
+                embedding=UnavailableEmbedding(),
+            )
+        )
+
+        vector = payload["vector"]
+        self.assertEqual(vector["state"], "degraded")
+        self.assertEqual(vector["reason_code"], "embedding_unavailable")
+        self.assertFalse(vector["semantic_search_available"])
 
     def test_nonzero_index_reports_semantic_search_available(self):
         semantic = Semantic(

@@ -115,14 +115,14 @@ src/gateway/memory_statistics.py::MemoryStatisticsService
 src/gateway/memory_inspector.py::MemoryInspectorFacade
 ```
 
-Qdrant 失败时 Lexical 检索继续工作；维度不匹配只标记 `rebuild_required`，不得自动删除生产 Collection。
+Qdrant 失败时 Lexical 检索继续工作；维度不匹配只标记 `rebuild_required`，不得自动删除生产 Collection。服务可用但 Collection/向量为空时，空库事实优先于尚未验证的 Embedding 状态，必须报告 `empty / collection_empty`。
 新 DataRoot 中自动生成的 `00-System/Permanent-Memory.md` 和 `00-System/Templates/**` 仅服务主人操作界面，不得计入文档、Core Memory、分块或向量；`00-System/Rules` 与正式知识路径继续按统一资格规则索引。
 
 局部验收：
 
 ```powershell
 .\scripts\validate.ps1 -Mode focused -Area retrieval
-python -m pytest -q tests/test_vault_layout.py tests/test_semantic_runtime_wiring.py tests/test_permanent_memory_gateway.py
+python -m pytest -q tests/test_vault_layout.py tests/test_semantic_runtime_wiring.py tests/test_permanent_memory_gateway.py tests/test_vector_truth_contract.py
 ```
 
 Desktop Inspector 变化额外运行：
