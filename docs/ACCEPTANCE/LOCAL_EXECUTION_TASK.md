@@ -7,30 +7,30 @@
 ## 1. 当前任务元数据
 
 ```yaml
-task_id: PR60-MEMORY-QUALITY-TRIAL-05376996
+task_id: PR60-MEMORY-QUALITY-TRIAL-623D3C9D
 status: ACTIVE
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
 product_branch: feature/unified-ai-memory-connectors
-product_commit: 053769965cf767cfe5221ffa4334b189bedb4d7d
-artifact_name: lingji-windows-0.1.0-05376996
-artifact_id: 8832376546
-artifact_zip_sha256: abb116cbca8e7ccc2d23e206ed3fdc1a764f5b36bd4209864c628539bda33b4b
+product_commit: 623d3c9da49b385c6a2f3687d34b9e80599f7ae1
+artifact_name: lingji-windows-0.1.0-623d3c9d
+artifact_id: 8834121370
+artifact_zip_sha256: 95139eb91d4b7f12fedd29e126663de38a75f34078656855e69d3a212624179d
 installer_name: LingJi_0.1.0_windows_x64_setup.exe
-installer_sha256: 8f4719e610ddab037044dee364de6e3b4990c37c18a56da8f3fca6e6480b3b4e
+installer_sha256: d6b539fc6d9ad4ebb19215c60ea7ab287a87de76fc33b16f2339e76813bd1667
 portable_name: LingJi_0.1.0_windows_x64.exe
-portable_exe_sha256: a28169265e3f6eb16f9cb6102d4142b5e5c6d82a97e9c0bd7778e16571caae5e
-sidecar_exe_sha256: 8be47b40acf703454ffbec315c58f7a0f9c0d5250ab2156f554fb5b4a1025fb2
-manifest_sha256: c9778ddd6f4f782be2bcc43aa6d573b3a76518416aa718529f17fa2a627f73a5
-build_metadata_sha256: 167cd2dadddf8d2e3f822729d5d08a1f81080f0fb37a3da9d23b353c5b76721e
-artifact_workflow_run_id: 30744178349
+portable_exe_sha256: 7e2267169c34aeca71b5011f9d5e34b69c3bc3a0b4d42a412074c9059886d109
+sidecar_exe_sha256: 4475ca2760d44644f5c0efc627c6d2141a782242b64e2912408b26f30f4b7ad0
+manifest_sha256: 2ab3595ca3db7669ec84caddc7d11d5c005e61b603212f204ff61ea5ce289443
+build_metadata_sha256: 9f0de86f29c74756261f8461edaeadbcf697f9c6ce9aa9ff0fee87bc939e79bf
+artifact_workflow_run_id: 30749826622
 trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
 closeout_plan_path: docs/ACCEPTANCE/LOCAL_FINAL_CLOSEOUT_PLAN.md
-report_branch: acceptance/pr60-memory-quality-trial-05376996
-report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_05376996.md
-public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_05376996.json
-public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_05376996.txt
+report_branch: acceptance/pr60-memory-quality-trial-623d3c9d
+report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_623d3c9d.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_623d3c9d.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_623d3c9d.txt
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
 day0_required: true
 real_data_requires_day0_pass: true
@@ -53,16 +53,16 @@ pr60_draft_required: true
 ## 2. 当前远程基线
 
 ```text
-master = dff85844ced40c42cd1becb5a15747e85eff3b33
-product Head = 053769965cf767cfe5221ffa4334b189bedb4d7d
-product branch ahead of master = 185 commits
-product branch behind master = 21 commits
+master = ae80f0e86639ffba9ddf1cab1ec70c30484d146e
+product Head = 623d3c9da49b385c6a2f3687d34b9e80599f7ae1
+product branch ahead of master = 192 commits
+product branch behind master = 25 commits
 PR #60 = Draft / Do not merge
 ```
 
-当前产品提交修复了 Control API 创建第二个嵌入式 Qdrant 客户端的问题。只允许 MCP Runtime 实时拥有 SQLite/Qdrant；Control API 只能使用词法读取并消费 MCP 发布的状态快照。
+当前产品提交已修复 fresh DataRoot 把生成的永久记忆 Dashboard/Template 误计为正式文档、Core Memory 和向量的问题，并保留 MCP Runtime 对 SQLite/Qdrant 的唯一实时拥有权。新 Artifact 必须在任何导入前显示 0 文档、0 分块、0 Core Memory、0 向量和 `empty / collection_empty`。
 
-旧 `24f35704 / 8832010437`、`3739c42f / 8831573426`、`1860fa17 / 8830371064`、`4161807c / 8821878623`、`b68711fd / 8830090726` 及更早身份均禁止使用。
+旧 `05376996 / 8832376546`、`24f35704 / 8832010437`、`3739c42f / 8831573426`、`1860fa17 / 8830371064`、`4161807c / 8821878623`、`b68711fd / 8830090726` 及更早身份均禁止使用。
 
 ## 3. 第一步：读取本机最新提交并保护现场
 
@@ -99,26 +99,26 @@ backup/local-closeout-<timestamp>-<shortsha>
 
 Phase 0未完成，不得进入 Day 0。
 
-## 4. 当前立即任务：05376996 Day 0
+## 4. 当前立即任务：623d3c9d Day 0
 
 只下载和使用：
 
 ```text
-Artifact: lingji-windows-0.1.0-05376996
-Artifact ID: 8832376546
-Release run: 30744178349
+Artifact: lingji-windows-0.1.0-623d3c9d
+Artifact ID: 8834121370
+Release run: 30749826622
 ```
 
 任务根：
 
 ```text
-D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-05376996
+D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-623d3c9d
 ```
 
 产品 DataRoot：
 
 ```text
-D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-05376996\product
+D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-623d3c9d\product
 workspace = acceptance
 ```
 
@@ -132,7 +132,7 @@ HOME         = <任务根>\profile\User
 CODEX_HOME   = <任务根>\profile\CodexHome
 ```
 
-开始前从当前产品提交的隔离 worktree调用 `scripts/cleanup_acceptance_workspace.py`，清理上一轮 `24f35704` 任务根。合法 dry-run必须返回：
+开始前从当前产品提交的隔离 worktree调用 `scripts/cleanup_acceptance_workspace.py`，使用旧任务身份 `PR60-MEMORY-QUALITY-TRIAL-05376996` 精确清理上一轮 `D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-05376996`。合法 dry-run必须返回：
 
 ```text
 status = DRY_RUN_READY
