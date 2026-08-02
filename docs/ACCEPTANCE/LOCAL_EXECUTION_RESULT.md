@@ -2,24 +2,24 @@
 
 > 本文件是本机 Codex 向 ChatGPT / 主开发代理提交结果的唯一固定回执。
 >
-> 当前任务由灵机和 Codex自动执行低风险步骤。主人只观察 UI、授权真实内容、决定永久记忆以及许可 Windows 重启。
+> 当前任务由灵机和 Codex自动执行低风险步骤。主人只观察 UI、授权合成内容、决定测试候选以及许可 Windows 重启。
 
 ## 1. 当前回执
 
 ```yaml
-task_id: PR60-MEMORY-QUALITY-TRIAL-4161807C
+task_id: PR60-MEMORY-QUALITY-TRIAL-1860FA17
 status: PENDING
 verdict: PENDING
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
-product_commit: 4161807ce4598cc1696093da4a703de101648280
-task_instruction_commit: bc9aead956e363405c39ae784d9beb9ba5bc5dff
-report_branch: acceptance/pr60-memory-quality-trial-4161807c
+product_commit: 1860fa17c5de26b0ff4d54ace48158a6e343505a
+task_instruction_commit: fa395bd2b028eb763bb71cee692b7cbb5d285720
+report_branch: acceptance/pr60-memory-quality-trial-1860fa17
 report_commit: PENDING
-report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_4161807c.md
-public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_4161807c.json
-public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_4161807c.txt
+report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_1860fa17.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_1860fa17.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_1860fa17.txt
 cleanup_before: NOT_RUN
 cleanup_after: NOT_RUN
 remote_branch_verified: false
@@ -45,125 +45,76 @@ codex_mcp_success_percent: 0
 duplicate_formal_content_count: 0
 production_pollution_count: 0
 owner_config_preserved: NOT_RUN
-artifact_name: lingji-windows-0.1.0-4161807c
-artifact_id: 8821878623
-artifact_zip_sha256: c1019006509033a45debf24fd5530133cda2a804d051424a66a0c3d122c680ab
-installer_sha256: 219c5866ad22b5a1b6e6ea0d78c02fb2b4a392548d3cb9b360a236d9d6bdf931
-portable_exe_sha256: c49c46f32d9b4e52c0e32754c16b4bf8f67cfb9a7d61d90ea782a2a524508210
-sidecar_exe_sha256: 76c36cd02735afd556ebdfd9a0af4ebf0a8879eaccb56dc1252f1ea8466b9d20
-manifest_sha256: 50168354b918f318a71677892c4d5fd6e6dc85cbdf18ae0599d31bf12d61f368
-build_metadata_sha256: 73726765d1293d0a4ef7b3e72150208da98919abfaf53c7a681b35181c1a75a2
-binding_contract_version: 1
-binding_id: PR60-MEMORY-QUALITY-TRIAL-4161807C
-expected_data_root: D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-4161807c\product
-expected_workspace: acceptance
-actual_data_root: PENDING
-actual_workspace: PENDING
-binding_verified: false
-automatic_scan_result: NOT_RUN
-automatic_model_refresh_result: NOT_RUN
-automatic_hardware_refresh_result: NOT_RUN
-automatic_recovery_result: NOT_RUN
-owner_global_bootstrap_preserved: NOT_RUN
+artifact_name: lingji-windows-0.1.0-1860fa17
+artifact_id: 8830371064
+artifact_zip_sha256: 8c4d5de5ed678063f70896bede94905c941962ba744a53de6537ee2714ab9e37
+installer_sha256: ea109577ad86ee6b800973fbd5ca0c48cb0d0c7d98d5a67e82379a8b795c54a2
+portable_exe_sha256: 51266810195ff8ed2d1ef9dc16b7144aef1db2bf2898a420894b3d0c352d068e
+sidecar_exe_sha256: e6c005210a8b7e8c84bb7e4460110033c2aa8c026a1ea0da0fb49205cb0d72ae
+manifest_sha256: fd80bfa9e2acb7cb158e6e936980e974a6abad51dc2e6b510a24ba9a96f6a240
+build_metadata_sha256: 62bf86b9c2b666d27730de6ebb70b6e70bfdb515d57dab380810985b2ea3dfe7
 ```
 
 ## 2. 当前阶段
 
 ```text
-Day 0自动执行：NOT_RUN
-主人观察 A-D：NOT_RUN
-候选决定 E：NOT_RUN
-Windows重启许可与恢复 F：NOT_RUN
+代码与发布链：PASS
+正式 Artifact：READY
+Day 0：NOT_RUN
+主人检查点 A-F：NOT_RUN
 真实资料授权：false
 Stage 1：NOT_RUN
 Stage 2：NOT_RUN
 ```
 
-真实资料正文读取必须保持0，直到 Day 0 与主人观察全部 PASS并获得具名授权。
-
-## 3. 固定身份
+## 3. 本轮必须证明
 
 ```text
-产品 Head：4161807ce4598cc1696093da4a703de101648280
-Artifact：lingji-windows-0.1.0-4161807c
-Artifact ID：8821878623
-Artifact ZIP：c1019006509033a45debf24fd5530133cda2a804d051424a66a0c3d122c680ab
-Installer：219c5866ad22b5a1b6e6ea0d78c02fb2b4a392548d3cb9b360a236d9d6bdf931
-Portable：c49c46f32d9b4e52c0e32754c16b4bf8f67cfb9a7d61d90ea782a2a524508210
-Sidecar：76c36cd02735afd556ebdfd9a0af4ebf0a8879eaccb56dc1252f1ea8466b9d20
-Manifest：50168354b918f318a71677892c4d5fd6e6dc85cbdf18ae0599d31bf12d61f368
-Build metadata：73726765d1293d0a4ef7b3e72150208da98919abfaf53c7a681b35181c1a75a2
+首次恢复 <= 45 秒
+精确 DataRoot / workspace / binding
+合成导出包自动发现
+一次授权后立即入队，无路径输入和二次提交
+Codex跳过不可启动WindowsApps别名并选择可启动命令
+真实 codex mcp list 列出 lingji-memory
+真实 Codex MCP调用命中验收 Runtime
+MCP独占 SQLite/Qdrant，Control只读快照
+empty / locked / stale / healthy状态一致
+合成候选批准一个、拒绝一个
+Windows重启恢复
+清理 dry-run = DRY_RUN_READY，execute后目标不存在
+Production污染 = 0
+真实资料读取 = 0
 ```
 
-旧 Artifact `8723868744`、`8762312712`、`8820695386` 禁止使用。
+## 4. 自动化与主人边界
 
-## 4. Day 0自动验证状态
+Codex负责安装、启动、扫描、UI/API操作、状态刷新、重试、生命周期、截图、报告、Git提交、远程复读和清理。
+
+主人只在以下检查点给出结论或授权：
 
 ```text
-前置清理：NOT_RUN
-Artifact下载与哈希：NOT_RUN
-任务启动契约：NOT_RUN
-任务专属LOCALAPPDATA/APPDATA：NOT_RUN
-覆盖安装：NOT_RUN
-Runtime实际DataRoot自证：NOT_RUN
-Runtime workspace自证：NOT_RUN
-旧bootstrap回退防护：NOT_RUN
-无黑窗：NOT_RUN
-自动AI元数据扫描：NOT_RUN
-自动模型刷新：NOT_RUN
-自动硬件刷新：NOT_RUN
-自动状态轮询/重试/恢复：NOT_RUN
-UI观察台与菜单定位：NOT_RUN
-Codex配置/命令/真实MCP三层状态：NOT_RUN
-真实Codex MCP调用：NOT_RUN
-Embedding/Qdrant详细状态：NOT_RUN
-合成候选生成：NOT_RUN
-候选批准/拒绝执行：NOT_RUN
-Core/Sidecar三轮重启：NOT_RUN
-Desktop同环境重启：NOT_RUN
-Windows重启恢复：NOT_RUN
-主人全局bootstrap保留：NOT_RUN
-Production污染：0
-真实资料正文读取：0
+A：首启、DataRoot和UI观察
+B：授权读取任务生成的合成导出包
+C：一键导入、Codex MCP和Qdrant证据确认
+D：指定一个合成候选批准、一个拒绝
+E：允许 Windows重启
+F：重启、清理和远程报告最终确认
 ```
 
-## 5. 主人只需观察与决定
+主人未确认全部检查点前，`day0_result`不得为 `PASS`。
+
+## 5. 固定身份
 
 ```text
-Checkpoint A：UI主动运行、DataRoot/workspace/binding验证清楚，未要求逐项启动和扫描：NOT_RUN
-Checkpoint B：自动扫描和进度可见，真实正文前停在授权边界：NOT_RUN
-Checkpoint C：Codex三层状态一致，真实MCP调用成功：NOT_RUN
-Checkpoint D：Embedding/Qdrant原因、影响和处理进度可懂：NOT_RUN
-Checkpoint E：主人给出候选A/B决定，Codex代为执行且结果正确：NOT_RUN
-Checkpoint F：主人许可Windows重启，灵机自动恢复且绑定不漂移：NOT_RUN
+产品 Head：1860fa17c5de26b0ff4d54ace48158a6e343505a
+Artifact：lingji-windows-0.1.0-1860fa17
+Artifact ID：8830371064
+Release run：30738090397
 ```
 
-主人未明确确认 A-F 前：
+旧 `4161807c / 8821878623`、`b68711fd / 8830090726` 及更早身份禁止使用。
 
-```text
-day0_result != PASS
-real_data_authorized = false
-stage1_result = NOT_RUN
-stage2_result = NOT_RUN
-```
-
-## 6. Stage 1质量指标
-
-仅在具名真实资料授权后填写：
-
-```text
-质量题总数：0 / >=20
-主人抽查：0 / >=10
-质量分：0 / >=90%
-来源准确率：0 / >=95%
-误报率：0 / <=5%
-Codex MCP成功率：0 / >=95%
-重复正式内容：0
-Production污染：0
-主人配置保留：NOT_RUN
-```
-
-## 7. 最终状态规则
+## 6. 最终状态规则
 
 允许：
 
@@ -172,25 +123,24 @@ status: PENDING / RUNNING / COMPLETED / BLOCKED_SUBMISSION
 verdict: PENDING / PASS / FAIL / BLOCKED
 ```
 
-整个任务最终 PASS 必须同时满足：
+Day 0失败时：
 
-- Day 0与主人观察 A-F PASS；
-- 具名真实资料范围获得明确授权；
-- Stage 1与质量阈值PASS；
-- Production污染为0；
-- 主人配置保留；
-- 报告、远程复读和安全清理PASS。
+```text
+stage1_result = NOT_RUN
+stage2_result = NOT_RUN
+real_data_authorized = false
+```
 
-Day 0 PASS但尚未授权 Stage 1时，只能保持 `RUNNING / PENDING`。
+整个任务最终 PASS仍须满足 Day 0、明确真实资料授权、Stage 1、质量阈值、主人抽查、零重复、零Production污染、主人配置保留、清理和远程复读全部通过。
 
-## 8. 证据索引
+## 7. 证据索引
 
 ```text
 最终报告：PENDING
 公开摘要：PENDING
 公开哈希：PENDING
 PR #60评论：PENDING
-报告分支最终HEAD：PENDING
+报告分支最终 HEAD：PENDING
 ```
 
-禁止提交安装包、数据库、Token、私人正文、真实路径全集、node_modules、dist或未脱敏日志。
+禁止提交安装包、数据库、Token、私人正文、完整主人路径清单、node_modules、dist或未脱敏日志。
