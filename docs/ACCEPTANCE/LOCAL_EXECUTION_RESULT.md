@@ -28,7 +28,7 @@ remote_report_verified: true
 remote_result_verified: true
 pr_comment_verified: true
 local_temp_root_absent: true
-owner_observation: NOT_REACHED_DUE_TO_P0
+owner_observation: NOT_REQUIRED
 started_at: 2026-08-02T09:41:00Z
 finished_at: 2026-08-02T09:47:00Z
 trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
