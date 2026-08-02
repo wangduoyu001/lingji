@@ -8,7 +8,7 @@ Merge recommendation: DO NOT MERGE
 Product commit: 24f3570440437f57b6a62e54d409577ed40b6c14
 Artifact: lingji-windows-0.1.0-24f35704
 Artifact ID: 8832010437
-Report commit: PENDING
+Initial report commit: 5346a5391f0ef2a6cb3943530ba51180e8b7831a
 ```
 
 Day 0 stopped on P0 `LJ-24F35704-P0-QDRANT-LOCK`. The synthetic ChatGPT export was discovered without opening its body, then its single authorized import completed automatically. However, the MCP-published vector snapshot still reports `embedded_store_locked`; semantic retrieval is unavailable while the embedded Qdrant directory is accessed by another client. No real owner data was read, no permanent-memory decision was taken, and no Stage 1 or Stage 2 action ran.
@@ -75,7 +75,7 @@ The owner lock diagnostic is present and held by `packaged_mcp_http`; the lock t
 - Production pollution: `0` observed.
 - Real-data authorization: `false`; real-data read: `0`.
 - Report contains no token, private body, database, installer, or owner path inventory.
-- First remote report verification and task-root cleanup: PENDING at this report commit; the result receipt will be updated only after those steps complete.
+- GitHub API first read confirmed the report branch, report, and result receipt. Cleanup dry-run was `DRY_RUN_READY` for 871 scoped entries; execute removed 523 files, 347 directories, and one link. The isolated task root is absent.
 
 ## 8. Final Merge Recommendation
 
@@ -88,5 +88,5 @@ Required clients covered: packaged Desktop, Control API, MCP, synthetic ChatGPT 
 Skipped clients: real Codex MCP and all owner-data clients
 Blocking defects: LJ-24F35704-P0-QDRANT-LOCK
 Acceptance docs synchronized: YES
-Temporary evidence cleaned: PENDING
+Temporary evidence cleaned: YES
 ```
