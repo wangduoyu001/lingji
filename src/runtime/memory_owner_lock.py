@@ -15,9 +15,10 @@ class MemoryOwnerLockError(RuntimeError):
 class MemoryOwnerLock:
     """Cross-platform exclusive process lock for SQLite/Qdrant live ownership.
 
-    The lock is enforced by the operating system and is released when the owning
-    process exits, including abnormal exits. The JSON body is diagnostic metadata,
-    not the lock mechanism itself.
+    The operating system lock and human-readable diagnostics use separate files.
+    Windows may deny a second reader while an ``msvcrt`` byte-range lock is held,
+    so ``*.lock`` is only the mutex and ``*.json`` remains readable by diagnostics.
+    Both are task-local and contain no private content.
     """
 
     def __init__(
@@ -31,6 +32,7 @@ class MemoryOwnerLock:
         poll_seconds: float = 0.2,
     ) -> None:
         self.path = Path(path).expanduser().resolve(strict=False)
+        self.metadata_path = self.path.with_suffix(".json")
         self.owner = str(owner or "memory_runtime")
         self.instance_id = str(instance_id or "unknown")
         self.workspace = str(workspace or "unknown")
@@ -77,6 +79,7 @@ class MemoryOwnerLock:
         finally:
             handle.close()
             self._file = None
+            self._mark_released()
 
     def __enter__(self) -> "MemoryOwnerLock":
         return self.acquire()
@@ -84,43 +87,64 @@ class MemoryOwnerLock:
     def __exit__(self, exc_type, exc, traceback) -> None:
         self.release()
 
-    def _write_metadata(self) -> None:
-        assert self._file is not None
-        payload = {
+    def _metadata_payload(self, *, released_at: str | None = None) -> dict[str, object]:
+        payload: dict[str, object] = {
             "schema_version": 1,
             "owner": self.owner,
             "instance_id": self.instance_id,
             "workspace": self.workspace,
             "pid": os.getpid(),
+            "state": "released" if released_at else "held",
             "acquired_at": datetime.now(timezone.utc).isoformat(),
         }
-        encoded = (json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
-        self._file.seek(0)
-        self._file.truncate(0)
-        self._file.write(encoded)
-        self._file.flush()
+        if released_at:
+            payload["released_at"] = released_at
+        return payload
+
+    def _write_metadata(self) -> None:
+        self._write_metadata_payload(self._metadata_payload())
+
+    def _mark_released(self) -> None:
+        released_at = datetime.now(timezone.utc).isoformat()
+        payload = self._read_metadata()
+        if not payload:
+            payload = self._metadata_payload(released_at=released_at)
+        else:
+            payload["state"] = "released"
+            payload["released_at"] = released_at
         try:
-            os.fsync(self._file.fileno())
+            self._write_metadata_payload(payload)
         except OSError:
             pass
 
-    def _diagnostic_text(self) -> str:
+    def _write_metadata_payload(self, payload: dict[str, object]) -> None:
+        temporary = self.metadata_path.with_suffix(".json.tmp")
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(self.metadata_path)
+
+    def _read_metadata(self) -> dict[str, object]:
         try:
-            raw = self.path.read_text(encoding="utf-8-sig").strip()
+            raw = self.metadata_path.read_text(encoding="utf-8-sig").strip()
             payload = json.loads(raw)
-            if not isinstance(payload, dict):
-                return ""
-            return ", ".join(
-                part
-                for part in (
-                    f"owner={payload.get('owner')}" if payload.get("owner") else "",
-                    f"pid={payload.get('pid')}" if payload.get("pid") else "",
-                    f"workspace={payload.get('workspace')}" if payload.get("workspace") else "",
-                )
-                if part
-            )
+            return dict(payload) if isinstance(payload, dict) else {}
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
-            return ""
+            return {}
+
+    def _diagnostic_text(self) -> str:
+        payload = self._read_metadata()
+        return ", ".join(
+            part
+            for part in (
+                f"owner={payload.get('owner')}" if payload.get("owner") else "",
+                f"pid={payload.get('pid')}" if payload.get("pid") else "",
+                f"workspace={payload.get('workspace')}" if payload.get("workspace") else "",
+                f"state={payload.get('state')}" if payload.get("state") else "",
+            )
+            if part
+        )
 
     @staticmethod
     def _lock(handle: BinaryIO) -> None:
