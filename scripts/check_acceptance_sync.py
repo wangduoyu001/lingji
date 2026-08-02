@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Iterable, Sequence
 
-ACCEPTANCE_LOG = "docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md"
+LEGACY_ACCEPTANCE_LOG = "docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md"
+ACCEPTANCE_ENTRY_PREFIX = "docs/ACCEPTANCE/changes/"
 ACCEPTANCE_PREFIX = "docs/ACCEPTANCE/"
+_ACCEPTANCE_ENTRY_NAME = re.compile(
+    r"^docs/ACCEPTANCE/changes/\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9._-]*\.md$",
+    flags=re.IGNORECASE,
+)
 
 PRODUCT_PREFIXES = (
     "src/",
@@ -71,18 +77,23 @@ def is_acceptance_change(path: str) -> bool:
     return normalize_path(path).startswith(ACCEPTANCE_PREFIX)
 
 
-def validate_changed_paths(paths: Iterable[str]) -> tuple[bool, list[str], list[str]]:
+def is_acceptance_contract(path: str) -> bool:
+    normalized = normalize_path(path)
+    return normalized == LEGACY_ACCEPTANCE_LOG or bool(_ACCEPTANCE_ENTRY_NAME.fullmatch(normalized))
+
+
+def validate_changed_paths(
+    paths: Iterable[str],
+) -> tuple[bool, list[str], list[str], list[str]]:
     normalized = sorted({normalize_path(path) for path in paths if path.strip()})
     product_changes = [path for path in normalized if is_product_change(path)]
     acceptance_changes = [path for path in normalized if is_acceptance_change(path)]
+    acceptance_contracts = [path for path in normalized if is_acceptance_contract(path)]
 
     if not product_changes:
-        return True, product_changes, acceptance_changes
+        return True, product_changes, acceptance_changes, acceptance_contracts
 
-    if ACCEPTANCE_LOG not in acceptance_changes:
-        return False, product_changes, acceptance_changes
-
-    return True, product_changes, acceptance_changes
+    return bool(acceptance_contracts), product_changes, acceptance_changes, acceptance_contracts
 
 
 def run_git(repo_root: Path, arguments: Sequence[str]) -> list[str]:
@@ -127,8 +138,9 @@ def resolve_changed_paths(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Fail when product-affecting changes are not accompanied by an "
-            "update to docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md."
+            "Fail when product-affecting changes are not accompanied by either "
+            "the legacy acceptance log or one isolated Markdown entry under "
+            "docs/ACCEPTANCE/changes/."
         )
     )
     parser.add_argument("--base", default=os.getenv("ACCEPTANCE_BASE_SHA"))
@@ -151,7 +163,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"[acceptance-sync] BLOCKED: {exc}", file=sys.stderr)
         return 2
 
-    valid, product_changes, acceptance_changes = validate_changed_paths(changed_paths)
+    valid, product_changes, acceptance_changes, acceptance_contracts = validate_changed_paths(changed_paths)
 
     print(f"[acceptance-sync] changed files: {len(changed_paths)}")
     print(f"[acceptance-sync] product-impacting files: {len(product_changes)}")
@@ -161,15 +173,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if valid:
-        print(
-            "[acceptance-sync] PASS: product changes are accompanied by "
-            f"{ACCEPTANCE_LOG}."
-        )
+        print("[acceptance-sync] PASS: product changes include acceptance contract:")
+        for path in acceptance_contracts:
+            print(f"  - {path}")
         return 0
 
     print(
-        "[acceptance-sync] FAIL: product-impacting changes require an update to "
-        f"{ACCEPTANCE_LOG} in the same change.",
+        "[acceptance-sync] FAIL: product-impacting changes require either an "
+        f"update to {LEGACY_ACCEPTANCE_LOG} or one dated Markdown entry under "
+        f"{ACCEPTANCE_ENTRY_PREFIX}.",
         file=sys.stderr,
     )
     print("[acceptance-sync] product-impacting files:", file=sys.stderr)
@@ -177,8 +189,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"  - {path}", file=sys.stderr)
     if acceptance_changes:
         print(
-            "[acceptance-sync] acceptance files changed, but the mandatory change "
-            "log was not updated:",
+            "[acceptance-sync] acceptance files changed, but none is a valid "
+            "change contract:",
             file=sys.stderr,
         )
         for path in acceptance_changes:
