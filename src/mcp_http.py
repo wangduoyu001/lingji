@@ -66,14 +66,41 @@ def create_authenticated_mcp_app(
     token: str,
     agent_id: str = "lingji-local",
     gateway: Any | None = None,
+    extraction_pipeline: Any | None = None,
 ) -> ASGIApp:
     """Create one shared owner-memory MCP application behind local authentication."""
 
     from src.mcp_server import create_mcp_server
 
-    server = create_mcp_server(gateway=gateway, default_agent_id=agent_id)
+    server = create_mcp_server(
+        gateway=gateway,
+        default_agent_id=agent_id,
+        extraction_pipeline=extraction_pipeline,
+    )
     app = server.streamable_http_app()
     return BearerTokenMiddleware(app, token)
+
+
+def start_mcp_extraction_worker(
+    settings: Any,
+    pipeline: Any,
+    *,
+    worker_factory: Any | None = None,
+) -> Any:
+    """Run durable extraction in the process that owns the semantic index."""
+
+    if worker_factory is None:
+        from src.extraction import ExtractionWorker
+
+        worker_factory = ExtractionWorker
+    worker = worker_factory(
+        pipeline,
+        poll_seconds=settings.extraction_poll_seconds,
+        batch_size=settings.extraction_batch_size,
+        worker_id="packaged-mcp",
+    )
+    worker.start()
+    return worker
 
 
 def _assert_port_available(host: str, port: int) -> None:
@@ -125,6 +152,7 @@ def run_authenticated_mcp_http(
 
     from src.config import settings
     from src.gateway.bootstrap import build_memory_gateway
+    from src.mcp_server import build_mcp_extraction_pipeline
     from src.runtime import MemoryOwnerLock
 
     root = _memory_runtime_root(settings)
@@ -147,10 +175,13 @@ def run_authenticated_mcp_http(
     gateway = None
     publisher_stop = threading.Event()
     publisher: threading.Thread | None = None
+    extraction_worker: Any | None = None
     try:
         os.environ["LINGJI_MEMORY_STATUS_PRODUCER"] = "mcp"
         os.environ["LINGJI_MEMORY_STATUS_INSTANCE_ID"] = instance_id
         gateway = build_memory_gateway(settings)
+        pipeline = build_mcp_extraction_pipeline(gateway)
+        extraction_worker = start_mcp_extraction_worker(settings, pipeline)
         gateway.publish_statistics()
         publisher = threading.Thread(
             target=_publish_statistics_until_stopped,
@@ -163,6 +194,7 @@ def run_authenticated_mcp_http(
             token=token,
             agent_id=agent_id,
             gateway=gateway,
+            extraction_pipeline=pipeline,
         )
         uvicorn.run(
             app,
@@ -172,6 +204,8 @@ def run_authenticated_mcp_http(
             access_log=False,
         )
     finally:
+        if extraction_worker is not None:
+            extraction_worker.stop()
         publisher_stop.set()
         if publisher is not None:
             publisher.join(timeout=2.0)
