@@ -25,7 +25,7 @@ class AiAssistantDiscoveryService:
         workspace: str = "",
     ) -> None:
         self.home = Path(home or Path.home()).expanduser()
-        self.env = dict(env or os.environ)
+        self.env = dict(os.environ) if env is None else dict(env)
         self.platform_name = str(platform_name or platform.system()).lower()
         self.workspace = workspace or str(self.env.get("LINGJI_WORKSPACE") or "unknown")
 

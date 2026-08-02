@@ -54,7 +54,7 @@ def executable_invocation(
     list; no owner-provided shell fragment is accepted.
     """
 
-    environment = dict(env or os.environ)
+    environment = dict(os.environ) if env is None else dict(env)
     selected_platform = platform or os.name
     path = str(Path(executable).expanduser())
     suffix = Path(path).suffix.casefold()
@@ -77,7 +77,7 @@ def enumerate_executable_candidates(
 ) -> list[str]:
     """Enumerate deterministic PATH/npm candidates without recursive disk scans."""
 
-    environment = dict(env or os.environ)
+    environment = dict(os.environ) if env is None else dict(env)
     selected_platform = platform or os.name
     windows = selected_platform == "nt"
     path_value = str(environment.get("PATH") or "")

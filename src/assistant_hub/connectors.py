@@ -76,7 +76,7 @@ class AiMemoryConnectorService:
     ) -> None:
         self.storage_path = Path(storage_path).expanduser().resolve(strict=False)
         self.home = Path(home or Path.home()).expanduser().resolve(strict=False)
-        self.env = dict(env or os.environ)
+        self.env = dict(os.environ) if env is None else dict(env)
         self.runner = runner or _default_runner
         self.timeout_seconds = max(1.0, float(timeout_seconds))
         self.backup_root = self.storage_path / "assistant_hub" / "connector_backups"

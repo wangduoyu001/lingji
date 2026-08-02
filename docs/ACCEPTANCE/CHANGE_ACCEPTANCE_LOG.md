@@ -1,5 +1,33 @@
 # 验收要求变更记录
 
+## 2026-08-02 · PR #60 · autonomous import recovery release
+
+- Product branch: `feature/unified-ai-memory-connectors`
+- Product commit: `pending (release-repair branch)`
+- Affected modules: packaged Sidecar extraction worker, isolated Assistant Hub environment, and task-scoped cleanup policy.
+- Risk level: P0
+- User-visible change: an authorized supported export is processed by the packaged runtime instead of remaining indefinitely queued; automatic scans stay within the declared isolated profile.
+- Data and security boundary: no real content is read before authorization; empty fixture environments do not inherit owner configuration; cleanup remains limited to one named task root.
+
+### Automated acceptance
+
+- [x] `python -m pytest -q tests/test_packaged_control_api.py tests/test_assistant_hub_imports.py tests/test_assistant_hub_discovery.py tests/test_cleanup_acceptance_workspace.py tests/test_assistant_hub_api.py tests/test_ai_memory_connectors.py tests/test_ai_connector_readiness.py tests/test_executable_resolution.py` (60 passed)
+- [x] `python scripts/check_acceptance_sync.py`
+- [x] `npm run test:smoke` (22 passed) and `npm run build` in `desktop/lingji-control`
+
+### Real-machine acceptance
+
+- [ ] A newly built isolated Artifact repeats Day 0 with a synthetic export and proves the job leaves `queued` without a second submission.
+
+### Regression items
+
+- [x] An explicitly empty environment never discovers host `CODEX_HOME` or export directories.
+- [x] The exact `4161807c` legacy root is allowed only for the `1860fa17` cleanup task; adjacent names remain blocked.
+
+### Out of scope
+
+- No real owner data, external AI-client configuration, or automatic Core Memory approval.
+
 > 每个包含产品代码、运行时、UI、连接器、数据链路、脚本、依赖或发布流程变化的 PR，都必须在本文件顶部追加一条记录。
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。

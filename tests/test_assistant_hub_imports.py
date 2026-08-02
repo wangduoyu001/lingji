@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -60,6 +61,25 @@ def test_plan_returns_one_guided_action_when_no_export_exists(tmp_path: Path) ->
     assert sources["codex"]["state"] == "guided_action_required"
     assert sources["claude_code"]["state"] == "not_supported"
     assert sources["workbuddy"]["state"] == "not_supported"
+
+
+def test_explicit_empty_environment_does_not_inherit_host_profile(tmp_path: Path) -> None:
+    home = tmp_path / "owner"
+    (home / "Downloads").mkdir(parents=True)
+    host = tmp_path / "host"
+    (host / "Downloads").mkdir(parents=True)
+    (host / "Downloads" / "chatgpt-export.json").write_text("[]", encoding="utf-8")
+
+    previous = os.environ.get("USERPROFILE")
+    os.environ["USERPROFILE"] = str(host)
+    try:
+        planner = AssistantImportPlanner(storage_path=tmp_path / "storage", home=home, env={})
+        assert planner.plan()["summary"]["candidate_count"] == 0
+    finally:
+        if previous is None:
+            os.environ.pop("USERPROFILE", None)
+        else:
+            os.environ["USERPROFILE"] = previous
 
 
 def test_authorized_candidate_is_resolved_only_from_fresh_allowlist(tmp_path: Path) -> None:

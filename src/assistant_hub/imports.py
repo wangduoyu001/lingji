@@ -39,7 +39,7 @@ class AssistantImportPlanner:
     ) -> None:
         self.storage_path = Path(storage_path).expanduser().resolve(strict=False)
         self.home = Path(home or Path.home()).expanduser().resolve(strict=False)
-        self.env = dict(env or os.environ)
+        self.env = dict(os.environ) if env is None else dict(env)
 
     def plan(self) -> dict[str, Any]:
         candidates = self._scan_candidates()
