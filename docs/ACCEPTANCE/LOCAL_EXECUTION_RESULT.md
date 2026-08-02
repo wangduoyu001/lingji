@@ -25,8 +25,8 @@ cleanup_after: BLOCKED_POST_CLEANUP
 remote_branch_verified: true
 remote_commit_verified: true
 remote_report_verified: true
-remote_result_verified: false
-pr_comment_verified: false
+remote_result_verified: true
+pr_comment_verified: true
 local_temp_root_absent: false
 owner_observation: FAIL
 started_at: 2026-08-02T05:16:00Z
