@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "task_id": "PR60-MEMORY-QUALITY-TRIAL-05376996",
+  "verdict": "FAIL",
+  "product_commit": "053769965cf767cfe5221ffa4334b189bedb4d7d",
+  "artifact_id": 8832376546,
+  "day0": {
+    "artifact_identity": "PASS",
+    "startup_binding": "PASS",
+    "control_and_mcp_ports": "PASS",
+    "mcp_single_owner": "PASS",
+    "control_qdrant_second_owner": "PASS",
+    "pre_import_empty_store": "FAIL",
+    "pre_import_vectors": 11,
+    "reason_code": "nonempty_preimport_store"
+  },
+  "real_data_authorized": false,
+  "stage1": "NOT_RUN",
+  "stage2": "NOT_RUN",
+  "blocking_defect": "LJ-05376996-P0-NONEMPTY-DAY0-STORE"
+}
