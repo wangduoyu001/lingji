@@ -8,31 +8,31 @@
 
 ```yaml
 task_id: PR60-MEMORY-QUALITY-TRIAL-4161807C
-status: PENDING
-verdict: PENDING
+status: COMPLETED
+verdict: FAIL
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
 product_commit: 4161807ce4598cc1696093da4a703de101648280
 task_instruction_commit: bc9aead956e363405c39ae784d9beb9ba5bc5dff
 report_branch: acceptance/pr60-memory-quality-trial-4161807c
-report_commit: PENDING
+report_commit: PENDING_REMOTE_VERIFICATION
 report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_4161807c.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_4161807c.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_4161807c.txt
-cleanup_before: NOT_RUN
-cleanup_after: NOT_RUN
+cleanup_before: PASS
+cleanup_after: PENDING_REMOTE_VERIFICATION
 remote_branch_verified: false
 remote_commit_verified: false
 remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
 local_temp_root_absent: false
-owner_observation: NOT_REQUIRED
-started_at: PENDING
-finished_at: PENDING
+owner_observation: CONFIRMED_WITH_UX_FAILURE
+started_at: 2026-08-02T05:16:00Z
+finished_at: 2026-08-02T05:55:00Z
 trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
-day0_result: NOT_RUN
+day0_result: FAIL
 stage1_result: NOT_RUN
 stage2_result: NOT_RUN
 real_data_authorized: false
@@ -57,14 +57,14 @@ binding_contract_version: 1
 binding_id: PR60-MEMORY-QUALITY-TRIAL-4161807C
 expected_data_root: D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-4161807c\product
 expected_workspace: acceptance
-actual_data_root: PENDING
-actual_workspace: PENDING
-binding_verified: false
-automatic_scan_result: NOT_RUN
-automatic_model_refresh_result: NOT_RUN
-automatic_hardware_refresh_result: NOT_RUN
-automatic_recovery_result: NOT_RUN
-owner_global_bootstrap_preserved: NOT_RUN
+actual_data_root: D:\\codex\\LingJiAcceptance\\PR60-MEMORY-TRIAL-4161807c\\product
+actual_workspace: acceptance
+binding_verified: true
+automatic_scan_result: PASS
+automatic_model_refresh_result: PASS
+automatic_hardware_refresh_result: PASS
+automatic_recovery_result: FAIL
+owner_global_bootstrap_preserved: PASS
 ```
 
 ## 2. 当前阶段
