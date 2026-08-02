@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -100,6 +101,28 @@ class AiAssistantDiscoveryTests(unittest.TestCase):
         self.assertEqual(codex["candidate_count"], 1)
         self.assertEqual(codex["discovered_paths"], ["<local>/custom-codex"])
         self.assertNotIn(str(self.root), json.dumps(codex))
+
+    def test_explicit_empty_environment_does_not_inherit_host_codex_home(self) -> None:
+        host_codex_home = self.root / "host-codex"
+        host_codex_home.mkdir()
+        (host_codex_home / "report.json").write_text("{}", encoding="utf-8")
+
+        previous = os.environ.get("CODEX_HOME")
+        os.environ["CODEX_HOME"] = str(host_codex_home)
+        try:
+            payload = AiAssistantDiscoveryService(
+                home=self.home,
+                env={},
+                platform_name="windows",
+            ).scan()
+        finally:
+            if previous is None:
+                os.environ.pop("CODEX_HOME", None)
+            else:
+                os.environ["CODEX_HOME"] = previous
+
+        codex = next(item for item in payload["assistants"] if item["id"] == "codex")
+        self.assertEqual(codex["detection_state"], "not_found")
 
 
 if __name__ == "__main__":

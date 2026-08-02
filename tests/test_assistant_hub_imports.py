@@ -62,6 +62,22 @@ def test_plan_returns_one_guided_action_when_no_export_exists(tmp_path: Path) ->
     assert sources["workbuddy"]["state"] == "not_supported"
 
 
+def test_explicit_empty_environment_does_not_scan_host_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = tmp_path / "owner"
+    host_profile = tmp_path / "host-profile"
+    host_downloads = host_profile / "Downloads"
+    host_downloads.mkdir(parents=True)
+    (host_downloads / "chatgpt-export.zip").write_bytes(b"must-not-be-discovered")
+    monkeypatch.setenv("USERPROFILE", str(host_profile))
+
+    planner = AssistantImportPlanner(storage_path=tmp_path / "storage", home=owner, env={})
+
+    assert planner.plan()["summary"]["candidate_count"] == 0
+
+
 def test_authorized_candidate_is_resolved_only_from_fresh_allowlist(tmp_path: Path) -> None:
     home = tmp_path / "owner"
     downloads = home / "Downloads"

@@ -54,7 +54,10 @@ def executable_invocation(
     list; no owner-provided shell fragment is accepted.
     """
 
-    environment = dict(env or os.environ)
+    # An explicitly supplied empty mapping is an isolation boundary.  Falling
+    # back to the process environment here would make fixture-only scans probe
+    # the owner's PATH and can turn "not found" into a misleading result.
+    environment = dict(os.environ) if env is None else dict(env)
     selected_platform = platform or os.name
     path = str(Path(executable).expanduser())
     suffix = Path(path).suffix.casefold()
@@ -77,7 +80,9 @@ def enumerate_executable_candidates(
 ) -> list[str]:
     """Enumerate deterministic PATH/npm candidates without recursive disk scans."""
 
-    environment = dict(env or os.environ)
+    # See ``executable_invocation``: empty is deliberately different from
+    # omitted for owner-data isolation.
+    environment = dict(os.environ) if env is None else dict(env)
     selected_platform = platform or os.name
     windows = selected_platform == "nt"
     path_value = str(environment.get("PATH") or "")
