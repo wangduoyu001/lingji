@@ -21,10 +21,12 @@ For a ready, unlocked, non-rebuild vector service, Collection/vector emptiness i
 | Gate | Result |
 |---|---|
 | Focused vector/runtime regression | PASS — 14 passed |
-| Complete Python suite | PENDING |
-| Desktop smoke/build | PENDING |
-| Rust/Tauri | PENDING |
-| Unified release | PENDING |
+| Complete Python suite | PASS — unified release suite `python-full` |
+| Desktop smoke/build | PASS — both suites passed |
+| Rust/Tauri | PASS — 111.52 seconds |
+| Unified release | PASS — 15/15 suites on `3807330e33be7577785bff920b9b7331a1be56a5` |
 | Fresh Artifact Day 0 | PENDING |
+
+The local release metadata is schema 5 and binds to the exact validated commit. The locally produced installer SHA-256 is `268d75062e172909a3d0961a7fe6c82b0d5e5e76f86bd32d66ce65e5d3fe161b`, portable executable SHA-256 is `4c1420018939444d0221303ce89fdad97eba6c3a41ba579c1f7dbbcfa0fc57aa`, sidecar executable SHA-256 is `a363eee05879cc71f4df0ce9ec9bd3f0cdf6048848d81bdcf656da69c122e39d`, and manifest SHA-256 is `cfda1a34c921dbd6d485c314f60be61d9d1d13b1d0846189dedbfab4680eb71d`.
 
 No real owner content, Production data, external AI-client configuration, permanent memory or Qdrant collection is modified by this repair.

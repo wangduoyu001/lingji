@@ -3,7 +3,7 @@
 ## 2026-08-02 · PR #60 · fresh empty-vector state precedence recovery
 
 - Product branch: `codex/pr60-empty-vector-state-6214ac48`
-- Product commit: `872b15c7c13bd28395c1781c569f9c6a0c5c3def`
+- Product commit: `3807330e33be7577785bff920b9b7331a1be56a5`
 - Affected modules: MCP-published memory/vector status normalization and fresh Day 0 UI/API truth.
 - Risk level: P0
 - User-visible change: a fresh empty DataRoot reports `empty / collection_empty` even before the configured Embedding model has completed a real request verification.
@@ -12,7 +12,7 @@
 ### Automated acceptance
 
 - [x] `python -m pytest -q tests/test_vector_truth_contract.py tests/test_semantic_runtime_wiring.py`: 14 passed; empty Collection truth takes precedence over unverified Embedding while lock/rebuild/service failure behavior remains unchanged.
-- [ ] Unified `scripts/validate.ps1 -Mode release` on the exact repair commit.
+- [x] Unified `scripts/validate.ps1 -Mode release` on exact commit `3807330e33be7577785bff920b9b7331a1be56a5`: 15/15 suites passed.
 
 ### Real-machine acceptance
 
