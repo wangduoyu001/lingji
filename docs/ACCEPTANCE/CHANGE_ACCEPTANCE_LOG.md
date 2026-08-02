@@ -11,7 +11,8 @@
 
 ### Automated acceptance
 
-- [x] `python -m pytest -q tests/test_packaged_control_api.py tests/test_mcp_http_auth.py tests/test_mcp_server.py tests/test_assistant_hub_imports.py tests/test_assistant_hub_api.py` (40 passed)
+- [x] `python -m pytest -q tests/test_p2_07_integration_wiring.py tests/test_packaged_control_api.py tests/test_mcp_http_auth.py tests/test_mcp_server.py tests/test_assistant_hub_imports.py tests/test_assistant_hub_api.py` (44 passed): verifies the MCP worker remains in its semantic owner process while the standard MCP server keeps its direct-stdio pipeline contract.
+- [x] `python -m pytest -q --tb=short` (620 passed, 10 skipped): verifies the complete cross-platform unit suite after the ownership change.
 - [x] `python scripts/check_acceptance_sync.py`
 
 ### Real-machine acceptance
@@ -20,8 +21,9 @@
 
 ### Regression items
 
-- [ ] Parent Sidecar must not start a second extraction worker.
-- [ ] MCP worker must stop with its owner process and preserve queue completion semantics.
+- [x] Parent Sidecar must not start a second extraction worker.
+- [x] Direct stdio MCP retains its existing pipeline construction and skill-registry layout.
+- [ ] MCP worker must stop with its owner process and preserve queue completion semantics on the new Artifact.
 
 ### Out of scope
 
