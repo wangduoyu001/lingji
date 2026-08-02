@@ -25,7 +25,7 @@ cleanup_after: PASS
 remote_branch_verified: true
 remote_commit_verified: true
 remote_report_verified: true
-remote_result_verified: false
+remote_result_verified: true
 pr_comment_verified: true
 local_temp_root_absent: true
 owner_observation: NOT_REACHED_DUE_TO_P0
