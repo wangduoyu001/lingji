@@ -1,5 +1,38 @@
 # 验收要求变更记录
 
+## 2026-08-02 · PR #60 · fresh Day 0 generated-scaffold truth recovery
+
+- Product branch: `codex/pr60-vector-snapshot-truth-05376996`
+- Product commit: `d82f23517eb537473f141955173aba82d26f1ddc` (integrated local release-validation commit)
+- Affected modules: single-Vault retrieval eligibility, fresh memory-gateway bootstrap, and MCP-published empty-store status.
+- Risk level: P0
+- User-visible change: a newly created LingJi DataRoot no longer reports generated permanent-memory UI scaffolding as owner knowledge, Core Memory, or healthy semantic vectors before any authorized import.
+- Data and security boundary: generated dashboards and templates remain available in Obsidian, while only owner/imported knowledge enters the rebuildable lexical and semantic indexes; no real owner content is read by this repair.
+
+### Automated acceptance
+
+- [x] `python -m pytest -q tests/test_vault_layout.py tests/test_semantic_runtime_wiring.py tests/test_permanent_memory_gateway.py` (18 passed): generated permanent-memory UI files exist but are excluded from retrieval, an owner-created System rule remains indexable, and a fresh gateway publishes 0 documents/chunks/vectors with `collection_empty` truth.
+- [x] `python -m pytest -q --tb=short` (623 passed, 10 skipped, 3 subtests passed before the acceptance-contract merge; combined tree passed again inside unified release validation): complete Python regression suite.
+- [x] `python scripts/check_acceptance_sync.py`: product changes carry the incremental acceptance contract. Final handoff check remains part of the exact committed release tree.
+- [x] `npm ci --no-audit --no-fund`, `npm run test:smoke` (22 scripts), and `npm run build` in `desktop/lingji-control`.
+- [x] `scripts/validate.ps1 -Mode release` on integrated commit `d82f23517eb537473f141955173aba82d26f1ddc`: all 15 suites passed, including clean install, full Python, Desktop smoke/build, Rust/Tauri, Sidecar, NSIS, and Windows package generation; summary and package metadata both reread the exact commit.
+
+### Real-machine acceptance
+
+- [ ] Build a new Windows Artifact from the merged repair Head, delete only the named task root with the product cleanup utility, and repeat a fresh locked acceptance Day 0.
+- [ ] Before any fixture or authorization, authenticated API and packaged UI both report 0 documents, 0 chunks, 0 Core Memory, and 0 vectors; lexical remains available and semantic reports `empty / collection_empty`.
+- [ ] After owner-authorized synthetic import, the MCP-owned index transitions to a coherent non-empty state without a second Qdrant owner.
+
+### Regression items
+
+- [x] `00-System/Permanent-Memory.md` and everything under `00-System/Templates` are excluded by the authoritative retrieval eligibility rule.
+- [x] `00-System/Rules` and formal knowledge/Core Memory paths remain indexable in regression coverage.
+- [x] Permanent-memory dashboard, Base, and template files remain generated for owner operation.
+
+### Out of scope
+
+- No automatic permanent-memory approval, real owner-data read, external AI-client mutation, or second memory/index implementation.
+
 ## 2026-08-02 · PR #60 · exact release Git identity recovery
 
 - Product branch: `codex/pr60-validation-git-identity-05376996`

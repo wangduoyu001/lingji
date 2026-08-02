@@ -1,10 +1,11 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
-> Updated: 2026-07-29
+> Updated: 2026-08-02
 > Formal and default branch: `master`
 > Stable Windows baseline: `18b99a6909e929df432253686eeaeee3ed9f7024`
 > Current UI work: PR #56 `feature/desktop-guided-usage`
-> Current stacked connector work: `feature/unified-ai-memory-connectors`
+> Current stacked connector work: PR #60 `feature/unified-ai-memory-connectors`
+> Current local closeout repair: `codex/pr60-vector-snapshot-truth-05376996`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
 > Validation evidence: `docs/TEST_REPORTS/`
@@ -38,8 +39,14 @@ Desktop guided usage + AI Assistant Hub + memory import onboarding
 
 feature/unified-ai-memory-connectors
 Codex / Claude Code / WorkBuddy shared-memory connector productization
-状态：STACKED_ON_PR56 / code complete / automated validation pending
+状态：PR #60 DRAFT / final local closeout RUNNING
+
+codex/pr60-vector-snapshot-truth-05376996
+Fresh Day 0 generated-scaffold truth recovery
+状态：PHASE_2_REPAIR / regression and release validation in progress
 ```
+
+固定 `05376996 / Artifact 8832376546` 的独立空白 Day 0 已在 2026-08-02 复现 P0：自动生成的永久记忆仪表盘和模板被错误计为 2 个正式文档、11 个分块与 11 个健康向量。当前最小修复保留 Obsidian 操作界面，只从唯一检索资格规则排除生成 Dashboard/Template；新 Artifact 和重新 Day 0 通过前，PR #60 不得转 Ready。
 
 下一后端阶段：
 
