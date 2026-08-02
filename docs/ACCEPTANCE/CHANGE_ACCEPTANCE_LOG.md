@@ -3,7 +3,7 @@
 ## 2026-08-02 · PR #60 · read-only installer directory cleanup recovery
 
 - Product branch: `codex/pr60-cleanup-readonly-dir-623d3c9d`
-- Product commit: `pending (local final-closeout cleanup repair)`
+- Product commit: `018e7d25327846cce08bb9f25cd3faf1db13c2ac`
 - Affected modules: task-scoped acceptance cleanup execution and Windows installer-profile cleanup regression coverage.
 - Risk level: P0
 - User-visible change: final acceptance cleanup completes when NSIS has left an empty Start Menu directory with the Windows read-only attribute.
@@ -12,7 +12,7 @@
 ### Automated acceptance
 
 - [x] `python -m pytest -q tests/test_cleanup_acceptance_workspace.py`: `13 passed`; an authorized task root containing a read-only installer directory is fully removed, while unrelated targets remain protected.
-- [ ] `python -m pytest -q --tb=short`, Desktop smoke/build, Rust/Tauri, and unified release validation.
+- [x] Unified `scripts/validate.ps1 -Mode release`: `15/15 PASS` on exact commit `018e7d25327846cce08bb9f25cd3faf1db13c2ac`, including Python full, Desktop smoke/build, Rust/Tauri, Sidecar and Windows release packaging.
 
 ### Real-machine acceptance
 
@@ -20,8 +20,8 @@
 
 ### Regression items
 
-- [ ] Only normal directories receive writable attributes immediately before `os.rmdir`; reparse/link handling remains separate.
-- [ ] No wildcard, parent-root, neighbor, production, Vault, or unknown-worktree deletion is authorized.
+- [x] Only normal directories receive writable attributes immediately before `os.rmdir`; reparse/link handling remains separate.
+- [x] No wildcard, parent-root, neighbor, production, Vault, or unknown-worktree deletion is authorized.
 
 ### Out of scope
 
