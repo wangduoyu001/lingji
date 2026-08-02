@@ -7,29 +7,29 @@
 ## 1. 当前任务元数据
 
 ```yaml
-task_id: PR60-MEMORY-QUALITY-TRIAL-4161807C
+task_id: PR60-MEMORY-QUALITY-TRIAL-1860FA17
 status: ACTIVE
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
 product_branch: feature/unified-ai-memory-connectors
-product_commit: 4161807ce4598cc1696093da4a703de101648280
-artifact_name: lingji-windows-0.1.0-4161807c
-artifact_id: 8821878623
-artifact_zip_sha256: c1019006509033a45debf24fd5530133cda2a804d051424a66a0c3d122c680ab
+product_commit: 1860fa17c5de26b0ff4d54ace48158a6e343505a
+artifact_name: lingji-windows-0.1.0-1860fa17
+artifact_id: 8830371064
+artifact_zip_sha256: 8c4d5de5ed678063f70896bede94905c941962ba744a53de6537ee2714ab9e37
 installer_name: LingJi_0.1.0_windows_x64_setup.exe
-installer_sha256: 219c5866ad22b5a1b6e6ea0d78c02fb2b4a392548d3cb9b360a236d9d6bdf931
+installer_sha256: ea109577ad86ee6b800973fbd5ca0c48cb0d0c7d98d5a67e82379a8b795c54a2
 portable_name: LingJi_0.1.0_windows_x64.exe
-portable_exe_sha256: c49c46f32d9b4e52c0e32754c16b4bf8f67cfb9a7d61d90ea782a2a524508210
-sidecar_exe_sha256: 76c36cd02735afd556ebdfd9a0af4ebf0a8879eaccb56dc1252f1ea8466b9d20
-manifest_sha256: 50168354b918f318a71677892c4d5fd6e6dc85cbdf18ae0599d31bf12d61f368
-build_metadata_sha256: 73726765d1293d0a4ef7b3e72150208da98919abfaf53c7a681b35181c1a75a2
-artifact_workflow_run_id: 30710872683
+portable_exe_sha256: 51266810195ff8ed2d1ef9dc16b7144aef1db2bf2898a420894b3d0c352d068e
+sidecar_exe_sha256: e6c005210a8b7e8c84bb7e4460110033c2aa8c026a1ea0da0fb49205cb0d72ae
+manifest_sha256: fd80bfa9e2acb7cb158e6e936980e974a6abad51dc2e6b510a24ba9a96f6a240
+build_metadata_sha256: 62bf86b9c2b666d27730de6ebb70b6e70bfdb515d57dab380810985b2ea3dfe7
+artifact_workflow_run_id: 30738090397
 trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
-report_branch: acceptance/pr60-memory-quality-trial-4161807c
-report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_4161807c.md
-public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_4161807c.json
-public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_4161807c.txt
+report_branch: acceptance/pr60-memory-quality-trial-1860fa17
+report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_1860fa17.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_1860fa17.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_1860fa17.txt
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
 day0_required: true
 real_data_requires_day0_pass: true
@@ -45,364 +45,362 @@ remote_verification_required: true
 owner_confirmation_required: true
 ```
 
-## 2. 产品原则
+## 2. 当前唯一产品身份
 
-本轮不是让主人按按钮驱动工作流。目标是验证：
-
-```text
-灵机主动发现
-→ 主动检查
-→ 主动执行可逆低风险动作
-→ 自动重试与恢复
-→ UI持续展示状态、进度、DataRoot、阻塞和证据
-→ 只有读取真实正文、修改外部客户端配置、永久记忆或不可逆操作时请求主人决定
-```
-
-菜单必须保留，作为查看、授权、诊断和手动干预入口；不得把菜单存在误解成主人必须逐项操作。
-
-## 3. 固定远程身份
-
-必须精确确认：
+只允许使用：
 
 ```text
-origin/feature/unified-ai-memory-connectors
-= 4161807ce4598cc1696093da4a703de101648280
-
-Artifact 8821878623
-= lingji-windows-0.1.0-4161807c
-= head_sha 4161807ce4598cc1696093da4a703de101648280
+Product Head：1860fa17c5de26b0ff4d54ace48158a6e343505a
+Artifact：lingji-windows-0.1.0-1860fa17
+Artifact ID：8830371064
+Workflow：Windows Desktop Release Baseline #146 / run 30738090397
 ```
 
 精确 Head 已通过：
 
 ```text
-local-execution-handoff #101
-acceptance-doc-sync #135
-tests #1189
-P0 Windows Gate #262
-Windows Desktop Release Baseline #144
+local-execution-handoff #123
+acceptance-doc-sync #193
+tests #1208
+P0 Windows Gate #264
+Windows Desktop Release Baseline #146
 ```
 
-旧产品提交 `1c514877`、`d69874af`、`3e24e65c` 与 Artifact `8723868744`、`8762312712`、`8820695386` 均为历史失败身份，禁止下载、安装或复验。
+旧提交和 Artifact，包括 `4161807c / 8821878623`、`b68711fd / 8830090726` 以及更早版本，均为失败或被替代身份，禁止下载、安装、复验或从其报告推断行为。
 
-PR #60 必须保持 Draft，整个 Day 0 与 Stage 1 完成前不得合并。
+PR #60 必须保持 Draft，不得合并到 master。
 
-## 4. 阶段边界
+## 3. 产品工作方式
+
+本轮不是让主人逐项点击菜单。验收目标是：
 
 ```text
-Day 0：合成资料、隔离配置、元数据扫描、自动运行与恢复验证。
-Stage 1：仅在 Day 0 PASS 且主人明确授权一个具名真实资料范围后执行。
-Stage 2：Stage 1 PASS 后才允许扩大授权范围。
+灵机主动发现
+→ 主动检查
+→ 自动执行低风险可逆动作
+→ 自动入队、去重、刷新、重试和恢复
+→ UI 展示状态、证据、进度、阻塞与授权边界
+→ 只在读取真实正文、修改外部客户端、永久记忆或不可逆操作时请求主人决定
 ```
 
-Day 0 前和过程中：
+Codex负责安装、启动、窗口操作、API调用、截图、日志、重启、报告、Git提交、远程复读和清理。主人只负责：
 
-- 真实资料正文读取数必须为 0；
-- 不得读取真实剧本、ChatGPT正文、Obsidian正文或 Codex Session/JSONL；
-- 允许只读安装状态、已知目录存在性、类型、支持状态和近似数量；
-- 不得自动修改主人真实 Codex/Claude/WorkBuddy 配置；
-- 不得自动下载模型或重建 Production Qdrant；
-- 不得自动批准永久记忆。
+1. 观察 UI 是否一眼可懂；
+2. 明确授权读取任务生成的合成导出包；
+3. 指定一个合成候选批准、一个合成候选拒绝；
+4. 明确允许 Windows 重启；
+5. Day 0 全部 PASS 后，另行授权具体真实资料范围。
 
-## 5. 唯一临时根与安全清理
+主人不得被要求手工填写路径、手工刷新状态、手工执行命令、手工上传报告或手工清理目录。
 
-唯一任务目录：
+## 4. 开始前清理
+
+### 4.1 使用修复后的清理工具
+
+先建立精确产品 Commit 的只读/隔离 worktree，并从该 worktree调用：
+
+```text
+scripts/cleanup_acceptance_workspace.py
+```
+
+禁止使用旧 master 中可能尚未包含 `DRY_RUN_READY` 修复的脚本。
+
+### 4.2 清理上一轮失败根
+
+目标：
 
 ```text
 D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-4161807c
 ```
 
-若存在，先执行 dry-run：
-
-```powershell
-python scripts/cleanup_acceptance_workspace.py `
-  --task-id PR60-MEMORY-QUALITY-TRIAL-4161807C `
-  --target D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-4161807c
-```
-
-清单只能包含该任务目录。确认后追加 `--execute`。不得手工强删、不得删除共享父目录、不得扩大白名单。
-
-开始前确认：
-
-- 8766、8767 空闲；
-- 无 LingJi、Sidecar、MCP 遗留进程；
-- 旧任务专属目录均不存在；
-- 主工作区原有未跟踪文件不得修改；
-- Production DataRoot、Vault、SQLite、Qdrant 不得读取或修改。
-
-## 6. Artifact 下载与复核
-
-只下载 Artifact `8821878623`，逐项验证：
+任务身份：
 
 ```text
-ZIP：c1019006509033a45debf24fd5530133cda2a804d051424a66a0c3d122c680ab
-Installer：219c5866ad22b5a1b6e6ea0d78c02fb2b4a392548d3cb9b360a236d9d6bdf931
-Portable：c49c46f32d9b4e52c0e32754c16b4bf8f67cfb9a7d61d90ea782a2a524508210
-Sidecar：76c36cd02735afd556ebdfd9a0af4ebf0a8879eaccb56dc1252f1ea8466b9d20
-Manifest：50168354b918f318a71677892c4d5fd6e6dc85cbdf18ae0599d31bf12d61f368
-build-metadata.json：73726765d1293d0a4ef7b3e72150208da98919abfaf53c7a681b35181c1a75a2
+PR60-MEMORY-QUALITY-TRIAL-4161807C
 ```
 
-`build-metadata.json` 必须包含：
+先 dry-run。合法结果必须是：
+
+```text
+status = DRY_RUN_READY
+authorized = true
+next_action = rerun_with_execute
+```
+
+确认清单只在该唯一任务根下后，自动追加 `--execute`。最终必须：
+
+```text
+status = PASS
+next_action = cleanup_complete 或 nothing_to_remove
+目标目录不存在
+相邻目录与主人数据未变化
+```
+
+不得因为 dry-run列出待删除项就标记 `BLOCKED`，也不得绕过脚本手工强删。
+
+### 4.3 环境保护
+
+开始前必须：
+
+- 关闭旧 LingJi Desktop；
+- 清空遗留 LingJi、Sidecar、MCP进程；
+- 确认 8766、8767 空闲；
+- 记录现有安装版本；
+- 备份全局 bootstrap并记录哈希或“不存在”；
+- 不读取主人真实 `CODEX_HOME`、ChatGPT、剧本、Vault或其他私人正文；
+- 不修改 Production DataRoot、Production Vault、SQLite或 Qdrant。
+
+## 5. 当前任务隔离环境
+
+唯一任务根：
+
+```text
+D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-1860fa17
+```
+
+产品 DataRoot：
+
+```text
+D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-1860fa17\product
+workspace = acceptance
+```
+
+任务专属环境：
+
+```text
+LOCALAPPDATA = <任务根>\profile\LocalAppData
+APPDATA      = <任务根>\profile\AppData
+USERPROFILE  = <任务根>\profile\User
+HOME         = <任务根>\profile\User
+CODEX_HOME   = <任务根>\profile\CodexHome
+```
+
+使用任务专属启动绑定契约，必须锁定：
+
+- 精确 DataRoot；
+- `acceptance` workspace；
+- 唯一 binding id；
+- 非 C盘；
+- 不允许 UI覆盖；
+- 不允许回退全局 bootstrap；
+- 不允许接管外部 Runtime。
+
+## 6. Artifact核验与覆盖安装
+
+只下载 Artifact `8830371064`，依次验证任务 YAML 中全部哈希。
+
+`build-metadata.json` 必须显示：
 
 ```text
 schema_version = 5
-commit = 4161807ce4598cc1696093da4a703de101648280
 version = 0.1.0
+commit = 1860fa17c5de26b0ff4d54ace48158a6e343505a
 channel = pr
+target = x86_64-pc-windows-msvc
 installer_format = nsis
 signed = false
+first_run_configuration_required = false
 automatic_safe_non_system_drive_selection = true
 startup_binding_contract_supported = true
 runtime_binding_identity_required = true
 external_runtime_adoption_allowed = false
 owner_authorization_required_for_real_content = true
+c_drive_runtime_data_allowed = false
 ```
 
-任一不符立即停止。
+覆盖安装，不卸载主人数据。身份不符立即 `BLOCKED_WRONG_IDENTITY`。
 
-## 7. 启动契约与物理隔离
+## 7. Day 0 自动执行与门禁
 
-### 7.1 创建任务启动契约
+### 7.1 首次恢复
 
-在任务目录创建：
+Codex启动 Desktop并计时。必须在 45 秒内同时满足：
+
+- 8766鉴权健康；
+- 8767 MCP可用；
+- Desktop显示 Runtime ready；
+- Runtime ping反向证明精确 DataRoot和 workspace；
+- 无黑色控制台窗口；
+- 无 Production路径；
+- 无第二个 MCP/Qdrant拥有者。
+
+超过45秒、第一轮失败后依赖第二轮人工重试，均记 Day 0 FAIL。
+
+### 7.2 合成导出包和自动发现
+
+只在隔离 `USERPROFILE\Downloads` 创建：
+
+1. 一个格式有效、内容明确的合成 ChatGPT Export；
+2. 一个格式有效、内容明确的合成 Codex Work Report；
+3. 一个无关 JSON 和一个无关 ZIP作为负面样本。
+
+合成内容不得复制主人真实资料，只能包含虚构项目、虚构偏好和确定性答案。
+
+灵机必须自动扫描元数据：
+
+- 只识别两个受支持导出包；
+- 不把无关 JSON/ZIP列为候选；
+- 不向前端暴露绝对路径；
+- 不跟随符号链接；
+- 未授权前正文读取数为0。
+
+### 7.3 一步导入
+
+发现候选后 UI必须只提供一个主要动作：
 
 ```text
-startup-binding.json
+授权最近导出包并开始导入
 ```
 
-内容必须为：
+主人在聊天中明确授权合成包后，Codex代为触发 UI或受控 API。必须：
 
-```json
-{
-  "schema_version": 1,
-  "binding_id": "PR60-MEMORY-QUALITY-TRIAL-4161807C",
-  "data_root": "D:\\codex\\LingJiAcceptance\\PR60-MEMORY-TRIAL-4161807c\\product",
-  "workspace": "acceptance"
-}
-```
+- 一次授权后立即进入正式采集队列；
+- 不再出现路径输入；
+- 不再出现第二个“提交导入”；
+- 自动展示处理、去重、完成或失败重试；
+- 不自动写 Core Memory。
 
-### 7.2 隔离 Desktop 小配置
+另用一个受支持但未被自动发现的合成文件验证：选择文件后立即入队，不得二次提交。
 
-记录主人原始文件是否存在及 SHA256，但不得打开其内容：
+Claude Code和 WorkBuddy等无正式历史适配器的来源只显示边界说明，不得展示无效导入按钮。
+
+### 7.4 Codex命令与真实 MCP
+
+必须在隔离环境下验证：
+
+1. 枚举确定性 PATH/PATHEXT/npm候选；
+2. 若 `WindowsApps\codex.exe` 返回 Access Denied，自动跳过；
+3. 继续选择可启动的 `codex.cmd`、`codex.exe`或其他合法 PATH候选；
+4. UI分别显示：
+   - 配置状态；
+   - 候选存在；
+   - 实际命令可启动；
+   - 最终选中命令；
+   - 真实客户端注册状态；
+5. 真实执行 `codex mcp list`，必须列出 `lingji-memory`；
+6. 完成至少一次真实 Codex MCP调用，命中当前验收 Runtime并返回合成资料中的确定答案。
+
+没有可启动候选、真实命令被拒绝、未列出 `lingji-memory`、错误端口、错误 DataRoot或鉴权失败，均为 Day 0 FAIL。不得用配置文件存在代替真实成功。
+
+### 7.5 Qdrant与检索真相
+
+必须验证 MCP是 SQLite/Qdrant唯一实时拥有者：
 
 ```text
-%LOCALAPPDATA%\LingJi\desktop-bootstrap.json
+runtime/memory-owner.lock = OS互斥
+runtime/memory-owner.json = 可读诊断
 ```
 
-启动安装版 Desktop 时，使用任务专属进程环境：
+Control API只能读取 MCP发布的 `memory_status.json`，不得再次打开同一嵌入式 Qdrant目录。
 
-```text
-LOCALAPPDATA=D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-4161807c\localappdata
-APPDATA=D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-4161807c\appdata
-LINGJI_BOOTSTRAP_CONTRACT_FILE=D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-4161807c\startup-binding.json
-```
+状态必须一致：
 
-不得修改主人全局 bootstrap。结束时其存在状态和 SHA256 必须与开始前一致。
+- 尚无向量：`empty / collection_empty`；
+- `semantic_search_available = false`；
+- `lexical_search_available = true`；
+- 不得显示 healthy；
+- 导入和索引完成后，向量数量、Collection、覆盖率、Embedding和语义检索可用性必须相互一致；
+- 不得出现 `ready + 0 vectors`；
+- 不得出现 Control显示正常、MCP显示目录被锁；
+- 快照过期不得宣称语义检索可用。
 
-### 7.3 安装与启动
+### 7.6 合成候选审核
 
-- 使用固定 Installer 覆盖安装，不卸载主人数据；
-- 安装过程不得自动启动无契约 Desktop；优先使用 NSIS 静默安装；
-- 安装后由 Codex在上述任务专属环境中启动 Desktop；
-- 不要求主人手动选择目录、启动核心、点击扫描或逐项刷新；
-- 若启动契约无效、8766被占用、Runtime根不匹配或 workspace错误，必须阻断，不得退回旧 bootstrap。
+从合成资料生成至少两个候选：
 
-## 8. Day 0 自动验收
-
-Codex负责自动完成以下低风险动作并记录证据：
-
-### 8.1 DataRoot 身份自证
-
-必须同时满足：
-
-```text
-UI expected DataRoot = 任务 product 根
-UI actual DataRoot = 任务 product 根
-UI workspace = acceptance
-UI binding source = startup_contract
-UI binding id = PR60-MEMORY-QUALITY-TRIAL-4161807C
-UI binding verified = true
-/api/runtime/ping binding_contract_version = 1
-/api/runtime/ping data_root = 任务 product 根
-/api/runtime/ping workspace = acceptance
-```
-
-只验证端口、Token或HTTP 200不得算 PASS。
-
-### 8.2 自动工作行为
-
-不经过主人点击，连接后必须自动执行并在 UI显示进度：
-
-- AI软件与允许历史目录元数据扫描；
-- 模型状态刷新；
-- 硬件与运行能力刷新；
-- Runtime启动与身份核验；
-- 状态轮询、失败重试和自动恢复；
-- 已授权合成资料的解析、去重、排队与进度更新。
-
-UI必须明确展示：
-
-- 灵机当前正在做什么；
-- 已完成项目；
-- 失败或后台重试项目；
-- 精确 DataRoot、workspace、绑定来源与验证结果；
-- 哪一项正在等待主人授权或决定。
-
-### 8.3 UI定位
-
-必须观察到：
-
-```text
-菜单完整存在；
-日常入口表达为查看状态、查看进度、查看授权或手动干预；
-不存在“主人必须按1→2→3逐项操作”的流程；
-不存在“扫描我的AI软件”作为启动必需按钮；
-不存在“唯一推荐下一步”把主人当工作流引擎；
-```
-
-### 8.4 Codex三层状态与真实MCP
-
-页面分别展示：
-
-```text
-配置目录状态
-codex命令状态
-真实MCP调用状态
-```
-
-只有真实调用成功才可显示 ready。使用隔离临时 `CODEX_HOME` 或等效副本，完成至少一次真实 MCP 调用，命中当前 acceptance Runtime并返回合成资料的确定答案。不得读取或修改主人真实 Codex配置正文。
-
-### 8.5 Embedding与Qdrant
-
-页面必须分别显示配置模型、实际激活模型、缺失模型、最近错误、Qdrant模式/服务、collection/index、是否需重建、全文检索影响、语义检索影响和自动修复进度。
-
-禁止恢复模糊文案：
-
-```text
-配置存在但尚未激活；全文检索仍可用，后续从向量中心处理
-```
-
-### 8.6 合成候选与永久记忆边界
-
-Codex自动创建至少两个合成候选并展示来源、内容、目标层级和后果，但不得自行批准或拒绝。
-
-到达此处后暂停，只请求主人给出一次明确决定，例如：
-
-```text
-候选A批准，候选B拒绝
-```
-
-主人作出决定后，Codex代为执行并验证：
-
+- 主人明确指定一个批准；
+- 主人明确指定一个拒绝；
+- Codex代为执行 UI动作；
 - 批准前 Core Memory不增加；
-- 批准项进入正确层级；
-- 拒绝项不进入永久记忆；
-- UI结果清晰可观察。
+- 拒绝项不得进入永久记忆；
+- UI显示来源、候选内容、目标层级和后果。
 
-### 8.7 生命周期
+### 7.7 生命周期
 
-Codex自动完成：
+自动验证：
 
-- Core/Sidecar连续重启3次；
-- Desktop关闭并在同一任务环境重新打开；
-- 每次恢复后重新验证DataRoot身份；
-- 无黑窗、无Production污染、状态和候选正确恢复。
+- Core/Sidecar/MCP连续重启3次；
+- Desktop关闭再打开；
+- 每轮在预算内恢复；
+- 8766/8767、DataRoot、workspace、binding、owner lock和候选状态正确；
+- 无孤儿进程；
+- 无 Production污染。
 
-Windows重启属于中断性操作，执行前只请求主人一次明确许可。获准后由Codex执行重启并继续验证，不要求主人手动恢复服务。
+在 Windows重启前只向主人请求一次许可。重启后自动继续并验证同一状态。
 
-## 9. 主人观察点
+## 8. 主人检查点
 
-主人不是操作员，只需观察和决定。Codex在自动部分完成后集中提供一份可读摘要，并等待以下确认：
+Codex只在以下位置暂停：
 
 ```text
-Checkpoint A：UI显示灵机主动运行，精确DataRoot/工作空间/绑定验证清楚；没有要求我逐项启动、扫描或刷新。
-Checkpoint B：自动扫描和进度可见；读取真实正文前确实停在授权边界。
-Checkpoint C：Codex三层状态一致，真实MCP调用成功。
-Checkpoint D：Embedding/Qdrant原因、影响与自动处理进度一眼可懂。
-Checkpoint E：主人给出候选A/B决定，Codex执行后结果正确。
-Checkpoint F：主人授权Windows重启后，灵机自动恢复且绑定身份不漂移。
+A：首启在45秒内恢复，UI状态、DataRoot和当前动作清楚。
+B：合成导出包已自动发现；请求主人授权读取并导入。
+C：一键导入、Codex真实MCP和Qdrant状态一致；展示证据。
+D：请求主人指定一个候选批准、一个拒绝。
+E：请求主人允许 Windows重启。
+F：重启恢复、清理和远程报告完成；展示最终证据。
 ```
 
 主人未明确确认 A-F 前：
 
 ```text
-day0_result 不得写 PASS
+day0_result 不得为 PASS
 real_data_authorized 必须为 false
-stage1_result / stage2_result 必须为 NOT_RUN
+stage1_result = NOT_RUN
+stage2_result = NOT_RUN
 ```
 
-## 10. Stage 1
+## 9. Stage 1边界
 
-只有 Day 0 与 A-F 全部 PASS 后，Codex才可请求一个具名、最小化真实资料授权范围。未收到主人明确授权时保持：
+Day 0与主人检查点全部 PASS 后，Codex必须停止。只有主人另行给出**明确命名的真实资料范围**，才可进入 Stage 1。
+
+未经授权，禁止读取真实剧本、ChatGPT内容、Codex Session/JSONL、Obsidian正文或其他私人正文。
+
+质量阈值仍按 YAML执行：至少20道质量题、主人抽查至少10道、质量分不低于90%、来源准确率不低于95%、误报率不高于5%、Codex MCP成功率不低于95%、重复正式内容0、Production污染0。
+
+## 10. 结束清理
+
+报告第一次远程确认后，使用精确产品 Commit中的修复脚本清理：
 
 ```text
-real_data_authorized: false
-stage1_result: NOT_RUN
-stage2_result: NOT_RUN
+D:\codex\LingJiAcceptance\PR60-MEMORY-TRIAL-1860fa17
 ```
 
-授权后按 `docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md` 执行至少20道质量题、主人抽查至少10道，并满足既定质量阈值。不得自行扩大授权范围。
+先 dry-run，必须为 `DRY_RUN_READY`；随后自动 `--execute`，最终目标不存在。不得让主人手工删除。
 
-## 11. 报告、远程复读与清理
+同时删除本轮 Artifact副本、安装包、日志、截图、fixture、checkpoint、临时配置、worktree和合成导出包；恢复原 bootstrap哈希或原不存在状态。不得删除主人正式数据或其他任务目录。
 
-报告分支：
+## 11. 提交与远程复读
 
-```text
-acceptance/pr60-memory-quality-trial-4161807c
-```
+Codex必须：
 
-提交并远程复读：
+1. 创建 `acceptance/pr60-memory-quality-trial-1860fa17`；
+2. 写入报告、公开摘要、公开哈希和结果回执；
+3. push；
+4. 使用远程 API重新读取分支、Commit、报告、回执和 PR #60评论；
+5. 完成清理；
+6. 更新回执并再次 push；
+7. 再次远程复读；
+8. PR #60保持 Draft。
 
-```text
-docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_4161807c.md
-docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_4161807c.json
-docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_4161807c.txt
-docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
-PR #60 评论
-```
+报告不得包含 Token、私人正文、完整主人路径清单、数据库、安装包、node_modules、dist或未脱敏日志。
 
-禁止提交安装包、数据库、Token、私人正文、真实路径全集、node_modules、dist或未脱敏日志。
+## 12. 最终判定
 
-第一次远程复读成功后：
+Day 0 PASS至少要求：
 
-- 停止任务创建的进程和监听；
-- 删除任务专属 Artifact、安装包、启动契约、临时配置、fixture、日志、截图和worktree；
-- 使用安全清理工具删除任务唯一临时根；
-- 共享父目录允许保留；
-- 不删除主人全局 bootstrap、Production数据或其他任务目录；
-- 更新结果回执后再次push并远程复读。
+- 新 Artifact身份和全部哈希一致；
+- 首次恢复不超过45秒；
+- DataRoot绑定正确；
+- 自动发现和一步导入成立；
+- Codex选到可启动命令并完成真实 MCP调用；
+- Qdrant单一所有权和状态一致；
+- 合成候选批准/拒绝边界正确；
+- Windows重启恢复；
+- Production污染0；
+- 真实资料读取0；
+- 清理前后PASS；
+- 主人检查点A-F明确PASS；
+- 远程报告、回执和评论全部复读确认。
 
-## 12. 失败与阻塞规则
-
-以下任一情况立即停止，不得继续到真实资料：
-
-```text
-身份或哈希不匹配
-启动契约退回旧bootstrap
-实际DataRoot或workspace不匹配
-未托管外部Runtime被接管
-主人全局bootstrap变化
-自动扫描读取了真实正文
-UI仍要求主人逐项驱动常规工作
-真实MCP命中错误Runtime
-Production污染
-安全清理拒绝且无法按任务规则解决
-```
-
-最终回复格式：
-
-```text
-PR60 自治 Day 0
-任务: PR60-MEMORY-QUALITY-TRIAL-4161807C
-当前阶段: 自动执行 / 等待主人观察与决定 / Stage 1
-Day 0: PASS / FAIL / BLOCKED / RUNNING
-产品 Commit: 4161807ce4598cc1696093da4a703de101648280
-Artifact: 8821878623
-实际 DataRoot: <路径>
-绑定验证: PASS / FAIL
-自动动作: <完成摘要>
-等待主人: <仅授权或决定事项>
-真实资料读取: 0 / <授权后数量>
-报告分支: acceptance/pr60-memory-quality-trial-4161807c
-```
+任一P0失败立即停止。不得进入 Stage 1，不得把“最终恢复了”替代首轮时限失败，也不得把“状态解释得更清楚”替代功能真正可用。
