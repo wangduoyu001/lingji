@@ -10,7 +10,7 @@ Product commit: 053769965cf767cfe5221ffa4334b189bedb4d7d
 Artifact: lingji-windows-0.1.0-05376996
 Artifact ID: 8832376546
 Fresh Day 0 started: 2026-08-02T12:33:55.521Z
-Fresh report content commit: PENDING_THIS_RERUN
+Fresh report content commit: 215b917b15859a2841c752c1d8c293359c04410b
 ```
 
 This result comes from a new final-closeout execution after Phase 0 discovery. The Artifact was downloaded again by ID into a newly created task root; no prior Artifact, acceptance directory, database, log, screenshot, fixture, or report conclusion was used as execution evidence.

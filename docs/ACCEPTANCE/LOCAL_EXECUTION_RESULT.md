@@ -16,7 +16,7 @@ product_pr: 60
 product_commit: 053769965cf767cfe5221ffa4334b189bedb4d7d
 task_instruction_commit: 03b8b27ac2e79923ad4001b49b4345cda726f588
 report_branch: acceptance/pr60-memory-quality-trial-05376996
-report_commit: PENDING_THIS_RERUN
+report_commit: 215b917b15859a2841c752c1d8c293359c04410b
 report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_05376996.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_05376996.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_05376996.txt
@@ -140,7 +140,7 @@ real_data_authorized = false
 公开摘要：docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_05376996.json
 公开哈希：docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_05376996.txt
 PR #60评论：https://github.com/wangduoyu001/lingji/pull/60#issuecomment-5157375808
-报告分支报告内容 HEAD：PENDING_THIS_RERUN
+报告分支报告内容 HEAD：215b917b15859a2841c752c1d8c293359c04410b
 ```
 
 禁止提交安装包、数据库、Token、私人正文、完整主人路径清单、node_modules、dist或未脱敏日志。
