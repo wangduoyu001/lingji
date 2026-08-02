@@ -8,8 +8,8 @@
 
 ```yaml
 task_id: PR60-MEMORY-QUALITY-TRIAL-24F35704
-status: PENDING
-verdict: PENDING
+status: COMPLETED
+verdict: FAIL
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
@@ -20,19 +20,19 @@ report_commit: PENDING
 report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_24f35704.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_24f35704.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_24f35704.txt
-cleanup_before: NOT_RUN
-cleanup_after: NOT_RUN
+cleanup_before: PASS
+cleanup_after: PENDING
 remote_branch_verified: false
 remote_commit_verified: false
 remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
 local_temp_root_absent: false
-owner_observation: NOT_REQUIRED
-started_at: PENDING
-finished_at: PENDING
+owner_observation: NOT_REACHED_P0_STOP
+started_at: 2026-08-02T10:22:34Z
+finished_at: 2026-08-02T10:25:56Z
 trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
-day0_result: NOT_RUN
+day0_result: FAIL
 stage1_result: NOT_RUN
 stage2_result: NOT_RUN
 real_data_authorized: false
