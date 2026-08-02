@@ -2,24 +2,24 @@
 
 > 本文件是本机 Codex 向 ChatGPT / 主开发代理提交结果的唯一固定回执。
 >
-> 当前任务已升级为本机最终收尾：Phase 0与05376996缺陷修复循环已经完成，现执行新精确 Head 623d3c9d Day 0；若继续发现可修复缺陷，由本机完成开发、测试、PR、发包和复验。
+> 当前任务已升级为本机最终收尾：Phase 0与05376996缺陷修复循环已经完成，清理生命周期缺陷也已修复并合入，现执行新精确 Head 6214ac48 Day 0；若继续发现可修复缺陷，由本机完成开发、测试、PR、发包和复验。
 
 ## 1. 当前回执
 
 ```yaml
-task_id: PR60-MEMORY-QUALITY-TRIAL-623D3C9D
+task_id: PR60-MEMORY-QUALITY-TRIAL-6214AC48
 status: RUNNING
 verdict: PENDING
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
-product_commit: 623d3c9da49b385c6a2f3687d34b9e80599f7ae1
-task_instruction_commit: 619cb9c370cdf1e733f65e65f1f4bdd6ef6574d1
-report_branch: acceptance/pr60-memory-quality-trial-623d3c9d
+product_commit: 6214ac4839f2a252f8714e7d14b6bf4ff6244e0a
+task_instruction_commit: 23df9b27f15b1a1369e83be7c43ec82690fa9230
+report_branch: acceptance/pr60-memory-quality-trial-6214ac48
 report_commit: PENDING
-report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_623d3c9d.md
-public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_623d3c9d.json
-public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_623d3c9d.txt
+report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_6214ac48.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_6214ac48.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_6214ac48.txt
 cleanup_before: NOT_RUN
 cleanup_after: NOT_RUN
 remote_branch_verified: false
@@ -29,7 +29,7 @@ remote_result_verified: false
 pr_comment_verified: false
 local_temp_root_absent: false
 owner_observation: NOT_REQUIRED
-started_at: 2026-08-02T12:26:47Z
+started_at: 2026-08-02T14:04:50Z
 finished_at: PENDING
 trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
 day0_result: NOT_RUN
@@ -45,14 +45,14 @@ codex_mcp_success_percent: 0
 duplicate_formal_content_count: 0
 production_pollution_count: 0
 owner_config_preserved: NOT_RUN
-artifact_name: lingji-windows-0.1.0-623d3c9d
-artifact_id: 8834121370
-artifact_zip_sha256: 95139eb91d4b7f12fedd29e126663de38a75f34078656855e69d3a212624179d
-installer_sha256: d6b539fc6d9ad4ebb19215c60ea7ab287a87de76fc33b16f2339e76813bd1667
-portable_exe_sha256: 7e2267169c34aeca71b5011f9d5e34b69c3bc3a0b4d42a412074c9059886d109
-sidecar_exe_sha256: 4475ca2760d44644f5c0efc627c6d2141a782242b64e2912408b26f30f4b7ad0
-manifest_sha256: 2ab3595ca3db7669ec84caddc7d11d5c005e61b603212f204ff61ea5ce289443
-build_metadata_sha256: 9f0de86f29c74756261f8461edaeadbcf697f9c6ce9aa9ff0fee87bc939e79bf
+artifact_name: lingji-windows-0.1.0-6214ac48
+artifact_id: 8834478298
+artifact_zip_sha256: 7d9dc31756b9161c1e5b55b5fcbdbc43c82f52c9dac7455e397cbb1a8445a30f
+installer_sha256: 87d93cb27d60a0877942063052d708c9e803afb2dea9c809a5ec6a9f3e46cf84
+portable_exe_sha256: ffd114ce9e6a47891ba115edcf50fe083a13c3c19dd7f1ec95b2e0a575a9ae2d
+sidecar_exe_sha256: b4860a30d9a78bd1b8140db3e1f1e1a594425771269fc07b44390805503c278f
+manifest_sha256: 6358361cce6b7fc0729b953eb5b19894cbb9c06891771fa2f4eaf72704f83e96
+build_metadata_sha256: db2f5ac93fb049d38dd5cc46ec258860bd2856545d9929df9e37278a60c2f54b
 ```
 
 ## 2. 本地接管阶段
@@ -60,8 +60,8 @@ build_metadata_sha256: 9f0de86f29c74756261f8461edaeadbcf697f9c6ce9aa9ff0fee87bc9
 ```text
 Phase 0 本机现场读取与安全备份：PASS
 Phase 1 05376996 Day 0：FAIL（fresh empty-store truth）
-Phase 2 本地修复循环：PASS（PR #82、#83已合并；产品Head 623d3c9d；五类远程门禁PASS）
-Phase 1 623d3c9d Day 0重跑：NOT_RUN
+Phase 2 本地修复循环：PASS（PR #82、#83、#84已合并；产品Head 6214ac48；旧05376996根已由修复后的清理契约安全删除）
+Phase 1 6214ac48 Day 0重跑：NOT_RUN
 Phase 3 Stage 1真实资料试运行：NOT_AUTHORIZED
 Phase 4 Stage 2扩展：NOT_RUN
 Phase 5 master收敛：NOT_RUN
@@ -83,7 +83,7 @@ docs/ACCEPTANCE/LOCAL_FINAL_CLOSEOUT_PLAN.md
 本机HEAD：9eace85e3387db363e8659f8d784f08f3d4f44c8
 origin/master：ae80f0e86639ffba9ddf1cab1ec70c30484d146e
 origin/product（Phase 0时）：053769965cf767cfe5221ffa4334b189bedb4d7d
-当前远程产品Head：623d3c9da49b385c6a2f3687d34b9e80599f7ae1
+当前远程产品Head：6214ac4839f2a252f8714e7d14b6bf4ff6244e0a
 未推送提交：0（相对配置 upstream）
 未提交修改：无 tracked/staged；保留未知 .workbuddy/ 与 output/
 worktree：10 个既有 worktree，全部只读记录并保留
@@ -133,12 +133,12 @@ Production污染0
 ## 6. 当前固定身份
 
 ```text
-master基线：ae80f0e86639ffba9ddf1cab1ec70c30484d146e
-产品Head：623d3c9da49b385c6a2f3687d34b9e80599f7ae1
-Artifact：lingji-windows-0.1.0-623d3c9d
-Artifact ID：8834121370
-Release run：30749826622
-任务指令提交：619cb9c370cdf1e733f65e65f1f4bdd6ef6574d1
+master基线：60baa06656fba0c64ddc5074a2830624c9348c57
+产品Head：6214ac4839f2a252f8714e7d14b6bf4ff6244e0a
+Artifact：lingji-windows-0.1.0-6214ac48
+Artifact ID：8834478298
+Release run：30750955322
+任务指令提交：23df9b27f15b1a1369e83be7c43ec82690fa9230
 ```
 
 ## 7. 主人边界
