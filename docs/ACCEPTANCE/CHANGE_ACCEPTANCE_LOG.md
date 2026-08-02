@@ -1,5 +1,33 @@
 # 验收要求变更记录
 
+## 2026-08-02 · PR #60 · Control-only Qdrant ownership recovery
+
+- Product branch: `feature/unified-ai-memory-connectors`
+- Product commit: `pending (second-owner recovery branch)`
+- Affected modules: Control API Codex/project runtime wiring and the MCP-owned embedded semantic index boundary.
+- Risk level: P0
+- User-visible change: opening LingJi’s start and activity views no longer competes with the managed MCP runtime for the embedded vector store.
+- Data and security boundary: Control routes retain SQLite/Vault lexical access and only consume the MCP-published vector status; only the MCP process may open embedded Qdrant.
+
+### Automated acceptance
+
+- [x] `python -m pytest -q tests/test_p2_07_integration_wiring.py tests/test_packaged_control_api.py tests/test_mcp_http_auth.py tests/test_mcp_server.py tests/test_assistant_hub_imports.py tests/test_assistant_hub_api.py` (45 passed): verifies the Control project gateway explicitly disables semantic runtime while packaged MCP remains the queue and semantic owner.
+- [x] `python -m pytest -q --tb=short` (621 passed, 10 skipped): validates the complete cross-platform suite.
+- [x] `python scripts/check_acceptance_sync.py`
+
+### Real-machine acceptance
+
+- [ ] A newly built isolated Artifact starts the Desktop start page, imports one authorized synthetic ChatGPT export, and proves the MCP-published snapshot reaches a coherent post-import vector state without `embedded_store_locked`.
+
+### Regression items
+
+- [ ] `/api/codex/current` must not instantiate a second embedded Qdrant client.
+- [ ] Control API must keep reporting the MCP-published snapshot rather than live-opening Qdrant.
+
+### Out of scope
+
+- No real owner data, external AI-client configuration, or automatic Core Memory approval.
+
 ## 2026-08-02 · PR #60 · MCP-owned packaged extraction recovery
 
 - Product branch: `feature/unified-ai-memory-connectors`

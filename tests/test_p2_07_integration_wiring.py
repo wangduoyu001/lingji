@@ -85,6 +85,24 @@ def test_codex_route_registration_is_lazy_and_auth_precedes_runtime(monkeypatch)
     assert initialized == []
 
 
+def test_control_project_gateway_disables_embedded_semantic_runtime(monkeypatch):
+    captured = {}
+
+    def fake_builder(settings, **kwargs):
+        captured["settings"] = settings
+        captured.update(kwargs)
+        return object()
+
+    marker = SimpleNamespace(name="acceptance")
+    monkeypatch.setattr(p2_07_api, "build_memory_gateway", fake_builder)
+
+    gateway = p2_07_api.build_control_read_gateway(marker)
+
+    assert gateway is not None
+    assert captured["settings"] is marker
+    assert captured["runtime_values"] == {"semantic_enabled": False}
+
+
 def test_independent_routers_define_and_include_required_routes():
     root = Path(__file__).resolve().parents[1]
     project_routes = (root / "src" / "control" / "project_memory_api.py").read_text(

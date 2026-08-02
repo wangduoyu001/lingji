@@ -23,6 +23,17 @@ class P207ControlRuntime:
     notes: SafeObsidianNotesService
 
 
+def build_control_read_gateway(settings: Any) -> Any:
+    """Build the Control-only project gateway without opening embedded Qdrant.
+
+    The packaged MCP process is the sole semantic-index owner.  Control routes
+    still need SQLite/Vault services for Codex and project views, but those
+    views must remain lexical and consume the MCP-published vector snapshot.
+    """
+
+    return build_memory_gateway(settings, runtime_values={"semantic_enabled": False})
+
+
 class _LazyProxy:
     def __init__(self, getter: Callable[[], Any], attribute: str):
         self._getter = getter
@@ -48,7 +59,7 @@ def register_p2_07_routes(app: Any, settings: Any, control: Any, *, token: str) 
                 return cached
             gateway = getattr(control, "memory_gateway", None)
             if gateway is None:
-                gateway = build_memory_gateway(settings)
+                gateway = build_control_read_gateway(settings)
                 control.memory_gateway = gateway
             pipeline = getattr(control, "pipeline", None)
             if pipeline is None:
