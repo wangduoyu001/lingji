@@ -19,10 +19,11 @@ def test_memory_owner_lock_is_exclusive_and_recoverable(tmp_path: Path) -> None:
         poll_seconds=0.05,
     ).acquire()
     try:
-        metadata = json.loads(path.read_text(encoding="utf-8"))
+        metadata = json.loads(first.metadata_path.read_text(encoding="utf-8"))
         assert metadata["owner"] == "mcp"
         assert metadata["instance_id"] == "first"
         assert metadata["workspace"] == "acceptance"
+        assert metadata["state"] == "held"
 
         second = MemoryOwnerLock(
             path,
@@ -32,10 +33,15 @@ def test_memory_owner_lock_is_exclusive_and_recoverable(tmp_path: Path) -> None:
             timeout_seconds=0.1,
             poll_seconds=0.05,
         )
-        with pytest.raises(MemoryOwnerLockError, match="owns the embedded store"):
+        with pytest.raises(MemoryOwnerLockError, match="owns the embedded store") as error:
             second.acquire()
+        assert "instance" not in str(error.value).lower() or "owner=mcp" in str(error.value)
     finally:
         first.release()
+
+    released = json.loads(first.metadata_path.read_text(encoding="utf-8"))
+    assert released["state"] == "released"
+    assert released["released_at"]
 
     recovered = MemoryOwnerLock(
         path,
@@ -46,8 +52,9 @@ def test_memory_owner_lock_is_exclusive_and_recoverable(tmp_path: Path) -> None:
     ).acquire()
     try:
         assert recovered.held is True
-        metadata = json.loads(path.read_text(encoding="utf-8"))
+        metadata = json.loads(recovered.metadata_path.read_text(encoding="utf-8"))
         assert metadata["instance_id"] == "recovered"
+        assert metadata["state"] == "held"
     finally:
         recovered.release()
 
@@ -63,3 +70,5 @@ def test_release_is_idempotent(tmp_path: Path) -> None:
     lock.release()
     lock.release()
     assert lock.held is False
+    metadata = json.loads(lock.metadata_path.read_text(encoding="utf-8"))
+    assert metadata["state"] == "released"
