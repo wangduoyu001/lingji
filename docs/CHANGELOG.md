@@ -4,6 +4,12 @@
 
 ## 2026-08-02
 
+### Fresh Day 0 空向量状态优先级修复
+
+- 修复新 DataRoot 在 0 文档、0 分块、0 Core Memory、0 向量时，因为 Embedding 尚未完成运行时验证而错误显示 `embedding_unavailable` 的问题。
+- 当向量服务可用但 Collection/向量确实为空时，统一报告 `empty / collection_empty`；全文检索保持可用，语义检索等待获授权内容进入索引。
+- 锁冲突、重建要求、服务不可用和非空索引的 Embedding 故障仍保持更高风险状态，不被空库状态掩盖。
+
 ### Windows 验收清理只读目录修复
 
 - 修复 NSIS 在隔离 profile 中留下只读 Start Menu 空目录时，任务专属清理器因 WinError 5 无法完成的问题。

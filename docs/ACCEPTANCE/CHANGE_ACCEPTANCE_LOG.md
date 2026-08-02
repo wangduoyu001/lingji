@@ -1,5 +1,33 @@
 # 验收要求变更记录
 
+## 2026-08-02 · PR #60 · fresh empty-vector state precedence recovery
+
+- Product branch: `codex/pr60-empty-vector-state-6214ac48`
+- Product commit: `872b15c7c13bd28395c1781c569f9c6a0c5c3def`
+- Affected modules: MCP-published memory/vector status normalization and fresh Day 0 UI/API truth.
+- Risk level: P0
+- User-visible change: a fresh empty DataRoot reports `empty / collection_empty` even before the configured Embedding model has completed a real request verification.
+- Data and security boundary: no content read, import, Core Memory write, Qdrant deletion/rebuild, model download or external-client mutation.
+
+### Automated acceptance
+
+- [x] `python -m pytest -q tests/test_vector_truth_contract.py tests/test_semantic_runtime_wiring.py`: 14 passed; empty Collection truth takes precedence over unverified Embedding while lock/rebuild/service failure behavior remains unchanged.
+- [ ] Unified `scripts/validate.ps1 -Mode release` on the exact repair commit.
+
+### Real-machine acceptance
+
+- [ ] Fresh isolated Artifact reports 0 documents, 0 chunks, 0 Core Memory, 0 vectors and `empty / collection_empty` through authenticated API and packaged UI before any fixture or real-content authorization.
+- [ ] MCP remains the sole snapshot producer; lexical search is available and semantic search is unavailable until indexable authorized content exists.
+
+### Regression items
+
+- [x] A non-empty vector index with unavailable Embedding still reports `embedding_unavailable`.
+- [x] Embedded-store lock, rebuild-required and service-unavailable states are not hidden by empty counts.
+
+### Out of scope
+
+- No import, UI layout, model/provider, Qdrant ownership, permanent-memory review or owner-data behavior change.
+
 ## 2026-08-02 · PR #60 · read-only installer directory cleanup recovery
 
 - Product branch: `codex/pr60-cleanup-readonly-dir-623d3c9d`
