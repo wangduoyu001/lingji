@@ -1,21 +1,40 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "task_id": "PR60-MEMORY-QUALITY-TRIAL-05376996",
-  "verdict": "FAIL",
+  "execution": "final_closeout_independent_rerun",
+  "overall_status": "RUNNING",
+  "checkpoint_verdict": "FAIL",
   "product_commit": "053769965cf767cfe5221ffa4334b189bedb4d7d",
   "artifact_id": 8832376546,
+  "latest_master_at_start": "ae80f0e86639ffba9ddf1cab1ec70c30484d146e",
+  "phase0": {
+    "result": "PASS",
+    "local_head": "9eace85e3387db363e8659f8d784f08f3d4f44c8",
+    "unpushed_commits": 0,
+    "untracked_entries_preserved": 2,
+    "existing_worktrees_preserved": 10,
+    "discovery_report": "docs/TEST_REPORTS/LOCAL_FINAL_CLOSEOUT_DISCOVERY_9eace85.md"
+  },
   "day0": {
+    "artifact_download": "FRESH",
     "artifact_identity": "PASS",
+    "first_recovery_seconds": 9.531,
     "startup_binding": "PASS",
     "control_and_mcp_ports": "PASS",
     "mcp_single_owner": "PASS",
     "control_qdrant_second_owner": "PASS",
+    "real_content_reads": 0,
     "pre_import_empty_store": "FAIL",
+    "pre_import_documents": 2,
+    "pre_import_chunks": 11,
     "pre_import_vectors": 11,
+    "vector_state": "healthy",
     "reason_code": "nonempty_preimport_store"
   },
   "real_data_authorized": false,
   "stage1": "NOT_RUN",
   "stage2": "NOT_RUN",
-  "blocking_defect": "LJ-05376996-P0-NONEMPTY-DAY0-STORE"
+  "production_pollution_count": 0,
+  "blocking_defect": "LJ-05376996-P0-NONEMPTY-DAY0-STORE",
+  "next_phase": "PHASE_2_LOCAL_ROOT_CAUSE_REPAIR"
 }

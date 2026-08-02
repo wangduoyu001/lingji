@@ -1,7 +1,10 @@
-artifact_zip_sha256  abb116cbca8e7ccc2d23e206ed3fdc1a764f5b36bd4209864c628539bda33b4b
-installer_sha256     8f4719e610ddab037044dee364de6e3b4990c37c18a56da8f3fca6e6480b3b4e
-portable_sha256      a28169265e3f6eb16f9cb6102d4142b5e5c6d82a97e9c0bd7778e16571caae5e
-sidecar_sha256       8be47b40acf703454ffbec315c58f7a0f9c0d5250ab2156f554fb5b4a1025fb2
-manifest_sha256      c9778ddd6f4f782be2bcc43aa6d573b3a76518416aa718529f17fa2a627f73a5
+artifact_zip_sha256   abb116cbca8e7ccc2d23e206ed3fdc1a764f5b36bd4209864c628539bda33b4b
+installer_sha256      8f4719e610ddab037044dee364de6e3b4990c37c18a56da8f3fca6e6480b3b4e
+portable_sha256       a28169265e3f6eb16f9cb6102d4142b5e5c6d82a97e9c0bd7778e16571caae5e
+sidecar_sha256        8be47b40acf703454ffbec315c58f7a0f9c0d5250ab2156f554fb5b4a1025fb2
+manifest_sha256       c9778ddd6f4f782be2bcc43aa6d573b3a76518416aa718529f17fa2a627f73a5
 build_metadata_sha256 167cd2dadddf8d2e3f822729d5d08a1f81080f0fb37a3da9d23b353c5b76721e
-pre_import_vectors   11
+pre_import_documents  2
+pre_import_chunks     11
+pre_import_vectors    11
+first_recovery_sec    9.531

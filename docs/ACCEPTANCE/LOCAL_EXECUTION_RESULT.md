@@ -8,29 +8,29 @@
 
 ```yaml
 task_id: PR60-MEMORY-QUALITY-TRIAL-05376996
-status: COMPLETED
+status: RUNNING
 verdict: FAIL
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
 product_commit: 053769965cf767cfe5221ffa4334b189bedb4d7d
-task_instruction_commit: ab32a826ddcad83f77ba29583a9c365337ea7f5f
+task_instruction_commit: 03b8b27ac2e79923ad4001b49b4345cda726f588
 report_branch: acceptance/pr60-memory-quality-trial-05376996
-report_commit: ea50050fa32c9d8981522c8cee565db759d2ffca
+report_commit: PENDING_THIS_RERUN
 report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_05376996.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_05376996.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_05376996.txt
 cleanup_before: PASS
-cleanup_after: PASS
-remote_branch_verified: true
-remote_commit_verified: true
-remote_report_verified: true
-remote_result_verified: true
-pr_comment_verified: true
-local_temp_root_absent: true
+cleanup_after: NOT_RUN
+remote_branch_verified: false
+remote_commit_verified: false
+remote_report_verified: false
+remote_result_verified: false
+pr_comment_verified: false
+local_temp_root_absent: false
 owner_observation: NOT_REQUIRED
-started_at: 2026-08-02T10:57:52Z
-finished_at: 2026-08-02T11:02:28Z
+started_at: 2026-08-02T12:26:47Z
+finished_at: NOT_FINISHED
 trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
 day0_result: FAIL
 stage1_result: NOT_RUN
@@ -60,7 +60,7 @@ build_metadata_sha256: 167cd2dadddf8d2e3f822729d5d08a1f81080f0fb37a3da9d23b353c5
 ```text
 代码与发布链：PASS
 正式 Artifact：READY
-Day 0：FAIL（LJ-05376996-P0-NONEMPTY-DAY0-STORE）
+Day 0：FAIL（全新独立复跑已复现 LJ-05376996-P0-NONEMPTY-DAY0-STORE）
 主人检查点 A-F：NOT_RUN
 真实资料授权：false
 Stage 1：NOT_RUN
@@ -140,7 +140,7 @@ real_data_authorized = false
 公开摘要：docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_05376996.json
 公开哈希：docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_05376996.txt
 PR #60评论：https://github.com/wangduoyu001/lingji/pull/60#issuecomment-5157375808
-报告分支报告内容 HEAD：ea50050fa32c9d8981522c8cee565db759d2ffca
+报告分支报告内容 HEAD：PENDING_THIS_RERUN
 ```
 
 禁止提交安装包、数据库、Token、私人正文、完整主人路径清单、node_modules、dist或未脱敏日志。
