@@ -7,19 +7,19 @@
 ## 1. 当前回执
 
 ```yaml
-task_id: PR60-MEMORY-QUALITY-TRIAL-1860FA17
+task_id: PR60-MEMORY-QUALITY-TRIAL-3739C42F
 status: PENDING
 verdict: PENDING
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
-product_commit: 1860fa17c5de26b0ff4d54ace48158a6e343505a
-task_instruction_commit: fa395bd2b028eb763bb71cee692b7cbb5d285720
-report_branch: acceptance/pr60-memory-quality-trial-1860fa17
+product_commit: 3739c42ffc44b5524a3231bc2fd7279ae43c11b1
+task_instruction_commit: 56c8de00d1a9bf2c5b1c92e73683577dc88de75f
+report_branch: acceptance/pr60-memory-quality-trial-3739c42f
 report_commit: PENDING
-report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_1860fa17.md
-public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_1860fa17.json
-public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_1860fa17.txt
+report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_3739c42f.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_3739c42f.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_3739c42f.txt
 cleanup_before: NOT_RUN
 cleanup_after: NOT_RUN
 remote_branch_verified: false
@@ -45,14 +45,14 @@ codex_mcp_success_percent: 0
 duplicate_formal_content_count: 0
 production_pollution_count: 0
 owner_config_preserved: NOT_RUN
-artifact_name: lingji-windows-0.1.0-1860fa17
-artifact_id: 8830371064
-artifact_zip_sha256: 8c4d5de5ed678063f70896bede94905c941962ba744a53de6537ee2714ab9e37
-installer_sha256: ea109577ad86ee6b800973fbd5ca0c48cb0d0c7d98d5a67e82379a8b795c54a2
-portable_exe_sha256: 51266810195ff8ed2d1ef9dc16b7144aef1db2bf2898a420894b3d0c352d068e
-sidecar_exe_sha256: e6c005210a8b7e8c84bb7e4460110033c2aa8c026a1ea0da0fb49205cb0d72ae
-manifest_sha256: fd80bfa9e2acb7cb158e6e936980e974a6abad51dc2e6b510a24ba9a96f6a240
-build_metadata_sha256: 62bf86b9c2b666d27730de6ebb70b6e70bfdb515d57dab380810985b2ea3dfe7
+artifact_name: lingji-windows-0.1.0-3739c42f
+artifact_id: 8831573426
+artifact_zip_sha256: 96c106cd2107b6247d53ceaa6305499af9d0c185a0086a2d2cb1020c6246d387
+installer_sha256: 4faa7b2bc558870fa5b864603a7d44db706ee4fdf7ac853084ac003b70e79823
+portable_exe_sha256: 38f2324be22dcaaaa5c4cb9e57ce5fb53dd4eb2656a6907a303405dcf55dda26
+sidecar_exe_sha256: 2a45a7217cd5c55fda05ef7de80dc9c6057e66da5d649ec0a11828eafd672311
+manifest_sha256: 25ca10303b881bc44547a3185c3361ea8239358a799e3f227c0ec542dd89d290
+build_metadata_sha256: 33dcaefe4b1eac885fa692ba0529f459fada105532cbf793e80a638576c8a7d5
 ```
 
 ## 2. 当前阶段
