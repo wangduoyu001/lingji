@@ -51,6 +51,85 @@
 
 ---
 
+## 2026-08-02 · PR #72 / PR #60 后续 · 自动导入、运行时真相与清理闭环
+
+- 产品分支：`fix/pr60-import-state-cleanup-recovery`
+- 产品 Commit：`pending`
+- 来源缺陷：`PR60-MEMORY-QUALITY-TRIAL-4161807C / DAY0 FAIL / BLOCKED_POST_CLEANUP`
+- 影响模块：AI 助手导入编排、ChatGPT/Codex 导出候选发现、正式采集队列、Codex 三层连接状态、MCP/Qdrant 所有权、向量状态快照、Desktop 状态页、安全清理工具、Day 0 生命周期验收
+- 风险等级：P0
+- 用户可感知变化：灵机自动发现受支持导出包；发现后只需一次授权即可入队。未发现时只保留一个文件选择动作，选中即入队，不再要求填写路径或二次提交。配置、命令启动、真实客户端验证、全文检索和语义检索分别显示真实证据。
+- 数据或安全边界变化：自动候选发现仅扫描受控位置和元数据，不读取正文、不暴露绝对路径；真实文件读取仍需精确授权；MCP 成为 SQLite/Qdrant 唯一实时拥有者；不自动写 Core Memory、不自动重建 Production Qdrant。
+
+### 新增或修改的自动验收
+
+- [ ] `python -m pytest -q tests/test_assistant_hub_imports.py tests/test_assistant_hub_api.py`：验证候选扫描有界、只读元数据、不泄露路径、一次授权入队、无候选时只有一个选择动作、不支持来源没有假按钮。
+- [ ] `python -m pytest -q tests/test_ai_memory_connectors.py tests/test_ai_connector_readiness.py`：验证 Codex 配置、命令启动和真实客户端注册三层状态；Access Denied、命令缺失和 MCP 不可见均不得显示 ready。
+- [ ] `python -m pytest -q tests/test_vector_truth_contract.py tests/test_memory_owner_lock.py tests/test_memory_statistics.py`：验证 MCP 单一所有权、Windows/POSIX 文件锁、可读诊断元数据、empty/locked/stale/healthy 向量状态和全文/语义检索分离。
+- [ ] `python -m pytest -q tests/test_cleanup_acceptance_workspace.py`：合法 dry-run 返回 `DRY_RUN_READY`，显式执行后目标消失；越界、身份不匹配或真实删除失败才返回 `BLOCKED`。
+- [ ] `npm run test:smoke`：验证 AI 助手页没有路径输入和二次提交，连接器与 Qdrant 状态使用证据合同。
+- [ ] `npm run build`：验证 React/TypeScript 生产构建。
+- [ ] `P0 Windows Gate`：验证 Windows Python、Desktop、Rust/Tauri 和启动恢复链。
+- [ ] `Windows Desktop Release Baseline`：验证打包 Sidecar、MCP 单一所有权、NSIS、身份与哈希合同。
+
+### 新增或修改的真机验收
+
+- [ ] 首次启动后灵机自动扫描 Downloads、Desktop 和任务导入箱中受支持导出包的元数据；未授权前真实正文读取数保持 0。
+- [ ] 发现 ChatGPT/Codex 支持包时，UI 只显示一个“授权并开始导入”动作；授权后立即进入正式采集队列，不再要求填写路径或再次提交。
+- [ ] 未发现包但存在正式适配器时，UI 只显示一个文件选择动作；选择完成立即入队，并自动显示处理进度、去重和失败重试。
+- [ ] Claude Code、WorkBuddy 等暂无正式历史适配器的来源只解释边界，不展示无效导入按钮。
+- [ ] Codex 状态必须分别展示配置、命令启动、真实客户端注册；路径存在但 `Access is denied` 时必须为 `client_launch_blocked`。
+- [ ] 只有真实 Codex 命令运行并列出 `lingji-memory` 后才可显示 ready；配置存在不得借用绿色状态。
+- [ ] MCP 是嵌入式 Qdrant 唯一进程拥有者；Control API 只读 MCP 发布快照，不得再次打开同一嵌入式目录。
+- [ ] `ready + 0 vectors` 必须显示 `empty`，不得显示语义检索可用；目录锁冲突显示 `embedded_store_locked`，并说明全文检索仍可用。
+- [ ] 首次 Core/Sidecar/MCP 恢复必须在验收预算内完成，8766 与 8767 同时健康后才算 ready；不得出现第一轮超过 45 秒、后续轮次才恢复的结果。
+- [ ] 结束清理先 dry-run，状态必须为 `DRY_RUN_READY`；显式执行后唯一任务根不存在，相邻目录与主人数据不变。
+
+### 主人肉眼确认
+
+- [ ] 主人能在 5 秒内看懂灵机发现了什么、是否读取正文、当前唯一授权动作以及授权后的自动处理范围。
+- [ ] 选中文件后不再出现第二个“提交导入”动作。
+- [ ] 配置、命令和真实连接不会出现互相矛盾的绿色/红色状态。
+- [ ] Qdrant 面板能一眼区分服务、Collection、向量数量、全文检索、语义检索、原因和自动恢复状态。
+- [ ] 日常流程不要求主人手动驱动扫描、刷新、重试和进度轮询。
+
+### 强制回归项
+
+- [ ] 未经主人授权不得读取 ChatGPT、Codex、剧本、Vault 或其他真实正文。
+- [ ] 候选扫描不得跟随符号链接，不得扫描未知目录，不得向前端返回绝对路径。
+- [ ] 过期候选 ID 必须重新扫描并拒绝，不得继续读取已移动或删除文件。
+- [ ] 任意 JSON/ZIP 不得因为后缀相同就成为导入候选。
+- [ ] 配置文件存在、可执行文件路径存在、命令能启动和 MCP 注册可见必须分别取证。
+- [ ] Control API 与 MCP 不得各自创建嵌入式 Qdrant 客户端并给出独立结论。
+- [ ] stale 快照不得宣称语义检索可用。
+- [ ] 清理工具不得把合法 dry-run 的待删除清单误判为阻断，也不得放宽到通配符或父目录删除。
+- [ ] 候选未批准前 Core Memory 不增加，拒绝项不进入永久记忆。
+- [ ] Production 污染保持 0；Stage 1 在新 Day 0 PASS 前保持 NOT_RUN。
+
+### 清理与回滚
+
+- 临时数据前缀：由新的精确 Head Day 0 任务声明。
+- 覆盖安装方式：新 Artifact 覆盖安装，不卸载主人数据。
+- 运行时锁：任务根 `runtime/memory-owner.lock` 仅作 OS 互斥，`runtime/memory-owner.json` 仅作可读诊断；任务清理时共同删除。
+- 测试数据清理：仅删除任务专属 DataRoot、Artifact、安装包、日志、fixture、临时配置和 worktree；先 dry-run，再显式执行。
+- 回滚：回退自动导入编排、三层连接合同、MCP 单一所有权和向量快照；不得恢复路径输入、二次提交或多进程 Qdrant 探测。
+
+### 不在范围
+
+- 不自动读取 Codex 原始 Session/JSONL。
+- 不新增 Claude Code 或 WorkBuddy 正文导入适配器。
+- 不自动下载 Embedding 模型。
+- 不自动重建 Production Qdrant。
+- 不自动批准永久记忆。
+- 不开放远程或公网 MCP。
+
+### 最终报告
+
+- 实施报告：`docs/TEST_REPORTS/PR60_AUTONOMOUS_IMPORT_STATE_COHERENCE_CLEANUP_FIX.md`
+- 新 Artifact 和复验任务：精确 Head CI、P0 Windows、Release 和哈希核验通过后更新。
+
+---
+
 ## 2026-08-02 · PR #71 / PR #60 后续 · Runtime DataRoot 强绑定与 UI 观察台自治改造
 
 - 产品分支：`fix/pr60-autonomous-runtime-binding`

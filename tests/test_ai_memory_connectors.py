@@ -186,14 +186,18 @@ def test_codex_config_without_command_is_blocked_not_connected(
     result = service.test("codex")
     assert result["ok"] is False
     assert result["state"] == "blocked"
+    assert result["code"] == "CLIENT_NOT_FOUND"
     assert "找不到 codex 命令" in result["message"]
 
     status = service.status()["connectors"][0]
     assert status["configuration_state"] == "configured"
-    assert status["status_state"] == "blocked"
+    assert status["status_state"] == "client_not_found"
     assert status["client_available"] is False
     assert status["live_test"] is False
-    assert "配置文件已写入" in status["blocking_reason"]
+    assert status["readiness"]["configuration"]["state"] == "configured"
+    assert status["readiness"]["client"]["state"] == "not_found"
+    assert status["readiness"]["real_connection"]["state"] == "blocked"
+    assert "数据目录不等于找到 codex 命令" in status["blocking_reason"]
 
 
 def test_codex_is_ready_only_after_real_cli_verification(

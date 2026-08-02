@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "../api";
 import AssistantConnectorPanel from "../components/AssistantConnectorPanel";
 import type { PageId, PageProps } from "../types";
@@ -6,6 +6,45 @@ import "./AssistantHubPage.css";
 
 type AssistantState = "detected" | "not_found" | "manual_export" | string;
 type ImportState = "available" | "manual_export" | "planned" | string;
+
+type ImportCandidate = {
+  candidate_id: string;
+  source_id: string;
+  source_type: string;
+  adapter_name: string;
+  display_name: string;
+  size_bytes: number;
+  modified_at: string | null;
+};
+
+type ImportSource = {
+  id: string;
+  label: string;
+  state: "candidate_ready" | "guided_action_required" | "not_supported" | string;
+  supported: boolean;
+  automatic_candidate_available: boolean;
+  owner_action_count: number;
+  primary_action: string;
+  guide: string;
+  candidates: ImportCandidate[];
+};
+
+type ImportPlan = {
+  scanned_at: string;
+  safety: {
+    metadata_only: boolean;
+    content_read: boolean;
+    arbitrary_path_submission: boolean;
+    owner_authorization_required: boolean;
+    automatic_core_memory_write: boolean;
+  };
+  summary: {
+    candidate_count: number;
+    automatic_ready: number;
+    guided_sources: number;
+  };
+  sources: ImportSource[];
+};
 
 type AssistantRecord = {
   id: string;
@@ -40,36 +79,44 @@ type AssistantScan = {
     planned: number;
   };
   assistants: AssistantRecord[];
+  import_plan?: ImportPlan;
 };
 
-type ImportMode = "chatgpt_export" | "codex_report";
-type CaptureSubmission = { job_id?: string; duplicate?: boolean; status?: string; capture_id?: string };
+type CaptureSubmission = {
+  job_id?: string;
+  duplicate?: boolean;
+  status?: string;
+  capture_id?: string;
+};
 
 type Props = PageProps & { onNavigate: (page: PageId) => void };
 
 const stateLabel = (state: string): string => ({
   detected: "已自动检测",
   not_found: "未检测到",
-  manual_export: "等待主人提供导出文件",
-  available: "可在授权后导入",
+  manual_export: "需要官方导出包",
+  available: "支持导入",
   planned: "适配中",
   configuration_required: "等待配置授权",
   unavailable: "暂不可用",
 }[state] ?? state);
 
 const stateTone = (state: string): string => {
-  if (["detected", "available", "healthy", "ready"].includes(state)) return "ok";
-  if (["planned", "manual_export", "configuration_required"].includes(state)) return "warning";
+  if (["detected", "available", "healthy", "ready", "candidate_ready"].includes(state)) return "ok";
+  if (["planned", "manual_export", "configuration_required", "guided_action_required"].includes(state)) return "warning";
+  if (["failed", "blocked"].includes(state)) return "error";
   return "neutral";
 };
 
 const time = (value: string | null): string => value ? new Date(value).toLocaleString() : "暂无";
+const size = (value: number): string => value >= 1024 * 1024
+  ? `${(value / 1024 / 1024).toFixed(1)} MB`
+  : `${Math.max(Math.round(value / 1024), 1)} KB`;
 
 export default function AssistantHubPage({ api, active, onNavigate }: Props) {
   const [scan, setScan] = useState<AssistantScan | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [paths, setPaths] = useState<Record<ImportMode, string>>({ chatgpt_export: "", codex_report: "" });
   const [result, setResult] = useState("");
 
   const load = useCallback(async (rescan = false) => {
@@ -90,43 +137,26 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
 
   useEffect(() => { void load(true); }, [load]);
 
-  const chooseFile = async (mode: ImportMode) => {
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({
-        multiple: false,
-        directory: false,
-        title: mode === "chatgpt_export" ? "授权灵机读取 ChatGPT 导出文件" : "授权灵机读取 Codex Report",
-        filters: mode === "chatgpt_export"
-          ? [{ name: "ChatGPT Export", extensions: ["zip", "json"] }]
-          : [{ name: "Codex Report", extensions: ["json"] }],
-      });
-      if (typeof selected === "string") setPaths((value) => ({ ...value, [mode]: selected }));
-    } catch {
-      setResult("文件授权仅在安装版灵机中可用。请使用 Windows 安装包验收。");
-    }
-  };
+  const importPlan = scan?.import_plan ?? null;
+  const primaryImport = useMemo(() => {
+    if (!importPlan) return null;
+    return importPlan.sources.find((source) => source.state === "candidate_ready")
+      ?? importPlan.sources.find((source) => source.state === "guided_action_required")
+      ?? null;
+  }, [importPlan]);
 
-  const submitImport = async (mode: ImportMode) => {
-    const inputPath = paths[mode];
-    if (!inputPath) {
-      setResult("请先授权一个导出文件。");
-      return;
-    }
-    setBusy(`import:${mode}`);
+  const authorizeCandidate = async (candidate: ImportCandidate) => {
+    setBusy(`candidate:${candidate.candidate_id}`);
     setResult("");
     try {
-      const response = await api.post<CaptureSubmission>("/api/capture/file", {
-        input_path: inputPath,
-        source_type: mode,
-        adapter_name: mode === "chatgpt_export" ? "chatgpt_export" : "codex_work_report",
-        privacy: "private",
-        process_later: true,
-        metadata: { origin: "assistant_hub", owner_authorized: true },
-      });
+      const response = await api.post<CaptureSubmission>(
+        `/api/assistant-hub/import-candidates/${candidate.candidate_id}/authorize`,
+        { confirmation: `AUTHORIZE_ASSISTANT_IMPORT_${candidate.candidate_id.toUpperCase()}` },
+      );
       setResult(response.duplicate
-        ? "这份内容已经提交过，灵机没有重复创建任务。"
-        : `授权已记录，灵机已接管后续处理${response.job_id ? `：${response.job_id}` : ""}。候选长期记忆仍需主人最终确认。`);
+        ? `${candidate.display_name} 已处理过，灵机没有重复创建任务。`
+        : `${candidate.display_name} 已获授权并进入处理队列${response.job_id ? `：${response.job_id}` : ""}。后续解析、去重和失败重试由灵机完成。`);
+      await load(false);
     } catch (reason) {
       const apiError = reason instanceof ApiError ? reason : new ApiError(0, "UNKNOWN", "导入失败");
       setResult(`导入失败：${apiError.message}`);
@@ -135,16 +165,58 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
     }
   };
 
+  const chooseAndImport = async (source: ImportSource) => {
+    setResult("");
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        title: source.id === "chatgpt"
+          ? "选择 ChatGPT 官方导出包，选中后立即导入"
+          : "选择 Codex Work Report，选中后立即导入",
+        filters: source.id === "chatgpt"
+          ? [{ name: "ChatGPT Export", extensions: ["zip", "json"] }]
+          : [{ name: "Codex Work Report", extensions: ["json"] }],
+      });
+      if (typeof selected !== "string") return;
+      setBusy(`selected:${source.id}`);
+      const response = await api.post<CaptureSubmission>("/api/assistant-hub/import-selected-file", {
+        input_path: selected,
+        source_id: source.id,
+        confirmation: "AUTHORIZE_SELECTED_ASSISTANT_IMPORT",
+      });
+      setResult(response.duplicate
+        ? "这份内容已经处理过，灵机没有重复创建任务。"
+        : `文件已获授权并进入处理队列${response.job_id ? `：${response.job_id}` : ""}。不需要再次点击提交。`);
+      await load(false);
+    } catch (reason) {
+      const apiError = reason instanceof ApiError ? reason : new ApiError(0, "UNKNOWN", "导入失败");
+      setResult(`导入失败：${apiError.message}`);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const runImport = (source: ImportSource) => {
+    const candidate = source.candidates[0];
+    if (candidate) {
+      void authorizeCandidate(candidate);
+      return;
+    }
+    if (source.supported) void chooseAndImport(source);
+  };
+
   if (!active) return <div className="assistant-hub-state">灵机核心连接后会自动扫描、连接和汇总 AI 来源。</div>;
 
   return <div className="assistant-hub-page">
     <section className="assistant-onboarding-hero">
       <div>
         <span className="desktop-eyebrow">自动运行观察台</span>
-        <h2>灵机正在主动发现和维护 AI 连接</h2>
+        <h2>灵机正在主动发现 AI 来源并准备导入</h2>
         <p>
-          安装检测、历史目录元数据扫描、状态刷新和失败重试由灵机自动执行。
-          这里只有读取真实正文、修改外部客户端配置和写入永久记忆时才需要你的授权。
+          安装检测、受支持导出包的元数据扫描、连接检查、状态刷新和失败重试由灵机自动执行。
+          你只在读取真实正文前授权一次，之后不需要填写路径或再次提交。
         </p>
       </div>
       <button className="button secondary" disabled={busy === "scan"} onClick={() => void load(true)}>
@@ -155,20 +227,38 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
     {error && <div className="assistant-hub-notice error">{error}</div>}
 
     <section className="assistant-setup-flow" aria-label="灵机自动处理流程">
-      <div><strong>1</strong><span><b>自动发现</b><small>确认安装和可用能力，不读取对话正文。</small></span></div>
-      <div><strong>2</strong><span><b>自动检查</b><small>验证命令、配置状态和连接条件，失败会后台重试。</small></span></div>
-      <div><strong>3</strong><span><b>授权读取</b><small>发现可导入资料后，只在读取正文前请求主人确认。</small></span></div>
-      <div><strong>4</strong><span><b>主人定稿</b><small>只有你确认的候选才成为正式永久记忆。</small></span></div>
+      <div><strong>1</strong><span><b>自动发现</b><small>查找安装、目录和受支持导出包，只读取元数据。</small></span></div>
+      <div><strong>2</strong><span><b>自动判断</b><small>区分可直接授权导入、需要一步选择和暂不支持。</small></span></div>
+      <div><strong>3</strong><span><b>一次授权</b><small>授权后立即入队，不再要求填写路径或二次提交。</small></span></div>
+      <div><strong>4</strong><span><b>自动处理</b><small>解析、去重、进度和重试由灵机维护，永久记忆仍由你定稿。</small></span></div>
     </section>
 
     {scan && <>
       <section className="assistant-scan-summary">
         <div><span>当前工作空间</span><strong>{scan.workspace || "未知"}</strong></div>
         <div><span>自动检测到工具</span><strong>{scan.summary.detected}</strong></div>
-        <div><span>等待授权来源</span><strong>{scan.summary.import_ready + scan.summary.requires_manual_export}</strong></div>
-        <div><span>待开发适配器</span><strong>{scan.summary.planned}</strong></div>
-        <small>最近自动扫描：{time(scan.scanned_at)}</small>
+        <div><span>可一步授权的导出包</span><strong>{importPlan?.summary.candidate_count ?? 0}</strong></div>
+        <div><span>需要一步选择的来源</span><strong>{importPlan?.summary.guided_sources ?? 0}</strong></div>
+        <small>最近自动扫描：{time(scan.scanned_at)} · 未读取任何对话正文</small>
       </section>
+
+      {primaryImport && <section className={`assistant-primary-import ${stateTone(primaryImport.state)}`}>
+        <div>
+          <span className="desktop-eyebrow">当前导入动作</span>
+          <h3>{primaryImport.label}</h3>
+          <p>{primaryImport.guide}</p>
+          {primaryImport.candidates[0] && <small>
+            已发现：{primaryImport.candidates[0].display_name} · {size(primaryImport.candidates[0].size_bytes)} · {time(primaryImport.candidates[0].modified_at)}
+          </small>}
+        </div>
+        <button
+          className="button primary"
+          disabled={busy !== ""}
+          onClick={() => runImport(primaryImport)}
+        >
+          {busy.startsWith("candidate:") || busy.startsWith("selected:") ? "灵机接管中…" : primaryImport.primary_action}
+        </button>
+      </section>}
 
       <section className="assistant-card-grid">
         {scan.assistants.map((assistant) => <article className="assistant-card" key={assistant.id}>
@@ -180,13 +270,9 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
           <dl>
             <div><dt>历史导入</dt><dd>{stateLabel(assistant.import_state)}</dd></div>
             <div><dt>自动同步</dt><dd>{stateLabel(assistant.sync_state)}</dd></div>
-            <div><dt>候选文件</dt><dd>{assistant.candidate_count.toLocaleString()}</dd></div>
+            <div><dt>元数据候选</dt><dd>{assistant.candidate_count.toLocaleString()}</dd></div>
             <div><dt>最近活动</dt><dd>{time(assistant.latest_activity_at)}</dd></div>
           </dl>
-          {assistant.discovered_paths.length > 0 && <div className="assistant-path-list">
-            <small>已发现以下来源，仅读取了路径和数量元数据：</small>
-            {assistant.discovered_paths.map((path) => <code key={path}>{path}</code>)}
-          </div>}
           <footer>{assistant.next_action}</footer>
         </article>)}
       </section>
@@ -194,74 +280,58 @@ export default function AssistantHubPage({ api, active, onNavigate }: Props) {
 
     <AssistantConnectorPanel api={api} active={active} />
 
-    <section className="assistant-import-section">
+    {importPlan && <section className="assistant-import-section">
       <div className="assistant-section-heading">
         <div>
-          <span className="desktop-eyebrow">需要主人授权的边界</span>
-          <h3>选择一次来源，后续解析、去重、入队和进度维护由灵机完成</h3>
+          <span className="desktop-eyebrow">导入来源</span>
+          <h3>能自动发现的直接授权，不能自动发现的只保留一个动作</h3>
+          <p>页面不会要求你手工填写路径，也不会在选完文件后再让你点击一次提交。</p>
         </div>
         <button className="button secondary" onClick={() => onNavigate("activity")}>查看自动处理进度</button>
       </div>
       <div className="assistant-import-grid">
-        <ImportCard
-          title="ChatGPT 历史"
-          detail="授权读取官方导出的 ZIP 或 conversations JSON。"
-          path={paths.chatgpt_export}
-          busy={busy === "import:chatgpt_export"}
-          onChoose={() => void chooseFile("chatgpt_export")}
-          onSubmit={() => void submitImport("chatgpt_export")}
-        />
-        <ImportCard
-          title="Codex 工作报告"
-          detail="授权读取灵机/Codex 生成的结构化 JSON 工作报告。"
-          path={paths.codex_report}
-          busy={busy === "import:codex_report"}
-          onChoose={() => void chooseFile("codex_report")}
-          onSubmit={() => void submitImport("codex_report")}
-        />
+        {importPlan.sources.map((source) => <article className={`assistant-import-card ${source.state}`} key={source.id}>
+          <div>
+            <div className="assistant-import-title-line">
+              <h4>{source.label}</h4>
+              <span className={`pill ${stateTone(source.state)}`}>
+                {source.state === "candidate_ready" ? "已发现导出包" : source.state === "guided_action_required" ? "一步选择" : "暂不支持"}
+              </span>
+            </div>
+            <p>{source.guide}</p>
+          </div>
+          {source.candidates[0] && <div className="assistant-import-candidate">
+            <strong>{source.candidates[0].display_name}</strong>
+            <small>{size(source.candidates[0].size_bytes)} · {time(source.candidates[0].modified_at)}</small>
+          </div>}
+          {source.supported && <button
+            className="button"
+            disabled={busy !== ""}
+            onClick={() => runImport(source)}
+          >
+            {busy === `candidate:${source.candidates[0]?.candidate_id}` || busy === `selected:${source.id}`
+              ? "灵机接管中…"
+              : source.primary_action}
+          </button>}
+        </article>)}
       </div>
       {result && <div className="assistant-hub-notice">{result}</div>}
-    </section>
+    </section>}
 
     <section className="assistant-memory-policy">
       <div>
         <span className="desktop-eyebrow">永久记忆规则</span>
         <h3>灵机自动整理，主人只负责最终批准</h3>
-        <p>连接后的 AI 可以读取你批准的记忆，也可以提交候选；导入资料会自动保留来源、去重和进入处理链。只有你在“人工记忆审核”中确认的内容，才成为正式长期记忆。</p>
+        <p>导入资料会自动保留来源、去重并进入处理链。只有你在“人工记忆审核”中确认的内容，才成为正式长期记忆。</p>
       </div>
       <div className="assistant-policy-list">
-        <span>✓ 自动扫描安装和历史目录元数据</span>
-        <span>✓ 自动检测连接、模型和运行状态</span>
-        <span>✓ 自动解析、去重、排队和失败重试</span>
+        <span>✓ 自动扫描安装、目录和受支持导出包元数据</span>
+        <span>✓ 一次授权后自动入队、解析、去重和失败重试</span>
+        <span>✓ 不支持的来源明确说明，不展示无效按钮</span>
         <span>× 未授权不读取真实正文</span>
         <span>× 不允许 AI 直接写入 Core Memory</span>
       </div>
       <button className="button secondary" onClick={() => onNavigate("memory_review")}>查看待批准候选</button>
     </section>
   </div>;
-}
-
-function ImportCard({
-  title,
-  detail,
-  path,
-  busy,
-  onChoose,
-  onSubmit,
-}: {
-  title: string;
-  detail: string;
-  path: string;
-  busy: boolean;
-  onChoose: () => void;
-  onSubmit: () => void;
-}) {
-  return <article className="assistant-import-card">
-    <div><h4>{title}</h4><p>{detail}</p></div>
-    <code>{path || "尚未授权文件"}</code>
-    <div>
-      <button className="button secondary" onClick={onChoose}>授权文件</button>
-      <button className="button" disabled={!path || busy} onClick={onSubmit}>{busy ? "灵机接管中…" : "授权并交给灵机"}</button>
-    </div>
-  </article>;
 }

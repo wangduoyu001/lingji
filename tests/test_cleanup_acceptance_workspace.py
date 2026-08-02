@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.cleanup_acceptance_workspace import CleanupError, cleanup, validate_target
+from scripts.cleanup_acceptance_workspace import (
+    CleanupError,
+    cleanup,
+    result_payload,
+    validate_target,
+)
 
 
 def test_refuses_cleanup_root_itself(tmp_path: Path) -> None:
@@ -76,11 +81,31 @@ def test_dry_run_reports_without_deleting(tmp_path: Path) -> None:
         root, target, "PR60-MEMORY-QUALITY-TRIAL-D69874AF"
     )
     result = cleanup(resolved_root, resolved_target, execute=False)
+    payload = result_payload(result, execute_requested=False)
 
     assert result.existed is True
     assert result.executed is False
     assert target.exists()
     assert "PR60-MEMORY-TRIAL-1c514877/logs/run.log" in result.remaining
+    assert payload["status"] == "DRY_RUN_READY"
+    assert payload["authorized"] is True
+    assert payload["next_action"] == "rerun_with_execute"
+    assert payload["planned_entries"] == len(result.remaining)
+
+
+def test_missing_target_is_pass_not_blocked(tmp_path: Path) -> None:
+    root = tmp_path / "LingJiAcceptance"
+    target = root / "PR60-MEMORY-TRIAL-4161807c"
+    root.mkdir(parents=True)
+
+    resolved_root, resolved_target = validate_target(
+        root, target, "PR60-MEMORY-QUALITY-TRIAL-4161807C"
+    )
+    result = cleanup(resolved_root, resolved_target, execute=False)
+    payload = result_payload(result, execute_requested=False)
+
+    assert payload["status"] == "PASS"
+    assert payload["next_action"] == "nothing_to_remove"
 
 
 def test_execute_removes_only_authorized_validation_target(tmp_path: Path) -> None:
@@ -98,10 +123,13 @@ def test_execute_removes_only_authorized_validation_target(tmp_path: Path) -> No
         "PR60-CODE-RELEASE-VALIDATION-A90A18A6",
     )
     result = cleanup(resolved_root, resolved_target, execute=True)
+    payload = result_payload(result, execute_requested=True)
 
     assert result.executed is True
     assert result.remaining == []
     assert not target.exists()
+    assert payload["status"] == "PASS"
+    assert payload["next_action"] == "cleanup_complete"
     assert (protected / "keep.txt").read_text(encoding="utf-8") == "keep"
 
 

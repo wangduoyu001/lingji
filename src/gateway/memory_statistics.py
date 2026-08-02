@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_STATUS_SCHEMA_VERSION = 1
+_STATUS_SCHEMA_VERSION = 2
 _DEFAULT_STALE_SECONDS = 300.0
 _MAX_MISSING_IDS = 100
 
@@ -13,7 +14,7 @@ _MAX_MISSING_IDS = 100
 class MemoryStatisticsService:
     """Build or read one truthful memory/vector status snapshot.
 
-    A process that owns the MemoryGateway may publish live data. Other processes,
+    A process that owns the MemoryGateway publishes live data. Other processes,
     especially the Local Control API, read the persisted snapshot instead of
     opening the same embedded Qdrant path a second time.
     """
@@ -56,6 +57,7 @@ class MemoryStatisticsService:
         return {
             "as_of": payload.get("as_of"),
             "source": payload.get("source"),
+            "producer": dict(payload.get("producer") or {}),
             "stale": payload.get("stale", False),
             "workspace": payload.get("workspace"),
             **dict(payload.get("memory") or {}),
@@ -66,6 +68,7 @@ class MemoryStatisticsService:
         return {
             "as_of": payload.get("as_of"),
             "source": payload.get("source"),
+            "producer": dict(payload.get("producer") or {}),
             "stale": payload.get("stale", False),
             "workspace": payload.get("workspace"),
             "embedding": dict(payload.get("embedding") or {}),
@@ -77,6 +80,7 @@ class MemoryStatisticsService:
         return {
             "as_of": payload.get("as_of"),
             "source": payload.get("source"),
+            "producer": dict(payload.get("producer") or {}),
             "stale": payload.get("stale", False),
             "workspace": payload.get("workspace"),
             **dict(payload.get("coverage") or {}),
@@ -143,40 +147,45 @@ class MemoryStatisticsService:
                 "active_model": None,
                 "dimension": None,
             }
-            vector = {
-                "state": vector_state,
-                "ready": False,
-                "collection_exists": False,
-                "vectors": None,
-                "dimension": None,
-                "collection": getattr(workspace, "qdrant_collection", None),
-                "mode": getattr(workspace, "qdrant_mode", None),
-                "rebuild_required": False,
-                "last_error": warnings[-1].get("message") if degraded and warnings else None,
-            }
+            vector = self._normalize_vector_truth(
+                {
+                    "state": vector_state,
+                    "ready": False,
+                    "collection_exists": False,
+                    "vectors": None,
+                    "dimension": None,
+                    "collection": getattr(workspace, "qdrant_collection", None),
+                    "mode": getattr(workspace, "qdrant_mode", None),
+                    "rebuild_required": False,
+                    "last_error": warnings[-1].get("message") if degraded and warnings else None,
+                },
+                self._coverage_unavailable(
+                    expected=memory.get("chunks"),
+                    state=vector_state,
+                ),
+                embedding,
+                preferred_state=vector_state,
+            )
             coverage = self._coverage_unavailable(
                 expected=memory.get("chunks"),
                 state=vector_state,
             )
         else:
             embedding = self._embedding_status(semantic)
-            vector = self._vector_status(semantic)
+            raw_vector = self._vector_status(semantic)
             coverage = self._coverage_status(database, semantic, memory.get("chunks"))
-            vector["state"] = self._vector_state(vector, coverage)
-            if embedding.get("state") == "unavailable" and vector["state"] == "healthy":
-                vector["state"] = "degraded"
+            vector = self._normalize_vector_truth(raw_vector, coverage, embedding)
 
         states = [memory.get("state"), vector.get("state")]
         overall_state = "healthy"
-        if "unavailable" in states:
-            overall_state = "degraded"
-        elif "degraded" in states:
+        if any(state in {"unavailable", "degraded", "empty", "configuration_required"} for state in states):
             overall_state = "degraded"
 
         return {
             "schema_version": _STATUS_SCHEMA_VERSION,
             "as_of": self._now(),
             "source": "live",
+            "producer": self._producer(),
             "stale": False,
             "state": overall_state,
             "workspace": workspace_name,
@@ -214,7 +223,10 @@ class MemoryStatisticsService:
         try:
             status = dict(semantic.status())
             status.setdefault("collection", getattr(semantic, "collection", None))
-            status.setdefault("mode", getattr(getattr(semantic, "workspace", None), "qdrant_mode", None))
+            status.setdefault(
+                "mode",
+                getattr(getattr(semantic, "workspace", None), "qdrant_mode", None),
+            )
             return status
         except Exception as exc:
             return {
@@ -223,7 +235,9 @@ class MemoryStatisticsService:
                 "vectors": None,
                 "dimension": None,
                 "collection": getattr(semantic, "collection", None),
-                "mode": getattr(getattr(semantic, "workspace", None), "qdrant_mode", None),
+                "mode": getattr(
+                    getattr(semantic, "workspace", None), "qdrant_mode", None
+                ),
                 "rebuild_required": False,
                 "last_error": self._safe_error(exc),
             }
@@ -240,10 +254,14 @@ class MemoryStatisticsService:
             missing_ids = list(result.get("missing_chunk_ids") or [])
             result["missing_chunk_ids"] = missing_ids[:_MAX_MISSING_IDS]
             result["missing_chunk_ids_truncated"] = len(missing_ids) > _MAX_MISSING_IDS
-            result["state"] = "healthy" if int(result.get("missing") or 0) == 0 else "degraded"
+            result["state"] = (
+                "healthy" if int(result.get("missing") or 0) == 0 else "degraded"
+            )
             return result
         except Exception as exc:
-            result = self._coverage_unavailable(expected=expected_count, state="unavailable")
+            result = self._coverage_unavailable(
+                expected=expected_count, state="unavailable"
+            )
             result["last_error"] = self._safe_error(exc)
             return result
 
@@ -268,17 +286,116 @@ class MemoryStatisticsService:
             "missing_chunk_ids_truncated": False,
         }
 
-    @staticmethod
-    def _vector_state(vector: dict[str, Any], coverage: dict[str, Any]) -> str:
-        if vector.get("rebuild_required"):
-            return "degraded"
-        if not vector.get("ready"):
-            return "unavailable"
-        if coverage.get("state") == "degraded":
-            return "degraded"
-        if coverage.get("state") == "unavailable":
-            return "unavailable"
-        return "healthy"
+    @classmethod
+    def _normalize_vector_truth(
+        cls,
+        raw: dict[str, Any],
+        coverage: dict[str, Any],
+        embedding: dict[str, Any],
+        *,
+        preferred_state: str | None = None,
+    ) -> dict[str, Any]:
+        vector = dict(raw)
+        ready = bool(vector.get("ready"))
+        collection_exists = bool(vector.get("collection_exists"))
+        vectors_raw = vector.get("vectors")
+        vectors = int(vectors_raw) if vectors_raw is not None else None
+        rebuild_required = bool(vector.get("rebuild_required"))
+        embedding_available = bool(embedding.get("available"))
+        last_error = str(vector.get("last_error") or "")
+        normalized_error = last_error.casefold()
+        locked = any(
+            token in normalized_error
+            for token in (
+                "already accessed by another instance",
+                "already locked",
+                "directory locked",
+                "resource temporarily unavailable",
+                "another lingji memory runtime owns",
+            )
+        )
+
+        semantic_search_available = bool(
+            ready
+            and collection_exists
+            and vectors is not None
+            and vectors > 0
+            and embedding_available
+            and not rebuild_required
+            and not locked
+        )
+        lexical_search_available = True
+
+        if preferred_state in {"disabled", "degraded"}:
+            state = preferred_state
+            reason_code = (
+                "semantic_runtime_initialization_failed"
+                if preferred_state == "degraded"
+                else "semantic_disabled"
+            )
+        elif locked:
+            state = "unavailable"
+            reason_code = "embedded_store_locked"
+        elif rebuild_required:
+            state = "degraded"
+            reason_code = "vector_rebuild_required"
+        elif not ready:
+            state = "unavailable"
+            reason_code = "vector_service_unavailable"
+        elif not embedding_available:
+            state = "degraded"
+            reason_code = "embedding_unavailable"
+        elif not collection_exists or vectors in {None, 0}:
+            state = "empty"
+            reason_code = "collection_empty"
+        elif coverage.get("state") == "degraded":
+            state = "degraded"
+            reason_code = "vector_coverage_incomplete"
+        elif coverage.get("state") == "unavailable":
+            state = "unavailable"
+            reason_code = "vector_coverage_unknown"
+        else:
+            state = "healthy"
+            reason_code = "ready"
+
+        if semantic_search_available:
+            impact = "全文检索和语义检索均可用。"
+            recovery_state = "not_required"
+            recovery_action = ""
+        elif reason_code == "collection_empty":
+            impact = "全文检索可用；当前没有可供语义检索的向量。"
+            recovery_state = "waiting_for_indexable_content"
+            recovery_action = "导入并处理获授权资料后自动建立向量；无需手工寻找 Qdrant 目录。"
+        elif reason_code == "embedded_store_locked":
+            impact = "全文检索仍可用；语义检索暂不可用。"
+            recovery_state = "waiting_for_single_owner"
+            recovery_action = "灵机会等待旧内存进程退出并由唯一 MCP Runtime 重新接管。"
+        elif reason_code == "vector_rebuild_required":
+            impact = "全文检索仍可用；语义结果可能不完整。"
+            recovery_state = "owner_authorization_required"
+            recovery_action = "确认模型和维度后，从向量中心授权重建当前工作空间索引。"
+        else:
+            impact = "全文检索仍可用；语义检索当前不可用。"
+            recovery_state = "diagnosis_required"
+            recovery_action = "查看当前原因；灵机会自动刷新状态，但不会删除或重建生产索引。"
+
+        vector.update(
+            {
+                "state": state,
+                "service_ready": ready,
+                "search_available": semantic_search_available,
+                "semantic_search_available": semantic_search_available,
+                "lexical_search_available": lexical_search_available,
+                "reason_code": reason_code,
+                "impact": impact,
+                "recovery": {
+                    "state": recovery_state,
+                    "automatic_refresh": True,
+                    "action": recovery_action,
+                },
+            }
+        )
+        return vector
 
     def _write_snapshot(self, payload: dict[str, Any]) -> None:
         if self.snapshot_path is None:
@@ -293,7 +410,9 @@ class MemoryStatisticsService:
 
     def _read_snapshot(self) -> dict[str, Any]:
         if self.snapshot_path is None or not self.snapshot_path.is_file():
-            return self._unavailable_snapshot("Memory runtime status snapshot is not available")
+            return self._unavailable_snapshot(
+                "Memory runtime status snapshot is not available"
+            )
         try:
             payload = json.loads(self.snapshot_path.read_text(encoding="utf-8-sig"))
             if not isinstance(payload, dict):
@@ -301,10 +420,32 @@ class MemoryStatisticsService:
             age_seconds = self._age_seconds(payload.get("as_of"))
             payload = dict(payload)
             payload["source"] = "snapshot"
-            payload["stale"] = age_seconds is None or age_seconds > self.stale_after_seconds
+            payload["producer"] = dict(payload.get("producer") or {})
+            payload["stale"] = (
+                age_seconds is None or age_seconds > self.stale_after_seconds
+            )
             payload["age_seconds"] = age_seconds
+            raw_vector = dict(payload.get("vector") or {})
+            coverage = dict(payload.get("coverage") or {})
+            embedding = dict(payload.get("embedding") or {})
+            if "search_available" not in raw_vector:
+                payload["vector"] = self._normalize_vector_truth(
+                    raw_vector, coverage, embedding
+                )
             if payload["stale"]:
                 payload["state"] = "degraded"
+                vector = dict(payload.get("vector") or {})
+                vector["stale"] = True
+                vector["search_available"] = False
+                vector["semantic_search_available"] = False
+                vector["reason_code"] = "status_snapshot_stale"
+                vector["impact"] = "全文检索可用；语义检索状态过期，暂不宣称可用。"
+                vector["recovery"] = {
+                    "state": "waiting_for_mcp_publisher",
+                    "automatic_refresh": True,
+                    "action": "灵机正在等待唯一 MCP Runtime 发布新快照。",
+                }
+                payload["vector"] = vector
             return payload
         except Exception as exc:
             return self._unavailable_snapshot(
@@ -312,10 +453,35 @@ class MemoryStatisticsService:
             )
 
     def _unavailable_snapshot(self, message: str) -> dict[str, Any]:
+        embedding = {
+            "state": "configuration_required",
+            "available": False,
+            "active_model": None,
+            "dimension": None,
+        }
+        coverage = self._coverage_unavailable(None, "configuration_required")
+        vector = self._normalize_vector_truth(
+            {
+                "state": "configuration_required",
+                "ready": False,
+                "collection_exists": False,
+                "vectors": None,
+                "dimension": None,
+                "collection": None,
+                "mode": None,
+                "rebuild_required": False,
+                "last_error": message,
+            },
+            coverage,
+            embedding,
+        )
+        vector["state"] = "configuration_required"
+        vector["reason_code"] = "memory_status_snapshot_unavailable"
         return {
             "schema_version": _STATUS_SCHEMA_VERSION,
             "as_of": None,
             "source": "unavailable",
+            "producer": {},
             "stale": True,
             "state": "configuration_required",
             "workspace": None,
@@ -328,24 +494,9 @@ class MemoryStatisticsService:
                 "database_bytes": None,
                 "database_path": None,
             },
-            "embedding": {
-                "state": "configuration_required",
-                "available": False,
-                "active_model": None,
-                "dimension": None,
-            },
-            "vector": {
-                "state": "configuration_required",
-                "ready": False,
-                "collection_exists": False,
-                "vectors": None,
-                "dimension": None,
-                "collection": None,
-                "mode": None,
-                "rebuild_required": False,
-                "last_error": message,
-            },
-            "coverage": self._coverage_unavailable(None, "configuration_required"),
+            "embedding": embedding,
+            "vector": vector,
+            "coverage": coverage,
             "warnings": [
                 {
                     "code": "memory_status_snapshot_unavailable",
@@ -356,6 +507,18 @@ class MemoryStatisticsService:
         }
 
     @staticmethod
+    def _producer() -> dict[str, Any]:
+        return {
+            "service": str(
+                os.environ.get("LINGJI_MEMORY_STATUS_PRODUCER") or "memory_gateway"
+            ),
+            "instance_id": str(
+                os.environ.get("LINGJI_MEMORY_STATUS_INSTANCE_ID") or ""
+            ),
+            "pid": os.getpid(),
+        }
+
+    @staticmethod
     def _age_seconds(value: Any) -> float | None:
         if not value:
             return None
@@ -363,13 +526,19 @@ class MemoryStatisticsService:
             parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=timezone.utc)
-            return max((datetime.now(timezone.utc) - parsed).total_seconds(), 0.0)
+            return max(
+                (datetime.now(timezone.utc) - parsed).total_seconds(), 0.0
+            )
         except (TypeError, ValueError):
             return None
 
     @staticmethod
     def _now() -> str:
-        return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+        return (
+            datetime.now(timezone.utc)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z")
+        )
 
     @staticmethod
     def _safe_error(exc: Exception) -> str:

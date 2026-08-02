@@ -217,6 +217,23 @@ def cleanup(root: Path, target: Path, *, execute: bool) -> CleanupResult:
     )
 
 
+def result_payload(result: CleanupResult, *, execute_requested: bool) -> dict[str, object]:
+    payload: dict[str, object] = asdict(result)
+    payload["authorized"] = True
+    payload["execute_requested"] = bool(execute_requested)
+    payload["planned_entries"] = len(result.remaining) if not result.executed else 0
+    if result.executed:
+        payload["status"] = "PASS"
+        payload["next_action"] = "cleanup_complete"
+    elif result.existed:
+        payload["status"] = "DRY_RUN_READY"
+        payload["next_action"] = "rerun_with_execute"
+    else:
+        payload["status"] = "PASS"
+        payload["next_action"] = "nothing_to_remove"
+    return payload
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--task-id", required=True)
@@ -233,11 +250,20 @@ def main() -> int:
         root, target = validate_target(args.root, args.target, args.task_id)
         result = cleanup(root, target, execute=args.execute)
     except CleanupError as exc:
-        print(json.dumps({"status": "BLOCKED", "error": str(exc)}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {
+                    "status": "BLOCKED",
+                    "authorized": False,
+                    "execute_requested": bool(args.execute),
+                    "error": str(exc),
+                },
+                ensure_ascii=False,
+            )
+        )
         return 2
 
-    payload = asdict(result)
-    payload["status"] = "PASS" if not result.remaining else "BLOCKED"
+    payload = result_payload(result, execute_requested=args.execute)
     text = json.dumps(payload, ensure_ascii=False, indent=2)
     print(text)
     if args.json_output:
