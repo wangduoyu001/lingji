@@ -22,11 +22,11 @@ public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMAR
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_05376996.txt
 cleanup_before: PASS
 cleanup_after: NOT_RUN
-remote_branch_verified: false
-remote_commit_verified: false
-remote_report_verified: false
-remote_result_verified: false
-pr_comment_verified: false
+remote_branch_verified: true
+remote_commit_verified: true
+remote_report_verified: true
+remote_result_verified: true
+pr_comment_verified: true
 local_temp_root_absent: false
 owner_observation: NOT_REQUIRED
 started_at: 2026-08-02T12:26:47Z
@@ -139,7 +139,7 @@ real_data_authorized = false
 最终报告：docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_05376996.md
 公开摘要：docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_05376996.json
 公开哈希：docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_05376996.txt
-PR #60评论：https://github.com/wangduoyu001/lingji/pull/60#issuecomment-5157375808
+PR #60本轮独立复跑评论：https://github.com/wangduoyu001/lingji/pull/60#issuecomment-5157925567
 报告分支报告内容 HEAD：215b917b15859a2841c752c1d8c293359c04410b
 ```
 
