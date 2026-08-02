@@ -3,7 +3,7 @@
 ## 2026-08-02 · PR #60 · exact release Git identity recovery
 
 - Product branch: `codex/pr60-validation-git-identity-05376996`
-- Product commit: `pending (local final-closeout acceptance-contract repair)`
+- Product commit: `4e6d25cc63800e290cdea1bc5e41e51a5bc200ec` (validated code commit)
 - Affected modules: unified local validation entrypoint, release metadata, and validation regression coverage.
 - Risk level: P0
 - User-visible change: local Windows release summaries and package metadata identify the exact repair commit and branch instead of `unknown`.
@@ -12,18 +12,18 @@
 ### Automated acceptance
 
 - [x] `python -m pytest -q tests/test_validation_git_identity.py tests/test_acceptance_sync.py tests/test_local_execution_handoff.py` (33 passed): stale PowerShell native exit state cannot hide a successful Git identity read.
-- [ ] `python -m pytest -q --tb=short`: complete Python regression suite.
-- [ ] Desktop smoke/build and Rust/Tauri tests.
-- [ ] `scripts/validate.ps1 -Mode release`: `latest-summary.json` and `build-metadata.json` contain the exact 40-character validation commit, never `unknown`.
+- [x] `python -m pytest -q --tb=short`: complete Python suite passed inside unified release validation.
+- [x] Desktop smoke/build and Rust/Tauri tests passed inside unified release validation.
+- [x] `scripts/validate.ps1 -Mode release`: all 15 suites passed; `latest-summary.json` and `build-metadata.json` both contain exact commit `4e6d25cc63800e290cdea1bc5e41e51a5bc200ec`, never `unknown`.
 
 ### Real-machine acceptance
 
-- [ ] Build one local Windows release with an isolated D-drive PyInstaller environment and verify summary/package commit identity plus artifact hashes.
+- [x] Built one local Windows release with PyInstaller 6.21.0 in the task-owned D-drive venv; summary/package identity and installer, portable, manifest, metadata, and Sidecar hashes were independently reread.
 
 ### Regression items
 
-- [ ] Capture `$LASTEXITCODE` immediately after native Git execution, before any PowerShell pipeline command can change it.
-- [ ] Git absence or a real nonzero Git exit still returns the explicit fallback.
+- [x] Capture `$LASTEXITCODE` immediately after native Git execution, before any PowerShell pipeline command can change it.
+- [x] Git absence or a real nonzero Git exit still returns the explicit fallback.
 
 ### Out of scope
 
