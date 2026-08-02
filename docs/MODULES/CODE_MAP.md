@@ -408,11 +408,15 @@ second_brain/obsidian_cli.py
 scripts/validate.ps1
 = 本地 focused / full / release 统一入口
 
+scripts/validation_git.ps1::Get-GitValue
+= 验证摘要与本地发布元数据的精确 Git Commit / Branch 身份读取
+
 requirements-test.txt
 requirements-sidecar-build.txt
 requirements-mcp.txt
 constraints/python-3.12-windows.txt
 scripts/validate_clean_install.py
+tests/test_validation_git_identity.py
 
 desktop/lingji-control/package.json
 desktop/lingji-control/scripts/run-smoke-suite.mjs
