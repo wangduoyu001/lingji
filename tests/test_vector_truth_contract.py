@@ -136,6 +136,64 @@ class VectorTruthContractTests(unittest.TestCase):
         self.assertEqual(vector["recovery"]["state"], "waiting_for_single_owner")
         self.assertIn("唯一 MCP Runtime", vector["recovery"]["action"])
 
+    def test_rebuild_required_precedes_empty_collection(self):
+        payload = self._snapshot(
+            Semantic(
+                {
+                    "ready": True,
+                    "collection_exists": False,
+                    "vectors": 0,
+                    "dimension": None,
+                    "rebuild_required": True,
+                    "last_error": None,
+                },
+                embedding=UnavailableEmbedding(),
+            )
+        )
+
+        vector = payload["vector"]
+        self.assertEqual(vector["state"], "degraded")
+        self.assertEqual(vector["reason_code"], "vector_rebuild_required")
+
+    def test_service_unavailable_precedes_empty_collection(self):
+        payload = self._snapshot(
+            Semantic(
+                {
+                    "ready": False,
+                    "collection_exists": False,
+                    "vectors": 0,
+                    "dimension": None,
+                    "rebuild_required": False,
+                    "last_error": "connection refused",
+                },
+                embedding=UnavailableEmbedding(),
+            )
+        )
+
+        vector = payload["vector"]
+        self.assertEqual(vector["state"], "unavailable")
+        self.assertEqual(vector["reason_code"], "vector_service_unavailable")
+
+    def test_nonempty_index_still_requires_available_embedding(self):
+        payload = self._snapshot(
+            Semantic(
+                {
+                    "ready": True,
+                    "collection_exists": True,
+                    "vectors": 2,
+                    "dimension": 1024,
+                    "rebuild_required": False,
+                    "last_error": None,
+                },
+                embedding=UnavailableEmbedding(),
+            )
+        )
+
+        vector = payload["vector"]
+        self.assertEqual(vector["state"], "degraded")
+        self.assertEqual(vector["reason_code"], "embedding_unavailable")
+        self.assertFalse(vector["semantic_search_available"])
+
     def test_nonzero_index_reports_semantic_search_available(self):
         semantic = Semantic(
             {
