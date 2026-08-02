@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task_id": "PR60-MEMORY-QUALITY-TRIAL-4161807C",
-  "verdict": "FAIL",
+  "verdict": "BLOCKED",
   "product_commit": "4161807ce4598cc1696093da4a703de101648280",
   "artifact_id": 8821878623,
   "day0_result": "FAIL",
@@ -11,6 +11,7 @@
   "binding_verified": true,
   "global_bootstrap_preserved": true,
   "production_pollution_count": 0,
+  "cleanup_after": "BLOCKED_POST_CLEANUP",
   "owner_window_observation": "normal_no_black_screen",
   "owner_feedback": "automatic_import_or_clear_one_step_guidance_required",
   "blocking_findings": [

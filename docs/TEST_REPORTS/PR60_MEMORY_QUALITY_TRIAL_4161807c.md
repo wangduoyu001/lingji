@@ -49,3 +49,7 @@ The owner later gave broad permission to import real material. It was intentiona
 ## Scope and privacy
 
 This report contains no tokens, real-content excerpts, private database contents, full real source paths, or screenshots. The task-specific temporary root is cleaned only after the first remote report verification.
+
+## Post-report cleanup
+
+The mandated cleanup tool was run in dry-run mode against the exact task root after the first remote report verification. It correctly limited its candidate list to that root but returned `BLOCKED` and refused execution. No manual deletion was attempted. The final handoff state is therefore `BLOCKED_POST_CLEANUP`; the isolated task root remains solely because the approved cleanup tool did not permit its removal.

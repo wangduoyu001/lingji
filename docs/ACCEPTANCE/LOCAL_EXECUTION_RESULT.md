@@ -8,27 +8,27 @@
 
 ```yaml
 task_id: PR60-MEMORY-QUALITY-TRIAL-4161807C
-status: COMPLETED
-verdict: FAIL
+status: BLOCKED_SUBMISSION
+verdict: BLOCKED
 execution_mode: DAY0_THEN_REAL_DATA_TRIAL
 repository: wangduoyu001/lingji
 product_pr: 60
 product_commit: 4161807ce4598cc1696093da4a703de101648280
 task_instruction_commit: bc9aead956e363405c39ae784d9beb9ba5bc5dff
 report_branch: acceptance/pr60-memory-quality-trial-4161807c
-report_commit: PENDING_REMOTE_VERIFICATION
+report_commit: 8f3ccd153f20d2667961ebcbf09d487633da77d9
 report_path: docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_4161807c.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_SUMMARY_4161807c.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR60_MEMORY_QUALITY_TRIAL_HASHES_4161807c.txt
 cleanup_before: PASS
-cleanup_after: PENDING_REMOTE_VERIFICATION
-remote_branch_verified: false
-remote_commit_verified: false
-remote_report_verified: false
+cleanup_after: BLOCKED_POST_CLEANUP
+remote_branch_verified: true
+remote_commit_verified: true
+remote_report_verified: true
 remote_result_verified: false
 pr_comment_verified: false
 local_temp_root_absent: false
-owner_observation: CONFIRMED_WITH_UX_FAILURE
+owner_observation: FAIL
 started_at: 2026-08-02T05:16:00Z
 finished_at: 2026-08-02T05:55:00Z
 trial_protocol_path: docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
@@ -65,6 +65,8 @@ automatic_model_refresh_result: PASS
 automatic_hardware_refresh_result: PASS
 automatic_recovery_result: FAIL
 owner_global_bootstrap_preserved: PASS
+blocker_code: BLOCKED_POST_CLEANUP
+blocker_detail: cleanup tool dry-run refused the exact task root; no manual deletion permitted
 ```
 
 ## 2. 当前阶段
