@@ -1,5 +1,45 @@
 # 验收要求变更记录
 
+## 2026-08-02 · PR #60 · 1860fa17 cleanup authorization repair
+
+- Product branch: `feature/unified-ai-memory-connectors`
+- Product commit: `pending`
+- Affected module: task-scoped acceptance cleanup policy.
+- Risk level: P0
+- User-visible change: none; the official trial can clean only its explicitly named prior failed task root.
+- Data and security boundary: no wildcard or parent-directory authorization is added. Production data and neighboring task roots remain refused.
+
+### New or modified automated acceptance
+
+- [x] `python -m pytest -q tests/test_cleanup_acceptance_workspace.py`: the exact `4161807c` legacy root is authorized for the `1860fa17` task, while an adjacent name is rejected (`12 passed`).
+
+### New or modified real-machine acceptance
+
+- [x] The exact task's cleanup script returned `DRY_RUN_READY` before the explicit execute request, then removed only the authorized legacy root.
+
+### Owner visual confirmation
+
+- [ ] Not applicable; no UI change.
+
+### Regression items
+
+- [x] Cleanup remains restricted to one direct child of `D:\\codex\\LingJiAcceptance` and one explicitly authorized name.
+
+### Cleanup and rollback
+
+- Test data prefix: test-only `tmp_path`.
+- Rollback: remove this single legacy mapping; no production data is changed by the code change.
+
+### Out of scope
+
+- No deletion is performed by this repair.
+- No product Runtime, Desktop UI, connector, or memory behavior changes.
+
+### Final report
+
+- Report path: `docs/TEST_REPORTS/PR60_MEMORY_QUALITY_TRIAL_1860fa17.md`
+- Report branch: `acceptance/pr60-memory-quality-trial-1860fa17`
+
 > 每个包含产品代码、运行时、UI、连接器、数据链路、脚本、依赖或发布流程变化的 PR，都必须在本文件顶部追加一条记录。
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。

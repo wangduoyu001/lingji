@@ -26,6 +26,11 @@ _MEMORY_TRIAL_TASK = re.compile(
     flags=re.IGNORECASE,
 )
 _LEGACY_TARGETS_BY_TASK = {
+    "PR60-MEMORY-QUALITY-TRIAL-1860FA17": frozenset(
+        {
+            "PR60-MEMORY-TRIAL-4161807c",
+        }
+    ),
     "PR60-MEMORY-QUALITY-TRIAL-D69874AF": frozenset(
         {
             "PR60-MEMORY-TRIAL-1c514877",

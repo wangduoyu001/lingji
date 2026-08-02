@@ -93,7 +93,7 @@ def test_dry_run_reports_without_deleting(tmp_path: Path) -> None:
     assert payload["planned_entries"] == len(result.remaining)
 
 
-def test_missing_target_is_pass_not_blocked(tmp_path: Path) -> None:
+def test_1860fa17_legacy_target_is_authorized_and_missing_is_pass(tmp_path: Path) -> None:
     root = tmp_path / "LingJiAcceptance"
     target = root / "PR60-MEMORY-TRIAL-4161807c"
     root.mkdir(parents=True)
@@ -106,6 +106,14 @@ def test_missing_target_is_pass_not_blocked(tmp_path: Path) -> None:
 
     assert payload["status"] == "PASS"
     assert payload["next_action"] == "nothing_to_remove"
+
+
+def test_1860fa17_legacy_target_never_authorizes_a_neighbor(tmp_path: Path) -> None:
+    root = tmp_path / "LingJiAcceptance"
+    target = root / "PR60-MEMORY-TRIAL-4161807d"
+
+    with pytest.raises(CleanupError, match="not authorized"):
+        validate_target(root, target, "PR60-MEMORY-QUALITY-TRIAL-1860FA17")
 
 
 def test_execute_removes_only_authorized_validation_target(tmp_path: Path) -> None:
