@@ -1,0 +1,19 @@
+{
+  "task_id": "PR60-MEMORY-QUALITY-TRIAL-1860FA17",
+  "product_commit": "1860fa17c5de26b0ff4d54ace48158a6e343505a",
+  "artifact_id": 8830371064,
+  "verdict": "FAIL",
+  "failure_code": "D0-AUTO-IMPORT-QUEUE-STALLED",
+  "artifact_identity_verified": true,
+  "first_startup_seconds": 16.5,
+  "runtime_binding_verified": true,
+  "synthetic_candidate_count": 2,
+  "metadata_only_scan": true,
+  "authorized_job_id": "LJ-JOB-A0D24984A012",
+  "authorized_job_final_status": "queued",
+  "authorized_job_attempts": 0,
+  "observation_seconds": 40,
+  "real_data_read": false,
+  "stage1_result": "NOT_RUN",
+  "stage2_result": "NOT_RUN"
+}
