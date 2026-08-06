@@ -9,6 +9,7 @@ import {
 } from "../runtimeTypes";
 import type { NavigationItem, PageId } from "../types";
 import NavIcon from "./NavIcon";
+import UsageGuideDrawer from "./UsageGuideDrawer";
 
 type Props = {
   page: PageId;
@@ -48,6 +49,7 @@ export default function DesktopShell({
   children,
 }: Props) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [usageGuideOpen, setUsageGuideOpen] = useState(false);
   const shortCommit = releaseMetadata?.commit && releaseMetadata.commit !== "development"
     ? releaseMetadata.commit.slice(0, 8)
     : "dev";
@@ -84,7 +86,7 @@ export default function DesktopShell({
         </div>
 
         <nav className="desktop-nav desktop-nav-primary">
-          <div className="desktop-nav-group-title">运行观察</div>
+          <div className="desktop-nav-group-title">日常使用</div>
           <div className="desktop-nav-items">
             {PRIMARY_NAVIGATION.map((item) => (
               <button
@@ -103,6 +105,14 @@ export default function DesktopShell({
             ))}
           </div>
         </nav>
+
+        <button className="desktop-usage-guide-button" onClick={() => setUsageGuideOpen(true)}>
+          <span>?</span>
+          <div>
+            <strong>不知道怎么用？</strong>
+            <small>打开灵机使用说明</small>
+          </div>
+        </button>
 
         <div className="desktop-sidebar-status">
           <div className="desktop-status-line">
@@ -181,23 +191,32 @@ export default function DesktopShell({
             <h1>{current.label}</h1>
             <p>{current.hint}</p>
           </div>
-          <div className={connected ? "desktop-connection-badge connected" : "desktop-connection-badge"}>
-            <span className={connected ? "status-dot online" : "status-dot"} />
-            <span>
-              {connected
-                ? "运行中"
-                : connectionState === "booting"
-                  ? "启动中"
-                  : connectionState === "configuration_required"
-                    ? "需要配置"
-                    : ownerStopped
-                      ? "已暂停"
-                      : "自动恢复中"}
-            </span>
+          <div className="desktop-toolbar-actions">
+            <button className="desktop-help-button" onClick={() => setUsageGuideOpen(true)}>怎么使用</button>
+            <div className={connected ? "desktop-connection-badge connected" : "desktop-connection-badge"}>
+              <span className={connected ? "status-dot online" : "status-dot"} />
+              <span>
+                {connected
+                  ? "运行中"
+                  : connectionState === "booting"
+                    ? "启动中"
+                    : connectionState === "configuration_required"
+                      ? "需要配置"
+                      : ownerStopped
+                        ? "已暂停"
+                        : "自动恢复中"}
+              </span>
+            </div>
           </div>
         </header>
         <div className="desktop-content">{children}</div>
       </main>
+
+      <UsageGuideDrawer
+        open={usageGuideOpen}
+        onClose={() => setUsageGuideOpen(false)}
+        onNavigate={onNavigate}
+      />
     </div>
   );
 }

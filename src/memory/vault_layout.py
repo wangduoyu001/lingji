@@ -267,12 +267,15 @@ class VaultLayout:
         if not include_private and parts and parts[0] == "08-Private":
             return False
         excluded_prefixes = (
+            ("00-System", "Templates"),
             ("00-System", "Logs"),
             ("00-System", "Index-Status"),
             ("00-System", "Backups"),
             ("00-System", "Context-Packs"),
         )
-        return not any(parts[: len(prefix)] == prefix for prefix in excluded_prefixes)
+        if any(parts[: len(prefix)] == prefix for prefix in excluded_prefixes):
+            return False
+        return parts != ("00-System", "Permanent-Memory.md")
 
     def should_analyze(self, path: Path | str) -> bool:
         if not self.should_index(path, include_private=False):

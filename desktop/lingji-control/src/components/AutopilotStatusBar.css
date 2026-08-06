@@ -1,0 +1,69 @@
+.autopilot-status-bar {
+  display: grid;
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--border-subtle, rgba(120, 130, 150, 0.26));
+  border-radius: 18px;
+  background: rgba(20, 28, 42, 0.72);
+  box-shadow: 0 16px 38px rgba(4, 8, 16, 0.16);
+}
+
+.autopilot-status-bar.verified {
+  border-color: rgba(86, 190, 143, 0.42);
+}
+
+.autopilot-status-bar.checking {
+  border-color: rgba(224, 177, 82, 0.44);
+}
+
+.autopilot-status-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.autopilot-status-copy strong {
+  font-size: 1rem;
+}
+
+.autopilot-status-copy small {
+  max-width: 920px;
+  line-height: 1.65;
+  color: var(--text-muted, #aab4c5);
+}
+
+.autopilot-status-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.autopilot-binding-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.autopilot-binding-details div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.autopilot-binding-details dt {
+  font-size: 0.72rem;
+  color: var(--text-muted, #aab4c5);
+}
+
+.autopilot-binding-details dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+}

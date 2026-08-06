@@ -1,4 +1,5 @@
 import CurrentWorkPanel from "../components/CurrentWorkPanel";
+import StartCenterPanel from "../components/StartCenterPanel";
 import { Empty, Metric, Notice, bytes } from "../components/ui";
 import type { LingJiApi } from "../api";
 import type { PageId, Row } from "../types";
@@ -20,7 +21,7 @@ function stateLabel(value: unknown): string {
     healthy: "运行正常",
     ready: "已就绪",
     available: "可用",
-    degraded: "降级运行",
+    degraded: "部分能力待处理",
     warning: "需要关注",
     stale: "数据过期",
     failed: "运行失败",
@@ -30,6 +31,46 @@ function stateLabel(value: unknown): string {
   };
   return labels[state] ?? display(value);
 }
+
+const AUTONOMY_FLOW: Array<{
+  number: string;
+  title: string;
+  detail: string;
+  label: string;
+  page: PageId;
+  ownerDecision?: boolean;
+}> = [
+  {
+    number: "1",
+    title: "自动发现",
+    detail: "灵机主动扫描 AI 软件、允许目录元数据、模型和硬件状态。",
+    label: "查看发现结果",
+    page: "assistant_hub",
+  },
+  {
+    number: "2",
+    title: "自动处理",
+    detail: "已授权资料会自动解析、去重、排队、重试并记录进度。",
+    label: "查看处理进度",
+    page: "activity",
+  },
+  {
+    number: "3",
+    title: "需要时才询问",
+    detail: "读取真实正文或修改外部客户端配置前，灵机才会请求授权。",
+    label: "查看待授权事项",
+    page: "attention",
+    ownerDecision: true,
+  },
+  {
+    number: "4",
+    title: "主人只做最终决定",
+    detail: "永久记忆的批准、拒绝和高风险操作必须由你定稿。",
+    label: "查看候选记忆",
+    page: "memory_review",
+    ownerDecision: true,
+  },
+];
 
 export default function OverviewPage({
   data,
@@ -57,6 +98,9 @@ export default function OverviewPage({
   const computePolicy = (hardware.compute_policy ?? {}) as Record<string, unknown>;
   const runtimeState = memoryRuntime.state ?? health.status;
   const stale = Boolean(memoryRuntime.stale);
+  const embeddingReady = ["healthy", "ready", "available"].includes(
+    String(embedding.state ?? "").toLowerCase(),
+  );
 
   const attentionCount = [
     Number(health.error_count ?? 0) > 0,
@@ -64,12 +108,13 @@ export default function OverviewPage({
     vector.rebuild_required === true,
     storageAlerts.below_minimum_free === true,
   ].filter(Boolean).length;
+  const activeJobs = Number(queue.running ?? 0) + Number(queue.pending ?? 0) + Number(queue.retrying ?? 0);
 
   return (
     <div className="stack overview-page observation-page">
       <section className={`overview-hero overview-hero-${stateTone(runtimeState) ?? "neutral"}`}>
         <div className="overview-hero-main">
-          <span className="desktop-eyebrow">SYSTEM POSTURE</span>
+          <span className="desktop-eyebrow">灵机运行观察台</span>
           <div className="overview-title-line">
             <h2>{stateLabel(runtimeState)}</h2>
             <span className={`pill ${stateTone(runtimeState) === "good" ? "ok" : stateTone(runtimeState) === "bad" ? "error" : "warning"}`}>
@@ -77,14 +122,15 @@ export default function OverviewPage({
             </span>
           </div>
           <p>
-            灵机会自动检查服务、处理队列、更新索引和恢复连接。
+            灵机会主动启动、发现、处理、重试和恢复。你主要通过这里了解它在做什么；
+            只有读取真实内容、修改外部配置或写入永久记忆时才需要决定。
             {memoryRuntime.as_of ? ` · 状态时间 ${display(memoryRuntime.as_of)}` : ""}
           </p>
         </div>
         <div className="observation-live-state">
           <span className={stateTone(runtimeState) === "good" ? "status-dot online" : "status-dot"} />
           <div>
-            <strong>{Number(queue.running ?? 0) > 0 ? `${display(queue.running)} 个任务运行中` : "后台自动运行"}</strong>
+            <strong>{activeJobs > 0 ? `${activeJobs} 个任务正在自动推进` : "当前空闲，不需要操作"}</strong>
             <small>状态每 10 秒自动更新</small>
           </div>
         </div>
@@ -92,20 +138,45 @@ export default function OverviewPage({
 
       {stale && <Notice kind="warning">当前记忆和向量统计来自旧快照，系统正在自动刷新。</Notice>}
 
+      <StartCenterPanel api={api} active={active} overview={data} onNavigate={onNavigate} />
+
+      <section className="daily-flow" aria-label="灵机自动运行与主人授权边界">
+        <div className="daily-flow-heading">
+          <div>
+            <span className="desktop-eyebrow">灵机如何主动工作</span>
+            <h3>自动干活，必要时才打扰主人</h3>
+            <p>下面是运行机制，不是要求你逐项点击的操作流程。所有入口都用于查看、授权或手动干预。</p>
+          </div>
+          <button className="button secondary" onClick={() => onNavigate("activity")}>查看灵机正在做什么</button>
+        </div>
+        <div className="daily-flow-grid">
+          {AUTONOMY_FLOW.map((item) => (
+            <button key={item.number} className="daily-flow-card" onClick={() => onNavigate(item.page)}>
+              <span className="daily-flow-number">{item.number}</span>
+              <span className="daily-flow-copy">
+                <strong>{item.title}</strong>
+                <small>{item.detail}</small>
+                <em>{item.ownerDecision ? `需要你时：${item.label}` : item.label}</em>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <CurrentWorkPanel api={api} active={active} />
 
       <section className={attentionCount ? "attention-summary attention-summary-warning" : "attention-summary"}>
         <div>
-          <span className="desktop-eyebrow">OWNER ATTENTION</span>
-          <h3>{attentionCount ? `${attentionCount} 类异常需要查看` : "暂时不需要你处理"}</h3>
+          <span className="desktop-eyebrow">需要主人决定</span>
+          <h3>{attentionCount ? `${attentionCount} 类事项等待查看` : "暂时不需要你处理"}</h3>
           <p>{attentionCount ? "系统不能安全自行决定的事项已集中到待办页。" : "普通任务、重试和状态恢复由后台自动完成。"}</p>
         </div>
-        <button className="button secondary" onClick={() => onNavigate("attention")}>查看待办</button>
+        <button className="button secondary" onClick={() => onNavigate("attention")}>查看待办与授权</button>
       </section>
 
       <section className="overview-section">
         <div className="overview-section-heading">
-          <div><span className="desktop-eyebrow">SYSTEM SIGNALS</span><h3>关键状态</h3></div>
+          <div><span className="desktop-eyebrow">关键状态</span><h3>系统现在怎么样</h3></div>
           <small>详细技术信息已移到高级诊断</small>
         </div>
         <div className="metric-grid observation-metric-grid">
@@ -128,10 +199,10 @@ export default function OverviewPage({
             tone={vector.rebuild_required ? "bad" : stateTone(vector.state)}
           />
           <Metric
-            title="本地模型"
+            title="Embedding"
             value={display(embedding.active_model ?? embedding.configured_model)}
-            detail={stateLabel(embedding.state)}
-            tone={stateTone(embedding.state)}
+            detail={embeddingReady ? "已激活" : "后台正在诊断模型、Provider 与索引状态"}
+            tone={embeddingReady ? "good" : "warn"}
           />
           <Metric
             title="算力模式"

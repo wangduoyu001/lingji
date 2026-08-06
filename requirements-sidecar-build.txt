@@ -1,2 +1,3 @@
 -r requirements-ui.txt
+-r requirements-mcp.txt
 pyinstaller==6.21.0

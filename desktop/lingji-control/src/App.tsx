@@ -1,8 +1,12 @@
 import { useState } from "react";
 import AppPages from "./AppPages";
+import AutopilotStatusBar from "./components/AutopilotStatusBar";
 import DesktopShell from "./components/DesktopShell";
 import RuntimeBoundary from "./components/RuntimeBoundary";
 import "./DesktopUX.css";
+import "./GuidedUsage.css";
+import "./components/StartCenterPanel.css";
+import "./pages/AssistantImportFlow.css";
 import "./ReleaseUX.css";
 import { useLingJiConnection } from "./hooks/useLingJiConnection";
 import { useReleaseMetadata } from "./hooks/useReleaseMetadata";
@@ -57,6 +61,13 @@ export default function App() {
         onConfigure={connection.configureRuntime}
         onResume={() => void connection.connect()}
       >
+        {connection.connected && (
+          <AutopilotStatusBar
+            autopilot={connection.autopilotStatus}
+            binding={connection.bindingVerification}
+            bootstrap={connection.bootstrapStatus}
+          />
+        )}
         <AppPages
           page={page}
           api={connection.api}

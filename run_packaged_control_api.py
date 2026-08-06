@@ -7,6 +7,7 @@ import os
 import re
 import secrets
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -16,8 +17,11 @@ from typing import Any, Mapping, MutableMapping, Sequence
 
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 _WORKSPACES = {"production", "acceptance"}
+_SERVICES = {"control", "mcp"}
 _WINDOWS_SYSTEM_DRIVE = re.compile(r"^c:[\\/]", re.IGNORECASE)
 _RUNTIME_SCHEMA_VERSION = 1
+_MCP_HOST = "127.0.0.1"
+_MCP_PORT = 8767
 
 
 def _absolute_owner_root(value: str | Path) -> Path:
@@ -51,18 +55,30 @@ def runtime_stop_request_path(root: str | Path) -> Path:
     return _runtime_dir(_absolute_owner_root(root)) / "sidecar-stop-request.json"
 
 
-def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
+def mcp_state_path(root: str | Path) -> Path:
+    return _runtime_dir(_absolute_owner_root(root)) / "mcp-state.json"
+
+
+def mcp_token_path(root: str | Path) -> Path:
+    return _absolute_owner_root(root) / "storage" / "mcp_http_token"
+
+
+def _write_text_atomic(path: Path, value: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(dict(payload), ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    temporary.write_text(value, encoding="utf-8")
     temporary.replace(path)
     try:
         path.chmod(0o600)
     except OSError:
         pass
+
+
+def _write_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
+    _write_text_atomic(
+        path,
+        json.dumps(dict(payload), ensure_ascii=False, sort_keys=True) + "\n",
+    )
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -89,13 +105,7 @@ def configure_packaged_environment(
     workspace: str | None = None,
     environ: MutableMapping[str, str] | None = None,
 ) -> dict[str, str]:
-    """Configure explicit paths before importing ``src.config``.
-
-    ``data_root`` is the active workspace root. The Desktop derives it from a
-    user-selected non-system-drive base directory plus ``production`` or
-    ``acceptance``. The two workspace profiles therefore remain physically
-    separate while the small bootstrap pointer may stay under LocalAppData.
-    """
+    """Configure explicit owner paths before importing ``src.config``."""
 
     normalized_host = str(host or "").strip().lower()
     if normalized_host not in _LOOPBACK_HOSTS:
@@ -129,6 +139,9 @@ def configure_packaged_environment(
         "ACCEPTANCE_QDRANT_PATH": str(acceptance_root / "qdrant"),
         "CONTROL_API_HOST": normalized_host,
         "CONTROL_API_PORT": str(int(port)),
+        "MCP_HOST": _MCP_HOST,
+        "MCP_PORT": str(_MCP_PORT),
+        "MCP_TRANSPORT": "streamable-http",
         "LINGJI_PACKAGED_RUNTIME": "1",
         "LINGJI_OWNER_DATA_ROOT": str(root),
     }
@@ -146,10 +159,7 @@ def configure_packaged_environment(
     ):
         (root / directory).mkdir(parents=True, exist_ok=True)
 
-    return {
-        **required_values,
-        "VAULT_DIR": target["VAULT_DIR"],
-    }
+    return {**required_values, "VAULT_DIR": target["VAULT_DIR"]}
 
 
 def packaged_runtime_contract(
@@ -191,6 +201,18 @@ def packaged_runtime_contract(
         "system_drive_runtime_data_allowed": False,
         "automatic_model_download": False,
         "automatic_qdrant_rebuild": False,
+        "mcp": {
+            "managed": True,
+            "host": _MCP_HOST,
+            "port": _MCP_PORT,
+            "url": f"http://{_MCP_HOST}:{_MCP_PORT}/mcp",
+            "transport": "streamable-http",
+            "authentication": "bearer_token",
+            "token_file": str(mcp_token_path(root)),
+            "state_file": str(mcp_state_path(root)),
+            "loopback_only": True,
+            "automatic_core_memory_write": False,
+        },
     }
 
 
@@ -248,21 +270,135 @@ def install_runtime_lifecycle(
             time.sleep(max(0.05, float(poll_seconds)))
 
     atexit.register(cleanup)
-    thread = threading.Thread(
+    threading.Thread(
         target=monitor,
         name="lingji-sidecar-stop-monitor",
         daemon=True,
-    )
-    thread.start()
+    ).start()
     return state
 
 
+def _ensure_mcp_token(root: Path) -> str:
+    path = mcp_token_path(root)
+    try:
+        token = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        token = ""
+    if token:
+        return token
+    token = secrets.token_urlsafe(32)
+    _write_text_atomic(path, token + "\n")
+    return token
+
+
+def _runtime_command() -> list[str]:
+    if getattr(sys, "frozen", False):
+        return [sys.executable]
+    return [sys.executable, str(Path(__file__).resolve(strict=False))]
+
+
+def _hidden_process_kwargs() -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+    }
+    if os.name == "nt":
+        kwargs["creationflags"] = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = 0
+        kwargs["startupinfo"] = startupinfo
+    return kwargs
+
+
+def _start_managed_mcp_process(root: Path, workspace: str) -> subprocess.Popen[Any]:
+    command = _runtime_command() + [
+        "--data-root",
+        str(root),
+        "--workspace",
+        workspace,
+        "--service",
+        "mcp",
+        "--parent-pid",
+        str(os.getpid()),
+    ]
+    process = subprocess.Popen(command, **_hidden_process_kwargs())
+
+    def cleanup() -> None:
+        if process.poll() is None:
+            try:
+                process.terminate()
+                process.wait(timeout=5)
+            except Exception:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
+
+    atexit.register(cleanup)
+    return process
+
+
+def _install_parent_watch(parent_pid: int, *, poll_seconds: float = 0.5) -> None:
+    if parent_pid <= 0:
+        return
+
+    def monitor() -> None:
+        try:
+            import psutil
+        except ImportError:
+            return
+        while psutil.pid_exists(parent_pid):
+            time.sleep(max(0.1, poll_seconds))
+        os._exit(0)
+
+    threading.Thread(
+        target=monitor,
+        name="lingji-mcp-parent-monitor",
+        daemon=True,
+    ).start()
+
+
+def _install_mcp_state(root: Path, *, parent_pid: int, workspace: str) -> None:
+    path = mcp_state_path(root)
+    instance_id = secrets.token_urlsafe(24)
+    _write_json_atomic(
+        path,
+        {
+            "schema_version": 1,
+            "mode": "packaged_mcp_http",
+            "workspace": workspace,
+            "pid": os.getpid(),
+            "parent_pid": parent_pid,
+            "instance_id": instance_id,
+            "started_at_utc": datetime.now(timezone.utc).isoformat(),
+            "host": _MCP_HOST,
+            "port": _MCP_PORT,
+            "url": f"http://{_MCP_HOST}:{_MCP_PORT}/mcp",
+            "authenticated": True,
+        },
+    )
+
+    def cleanup() -> None:
+        existing = _read_json(path)
+        if existing and existing.get("instance_id") == instance_id:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    atexit.register(cleanup)
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="LingJi packaged local control runtime")
+    parser = argparse.ArgumentParser(description="LingJi packaged local runtime")
     parser.add_argument("--data-root", required=True, help="Absolute active-workspace data root")
     parser.add_argument("--workspace", choices=sorted(_WORKSPACES), default=None)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8766)
+    parser.add_argument("--service", choices=sorted(_SERVICES), default="control")
+    parser.add_argument("--parent-pid", type=int, default=0)
     parser.add_argument(
         "--check-config",
         action="store_true",
@@ -293,22 +429,47 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(contract_json)
         return 0
 
-    configure_packaged_environment(
+    values = configure_packaged_environment(
         args.data_root,
         host=args.host,
         port=args.port,
         workspace=workspace,
     )
+    root = Path(values["LINGJI_OWNER_DATA_ROOT"])
+    _ensure_standard_streams()
+
+    if args.service == "mcp":
+        token = _ensure_mcp_token(root)
+        _install_parent_watch(int(args.parent_pid))
+        _install_mcp_state(root, parent_pid=int(args.parent_pid), workspace=workspace)
+        from src.mcp_http import run_authenticated_mcp_http
+
+        run_authenticated_mcp_http(
+            token=token,
+            host=_MCP_HOST,
+            port=_MCP_PORT,
+            agent_id="lingji-local",
+        )
+        return 0
+
     install_runtime_lifecycle(
         args.data_root,
         host=args.host,
         port=args.port,
         workspace=workspace,
     )
-    _ensure_standard_streams()
-    from run_control_api import main as run_control_api
+    _ensure_mcp_token(root)
+    mcp_process = _start_managed_mcp_process(root, workspace)
+    try:
+        from run_control_api import main as run_control_api
 
-    run_control_api()
+        run_control_api()
+    finally:
+        if mcp_process.poll() is None:
+            try:
+                mcp_process.terminate()
+            except Exception:
+                pass
     return 0
 
 

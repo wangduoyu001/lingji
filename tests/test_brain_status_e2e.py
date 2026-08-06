@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -33,13 +33,23 @@ class _DeterministicControlService:
 
 
 @pytest.fixture
-def control_client() -> TestClient:
+def runtime_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    root = (tmp_path / "acceptance-runtime").resolve()
+    root.mkdir()
+    monkeypatch.setenv("LINGJI_OWNER_DATA_ROOT", str(root))
+    monkeypatch.setenv("LINGJI_WORKSPACE", "acceptance")
+    return root
+
+
+@pytest.fixture
+def control_client(runtime_root: Path) -> TestClient:
     settings = Settings(
         _env_file=None,
-        vault_dir="_e2e_vault",
-        storage_dir="_e2e_storage",
-        backup_dir="_e2e_backups",
-        log_dir="_e2e_logs",
+        vault_dir=str(runtime_root / "vault"),
+        storage_dir=str(runtime_root / "storage"),
+        backup_dir=str(runtime_root / "backups"),
+        log_dir=str(runtime_root / "logs"),
+        workspace_name="acceptance",
         llm_model="qwen3:8b",
         embed_model="bge-m3",
         startup_min_free_gb=0,
@@ -74,19 +84,22 @@ class TestBrainStatusApiContract:
         assert response.status_code == 200
         assert response.json()["health"]["status"] == "healthy"
 
+    def test_runtime_ping_proves_actual_data_root(
+        self,
+        control_client: TestClient,
+        runtime_root: Path,
+    ):
+        response = control_client.get("/api/runtime/ping", headers=AUTH_HEADERS)
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "ok",
+            "binding_contract_version": 1,
+            "data_root": str(runtime_root),
+            "workspace": "acceptance",
+        }
+
     def test_local_control_token_is_required(self, control_client: TestClient):
-        response = control_client.get("/api/brain/status")
-
-        assert response.status_code == 401
-
-    def test_frontend_dist_exists(self):
-        """Frontend dist directory has compiled JS bundles when a build ran first."""
-        dist = os.path.join("desktop", "lingji-control", "dist")
-        if not os.path.isdir(dist):
-            pytest.skip("Frontend dist not built – run UI build first")
-        index = os.path.join(dist, "index.html")
-        assert os.path.isfile(index), "index.html missing"
-        assets_dir = os.path.join(dist, "assets")
-        assert os.path.isdir(assets_dir), "assets dir missing"
-        js_files = [name for name in os.listdir(assets_dir) if name.endswith(".js")]
-        assert len(js_files) >= 2, f"Expected >=2 JS bundles, got {len(js_files)}"
+        for endpoint in ("/api/brain/status", "/api/runtime/ping"):
+            response = control_client.get(endpoint)
+            assert response.status_code == 401

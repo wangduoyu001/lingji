@@ -1,6 +1,8 @@
 import type { LingJiApi } from "./api";
+import PageGuide from "./components/PageGuide";
 import AcceptancePage from "./pages/AcceptancePage";
 import ActivityPage from "./pages/ActivityPage";
+import AssistantHubPage from "./pages/AssistantHubPage";
 import AttentionPage from "./pages/AttentionPage";
 import AutoReviewPage from "./pages/AutoReviewPage";
 import BackupsPage from "./pages/BackupsPage";
@@ -38,10 +40,12 @@ type AppPagesProps = {
 export default function AppPages(props: AppPagesProps) {
   const { page, api, connected, overview, inspectorTarget, onOpenInspector, onNavigate } = props;
   return <section className="page-content">
+    <PageGuide page={page} onNavigate={onNavigate} />
     {page === "overview" && <OverviewPage data={overview} api={api} active={connected} onNavigate={onNavigate} />}
     {page === "activity" && <ActivityPage api={api} active={connected} />}
     {page === "attention" && <AttentionPage api={api} active={connected} overview={overview} onNavigate={onNavigate} />}
     {page === "diagnostics" && <DiagnosticsPage onNavigate={onNavigate} />}
+    {page === "assistant_hub" && <AssistantHubPage api={api} active={connected} onNavigate={onNavigate} />}
     {page === "brain_status" && <BrainStatusPage api={api} active={connected} />}
     {page === "memory_inspector" && <MemoryInspectorLoopPage api={api} active={connected} target={inspectorTarget} />}
     {page === "codex_workspace" && <CodexWorkspacePage api={api} active={connected} onOpenInspector={onOpenInspector} />}

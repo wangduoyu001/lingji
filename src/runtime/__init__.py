@@ -1,3 +1,4 @@
+from .memory_owner_lock import MemoryOwnerLock, MemoryOwnerLockError
 from .ports import (
     McpRuntimeConfig,
     ensure_tcp_port_available,
@@ -15,6 +16,8 @@ from .workspace import (
 
 __all__ = [
     "McpRuntimeConfig",
+    "MemoryOwnerLock",
+    "MemoryOwnerLockError",
     "WorkspaceContext",
     "WorkspaceName",
     "WorkspaceResolver",

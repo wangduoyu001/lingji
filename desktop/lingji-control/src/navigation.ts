@@ -1,18 +1,19 @@
 import type { NavigationGroup, NavigationItem } from "./types";
 
 export const NAVIGATION_GROUPS: NavigationGroup[] = [
-  { id: "observe", label: "运行观察" },
-  { id: "advanced", label: "高级诊断" },
+  { id: "observe", label: "日常使用" },
+  { id: "advanced", label: "高级功能" },
 ];
 
 export const PRIMARY_NAVIGATION: NavigationItem[] = [
-  { id: "overview", label: "运行状态", hint: "系统是否正常、现在正在做什么", group: "observe", icon: "home" },
+  { id: "overview", label: "开始使用", hint: "连接 AI、导入资料并查看运行状态", group: "observe", icon: "home" },
   { id: "activity", label: "活动记录", hint: "当前任务、最近完成与失败记录", group: "observe", icon: "logs" },
   { id: "attention", label: "需要我处理", hint: "只显示必须由主人决定的事项", group: "observe", icon: "review" },
   { id: "diagnostics", label: "高级诊断", hint: "模型、向量、存储、设置与日志", group: "observe", icon: "settings" },
 ];
 
 export const ADVANCED_NAVIGATION: NavigationItem[] = [
+  { id: "assistant_hub", label: "AI 助手与记忆导入", hint: "扫描 Codex、Claude、WorkBuddy 并导入已有 AI 资料", group: "advanced", icon: "model" },
   { id: "brain_status", label: "脑状态", hint: "记忆、模型、算力与任务详细状态", group: "advanced", icon: "pulse" },
   { id: "codex_workspace", label: "项目与对话", hint: "项目、会话、当前工作与处理进度", group: "advanced", icon: "project" },
   { id: "memory_review", label: "人工记忆审核", hint: "主人批准、编辑或拒绝候选记忆", group: "advanced", icon: "review" },

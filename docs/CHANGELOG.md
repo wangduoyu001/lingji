@@ -2,6 +2,76 @@
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
 
+## 2026-08-02
+
+### Fresh Day 0 空向量状态优先级修复
+
+- 修复新 DataRoot 在 0 文档、0 分块、0 Core Memory、0 向量时，因为 Embedding 尚未完成运行时验证而错误显示 `embedding_unavailable` 的问题。
+- 当向量服务可用但 Collection/向量确实为空时，统一报告 `empty / collection_empty`；全文检索保持可用，语义检索等待获授权内容进入索引。
+- 锁冲突、重建要求、服务不可用和非空索引的 Embedding 故障仍保持更高风险状态，不被空库状态掩盖。
+
+### Windows 验收清理只读目录修复
+
+- 修复 NSIS 在隔离 profile 中留下只读 Start Menu 空目录时，任务专属清理器因 WinError 5 无法完成的问题。
+- 仅在删除已通过精确 task-id/root/单层目标授权的普通目录前解除只读属性；链接与 reparse point 仍走独立分支，不跟随目标。
+- 不扩展清理范围，不增加通配符、父目录或相邻目录删除能力。
+
+### Fresh Day 0 空索引真实性修复
+
+- 修复新 DataRoot 首启时把灵机自动生成的永久记忆仪表盘与核心记忆模板计入正式知识、Core Memory 和向量索引的问题。
+- `00-System/Permanent-Memory.md` 与 `00-System/Templates/**` 继续在 Obsidian 中生成供主人操作，但不再进入可重建检索索引。
+- `00-System/Rules`、正式知识和主人批准的 Core Memory 仍按原统一规则索引，没有新增数据库、向量库或事实源。
+- 新增 fresh-gateway 回归，要求未导入任何资料时为 0 文档、0 分块、0 Core Memory、0 向量，并明确报告 `empty / collection_empty`；语义检索不可用、全文检索可用。
+- 固定旧 Artifact `8832376546` 已由独立本机 Day 0 判定 FAIL；只有新 Head、新 Artifact 和重新 Day 0 才能形成通过结论。
+
+### 本地 Release 精确 Git 身份修复
+
+- 修复 PowerShell 原生命令退出码被后续管道状态覆盖时，统一验证摘要和 Windows 发布元数据错误写入 `commit: unknown`、`branch: unknown` 的问题。
+- Git 输出先完整捕获，并在任何 PowerShell 管道处理前保存原生命令退出码；真实失败仍回落到明确的 `unknown`。
+- 新增 Windows 回归测试，主动注入陈旧非零 `$LASTEXITCODE`，确认实际 Git commit/branch 仍被精确读取。
+
+## 2026-07-29
+
+### Windows Desktop 生命周期与控制台缺陷修复
+
+- Squash 合并 PR #53，正式合并提交为 `18b99a6909e929df432253686eeaeee3ed9f7024`。
+- 完成 Windows Runtime/Sidecar 生命周期、首次 DataRoot 配置、production/acceptance Workspace 隔离和非系统盘数据边界。
+- 移除 CPU 与物理磁盘 PowerShell/WMI 探测，Desktop、Sidecar 和诊断子进程采用 Windows GUI/隐藏窗口合同。
+- Owner 真机验证安装、应用重启、三轮 Core 重启、Windows 重启恢复、同版本覆盖安装和卸载数据保护。
+- Owner 确认启动与重启过程不再出现 PowerShell、CMD 或黑色控制台窗口。
+- PR #53 的测试、P0 Windows Gate 与 Windows Desktop Release Baseline 全部成功。
+
+### PR #56 UI 优先、新手引导与 AI 助手中心
+
+- 将 UI 可理解性提升为下一阶段最高优先级；Issue #57 Qdrant/Embedding 主线被明确阻塞到 PR #56 Owner 验收通过并合并之后。
+- 首页从工程状态入口调整为“开始使用”，第一步为扫描 AI、导入已有资料、查看处理并审核永久记忆。
+- 增加统一页面说明、全局“怎么使用”抽屉和首次设置流程。
+- 新增 `src/assistant_hub/discovery.py`，安全发现 Codex、Claude Code 与 WorkBuddy，只读取固定目录和文件元数据，不读取对话正文、Token、Cookie 或密码。
+- 新增认证的 `/api/assistant-hub/status` 与 `/api/assistant-hub/scan`，继续复用唯一 8766 Local Control API。
+- 新增 `AssistantHubPage`，支持 ChatGPT Export ZIP/JSON 和 Codex Report JSON 进入现有 Capture/Extraction Queue。
+- 明确 Claude Code 与 WorkBuddy 当前只完成检测，正文导入与自动同步仍为 planned，不显示为已连接。
+- 永久记忆继续执行“候选 → 主人审核 → 正式记忆”，禁止自动写入 Core Memory。
+- 新增 Assistant Hub Python/API/Desktop Smoke、模块文档、快速上手、代码地图和实施报告。
+- PR #56 Head `8c69dfa3bc9562f80f190701244ece82896c7e17` 的 `tests #1023`、`P0 Windows Gate #233`、`Windows Desktop Release Baseline #122` 全部成功。
+- PR #56 保持 Draft，仍须 Owner 按陌生用户视角验收，不因按钮可点击而自动判定 PASS。
+
+### 统一 AI 记忆连接器产品化
+
+- 从 PR #56 Head 创建 stacked 分支 `feature/unified-ai-memory-connectors`，不直接修改 `master`。
+- 安装版 `lingji-core.exe` 新增受管 MCP 子进程，使用 authenticated Streamable HTTP `127.0.0.1:8767/mcp`。
+- MCP 子进程由 Control Runtime 托管，父进程停止或重启时同步退出；Token、状态和数据均保存在当前 Workspace 的 owner DataRoot。
+- 保持原 Runtime 合同 Schema 2，新增向后兼容 `mcp` 字段，不改变 8766、DataRoot、Workspace、Stop Request 或无黑窗合同。
+- 新增 `src/assistant_hub/connectors.py`，实现 Codex、Claude Code、WorkBuddy/CodeBuddy 的状态、预览、设置、测试和回滚能力。
+- Codex 只管理 `~/.codex/config.toml` 中带标记的 LingJi 区块，写入前验证 TOML、检测同名冲突并备份。
+- Claude Code 只调用官方 `claude mcp` CLI，使用 user scope、HTTP Transport 和 Bearer Header，并支持 get/remove。
+- WorkBuddy/CodeBuddy 不修改未公开的本地配置文件，只生成可复制的自定义 MCP JSON，由用户在官方页面完成设置和测试。
+- 新增认证的 8766 Connector 管理 API；所有写入需要精确 confirmation，不接受任意命令、任意客户端或任意配置路径。
+- 新增 8767 Bearer Token 中间件；未认证请求返回401，MCP 不绑定公网。
+- Desktop 首次流程扩展为“扫描 → 连接 → 导入 → 审核”，并明确连接与历史导入不是同一件事。
+- 新增 Codex/Claude/WorkBuddy 连接状态、改动预览、备份说明、连接测试和回滚 UI。
+- 第一版所有本机客户端使用同一 `lingji-local` owner-approved 记忆视图；每 AI 独立 Agent Scope、历史 Adapter 和 ChatGPT 实时连接仍未实现。
+- 新增 Python 测试、Desktop Smoke、Windows 打包合同、模块文档和实施报告；自动 CI 与主人真机验收尚未完成，禁止合并。
+
 ## 2026-07-26
 
 ### P2-11B Packaged Python runtime Sidecar manager
@@ -214,4 +284,3 @@
 - 增加有边界的三目录 Watcher。
 - 增加 Ollama Embedding，`bge-m3` 为主模型，`nomic-embed-text` 为备用模型。
 - 增加 `AGENTS.md` 和磁盘安全规则。
-- 从上游 `lingji.git` master 分支建立初始 Worktree。

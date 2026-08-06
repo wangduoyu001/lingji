@@ -2,9 +2,18 @@ from __future__ import annotations
 
 import hmac
 import logging
+import os
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+from src.assistant_hub import (
+    AiAssistantDiscoveryService,
+    AiMemoryConnectorService,
+    AssistantImportPlanner,
+    ConnectorError,
+)
 
 from .capture import (
     CAPTURE_SERVICE_UNAVAILABLE,
@@ -89,11 +98,27 @@ class CaptureShareRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ConnectorActionRequest(BaseModel):
+    confirmation: str = ""
+
+
+class AssistantCandidateImportRequest(BaseModel):
+    confirmation: str = ""
+
+
+class AssistantSelectedFileImportRequest(BaseModel):
+    input_path: str = Field(min_length=1)
+    source_id: str = Field(min_length=1)
+    confirmation: str = ""
+
+
 def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str) -> None:
     from fastapi import Depends, Header, HTTPException, Query
     from fastapi.responses import JSONResponse
 
     capture: CaptureControlService | None = None
+    connectors: AiMemoryConnectorService | None = None
+    imports: AssistantImportPlanner | None = None
 
     def authorize(x_lingji_token: str | None = Header(default=None)) -> None:
         if token and not hmac.compare_digest(str(x_lingji_token or ""), token):
@@ -143,11 +168,33 @@ def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str
                 status_code=503,
             ) from exc
 
+    def connector_control() -> AiMemoryConnectorService:
+        nonlocal connectors
+        if connectors is None:
+            connectors = AiMemoryConnectorService(storage_path=settings.storage_path)
+        return connectors
+
+    def import_control() -> AssistantImportPlanner:
+        nonlocal imports
+        if imports is None:
+            imports = AssistantImportPlanner(storage_path=settings.storage_path)
+        return imports
+
     def translate(exc: Exception) -> HTTPException:
+        if isinstance(exc, ConnectorError):
+            return HTTPException(
+                status_code=exc.status_code,
+                detail={"code": exc.code, "message": exc.message},
+            )
         if isinstance(exc, CaptureControlError):
             return HTTPException(
                 status_code=exc.status_code,
                 detail={"code": exc.code, "message": exc.message},
+            )
+        if isinstance(exc, ValueError):
+            return HTTPException(
+                status_code=409,
+                detail={"code": "IMPORT_CANDIDATE_INVALID", "message": str(exc)},
             )
         logger.exception("Capture API request failed")
         return HTTPException(
@@ -161,15 +208,92 @@ def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str
     def response(payload: dict[str, Any]) -> JSONResponse:
         return JSONResponse(status_code=200 if payload.get("duplicate") else 202, content=payload)
 
+    def assistant_scan() -> dict[str, Any]:
+        workspace = str(getattr(settings, "workspace", "") or "")
+        payload = AiAssistantDiscoveryService(workspace=workspace).scan()
+        payload["import_plan"] = import_control().plan()
+        return payload
+
+    def selected_file_payload(request: AssistantSelectedFileImportRequest) -> dict[str, Any]:
+        if request.confirmation != "AUTHORIZE_SELECTED_ASSISTANT_IMPORT":
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "CONFIRMATION_REQUIRED", "message": "读取选中文件需要明确授权"},
+            )
+        source_id = request.source_id.strip().lower()
+        mapping = {
+            "chatgpt": ("chatgpt_export", "chatgpt_export", {".zip", ".json"}),
+            "codex": ("codex_report", "codex_work_report", {".json"}),
+        }
+        if source_id not in mapping:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "UNSUPPORTED_IMPORT_SOURCE", "message": "当前来源没有正式导入适配器"},
+            )
+        source_type, adapter_name, suffixes = mapping[source_id]
+        path = Path(request.input_path).expanduser().resolve(strict=False)
+        if not path.is_file() or path.is_symlink() or path.suffix.lower() not in suffixes:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "INVALID_IMPORT_FILE", "message": "所选文件不存在或格式不受支持"},
+            )
+        return {
+            "input_path": str(path),
+            "source_type": source_type,
+            "adapter_name": adapter_name,
+            "privacy": "private",
+            "process_later": True,
+            "metadata": {
+                "origin": "assistant_hub_selected_file",
+                "owner_authorized": True,
+                "source_id": source_id,
+            },
+        }
+
+    def runtime_identity() -> dict[str, Any]:
+        workspace = str(
+            os.environ.get("LINGJI_WORKSPACE")
+            or getattr(settings, "workspace", "")
+            or getattr(settings, "workspace_name", "")
+            or "unknown"
+        ).strip().lower()
+        configured_root = str(os.environ.get("LINGJI_OWNER_DATA_ROOT") or "").strip()
+        if configured_root:
+            root = Path(configured_root).expanduser().resolve(strict=False)
+        else:
+            storage = Path(
+                str(
+                    getattr(settings, "storage_path", "")
+                    or getattr(settings, "storage_dir", "")
+                    or ""
+                )
+            ).expanduser().resolve(strict=False)
+            root = storage.parent if storage.name.lower() == "storage" else storage
+        return {
+            "status": "ok",
+            "binding_contract_version": 1,
+            "data_root": str(root),
+            "workspace": workspace,
+        }
+
+    replaced_routes = {
+        ("/api/share", "POST"),
+        ("/api/runtime/ping", "GET"),
+    }
     app.router.routes[:] = [
         route
         for route in app.router.routes
-        if not (
-            getattr(route, "path", None) == "/api/share"
-            and "POST" in (getattr(route, "methods", set()) or set())
+        if not any(
+            getattr(route, "path", None) == path
+            and method in (getattr(route, "methods", set()) or set())
+            for path, method in replaced_routes
         )
     ]
     secured = [Depends(authorize)]
+
+    @app.get("/api/runtime/ping", dependencies=secured)
+    def runtime_ping() -> dict[str, Any]:
+        return runtime_identity()
 
     @app.post("/api/capture/text", dependencies=secured)
     def capture_text(request: CaptureTextRequest):
@@ -264,6 +388,98 @@ def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str
     def capture_resume() -> dict[str, Any]:
         try:
             return capture_control().resume()
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.get("/api/assistant-hub/status", dependencies=secured)
+    def assistant_hub_status() -> dict[str, Any]:
+        return assistant_scan()
+
+    @app.post("/api/assistant-hub/scan", dependencies=secured)
+    def assistant_hub_scan() -> dict[str, Any]:
+        return assistant_scan()
+
+    @app.get("/api/assistant-hub/import-plan", dependencies=secured)
+    def assistant_hub_import_plan() -> dict[str, Any]:
+        return import_control().plan()
+
+    @app.post("/api/assistant-hub/import-candidates/{candidate_id}/authorize", dependencies=secured)
+    def assistant_hub_authorize_candidate(
+        candidate_id: str,
+        request: AssistantCandidateImportRequest,
+    ):
+        expected = import_control().expected_confirmation(candidate_id)
+        if request.confirmation != expected:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "CONFIRMATION_REQUIRED", "message": "读取候选导出包需要明确授权"},
+            )
+        try:
+            selected = import_control().resolve_authorized_candidate(candidate_id)
+            payload = {
+                "input_path": selected["input_path"],
+                "source_type": selected["source_type"],
+                "adapter_name": selected["adapter_name"],
+                "privacy": "private",
+                "process_later": True,
+                "metadata": {
+                    "origin": "assistant_hub_discovered_candidate",
+                    "owner_authorized": True,
+                    "source_id": selected["source_id"],
+                    "display_name": selected["display_name"],
+                },
+            }
+            return response(capture_control().submit_file(payload))
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/assistant-hub/import-selected-file", dependencies=secured)
+    def assistant_hub_import_selected_file(request: AssistantSelectedFileImportRequest):
+        try:
+            return response(capture_control().submit_file(selected_file_payload(request)))
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.get("/api/assistant-hub/connections", dependencies=secured)
+    def assistant_hub_connections(live: bool = Query(default=False)) -> dict[str, Any]:
+        try:
+            return connector_control().status(live=live)
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/assistant-hub/connections/{connector_id}/preview", dependencies=secured)
+    def assistant_hub_connection_preview(connector_id: str) -> dict[str, Any]:
+        try:
+            return connector_control().preview(connector_id)
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/assistant-hub/connections/{connector_id}/apply", dependencies=secured)
+    def assistant_hub_connection_apply(
+        connector_id: str,
+        request: ConnectorActionRequest,
+    ) -> dict[str, Any]:
+        try:
+            return connector_control().apply(connector_id, request.confirmation)
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/assistant-hub/connections/{connector_id}/test", dependencies=secured)
+    def assistant_hub_connection_test(connector_id: str) -> dict[str, Any]:
+        try:
+            return connector_control().test(connector_id)
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.post("/api/assistant-hub/connections/{connector_id}/rollback", dependencies=secured)
+    def assistant_hub_connection_rollback(
+        connector_id: str,
+        request: ConnectorActionRequest,
+    ) -> dict[str, Any]:
+        try:
+            return connector_control().rollback(connector_id, request.confirmation)
         except Exception as exc:
             raise translate(exc) from exc
 

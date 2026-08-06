@@ -157,6 +157,45 @@ class SemanticRuntimeWiringTests(unittest.TestCase):
         embedding_factory.assert_not_called()
         semantic_factory.assert_not_called()
 
+    def test_fresh_gateway_keeps_generated_owner_ui_out_of_memory_indexes(self):
+        self.settings.vault_auto_init = True
+        embedding = FakeEmbeddingProvider()
+        semantic = FakeSemanticProvider()
+        semantic.embedding_provider = embedding
+
+        with patch("src.gateway.bootstrap.build_embedding_provider", return_value=embedding), patch(
+            "src.gateway.bootstrap.QdrantSemanticProvider", return_value=semantic
+        ):
+            gateway = build_memory_gateway(
+                self.settings,
+                rebuild_if_empty=True,
+                workspace=self.context,
+            )
+
+        self.addCleanup(gateway.close)
+        self.assertTrue(
+            (self.context.vault_path / "00-System" / "Permanent-Memory.md").is_file()
+        )
+        self.assertTrue(
+            (
+                self.context.vault_path
+                / "00-System"
+                / "Templates"
+                / "核心记忆模板.md"
+            ).is_file()
+        )
+
+        snapshot = gateway.statistics.snapshot()
+        self.assertEqual(snapshot["memory"]["documents"], 0)
+        self.assertEqual(snapshot["memory"]["chunks"], 0)
+        self.assertEqual(snapshot["memory"]["core_memories"], 0)
+        self.assertEqual(snapshot["vector"]["vectors"], 0)
+        self.assertEqual(snapshot["vector"]["state"], "empty")
+        self.assertEqual(snapshot["vector"]["reason_code"], "collection_empty")
+        self.assertFalse(snapshot["vector"]["semantic_search_available"])
+        self.assertTrue(snapshot["vector"]["lexical_search_available"])
+        self.assertEqual(semantic.points, {})
+
     def test_semantic_initialization_failure_returns_lexical_gateway_with_warning(self):
         with patch(
             "src.gateway.bootstrap.build_embedding_provider",

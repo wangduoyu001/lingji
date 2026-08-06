@@ -7,6 +7,7 @@ export type PageId =
   | "activity"
   | "attention"
   | "diagnostics"
+  | "assistant_hub"
   | "brain_status"
   | "codex_workspace"
   | "memory_review"
