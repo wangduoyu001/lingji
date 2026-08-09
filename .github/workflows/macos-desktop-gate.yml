@@ -1,0 +1,102 @@
+name: macOS Desktop Gate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/macos-desktop-gate.yml'
+      - 'desktop/lingji-control/**'
+      - 'scripts/build_macos_sidecar.sh'
+      - 'run_packaged_control_api.py'
+      - 'run_control_api.py'
+      - 'src/**'
+      - 'requirements*.txt'
+  pull_request:
+    paths:
+      - 'desktop/lingji-control/**'
+      - 'scripts/build_macos_sidecar.sh'
+      - 'run_packaged_control_api.py'
+      - 'run_control_api.py'
+      - 'src/**'
+      - 'requirements*.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apple-silicon-build:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Verify Apple Silicon runner
+        run: |
+          uname -a
+          test "$(uname -m)" = "arm64"
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Verify native Python
+        run: |
+          python3 - <<'PY'
+          import platform
+          assert platform.machine() in {'arm64', 'aarch64'}, platform.machine()
+          print(platform.python_version(), platform.machine())
+          PY
+
+      - name: Install Python sidecar dependencies
+        run: python3 -m pip install -r requirements-sidecar-build.txt
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/lingji-control/package-lock.json
+
+      - name: Install desktop dependencies
+        working-directory: desktop/lingji-control
+        run: npm ci
+
+      - name: Setup Rust target
+        run: |
+          rustup target add aarch64-apple-darwin
+          rustc -Vv
+
+      - name: Rust unit tests
+        working-directory: desktop/lingji-control/src-tauri
+        run: cargo test --target aarch64-apple-darwin
+
+      - name: Build Apple Silicon release
+        working-directory: desktop/lingji-control
+        env:
+          LINGJI_BUILD_COMMIT: ${{ github.sha }}
+          LINGJI_BUILD_CHANNEL: ci-macos
+          LINGJI_BUILD_TARGET: aarch64-apple-darwin
+          LINGJI_BUILD_SIGNED: 'false'
+        run: npm run release:macos
+
+      - name: Verify sidecar contract and bundles
+        run: |
+          test -x desktop/lingji-control/src-tauri/binaries/lingji-core-aarch64-apple-darwin
+          test -d desktop/lingji-control/src-tauri/binaries/lingji_core_lib
+          find desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle -maxdepth 3 -type f -print
+          find desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle -name '*.dmg' -type f | grep -q .
+          find desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle -name '*.app' -type d | grep -q .
+
+      - name: Upload macOS bundle
+        uses: actions/upload-artifact@v6
+        with:
+          name: lingji-macos-arm64
+          if-no-files-found: error
+          path: |
+            desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
