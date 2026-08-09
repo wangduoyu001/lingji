@@ -23,6 +23,7 @@ assert.equal(
   macConfig.bundle.resources["binaries/lingji-core-aarch64-apple-darwin"],
   "lingji-core.exe",
 );
+assert.equal(macConfig.bundle.macOS.signingIdentity, "-");
 assert.deepEqual(sidecarConfig.bundle.externalBin, ["binaries/lingji-core"]);
 
 assert.match(pkg.scripts["build:sidecar:macos"], /build_macos_sidecar\.sh aarch64-apple-darwin/);
