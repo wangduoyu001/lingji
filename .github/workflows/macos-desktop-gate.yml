@@ -154,12 +154,36 @@ jobs:
           LINGJI_BUILD_SIGNED: 'false'
         run: npx tauri bundle --config src-tauri/tauri.sidecar.conf.json --bundles dmg --target aarch64-apple-darwin
 
-      - name: Verify DMG
+      - name: Mount and verify final DMG
         run: |
           set -euo pipefail
           BUNDLE_ROOT="desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle"
-          find "$BUNDLE_ROOT/dmg" -maxdepth 1 -name '*.dmg' -type f -print | tee "$RUNNER_TEMP/dmg-files.txt"
-          test -s "$RUNNER_TEMP/dmg-files.txt"
+          DMG="$(find "$BUNDLE_ROOT/dmg" -maxdepth 1 -name '*.dmg' -type f | head -n 1)"
+          test -n "$DMG"
+          MOUNT_POINT="$RUNNER_TEMP/lingji-dmg-mount"
+          mkdir -p "$MOUNT_POINT"
+          hdiutil attach "$DMG" -mountpoint "$MOUNT_POINT" -nobrowse -readonly
+          trap 'hdiutil detach "$MOUNT_POINT" -force >/dev/null 2>&1 || true' EXIT
+          APP_DIR="$(find "$MOUNT_POINT" -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          test -n "$APP_DIR"
+          test -x "$APP_DIR/Contents/Resources/lingji-core.exe"
+          test -d "$APP_DIR/Contents/Resources/lingji_core_lib"
+          codesign --verify --deep --strict "$APP_DIR"
+          CONTRACT_ROOT="$RUNNER_TEMP/lingji-dmg-contract"
+          mkdir -p "$CONTRACT_ROOT"
+          "$APP_DIR/Contents/Resources/lingji-core.exe" \
+            --data-root "$CONTRACT_ROOT" \
+            --check-config \
+            --check-config-output "$CONTRACT_ROOT/contract.json"
+          python3 - <<PY
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("$CONTRACT_ROOT/contract.json").read_text(encoding="utf-8"))
+          assert payload["mode"] == "packaged_sidecar", payload
+          assert payload["owner_data_outside_install_dir"] is True, payload
+          PY
+          hdiutil detach "$MOUNT_POINT"
+          trap - EXIT
 
       - name: Upload macOS bundle
         uses: actions/upload-artifact@v6
