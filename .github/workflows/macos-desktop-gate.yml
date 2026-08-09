@@ -87,24 +87,22 @@ jobs:
         working-directory: desktop/lingji-control/src-tauri
         run: cargo test --target aarch64-apple-darwin
 
-      - name: Build Apple Silicon desktop
+      - name: Build Apple Silicon app bundle
         working-directory: desktop/lingji-control
         env:
           LINGJI_BUILD_COMMIT: ${{ github.sha }}
           LINGJI_BUILD_CHANNEL: ci-macos
           LINGJI_BUILD_TARGET: aarch64-apple-darwin
           LINGJI_BUILD_SIGNED: 'false'
-        run: npx tauri build --config src-tauri/tauri.sidecar.conf.json --bundles dmg --target aarch64-apple-darwin
+        run: npx tauri build --config src-tauri/tauri.sidecar.conf.json --bundles app --target aarch64-apple-darwin
 
-      - name: Verify sidecar contract and bundles
+      - name: Verify packaged sidecar contract
         run: |
           set -euo pipefail
           test -x desktop/lingji-control/src-tauri/binaries/lingji-core-aarch64-apple-darwin
           test -d desktop/lingji-control/src-tauri/binaries/lingji_core_lib
           BUNDLE_ROOT="desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle"
-          find "$BUNDLE_ROOT" -maxdepth 3 -type f -print
-          find "$BUNDLE_ROOT" -name '*.dmg' -type f | grep -q .
-          APP_DIR="$(find "$BUNDLE_ROOT" -name '*.app' -type d | head -n 1)"
+          APP_DIR="$(find "$BUNDLE_ROOT/macos" -maxdepth 1 -name '*.app' -type d | head -n 1)"
           test -n "$APP_DIR"
           PACKAGED_SIDECAR="$APP_DIR/Contents/Resources/lingji-core.exe"
           test -x "$PACKAGED_SIDECAR"
@@ -128,7 +126,7 @@ jobs:
         run: |
           set -euo pipefail
           BUNDLE_ROOT="desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle"
-          APP_DIR="$(find "$BUNDLE_ROOT" -name '*.app' -type d | head -n 1)"
+          APP_DIR="$(find "$BUNDLE_ROOT/macos" -maxdepth 1 -name '*.app' -type d | head -n 1)"
           PACKAGED_SIDECAR="$APP_DIR/Contents/Resources/lingji-core.exe"
           DATA_ROOT="$RUNNER_TEMP/lingji-packaged-runtime"
           mkdir -p "$DATA_ROOT"
@@ -147,11 +145,25 @@ jobs:
           cat "$RUNNER_TEMP/lingji-sidecar.log" >&2
           exit 1
 
+      - name: Create DMG from verified app build
+        working-directory: desktop/lingji-control
+        env:
+          LINGJI_BUILD_COMMIT: ${{ github.sha }}
+          LINGJI_BUILD_CHANNEL: ci-macos
+          LINGJI_BUILD_TARGET: aarch64-apple-darwin
+          LINGJI_BUILD_SIGNED: 'false'
+        run: npx tauri bundle --config src-tauri/tauri.sidecar.conf.json --bundles dmg --target aarch64-apple-darwin
+
+      - name: Verify DMG
+        run: |
+          set -euo pipefail
+          BUNDLE_ROOT="desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle"
+          find "$BUNDLE_ROOT/dmg" -maxdepth 1 -name '*.dmg' -type f -print | tee "$RUNNER_TEMP/dmg-files.txt"
+          test -s "$RUNNER_TEMP/dmg-files.txt"
+
       - name: Upload macOS bundle
         uses: actions/upload-artifact@v6
         with:
           name: lingji-macos-arm64
           if-no-files-found: error
-          path: |
-            desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-            desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+          path: desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
