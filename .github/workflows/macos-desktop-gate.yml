@@ -75,18 +75,22 @@ jobs:
           rustup target add aarch64-apple-darwin
           rustc -Vv
 
+      - name: Build Apple Silicon sidecar
+        working-directory: desktop/lingji-control
+        run: npm run build:sidecar:macos
+
       - name: Rust unit tests
         working-directory: desktop/lingji-control/src-tauri
         run: cargo test --target aarch64-apple-darwin
 
-      - name: Build Apple Silicon release
+      - name: Build Apple Silicon desktop
         working-directory: desktop/lingji-control
         env:
           LINGJI_BUILD_COMMIT: ${{ github.sha }}
           LINGJI_BUILD_CHANNEL: ci-macos
           LINGJI_BUILD_TARGET: aarch64-apple-darwin
           LINGJI_BUILD_SIGNED: 'false'
-        run: npm run release:macos
+        run: npx tauri build --config src-tauri/tauri.sidecar.conf.json --bundles dmg --target aarch64-apple-darwin
 
       - name: Verify sidecar contract and bundles
         run: |
