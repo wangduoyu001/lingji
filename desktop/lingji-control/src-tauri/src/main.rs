@@ -27,6 +27,33 @@ struct ReleaseMetadata {
     signed: bool,
 }
 
+fn prepare_platform_environment() {
+    #[cfg(target_os = "macos")]
+    {
+        if env::var_os("LOCALAPPDATA").is_none() {
+            if let Some(home) = env::var_os("HOME") {
+                let app_support = PathBuf::from(home).join("Library").join("Application Support");
+                env::set_var("LOCALAPPDATA", app_support);
+            }
+        }
+    }
+}
+
+fn installer_format() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        return "nsis";
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return "dmg";
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        "unknown"
+    }
+}
+
 #[tauri::command]
 fn control_credentials() -> Result<ControlCredentials, String> {
     runtime_bootstrap::require_configured()?;
@@ -64,7 +91,7 @@ fn release_metadata() -> ReleaseMetadata {
         build_time_utc: env!("LINGJI_BUILD_TIME_UTC"),
         channel: env!("LINGJI_BUILD_CHANNEL"),
         target: env!("LINGJI_BUILD_TARGET"),
-        installer_format: "nsis",
+        installer_format: installer_format(),
         signed: env!("LINGJI_BUILD_SIGNED").eq_ignore_ascii_case("true"),
     }
 }
@@ -132,6 +159,7 @@ async fn guarded_runtime_restart(
 }
 
 fn main() {
+    prepare_platform_environment();
     runtime_bootstrap::quarantine_inherited_environment();
     let _ = runtime_bootstrap::apply_saved_environment();
     let app = tauri::Builder::default()
