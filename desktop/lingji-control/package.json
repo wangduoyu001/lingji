@@ -17,7 +17,9 @@
     "preview": "vite preview --host 127.0.0.1",
     "tauri": "tauri",
     "build:sidecar:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File ../../scripts/build_windows_sidecar.ps1",
+    "build:sidecar:macos": "bash ../../scripts/build_macos_sidecar.sh aarch64-apple-darwin",
     "release:windows": "npm run build:sidecar:windows && tauri build --config src-tauri/tauri.sidecar.conf.json --bundles nsis --target x86_64-pc-windows-msvc",
+    "release:macos": "npm run build:sidecar:macos && tauri build --config src-tauri/tauri.sidecar.conf.json --bundles dmg --target aarch64-apple-darwin",
     "test:obsidian": "tsx scripts/obsidian-smoke.mjs"
   },
   "dependencies": {
