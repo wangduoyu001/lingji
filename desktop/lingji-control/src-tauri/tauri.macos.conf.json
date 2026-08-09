@@ -1,5 +1,8 @@
 {
   "bundle": {
-    "targets": ["dmg"]
+    "targets": ["dmg"],
+    "resources": {
+      "binaries/lingji-core-aarch64-apple-darwin": "lingji-core.exe"
+    }
   }
 }
