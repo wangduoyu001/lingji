@@ -66,6 +66,10 @@ jobs:
         working-directory: desktop/lingji-control
         run: npm ci
 
+      - name: Static macOS release smoke
+        working-directory: desktop/lingji-control
+        run: npm run test:macos-release
+
       - name: Setup Rust target
         run: |
           rustup target add aarch64-apple-darwin
@@ -86,11 +90,54 @@ jobs:
 
       - name: Verify sidecar contract and bundles
         run: |
+          set -euo pipefail
           test -x desktop/lingji-control/src-tauri/binaries/lingji-core-aarch64-apple-darwin
           test -d desktop/lingji-control/src-tauri/binaries/lingji_core_lib
-          find desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle -maxdepth 3 -type f -print
-          find desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle -name '*.dmg' -type f | grep -q .
-          find desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle -name '*.app' -type d | grep -q .
+          BUNDLE_ROOT="desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle"
+          find "$BUNDLE_ROOT" -maxdepth 3 -type f -print
+          find "$BUNDLE_ROOT" -name '*.dmg' -type f | grep -q .
+          APP_DIR="$(find "$BUNDLE_ROOT" -name '*.app' -type d | head -n 1)"
+          test -n "$APP_DIR"
+          PACKAGED_SIDECAR="$APP_DIR/Contents/Resources/lingji-core.exe"
+          test -x "$PACKAGED_SIDECAR"
+          test -d "$APP_DIR/Contents/Resources/lingji_core_lib"
+          CONTRACT_ROOT="$RUNNER_TEMP/lingji-packaged-contract"
+          mkdir -p "$CONTRACT_ROOT"
+          "$PACKAGED_SIDECAR" \
+            --data-root "$CONTRACT_ROOT" \
+            --check-config \
+            --check-config-output "$CONTRACT_ROOT/contract.json"
+          python3 - <<PY
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("$CONTRACT_ROOT/contract.json").read_text(encoding="utf-8"))
+          assert payload["mode"] == "packaged_sidecar", payload
+          assert payload["host"] == "127.0.0.1", payload
+          assert payload["owner_data_outside_install_dir"] is True, payload
+          PY
+
+      - name: Boot packaged control API
+        run: |
+          set -euo pipefail
+          BUNDLE_ROOT="desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle"
+          APP_DIR="$(find "$BUNDLE_ROOT" -name '*.app' -type d | head -n 1)"
+          PACKAGED_SIDECAR="$APP_DIR/Contents/Resources/lingji-core.exe"
+          DATA_ROOT="$RUNNER_TEMP/lingji-packaged-runtime"
+          mkdir -p "$DATA_ROOT"
+          "$PACKAGED_SIDECAR" --data-root "$DATA_ROOT" --host 127.0.0.1 --port 8766 >"$RUNNER_TEMP/lingji-sidecar.log" 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 80); do
+            if [[ -s "$DATA_ROOT/storage/control_api_token" ]]; then
+              TOKEN="$(cat "$DATA_ROOT/storage/control_api_token")"
+              if curl --silent --fail -H "X-LingJi-Token: $TOKEN" http://127.0.0.1:8766/api/runtime/ping >/dev/null; then
+                exit 0
+              fi
+            fi
+            sleep 0.25
+          done
+          cat "$RUNNER_TEMP/lingji-sidecar.log" >&2
+          exit 1
 
       - name: Upload macOS bundle
         uses: actions/upload-artifact@v6
