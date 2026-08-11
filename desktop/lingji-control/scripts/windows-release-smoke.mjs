@@ -59,6 +59,7 @@ assert.match(rustMain, /^#!\[cfg_attr\(not\(debug_assertions\), windows_subsyste
 assert.match(rustMain, /fn release_metadata/);
 assert.match(rustMain, /owner_data_root/);
 assert.match(rustMain, /runtime_bootstrap_status/);
+assert.match(rustMain, /runtime_autoconfigure/);
 assert.match(rustMain, /runtime_configure/);
 assert.match(rustMain, /guarded_runtime_ensure/);
 assert.match(rustMain, /guarded_runtime_stop/);
@@ -71,8 +72,8 @@ assert.equal(hook.includes("vault_path"), false, "Copied diagnostics must not ex
 assert.match(shell, /复制诊断信息/);
 assert.match(shell, /releaseMetadata\?\.version/);
 assert.match(shell, /desktop-runtime-tools/);
-assert.match(boundary, /自动启动/);
-assert.match(boundary, /首次使用/);
+assert.match(boundary, /自动准备/);
+assert.match(boundary, /手动选择位置/);
 assert.match(boundary, /恢复运行/);
 assert.equal(boundary.includes(">启动核心</button>"), false, "Routine installed startup must remain automatic");
 
@@ -119,6 +120,9 @@ for (const token of [
   "pull_request:",
   "permissions:",
   "contents: read",
+  "Checkout exact product source",
+  "github.event.pull_request.head.sha || github.sha",
+  "Checkout identity mismatch",
   "requirements-sidecar-build.txt",
   "build_windows_sidecar.ps1",
   "Test Rust runtime manager",
