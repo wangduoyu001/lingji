@@ -231,6 +231,57 @@ jobs:
           hdiutil detach "$MOUNT_POINT"
           trap - EXIT
 
+      - name: Verify installed App acceptance isolation
+        run: |
+          set -euo pipefail
+          BUNDLE_ROOT="desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle"
+          DMG="$(find "$BUNDLE_ROOT/dmg" -maxdepth 1 -name '*.dmg' -type f | head -n 1)"
+          MOUNT_POINT="$RUNNER_TEMP/lingji-isolation-dmg-mount"
+          TASK_ROOT="$RUNNER_TEMP/lingji-installed-app-acceptance"
+          mkdir -p "$MOUNT_POINT" "$TASK_ROOT/isolated-home" "$TASK_ROOT/runtime-data"
+          hdiutil attach "$DMG" -mountpoint "$MOUNT_POINT" -nobrowse -readonly
+          APP_DIR="$(find "$MOUNT_POINT" -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          MAIN_BINARY="$(find "$APP_DIR/Contents/MacOS" -maxdepth 1 -type f | head -n 1)"
+          test -n "$MAIN_BINARY"
+          launch() {
+            HOME="$TASK_ROOT/isolated-home" \
+            LINGJI_ACCEPTANCE_DATA_ROOT="$TASK_ROOT/runtime-data" \
+              "$MAIN_BINARY" >"$TASK_ROOT/desktop-launch.log" 2>&1 &
+            DESKTOP_PID=$!
+            for _ in $(seq 1 80); do
+              if [[ -s "$TASK_ROOT/runtime-data/storage/control_api_token" ]]; then
+                TOKEN="$(cat "$TASK_ROOT/runtime-data/storage/control_api_token")"
+                if curl --silent --fail -H "X-LingJi-Token: $TOKEN" http://127.0.0.1:8766/api/runtime/ping >/dev/null; then
+                  return 0
+                fi
+              fi
+              sleep 0.25
+            done
+            cat "$TASK_ROOT/desktop-launch.log" >&2
+            return 1
+          }
+          cleanup_runtime() {
+            kill "$DESKTOP_PID" 2>/dev/null || true
+            wait "$DESKTOP_PID" 2>/dev/null || true
+          }
+          trap 'cleanup_runtime; hdiutil detach "$MOUNT_POINT" -force >/dev/null 2>&1 || true' EXIT
+          launch
+          cleanup_runtime
+          launch
+          cleanup_runtime
+          python3 - <<PY
+          from pathlib import Path
+          task_root = Path("$TASK_ROOT").resolve()
+          data_root = task_root / "runtime-data"
+          required = ["storage", "logs", "runtime", "raw", "qdrant"]
+          assert all((data_root / name).exists() for name in required), required
+          assert not (task_root / "isolated-home" / "Documents" / "acceptance").exists()
+          for path in task_root.rglob("*"):
+              assert path.is_relative_to(task_root), path
+          PY
+          hdiutil detach "$MOUNT_POINT"
+          trap - EXIT
+
       - name: Upload macOS bundle
         uses: actions/upload-artifact@v6
         with:
