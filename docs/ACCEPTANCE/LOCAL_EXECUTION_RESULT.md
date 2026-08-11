@@ -2,7 +2,7 @@
 
 > 本文件是本机 Codex 向 ChatGPT / 主开发代理提交当前任务结果的固定回执。
 >
-> 当前任务为 PR #88 的 M5 Phase 4 失败根因修复。旧 `171091fe` Artifact 已拒绝，不得在没有新产品 Head 和新 Artifact 的情况下重新真机验收。
+> 当前任务为 PR #88 的 M5 Phase 4 失败根因修复，并包含本机认证状态安全同步增强。旧 `171091fe` Artifact 已拒绝，不得在没有新产品 Head 和新 Artifact 的情况下重新真机验收。
 
 ## 1. 当前回执
 
@@ -14,7 +14,7 @@ execution_mode: FAILURE_REPORT_FIRST_THEN_ROOT_CAUSE_REPAIR
 repository: wangduoyu001/lingji
 product_pr: 88
 product_commit: 171091fe764c6653cdc7325b4a1a71e0b7800822
-task_instruction_commit: 3136ad78dabf6951fe6c63ced93e656c0befa8c9
+task_instruction_commit: 286f678ef603aec333168e8afc1bb5c58da3b659
 report_branch: acceptance/pr88-m5-phase4-failure-repair-171091fe
 report_commit: PENDING
 report_path: docs/TEST_REPORTS/PR88_M5_PHASE4_FAILURE_REPAIR.md
@@ -37,6 +37,13 @@ identity_root_cause_fixed: false
 first_run_ux_root_cause_fixed: false
 acceptance_isolation_root_cause_fixed: false
 three_real_failure_regressions: NOT_RUN
+auth_sync_contract_path: docs/AUTH_CREDENTIAL_STATE_SYNC.md
+auth_state_sync_implemented: false
+auth_status_regressions: NOT_RUN
+auth_snapshot_generated: false
+auth_snapshot_path: docs/TEST_REPORTS/evidence/LOCAL_AUTH_STATUS_PR88.json
+auth_blockers: PENDING
+secret_export_count: PENDING
 full_ci: NOT_RUN
 windows_release: NOT_RUN
 macos_release: NOT_RUN
@@ -83,8 +90,39 @@ M5-ISOLATION-002
 
 根因、修复、回归测试、新 CI、新 Artifact 和远程复读全部完成后再更新本回执。
 
-## 5. 最终原则
+## 5. 本轮必须完成的认证状态增强
 
-只有新的精确产品 Head、双平台 Release Gate、新 macOS Artifact 和独立哈希核验完成后，才允许把 M5 固定任务单重新切为 ACTIVE。
+认证同步不是第四个 M5 FAIL，但本轮必须实现：
+
+```text
+本机 Secret → OS 安全凭据存储
+认证验证 → lingji_state.db 非敏感状态
+Desktop / Autopilot → 只显示认证结论
+验收/交接 → allowlist 脱敏快照
+GitHub → 只保存认证状态，不保存 Secret
+```
+
+权威合同：
+
+```text
+docs/AUTH_CREDENTIAL_STATE_SYNC.md
+```
+
+最终必须回填：
+
+```text
+auth_state_sync_implemented = true
+auth_status_regressions = PASS
+auth_snapshot_generated = true
+auth_snapshot_path = docs/TEST_REPORTS/evidence/LOCAL_AUTH_STATUS_PR88.json
+auth_blockers = 0
+secret_export_count = 0
+```
+
+任何 Token / Refresh Token / API Key / Cookie / Authorization Header / Secret 片段进入仓库，当前任务直接 FAIL。
+
+## 6. 最终原则
+
+只有新的精确产品 Head、三个真实失败根因关闭、认证状态同步增强完成、双平台 Release Gate、新 macOS Artifact 和独立哈希核验完成后，才允许把 M5 固定任务单重新切为 ACTIVE。
 
 本回执 `COMPLETED` 只代表**开发修复和新包交付完成**，不代表真实 M5 已 PASS。
