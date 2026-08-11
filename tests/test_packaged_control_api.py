@@ -99,6 +99,20 @@ def test_packaged_environment_keeps_production_and_acceptance_separate(runtime_t
     assert Path(acceptance["STORAGE_DIR"]).is_relative_to(base / "acceptance")
 
 
+def test_packaged_acceptance_runtime_rejects_a_root_outside_the_task_override(
+    runtime_tmp_path: Path,
+):
+    task_root = runtime_tmp_path / "task-root" / "runtime-data"
+    rogue_root = runtime_tmp_path / "Documents" / "acceptance"
+
+    with pytest.raises(ValueError, match="LINGJI_ACCEPTANCE_DATA_ROOT"):
+        configure_packaged_environment(
+            rogue_root,
+            workspace="acceptance",
+            environ={"LINGJI_ACCEPTANCE_DATA_ROOT": str(task_root)},
+        )
+
+
 def test_packaged_environment_preserves_explicit_owner_vault(runtime_tmp_path: Path):
     explicit_vault = (runtime_tmp_path / "My Obsidian Vault").resolve()
     environ = {"VAULT_DIR": str(explicit_vault)}
