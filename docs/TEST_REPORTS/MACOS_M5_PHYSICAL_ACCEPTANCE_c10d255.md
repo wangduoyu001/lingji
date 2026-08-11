@@ -117,5 +117,5 @@ Codex executor: Codex
 Owner observation: completed; FAIL
 Acceptance date: 2026-08-11
 Report branch: acceptance/macos-m5-physical-acceptance-c10d255
-Report commit: pending
+Report commit: 1b9a8cf3917183b2374e5743bf5cd48d75cb5739 (initial report commit)
 ```
