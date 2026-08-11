@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
-const [panel, currentWork, overview, attention, codex, api, discovery, imports, styles, boundary, connection, bootstrap] = await Promise.all([
+const [
+  panel, currentWork, overview, attention, codex, api, discovery, imports, styles,
+  boundary, connection, bootstrap, autopilotEngine, autopilotApi, runtimeEntrypoint,
+] = await Promise.all([
   read("../src/components/AssistantDiscoveryPanel.tsx"),
   read("../src/components/CurrentWorkPanel.tsx"),
   read("../src/pages/OverviewPage.tsx"),
@@ -19,6 +22,9 @@ const [panel, currentWork, overview, attention, codex, api, discovery, imports, 
   read("../src/components/RuntimeBoundary.tsx"),
   read("../src/hooks/useLingJiConnection.ts"),
   read("../src-tauri/src/runtime_bootstrap.rs"),
+  read("../../../src/autopilot/engine.py"),
+  read("../../../src/control/autopilot_api.py"),
+  read("../../../run_control_api.py"),
 ]);
 
 assert.match(panel, /\/api\/assistant-hub\/status/);
@@ -42,10 +48,13 @@ assert.match(currentWork, /没有前台任务；自动发现、状态检查和�
 assert.match(currentWork, /current-work-details/);
 
 assert.match(overview, /owner-autopilot-home/);
-assert.match(overview, /ownerDecisionCount/);
-assert.match(overview, /systemIssueCount/);
-assert.match(overview, /没有需要你操作的事项/);
-assert.match(overview, /灵机会先自行重试、恢复和保留证据/);
+assert.match(overview, /\/api\/autopilot\/status/);
+assert.match(overview, /autopilotOwnerCount/);
+assert.match(overview, /autopilotBackgroundCount/);
+assert.match(overview, /recent_actions/);
+assert.match(overview, /刚自动处理/);
+assert.match(overview, /已自动复验/);
+assert.match(overview, /诊断、安全修复、复验并保留记录/);
 assert.equal(overview.includes("overview-technical-summary"), false, "Daily home must not expose the technical metric dashboard");
 assert.equal(overview.includes("Metric"), false, "Daily home must not render technical metric tiles");
 
@@ -72,6 +81,26 @@ assert.match(bootstrap, /LINGJI_ACCEPTANCE_DATA_ROOT/);
 assert.match(bootstrap, /configure_default/);
 assert.match(bootstrap, /auto_selected/);
 assert.match(bootstrap, /persisted acceptance workspace is never reused/);
+
+assert.match(autopilotEngine, /class AutopilotEngine/);
+assert.match(autopilotEngine, /StartupHealthChecker/);
+assert.match(autopilotEngine, /release_stale/);
+assert.match(autopilotEngine, /vector_rebuild_required/);
+assert.match(autopilotEngine, /不会自动执行不可逆操作/);
+assert.match(autopilotEngine, /不会无限循环/);
+assert.equal(autopilotEngine.includes(".retry("), false, "Autopilot must not retry exhausted/cancelled jobs indefinitely");
+assert.equal(autopilotEngine.includes("rebuild_collection"), false, "Autopilot must not silently rebuild Qdrant");
+assert.equal(autopilotEngine.includes("approve_memory"), false, "Autopilot must not approve permanent memory");
+
+assert.match(autopilotApi, /\/api\/autopilot\/status/);
+assert.match(autopilotApi, /x_lingji_token/);
+assert.equal(autopilotApi.includes("@app.post"), false, "Phase 4 Autopilot API is read-only");
+
+assert.match(runtimeEntrypoint, /AutopilotEngine/);
+assert.match(runtimeEntrypoint, /register_autopilot_routes/);
+assert.match(runtimeEntrypoint, /autopilot\.start\(\)/);
+assert.match(runtimeEntrypoint, /autopilot\.stop\(\)/);
+assert.match(runtimeEntrypoint, /finally:/);
 
 for (const route of [
   "/api/assistant-hub/status",

@@ -3,8 +3,10 @@ from __future__ import annotations
 import secrets
 from pathlib import Path
 
+from src.autopilot import AutopilotEngine
 from src.config import settings
 from src.control.api import create_control_app
+from src.control.autopilot_api import register_autopilot_routes
 from src.control.auto_review_api import register_auto_review_routes
 from src.control.governed_service import GovernedLocalControlService
 from src.control.p2_07_api import register_p2_07_routes
@@ -41,16 +43,28 @@ def main() -> None:
     token = load_or_create_token(token_path)
     state_db = StateDatabase(settings.state_db_path)
     service = GovernedLocalControlService(settings, state_db=state_db)
+    autopilot = AutopilotEngine(
+        settings,
+        state_db=state_db,
+        queue=service.queue,
+        memory_statistics=service.memory_statistics,
+    )
     app = create_control_app(settings, service=service, token=token)
+    register_autopilot_routes(app, autopilot, token=token)
     register_p2_07_routes(app, settings, service, token=token)
     register_auto_review_routes(app, settings, service, token=token)
     register_settings_governance_routes(app, service, token=token)
-    uvicorn.run(
-        app,
-        host=settings.control_api_host,
-        port=settings.control_api_port,
-        log_level="info",
-    )
+    autopilot.start()
+    try:
+        uvicorn.run(
+            app,
+            host=settings.control_api_host,
+            port=settings.control_api_port,
+            log_level="info",
+        )
+    finally:
+        autopilot.stop()
+        service.close()
 
 
 if __name__ == "__main__":
