@@ -9,7 +9,7 @@ const dashboard = fs.readFileSync(new URL("../src/components/CurrentWorkPanel.ts
 
 assert.match(nav, /codex_workspace/);
 for (const path of ["/api/codex/projects/resolve", "/api/codex/projects", "/api/codex/current", "/api/codex/sessions", "/api/activity", "/api/context/project"]) assert.ok(api.includes(path), path);
-assert.match(dashboard, /当前项目/); assert.match(dashboard, /无活动会话/); assert.match(dashboard, /未绑定/);
+assert.match(dashboard, /当前项目/); assert.match(dashboard, /Codex 工作记录/); assert.match(dashboard, /无活动记录/); assert.match(dashboard, /未绑定/);
 assert.match(page, /Codex 工作记录/); assert.match(page, /工作记录详情/); assert.match(page, /不是灵机新建了聊天窗口/);
 assert.doesNotMatch(page, /transcript/i); assert.doesNotMatch(page, /absolute_path|input_path/);
 assert.match(api, /after_id=/); assert.match(contract, /ACTIVE_POLL_MS = 1000/); assert.match(contract, /IDLE_POLL_MS = 5000/);
