@@ -32,6 +32,9 @@ retry_same_artifact: false
 physical_reacceptance_before_new_artifact: false
 source_failure_report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_171091fe.md
 source_failure_report_branch: acceptance/macos-m5-autopilot-phase4-171091fe
+auth_sync_contract_path: docs/AUTH_CREDENTIAL_STATE_SYNC.md
+auth_state_sync_required: true
+secret_export_count_required: 0
 ```
 
 ## 2. 当前结论
@@ -246,7 +249,135 @@ SQLite/Qdrant/log/raw/vault/backup/runtime/token 全在 task root
 
 只测纯函数不算关闭本缺陷。
 
-## 8. 双平台回归边界
+## 8. 必做增强 D：本机认证状态安全同步
+
+这不是第四个 M5 失败原因，但本轮必须一起完成，解决“本机已经有 Token / 登录状态，仓库和远端代理却不知道认证进行到哪一步”的断层。
+
+权威规范：
+
+```text
+docs/AUTH_CREDENTIAL_STATE_SYNC.md
+```
+
+永久原则：
+
+```text
+Secrets never sync. Secret state syncs.
+```
+
+### 目标链路
+
+```text
+macOS Keychain / Windows Credential Manager
+→ 一个跨平台 CredentialStore 抽象
+→ 本机认证验证
+→ lingji_state.db 非敏感 AuthStatus
+→ Desktop / Health / Autopilot
+→ 验收/交接时生成 allowlist 脱敏 Snapshot
+→ GitHub acceptance / test report
+```
+
+GitHub 只保存“认证进度/结果”，绝不保存 Secret。
+
+### 统一状态
+
+至少支持：
+
+```text
+not_configured
+credential_present
+verifying
+verified
+expired
+permission_insufficient
+invalid
+error
+```
+
+本机状态允许记录：
+
+```text
+provider
+auth_method
+state
+credential_present
+credential_valid
+permissions_ok
+account_bound
+last_verified_at
+expires_at
+last_error_code
+last_error_at
+```
+
+严禁保存：
+
+```text
+Token
+Refresh Token
+API Key
+Cookie
+Authorization Header
+密码
+Secret 前后缀
+Secret hash / fingerprint
+```
+
+### 仓库快照
+
+开发/验收时生成：
+
+```text
+docs/TEST_REPORTS/evidence/LOCAL_AUTH_STATUS_PR88.json
+```
+
+至少包含：
+
+```text
+schema_version
+task_id
+generated_at
+platform
+providers.<name>.credential_present
+providers.<name>.state
+providers.<name>.permissions_ok（适用时）
+auth_blockers
+secret_export_count
+```
+
+结果回执只记录摘要和 `auth_snapshot_path`。
+
+### 实现边界
+
+- 优先复用现有依赖/安全抽象；没有时只增加一层 `CredentialStore` 接口，不允许各 provider 自建 Secret 文件；
+- CI 使用 fake / in-memory credential backend，禁止操作真实 Keychain / Credential Manager；
+- 真实系统安全存储只在对应本机验收验证；
+- 8766 / MCP 现有 Token 链不能因为本轮迁移失效；
+- 不做高频 Git 实时同步，只有验收、交接、故障报告或显式快照才提交；
+- 快照生成必须采用 allowlist schema，禁止“dump 全对象再 redact”。
+
+### 必须新增回归
+
+```text
+CredentialStore fake backend：读/写/删/不存在/错误映射
+AuthStatus 状态转换
+Runtime 重启后非敏感认证状态恢复
+快照 allowlist
+fake Token / Cookie / Authorization Header 不得进入快照
+仓库 evidence secret scan
+Desktop 只显示“已连接/需重新认证/权限不足”等结论
+Windows / macOS 共用同一状态模型
+```
+
+硬门禁：
+
+```text
+secret_export_count = 0
+```
+
+发现疑似 Secret 时：快照生成 FAIL、提交 FAIL、验收不得 PASS。
+
+## 9. 双平台回归边界
 
 不得破坏：
 
@@ -264,7 +395,7 @@ Production DataRoot / Vault
 
 Mac 与 Windows 继续共享同一业务核心。
 
-## 9. 自动测试顺序
+## 10. 自动测试顺序
 
 先跑焦点：
 
@@ -274,6 +405,7 @@ bootstrap / acceptance isolation Rust
 Desktop first-run smoke
 Autopilot tests
 packaged runtime tests
+CredentialStore / AuthStatus / sanitized snapshot / secret scan
 ```
 
 焦点全部通过后再跑：
@@ -293,9 +425,9 @@ macOS Desktop Gate
 
 所有远程门禁必须绑定同一个最终产品 Head。
 
-## 10. 新 Artifact 门禁
+## 11. 新 Artifact 门禁
 
-三项根因和全量门禁全部 PASS 后才能创建新 M5 包。
+三项根因、认证同步增强和全量门禁全部 PASS 后才能创建新 M5 包。
 
 必须记录全新的：
 
@@ -307,6 +439,8 @@ Artifact ZIP sha256
 DMG sha256
 DMG size
 Windows artifact identity
+auth_snapshot_path
+secret_export_count = 0
 ```
 
 Codex 必须下载新 Artifact，独立核对 ZIP/DMG 哈希，并从最终 DMG 内真实读取 App release metadata。
@@ -319,7 +453,7 @@ Artifact 9102748834
 DMG 78c1b01abbe44b2800f4cfc3af5020f96d66feaa0682f909c4e2fc86d35fed9f
 ```
 
-## 11. 报告与清理
+## 12. 报告与清理
 
 开发过程中更新：
 
@@ -327,6 +461,7 @@ DMG 78c1b01abbe44b2800f4cfc3af5020f96d66feaa0682f909c4e2fc86d35fed9f
 docs/TEST_REPORTS/PR88_M5_PHASE4_FAILURE_REPAIR.md
 docs/TEST_REPORTS/evidence/PR88_M5_PHASE4_FAILURE_REPAIR_SUMMARY.json
 docs/TEST_REPORTS/evidence/PR88_M5_PHASE4_FAILURE_REPAIR_HASHES.txt
+docs/TEST_REPORTS/evidence/LOCAL_AUTH_STATUS_PR88.json
 docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md
 docs/MODULES/CODE_MAP.md（入口/所有权变化时）
 docs/CHANGELOG.md
@@ -335,9 +470,9 @@ PR #88 body/comment
 
 每个重大修改完成后更新 Markdown 报告，不堆临时报告和无用日志。
 
-清理只允许删除本轮明确创建的临时 worktree、build output、fixture、日志和测试 DataRoot；禁止删除主人 Production、Vault、正式记忆和第三方应用配置。
+清理只允许删除本轮明确创建的临时 worktree、build output、fixture、日志和测试 DataRoot；禁止删除主人 Production、Vault、正式记忆、系统钥匙串/凭据管理器中的主人正式 Secret 和第三方应用配置。
 
-## 12. 完成条件
+## 13. 完成条件
 
 只有以下全部成立才可把结果回执标记 `COMPLETED`：
 
@@ -348,6 +483,10 @@ identity_root_cause_fixed = true
 first_run_ux_root_cause_fixed = true
 acceptance_isolation_root_cause_fixed = true
 three_real_failure_regressions = PASS
+auth_state_sync_implemented = true
+auth_status_regressions = PASS
+auth_snapshot_generated = true
+secret_export_count = 0
 full_ci = PASS
 windows_release = PASS
 macos_release = PASS
