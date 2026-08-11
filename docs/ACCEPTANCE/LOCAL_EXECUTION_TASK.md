@@ -1,10 +1,10 @@
 # LingJi 本机执行任务单
 
-> 本文件是 ChatGPT / 主开发代理向本机 Codex 下达当前开发任务的唯一权威入口。
+> 本文件是 ChatGPT / 主开发代理向本机 Codex 下达当前任务的唯一权威入口。
 >
-> 当前任务不是再次验收。`171091fe...` / Artifact `9102748834` 已在真实 M5 上 FAIL，禁止重复安装或重复验收同一包。
+> 当前不是再次 M5 验收。`171091fe...` / Artifact `9102748834` 已在真实 M5 上 **FAIL**，禁止重复安装、重复验收或只换包不修根因。
 
-## 1. 当前任务身份
+## 1. 当前任务元数据
 
 ```yaml
 task_id: PR88-M5-PHASE4-FAILURE-REPAIR-171091FE
@@ -13,39 +13,40 @@ execution_mode: FAILURE_REPORT_FIRST_THEN_ROOT_CAUSE_REPAIR
 repository: wangduoyu001/lingji
 product_pr: 88
 product_branch: feature/owner-autopilot-ui-codexpp
-failed_product_commit: 171091fe764c6653cdc7325b4a1a71e0b7800822
-failed_artifact_name: lingji-macos-arm64
-failed_artifact_id: 9102748834
+product_commit: 171091fe764c6653cdc7325b4a1a71e0b7800822
+artifact_name: REJECTED-lingji-macos-arm64-171091fe
+artifact_id: 9102748834
+report_branch: acceptance/pr88-m5-phase4-failure-repair-171091fe
+report_path: docs/TEST_REPORTS/PR88_M5_PHASE4_FAILURE_REPAIR.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR88_M5_PHASE4_FAILURE_REPAIR_SUMMARY.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR88_M5_PHASE4_FAILURE_REPAIR_HASHES.txt
+result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
+cleanup_before_required: true
+cleanup_after_required: true
+remote_verification_required: true
+owner_confirmation_required: true
+failed_m5_task: MACOS-M5-AUTOPILOT-PHASE4-171091FE
 failed_workflow_run_id: 31495013820
 failed_dmg_sha256: 78c1b01abbe44b2800f4cfc3af5020f96d66feaa0682f909c4e2fc86d35fed9f
-failed_m5_task: MACOS-M5-AUTOPILOT-PHASE4-171091FE
-product_status: FAIL_DO_NOT_MERGE
 retry_same_artifact: false
 physical_reacceptance_before_new_artifact: false
-source_report_expected_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_171091fe.md
-source_report_expected_branch: acceptance/macos-m5-autopilot-phase4-171091fe
-result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
-implementation_report_path: docs/TEST_REPORTS/PR88_M5_PHASE4_FAILURE_REPAIR.md
+source_failure_report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_171091fe.md
+source_failure_report_branch: acceptance/macos-m5-autopilot-phase4-171091fe
 ```
 
-## 2. 已知现场结论
+## 2. 当前结论
 
-主人已确认本轮 M5 复验结束，结论为 **FAIL，不是 BLOCKED**。
+主人已确认 2026-08-11 本轮 M5 复验结束，结论为 **FAIL，不是 BLOCKED**。
 
-已知三类阻断：
+三类阻断：
 
 ```text
-M5-IDENTITY-002
-安装包 / 已安装 App 的真实身份未满足精确产品 Commit 合同。
-
-M5-UX-003
-首次使用体验仍不清晰，不能让普通主人无需理解技术概念直接进入可用状态。
-
-M5-ISOLATION-002
-本轮错误写入了任务根之外的 ~/Documents/acceptance。
+M5-IDENTITY-002   安装包 / 已安装 App 身份不精确
+M5-UX-003         首次使用体验仍不清晰
+M5-ISOLATION-002  错误写入 ~/Documents/acceptance
 ```
 
-现场已经完成：
+主人已完成现场收尾：
 
 ```text
 新版本停止
@@ -54,135 +55,127 @@ M5-ISOLATION-002
 旧的有效签名 /Applications/灵机.app 已恢复
 ```
 
-不得要求主人重新执行以上步骤。
+**不得要求主人重新执行这些动作。**
 
-## 3. 第一步硬门禁：先恢复并读取真实失败报告
+## 3. 第一硬门禁：先读真实失败报告
 
-Codex 在修改任何产品代码前必须先读取本机刚生成的 Phase 4 M5 失败报告、相关最小证据和本机 Git 状态。
+Codex 在修改任何产品代码前，必须读取本机刚生成的 Phase 4 M5 失败报告与最小证据。
 
-预期报告：
+预期：
 
 ```text
 docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_171091fe.md
-```
-
-预期报告分支：
-
-```text
 acceptance/macos-m5-autopilot-phase4-171091fe
 ```
 
-### 当前远程事实
-
-ChatGPT 已在 2026-08-11 对 GitHub 远程做了重新读取：
+ChatGPT 已重新读取 GitHub 远程，当前事实是：
 
 ```text
-预期 Phase 4 acceptance 分支：未发现
-预期 MACOS_M5_PHYSICAL_ACCEPTANCE_171091fe.md：master / 产品分支均未发现
-GitHub acceptance refs 中只有旧 c10d255 / bf9da9ff 等历史分支
-远程最新 M5 相关 docs commit 仍为 f0fde9c1（Phase 4任务单）
+预期 Phase 4 acceptance 分支：远程未发现
+预期 MACOS_M5_PHYSICAL_ACCEPTANCE_171091fe.md：master / 产品分支未发现
+GitHub acceptance refs：只有旧 c10d255 / bf9da9ff 等历史分支
 ```
 
-因此 Codex 不得继续宣称“已推送”而不复读远程。
+所以 Codex 不得继续把“执行过 git push”当成“报告已经在远程”。
 
-### Codex 必须执行
+### 开发前必须完成
 
-1. 找到本机刚生成的失败报告，确认文件内容、mtime、Git status、当前分支、HEAD、reflog、未推送提交；
-2. 读取报告全文，提取三个阻断的**实际 observed / expected / evidence / exact path / exact SHA**；
-3. 若报告确实还没有到远程：只提交报告、必要脱敏证据和失败结果回执到正确 acceptance 分支；
-4. `git push` 后必须用 `git ls-remote` + GitHub API/`gh api` 重新读取远程分支、Commit 和报告原文；
-5. 在 PR #88 留一条与该报告 Commit 对应的 FAIL 评论；
-6. 只有 `remote_report_verified=true` 后才能修改产品代码。
+1. 只读盘点本机仓库：路径、当前分支、HEAD、origin、`git status`、`git log`、`git reflog`、未推送提交、worktree；
+2. 找到本机失败报告，读取全文；
+3. 从报告中提取三个阻断的 `observed / expected / evidence / exact path / exact SHA`；
+4. 若报告尚未真正到远程，先把报告、必要脱敏证据和对应 FAIL 回执提交到正确 acceptance 分支；
+5. push 后执行 `git ls-remote` + `gh api` / GitHub API 重新读取远程分支、Commit、报告原文；
+6. 在 PR #88 留与失败报告 Commit 对应的 FAIL 评论；
+7. 只有 `remote_failure_report_verified=true` 后才能修改产品代码。
 
-如果本机报告不存在或已经被误删，不得凭记忆编造证据。使用当前仍存在的最小日志、终端历史、Git reflog 和已知现场事实重建一份**明确标注 reconstructed** 的报告，再远程提交。
+若本机报告不存在，不得凭记忆伪造。只能依据仍存在的最小日志、终端历史、reflog 与已知现场事实重建，并在报告中明确标记 `reconstructed=true`。
 
-## 4. 修复原则
+## 4. 修复循环
 
-固定流程：
+固定顺序：
 
 ```text
-真实失败报告
+失败报告
 → 根因定位
 → 最小修复
-→ 针对真实失败路径的自动回归测试
+→ 覆盖真实失败路径的自动回归
 → 焦点测试
-→ 全量 Python / Desktop / Rust
-→ Windows P0 + Windows Release
+→ 全量 Python/Desktop/Rust
+→ P0 Windows + Windows Release
 → macOS Release Gate
 → 新精确产品 Head
 → 新 Artifact / 新哈希
-→ 更新 M5 任务单
+→ 更新 M5 任务
 → 才允许重新真机验收
 ```
 
 禁止：
 
-- 只改文案或预期值让测试变绿；
-- 把观察到的错误 Commit 改成“正确预期”；
-- 在测试里豁免 `~/Documents/acceptance`；
-- 用旧 Artifact 重新验收；
-- 只换 Artifact 不增加覆盖本次真实失败的回归测试；
-- 破坏 Windows 已通过的共享主线；
-- 新增第二套 Runtime、队列、状态库或 Mac 特供业务逻辑。
+- 只改预期值或文案让测试变绿；
+- 把错误 observed SHA 改成“正确答案”；
+- 在测试中豁免 `~/Documents/acceptance`；
+- 重试 Artifact `9102748834`；
+- 只换 Artifact 而不新增本次失败回归；
+- force push / reset --hard / clean -fdx；
+- 删除未知 worktree、主人数据或第三方 AI 配置；
+- 新增第二套 Runtime、数据库、队列或 Mac 专用业务分叉。
 
-## 5. 阻断 A：安装包精确身份
+## 5. 修复 A：精确安装包身份
 
-先以失败报告中的真实值为准确认：
+以失败报告的实际证据为准，先回答：
 
 ```text
-expected product SHA
-artifact workflow source SHA
-.app embedded/release metadata SHA
-安装后 UI / diagnostics SHA
-实际运行 Sidecar / App 来源
-codesign identity / bundle path
+expected product SHA 是什么
+workflow checkout SHA 是什么
+.app 内 release metadata SHA 是什么
+最终 DMG 内 App SHA 是什么
+安装到 /Applications 后 App/UI/diagnostics SHA 是什么
+真正运行的主程序与 Sidecar 分别来自哪个 bundle
 ```
 
-必须定位“CI 为什么认为 exact-head PASS，而真实安装后仍显示/运行错误身份”的根因。
-
-重点检查但不要预设结论：
+重点检查但不得先入为主：
 
 ```text
 .github/workflows/macos-desktop.yml
-release metadata 的 Rust build-time 注入来源
-Tauri .app / DMG 生成与二次构建路径
-安装 whole-bundle replace 后实际启动的 bundle
-Desktop release_metadata command
-packaged Sidecar 与主程序各自身份来源
-缓存 / target / 旧 bundle 是否可能进入最终 DMG
+Tauri build-time release metadata 注入
+.app 与 DMG 是否发生二次构建
+release_metadata Tauri command
+安装 whole-bundle replace 后真实启动路径
+Sidecar 与主程序身份来源
+CI target/cache/旧 bundle 是否可能污染最终 DMG
 ```
 
-### 必须增加的回归
+### 必须新增回归
 
-新的 macOS Gate 不能只对二进制做 `strings | grep`。
+新的 macOS Gate 不能只做 `strings | grep`。
 
-至少要从**最终 DMG 挂载后的 App**验证：
+从**最终 DMG 挂载后的 App**至少验证：
 
 ```text
-1. 主程序真实 release_metadata.commit == workflow expected head SHA
-2. 主程序架构 arm64
-3. Sidecar 来自同一 bundle
-4. DMG 内 App 与构建前 verified App 身份一致
-5. 安装/复制后的 App 仍能返回同一精确 SHA（可自动验证的部分）
+release_metadata.commit == expected product Head
+主程序 == arm64
+Sidecar == arm64 且来自同一 App bundle
+DMG 内 App 与 build 前 verified App 身份一致
+安装/复制后的 App 可自动验证部分仍返回同一精确 SHA
 ```
 
-任何 identity 字段为 merge commit、master docs commit、旧产品 SHA、unknown 或彼此不一致：Release Gate 必须 FAIL。
+任何身份字段出现 PR merge commit、master docs commit、旧产品 SHA、unknown 或彼此不一致，Release Gate 必须 FAIL。
 
-## 6. 阻断 B：首次使用体验
+## 6. 修复 B：首次体验
 
-首先把失败报告中的主人实际观察逐条转成 UI 回归断言，不得由开发者自己猜“这样应该够清晰”。
+先把失败报告里主人的实际观察逐条转成 UI 回归，不允许开发者自己猜“应该已经够清楚”。
 
-目标体验固定为：
+目标正常路径只有：
 
 ```text
 打开灵机
 → 灵机自动准备
-→ 能自动解决的自己解决
-→ 直接进入首页
-→ 首页只告诉主人现在是否需要做决定
+→ 自动解决可恢复问题
+→ 进入首页
+→ 首页只告诉主人是否有必须决定的事情
 ```
 
-正常首次启动不得要求主人理解或选择：
+正常首次启动不得要求主人理解：
 
 ```text
 DataRoot
@@ -191,11 +184,11 @@ Qdrant
 Embedding
 SQLite
 8766 / MCP
-路径策略
 bootstrap
+路径策略
 ```
 
-只有自动准备真实失败时才出现一个清晰兜底动作；技术详情默认折叠。
+只有自动准备真实失败时才出现**一个主要恢复动作**；手选路径和技术详情必须降为次级/折叠兜底。
 
 重点检查：
 
@@ -203,90 +196,93 @@ bootstrap
 desktop/lingji-control/src/components/RuntimeBoundary.tsx
 desktop/lingji-control/src/hooks/useLingJiConnection.ts
 desktop/lingji-control/src/pages/OverviewPage.tsx
-DesktopShell / 状态栏 / 首次启动可见文案
+DesktopShell / 首次启动状态栏 / 可见错误文案
 ```
 
-### 必须增加的回归
+### 必须新增回归
 
-- fresh bootstrap 时不出现手选目录主流程；
-- 正常路径不出现 acceptance/workspace/DataRoot 等术语；
-- 自动准备失败时只有一个主要恢复动作，高级路径选择折叠；
-- 自动准备 → healthy → Overview 的状态切换无矛盾提示；
-- 首页无主人事项时明确“无需操作”；
-- 错误状态不得同时显示“正常/已准备好”。
+- fresh bootstrap 正常路径无手选目录主流程；
+- 正常路径不暴露 acceptance/workspace/DataRoot 等技术术语；
+- 自动准备失败时只有一个清晰主动作，高级路径选择折叠；
+- booting → healthy → Overview 不出现互相矛盾的状态；
+- 首页无主人事项明确“无需操作”；
+- error/degraded 不得同时冒充“正常/已准备好”。
 
-## 7. 阻断 C：`~/Documents/acceptance` 越界写入
+## 7. 修复 C：`~/Documents/acceptance` 越界写入
 
-失败报告必须给出实际生成路径、生成时间和尽可能精确的写入来源。
+失败报告必须给出实际路径、生成时间和尽量精确的写入来源。
 
-重点沿以下链路追踪，但以真实证据为准：
+沿真实启动链追：
 
 ```text
 LINGJI_ACCEPTANCE_DATA_ROOT
 runtime_bootstrap.rs
-RuntimeManager 启动环境
+RuntimeManager 子进程环境
 run_packaged_control_api.py
-WorkspaceResolver / Settings 默认值
-所有 acceptance 默认目录 / fallback
-测试脚本与验收脚本
+src/runtime/workspace.py
+Settings 默认值 / fallback
+验收脚本自身是否产生该目录
 ```
 
-当前产品代码已经有 task-scoped `LINGJI_ACCEPTANCE_DATA_ROOT` 合同，因此这次的目标不是再写一条“不要污染”的文档，而是找到**谁绕过了这个合同**。
+当前代码已经声明 task-scoped override，因此不能再靠写文档解决。必须找到**哪个实际路径绕过了合同**。
 
-### 必须增加的回归
-
-建立 macOS 隔离集成测试：
+### 必须新增 macOS 隔离集成回归
 
 ```text
-给定：HOME=<isolated-home>
-     LINGJI_ACCEPTANCE_DATA_ROOT=<task-root>/runtime-data
-启动：与正式打包 Runtime 等价的 bootstrap / sidecar 链
-验证：SQLite/Qdrant/log/raw/vault/backup/runtime/token 全在 task root
-验证：<isolated-home>/Documents/acceptance 不存在
-验证：任务根外新增 LingJi acceptance 路径数量 = 0
+HOME=<isolated-home>
+LINGJI_ACCEPTANCE_DATA_ROOT=<task-root>/runtime-data
+启动与正式打包 Runtime 等价的 bootstrap + sidecar 链
 ```
 
-测试必须覆盖首次启动和再次启动，不能只测纯函数。
+验证：
 
-## 8. 双平台与安全边界
+```text
+SQLite/Qdrant/log/raw/vault/backup/runtime/token 全在 task root
+<isolated-home>/Documents/acceptance 不存在
+任务根外新增 LingJi acceptance 路径数量 = 0
+首次启动 PASS
+再次启动 PASS
+```
 
-这三项修复不得破坏：
+只测纯函数不算关闭本缺陷。
+
+## 8. 双平台回归边界
+
+不得破坏：
 
 ```text
 Windows NSIS / RuntimeManager
-Windows 自动/手动 DataRoot 既有合同
+Windows 既有 DataRoot 合同
 8766 loopback + token
-MCP 8767 / stdio合同
+MCP 8767 / stdio
 Autopilot Doctor-Repair-Verify
 永久记忆人工确认
 Qdrant destructive action人工确认
-真实 AI 正文读取授权
+真实 AI 正文授权
 Production DataRoot / Vault
 ```
 
-Mac 与 Windows 必须继续共享同一业务核心，不创建 Mac 专用产品分叉。
+Mac 与 Windows 继续共享同一业务核心。
 
-## 9. 自动验收顺序
+## 9. 自动测试顺序
 
-先跑焦点测试，失败就修，不要把红测试带进全量 CI。
-
-至少：
+先跑焦点：
 
 ```text
-身份专项测试
-bootstrap / acceptance isolation Rust tests
-Desktop 首次体验 smoke
+身份专项
+bootstrap / acceptance isolation Rust
+Desktop first-run smoke
 Autopilot tests
 packaged runtime tests
 ```
 
-焦点通过后执行：
+焦点全部通过后再跑：
 
 ```text
-Python 3.11 / 3.12 full tests
-Windows Python tests
-Desktop full smoke + React production build
-Rust/Tauri tests
+Python 3.11 / 3.12 full
+Windows Python
+Desktop full smoke + React build
+Rust/Tauri
 MCP / Obsidian / browser smoke
 acceptance-doc-sync
 local-execution-handoff
@@ -295,63 +291,55 @@ Windows Desktop Release Baseline
 macOS Desktop Gate
 ```
 
-所有门禁必须针对同一个**最终产品 Head**。
+所有远程门禁必须绑定同一个最终产品 Head。
 
 ## 10. 新 Artifact 门禁
 
-只有三项修复和全部自动门禁 PASS 后才能发新 M5 包。
+三项根因和全量门禁全部 PASS 后才能创建新 M5 包。
 
-必须产生全新的：
+必须记录全新的：
 
 ```text
 product_commit
 macOS workflow_run_id
-artifact_id
-artifact ZIP sha256
+macOS artifact_id
+Artifact ZIP sha256
 DMG sha256
 DMG size
 Windows artifact identity
 ```
 
-Codex 必须下载自己刚生成的 macOS Artifact，再独立核对 ZIP/DMG 哈希和最终 DMG 内 App release metadata。
+Codex 必须下载新 Artifact，独立核对 ZIP/DMG 哈希，并从最终 DMG 内真实读取 App release metadata。
 
-旧身份全部作废：
+以下旧身份永久拒绝：
 
 ```text
 171091fe764c6653cdc7325b4a1a71e0b7800822
 Artifact 9102748834
-DMG sha256 78c1b01abbe44b2800f4cfc3af5020f96d66feaa0682f909c4e2fc86d35fed9f
+DMG 78c1b01abbe44b2800f4cfc3af5020f96d66feaa0682f909c4e2fc86d35fed9f
 ```
 
-## 11. 文档要求
+## 11. 报告与清理
 
-开发完成前必须新增/更新：
+开发过程中更新：
 
 ```text
 docs/TEST_REPORTS/PR88_M5_PHASE4_FAILURE_REPAIR.md
+docs/TEST_REPORTS/evidence/PR88_M5_PHASE4_FAILURE_REPAIR_SUMMARY.json
+docs/TEST_REPORTS/evidence/PR88_M5_PHASE4_FAILURE_REPAIR_HASHES.txt
 docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md
-docs/MODULES/CODE_MAP.md（若入口/所有权变化）
+docs/MODULES/CODE_MAP.md（入口/所有权变化时）
 docs/CHANGELOG.md
 PR #88 body/comment
 ```
 
-实施报告必须分别写清：
+每个重大修改完成后更新 Markdown 报告，不堆临时报告和无用日志。
 
-```text
-失败报告来源 Commit
-三个根因
-修改文件
-新增回归测试
-焦点测试结果
-完整 CI run IDs
-新 Artifact 身份与哈希
-Windows 回归结果
-剩余风险
-```
+清理只允许删除本轮明确创建的临时 worktree、build output、fixture、日志和测试 DataRoot；禁止删除主人 Production、Vault、正式记忆和第三方应用配置。
 
 ## 12. 完成条件
 
-本开发任务只有以下全部成立才可标记 `COMPLETED`：
+只有以下全部成立才可把结果回执标记 `COMPLETED`：
 
 ```text
 source_failure_report_read = true
@@ -367,7 +355,11 @@ new_exact_product_head = recorded
 new_artifact_id = recorded
 new_artifact_hashes_verified = true
 old_artifact_retry = false
-PR88 = Draft / DO_NOT_MERGE
+cleanup_before = PASS
+cleanup_after = PASS
+remote_result_verified = true
+pr_comment_verified = true
+PR #88 = Draft / DO_NOT_MERGE
 ```
 
-完成开发后，Codex只更新 `MACOS_M5_LOCAL_EXECUTION_TASK.md` 为**新的精确 Artifact**并把状态切回 ACTIVE；不得自行把真实 M5 验收写成 PASS。
+开发完成后，Codex只把 `MACOS_M5_LOCAL_EXECUTION_TASK.md` 原地更新为**新精确 Artifact**并重新设为 ACTIVE；不得自行宣称真实 M5 PASS。
