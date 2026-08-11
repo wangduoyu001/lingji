@@ -102,7 +102,8 @@ assert.match(diagnostics, /ADVANCED_NAVIGATION/);
 
 assert.match(currentWork, /intervalMs: 5_000/);
 assert.match(currentWork, /系统当前空闲/);
-assert.match(currentWork, /处理进度/);
+assert.match(currentWork, /current-work-progress/);
+assert.match(currentWork, /aria-label={`任务进度/);
 assert.match(currentWork, /onPendingReviewCount/);
 assert.match(currentWork, /工作细节/);
 
