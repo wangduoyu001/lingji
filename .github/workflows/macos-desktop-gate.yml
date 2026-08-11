@@ -115,7 +115,16 @@ jobs:
           APP_DIR="$(find "$BUNDLE_ROOT/macos" -maxdepth 1 -name '*.app' -type d | head -n 1)"
           MAIN_BINARY="$(find "$APP_DIR/Contents/MacOS" -maxdepth 1 -type f | head -n 1)"
           test -n "$MAIN_BINARY"
-          strings "$MAIN_BINARY" | grep -F "$EXPECTED" >/dev/null
+          file "$MAIN_BINARY" | grep -E 'arm64|arm64e' >/dev/null
+          "$MAIN_BINARY" --release-metadata-output "$RUNNER_TEMP/release_metadata.json"
+          python3 - <<PY
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("$RUNNER_TEMP/release_metadata.json").read_text(encoding="utf-8"))
+          assert payload["commit"] == "$EXPECTED", payload
+          assert payload["target"] == "aarch64-apple-darwin", payload
+          assert payload["installer_format"] == "dmg", payload
+          PY
 
       - name: Verify packaged sidecar contract
         run: |
@@ -128,6 +137,7 @@ jobs:
           PACKAGED_SIDECAR="$APP_DIR/Contents/Resources/lingji-core.exe"
           test -x "$PACKAGED_SIDECAR"
           test -d "$APP_DIR/Contents/Resources/lingji_core_lib"
+          file "$PACKAGED_SIDECAR" | grep -E 'arm64|arm64e' >/dev/null
           CONTRACT_ROOT="$RUNNER_TEMP/lingji-packaged-contract"
           mkdir -p "$CONTRACT_ROOT"
           "$PACKAGED_SIDECAR" \
@@ -192,7 +202,19 @@ jobs:
           test -d "$APP_DIR/Contents/Resources/lingji_core_lib"
           codesign --verify --deep --strict "$APP_DIR"
           MAIN_BINARY="$(find "$APP_DIR/Contents/MacOS" -maxdepth 1 -type f | head -n 1)"
-          strings "$MAIN_BINARY" | grep -F "$EXPECTED" >/dev/null
+          test -n "$MAIN_BINARY"
+          file "$MAIN_BINARY" | grep -E 'arm64|arm64e' >/dev/null
+          file "$APP_DIR/Contents/Resources/lingji-core.exe" | grep -E 'arm64|arm64e' >/dev/null
+          "$MAIN_BINARY" --release-metadata-output "$RUNNER_TEMP/dmg-release_metadata.json"
+          cmp "$RUNNER_TEMP/release_metadata.json" "$RUNNER_TEMP/dmg-release_metadata.json"
+          python3 - <<PY
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("$RUNNER_TEMP/dmg-release_metadata.json").read_text(encoding="utf-8"))
+          assert payload["commit"] == "$EXPECTED", payload
+          assert payload["target"] == "aarch64-apple-darwin", payload
+          assert payload["installer_format"] == "dmg", payload
+          PY
           CONTRACT_ROOT="$RUNNER_TEMP/lingji-dmg-contract"
           mkdir -p "$CONTRACT_ROOT"
           "$APP_DIR/Contents/Resources/lingji-core.exe" \
