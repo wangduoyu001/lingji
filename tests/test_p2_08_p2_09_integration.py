@@ -127,7 +127,8 @@ def test_desktop_uses_shared_polling_and_shadow_dashboard_without_execution_cont
     assert "ADVANCED_NAVIGATION" in diagnostics
     assert "pending_review_count" in attention
     assert "/api/auto-review/metrics" not in attention
-    assert "SHADOW 决策目前是审计历史" in attention
+    assert "SHADOW 决策仍是审计历史" in attention
+    assert "不会冒充当前待办" in attention
     assert "usePollingResource" in dashboard
     assert "AbortController" in polling
     assert "inFlightRef" in polling
