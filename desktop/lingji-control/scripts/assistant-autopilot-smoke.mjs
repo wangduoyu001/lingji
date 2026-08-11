@@ -1,0 +1,62 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const read = (path) => readFile(resolve(here, path), "utf8");
+
+const [panel, overview, codex, api, discovery, imports, styles] = await Promise.all([
+  read("../src/components/AssistantDiscoveryPanel.tsx"),
+  read("../src/pages/OverviewPage.tsx"),
+  read("../src/pages/CodexWorkspacePage.tsx"),
+  read("../../../src/control/capture_api.py"),
+  read("../../../src/assistant_hub/discovery.py"),
+  read("../../../src/assistant_hub/imports.py"),
+  read("../src/AssistantAutopilot.css"),
+]);
+
+assert.match(panel, /\/api\/assistant-hub\/status/);
+assert.match(panel, /intervalMs: 15_000/);
+assert.match(panel, /没有你的允许，不会读取真实对话正文/);
+assert.match(panel, /允许读取并自动整理/);
+assert.match(panel, /AUTHORIZE_ASSISTANT_IMPORT_/);
+assert.match(panel, /AUTHORIZE_SELECTED_ASSISTANT_IMPORT/);
+assert.equal(panel.includes("setInterval"), false, "Assistant discovery should reuse the polling resource");
+
+assert.match(overview, /AssistantDiscoveryPanel/);
+assert.match(overview, /只有读取真实内容、写入永久记忆或执行不可逆操作时才需要你决定/);
+assert.match(overview, /系统健康细节/);
+
+assert.match(codex, /Codex 工作记录/);
+assert.match(codex, /不是灵机新建了聊天窗口/);
+assert.match(codex, /已识别工作记录/);
+assert.match(codex, /15_000/);
+assert.equal(codex.includes("<h2>项目对话</h2>"), false);
+
+for (const route of [
+  "/api/assistant-hub/status",
+  "/api/assistant-hub/scan",
+  "/api/assistant-hub/import-plan",
+  "/api/assistant-hub/import-candidates/{candidate_id}/authorize",
+  "/api/assistant-hub/import-selected-file",
+]) assert.ok(api.includes(route), `Missing assistant autopilot route ${route}`);
+
+assert.match(discovery, /content_read": False/);
+assert.match(discovery, /followlinks=False/);
+assert.match(discovery, /\.codex/);
+assert.match(discovery, /\.claude/);
+assert.match(imports, /_MAX_SCAN_DEPTH = 2/);
+assert.match(imports, /candidate_id/);
+assert.match(imports, /resolve_authorized_candidate/);
+
+for (const token of [
+  ".assistant-autopilot-panel",
+  ".assistant-autopilot-summary",
+  ".assistant-autopilot-action",
+  ".overview-technical-summary",
+  ".runtime-advanced-setup",
+  ".codex-session-explainer",
+]) assert.ok(styles.includes(token), `Missing assistant autopilot style ${token}`);
+
+console.log("assistant-autopilot-smoke: PASS");

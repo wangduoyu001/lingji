@@ -1,7 +1,9 @@
+import AssistantDiscoveryPanel from "../components/AssistantDiscoveryPanel";
 import CurrentWorkPanel from "../components/CurrentWorkPanel";
 import { Empty, Metric, Notice, bytes } from "../components/ui";
 import type { LingJiApi } from "../api";
 import type { PageId, Row } from "../types";
+import "../AssistantAutopilot.css";
 
 const display = (value: unknown, suffix = "") =>
   value === null || value === undefined || value === "" ? "未知" : `${String(value)}${suffix}`;
@@ -20,9 +22,10 @@ function stateLabel(value: unknown): string {
     healthy: "运行正常",
     ready: "已就绪",
     available: "可用",
-    degraded: "降级运行",
+    degraded: "部分能力待配置",
+    configuration_required: "正在完成首次配置",
     warning: "需要关注",
-    stale: "数据过期",
+    stale: "状态待更新",
     failed: "运行失败",
     error: "存在错误",
     unavailable: "当前不可用",
@@ -42,7 +45,7 @@ export default function OverviewPage({
   active: boolean;
   onNavigate: (page: PageId) => void;
 }) {
-  if (!data) return <Empty text="灵机核心连接后会自动显示运行状态。" />;
+  if (!data) return <Empty text="灵机核心连接后会自动开始检查本机环境。" />;
   const d = data as Record<string, unknown>;
   const health = (d.health ?? {}) as Record<string, unknown>;
   const queue = ((d.queue as Record<string, unknown> | undefined)?.stats ?? {}) as Record<string, unknown>;
@@ -69,89 +72,102 @@ export default function OverviewPage({
     <div className="stack overview-page observation-page">
       <section className={`overview-hero overview-hero-${stateTone(runtimeState) ?? "neutral"}`}>
         <div className="overview-hero-main">
-          <span className="desktop-eyebrow">SYSTEM POSTURE</span>
+          <span className="desktop-eyebrow">灵机自动驾驶</span>
           <div className="overview-title-line">
             <h2>{stateLabel(runtimeState)}</h2>
             <span className={`pill ${stateTone(runtimeState) === "good" ? "ok" : stateTone(runtimeState) === "bad" ? "error" : "warning"}`}>
-              {display(runtimeState)}
+              {attentionCount ? `${attentionCount} 项需要关注` : "后台自动运行"}
             </span>
           </div>
           <p>
-            灵机会自动检查服务、处理队列、更新索引和恢复连接。
-            {memoryRuntime.as_of ? ` · 状态时间 ${display(memoryRuntime.as_of)}` : ""}
+            灵机会自己发现本机 AI 工具、检查运行状态、处理已经授权的资料并自动重试。
+            只有读取真实内容、写入永久记忆或执行不可逆操作时才需要你决定。
           </p>
         </div>
         <div className="observation-live-state">
           <span className={stateTone(runtimeState) === "good" ? "status-dot online" : "status-dot"} />
           <div>
-            <strong>{Number(queue.running ?? 0) > 0 ? `${display(queue.running)} 个任务运行中` : "后台自动运行"}</strong>
-            <small>状态每 10 秒自动更新</small>
+            <strong>{Number(queue.running ?? 0) > 0 ? `${display(queue.running)} 个任务正在处理` : "系统自己工作中"}</strong>
+            <small>状态自动更新</small>
           </div>
         </div>
       </section>
 
-      {stale && <Notice kind="warning">当前记忆和向量统计来自旧快照，系统正在自动刷新。</Notice>}
+      {stale && <Notice kind="warning">部分状态来自旧快照，灵机正在后台重新确认。</Notice>}
+
+      <AssistantDiscoveryPanel
+        api={api}
+        active={active}
+        onOpenCodex={() => onNavigate("codex_workspace")}
+        onOpenActivity={() => onNavigate("activity")}
+      />
 
       <CurrentWorkPanel api={api} active={active} />
 
       <section className={attentionCount ? "attention-summary attention-summary-warning" : "attention-summary"}>
         <div>
-          <span className="desktop-eyebrow">OWNER ATTENTION</span>
-          <h3>{attentionCount ? `${attentionCount} 类异常需要查看` : "暂时不需要你处理"}</h3>
-          <p>{attentionCount ? "系统不能安全自行决定的事项已集中到待办页。" : "普通任务、重试和状态恢复由后台自动完成。"}</p>
+          <span className="desktop-eyebrow">需要你决定</span>
+          <h3>{attentionCount ? `${attentionCount} 类事项无法安全自动决定` : "现在没有必须由你处理的事项"}</h3>
+          <p>
+            {attentionCount
+              ? "灵机能自动处理的事情已经先处理，剩下的集中放在这里。"
+              : "普通扫描、状态检查、重试和恢复由后台自己完成。"}
+          </p>
         </div>
-        <button className="button secondary" onClick={() => onNavigate("attention")}>查看待办</button>
+        <button className="button secondary" onClick={() => onNavigate("attention")}>
+          {attentionCount ? "查看需要我决定的事项" : "查看决策记录"}
+        </button>
       </section>
 
-      <section className="overview-section">
-        <div className="overview-section-heading">
-          <div><span className="desktop-eyebrow">SYSTEM SIGNALS</span><h3>关键状态</h3></div>
-          <small>详细技术信息已移到高级诊断</small>
+      <details className="overview-technical-summary">
+        <summary>
+          <span>系统健康细节</span>
+          <span>模型、向量、算力、存储等技术信息</span>
+        </summary>
+        <div>
+          <div className="metric-grid observation-metric-grid">
+            <Metric
+              title="任务队列"
+              value={Number(queue.running ?? 0) > 0 ? `${display(queue.running)} 运行中` : `${display(queue.pending)} 等待`}
+              detail={`自动重试 ${display(queue.retrying)} · 失败 ${display(queue.failed)}`}
+              tone={Number(queue.failed ?? 0) > 0 ? "bad" : Number(queue.retrying ?? 0) > 0 ? "warn" : "good"}
+            />
+            <Metric
+              title="记忆处理"
+              value={display(memory.documents)}
+              detail={`文档 · ${display(memory.chunks)} 个分块`}
+              tone={stateTone(memory.state)}
+            />
+            <Metric
+              title="向量索引"
+              value={display(vector.vectors)}
+              detail={`${stateLabel(vector.state)} · 维度 ${display(vector.dimension)}`}
+              tone={vector.rebuild_required ? "bad" : stateTone(vector.state)}
+            />
+            <Metric
+              title="本地模型"
+              value={display(embedding.active_model ?? embedding.configured_model)}
+              detail={stateLabel(embedding.state)}
+              tone={stateTone(embedding.state)}
+            />
+            <Metric
+              title="算力模式"
+              value={display(computePolicy.requested_mode ?? computePolicy.mode)}
+              detail={`设备 ${display(computePolicy.selected_device ?? computePolicy.device)}`}
+              tone={stateTone(computePolicy.state)}
+            />
+            <Metric
+              title="磁盘剩余"
+              value={storage.disk_free_bytes == null ? "未知" : bytes(Number(storage.disk_free_bytes))}
+              detail={`${display(storage.disk_free_percent, "%")} · 灵机占用 ${storage.bytes == null ? "未知" : bytes(Number(storage.bytes))}`}
+              tone={storageAlerts.below_minimum_free ? "bad" : "good"}
+            />
+          </div>
+          <div className="overview-footer-actions">
+            <button className="button secondary" onClick={() => onNavigate("diagnostics")}>打开高级工具</button>
+          </div>
         </div>
-        <div className="metric-grid observation-metric-grid">
-          <Metric
-            title="任务队列"
-            value={Number(queue.running ?? 0) > 0 ? `${display(queue.running)} 运行中` : `${display(queue.pending)} 等待`}
-            detail={`自动重试 ${display(queue.retrying)} · 失败 ${display(queue.failed)}`}
-            tone={Number(queue.failed ?? 0) > 0 ? "bad" : Number(queue.retrying ?? 0) > 0 ? "warn" : "good"}
-          />
-          <Metric
-            title="记忆处理"
-            value={display(memory.documents)}
-            detail={`文档 · ${display(memory.chunks)} 个分块`}
-            tone={stateTone(memory.state)}
-          />
-          <Metric
-            title="向量索引"
-            value={display(vector.vectors)}
-            detail={`${stateLabel(vector.state)} · 维度 ${display(vector.dimension)}`}
-            tone={vector.rebuild_required ? "bad" : stateTone(vector.state)}
-          />
-          <Metric
-            title="本地模型"
-            value={display(embedding.active_model ?? embedding.configured_model)}
-            detail={stateLabel(embedding.state)}
-            tone={stateTone(embedding.state)}
-          />
-          <Metric
-            title="算力模式"
-            value={display(computePolicy.requested_mode ?? computePolicy.mode)}
-            detail={`设备 ${display(computePolicy.selected_device ?? computePolicy.device)}`}
-            tone={stateTone(computePolicy.state)}
-          />
-          <Metric
-            title="磁盘剩余"
-            value={storage.disk_free_bytes == null ? "未知" : bytes(Number(storage.disk_free_bytes))}
-            detail={`${display(storage.disk_free_percent, "%")} · 灵机占用 ${storage.bytes == null ? "未知" : bytes(Number(storage.bytes))}`}
-            tone={storageAlerts.below_minimum_free ? "bad" : "good"}
-          />
-        </div>
-      </section>
-
-      <div className="overview-footer-actions">
-        <button className="button secondary" onClick={() => onNavigate("activity")}>查看活动记录</button>
-        <button className="button secondary" onClick={() => onNavigate("diagnostics")}>打开高级诊断</button>
-      </div>
+      </details>
     </div>
   );
 }
