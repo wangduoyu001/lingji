@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
-const [macConfigText, packageText, buildScript, rustMain, bootstrap, sidecarConfigText, workflow] = await Promise.all([
+const [macConfigText, packageText, buildScript, rustMain, bootstrap, sidecarConfigText, workflow, runtimeBoundary] = await Promise.all([
   read("../src-tauri/tauri.macos.conf.json"),
   read("../package.json"),
   read("../../../scripts/build_macos_sidecar.sh"),
@@ -14,6 +14,7 @@ const [macConfigText, packageText, buildScript, rustMain, bootstrap, sidecarConf
   read("../src-tauri/src/runtime_bootstrap.rs"),
   read("../src-tauri/tauri.sidecar.conf.json"),
   read("../../../.github/workflows/macos-desktop-gate.yml"),
+  read("../src/components/RuntimeBoundary.tsx"),
 ]);
 
 const macConfig = JSON.parse(macConfigText);
@@ -76,5 +77,12 @@ for (const token of [
 ]) {
   assert.ok(workflow.includes(token), `macOS release identity contract is missing ${token}`);
 }
+
+assert.match(runtimeBoundary, /<details className="runtime-advanced-setup">[\s\S]*手动选择位置/);
+assert.equal(
+  runtimeBoundary.match(/<div className="toolbar runtime-fallback-actions">[\s\S]*?<\/div>/)?.[0].includes("手动选择位置"),
+  false,
+  "manual data-root selection must be an advanced fallback, not a first-run action",
+);
 
 console.log("macos-release-smoke: PASS");

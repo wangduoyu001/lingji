@@ -80,26 +80,25 @@ export default function RuntimeBoundary({
             <button className="button primary" disabled={Boolean(runtimeBusy)} onClick={onResume}>
               {runtimeBusy === "ensure" ? "重新准备中…" : "让灵机重新自动准备"}
             </button>
-            <button className="button secondary" disabled={Boolean(runtimeBusy)} onClick={() => void chooseDataRoot()}>
-              {baseDataRoot ? "重新选择位置" : "手动选择位置"}
-            </button>
           </div>
-
-          {baseDataRoot && (
-            <div className="runtime-manual-fallback">
-              <small>已选择：{baseDataRoot}</small>
-              <button
-                className="button primary"
-                disabled={Boolean(runtimeBusy)}
-                onClick={() => onConfigure(baseDataRoot.trim(), "production")}
-              >
-                {runtimeBusy === "configure" ? "正在保存…" : "使用这个位置继续"}
-              </button>
-            </div>
-          )}
 
           <details className="runtime-advanced-setup">
             <summary>故障详情与高级设置</summary>
+            <button className="button secondary" disabled={Boolean(runtimeBusy)} onClick={() => void chooseDataRoot()}>
+              {baseDataRoot ? "重新选择位置" : "手动选择位置"}
+            </button>
+            {baseDataRoot && (
+              <div className="runtime-manual-fallback">
+                <small>已选择：{baseDataRoot}</small>
+                <button
+                  className="button primary"
+                  disabled={Boolean(runtimeBusy)}
+                  onClick={() => onConfigure(baseDataRoot.trim(), "production")}
+                >
+                  {runtimeBusy === "configure" ? "正在保存…" : "使用这个位置继续"}
+                </button>
+              </div>
+            )}
             <div className="settings-list">
               <label>
                 手动路径
