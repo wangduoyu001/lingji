@@ -51,6 +51,91 @@
 
 ---
 
+## 2026-08-11 · PR #88 Phase 3 · Autopilot 启动架构与真机阻断修复
+
+- 产品分支：`feature/owner-autopilot-ui-codexpp`
+- 产品 Commit：`pending`
+- 来源真机报告：`acceptance/macos-m5-ux-reacceptance-bf9da9ff` / `26946c58cd96158c6318d5f9b5b8f83a91c62aa9`
+- 来源结论：`FAIL / DO NOT MERGE`
+- 影响模块：macOS/Windows Desktop bootstrap、首次启动、Runtime 数据隔离、首页 Owner Autopilot、AI 来源接管、macOS/Windows Release identity、M5 安装替换协议、Desktop smoke
+- 风险等级：P0
+- 用户可感知变化：Mac 正常首次启动不再要求主人选择资料目录；灵机自动选择平台安全默认目录、自动启动与恢复。首页不再展示技术 Metric 大面板，AI 来源无授权事项时降为安静的后台接管状态。只有读取真实正文、永久记忆和不可逆操作进入主人决策。
+- 数据或安全边界变化：新增 `LINGJI_ACCEPTANCE_DATA_ROOT` 作为仅验收进程使用的 task-scoped 临时根；普通启动不得复用历史 Acceptance workspace；自动化不扩大真实正文读取、永久记忆批准或不可逆重建权限。
+
+### 本轮必须关闭的真机缺陷
+
+- [ ] `M5-IDENTITY-001`：PR Artifact 内嵌 Commit 必须精确等于产品 Head，不得使用 PR merge commit。
+- [ ] `M5-UX-002`：Mac 首次启动必须自动确定安全资料目录并继续，手动路径只能作为自动准备失败后的兜底。
+- [ ] `M5-ISOLATION-001`：验收 Runtime 所有写入必须在任务单指定 `LINGJI_ACCEPTANCE_DATA_ROOT` 下，`~/Documents/acceptance` 等任务根外新增目录数量必须为 0。
+- [ ] `M5-INSTALL-001`：禁止 overlay 写入旧 `.app`；必须整体备份旧 App、完整替换新 App、签名复验失败时整体回滚。
+
+### 新增或修改的自动验收
+
+- [ ] `desktop/lingji-control/scripts/assistant-autopilot-smoke.mjs`：验证自动 bootstrap、AI 元数据被动接管、正文授权边界、永久记忆边界和 acceptance override。
+- [ ] `desktop/lingji-control/scripts/observation-first-ui-smoke.mjs`：禁止手选目录重新成为正常首次启动主流程；禁止首页恢复技术 Metric 大面板。
+- [ ] `desktop/lingji-control/scripts/macos-release-smoke.mjs`：验证 macOS 自动默认目录、task-scoped acceptance override 与 Release exact-head identity 配置。
+- [ ] Rust unit tests：验证 `auto_selected` bootstrap 合同、workspace/path 合同与 acceptance 隔离规则。
+- [ ] GitHub `tests`：Python 3.11/3.12、Windows Python、MCP、Desktop smoke、React build、Tauri 配置全部 PASS。
+- [ ] GitHub `P0 Windows Gate`：同一产品代码不得破坏 Windows Runtime、首次配置和 Rust/Tauri 基线。
+- [ ] GitHub `Windows Desktop Release Baseline`：checkout 与 release metadata 必须使用同一精确 PR Head。
+- [ ] GitHub `macOS Desktop Gate`：显式 checkout PR Head；`.app` 与最终 DMG 主二进制必须嵌入该精确 SHA；Sidecar、API boot、DMG mount 全部 PASS。
+- [ ] `acceptance-doc-sync` / `local-execution-handoff`：治理门禁必须 PASS。
+
+### 新增或修改的真机验收
+
+- [ ] 使用新精确 Artifact，验收前通过任务单设置 `LINGJI_ACCEPTANCE_DATA_ROOT="$ACCEPTANCE_ROOT/runtime-data"`，并在 Runtime 启动前注入。
+- [ ] 旧 `/Applications/灵机.app` 必须整体移入任务临时备份；完整复制新 App；`codesign --verify --deep --strict` PASS 后才启动，禁止 overlay copy。
+- [ ] Release Metadata / App 内嵌 commit 与任务单产品 Head 完全一致。
+- [ ] 首次打开不手动选择 DataRoot 即可自动准备并进入首页；若自动准备失败，才允许出现手动路径兜底。
+- [ ] 所有 SQLite、Qdrant、token、logs、raw、vault、backup 写入只出现在 task-scoped runtime-data；`~/Documents/acceptance` 不得因本轮创建。
+- [ ] 首页无主人事项时明确“无需操作”；技术异常显示为后台自动处理中，不进入主人决策数。
+- [ ] AI 来源识别不把“2 个工具 / 4400 条工作记录元数据”作为主要任务卡；无授权事项时只以被动状态显示。
+- [ ] 合成导出候选只展示一次清晰授权；未授权真实正文读取次数为 0，永久记忆自动批准为 0。
+- [ ] 生命周期完成启动 → healthy → 退出 → Core/8766 释放 → 同任务根再次启动 → healthy。
+
+### 主人肉眼确认
+
+- [ ] 第一次打开无需理解 DataRoot、Workspace、Qdrant、Embedding、端口即可进入可用状态。
+- [ ] 首页首先告诉主人“有没有必须由我决定的事”，而不是展示后台技术指标或大量扫描计数。
+- [ ] 没有主人事项时界面足够安静，不需要为了确认系统正常而点按钮。
+- [ ] 真正权限边界出现时，动作清晰且只有一个主要选择。
+- [ ] 主人明确确认相比 bf9da9ff 已达到可接受的智能化/自动化主流程；未确认前 PR #88 保持 Draft。
+
+### 回归项
+
+- [ ] 未经主人授权不得读取真实 AI 对话/导出正文。
+- [ ] 不允许自动批准永久记忆。
+- [ ] 不允许自动删除或重建 Production Qdrant。
+- [ ] 不允许自动修改外部 AI 客户端配置。
+- [ ] Windows 与 macOS 必须保持同一核心代码，不创建 Mac 特供业务实现。
+- [ ] 自动准备失败必须真实降级到手动兜底，不能伪造成功。
+- [ ] Production DataRoot / Vault 污染为 0。
+
+### 清理与回滚
+
+- 临时数据前缀：`MACOS-M5-AUTOPILOT-PHASE3-<short-sha>`。
+- 安装方式：`whole_bundle_replace`，禁止 overlay。
+- 临时 App 备份：仅存于 `$ACCEPTANCE_ROOT/app-backup`；新版本 PASS 后随任务根删除；新版本 FAIL 时先恢复旧 App 并验证签名。
+- Runtime 测试根：`$ACCEPTANCE_ROOT/runtime-data`，结束后整体删除。
+- 失败证据仅保留最小必要内容；成功日志、截图、DMG、重复 ZIP、临时 Qdrant/SQLite 全部按 M5 协议清理。
+
+### 不在范围
+
+- 未授权静默导入 AI 正文。
+- 自动批准永久记忆。
+- 无备份执行破坏性 Repair。
+- 自动修改第三方 AI 客户端配置。
+- 本轮不把所有高级工具页面重做一遍；目标是启动主链和日常首页智能化。
+
+### 最终报告
+
+- 实施报告：`docs/TEST_REPORTS/OWNER_AUTOPILOT_PHASE3_IMPLEMENTATION.md`
+- M5 报告：`docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_<short-sha>.md`
+- M5 报告分支：`acceptance/macos-m5-autopilot-phase3-<short-sha>`
+- PR #88：保持 Draft，直到精确 Artifact、M5 真机和主人体验全部 PASS。
+
+---
+
 ## 2026-08-11 · PR #88 · Owner Autopilot UI 与本机 AI 自动发现
 
 - 产品分支：`feature/owner-autopilot-ui-codexpp`

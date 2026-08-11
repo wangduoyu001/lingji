@@ -59,6 +59,12 @@ export function useLingJiConnection() {
     return status;
   }, []);
 
+  const automaticBootstrap = useCallback(async () => {
+    const status = await invoke<RuntimeBootstrapStatus>("runtime_autoconfigure");
+    setBootstrapStatus(status);
+    return status;
+  }, []);
+
   const ensureConnection = useCallback(async (resumeAfterOwnerStop: boolean) => {
     if (!isTauriDesktopRuntime()) {
       setState("unsupported");
@@ -70,12 +76,25 @@ export function useLingJiConnection() {
     setState("booting");
     setRuntimeBusy("ensure");
     try {
-      const bootstrap = await readBootstrap();
+      let bootstrap = await readBootstrap();
+      if (!bootstrap.configured || bootstrap.c_drive_write_detected) {
+        try {
+          bootstrap = await automaticBootstrap();
+        } catch (automaticReason) {
+          setOverview(null);
+          setRuntimeStatus(null);
+          setState("configuration_required");
+          setError(
+            `灵机没能自动准备安全的资料目录。${connectionMessage(automaticReason)}`,
+          );
+          return;
+        }
+      }
       if (!bootstrap.configured || bootstrap.c_drive_write_detected) {
         setOverview(null);
         setRuntimeStatus(null);
         setState("configuration_required");
-        setError(bootstrap.last_error || "请先选择非 C 盘的数据目录。");
+        setError(bootstrap.last_error || "灵机没能确定安全的资料目录。");
         return;
       }
       const status = await invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.ensure);
@@ -89,7 +108,7 @@ export function useLingJiConnection() {
     } finally {
       setRuntimeBusy("");
     }
-  }, [readBootstrap, readOverview]);
+  }, [automaticBootstrap, readBootstrap, readOverview]);
 
   const configureRuntime = useCallback(async (
     baseDataRoot: string,

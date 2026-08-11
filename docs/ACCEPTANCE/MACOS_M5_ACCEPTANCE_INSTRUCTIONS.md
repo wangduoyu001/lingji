@@ -4,26 +4,25 @@
 >
 > 目标不是“能打开一次”，而是在不污染主人正式数据和系统环境的前提下完成可重复验收，并在验收结束后恢复干净现场。
 >
-> 本文件与 `docs/ACCEPTANCE/README.md`、`CODEX_ACCEPTANCE_INSTRUCTIONS.md`、`LOCAL_EXECUTION_TASK.md` 一起生效。若通用文档包含 Windows 专属路径或操作，本文件在 macOS 验收中优先。
+> 若通用文档包含 Windows 专属路径或操作，本文件在 macOS 验收中优先。具体产品 Commit、Artifact、哈希和任务根以 `MACOS_M5_LOCAL_EXECUTION_TASK.md` 为准。
 
 ## 0. 强制执行顺序
 
-任何第一次 M5 验收都必须严格按以下顺序：
-
 ```text
-读取任务身份
+读取当前任务单
 → 本机环境盘点
 → 保存必要安全快照
-→ 验证 Artifact / 架构 / 签名
-→ 清理旧 LingJi 残留进程和端口
 → 创建唯一验收临时根目录
-→ 安装与启动
+→ 下载并验证精确 Artifact / Commit / 架构 / 签名
+→ 清理确认属于旧 LingJi 验收的残留进程和端口
+→ 安全整体替换 App
+→ 使用 task-scoped acceptance data root 启动已安装 App
 → Runtime / API / UI / 生命周期验收
-→ 保存失败或最终证据
-→ 退出 LingJi 并确认无残留进程
+→ 保存最小失败证据或最终证据
+→ 正常退出 LingJi 并确认无残留进程
 → 删除本轮垃圾和临时文件
 → 复查主人正式数据未受影响
-→ 远程回传报告
+→ 提交并远程复读报告
 ```
 
 环境盘点没有完成前，禁止安装和启动本轮验收包。
@@ -53,7 +52,7 @@ node -p 'process.arch' 2>/dev/null || true
 uname -m == arm64
 ```
 
-如果验收所用 Python、Rust、Node 或构建进程实际运行在 Rosetta / x86_64 下，必须标记：
+如果验收所用 Python、Rust、Node 或构建进程实际运行在 Rosetta / x86_64 下：
 
 ```text
 BLOCKED_NON_NATIVE_TOOLCHAIN
@@ -69,8 +68,6 @@ BLOCKED_NON_NATIVE_TOOLCHAIN
 spctl --status
 ```
 
-如果系统因 Gatekeeper、隔离属性、签名或权限阻止启动，必须先记录原始错误，再按任务单允许的方式处理。
-
 禁止为了让验收通过而全局关闭 Gatekeeper、SIP 或其他系统安全功能。
 
 ## 1.3 磁盘与目录
@@ -79,7 +76,6 @@ spctl --status
 
 - 系统盘剩余空间足够；
 - `/Applications` 可正常访问；
-- 当前用户主目录可读写；
 - `~/Library/Application Support` 可正常访问；
 - `~/Library/Caches` 可正常访问；
 - 没有将正式 LingJi 数据误放进本轮临时目录。
@@ -87,11 +83,11 @@ spctl --status
 不得删除、移动或覆盖主人正式：
 
 - Production DataRoot；
-- Acceptance 中主人要求长期保留的数据；
+- 主人明确要求长期保留的 Acceptance 数据；
 - Obsidian Vault；
 - 正式记忆正文；
 - Git 仓库正式分支；
-- 用户自己的 Codex、Claude、Obsidian、Ollama 配置；
+- Codex、Claude、Obsidian、Ollama 用户配置；
 - 任何无法确认归属的文件。
 
 ## 1.4 现有 LingJi 安装盘点
@@ -112,16 +108,14 @@ spctl --status
 ```text
 是否已安装
 当前版本
-当前 Commit（如果 UI / build metadata 可读）
+当前 Commit（如果 release metadata 可读）
 是否存在多个安装副本
 是否存在旧 DMG 挂载
 ```
 
-发现多个正式安装副本时，不得直接删除；先确认哪一个是当前正式安装，其他副本只在确认属于旧验收产物后清理。
+发现多个正式安装副本时不得直接删除；先确认归属。
 
 ## 1.5 LingJi 进程与端口现场
-
-验收前必须检查：
 
 ```bash
 pgrep -fl 'LingJi|lingji-core|灵机' || true
@@ -130,18 +124,9 @@ lsof -nP -iTCP:8767 -sTCP:LISTEN || true
 lsof -nP -iTCP:8765 -sTCP:LISTEN || true
 ```
 
-要求：
-
-- 没有未知来源 LingJi Desktop；
-- 没有旧 `lingji-core`；
-- 没有孤儿 MCP；
-- 8766 未被旧 LingJi 占用；
-- 8767 未被旧 MCP 占用；
-- 8765 如果存在，只能确认属于兼容用途。
-
 只允许结束确认属于 LingJi 的残留进程。
 
-禁止粗暴执行：
+禁止：
 
 ```text
 killall python
@@ -152,28 +137,28 @@ pkill -f python
 
 ## 1.6 外部依赖盘点
 
-只做检测，不因为缺失就擅自安装：
+只检测，不因缺失擅自安装：
 
-- Obsidian 是否安装；
-- Ollama 是否安装和是否运行；
-- Git 是否可用；
-- 当前 Vault 是否存在；
-- 当前模型是否存在；
-- Codex / MCP 是否属于本轮范围。
+- Obsidian；
+- Ollama；
+- Git；
+- Vault；
+- 当前模型；
+- Codex / MCP。
 
-未安装的可选依赖必须显示真实状态，不得伪造成系统整体失败。
+可选依赖缺失必须显示真实状态，不得伪造成系统整体失败。
 
 ---
 
 # 2. 唯一验收临时根目录
 
-本轮所有非正式数据必须集中到一个可整体删除的位置：
+本轮所有非正式数据必须集中到：
 
 ```text
 ~/Library/Caches/LingJiAcceptance/<task-id>-<short-commit>/
 ```
 
-只允许创建：
+建议子目录：
 
 ```text
 artifact/
@@ -183,19 +168,20 @@ evidence-public/
 fixtures/
 checkpoint/
 temp-config-backup/
-test-data-root/
+runtime-data/
+app-backup/
 report/
 ```
 
-禁止把验收日志、fixture、临时数据库、Qdrant、截图、解压包散落在：
+禁止把验收日志、fixture、临时数据库、Qdrant、截图、解压包、Runtime 数据散落在：
 
 ```text
 Desktop
 Documents
 Downloads
 仓库根目录
-/Applications
-正式 DataRoot
+/Applications（App 本体除外）
+正式 Production DataRoot
 正式 Vault
 ```
 
@@ -207,7 +193,8 @@ Downloads
 
 必须验证：
 
-- Artifact 对应任务指定 Commit；
+- Artifact 对应任务指定的**精确产品 Commit**；
+- Release Metadata / 嵌入 Commit 与任务单完全一致，不接受 PR merge commit 替代 Head；
 - 目标架构为 `aarch64-apple-darwin`；
 - DMG 哈希与任务单一致；
 - DMG 可挂载；
@@ -215,55 +202,126 @@ Downloads
 - App 主二进制为 arm64；
 - Sidecar 为 arm64；
 - Sidecar 和 `lingji_core_lib` 存在；
-- `codesign --verify --deep --strict` 结果符合当前发布合同。
+- `codesign --verify --deep --strict` 通过当前签名合同。
 
-不得拿旧 DMG 验收新 Commit。
-
-身份、哈希或架构不一致：
+身份、哈希或架构不一致立即：
 
 ```text
 FAIL_ARTIFACT_INTEGRITY
 ```
 
+不得为了继续 UI 验收而忽略身份失败。
+
 ---
 
-# 4. 第一次安装与启动
+# 4. 安装与安全替换
 
-## 4.1 安装
+## 4.1 禁止 overlay 覆盖 `.app`
 
-验收包从 DMG 安装到：
+**不得**把新 App 的内部文件直接复制到旧 `/Applications/灵机.app` 中。
 
-```text
-/Applications
-```
+原因：旧 sealed resources 可能残留，导致新 bundle 的签名验证失败。
 
-禁止长期直接从挂载 DMG 中运行作为正式验收结论。
+正确替换流程：
 
-首次验收不得删除主人旧 DataRoot 来制造“干净启动”。
-
-需要隔离测试时，只使用：
+1. 确认 LingJi 和受管 Runtime 已退出；
+2. 如果 `/Applications/灵机.app` 已存在，把整个旧 App 移到本轮：
 
 ```text
-~/Library/Caches/LingJiAcceptance/<task-id>-<short-commit>/test-data-root
+$ACCEPTANCE_ROOT/app-backup/灵机.app
 ```
 
-## 4.2 首次启动主人观察
+3. 从已验证 DMG 完整复制新的 `.app` 到 `/Applications`；
+4. 对新的 `/Applications/灵机.app` 执行：
 
-必须让主人确认：
+```bash
+codesign --verify --deep --strict /Applications/灵机.app
+```
 
-- App 是否能正常打开；
+5. 只有验证通过，才继续启动；
+6. 若复制或签名验证失败：删除本轮失败的新 App，并完整恢复备份 App；
+7. 不得因此删除任何 DataRoot、Vault 或用户配置。
+
+最终报告必须记录：
+
+```text
+install_mode=whole_bundle_replace
+post_install_codesign=PASS|FAIL
+rollback_required=true|false
+```
+
+## 4.2 验收 Runtime 必须先注入任务根
+
+Phase 3 起，真实验收使用临时环境变量：
+
+```text
+LINGJI_ACCEPTANCE_DATA_ROOT
+```
+
+任务单必须把它设置为本轮唯一目录，例如：
+
+```bash
+export LINGJI_ACCEPTANCE_DATA_ROOT="$ACCEPTANCE_ROOT/runtime-data"
+mkdir -p "$LINGJI_ACCEPTANCE_DATA_ROOT"
+```
+
+然后必须从**已安装 App** 的主二进制启动，并让该环境变量在 Runtime 启动之前生效：
+
+```bash
+APP_BIN="$(find /Applications/灵机.app/Contents/MacOS -maxdepth 1 -type f -perm -111 | head -n 1)"
+test -n "$APP_BIN"
+LINGJI_ACCEPTANCE_DATA_ROOT="$LINGJI_ACCEPTANCE_DATA_ROOT" "$APP_BIN" >"$ACCEPTANCE_ROOT/logs/desktop-launch.log" 2>&1 &
+```
+
+要求：
+
+- 验收 Runtime 的所有 SQLite、Qdrant、token、logs、raw、vault、backup 等只允许写入该 task-scoped root；
+- 不允许创建 `~/Documents/acceptance`；
+- 不允许写主人 Production DataRoot；
+- `LINGJI_ACCEPTANCE_DATA_ROOT` 只作用于本轮验收进程，不写成长期用户配置；
+- 普通日常启动没有该变量时不得继续复用历史 Acceptance workspace。
+
+任何任务数据出现在任务根之外：
+
+```text
+FAIL_ACCEPTANCE_ISOLATION
+```
+
+并立即记录 `production_pollution_count` / `unexpected_path`。
+
+---
+
+# 5. 首次启动与主人观察
+
+Phase 3 的正常产品首次启动预期是：
+
+```text
+打开 LingJi
+→ LingJi 自动选择平台默认安全资料目录
+→ 自动准备 Runtime
+→ 自动进入首页
+```
+
+**正常首次启动不应要求主人先选择 DataRoot。**
+
+“手动选择资料目录”只能在自动准备失败后的高级兜底中出现。
+
+主人只确认：
+
+- App 是否能正常出现；
+- 是否出现异常终端 / 黑窗；
 - 是否出现无法理解的系统弹窗；
-- 是否出现终端 / 黑色控制台窗口；
-- 第一次打开是否明确知道下一步；
-- 数据目录选择是否看得懂；
-- Production / Acceptance 是否明确；
-- 错误提示是否告诉用户下一步。
+- 第一次打开是否无需配置即可进入可用状态；
+- 首页是否能一眼知道“现在需要我做什么”；
+- 没有主人事项时是否明确“无需操作”；
+- 自动发现是否安静工作，而不是把数千条元数据当成任务压给主人；
+- 真正需要正文读取 / 永久记忆 / 不可逆操作时，授权动作是否清楚。
 
 Codex 不能替主人写“肉眼 PASS”。
 
 ---
 
-# 5. Runtime 与 API 真机验收
+# 6. Runtime 与 API 真机验收
 
 启动后必须确认：
 
@@ -281,33 +339,39 @@ runtime_binary_available=true
 - 8766 只监听 `127.0.0.1`；
 - 不存在第二个 Core；
 - 不存在孤儿 MCP；
-- Sidecar 来自当前安装的 App；
-- Runtime 数据写入预期 DataRoot；
-- 不把测试数据写进主人 Production；
-- 不把运行垃圾散落到 App 安装目录。
+- Sidecar 来自当前安装 App；
+- Runtime 数据只写入本轮 `LINGJI_ACCEPTANCE_DATA_ROOT`；
+- 不把运行垃圾写入 App bundle；
+- release metadata 的 commit 与任务单精确一致。
 
 ---
 
-# 6. UI 最低验收范围
+# 7. UI 最低验收范围
 
-第一次 M5 验收至少覆盖：
+日常主界面至少检查：
 
-1. 启动页 / 总览；
-2. Workspace 与 DataRoot；
-3. Runtime 状态；
-4. Control API 状态；
-5. Obsidian / Vault 状态；
-6. Qdrant / Embedding 状态；
-7. 模型与依赖状态；
-8. 日志 / 诊断入口；
-9. 退出；
-10. 再次启动。
+1. 首页：主人行动优先，技术指标不占第一屏；
+2. 当前工作；
+3. 需要我决定；
+4. AI 来源自动接管；
+5. Codex 工作记录解释；
+6. 高级工具 / 诊断入口；
+7. 退出与再次启动。
+
+专项高级能力继续从高级工具抽查：
+
+- Workspace / DataRoot；
+- Runtime / Control API；
+- Obsidian / Vault；
+- Qdrant / Embedding；
+- 模型与依赖；
+- 日志 / 诊断。
 
 所有状态必须来自真实后端，不得用默认绿色或假成功代替未知状态。
 
 ---
 
-# 7. 生命周期验收
+# 8. 生命周期验收
 
 至少执行：
 
@@ -315,9 +379,9 @@ runtime_binary_available=true
 启动
 → healthy
 → 正常退出
-→ 确认 Core 退出
-→ 确认 8766 释放
-→ 再启动
+→ Core 退出
+→ 8766 释放
+→ 使用同一 task-scoped root 再启动
 → 再次 healthy
 ```
 
@@ -332,21 +396,20 @@ lsof -nP -iTCP:8766 -sTCP:LISTEN || true
 
 ---
 
-# 8. 失败处理
+# 9. 失败处理
 
-任何失败必须先保存：
+任何失败先保存：
 
 - 失败步骤；
 - 可复现方式；
 - 最小相关日志；
-- 进程和端口状态；
+- 进程与端口状态；
 - 当前 Artifact / Commit；
 - 必要截图；
-- 是否污染正式数据。
+- 是否污染正式数据；
+- 是否需要恢复旧 App。
 
 只保留与失败根因直接相关的证据。
-
-禁止无限累积每一轮完整日志、截图和旧包。
 
 失败后如果需要开发修复：
 
@@ -354,85 +417,76 @@ lsof -nP -iTCP:8766 -sTCP:LISTEN || true
 根因分析
 → 最小修复
 → 自动测试
-→ 新 Artifact
+→ 新 Commit + 新 Artifact
+→ 原地更新当前任务单
 → 再次真机验收
 ```
 
-不得重复拿同一个已知失败包让主人反复验收。
+不得拿同一个已知失败包让主人反复验收。
 
 ---
 
-# 9. 验收结束后的强制清理
+# 10. 验收结束后的强制清理
 
 这是完成条件，不是可选优化。
 
-## 9.1 先正常退出
-
-清理前：
+## 10.1 先正常退出
 
 1. 正常退出 LingJi；
 2. 等待受管 Runtime 退出；
 3. 确认 8766 / 8767 已释放；
-4. 只结束确认属于本轮 LingJi 的残留进程。
+4. 卸载本轮 DMG；
+5. 只结束确认属于本轮 LingJi 的残留进程。
 
-## 9.2 必须删除
+## 10.2 必须删除
 
-本轮验收结束后删除：
-
-- `~/Library/Caches/LingJiAcceptance/<task-id>-<short-commit>/` 整个临时根目录；
-- 已挂载的验收 DMG；
-- 本轮重复下载的 ZIP / DMG；
+- 整个 `$ACCEPTANCE_ROOT`；
+- 本轮重复 Artifact ZIP / DMG；
 - 临时解压目录；
-- fixture；
-- checkpoint；
-- 临时 DataRoot；
-- 临时 Qdrant；
-- 临时 SQLite；
+- fixture / checkpoint；
+- task-scoped Runtime 数据；
+- 临时 Qdrant / SQLite；
+- 普通成功日志和截图；
 - 临时配置备份；
-- 普通成功日志；
-- 普通成功截图；
-- 构建产生但后续不会重复使用的临时产物；
-- 本轮专用临时 worktree；
-- 仓库外散落的本轮测试文件。
+- 本轮专用 worktree；
+- 无复用价值的本轮构建产物。
 
-如果本轮使用源码构建，验收结束应清理无复用价值的大体积构建产物，例如本轮专用 `target`、PyInstaller 临时目录和临时 bundle；不得因此删除共享源码或主人已有开发环境。
+删除 `$ACCEPTANCE_ROOT` 前，如果 `app-backup` 中保存着验收前旧 App：
 
-## 9.3 默认保留的核心文件
+- 新 App 验收 PASS 时，旧备份不再需要，随任务根删除；
+- 新 App 验收 FAIL 且需要回滚时，先恢复旧 App并验证签名，再删除任务根。
 
-只保留后续会重复使用或属于主人正式资产的内容：
+## 10.3 默认保留核心文件
 
-- `/Applications/灵机.app` 当前验收版本；
+只保留：
+
+- `/Applications/灵机.app` 当前有效版本（新版本 PASS 或失败后恢复的旧版本）；
 - 主人正式 Production DataRoot；
-- 主人明确要求长期保留的 Acceptance 数据；
+- 主人明确要求长期保留的数据；
 - Obsidian Vault；
-- 正式 Git 仓库源码；
-- 仓库中的最终 Markdown 验收报告；
-- 脱敏公开证据摘要；
-- 哈希清单；
+- 正式 Git 仓库；
+- 最终 Markdown 验收报告；
+- 脱敏公开证据摘要 / 哈希清单；
 - 主人明确要求保留的失败证据。
 
-本地 DMG 默认不属于核心长期文件，因为 GitHub Artifact 可重新获取。除非任务单明确要求后续离线重复安装，否则本机只保留一个最新验收 DMG，旧 DMG 全部删除。
+本地 DMG 默认不长期保存；GitHub Artifact 可重复获取。
 
-## 9.4 禁止擅自清理的内容
+## 10.4 禁止擅自清理
 
-任何情况下不得因为“保持干净”而删除：
+不得删除：
 
-- 主人正式 DataRoot；
+- Production DataRoot；
 - Vault；
 - 正式记忆；
 - 用户个人模型；
-- 用户 Codex / Claude / Obsidian / Ollama 配置；
+- Codex / Claude / Obsidian / Ollama 配置；
 - 无法确认归属的缓存或数据；
-- 其他软件的缓存；
+- 其他软件缓存；
 - macOS 系统缓存。
-
-只清理 **LingJi 本轮验收明确产生** 的垃圾。
 
 ---
 
-# 10. 清理后复查
-
-清理后必须再次检查：
+# 11. 清理后复查
 
 ```bash
 pgrep -fl 'LingJi|lingji-core|灵机' || true
@@ -440,39 +494,43 @@ lsof -nP -iTCP:8766 -sTCP:LISTEN || true
 lsof -nP -iTCP:8767 -sTCP:LISTEN || true
 ```
 
-并确认：
+确认：
 
 ```text
-本轮临时根目录不存在
+本轮临时根不存在
 DMG 已卸载
 重复安装包不存在
 重复 App 不存在
-临时测试 DataRoot 不存在
-临时 Qdrant / SQLite 不存在
+临时 Runtime/Qdrant/SQLite 不存在
+~/Documents/acceptance 不因本轮被创建
 普通成功日志和截图已删除
-正式 DataRoot / Vault 未变化或变化符合验收预期
+正式 DataRoot / Vault 无非预期变化
 ```
 
-结束清理失败时：
+清理失败：
 
 ```text
 BLOCKED_POST_CLEANUP
 ```
 
-不得标记为完整 PASS。
+不得标记完整 PASS。
 
 ---
 
-# 11. 最终回执必须包含
+# 12. 最终回执
 
 ```yaml
 platform: macOS
 architecture: arm64
 physical_m5_checked: true|false
 artifact_identity: PASS|FAIL
+embedded_commit_exact: true|false
 preflight_environment: PASS|FAIL
 pre_cleanup: PASS|FAIL
-install: PASS|FAIL
+install_mode: whole_bundle_replace
+post_install_codesign: PASS|FAIL
+acceptance_root_isolated: true|false
+unexpected_write_count: 0
 first_launch: PASS|FAIL
 runtime: PASS|FAIL
 control_api: PASS|FAIL
@@ -486,31 +544,34 @@ orphan_runtime_count: 0
 final_verdict: PASS|FAIL|BLOCKED
 ```
 
-只有以下条件全部满足，才允许写最终 `PASS`：
+只有以下全部满足才允许 `PASS`：
 
 ```text
 本机环境检查完成
-Artifact 身份正确
+Artifact 精确身份正确
+安全整体替换安装通过
+task-scoped Runtime 物理隔离通过
 真实 M5 启动完成
 Runtime/API/UI 验收完成
-无 Production 污染
+主人确认 UI 可理解且自动化主流程达标
+Production 污染 = 0
 退出与重启正常
 结束垃圾清理完成
 临时根目录已删除
-最终报告已回传
+最终报告已提交并远程复读
 ```
 
 ---
 
-# 12. 主人参与边界
+# 13. 主人参与边界
 
-主人只需要参与无法可靠自动化的部分：
+主人只参与无法可靠自动化的部分：
 
-- App 是否正常打开；
-- 系统是否弹出异常窗口；
+- App 是否正常出现；
+- 是否有异常窗口；
 - 页面是否能看懂；
-- 第一次打开是否知道下一步；
-- UI 是否有明显死按钮或错误状态；
+- 首页是否真的“无需配置、少打扰”；
+- 自动化程度是否达到产品预期；
 - 需要主人授权的正式数据操作。
 
-环境检查、进程端口检查、Artifact 核验、日志采集、临时目录管理、验收结束清理、报告和 Git 回传全部由 Codex 完成。
+环境检查、Artifact 核验、安装替换、进程端口检查、日志采集、临时目录管理、清理、报告和 Git 回传全部由 Codex 完成。

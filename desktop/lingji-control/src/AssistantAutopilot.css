@@ -365,6 +365,118 @@
 .attention-system-card strong { font-size: 10px; }
 .attention-system-card p { margin: 4px 0 0; color: var(--muted-2); font-size: 9px; line-height: 1.5; }
 
+/* Phase 3: autopilot-first daily surface. Passive automation must stay visually quiet. */
+.owner-autopilot-home {
+  gap: 12px;
+}
+
+.owner-autopilot-hero {
+  min-height: 0;
+}
+
+.owner-only-decision-card {
+  border-color: rgba(230,184,107,.28);
+}
+
+.autopilot-background-issue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(9,12,17,.18);
+}
+
+.autopilot-background-issue strong,
+.autopilot-background-issue small {
+  display: block;
+}
+
+.autopilot-background-issue strong {
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+.autopilot-background-issue small {
+  margin-top: 3px;
+  color: var(--muted-2);
+  font-size: 9px;
+}
+
+.assistant-autopilot-passive {
+  padding: 10px 12px;
+  border-color: rgba(255,255,255,.06);
+  background: rgba(9,12,17,.16);
+}
+
+.assistant-autopilot-passive .assistant-autopilot-more {
+  border: 0;
+  background: transparent;
+}
+
+.assistant-autopilot-passive .assistant-autopilot-more summary {
+  padding: 2px 0;
+}
+
+.assistant-passive-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.assistant-passive-row strong,
+.assistant-passive-row small {
+  display: block;
+}
+
+.assistant-passive-row strong {
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+.assistant-passive-row small {
+  margin-top: 3px;
+  color: var(--muted-2);
+  font-size: 9px;
+}
+
+.assistant-autopilot-needs-owner {
+  border-color: rgba(230,184,107,.22);
+}
+
+.owner-only-source-action {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.runtime-autopilot-boot p,
+.runtime-fallback-card p {
+  max-width: 720px;
+}
+
+.runtime-fallback-actions {
+  gap: 8px;
+}
+
+.runtime-manual-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(9,12,17,.2);
+}
+
+.runtime-manual-fallback small {
+  color: var(--muted);
+}
+
 @media (max-width: 1240px) {
   .assistant-autopilot-summary,
   .assistant-autopilot-tools,
@@ -377,7 +489,9 @@
   .assistant-autopilot-heading,
   .assistant-autopilot-action,
   .assistant-autopilot-footer,
-  .attention-system-card {
+  .attention-system-card,
+  .autopilot-background-issue,
+  .runtime-manual-fallback {
     align-items: flex-start;
     flex-direction: column;
   }

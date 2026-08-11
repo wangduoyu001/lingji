@@ -6,12 +6,14 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
-const [macConfigText, packageText, buildScript, rustMain, sidecarConfigText] = await Promise.all([
+const [macConfigText, packageText, buildScript, rustMain, bootstrap, sidecarConfigText, workflow] = await Promise.all([
   read("../src-tauri/tauri.macos.conf.json"),
   read("../package.json"),
   read("../../../scripts/build_macos_sidecar.sh"),
   read("../src-tauri/src/main.rs"),
+  read("../src-tauri/src/runtime_bootstrap.rs"),
   read("../src-tauri/tauri.sidecar.conf.json"),
+  read("../../../.github/workflows/macos-desktop-gate.yml"),
 ]);
 
 const macConfig = JSON.parse(macConfigText);
@@ -49,8 +51,30 @@ for (const token of [
   'env::set_var("LOCALAPPDATA", app_support)',
   'return "dmg"',
   "prepare_platform_environment();",
+  "runtime_autoconfigure",
+  "configure_default()",
 ]) {
-  assert.ok(rustMain.includes(token), `macOS desktop shim is missing ${token}`);
+  assert.ok(rustMain.includes(token), `macOS desktop bootstrap is missing ${token}`);
+}
+
+for (const token of [
+  "LINGJI_ACCEPTANCE_DATA_ROOT",
+  "automatic_default",
+  "auto_selected",
+  "persisted acceptance workspace is never reused",
+  'join("LingJiData")',
+]) {
+  assert.ok(bootstrap.includes(token), `macOS autopilot bootstrap is missing ${token}`);
+}
+
+for (const token of [
+  "Checkout exact product source",
+  "github.event.pull_request.head.sha || github.sha",
+  "Verify exact source identity",
+  "Verify embedded product identity",
+  "strings \"$MAIN_BINARY\"",
+]) {
+  assert.ok(workflow.includes(token), `macOS release identity contract is missing ${token}`);
 }
 
 console.log("macos-release-smoke: PASS");

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { runtimeStateLabel, type RuntimeBootstrapStatus, type RuntimeStatus } from "../runtimeTypes";
 import type { ConnectionState } from "../hooks/useLingJiConnection";
 import "../AssistantAutopilot.css";
@@ -31,13 +31,7 @@ export default function RuntimeBoundary({
   children,
 }: Props) {
   const [baseDataRoot, setBaseDataRoot] = useState("");
-  const [workspace, setWorkspace] = useState<WorkspaceName>("production");
   const isMac = typeof navigator !== "undefined" && /Macintosh|Mac OS X/i.test(navigator.userAgent);
-  const separator = isMac ? "/" : "\\";
-  const effectiveRoot = useMemo(() => {
-    const root = baseDataRoot.trim().replace(/[\\/]+$/, "");
-    return root ? `${root}${separator}${workspace}` : "";
-  }, [baseDataRoot, separator, workspace]);
 
   async function chooseDataRoot() {
     try {
@@ -49,8 +43,7 @@ export default function RuntimeBoundary({
       });
       if (typeof selected === "string") setBaseDataRoot(selected);
     } catch {
-      // Installed desktop builds provide the native picker. The text input
-      // remains an advanced fallback for development bridges.
+      // Native builds provide the picker. Manual input remains a last-resort fallback.
     }
   }
 
@@ -69,59 +62,47 @@ export default function RuntimeBoundary({
 
   if (state === "configuration_required") {
     return (
-      <section className="desktop-runtime-card desktop-runtime-card-blocked runtime-setup-card">
-        <div className="desktop-runtime-symbol">存</div>
+      <section className="desktop-runtime-card desktop-runtime-card-blocked runtime-setup-card runtime-fallback-card">
+        <div className="desktop-runtime-symbol">修</div>
         <div className="stack">
           <div>
-            <span className="desktop-eyebrow">首次使用</span>
-            <h2>选择一个位置存放灵机资料</h2>
+            <span className="desktop-eyebrow">自动准备未完成</span>
+            <h2>灵机没能自动确定安全的资料目录</h2>
             <p>
-              这里只需要选一次。灵机的记忆、索引、缓存和运行记录会集中放在这里，
-              以后启动会自动使用，不需要理解 DataRoot、Qdrant 或数据库目录。
+              正常情况下这里不会出现，灵机会自己选择平台默认位置并继续启动。
+              当前自动准备失败，你可以先让灵机重试；只有重试仍失败时才需要手动选择一次。
             </p>
-          </div>
-
-          <div className="runtime-simple-choice">
-            <button
-              className="button primary"
-              disabled={Boolean(runtimeBusy)}
-              onClick={() => void chooseDataRoot()}
-            >
-              {baseDataRoot ? "重新选择存放位置" : "选择存放位置"}
-            </button>
-            <small>
-              {baseDataRoot
-                ? `已选择：${baseDataRoot}`
-                : isMac
-                  ? "建议选择本机用户目录下长期可用的位置。"
-                  : "为避免系统盘持续增长，建议选择空间充足的非 C 盘位置。"}
-            </small>
           </div>
 
           {error && <small className="desktop-runtime-error">{error}</small>}
 
-          <div className="toolbar">
-            <button
-              className="button primary"
-              disabled={!baseDataRoot.trim() || Boolean(runtimeBusy)}
-              onClick={() => onConfigure(baseDataRoot.trim(), workspace)}
-            >
-              {runtimeBusy === "configure" || runtimeBusy === "ensure" ? "灵机正在准备…" : "开始使用灵机"}
+          <div className="toolbar runtime-fallback-actions">
+            <button className="button primary" disabled={Boolean(runtimeBusy)} onClick={onResume}>
+              {runtimeBusy === "ensure" ? "重新准备中…" : "让灵机重新自动准备"}
+            </button>
+            <button className="button secondary" disabled={Boolean(runtimeBusy)} onClick={() => void chooseDataRoot()}>
+              {baseDataRoot ? "重新选择位置" : "手动选择位置"}
             </button>
           </div>
 
+          {baseDataRoot && (
+            <div className="runtime-manual-fallback">
+              <small>已选择：{baseDataRoot}</small>
+              <button
+                className="button primary"
+                disabled={Boolean(runtimeBusy)}
+                onClick={() => onConfigure(baseDataRoot.trim(), "production")}
+              >
+                {runtimeBusy === "configure" ? "正在保存…" : "使用这个位置继续"}
+              </button>
+            </div>
+          )}
+
           <details className="runtime-advanced-setup">
-            <summary>高级设置与验收信息</summary>
+            <summary>故障详情与高级设置</summary>
             <div className="settings-list">
               <label>
-                工作空间
-                <select value={workspace} onChange={(event) => setWorkspace(event.target.value as WorkspaceName)}>
-                  <option value="production">日常使用</option>
-                  <option value="acceptance">验收 / 测试</option>
-                </select>
-              </label>
-              <label>
-                存放路径
+                手动路径
                 <input
                   value={baseDataRoot}
                   onChange={(event) => setBaseDataRoot(event.target.value)}
@@ -130,8 +111,8 @@ export default function RuntimeBoundary({
               </label>
             </div>
             <dl className="detail-list">
-              <div><dt>实际数据目录</dt><dd>{effectiveRoot || "选择位置后显示"}</dd></div>
               <div><dt>启动配置</dt><dd>{bootstrapStatus?.config_path_display || "由桌面应用自动管理"}</dd></div>
+              <div><dt>状态来源</dt><dd>{bootstrapStatus?.source || "未知"}</dd></div>
             </dl>
           </details>
         </div>
@@ -141,12 +122,12 @@ export default function RuntimeBoundary({
 
   if (state === "booting") {
     return (
-      <section className="desktop-runtime-card">
+      <section className="desktop-runtime-card runtime-autopilot-boot">
         <div className="desktop-spinner" aria-hidden="true" />
         <div>
-          <span className="desktop-eyebrow">自动启动</span>
+          <span className="desktop-eyebrow">灵机正在自动准备</span>
           <h2>{runtimeStateLabel(runtimeStatus)}</h2>
-          <p>灵机正在自己检查、启动并连接本机核心，不需要打开终端或手工配置端口。</p>
+          <p>正在选择安全资料目录、检查核心、恢复连接并同步本机状态。正常情况下不需要你设置任何东西。</p>
         </div>
       </section>
     );

@@ -14,6 +14,7 @@ const CONTROL_PORT: u16 = 8766;
 const SUPPORTED_WORKSPACES: [&str; 2] = ["production", "acceptance"];
 const OWNER_DATA_ROOT_ENV: &str = "LINGJI_OWNER_DATA_ROOT";
 const WORKSPACE_ENV: &str = "LINGJI_WORKSPACE";
+const ACCEPTANCE_DATA_ROOT_ENV: &str = "LINGJI_ACCEPTANCE_DATA_ROOT";
 
 static INHERITED_ENVIRONMENT_IGNORED: OnceLock<bool> = OnceLock::new();
 
@@ -24,6 +25,8 @@ struct RuntimeBootstrapConfig {
     active_workspace: String,
     #[serde(default)]
     owner_confirmed: bool,
+    #[serde(default)]
+    auto_selected: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -52,7 +55,18 @@ fn config_path() -> Result<PathBuf, String> {
 }
 
 fn config_path_display() -> String {
-    "%LOCALAPPDATA%\\LingJi\\desktop-bootstrap.json".to_string()
+    #[cfg(target_os = "macos")]
+    {
+        return "$HOME/Library/Application Support/LingJi/desktop-bootstrap.json".to_string();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return "%LOCALAPPDATA%\\LingJi\\desktop-bootstrap.json".to_string();
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        "LingJi/desktop-bootstrap.json".to_string()
+    }
 }
 
 fn validate_workspace(value: &str) -> Result<String, String> {
@@ -107,6 +121,31 @@ fn effective_data_root(base: &Path, workspace: &str) -> PathBuf {
     base.join(workspace)
 }
 
+fn acceptance_override_value() -> Option<String> {
+    env::var(ACCEPTANCE_DATA_ROOT_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn acceptance_override_status(probe_write: bool) -> Result<Option<RuntimeBootstrapStatus>, String> {
+    let Some(value) = acceptance_override_value() else {
+        return Ok(None);
+    };
+    let root = validate_base_root(&value, probe_write)?;
+    Ok(Some(RuntimeBootstrapStatus {
+        configured: true,
+        active_workspace: Some("acceptance".to_string()),
+        base_data_root_display: root.parent().map(|path| path.display().to_string()),
+        data_root_display: Some(root.display().to_string()),
+        config_path_display: config_path_display(),
+        source: "acceptance_override".to_string(),
+        c_drive_write_detected: looks_like_windows_system_drive(&root),
+        inherited_environment_ignored: inherited_environment_ignored(),
+        last_error: None,
+    }))
+}
+
 fn inherited_environment_present() -> bool {
     [OWNER_DATA_ROOT_ENV, WORKSPACE_ENV].iter().any(|name| {
         env::var(name)
@@ -133,13 +172,13 @@ fn inherited_environment_ignored() -> bool {
 fn validate_config_contract(config: &RuntimeBootstrapConfig) -> Result<(), String> {
     if config.schema_version != BOOTSTRAP_SCHEMA_VERSION {
         return Err(
-            "LingJi data directory configuration must be confirmed again in the installed UI"
+            "LingJi data directory configuration must be prepared again by the installed UI"
                 .to_string(),
         );
     }
-    if !config.owner_confirmed {
+    if !config.owner_confirmed && !config.auto_selected {
         return Err(
-            "LingJi data directory configuration is missing explicit owner confirmation"
+            "LingJi data directory configuration has neither an automatic safe selection nor owner confirmation"
                 .to_string(),
         );
     }
@@ -158,6 +197,12 @@ fn read_saved_config() -> Result<RuntimeBootstrapConfig, String> {
     let config: RuntimeBootstrapConfig = serde_json::from_slice(&bytes)
         .map_err(|error| format!("Invalid LingJi Desktop bootstrap configuration: {error}"))?;
     validate_config_contract(&config)?;
+    if config.active_workspace.eq_ignore_ascii_case("acceptance") && acceptance_override_value().is_none() {
+        return Err(
+            "A persisted acceptance workspace is never reused by a normal LingJi launch; an explicit task-scoped acceptance override is required"
+                .to_string(),
+        );
+    }
     Ok(config)
 }
 
@@ -183,8 +228,10 @@ fn status_from_config(
 }
 
 fn unconfigured_status(error: String) -> RuntimeBootstrapStatus {
-    let source = if error.contains("confirmed again") || error.contains("owner confirmation") {
+    let source = if error.contains("prepared again") || error.contains("neither an automatic") {
         "reconfirmation_required"
+    } else if error.contains("acceptance workspace") {
+        "acceptance_isolation_required"
     } else {
         "unconfigured"
     };
@@ -203,16 +250,24 @@ fn unconfigured_status(error: String) -> RuntimeBootstrapStatus {
 
 pub fn current_status() -> RuntimeBootstrapStatus {
     quarantine_inherited_environment();
-    match read_saved_config().and_then(|config| status_from_config(config, "bootstrap_file")) {
-        Ok(status) => status,
+    match acceptance_override_status(false) {
+        Ok(Some(status)) => status,
+        Ok(None) => match read_saved_config().and_then(|config| status_from_config(config, "bootstrap_file")) {
+            Ok(status) => status,
+            Err(error) => unconfigured_status(error),
+        },
         Err(error) => unconfigured_status(error),
     }
 }
 
 pub fn apply_saved_environment() -> Result<RuntimeBootstrapStatus, String> {
     quarantine_inherited_environment();
-    let config = read_saved_config()?;
-    let status = status_from_config(config, "bootstrap_file")?;
+    let status = if let Some(status) = acceptance_override_status(false)? {
+        status
+    } else {
+        let config = read_saved_config()?;
+        status_from_config(config, "bootstrap_file")?
+    };
     let workspace = status
         .active_workspace
         .as_deref()
@@ -229,9 +284,50 @@ pub fn apply_saved_environment() -> Result<RuntimeBootstrapStatus, String> {
 pub fn require_configured() -> Result<RuntimeBootstrapStatus, String> {
     let status = apply_saved_environment()?;
     if !status.configured || status.c_drive_write_detected {
-        return Err("LingJi requires an explicitly configured non-C: data directory".to_string());
+        return Err("LingJi requires a safe configured data directory".to_string());
     }
     Ok(status)
+}
+
+fn default_base_root() -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(value) = env::var("LOCALAPPDATA") {
+            let root = PathBuf::from(value);
+            if root.is_absolute() {
+                return Ok(root.join("LingJiData"));
+            }
+        }
+        if let Ok(value) = env::var("HOME") {
+            let root = PathBuf::from(value)
+                .join("Library")
+                .join("Application Support")
+                .join("LingJiData");
+            return Ok(root);
+        }
+        return Err("LingJi could not resolve the macOS Application Support directory".to_string());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(value) = env::var("XDG_DATA_HOME") {
+            let root = PathBuf::from(value);
+            if root.is_absolute() {
+                return Ok(root.join("LingJi"));
+            }
+        }
+        if let Ok(value) = env::var("HOME") {
+            return Ok(PathBuf::from(value).join(".local").join("share").join("LingJi"));
+        }
+        return Err("LingJi could not resolve a Linux user data directory".to_string());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Err("LingJi did not find a safe automatic non-system-drive location on Windows".to_string())
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        Err("Automatic LingJi data directory selection is unavailable on this platform".to_string())
+    }
 }
 
 fn control_port_in_use() -> bool {
@@ -276,6 +372,43 @@ fn write_saved_config(path: &Path, config: &RuntimeBootstrapConfig) -> Result<()
     Ok(())
 }
 
+pub fn configure_default() -> Result<RuntimeBootstrapStatus, String> {
+    quarantine_inherited_environment();
+    if let Some(status) = acceptance_override_status(true)? {
+        let data_root = status
+            .data_root_display
+            .as_deref()
+            .ok_or_else(|| "Acceptance data directory is unavailable".to_string())?;
+        env::set_var(OWNER_DATA_ROOT_ENV, data_root);
+        env::set_var(WORKSPACE_ENV, "acceptance");
+        return Ok(status);
+    }
+    if let Ok(status) = apply_saved_environment() {
+        return Ok(status);
+    }
+    if control_port_in_use() {
+        return Err("Stop the current LingJi runtime before preparing a new data directory".to_string());
+    }
+
+    let workspace = "production".to_string();
+    let base = default_base_root()?;
+    let base = validate_base_root(base.to_string_lossy().as_ref(), true)?;
+    let effective = effective_data_root(&base, &workspace);
+    validate_base_root(effective.to_string_lossy().as_ref(), true)?;
+
+    let config = RuntimeBootstrapConfig {
+        schema_version: BOOTSTRAP_SCHEMA_VERSION,
+        base_data_root: base.display().to_string(),
+        active_workspace: workspace.clone(),
+        owner_confirmed: false,
+        auto_selected: true,
+    };
+    write_saved_config(&config_path()?, &config)?;
+    env::set_var(OWNER_DATA_ROOT_ENV, &effective);
+    env::set_var(WORKSPACE_ENV, &workspace);
+    status_from_config(config, "automatic_default")
+}
+
 pub fn configure(
     base_data_root: String,
     workspace: String,
@@ -285,6 +418,12 @@ pub fn configure(
         return Err("Stop the current LingJi runtime before changing its data directory".to_string());
     }
     let workspace = validate_workspace(&workspace)?;
+    if workspace == "acceptance" && acceptance_override_value().is_none() {
+        return Err(
+            "Acceptance workspace is task-scoped and must use LINGJI_ACCEPTANCE_DATA_ROOT rather than a persisted owner setting"
+                .to_string(),
+        );
+    }
     let base = validate_base_root(&base_data_root, true)?;
     let effective = effective_data_root(&base, &workspace);
     validate_base_root(effective.to_string_lossy().as_ref(), true)?;
@@ -294,24 +433,26 @@ pub fn configure(
         base_data_root: base.display().to_string(),
         active_workspace: workspace.clone(),
         owner_confirmed: true,
+        auto_selected: false,
     };
     write_saved_config(&config_path()?, &config)?;
 
     env::set_var(OWNER_DATA_ROOT_ENV, &effective);
     env::set_var(WORKSPACE_ENV, &workspace);
-    status_from_config(config, "bootstrap_file")
+    status_from_config(config, "owner_selected")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn config(schema_version: u32, owner_confirmed: bool) -> RuntimeBootstrapConfig {
+    fn config(schema_version: u32, owner_confirmed: bool, auto_selected: bool) -> RuntimeBootstrapConfig {
         RuntimeBootstrapConfig {
             schema_version,
             base_data_root: "unused".to_string(),
-            active_workspace: "acceptance".to_string(),
+            active_workspace: "production".to_string(),
             owner_confirmed,
+            auto_selected,
         }
     }
 
@@ -337,19 +478,24 @@ mod tests {
     }
 
     #[test]
-    fn legacy_bootstrap_requires_owner_reconfirmation() {
-        let error = validate_config_contract(&config(1, false)).unwrap_err();
-        assert!(error.contains("confirmed again"));
+    fn legacy_bootstrap_requires_repreparation() {
+        let error = validate_config_contract(&config(1, false, false)).unwrap_err();
+        assert!(error.contains("prepared again"));
     }
 
     #[test]
-    fn current_bootstrap_requires_explicit_owner_confirmation() {
-        let error = validate_config_contract(&config(BOOTSTRAP_SCHEMA_VERSION, false)).unwrap_err();
-        assert!(error.contains("owner confirmation"));
+    fn current_bootstrap_rejects_untrusted_selection() {
+        let error = validate_config_contract(&config(BOOTSTRAP_SCHEMA_VERSION, false, false)).unwrap_err();
+        assert!(error.contains("neither an automatic"));
     }
 
     #[test]
     fn current_owner_confirmed_bootstrap_is_accepted() {
-        validate_config_contract(&config(BOOTSTRAP_SCHEMA_VERSION, true)).unwrap();
+        validate_config_contract(&config(BOOTSTRAP_SCHEMA_VERSION, true, false)).unwrap();
+    }
+
+    #[test]
+    fn current_automatic_bootstrap_is_accepted() {
+        validate_config_contract(&config(BOOTSTRAP_SCHEMA_VERSION, false, true)).unwrap();
     }
 }

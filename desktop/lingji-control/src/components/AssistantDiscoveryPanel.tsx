@@ -63,7 +63,7 @@ const size = (value: number) => value >= 1024 * 1024
   : `${Math.max(1, Math.round(value / 1024))} KB`;
 
 function stateLabel(state: string): string {
-  if (state === "detected") return "已识别";
+  if (state === "detected") return "已接管元数据";
   if (state === "manual_export") return "支持官方导出";
   if (state === "not_found") return "未发现";
   return state || "未知";
@@ -106,6 +106,8 @@ export default function AssistantDiscoveryPanel({
   );
   const importSource = decisionSources[0] ?? null;
   const decisionCount = decisionSources.length;
+  const detectedLabels = detected.map((assistant) => assistant.label).join("、");
+  const detectedMetadataCount = detected.reduce((total, assistant) => total + Number(assistant.candidate_count || 0), 0);
 
   useEffect(() => {
     onOwnerDecisionCount?.(decisionCount);
@@ -122,7 +124,7 @@ export default function AssistantDiscoveryPanel({
       );
       setMessage(response.duplicate
         ? "这份资料已经处理过，灵机没有重复创建任务。"
-        : `已交给灵机自动整理${response.job_id ? ` · ${response.job_id}` : ""}。`);
+        : `已授权，后续整理交给灵机${response.job_id ? ` · ${response.job_id}` : ""}。`);
       await resource.refresh();
     } catch (reason) {
       const error = reason instanceof ApiError ? reason : new ApiError(0, "UNKNOWN", "导入失败");
@@ -154,7 +156,7 @@ export default function AssistantDiscoveryPanel({
       });
       setMessage(response.duplicate
         ? "这份资料已经处理过，灵机没有重复创建任务。"
-        : `已交给灵机自动整理${response.job_id ? ` · ${response.job_id}` : ""}。`);
+        : `已授权，后续整理交给灵机${response.job_id ? ` · ${response.job_id}` : ""}。`);
       await resource.refresh();
     } catch (reason) {
       const error = reason instanceof ApiError ? reason : new ApiError(0, "UNKNOWN", "导入失败");
@@ -167,55 +169,16 @@ export default function AssistantDiscoveryPanel({
   if (!active) return null;
 
   return (
-    <section className="assistant-autopilot-panel assistant-autopilot-compact">
-      <div className="assistant-autopilot-heading">
-        <div>
-          <span className="desktop-eyebrow">自动发现</span>
-          <h2>{resource.loading ? "正在检查这台电脑" : `已自动识别 ${detected.length} 个 AI 工具`}</h2>
-          <p>灵机自己扫描已知位置。没有你的允许，不会读取真实对话正文，也不会自动写入永久记忆。</p>
-        </div>
-        <div className="assistant-autopilot-live">
-          <span className={resource.error ? "status-dot" : "status-dot online"} />
+    <section className={`assistant-autopilot-panel assistant-autopilot-compact ${importSource ? "assistant-autopilot-needs-owner" : "assistant-autopilot-passive"}`}>
+      {importSource && importSource.candidates[0] ? (
+        <div className="assistant-autopilot-action owner-only-source-action">
           <div>
-            <strong>{resource.error ? "自动重试中" : resource.refreshing ? "正在更新" : "后台持续检查"}</strong>
-            <small>无需手动刷新</small>
-          </div>
-        </div>
-      </div>
-
-      <div className="assistant-autopilot-tool-strip" aria-label="已识别 AI 工具">
-        {detected.length ? detected.map((assistant) => (
-          <button
-            type="button"
-            className="assistant-tool-chip"
-            key={assistant.id}
-            onClick={assistant.id === "codex" ? onOpenCodex : undefined}
-            disabled={assistant.id !== "codex"}
-          >
-            <span className="status-dot online" />
-            {assistant.label}
-          </button>
-        )) : (
-          <span className="assistant-tool-chip muted">{resource.loading ? "正在识别…" : "暂未发现本机 AI 工具"}</span>
-        )}
-        {decisionCount > 0 && <span className="pill warning">{decisionCount} 类资料等你授权</span>}
-      </div>
-
-      {resource.error && (
-        <div className="assistant-autopilot-note warning">
-          自动发现暂时失败，灵机会继续重试；这不是需要你手动排查的日常任务。
-        </div>
-      )}
-
-      {importSource && importSource.candidates[0] && (
-        <div className="assistant-autopilot-action">
-          <div>
-            <span className="desktop-eyebrow">需要你决定</span>
+            <span className="desktop-eyebrow">需要你授权</span>
             <strong>允许灵机读取 {importSource.label}？</strong>
             <p>
-              {importSource.candidates[0].display_name} · {size(importSource.candidates[0].size_bytes)}
+              当前只看到了文件元数据。授权后灵机会自己读取、排队、去重和整理；不会自动写入永久记忆。
+              {" "}{importSource.candidates[0].display_name} · {size(importSource.candidates[0].size_bytes)}
               {decisionCount > 1 ? ` · 另有 ${decisionCount - 1} 类资料等待授权` : ""}
-              {" · "}当前只读取了文件元数据。
             </p>
           </div>
           <button
@@ -223,13 +186,36 @@ export default function AssistantDiscoveryPanel({
             disabled={Boolean(busy)}
             onClick={() => void authorizeCandidate(importSource.candidates[0])}
           >
-            {busy ? "正在交给灵机…" : "允许读取并自动整理"}
+            {busy ? "正在交给灵机…" : "允许读取，后面自动处理"}
           </button>
+        </div>
+      ) : (
+        <div className="assistant-passive-row">
+          <div>
+            <span className="desktop-eyebrow">已自动接管</span>
+            <strong>
+              {resource.loading
+                ? "正在识别本机 AI 工具"
+                : detected.length
+                  ? detectedLabels
+                  : "暂未发现需要接管的本机 AI 工具"}
+            </strong>
+            <small>
+              {resource.error
+                ? "自动发现暂时失败，灵机会继续重试。"
+                : detected.length
+                  ? `元数据会在后台持续同步${detectedMetadataCount > 0 ? ` · 已识别 ${detectedMetadataCount.toLocaleString()} 条工作记录元数据` : ""}。`
+                  : "后台会持续检查，无需手动刷新。"}
+            </small>
+          </div>
+          <span className={resource.error ? "status-dot" : "status-dot online"} />
         </div>
       )}
 
+      {message && <div className="assistant-autopilot-note">{message}</div>}
+
       <details className="assistant-autopilot-more">
-        <summary>查看发现详情与手动导入</summary>
+        <summary>来源详情与手动导入</summary>
         <div className="assistant-autopilot-details">
           <div className="assistant-autopilot-tools">
             {resource.data?.assistants.map((assistant) => (
@@ -267,19 +253,13 @@ export default function AssistantDiscoveryPanel({
           )}
 
           <div className="assistant-autopilot-safety">
-            <span>只读元数据</span>
+            <span>元数据自动读取</span>
             <span>正文读取需授权</span>
             <span>永久记忆需审核</span>
           </div>
+          <button className="text-button" onClick={onOpenActivity}>查看后台处理记录</button>
         </div>
       </details>
-
-      {message && <div className="assistant-autopilot-note">{message}</div>}
-
-      <div className="assistant-autopilot-footer">
-        <span>普通扫描、检测和重试由灵机自动完成。</span>
-        <button className="text-button" onClick={onOpenActivity}>查看自动处理记录</button>
-      </div>
     </section>
   );
 }
