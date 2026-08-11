@@ -75,6 +75,9 @@ for (const token of [
   "Verify embedded product identity",
   "--release-metadata-output",
   "release_metadata.json",
+  "Verify installed App acceptance isolation",
+  "LINGJI_ACCEPTANCE_DATA_ROOT=\"$TASK_ROOT/runtime-data\"",
+  "isolated-home",
 ]) {
   assert.ok(workflow.includes(token), `macOS release identity contract is missing ${token}`);
 }
