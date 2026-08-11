@@ -16,24 +16,29 @@ product_pr: 88
 product_commit: 171091fe764c6653cdc7325b4a1a71e0b7800822
 task_instruction_commit: 286f678ef603aec333168e8afc1bb5c58da3b659
 report_branch: acceptance/pr88-m5-phase4-failure-repair-171091fe
-report_commit: PENDING
+report_commit: 602d5326e8990796e8e9206f82d6fd9a37366adc
 report_path: docs/TEST_REPORTS/PR88_M5_PHASE4_FAILURE_REPAIR.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR88_M5_PHASE4_FAILURE_REPAIR_SUMMARY.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR88_M5_PHASE4_FAILURE_REPAIR_HASHES.txt
-cleanup_before: NOT_RUN
+cleanup_before: PASS_OWNER_COMPLETED
 cleanup_after: NOT_RUN
-remote_branch_verified: false
-remote_commit_verified: false
-remote_report_verified: false
+remote_branch_verified: true
+remote_commit_verified: true
+remote_report_verified: true
 remote_result_verified: false
-pr_comment_verified: false
+pr_comment_verified: true
+pr_comment_id: 5254742686
 local_temp_root_absent: false
 owner_observation: NOT_REQUIRED
 started_at: PENDING
 finished_at: PENDING
 source_failure_report_read: true
-remote_failure_report_verified: false
+remote_failure_report_verified: true
 identity_root_cause_fixed: false
+identity_fix_branch: fix/pr88-m5-phase4-171091fe
+identity_fix_head: 90b7a70de2a5053c1224ee810949256a378f582a
+identity_gate_checkpoint: PASS_FINAL_DMG_METADATA_CONTRACT_PUBLISHED
+identity_rust_tests: NOT_RUN_NO_CARGO_TOOLCHAIN
 first_run_ux_root_cause_fixed: false
 ux_local_checkpoint: PASS_FOCUSED_TEST_AND_FRONTEND_BUILD
 ux_remote_product_head_verified: false
@@ -55,88 +60,102 @@ new_artifact_hashes_verified: false
 old_artifact_retry: false
 ```
 
-## 2. 当前开发检查点
+## 2. 已闭环的失败报告证据
 
-本机 Codex 当前报告：
+GitHub 远程已直接复读并确认：
 
 ```text
-Phase 4 FAIL 报告：已在本机重建并声称完成远程核验
-旧 Artifact 9102748834：永久拒绝
-M5-UX-003：第一条 UX 修复已完成本地回归
-身份精确性：待修
-~/Documents/acceptance 隔离：待修
-认证状态同步：待实现
+失败报告分支 = acceptance/pr88-m5-phase4-failure-repair-171091fe
+失败报告内容 commit = 602d5326e8990796e8e9206f82d6fd9a37366adc
+报告远程确认 commit = 36421dba21b3f36040493119a062988b77129c37
+失败报告 = docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_171091fe.md
+PR #88 FAIL / DO NOT MERGE 评论 ID = 5254742686
 ```
 
-UX 当前已完成的本地检查点：
+因此以下状态已经成立：
+
+```text
+source_failure_report_read = true
+remote_failure_report_verified = true
+remote_branch_verified = true
+remote_commit_verified = true
+remote_report_verified = true
+pr_comment_verified = true
+```
+
+这只表示失败证据闭环，不表示任何产品缺陷已经关闭。
+
+## 3. 当前开发检查点
+
+### M5-UX-003
+
+本机 Codex 已完成第一条 UX 修复：
 
 ```text
 手动选择资料目录不再与“自动准备”并列
 手动路径选择降级到高级兜底
-对应回归测试先 FAIL、修复后 PASS
+对应 UI 回归先 FAIL、修复后 PASS
 React / 前端构建 PASS
 ```
 
-**注意：这仍不是 `M5-UX-003` 正式关闭。** 当前 GitHub PR #88 远程产品 Head 仍是旧 `171091fe...`，在 UX 修改进入新的产品 Head、完成远程 CI 并生成新 Artifact 前：
+当前仍保持：
 
 ```text
 first_run_ux_root_cause_fixed = false
 ux_remote_product_head_verified = false
 ```
 
-不得把本地焦点测试 PASS 写成产品 Release PASS。
+因为该修改尚未进入最终产品 Head、完整 CI 和新 Artifact。
 
-## 3. 远程证据复读状态
+### M5-IDENTITY-002
 
-截至 ChatGPT 本轮直接读取 GitHub：
-
-```text
-PR #88 = Draft / DO NOT MERGE
-PR #88 remote product Head = 171091fe764c6653cdc7325b4a1a71e0b7800822
-预期 acceptance/macos-m5-autopilot-phase4-171091fe ref 仍未由 GitHub API 直接解析到
-```
-
-因此本回执暂时保留：
+远程修复分支已经存在：
 
 ```text
-remote_failure_report_verified = false
-remote_report_verified = false
+branch = fix/pr88-m5-phase4-171091fe
+head = 90b7a70de2a5053c1224ee810949256a378f582a
 ```
 
-这不否定本机已经生成报告；它表示**仓库权威状态尚未被当前远程读取证据闭环证明**。Codex 下一次提交/推送后必须再次 `git ls-remote` + GitHub API/`gh api` 复读，并把真实分支名、报告 Commit、PR 评论 ID 写入修复报告。
+已发布的身份门禁改造包括：
+
+```text
+从最终挂载 DMG 的真实 App 导出 release metadata
+验证 metadata.commit == expected exact product Head
+验证主程序 arm64
+验证 Sidecar arm64 且来自同一 bundle
+比较 build 前 App 与最终 DMG App metadata
+不再只依赖 strings | grep
+```
+
+当前环境没有 cargo，因此 Rust 本机测试未执行；macOS UI / release 合同焦点测试已通过。这个检查点**不能**提前写成 `identity_root_cause_fixed=true`，必须等最终统一 Head 上完整 Rust/Tauri、macOS Gate 和新 Artifact 实证。
 
 ## 4. 下一执行顺序
 
-不要重新发起旧包验收，也不要停在 UX 检查点。接下来按以下顺序连续执行：
+不要生成中间 Artifact，也不要重新做 M5 真机验收。继续：
 
 ```text
-A. 安装包精确身份
-   → 找到 CI exact-head 与真机 installed App 身份不一致的根因
-   → 增加最终 DMG / installed App release_metadata 回归
+A. 关闭 M5-ISOLATION-002
+   → 定位谁绕过 LINGJI_ACCEPTANCE_DATA_ROOT 写入 ~/Documents/acceptance
+   → 增加 packaged bootstrap + Sidecar 首次/再次启动隔离集成回归
 
-B. acceptance 隔离
-   → 找到谁绕过 LINGJI_ACCEPTANCE_DATA_ROOT 写入 ~/Documents/acceptance
-   → 增加首次启动 + 再次启动的 packaged-chain 隔离集成测试
-
-C. 认证状态安全同步
+B. 实现认证状态安全同步
    → OS CredentialStore
    → lingji_state.db 非敏感 AuthStatus
-   → Desktop / Autopilot 状态
+   → Desktop / Autopilot 只展示认证结论
    → allowlist sanitized snapshot
    → secret_export_count = 0
 
-D. 统一收口
-   → 三项真实失败回归全部 PASS
-   → 认证状态回归 PASS
+C. 统一收口已有 UX + Identity 修改
+   → 合并到一个新的精确产品 Head
+   → 三项真实失败回归 PASS
+   → AuthStatus 回归 PASS
    → Python / Desktop / Rust / MCP 全量
    → P0 Windows + Windows Release
    → macOS Release Gate
-   → 新精确产品 Head
-   → 新 Artifact / 哈希
+   → 新 macOS Artifact / ZIP / DMG 哈希
+   → 独立下载复核最终 DMG 内 metadata
    → 更新 M5 固定任务单
 ```
-
-这样可以避免每修一项就发一次包、真机再测一次，减少无意义的版本轮转。
 
 ## 5. 当前已知失败身份
 
@@ -157,7 +176,7 @@ M5-UX-003
 M5-ISOLATION-002
 ```
 
-根因、修复、回归测试、新 CI、新 Artifact 和远程复读全部完成后再把对应 `*_root_cause_fixed` 改为 `true`。
+只有根因、对应真实回归、统一最终 Head、全量 CI、新 Artifact 和远程复读全部完成后，才能把对应 `*_root_cause_fixed` 改为 `true`。
 
 ## 7. 本轮必须完成的认证状态增强
 
