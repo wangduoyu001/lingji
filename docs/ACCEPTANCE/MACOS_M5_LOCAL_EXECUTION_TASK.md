@@ -1,102 +1,118 @@
 # LingJi macOS M5 当前真机验收任务单
 
-> 这是当前 M5 真机验收的唯一执行入口。
+> **这是当前 M5 真机验收的唯一执行入口。**
 >
-> 用户只需要把本文件链接交给 Codex。Codex 必须自行读取本文件列出的任务身份、Artifact 和协议，不得再次向用户索要已经写在这里的 task_id、commit、Artifact ID、DMG 名称或下载位置。
+> 用户只需要把本文件链接交给 Codex。Codex 必须自行读取本文件中的任务身份、Artifact、验收协议、安装替换规则、隔离规则、清理规则和报告路径；禁止再次向用户索要已经写在这里的信息。
+>
+> 本文件采用“原地更新”策略：每轮新的 M5 验收直接覆盖当前任务身份，不为每个版本重复创建任务单。
 
-## 0. 当前任务身份
+## 0. 当前唯一任务身份
 
 ```yaml
 status: ACTIVE
-task_id: MACOS-M5-PHYSICAL-ACCEPTANCE-C10D255
+task_id: MACOS-M5-AUTOPILOT-PHASE3-C7734CDB
 execution_mode: FRESH_ENVIRONMENT_THEN_LOCAL_ACCEPTANCE
 repository: wangduoyu001/lingji
-product_commit: c10d25541ec8814179545e03f3c6709b7beeb283
-product_branch: master
+product_commit: c7734cdb3a865d16bc12d5e8c96aae9c6d1892aa
+product_branch: feature/owner-autopilot-ui-codexpp
+pull_request: 88
 platform: macOS Apple Silicon
 target: aarch64-apple-darwin
 app_version: 0.1.0
 bundle_format: dmg
 artifact_name: lingji-macos-arm64
-artifact_id: 9030728866
-workflow_run_id: 31288663236
+artifact_id: 9099532827
+workflow_run_id: 31486602857
 workflow_name: macOS Desktop Gate
 workflow_result: success
-artifact_archive_sha256: c7d052daebfb65ac4adfd443efa8dd7d2f471c5aad77f6849b54e06b18d1f81e
+artifact_archive_sha256: cb89f447fc7c0b11db9349505dfb248b9976e36113d1fd9808ed4c4971211de4
 dmg_name: 灵机_0.1.0_aarch64.dmg
-dmg_size_bytes: 46204704
-dmg_sha256: 65714a3eaab7d1a77a1dd5d1b8ce895daf3ba1a050970532afc5f9f805e2a45b
+dmg_size_bytes: 46242086
+dmg_sha256: 20aed5342788f51058206e1a9c346d16cbf94582402638c9338969ca498696e3
 protocol_path: docs/ACCEPTANCE/MACOS_M5_ACCEPTANCE_INSTRUCTIONS.md
-report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_c10d255.md
+implementation_report: docs/TEST_REPORTS/OWNER_AUTOPILOT_PHASE3_IMPLEMENTATION.md
+report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_c7734cdb.md
+report_branch: acceptance/macos-m5-autopilot-phase3-c7734cdb
 ```
 
-GitHub Actions run：
+GitHub Actions Run：
 
 ```text
-https://github.com/wangduoyu001/lingji/actions/runs/31288663236
+https://github.com/wangduoyu001/lingji/actions/runs/31486602857
 ```
 
-Artifact 页面：
+Artifact：
 
 ```text
-https://github.com/wangduoyu001/lingji/actions/runs/31288663236/artifacts/9030728866
+https://github.com/wangduoyu001/lingji/actions/runs/31486602857/artifacts/9099532827
 ```
 
-当前任务所验收的产品 Commit 必须保持为：
+PR：
 
 ```text
-c10d25541ec8814179545e03f3c6709b7beeb283
+https://github.com/wangduoyu001/lingji/pull/88
 ```
 
-本任务单或验收报告之后的文档 Commit 不改变被测产品身份。
+被测产品身份必须始终保持：
+
+```text
+c7734cdb3a865d16bc12d5e8c96aae9c6d1892aa
+```
+
+本任务单和验收协议后续产生的文档 Commit **不改变被测产品 Commit**。
 
 ---
 
-# 1. Codex 读取顺序
-
-收到本文件链接后固定执行：
+# 1. Codex 收到本链接后的固定读取顺序
 
 ```text
 本文件
 → docs/ACCEPTANCE/MACOS_M5_ACCEPTANCE_INSTRUCTIONS.md
-→ docs/ACCEPTANCE/README.md
-→ docs/ACCEPTANCE/CODEX_ACCEPTANCE_INSTRUCTIONS.md 中非 Windows 专属规则
-→ 被测 Commit c10d255 的相关代码和构建配置
+→ PR #88 当前说明
+→ feature/owner-autopilot-ui-codexpp @ c7734cdb 的相关代码与配置
+→ docs/TEST_REPORTS/OWNER_AUTOPILOT_PHASE3_IMPLEMENTATION.md
 ```
 
-macOS 与通用文档冲突时，以：
+macOS 专项规则与通用规则冲突时，优先级固定为：
 
 ```text
 MACOS_M5_LOCAL_EXECUTION_TASK.md
 → MACOS_M5_ACCEPTANCE_INSTRUCTIONS.md
+→ 其他通用验收文档
 ```
 
-优先。
-
-不得因为通用文档里存在 Windows 路径、Windows 重启或 NSIS 内容而要求用户补充 Mac 任务身份。
+**读完后直接执行，不再询问 task_id、commit、Artifact、DMG、临时目录、验收协议或报告路径。**
 
 ---
 
-# 2. Artifact 获取规则
+# 2. Artifact 必须由 Codex 自行取得
 
-Codex 必须优先自行从 GitHub Actions 下载，不得先让用户手工下载或重新提供 DMG。
-
-如果本机已登录 GitHub CLI：
+先创建唯一任务根：
 
 ```bash
-gh run download 31288663236 \
+export ACCEPTANCE_ROOT="$HOME/Library/Caches/LingJiAcceptance/MACOS-M5-AUTOPILOT-PHASE3-C7734CDB-c7734cdb"
+rm -rf "$ACCEPTANCE_ROOT"
+mkdir -p "$ACCEPTANCE_ROOT/artifact" "$ACCEPTANCE_ROOT/logs" "$ACCEPTANCE_ROOT/app-backup" "$ACCEPTANCE_ROOT/runtime-data"
+```
+
+`rm -rf` 仅允许作用于上面**精确任务根**；执行前必须确认目标路径完全匹配当前 task_id，不允许通配符或扩大路径。
+
+优先使用 GitHub CLI：
+
+```bash
+gh run download 31486602857 \
   -R wangduoyu001/lingji \
   -n lingji-macos-arm64 \
   --dir "$ACCEPTANCE_ROOT/artifact"
 ```
 
-下载后必须得到：
+必须得到：
 
 ```text
-灵机_0.1.0_aarch64.dmg
+$ACCEPTANCE_ROOT/artifact/灵机_0.1.0_aarch64.dmg
 ```
 
-然后验证：
+校验：
 
 ```bash
 shasum -a 256 "$ACCEPTANCE_ROOT/artifact/灵机_0.1.0_aarch64.dmg"
@@ -105,110 +121,244 @@ shasum -a 256 "$ACCEPTANCE_ROOT/artifact/灵机_0.1.0_aarch64.dmg"
 期望：
 
 ```text
-65714a3eaab7d1a77a1dd5d1b8ce895daf3ba1a050970532afc5f9f805e2a45b
+20aed5342788f51058206e1a9c346d16cbf94582402638c9338969ca498696e3
 ```
 
-如果 GitHub Actions Artifact 因鉴权无法自动下载：
+文件大小必须为：
 
-1. 先记录 `gh auth status` 的脱敏结果；
-2. 尝试仓库已有 GitHub 连接方式；
-3. 不允许换一个旧 DMG；
-4. 只有确定本机没有可用 GitHub 凭据、也无法通过当前仓库连接获取精确 Artifact 时，才标记：
+```text
+46242086 bytes
+```
+
+如果 GitHub Artifact 因鉴权无法下载：
+
+1. 记录脱敏 `gh auth status`；
+2. 尝试当前仓库已有 GitHub 认证；
+3. 禁止改用旧 DMG；
+4. 只有确认无法取得 **Artifact ID 9099532827** 时才标记：
 
 ```text
 BLOCKED_ARTIFACT_DOWNLOAD_AUTH
 ```
 
-此时才允许请求用户提供 **同一个 Artifact ID 9030728866 对应的文件**。
-
-不得再次询问 task_id、目标 commit 或 Artifact ID。
+此时才允许向用户索取 **同一个 Artifact ID 9099532827 对应的文件**。
 
 ---
 
-# 3. 第一次验收前环境盘点
+# 3. 第一次操作前必须完成本机只读预检
 
-严格执行 `MACOS_M5_ACCEPTANCE_INSTRUCTIONS.md` 第 1 节。
+严格执行 `MACOS_M5_ACCEPTANCE_INSTRUCTIONS.md`。
 
 至少确认：
 
 ```text
-macOS 版本
+macOS version
 uname -m == arm64
-Python / Node 原生架构
+Python / Node 是否原生 arm64
 Gatekeeper 状态
-磁盘剩余空间
-/Applications 状态
-~/Library/Application Support 状态
-~/Library/Caches 状态
-现有 LingJi 安装
+系统盘空间
+现有 /Applications/灵机.app
 旧 LingJi DMG 挂载
 LingJi / lingji-core / MCP 残留进程
 8765 / 8766 / 8767 端口
-Obsidian / Ollama / Git / Vault 可用性
+~/Library/Application Support/LingJi 现状
+~/Library/Application Support/LingJiData 现状
+~/Documents/acceptance 是否在验收前已经存在
+Obsidian / Ollama / Git / Vault 现状
+主人正式 Production DataRoot
 ```
 
-环境盘点只读，不删除正式数据。
+预检只读。禁止删除 Production DataRoot、Vault、正式记忆、个人模型、AI 客户端配置或任何归属不明确的文件。
 
-如果当前机器已经完成过同一任务 ID 的安全只读预检，Codex仍需快速复核关键环境是否变化，但不得要求用户重新提供已确定的产品身份。
+必须先记录 `~/Documents/acceptance` 的验收前状态，避免把历史残留与本轮污染混为一谈。
 
 ---
 
-# 4. 唯一临时目录
+# 4. 本轮最重要的物理隔离规则
 
-本轮固定使用：
-
-```text
-~/Library/Caches/LingJiAcceptance/MACOS-M5-PHYSICAL-ACCEPTANCE-C10D255-c10d255/
-```
-
-建议：
+本轮 Runtime **必须**使用 task-scoped 环境变量：
 
 ```bash
-export ACCEPTANCE_ROOT="$HOME/Library/Caches/LingJiAcceptance/MACOS-M5-PHYSICAL-ACCEPTANCE-C10D255-c10d255"
+export LINGJI_ACCEPTANCE_DATA_ROOT="$ACCEPTANCE_ROOT/runtime-data"
+mkdir -p "$LINGJI_ACCEPTANCE_DATA_ROOT"
 ```
 
-所有本轮：
+要求：
+
+- 在 LingJi Runtime 启动**之前**注入；
+- 本轮 SQLite、Qdrant、token、logs、raw、vault、backup 等全部只能写入该目录；
+- 不持久化为主人日常 Production 配置；
+- 不允许创建新的 `~/Documents/acceptance`；
+- 不允许写主人 Production DataRoot；
+- 普通日常启动没有该变量时不得继续复用历史 Acceptance workspace。
+
+任何本轮 Runtime 数据出现在任务根之外：
 
 ```text
-Artifact
-日志
-截图
-fixture
-checkpoint
-临时配置备份
-测试 DataRoot
-临时 Qdrant
-临时 SQLite
-报告中间文件
+FAIL_ACCEPTANCE_ISOLATION
 ```
 
-必须集中在该目录或仓库正式报告路径，不得散落 Desktop、Documents、Downloads 或正式 DataRoot。
+并记录：
+
+```text
+unexpected_write_count
+unexpected_paths
+production_pollution_count
+```
 
 ---
 
-# 5. 当前验收目标
+# 5. 安装必须使用 whole-bundle replace
 
-本轮不是开发任务，目标是验证精确 Artifact 在真实 M5 Mac 上是否可作为下一阶段基础版本。
+**禁止 overlay copy。** 不允许把新 `.app` 内文件叠加复制到旧 `/Applications/灵机.app`。
 
-必须完成：
+固定流程：
 
-## A. 安装包身份
+1. 正常退出旧 LingJi；
+2. 确认旧 Core / 8766 已释放；
+3. 挂载已验哈希的 DMG；
+4. 如果 `/Applications/灵机.app` 已存在，把**整个旧 App**移动到：
 
-- DMG SHA256 精确匹配；
-- DMG 可挂载；
-- `.app` 存在；
-- 主 App 二进制为 arm64；
-- Sidecar 为 arm64；
-- `codesign --verify --deep --strict` 符合当前 ad-hoc 验收合同。
+```text
+$ACCEPTANCE_ROOT/app-backup/灵机.app
+```
 
-## B. 首次安装与启动
+5. 从 DMG 完整复制新 `.app` 到 `/Applications`；
+6. 执行：
 
-- 安装到 `/Applications`；
-- 从 `/Applications` 启动，不把直接从 DMG 运行作为正式结论；
-- 不删除主人正式 DataRoot；
-- 第一次隔离测试使用本轮临时 `test-data-root`。
+```bash
+codesign --verify --deep --strict /Applications/灵机.app
+```
 
-## C. Runtime
+7. 只有 PASS 才继续；
+8. 新 App 复制或签名失败时，删除失败的新 App，完整恢复旧 App，再验证旧 App 签名。
+
+报告必须记录：
+
+```text
+install_mode=whole_bundle_replace
+post_install_codesign=PASS|FAIL
+rollback_required=true|false
+```
+
+---
+
+# 6. 启动必须保留 task-scoped 环境
+
+不要用会丢失本轮环境变量的普通 Finder 双击作为技术隔离结论。
+
+从**已安装 App** 的主二进制启动：
+
+```bash
+APP_BIN="$(find /Applications/灵机.app/Contents/MacOS -maxdepth 1 -type f -perm -111 | head -n 1)"
+test -n "$APP_BIN"
+LINGJI_ACCEPTANCE_DATA_ROOT="$LINGJI_ACCEPTANCE_DATA_ROOT" \
+  "$APP_BIN" >"$ACCEPTANCE_ROOT/logs/desktop-launch.log" 2>&1 &
+```
+
+主人仍然观察正常 GUI，不需要操作终端。
+
+---
+
+# 7. 本轮验收目标
+
+这不是开发任务。Codex 在验收模式下不得为了 PASS 修改产品代码。
+
+## A. 精确身份
+
+必须确认：
+
+```text
+Artifact / DMG SHA 匹配
+App 主二进制 arm64
+Sidecar arm64
+codesign PASS
+Release Metadata commit == c7734cdb3a865d16bc12d5e8c96aae9c6d1892aa
+UI/诊断显示的产品 commit == c7734cdb3a865d16bc12d5e8c96aae9c6d1892aa
+```
+
+任何 PR merge commit、旧 commit 或未知 commit 都不能通过。
+
+## B. Autopilot 首次启动
+
+Phase 3 的正常产品行为必须是：
+
+```text
+打开 LingJi
+→ 自动选择平台安全资料目录
+→ 自动准备 Runtime
+→ 自动连接
+→ 进入首页
+```
+
+正常首次启动**不应要求主人先选择 DataRoot**。
+
+“手动选择位置”只能在自动准备真实失败之后作为兜底出现。
+
+本轮验收使用 task-scoped root，因此 UI 也不应要求主人再次配置存储位置。
+
+## C. 首页智能化
+
+主人应首先看到：
+
+```text
+有没有必须由我决定的事情
+灵机当前正在自己做什么
+如果有系统异常，是否正在自动处理
+```
+
+没有主人事项时：首页应明确“无需操作”或同等清晰结论，不能靠大量技术卡片证明自己还活着。
+
+以下不应占据日常首页主区域：
+
+```text
+Qdrant
+Embedding dimension
+SQLite
+8766
+MCP 内部状态
+branch
+checkpoint
+索引内部状态
+大量 AI 元数据计数
+```
+
+它们必须保留在高级工具/诊断中，而不是删除功能。
+
+## D. AI 来源自动接管
+
+无需主人手工刷新、找路径或逐项导入，灵机应自动识别受支持本机 AI 元数据。
+
+至少观察 Codex；Claude Code / WorkBuddy 以本机真实安装情况为准。
+
+如果识别到几千条 Codex 工作记录元数据：
+
+- 不应把数字本身做成给主人处理的主要任务；
+- 应作为后台已接管状态；
+- “Codex 工作记录”必须能理解为扫描到的 Session/工作上下文，不是灵机创建的聊天窗口。
+
+## E. 主人决策边界
+
+“需要我决定”只允许用于：
+
+```text
+读取真实对话/导出正文
+导入敏感资料
+永久记忆审核
+删除/重建向量 Collection 等不可逆操作
+```
+
+普通错误、重试、健康异常、索引维护、扫描等应先由系统自动处理。
+
+未授权前必须保持：
+
+```text
+真实正文读取 = 0
+永久记忆自动批准 = 0
+不可逆向量操作 = 0
+```
+
+## F. Runtime / 生命周期
 
 必须验证：
 
@@ -219,84 +369,76 @@ runtime_state=healthy
 runtime_healthy=true
 runtime_managed=true
 runtime_binary_available=true
+8766 only 127.0.0.1
 ```
 
-并确认：
+并完成：
 
 ```text
-8766 仅监听 127.0.0.1
-无重复 Core
-无孤儿 MCP
-退出后 Core 退出
-退出后 8766 释放
-再次启动可恢复 healthy
+启动 → healthy
+→ 正常退出
+→ Core 退出
+→ 8766/8767 释放
+→ 同一 task-scoped root 再启动
+→ healthy
 ```
 
-## D. 最低 UI 范围
-
-至少检查：
-
-```text
-总览
-Workspace / DataRoot
-Runtime
-Control API
-Obsidian / Vault
-Qdrant / Embedding
-模型 / 外部依赖
-日志 / 诊断
-正常退出
-再次启动
-```
-
-## E. 主人只参与必要肉眼检查
-
-只有以下节点需要主人观察：
-
-```text
-App 是否正常出现
-是否有异常终端/黑窗
-首次页面是否知道下一步
-数据目录/Workspace 是否容易理解
-是否有无法操作或明显错误的 UI
-```
-
-其余 Git、哈希、进程、端口、文件、日志、API、清理均由 Codex 自己完成。
+不得留下重复 Core 或孤儿 MCP。
 
 ---
 
-# 6. 失败处理
+# 8. 主人只参与必要肉眼判断
+
+只有以下事项需要主人：
+
+```text
+App 是否正常出现
+有没有异常黑窗/终端
+首次打开是否无需配置即可开始
+首页能不能一眼看懂
+自动化程度是否明显达到“系统自己做、我只处理关键决定”
+Codex 工作记录是否能理解
+真正授权动作是否清楚
+```
+
+哈希、下载、进程、端口、安装替换、Runtime、API、目录污染检查、清理、报告和 Git 回传全部由 Codex 自行完成。
+
+Codex 不得替主人编造 UI PASS。
+
+---
+
+# 9. 失败处理
 
 任一步失败：
 
 ```text
 保存最小失败证据
 → 继续不受影响的只读检查
-→ 确认是否污染正式数据
-→ 正常退出并清理
-→ 生成 FAIL 报告
+→ 判断正式数据污染
+→ 必要时恢复旧 App
+→ 正常退出
+→ 清理本轮临时内容
+→ 生成 FAIL / BLOCKED 报告
 ```
 
-如果失败属于产品缺陷：
+产品缺陷：
 
 ```text
-本轮验收停止
-→ 报告根因和复现步骤
-→ 返回主开发代理修复
-→ 生成新 Commit + 新 Artifact
-→ 更新本任务单身份
+停止本轮验收
+→ 回传根因/复现/证据
+→ 开发代理修复
+→ 新 Commit + 新 Artifact
+→ 原地更新本任务单
 → 再验收
 ```
 
-禁止拿同一个已知失败的 DMG 反复要求主人测试。
-
-Codex 在验收模式下不得为了 PASS 擅自修改产品代码。
+**禁止拿同一个已确认失败的 DMG 反复要求主人测试。**
 
 ---
 
-# 7. 验收结束强制清理
+# 10. 验收结束强制清理
 
-无论 PASS / FAIL，都必须执行。
+无论 PASS / FAIL / BLOCKED 都必须执行。
 
 先：
 
@@ -304,80 +446,119 @@ Codex 在验收模式下不得为了 PASS 擅自修改产品代码。
 正常退出灵机
 → 确认 lingji-core 退出
 → 确认 8766 / 8767 释放
-→ 卸载本轮挂载 DMG
+→ 卸载 DMG
 ```
 
-然后删除本轮产生的：
+然后清理本轮：
 
 ```text
 ACCEPTANCE_ROOT
-重复 Artifact ZIP
-重复 DMG
-临时解压内容
-fixture
-checkpoint
-临时 DataRoot
-临时 Qdrant
-临时 SQLite
-普通成功日志
-普通成功截图
+Artifact ZIP / DMG
+临时解压目录
+fixture / checkpoint
+runtime-data
+临时 Qdrant / SQLite
+普通成功日志 / 截图
 临时配置备份
-本轮临时 worktree
-无复用价值的本轮专用构建缓存/产物
+临时 worktree
+无复用价值的构建缓存/产物
 ```
 
-只保留：
+App 回滚规则：
+
+- 新 App PASS：旧 App 备份随任务根删除；
+- 新 App FAIL 且需回滚：先恢复旧 App并验证，再删除任务根。
+
+只长期保留：
 
 ```text
-/Applications/灵机.app 当前验收版本
+/Applications/灵机.app 当前有效版本
 主人正式 Production DataRoot
-主人明确要求长期保留的 Acceptance 数据
+主人明确要求保留的数据
 Obsidian Vault
 正式 Git 仓库
 最终 Markdown 验收报告
-脱敏公开证据摘要
-哈希清单
-主人明确要求保留的失败证据
+脱敏公开证据/哈希
+明确要求保留的失败证据
 ```
 
-本轮本地 DMG 默认不属于必须长期保存的核心文件；GitHub Artifact 可重复取得。若后续复验明确需要离线安装，只允许保留一个当前最新版 DMG。
-
-禁止清理任何无法确认归属的主人数据或其他软件缓存。
+不得删除其他软件缓存或归属不明的主人文件。
 
 ---
 
-# 8. 最终报告
+# 11. 清理后复查
 
-最终报告写入：
+必须确认：
 
 ```text
-docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_c10d255.md
+本轮 ACCEPTANCE_ROOT 不存在
+DMG 已卸载
+重复 App 不存在
+本轮临时 Runtime/Qdrant/SQLite 不存在
+本轮没有新建 ~/Documents/acceptance
+Production DataRoot / Vault 无非预期变化
+8766 / 8767 已释放
+LingJi/lingji-core 无孤儿进程
 ```
 
-报告至少包含：
+清理失败：
+
+```text
+BLOCKED_POST_CLEANUP
+```
+
+不得标记完整 PASS。
+
+---
+
+# 12. 最终报告与回传
+
+写入：
+
+```text
+docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_c7734cdb.md
+```
+
+提交到：
+
+```text
+acceptance/macos-m5-autopilot-phase3-c7734cdb
+```
+
+至少包含：
 
 ```text
 task_id
 product_commit
 artifact_id
 dmg_sha256
-macOS version
-machine architecture
+macOS_version
+machine_architecture
 precheck_result
 artifact_integrity_result
-install_result
+embedded_commit_exact
+install_mode
+post_install_codesign
+rollback_required
+acceptance_root_isolated
+unexpected_write_count
+unexpected_paths
 first_launch_result
 runtime_result
 api_result
+autodiscovery_result
+codex_work_record_clarity
+owner_decision_vs_system_issue_clarity
+technical_detail_visibility
 ui_owner_observation
 restart_result
 production_pollution_count
 cleanup_after
 local_temp_root_absent
-verdict
+retained_core_files
 failed_step
 root_cause_if_known
-retained_core_files
+verdict
 ```
 
 结论只允许：
@@ -391,26 +572,33 @@ BLOCKED
 只有同时满足：
 
 ```text
-核心验收项通过
+精确 Artifact 身份通过
+whole-bundle 安装与签名通过
+task-scoped 物理隔离通过
+Runtime/API/生命周期通过
+主人确认 Phase 3 UI/自动化体验可接受
 正式数据污染 = 0
-清理完成
-本轮临时根目录不存在
+本轮垃圾清理完成
+任务根不存在
+远程报告已提交并复读
 ```
 
 才能标记 PASS。
 
 ---
 
-# 9. 给 Codex 的最后约束
+# 13. 给 Codex 的最后约束
 
-读完本文件后直接开始执行。
+读完本文件后直接执行。
 
-以下信息已经提供，禁止再向用户索要：
+以下信息已经提供，**禁止再次向用户索要**：
 
 ```text
 task_id
 repository
 product_commit
+product_branch
+PR
 platform
 target
 workflow run
@@ -419,8 +607,16 @@ artifact id
 DMG name
 DMG SHA256
 验收协议
-临时目录
+ACCEPTANCE_ROOT
+LINGJI_ACCEPTANCE_DATA_ROOT
+安装替换规则
 报告路径
+报告分支
 ```
 
-只有真正需要主人肉眼判断 UI，或出现本文件定义的外部阻断时，才与主人交互。
+只有以下两种情况才与主人交互：
+
+1. 需要主人肉眼判断 UI / 自动化程度；
+2. 出现本文件定义的真实外部阻断。
+
+除此之外全部由 Codex 自行完成。
