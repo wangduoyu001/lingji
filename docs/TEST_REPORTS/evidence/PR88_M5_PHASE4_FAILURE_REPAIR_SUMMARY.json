@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "task_id": "PR88-M5-PHASE4-FAILURE-REPAIR-171091FE",
+  "product_commit": "171091fe764c6653cdc7325b4a1a71e0b7800822",
+  "verdict": "FAIL",
+  "reconstructed_failure_report": true,
+  "blocking_defects": [
+    "M5-IDENTITY-002",
+    "M5-UX-003",
+    "M5-ISOLATION-002"
+  ],
+  "secret_export_count": 0
+}

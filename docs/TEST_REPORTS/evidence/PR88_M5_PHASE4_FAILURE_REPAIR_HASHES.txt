@@ -1,0 +1,4 @@
+# Rejected Artifact identity; this file deliberately contains no secret or local path.
+product_commit 171091fe764c6653cdc7325b4a1a71e0b7800822
+artifact_id 9102748834
+dmg_sha256 78c1b01abbe44b2800f4cfc3af5020f96d66feaa0682f909c4e2fc86d35fed9f
