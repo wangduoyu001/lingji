@@ -44,10 +44,14 @@ ux_local_checkpoint: PASS_FOCUSED_TEST_AND_FRONTEND_BUILD
 ux_remote_product_head_verified: false
 acceptance_isolation_root_cause_fixed: false
 isolation_guard_branch: fix/pr88-m5-isolation-171091fe
-isolation_guard_head: 3a007091359415d58ce3352b22d0229b450016ba
-isolation_guard_checkpoint: PASS_SIDECAR_OVERRIDE_ENFORCED
-isolation_launch_override_root_cause: PENDING
-three_real_failure_regressions: NOT_RUN
+isolation_guard_head: 41a4ba832ab9253ec3bfb53fad89578cdfdfb79f
+isolation_guard_checkpoint: PASS_PACKAGED_DMG_DESKTOP_LAUNCH_CONTRACT_PUBLISHED
+isolation_sidecar_override_guard: PASS_FOCUSED_REGRESSION
+isolation_packaged_dmg_launch_gate: PUBLISHED_NOT_RUN_REMOTE_MACOS_GATE
+isolation_first_second_launch_contract: PUBLISHED
+isolation_home_documents_acceptance_absent_contract: PUBLISHED
+isolation_launch_override_root_cause: PENDING_REMOTE_GATE_EVIDENCE
+three_real_failure_regressions: NOT_RUN_FINAL_HEAD
 auth_sync_contract_path: docs/AUTH_CREDENTIAL_STATE_SYNC.md
 auth_state_sync_implemented: false
 auth_status_regressions: NOT_RUN
@@ -115,15 +119,14 @@ identity_root_cause_fixed = false
 
 ### M5-ISOLATION-002
 
-远程修复分支已经存在：
+远程修复分支最新状态：
 
 ```text
 branch = fix/pr88-m5-isolation-171091fe
-head = 3a007091359415d58ce3352b22d0229b450016ba
-parent checkpoint = 90b7a70de2a5053c1224ee810949256a378f582a
+head = 41a4ba832ab9253ec3bfb53fad89578cdfdfb79f
 ```
 
-当前已关闭一个明确绕过入口：
+此前已经关闭一个明确绕过入口：
 
 ```text
 acceptance 模式下如果存在 LINGJI_ACCEPTANCE_DATA_ROOT
@@ -132,54 +135,68 @@ Sidecar 必须使用完全相同的目录
 对应回归先 FAIL、修复后 PASS
 ```
 
-这只是 guard，不是原始真机缺陷的完整根因。当前仍保持：
+最新提交把隔离验证提升到真实 Desktop 打包启动合同：
+
+```text
+从最终生成的 DMG 挂载真实 App
+直接启动 App 主程序，而不是只调用 Sidecar 函数
+HOME 指向 task-scoped isolated-home
+LINGJI_ACCEPTANCE_DATA_ROOT 指向 task-scoped runtime-data
+等待真实 8766 token + authenticated /api/runtime/ping
+停止 Desktop / Runtime
+再次从同一最终 DMG App 启动第二次
+再次完成 authenticated ping
+验证 storage / logs / runtime / raw / qdrant 均位于 task root
+验证 isolated HOME 下不存在 Documents/acceptance
+```
+
+这关闭了“只测 `configure_packaged_environment()`，却没测 Desktop → RuntimeManager → Sidecar 启动链”的验收缺口。
+
+但截至当前，这个新的 macOS Gate 合同只是**已经发布到远程修复分支**；还没有在真实 macOS GitHub Runner 上完成最终 Gate，也没有新的统一产品 Head / Artifact。因此仍保持：
 
 ```text
 acceptance_isolation_root_cause_fixed = false
-isolation_launch_override_root_cause = PENDING
+isolation_packaged_dmg_launch_gate = PUBLISHED_NOT_RUN_REMOTE_MACOS_GATE
+isolation_launch_override_root_cause = PENDING_REMOTE_GATE_EVIDENCE
 ```
 
-下一步必须继续沿真实启动链定位为什么原始 M5 启动没有把 override 正确带到 packaged Sidecar：
-
-```text
-Tauri RuntimeManager
-→ bootstrap / saved environment
-→ child process environment
-→ packaged Sidecar command
-→ run_packaged_control_api.py
-→ WorkspaceResolver / Settings fallback
-```
-
-必须新增**与正式打包启动等价**的首启 + 二启集成测试，证明 override 从 Desktop 启动入口一直传到 Sidecar，而不是只测 `configure_packaged_environment()` 的拒绝逻辑。
+只有远程 macOS Gate 在统一最终 Head 上真实跑过最终 DMG 首启 + 二启并 PASS，且任务根外 acceptance 写入为 0，才允许关闭 `M5-ISOLATION-002`。
 
 ## 4. 下一执行顺序
 
 不要生成中间 Artifact，也不要重新做 M5 真机验收。继续：
 
 ```text
-A. 完整关闭 M5-ISOLATION-002
-   → 找到启动链 override 丢失/替换点
-   → packaged Desktop/RuntimeManager/Sidecar 首启 + 二启隔离回归
-   → 任务根外 acceptance 写入 = 0
-
-B. 实现认证状态安全同步
+A. 实现认证状态安全同步
    → OS CredentialStore
    → lingji_state.db 非敏感 AuthStatus
    → Desktop / Autopilot 只展示认证结论
    → allowlist sanitized snapshot
    → secret_export_count = 0
 
-C. 统一收口已有 UX + Identity + Isolation 修改
+B. 统一收口 UX + Identity + Isolation + Auth
    → 一个新的精确产品 Head
    → 三项真实失败回归 PASS
    → AuthStatus 回归 PASS
    → Python / Desktop / Rust / MCP 全量
    → P0 Windows + Windows Release
    → macOS Release Gate
+
+C. 只有 macOS Gate 真实执行最终 DMG 后再关闭隔离缺陷
+   → 最终 DMG App 首启 PASS
+   → 最终 DMG App 二启 PASS
+   → authenticated 8766 ping PASS
+   → runtime directories 全在 task root
+   → isolated HOME/Documents/acceptance 不存在
+   → 任务根外 acceptance 写入 = 0
+
+D. 最后生成唯一新 Artifact
    → 新 macOS Artifact / ZIP / DMG 哈希
    → 独立下载复核最终 DMG 内 metadata
    → 更新 M5 固定任务单
 ```
+
+如果统一后的远程 macOS Gate 再现 `~/Documents/acceptance`，则必须继续追 RuntimeManager / bootstrap / child environment 的实际丢失点；不得删除或放宽这条 Gate 来换 PASS。
 
 ## 5. 当前已知失败身份
 
