@@ -30,10 +30,10 @@ for (const token of [
   "workspace-browser-grid",
   "project-rail-card",
   "session-card",
-  "Session 详情",
+  "工作记录详情",
   "activity-timeline",
   "Context Pack",
-  "Memory Inspector",
+  "查看这条记录如何进入记忆",
 ]) assert.ok(workspace.includes(token), `Codex Workspace is missing ${token}`);
 
 for (const token of [
