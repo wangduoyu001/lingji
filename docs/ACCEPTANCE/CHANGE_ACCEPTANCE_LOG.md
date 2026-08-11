@@ -51,6 +51,77 @@
 
 ---
 
+## 2026-08-11 · PR #88 · Owner Autopilot UI 与本机 AI 自动发现
+
+- 产品分支：`feature/owner-autopilot-ui-codexpp`
+- 产品 Commit：`b34a8752507c99ef929e98769fe37276166aa98d`
+- 影响模块：桌面首页、首次启动引导、Codex 工作记录、AI 工具元数据发现、ChatGPT/Codex 导出候选规划与授权导入、Desktop smoke
+- 风险等级：P1
+- 用户可感知变化：首页优先解释“发现了什么、正在做什么、需要主人决定什么”；Codex 的 Session 计数改为“工作记录”并解释来源；首次启动不再要求主人先理解 DataRoot、Qdrant 或 Windows 专属非 C 盘术语。
+- 数据或安全边界变化：自动发现只读取已知位置和文件元数据；不读取真实对话正文、不跟随符号链接、不修改外部 AI 客户端、不自动批准永久记忆；读取发现的导出包前仍需要主人一次明确授权。
+
+### 新增或修改的自动验收
+
+- [x] `python -m pytest -q tests/test_assistant_hub_discovery.py tests/test_assistant_hub_imports.py`：本地 `9 passed`，验证只读发现、路径脱敏、候选白名单、候选失效重验与非相关文件排除。
+- [x] `node desktop/lingji-control/scripts/assistant-autopilot-smoke.mjs`：验证首页自动发现、15 秒轮询、授权边界、Codex 工作记录解释与高级技术信息折叠合同。
+- [x] Python `py_compile` 与 TypeScript `transpileModule`：验证新增 Python 与 TS/TSX 可解析。
+- [ ] GitHub `tests`：Python 3.11/3.12、Windows Python、Desktop UI smoke/build、MCP 与其他仓库回归必须 PASS。
+- [ ] GitHub `P0 Windows Gate`：不得破坏已验收的 Windows Runtime、路径、安装和 UI 基线。
+- [ ] GitHub `macOS Desktop Gate`：Apple Silicon 构建、Tauri、Sidecar 与 DMG 门禁必须 PASS。
+- [ ] `acceptance-doc-sync` 与 `local-execution-handoff`：本条记录与后续真机任务必须通过治理门禁。
+
+### 新增或修改的真机验收
+
+- [ ] 使用 PR #88 精确 Head 生成的新 macOS arm64 Artifact 覆盖安装；首次打开必须只给出一个可理解的主要动作“选择存放位置 / 开始使用灵机”，DataRoot、acceptance 等技术细节默认折叠。
+- [ ] Mac 首次使用页面不得出现要求主人理解“非 C 盘”的 Windows 专属主文案；目录选择、保存配置、启动 Core 和重新打开必须可完成。
+- [ ] 首页启动后无需点击“扫描”即可自动识别本机 Codex；若存在 Claude Code / WorkBuddy，也应只读显示其真实识别状态。
+- [ ] 自动发现阶段检查日志/API/测试资料，确认真实对话正文读取次数为 0，Core Memory 自动新增为 0。
+- [ ] 准备一个任务专用的合成 ChatGPT/Codex 导出候选：UI 应先显示文件名/大小等元数据，主人一次授权后立即进入正式处理队列，不再要求输入路径或二次提交。
+- [ ] 打开 Codex 工作记录页：若显示 `2`，页面必须明确说明这是 2 条本机识别到的 Codex Session 工作记录，不是灵机新建的 2 个聊天窗口；列表应自动刷新。
+- [ ] Windows 使用同一代码基线复验首次配置、自动发现、首页、Codex 工作记录和授权导入，不得因 Mac 文案优化破坏 Windows 路径选择或 Runtime 启动。
+
+### 主人肉眼确认
+
+- [ ] 主人首次打开后不看技术文档，能够直接理解灵机下一步会自己做什么以及自己只需要决定什么。
+- [ ] 主人在首页能快速回答四个问题：`发现了什么`、`正在做什么`、`已经自动处理了什么`、`现在有什么必须由我决定`。
+- [ ] 主人看到 Codex 工作记录数量时不再把它理解为灵机莫名创建的聊天窗口。
+- [ ] Qdrant、Embedding、DataRoot、端口、MCP 等技术信息不会占据日常主流程，需要时仍能从“系统健康细节 / 高级工具”查看。
+
+### 回归项
+
+- [ ] 未经主人授权不得读取任何真实 ChatGPT/Codex 导出正文。
+- [ ] 自动扫描不得递归全盘、不得跟随符号链接、不得向前端暴露本机绝对路径。
+- [ ] 不允许自动批准永久记忆；现有人工记忆审核链保持有效。
+- [ ] Runtime、Qdrant、SQLite、MCP、Sidecar 所有权与生命周期合同不得因本轮 UI/发现优化改变。
+- [ ] Windows 与 macOS 使用同一产品代码；不得为 Mac 创建独立业务分支或复制核心逻辑。
+- [ ] 自动发现失败时 UI 必须说明会继续重试，不得把未知/失败显示为“全部正常”。
+
+### 清理与回滚
+
+- 临时数据前缀：后续 M5 / Windows 真机任务使用任务 ID 独立前缀，不使用主人 Production 根目录。
+- 覆盖安装或迁移方式：使用精确 PR #88 Artifact 覆盖当前验收版本；不卸载主人正式数据。
+- 临时备份删除条件：真机报告和远程回执确认后按现有任务清理合同删除。
+- 测试数据清理方式：只删除本轮任务创建的合成导出包、临时 DataRoot、日志和安装验证残留；不得删除主人真实 Vault、Production 数据或 AI 客户端配置。
+- 回滚：回退 PR #88 的 Owner Autopilot UI / assistant_hub 变更；不得通过关闭 acceptance 门禁或放宽内容授权边界回滚。
+
+### 不在范围
+
+- Codex 原始 Session / JSONL 的静默正文自动导入。
+- Claude Code / WorkBuddy 对话正文导入。
+- 自动下载或安装 Ollama / Embedding 模型。
+- 自动重建 Production Qdrant。
+- 自动批准永久记忆。
+- 修改外部 AI 客户端配置而不经主人授权。
+
+### 最终报告
+
+- 实施与自动测试报告：`docs/TEST_REPORTS/OWNER_AUTOPILOT_UI_CODEXPP_IMPLEMENTATION.md`
+- 真机报告：在精确 CI / Artifact 通过后创建 `docs/TEST_REPORTS/MACOS_M5_OWNER_AUTOPILOT_ACCEPTANCE_<short-sha>.md`
+- 真机报告分支：`acceptance/macos-m5-owner-autopilot-<short-sha>`
+- PR #88 保持 Draft，直到 CI、Mac/Windows 回归与主人可理解性检查完成。
+
+---
+
 ## 2026-08-01 · PR #60 后续 · 代码发布验证临时目录安全清理修复
 
 - 产品分支：`fix/cleanup-code-validation-workspace`
