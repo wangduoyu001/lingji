@@ -43,6 +43,10 @@ first_run_ux_root_cause_fixed: false
 ux_local_checkpoint: PASS_FOCUSED_TEST_AND_FRONTEND_BUILD
 ux_remote_product_head_verified: false
 acceptance_isolation_root_cause_fixed: false
+isolation_guard_branch: fix/pr88-m5-isolation-171091fe
+isolation_guard_head: 3a007091359415d58ce3352b22d0229b450016ba
+isolation_guard_checkpoint: PASS_SIDECAR_OVERRIDE_ENFORCED
+isolation_launch_override_root_cause: PENDING
 three_real_failure_regressions: NOT_RUN
 auth_sync_contract_path: docs/AUTH_CREDENTIAL_STATE_SYNC.md
 auth_state_sync_implemented: false
@@ -72,24 +76,11 @@ GitHub 远程已直接复读并确认：
 PR #88 FAIL / DO NOT MERGE 评论 ID = 5254742686
 ```
 
-因此以下状态已经成立：
-
-```text
-source_failure_report_read = true
-remote_failure_report_verified = true
-remote_branch_verified = true
-remote_commit_verified = true
-remote_report_verified = true
-pr_comment_verified = true
-```
-
 这只表示失败证据闭环，不表示任何产品缺陷已经关闭。
 
 ## 3. 当前开发检查点
 
 ### M5-UX-003
-
-本机 Codex 已完成第一条 UX 修复：
 
 ```text
 手动选择资料目录不再与“自动准备”并列
@@ -105,38 +96,71 @@ first_run_ux_root_cause_fixed = false
 ux_remote_product_head_verified = false
 ```
 
-因为该修改尚未进入最终产品 Head、完整 CI 和新 Artifact。
+必须等统一最终产品 Head、完整 CI 和新 Artifact。
 
 ### M5-IDENTITY-002
-
-远程修复分支已经存在：
 
 ```text
 branch = fix/pr88-m5-phase4-171091fe
 head = 90b7a70de2a5053c1224ee810949256a378f582a
 ```
 
-已发布的身份门禁改造包括：
+已发布：最终挂载 DMG 的真实 App 导出 release metadata、精确 Commit 比对、主程序/Sidecar arm64 校验、build 前与最终 DMG App metadata 比较，不再只依赖 `strings | grep`。
+
+当前环境没有 cargo，Rust 本机测试未执行，因此仍保持：
 
 ```text
-从最终挂载 DMG 的真实 App 导出 release metadata
-验证 metadata.commit == expected exact product Head
-验证主程序 arm64
-验证 Sidecar arm64 且来自同一 bundle
-比较 build 前 App 与最终 DMG App metadata
-不再只依赖 strings | grep
+identity_root_cause_fixed = false
 ```
 
-当前环境没有 cargo，因此 Rust 本机测试未执行；macOS UI / release 合同焦点测试已通过。这个检查点**不能**提前写成 `identity_root_cause_fixed=true`，必须等最终统一 Head 上完整 Rust/Tauri、macOS Gate 和新 Artifact 实证。
+### M5-ISOLATION-002
+
+远程修复分支已经存在：
+
+```text
+branch = fix/pr88-m5-isolation-171091fe
+head = 3a007091359415d58ce3352b22d0229b450016ba
+parent checkpoint = 90b7a70de2a5053c1224ee810949256a378f582a
+```
+
+当前已关闭一个明确绕过入口：
+
+```text
+acceptance 模式下如果存在 LINGJI_ACCEPTANCE_DATA_ROOT
+Sidecar 必须使用完全相同的目录
+传入 ~/Documents/acceptance 或其他不同 data_root 时直接拒绝
+对应回归先 FAIL、修复后 PASS
+```
+
+这只是 guard，不是原始真机缺陷的完整根因。当前仍保持：
+
+```text
+acceptance_isolation_root_cause_fixed = false
+isolation_launch_override_root_cause = PENDING
+```
+
+下一步必须继续沿真实启动链定位为什么原始 M5 启动没有把 override 正确带到 packaged Sidecar：
+
+```text
+Tauri RuntimeManager
+→ bootstrap / saved environment
+→ child process environment
+→ packaged Sidecar command
+→ run_packaged_control_api.py
+→ WorkspaceResolver / Settings fallback
+```
+
+必须新增**与正式打包启动等价**的首启 + 二启集成测试，证明 override 从 Desktop 启动入口一直传到 Sidecar，而不是只测 `configure_packaged_environment()` 的拒绝逻辑。
 
 ## 4. 下一执行顺序
 
 不要生成中间 Artifact，也不要重新做 M5 真机验收。继续：
 
 ```text
-A. 关闭 M5-ISOLATION-002
-   → 定位谁绕过 LINGJI_ACCEPTANCE_DATA_ROOT 写入 ~/Documents/acceptance
-   → 增加 packaged bootstrap + Sidecar 首次/再次启动隔离集成回归
+A. 完整关闭 M5-ISOLATION-002
+   → 找到启动链 override 丢失/替换点
+   → packaged Desktop/RuntimeManager/Sidecar 首启 + 二启隔离回归
+   → 任务根外 acceptance 写入 = 0
 
 B. 实现认证状态安全同步
    → OS CredentialStore
@@ -145,8 +169,8 @@ B. 实现认证状态安全同步
    → allowlist sanitized snapshot
    → secret_export_count = 0
 
-C. 统一收口已有 UX + Identity 修改
-   → 合并到一个新的精确产品 Head
+C. 统一收口已有 UX + Identity + Isolation 修改
+   → 一个新的精确产品 Head
    → 三项真实失败回归 PASS
    → AuthStatus 回归 PASS
    → Python / Desktop / Rust / MCP 全量
