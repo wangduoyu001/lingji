@@ -79,7 +79,7 @@ assert.match(cargo, /serde_json = "1"/);
 
 for (const token of [
   "mod runtime_bootstrap", "mod runtime_manager",
-  ".manage(RuntimeManager::default())", "runtime_bootstrap_status", "runtime_configure",
+  ".manage(RuntimeManager::default())", "runtime_bootstrap_status", "runtime_autoconfigure", "runtime_configure",
   "guarded_runtime_status", "guarded_runtime_ensure", "guarded_runtime_stop",
   "guarded_runtime_restart", "quarantine_inherited_environment", "require_configured",
 ]) assert.ok(rustMain.includes(token), `Rust app is missing ${token}`);
@@ -88,14 +88,18 @@ assert.equal(rustMain.includes("mod windowless_acceptance"), false, "Desktop mus
 
 for (const token of [
   "desktop-bootstrap.json", "BOOTSTRAP_SCHEMA_VERSION: u32 = 2", "base_data_root",
-  "active_workspace", "owner_confirmed", "production", "acceptance",
+  "active_workspace", "owner_confirmed", "auto_selected", "production", "acceptance",
+  "LINGJI_ACCEPTANCE_DATA_ROOT", "acceptance_override", "automatic_default",
   "c_drive_write_detected", "inherited_environment_ignored", "LINGJI_OWNER_DATA_ROOT",
   "LINGJI_WORKSPACE", "env::remove_var(OWNER_DATA_ROOT_ENV)",
-  "env::remove_var(WORKSPACE_ENV)", "Stop the current LingJi runtime",
+  "env::remove_var(WORKSPACE_ENV)", "Stop the current LingJi runtime", "configure_default",
 ]) assert.ok(bootstrap.includes(token), `Runtime bootstrap is missing ${token}`);
 assert.equal(bootstrap.includes("fn environment_status"), false, "Ambient environment must never configure the installed Desktop");
-assert.match(bootstrap, /legacy_bootstrap_requires_owner_reconfirmation/);
-assert.match(bootstrap, /current_bootstrap_requires_explicit_owner_confirmation/);
+assert.match(bootstrap, /legacy_bootstrap_requires_repreparation/);
+assert.match(bootstrap, /current_bootstrap_rejects_untrusted_selection/);
+assert.match(bootstrap, /current_owner_confirmed_bootstrap_is_accepted/);
+assert.match(bootstrap, /current_automatic_bootstrap_is_accepted/);
+assert.match(bootstrap, /persisted acceptance workspace is never reused/);
 assert.match(bootstrap, /write_saved_config/);
 assert.match(bootstrap, /json\.bak/);
 
@@ -118,10 +122,11 @@ for (const token of ["CREATE_NO_WINDOW", "STARTF_USESHOWWINDOW", "SW_HIDE"]) {
 }
 
 for (const command of [
-  "runtime_bootstrap_status", "runtime_configure", "guarded_runtime_ensure",
+  "runtime_bootstrap_status", "runtime_autoconfigure", "runtime_configure", "guarded_runtime_ensure",
   "guarded_runtime_status", "guarded_runtime_stop", "guarded_runtime_restart",
 ]) assert.ok(connection.includes(`"${command}"`), `Desktop connection hook is missing ${command}`);
 assert.match(connection, /configuration_required/);
+assert.match(connection, /automaticBootstrap/);
 assert.match(connection, /runtimeBusy/);
 assert.match(connection, /autoRecoveryActive/);
 assert.match(connection, /ensureConnection\(false\)/);
@@ -134,10 +139,12 @@ assert.match(shell, /停止核心/);
 assert.match(shell, /重启核心/);
 assert.match(shell, /data_root_display/);
 assert.match(shell, /外部进程/);
-assert.match(boundary, /DATA ROOT REQUIRED/);
-assert.match(boundary, /保存配置并启动核心/);
+assert.match(boundary, /自动准备未完成/);
+assert.match(boundary, /让灵机重新自动准备/);
+assert.match(boundary, /手动选择位置/);
 assert.match(boundary, /恢复运行/);
-assert.match(boundary, /AUTO RECOVERY/);
+assert.match(boundary, /自动恢复/);
+assert.equal(boundary.includes("首次使用"), false, "Manual first-use wizard must not be the normal product contract");
 assert.equal(boundary.includes(">启动核心</button>"), false, "Routine Sidecar startup must remain automatic");
 
 assert.match(releaseHook, /runtime_data_root/);

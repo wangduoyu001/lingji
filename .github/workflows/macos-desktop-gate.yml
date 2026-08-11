@@ -30,8 +30,19 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout
+      - name: Checkout exact product source
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify exact source identity
+        run: |
+          set -euo pipefail
+          EXPECTED="${{ github.event.pull_request.head.sha || github.sha }}"
+          ACTUAL="$(git rev-parse HEAD)"
+          echo "expected=$EXPECTED"
+          echo "actual=$ACTUAL"
+          test "$ACTUAL" = "$EXPECTED"
 
       - name: Verify Apple Silicon runner
         run: |
@@ -90,11 +101,21 @@ jobs:
       - name: Build Apple Silicon app bundle
         working-directory: desktop/lingji-control
         env:
-          LINGJI_BUILD_COMMIT: ${{ github.sha }}
+          LINGJI_BUILD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           LINGJI_BUILD_CHANNEL: ci-macos
           LINGJI_BUILD_TARGET: aarch64-apple-darwin
           LINGJI_BUILD_SIGNED: 'false'
         run: npx tauri build --config src-tauri/tauri.sidecar.conf.json --bundles app --target aarch64-apple-darwin
+
+      - name: Verify embedded product identity
+        run: |
+          set -euo pipefail
+          EXPECTED="${{ github.event.pull_request.head.sha || github.sha }}"
+          BUNDLE_ROOT="desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle"
+          APP_DIR="$(find "$BUNDLE_ROOT/macos" -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          MAIN_BINARY="$(find "$APP_DIR/Contents/MacOS" -maxdepth 1 -type f | head -n 1)"
+          test -n "$MAIN_BINARY"
+          strings "$MAIN_BINARY" | grep -F "$EXPECTED" >/dev/null
 
       - name: Verify packaged sidecar contract
         run: |
@@ -148,7 +169,7 @@ jobs:
       - name: Create DMG from verified app build
         working-directory: desktop/lingji-control
         env:
-          LINGJI_BUILD_COMMIT: ${{ github.sha }}
+          LINGJI_BUILD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
           LINGJI_BUILD_CHANNEL: ci-macos
           LINGJI_BUILD_TARGET: aarch64-apple-darwin
           LINGJI_BUILD_SIGNED: 'false'
@@ -157,6 +178,7 @@ jobs:
       - name: Mount and verify final DMG
         run: |
           set -euo pipefail
+          EXPECTED="${{ github.event.pull_request.head.sha || github.sha }}"
           BUNDLE_ROOT="desktop/lingji-control/src-tauri/target/aarch64-apple-darwin/release/bundle"
           DMG="$(find "$BUNDLE_ROOT/dmg" -maxdepth 1 -name '*.dmg' -type f | head -n 1)"
           test -n "$DMG"
@@ -169,6 +191,8 @@ jobs:
           test -x "$APP_DIR/Contents/Resources/lingji-core.exe"
           test -d "$APP_DIR/Contents/Resources/lingji_core_lib"
           codesign --verify --deep --strict "$APP_DIR"
+          MAIN_BINARY="$(find "$APP_DIR/Contents/MacOS" -maxdepth 1 -type f | head -n 1)"
+          strings "$MAIN_BINARY" | grep -F "$EXPECTED" >/dev/null
           CONTRACT_ROOT="$RUNNER_TEMP/lingji-dmg-contract"
           mkdir -p "$CONTRACT_ROOT"
           "$APP_DIR/Contents/Resources/lingji-core.exe" \

@@ -102,6 +102,11 @@ fn runtime_bootstrap_status() -> RuntimeBootstrapStatus {
 }
 
 #[tauri::command]
+fn runtime_autoconfigure() -> Result<RuntimeBootstrapStatus, String> {
+    runtime_bootstrap::configure_default()
+}
+
+#[tauri::command]
 fn runtime_configure(
     base_data_root: String,
     workspace: String,
@@ -161,7 +166,9 @@ async fn guarded_runtime_restart(
 fn main() {
     prepare_platform_environment();
     runtime_bootstrap::quarantine_inherited_environment();
-    let _ = runtime_bootstrap::apply_saved_environment();
+    let _ = runtime_bootstrap::apply_saved_environment()
+        .or_else(|_| runtime_bootstrap::configure_default());
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(RuntimeManager::default())
@@ -169,6 +176,7 @@ fn main() {
             control_credentials,
             release_metadata,
             runtime_bootstrap_status,
+            runtime_autoconfigure,
             runtime_configure,
             guarded_runtime_status,
             guarded_runtime_ensure,

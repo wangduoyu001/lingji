@@ -45,8 +45,10 @@ jobs:
         working-directory: desktop/lingji-control
 
     steps:
-      - name: Checkout
+      - name: Checkout exact product source
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v7
@@ -80,6 +82,8 @@ jobs:
           $config = Get-Content "src-tauri/tauri.conf.json" -Raw -Encoding UTF8 | ConvertFrom-Json
           $version = [string]$config.version
           $commit = "${{ github.event.pull_request.head.sha || github.sha }}"
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $commit) { throw "Checkout identity mismatch: expected $commit actual $actual" }
           $eventName = "${{ github.event_name }}"
           $channel = "pr"
           if ($eventName -eq "workflow_dispatch") {
