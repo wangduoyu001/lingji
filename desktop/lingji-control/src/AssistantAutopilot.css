@@ -169,6 +169,60 @@
   font-size: 9px;
 }
 
+.assistant-autopilot-compact {
+  gap: 11px;
+  padding: 15px 16px;
+}
+
+.assistant-autopilot-tool-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.assistant-tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 6px 9px;
+  color: var(--text-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(9,12,17,.28);
+  font: inherit;
+  font-size: 10px;
+}
+
+.assistant-tool-chip:not(:disabled) { cursor: pointer; }
+.assistant-tool-chip:disabled { opacity: 1; }
+.assistant-tool-chip.muted { color: var(--muted-2); }
+.assistant-tool-chip .status-dot { width: 6px; height: 6px; }
+
+.assistant-autopilot-details {
+  display: grid;
+  gap: 10px;
+  padding: 0 10px 10px;
+}
+
+.assistant-autopilot-details .assistant-autopilot-import-grid { padding: 0; }
+
+.assistant-autopilot-safety {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted-2);
+  font-size: 9px;
+}
+
+.assistant-autopilot-safety span {
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(9,12,17,.24);
+}
+
 .overview-technical-summary {
   overflow: hidden;
   border: 1px solid var(--line);
@@ -224,6 +278,93 @@
   line-height: 1.55;
 }
 
+.current-work-compact {
+  display: grid;
+  gap: 10px;
+  padding: 15px 16px;
+}
+
+.current-work-description {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.current-work-inline-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.current-work-inline-facts > span {
+  display: grid;
+  gap: 3px;
+  min-width: 140px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(9,12,17,.24);
+}
+
+.current-work-inline-facts small { color: var(--muted-2); font-size: 8px; }
+.current-work-inline-facts strong { font-size: 10px; font-weight: 600; }
+.current-work-inline-facts .warning { border-color: rgba(230,184,107,.22); background: var(--warning-soft); }
+
+.current-work-details {
+  border-top: 1px solid var(--line);
+}
+
+.current-work-details summary {
+  padding-top: 9px;
+  cursor: pointer;
+  color: var(--muted-2);
+  font-size: 9px;
+}
+
+.current-work-details > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 8px;
+  color: var(--muted-2);
+  font-size: 9px;
+}
+
+.attention-system-details {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(9,12,17,.18);
+}
+
+.attention-system-details > summary {
+  padding: 11px 13px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.attention-system-list {
+  display: grid;
+  gap: 7px;
+  padding: 0 10px 10px;
+}
+
+.attention-system-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(9,12,17,.24);
+}
+
+.attention-system-card strong { font-size: 10px; }
+.attention-system-card p { margin: 4px 0 0; color: var(--muted-2); font-size: 9px; line-height: 1.5; }
+
 @media (max-width: 1240px) {
   .assistant-autopilot-summary,
   .assistant-autopilot-tools,
@@ -235,7 +376,8 @@
 @media (max-width: 780px) {
   .assistant-autopilot-heading,
   .assistant-autopilot-action,
-  .assistant-autopilot-footer {
+  .assistant-autopilot-footer,
+  .attention-system-card {
     align-items: flex-start;
     flex-direction: column;
   }

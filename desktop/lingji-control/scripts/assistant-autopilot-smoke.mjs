@@ -6,9 +6,11 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
-const [panel, overview, codex, api, discovery, imports, styles] = await Promise.all([
+const [panel, currentWork, overview, attention, codex, api, discovery, imports, styles] = await Promise.all([
   read("../src/components/AssistantDiscoveryPanel.tsx"),
+  read("../src/components/CurrentWorkPanel.tsx"),
   read("../src/pages/OverviewPage.tsx"),
+  read("../src/pages/AttentionPage.tsx"),
   read("../src/pages/CodexWorkspacePage.tsx"),
   read("../../../src/control/capture_api.py"),
   read("../../../src/assistant_hub/discovery.py"),
@@ -22,11 +24,30 @@ assert.match(panel, /没有你的允许，不会读取真实对话正文/);
 assert.match(panel, /允许读取并自动整理/);
 assert.match(panel, /AUTHORIZE_ASSISTANT_IMPORT_/);
 assert.match(panel, /AUTHORIZE_SELECTED_ASSISTANT_IMPORT/);
+assert.match(panel, /onOwnerDecisionCount/);
+assert.match(panel, /查看发现详情与手动导入/);
+assert.match(panel, /无需手动刷新/);
+assert.equal(panel.includes("assistant-autopilot-summary"), false, "Discovery summary tiles must not dominate the daily UI");
 assert.equal(panel.includes("setInterval"), false, "Assistant discovery should reuse the polling resource");
 
-assert.match(overview, /AssistantDiscoveryPanel/);
-assert.match(overview, /只有读取真实内容、写入永久记忆或执行不可逆操作时才需要你决定/);
+assert.match(currentWork, /onPendingReviewCount/);
+assert.match(currentWork, /Codex 工作记录/);
+assert.match(currentWork, /没有前台任务；自动发现、状态检查和维护仍在后台继续/);
+assert.match(currentWork, /current-work-details/);
+
+assert.match(overview, /ownerDecisionCount/);
+assert.match(overview, /systemIssueCount/);
+assert.match(overview, /后台处理/);
+assert.match(overview, /不会冒充成你的决策/);
+assert.match(overview, /只有读取真实内容、写入永久记忆、删除或重建数据等/);
 assert.match(overview, /系统健康细节/);
+
+assert.match(attention, /\/api\/assistant-hub\/status/);
+assert.match(attention, /AI 历史资料等待读取授权/);
+assert.match(attention, /是否重建向量索引需要确认/);
+assert.match(attention, /普通故障、重试和诊断不再混进你的决策数量/);
+assert.match(attention, /系统异常与自动处理/);
+assert.match(attention, /你现在不用做任何决定/);
 
 assert.match(codex, /Codex 工作记录/);
 assert.match(codex, /不是灵机新建了聊天窗口/);
@@ -52,8 +73,12 @@ assert.match(imports, /resolve_authorized_candidate/);
 
 for (const token of [
   ".assistant-autopilot-panel",
-  ".assistant-autopilot-summary",
+  ".assistant-autopilot-tool-strip",
+  ".assistant-tool-chip",
   ".assistant-autopilot-action",
+  ".current-work-inline-facts",
+  ".current-work-details",
+  ".attention-system-details",
   ".overview-technical-summary",
   ".runtime-advanced-setup",
   ".codex-session-explainer",

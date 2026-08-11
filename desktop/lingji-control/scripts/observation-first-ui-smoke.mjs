@@ -75,7 +75,9 @@ assert.match(connection, /后台自动恢复已暂停/);
 
 assert.match(overview, /灵机自动驾驶/);
 assert.match(overview, /AssistantDiscoveryPanel/);
-assert.match(overview, /需要你决定/);
+assert.match(overview, /ownerDecisionCount/);
+assert.match(overview, /systemIssueCount/);
+assert.match(overview, /不会冒充成你的决策/);
 assert.match(overview, /overview-technical-summary/);
 assert.equal(overview.includes("刷新本机状态"), false, "Overview must not require manual refresh");
 assert.equal(overview.includes("健康检查"), false, "Detailed health checks belong in diagnostics");
@@ -85,12 +87,14 @@ assert.match(activity, /当前任务/);
 assert.match(activity, /最近结果/);
 assert.equal(activity.includes("刷新看板"), false, "Activity page must not expose manual refresh");
 
-assert.match(attention, /系统不能自行决定/);
-assert.match(attention, /暂时不需要你处理/);
-assert.match(attention, /部分待办状态暂时未知/);
+assert.match(attention, /暂时不需要你决定/);
+assert.match(attention, /部分决策状态暂时未知/);
 assert.match(attention, /不会把未知状态显示成一切正常/);
+assert.match(attention, /assistant-import-authorization/);
 assert.match(attention, /vector-rebuild/);
 assert.match(attention, /pending_review_count/);
+assert.match(attention, /系统异常与自动处理/);
+assert.match(attention, /普通故障、重试和诊断不再混进你的决策数量/);
 
 assert.match(diagnostics, /日常不需要进入这里/);
 assert.match(diagnostics, /<details/);
@@ -99,6 +103,8 @@ assert.match(diagnostics, /ADVANCED_NAVIGATION/);
 assert.match(currentWork, /intervalMs: 5_000/);
 assert.match(currentWork, /系统当前空闲/);
 assert.match(currentWork, /处理进度/);
+assert.match(currentWork, /onPendingReviewCount/);
+assert.match(currentWork, /工作细节/);
 
 for (const cssToken of [
   ".observation-hero",
@@ -106,7 +112,6 @@ for (const cssToken of [
   ".activity-timeline",
   ".attention-card",
   ".diagnostics-group",
-  ".current-work-summary",
 ]) assert.ok(desktopCss.includes(cssToken), `Desktop observation styles are missing ${cssToken}`);
 assert.match(releaseCss, /\.desktop-runtime-tools/);
 

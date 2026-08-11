@@ -1,3 +1,4 @@
+import { useState } from "react";
 import AssistantDiscoveryPanel from "../components/AssistantDiscoveryPanel";
 import CurrentWorkPanel from "../components/CurrentWorkPanel";
 import { Empty, Metric, Notice, bytes } from "../components/ui";
@@ -22,9 +23,9 @@ function stateLabel(value: unknown): string {
     healthy: "运行正常",
     ready: "已就绪",
     available: "可用",
-    degraded: "部分能力待配置",
+    degraded: "部分能力正在恢复",
     configuration_required: "正在完成首次配置",
-    warning: "需要关注",
+    warning: "后台正在处理异常",
     stale: "状态待更新",
     failed: "运行失败",
     error: "存在错误",
@@ -45,6 +46,9 @@ export default function OverviewPage({
   active: boolean;
   onNavigate: (page: PageId) => void;
 }) {
+  const [importDecisionCount, setImportDecisionCount] = useState(0);
+  const [pendingReviewCount, setPendingReviewCount] = useState(0);
+
   if (!data) return <Empty text="灵机核心连接后会自动开始检查本机环境。" />;
   const d = data as Record<string, unknown>;
   const health = (d.health ?? {}) as Record<string, unknown>;
@@ -61,12 +65,18 @@ export default function OverviewPage({
   const runtimeState = memoryRuntime.state ?? health.status;
   const stale = Boolean(memoryRuntime.stale);
 
-  const attentionCount = [
+  const irreversibleDecisionCount = vector.rebuild_required === true ? 1 : 0;
+  const systemIssueCount = [
     Number(health.error_count ?? 0) > 0,
     Number(queue.failed ?? 0) > 0,
-    vector.rebuild_required === true,
     storageAlerts.below_minimum_free === true,
   ].filter(Boolean).length;
+  const ownerDecisionCount = importDecisionCount + pendingReviewCount + irreversibleDecisionCount;
+  const heroStatus = ownerDecisionCount > 0
+    ? `${ownerDecisionCount} 项等你决定`
+    : systemIssueCount > 0
+      ? `后台处理 ${systemIssueCount} 项异常`
+      : "后台自动运行";
 
   return (
     <div className="stack overview-page observation-page">
@@ -75,13 +85,13 @@ export default function OverviewPage({
           <span className="desktop-eyebrow">灵机自动驾驶</span>
           <div className="overview-title-line">
             <h2>{stateLabel(runtimeState)}</h2>
-            <span className={`pill ${stateTone(runtimeState) === "good" ? "ok" : stateTone(runtimeState) === "bad" ? "error" : "warning"}`}>
-              {attentionCount ? `${attentionCount} 项需要关注` : "后台自动运行"}
+            <span className={`pill ${ownerDecisionCount > 0 ? "warning" : stateTone(runtimeState) === "bad" ? "error" : "ok"}`}>
+              {heroStatus}
             </span>
           </div>
           <p>
-            灵机会自己发现本机 AI 工具、检查运行状态、处理已经授权的资料并自动重试。
-            只有读取真实内容、写入永久记忆或执行不可逆操作时才需要你决定。
+            灵机会先自己扫描、诊断、重试和恢复。只有读取真实内容、写入永久记忆、删除或重建数据等
+            需要权限或不可逆的操作，才会停下来让你决定。
           </p>
         </div>
         <div className="observation-live-state">
@@ -95,34 +105,40 @@ export default function OverviewPage({
 
       {stale && <Notice kind="warning">部分状态来自旧快照，灵机正在后台重新确认。</Notice>}
 
+      <CurrentWorkPanel api={api} active={active} onPendingReviewCount={setPendingReviewCount} />
+
       <AssistantDiscoveryPanel
         api={api}
         active={active}
         onOpenCodex={() => onNavigate("codex_workspace")}
         onOpenActivity={() => onNavigate("activity")}
+        onOwnerDecisionCount={setImportDecisionCount}
       />
 
-      <CurrentWorkPanel api={api} active={active} />
-
-      <section className={attentionCount ? "attention-summary attention-summary-warning" : "attention-summary"}>
+      <section className={ownerDecisionCount ? "attention-summary attention-summary-warning" : "attention-summary"}>
         <div>
           <span className="desktop-eyebrow">需要你决定</span>
-          <h3>{attentionCount ? `${attentionCount} 类事项无法安全自动决定` : "现在没有必须由你处理的事项"}</h3>
+          <h3>{ownerDecisionCount ? `${ownerDecisionCount} 项必须由你确认` : "现在没有必须由你决定的事项"}</h3>
           <p>
-            {attentionCount
-              ? "灵机能自动处理的事情已经先处理，剩下的集中放在这里。"
-              : "普通扫描、状态检查、重试和恢复由后台自己完成。"}
+            {ownerDecisionCount
+              ? "灵机能安全自动完成的部分已经先做完，只把权限、永久记忆和不可逆操作留给你。"
+              : systemIssueCount > 0
+                ? `另有 ${systemIssueCount} 类系统异常正在后台诊断或等待安全处理条件，不会冒充成你的决策。`
+                : "扫描、状态检查、重试、恢复和已授权任务会继续在后台运行。"}
           </p>
         </div>
-        <button className="button secondary" onClick={() => onNavigate("attention")}>
-          {attentionCount ? "查看需要我决定的事项" : "查看决策记录"}
+        <button
+          className="button secondary"
+          onClick={() => onNavigate(ownerDecisionCount > 0 ? "attention" : systemIssueCount > 0 ? "activity" : "attention")}
+        >
+          {ownerDecisionCount > 0 ? "查看需要我决定的事项" : systemIssueCount > 0 ? "查看自动处理进度" : "查看决策记录"}
         </button>
       </section>
 
       <details className="overview-technical-summary">
         <summary>
           <span>系统健康细节</span>
-          <span>模型、向量、算力、存储等技术信息</span>
+          <span>{systemIssueCount > 0 ? `后台正在处理 ${systemIssueCount} 类技术异常` : "模型、向量、算力、存储等技术信息"}</span>
         </summary>
         <div>
           <div className="metric-grid observation-metric-grid">
