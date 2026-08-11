@@ -73,10 +73,14 @@ for (const token of [
   "github.event.pull_request.head.sha || github.sha",
   "Verify exact source identity",
   "Verify embedded product identity",
-  "strings \"$MAIN_BINARY\"",
+  "--release-metadata-output",
+  "release_metadata.json",
 ]) {
   assert.ok(workflow.includes(token), `macOS release identity contract is missing ${token}`);
 }
+
+assert.match(rustMain, /release_metadata_output_path/);
+assert.match(rustMain, /--release-metadata-output/);
 
 assert.match(runtimeBoundary, /<details className="runtime-advanced-setup">[\s\S]*手动选择位置/);
 assert.equal(
