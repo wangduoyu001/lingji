@@ -54,6 +54,16 @@ fn installer_format() -> &'static str {
     }
 }
 
+fn release_metadata_output_path() -> Option<PathBuf> {
+    let mut arguments = env::args_os();
+    while let Some(argument) = arguments.next() {
+        if argument == "--release-metadata-output" {
+            return arguments.next().map(PathBuf::from);
+        }
+    }
+    None
+}
+
 #[tauri::command]
 fn control_credentials() -> Result<ControlCredentials, String> {
     runtime_bootstrap::require_configured()?;
@@ -165,6 +175,20 @@ async fn guarded_runtime_restart(
 
 fn main() {
     prepare_platform_environment();
+    if let Some(path) = release_metadata_output_path() {
+        let payload = match serde_json::to_vec_pretty(&release_metadata()) {
+            Ok(payload) => payload,
+            Err(error) => {
+                eprintln!("Unable to encode LingJi release metadata: {error}");
+                std::process::exit(2);
+            }
+        };
+        if let Err(error) = fs::write(path, payload) {
+            eprintln!("Unable to write LingJi release metadata: {error}");
+            std::process::exit(2);
+        }
+        return;
+    }
     runtime_bootstrap::quarantine_inherited_environment();
     let _ = runtime_bootstrap::apply_saved_environment()
         .or_else(|_| runtime_bootstrap::configure_default());
