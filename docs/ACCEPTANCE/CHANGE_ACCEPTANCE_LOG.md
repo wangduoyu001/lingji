@@ -72,6 +72,11 @@
 - 不创建凭据文件、SQLite Secret 或 Git Secret。回滚仅移除状态层代码；不得删除主人已有系统凭据。
 - 最终报告：`docs/TEST_REPORTS/PR88_M5_PHASE4_FAILURE_REPAIR.md`；状态快照：`docs/TEST_REPORTS/evidence/LOCAL_AUTH_STATUS_PR88.json`。
 
+### Isolation guard follow-up
+
+- [ ] 当 acceptance task root 与传入 root 不一致时，必须先报告 `LINGJI_ACCEPTANCE_DATA_ROOT` 合同错误，再执行 Windows C: 盘拒绝；Windows 回归与最终 DMG 首启/二启 Gate 必须 PASS。
+- 回滚：仅恢复既有 validation order；不得放宽 task-scoped acceptance root 的精确匹配。
+
 ---
 
 ## 2026-08-11 · PR #88 Phase 3 · Autopilot 启动架构与真机阻断修复
