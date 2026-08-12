@@ -261,8 +261,25 @@ jobs:
             return 1
           }
           cleanup_runtime() {
+            python3 - <<PY
+          import json
+          from pathlib import Path
+          runtime = Path("$TASK_ROOT/runtime-data/runtime")
+          state = runtime / "sidecar-state.json"
+          if state.exists():
+              instance_id = json.loads(state.read_text(encoding="utf-8")).get("instance_id")
+              if instance_id:
+                  request = runtime / "sidecar-stop-request.json"
+                  temporary = request.with_suffix(".tmp")
+                  temporary.write_text(json.dumps({"instance_id": instance_id}), encoding="utf-8")
+                  temporary.replace(request)
+          PY
             kill "$DESKTOP_PID" 2>/dev/null || true
             wait "$DESKTOP_PID" 2>/dev/null || true
+            for _ in $(seq 1 40); do
+              [[ ! -e "$TASK_ROOT/runtime-data/runtime/sidecar-state.json" ]] && break
+              sleep 0.25
+            done
           }
           trap 'cleanup_runtime; hdiutil detach "$MOUNT_POINT" -force >/dev/null 2>&1 || true' EXIT
           launch
