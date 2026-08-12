@@ -107,14 +107,15 @@ def configure_packaged_environment(
     workspace_name = _workspace_name(
         workspace or target.get("LINGJI_WORKSPACE") or target.get("WORKSPACE_NAME")
     )
-    root = _absolute_owner_root(data_root)
     acceptance_override = str(target.get("LINGJI_ACCEPTANCE_DATA_ROOT") or "").strip()
     if workspace_name == "acceptance" and acceptance_override:
+        requested_root = Path(data_root).expanduser().resolve(strict=False)
         task_root = _absolute_owner_root(acceptance_override)
-        if root != task_root:
+        if requested_root != task_root:
             raise ValueError(
                 "Acceptance packaged runtime must use the exact LINGJI_ACCEPTANCE_DATA_ROOT task directory"
             )
+    root = _absolute_owner_root(data_root)
     base_root = root.parent
     production_root = root if workspace_name == "production" else base_root / "production"
     acceptance_root = root if workspace_name == "acceptance" else base_root / "acceptance"
