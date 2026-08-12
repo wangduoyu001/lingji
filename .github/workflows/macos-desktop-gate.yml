@@ -1,4 +1,5 @@
 name: macOS Desktop Gate
+# PR #88 closeout: rerun the final DMG gate against sidecar state that remains until real process exit.
 
 on:
   push:

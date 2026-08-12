@@ -51,6 +51,43 @@
 
 ---
 
+## 2026-08-12 · PR #88 Phase 4 · Sidecar 真实退出生命周期与最终 DMG 收口
+
+- 产品分支：`feature/owner-autopilot-ui-codexpp`
+- 产品 Commit：`pending final closeout head`
+- 影响模块：packaged Sidecar 生命周期、macOS 最终 DMG 首启/二启隔离 Gate、验收清理。
+- 风险等级：P0（最终 DMG 可卸载性与 Runtime 生命周期真实性）。
+- 用户可感知变化：无新增交互；修复仅保证后台 Sidecar 真正退出后才宣告停止，避免验收或退出阶段残留进程占用安装介质。
+- 数据或安全边界变化：停止仍使用精确 `instance_id` 的 task-scoped request，不扩大进程清理范围，不使用全局 kill/killall。
+
+### 新增或修改的自动验收
+
+- [ ] `tests/test_packaged_control_api.py`：匹配 stop request 被消费且 SIGTERM 已发送后，只要进程尚未真实退出，`sidecar-state.json` 必须继续存在；不再保护“收到停止请求即删除 state”的旧错误行为。
+- [ ] `macOS Desktop Gate`：最终 DMG App 首启/二启必须 authenticated 8766 ping；每次退出后等待真实 Sidecar state 消失，再执行 DMG detach，`Resource busy` 不得出现。
+- [ ] 最终 DMG 内 App metadata、主程序 arm64、Sidecar arm64、task-scoped DataRoot 与 `Documents/acceptance` 隔离合同继续全部 PASS。
+
+### 新增或修改的真机验收
+
+- [ ] 新精确 Artifact 在 M5 上覆盖安装后，退出/再次启动不得留下上一实例 Sidecar；8766 生命周期与任务根隔离保持正确。
+
+### 回归项
+
+- [ ] 不允许以 state 提前删除伪装进程已经退出。
+- [ ] 不允许为了卸载 DMG 使用全局进程清理。
+- [ ] 不放宽 `LINGJI_ACCEPTANCE_DATA_ROOT`、身份、认证状态或 Secret 边界。
+
+### 清理与回滚
+
+- 临时数据仅使用任务根；失败时保留最小日志后删除本轮临时 Runtime。
+- 回滚仅恢复生命周期实现，不得回退到 state 提前消失的语义。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/PR88_M5_SIDECAR_LIFECYCLE_FIX.md`
+- PR #88 保持 Draft，直到新精确 Artifact 的真实 M5 复验 PASS。
+
+---
+
 ## 2026-08-12 · PR #88 Phase 4 · 安全认证状态同步
 
 - 产品分支：`feature/owner-autopilot-ui-codexpp`
