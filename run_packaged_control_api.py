@@ -210,7 +210,7 @@ def install_runtime_lifecycle(
     workspace: str | None = None,
     poll_seconds: float = 0.25,
 ) -> dict[str, Any]:
-    """Write the packaged-process identity and monitor authenticated stop requests."""
+    """Track a live packaged Sidecar and keep its state until real process exit."""
 
     root = _absolute_owner_root(data_root)
     workspace_name = _workspace_name(workspace or os.environ.get("LINGJI_WORKSPACE"))
