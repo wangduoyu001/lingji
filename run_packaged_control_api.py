@@ -250,7 +250,10 @@ def install_runtime_lifecycle(
                     stop_path.unlink(missing_ok=True)
                 except OSError:
                     pass
-                cleanup()
+                # Keep sidecar-state.json until the process really exits. Uvicorn
+                # handles SIGTERM gracefully, so deleting state before sending the
+                # signal makes callers believe the mounted executable is already
+                # released while the process can still be alive.
                 os.kill(os.getpid(), signal.SIGTERM)
                 return
             time.sleep(max(0.05, float(poll_seconds)))
