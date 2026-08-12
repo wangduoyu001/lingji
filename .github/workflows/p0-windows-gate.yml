@@ -2,6 +2,21 @@ name: P0 Windows Gate
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - master
+      - 'feature/**'
+    paths:
+      - "requirements*.txt"
+      - "constraints/**"
+      - "src/**"
+      - "second_brain/**"
+      - "tests/**"
+      - "scripts/**"
+      - "desktop/lingji-control/**"
+      - "run_control_api.py"
+      - "run_packaged_control_api.py"
+      - ".github/workflows/p0-windows-gate.yml"
   pull_request:
     branches:
       - master
@@ -13,6 +28,8 @@ on:
       - "tests/**"
       - "scripts/**"
       - "desktop/lingji-control/**"
+      - "run_control_api.py"
+      - "run_packaged_control_api.py"
       - ".github/workflows/p0-windows-gate.yml"
 
 permissions:

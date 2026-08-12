@@ -3,7 +3,7 @@ name: macOS Desktop Gate
 
 on:
   push:
-    branches: [master]
+    branches: [master, 'feature/**']
     paths:
       - '.github/workflows/macos-desktop-gate.yml'
       - 'desktop/lingji-control/**'

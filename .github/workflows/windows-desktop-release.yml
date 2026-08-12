@@ -13,8 +13,19 @@ on:
           - acceptance
           - release-candidate
   push:
+    branches:
+      - master
+      - 'feature/**'
     tags:
       - "desktop-v*"
+    paths:
+      - "desktop/lingji-control/**"
+      - "src/**"
+      - "run_control_api.py"
+      - "run_packaged_control_api.py"
+      - "requirements*.txt"
+      - "scripts/build_windows_sidecar.ps1"
+      - ".github/workflows/windows-desktop-release.yml"
   pull_request:
     branches:
       - master
