@@ -175,7 +175,7 @@ def test_packaged_contract_is_explicit_about_safety_boundaries(runtime_tmp_path:
     ).endswith(r"runtime\sidecar-state.json")
 
 
-def test_runtime_lifecycle_writes_identity_and_accepts_matching_stop_request(
+def test_runtime_lifecycle_keeps_identity_until_process_really_exits(
     runtime_tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -206,8 +206,9 @@ def test_runtime_lifecycle_writes_identity_and_accepts_matching_stop_request(
         time.sleep(0.01)
 
     assert killed
-    assert not runtime_state_path(root).exists()
+    assert runtime_state_path(root).exists()
     assert not runtime_stop_request_path(root).exists()
+    runtime_state_path(root).unlink(missing_ok=True)
 
 
 def test_runtime_lifecycle_ignores_mismatched_stop_request(
