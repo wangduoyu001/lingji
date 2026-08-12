@@ -12,6 +12,7 @@ import pytest
 
 from run_packaged_control_api import (
     _ensure_standard_streams,
+    cleanup_runtime_lifecycle,
     configure_packaged_environment,
     install_runtime_lifecycle,
     main,
@@ -208,7 +209,25 @@ def test_runtime_lifecycle_keeps_identity_until_process_really_exits(
     assert killed
     assert runtime_state_path(root).exists()
     assert not runtime_stop_request_path(root).exists()
-    runtime_state_path(root).unlink(missing_ok=True)
+
+    cleanup_runtime_lifecycle(root, state["instance_id"])
+    assert not runtime_state_path(root).exists()
+
+
+def test_runtime_cleanup_only_removes_matching_instance(runtime_tmp_path: Path):
+    root = runtime_tmp_path / "LingJi" / "production"
+    state_path = runtime_state_path(root)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps({"instance_id": "current-instance", "pid": 123}),
+        encoding="utf-8",
+    )
+
+    cleanup_runtime_lifecycle(root, "older-instance")
+    assert state_path.exists()
+
+    cleanup_runtime_lifecycle(root, "current-instance")
+    assert not state_path.exists()
 
 
 def test_runtime_lifecycle_ignores_mismatched_stop_request(
@@ -234,9 +253,8 @@ def test_runtime_lifecycle_ignores_mismatched_stop_request(
 
     assert killed == []
     assert runtime_state_path(root).exists()
-    runtime_state_path(root).unlink(missing_ok=True)
+    cleanup_runtime_lifecycle(root, state["instance_id"])
     runtime_stop_request_path(root).unlink(missing_ok=True)
-    assert state["instance_id"]
 
 
 def test_check_config_prints_json_without_starting_server(runtime_tmp_path: Path, capsys):

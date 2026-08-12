@@ -52,7 +52,7 @@ for (const token of [
   "LINGJI_WORKSPACE", "_ensure_standard_streams", "LINGJI_WORKSPACE_ROOT",
   "CONTROL_API_HOST", "127.0.0.1", "owner_data_outside_install_dir",
   "system_drive_runtime_data_allowed", "sidecar-state.json", "sidecar-stop-request.json",
-  "install_runtime_lifecycle", "instance_id",
+  "install_runtime_lifecycle", "cleanup_runtime_lifecycle", "instance_id",
 ]) assert.ok(entrypoint.includes(token), `Packaged entrypoint is missing ${token}`);
 assert.equal(entrypoint.includes('"0.0.0.0"'), false);
 assert.match(entrypoint, /target\.setdefault\("VAULT_DIR"/);
@@ -62,9 +62,11 @@ assert.match(pythonTests, /rejects_windows_system_drive/);
 assert.match(pythonTests, /keeps_production_and_acceptance_separate/);
 assert.match(pythonTests, /preserves_explicit_owner_vault/);
 assert.match(pythonTests, /keeps_identity_until_process_really_exits/);
+assert.match(pythonTests, /cleanup_only_removes_matching_instance/);
 assert.match(pythonTests, /mismatched_stop_request/);
-assert.match(entrypoint, /Keep sidecar-state\.json until the process really exits/);
+assert.match(entrypoint, /Keep sidecar-state\.json while Uvicorn handles graceful SIGTERM/);
 assert.match(entrypoint, /atexit\.register\(cleanup\)/);
+assert.match(entrypoint, /finally:\s*\n\s*cleanup_runtime_lifecycle/);
 
 for (const token of [
   "PyInstaller", "--onedir", "--windowed", "--contents-directory", "lingji_core_lib",

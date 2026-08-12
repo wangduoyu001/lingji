@@ -202,6 +202,26 @@ def packaged_runtime_contract(
     }
 
 
+def cleanup_runtime_lifecycle(data_root: str | Path, instance_id: str) -> None:
+    """Remove lifecycle files only when they still belong to this Sidecar instance."""
+
+    root = _absolute_owner_root(data_root)
+    state_path = runtime_state_path(root)
+    stop_path = runtime_stop_request_path(root)
+    existing = _read_json(state_path)
+    if existing and existing.get("instance_id") == instance_id:
+        try:
+            state_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    request = _read_json(stop_path)
+    if request and request.get("instance_id") == instance_id:
+        try:
+            stop_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def install_runtime_lifecycle(
     data_root: str | Path,
     *,
@@ -235,12 +255,7 @@ def install_runtime_lifecycle(
     _write_json_atomic(state_path, state)
 
     def cleanup() -> None:
-        existing = _read_json(state_path)
-        if existing and existing.get("instance_id") == instance_id:
-            try:
-                state_path.unlink(missing_ok=True)
-            except OSError:
-                pass
+        cleanup_runtime_lifecycle(root, instance_id)
 
     def monitor() -> None:
         while True:
@@ -250,10 +265,9 @@ def install_runtime_lifecycle(
                     stop_path.unlink(missing_ok=True)
                 except OSError:
                     pass
-                # Keep sidecar-state.json until the process really exits. Uvicorn
-                # handles SIGTERM gracefully, so deleting state before sending the
-                # signal makes callers believe the mounted executable is already
-                # released while the process can still be alive.
+                # Keep sidecar-state.json while Uvicorn handles graceful SIGTERM.
+                # main() removes this exact instance in a finally block after the
+                # server returns; atexit remains a fallback for ordinary exits.
                 os.kill(os.getpid(), signal.SIGTERM)
                 return
             time.sleep(max(0.05, float(poll_seconds)))
@@ -310,7 +324,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         port=args.port,
         workspace=workspace,
     )
-    install_runtime_lifecycle(
+    lifecycle = install_runtime_lifecycle(
         args.data_root,
         host=args.host,
         port=args.port,
@@ -319,7 +333,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     _ensure_standard_streams()
     from run_control_api import main as run_control_api
 
-    run_control_api()
+    try:
+        run_control_api()
+    finally:
+        cleanup_runtime_lifecycle(args.data_root, str(lifecycle["instance_id"]))
     return 0
 
 
