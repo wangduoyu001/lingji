@@ -96,6 +96,7 @@ assert.equal(
 for (const token of ["已连接", "需重新认证", "权限不足", "auth_status"]) {
   assert.ok(overview.includes(token), `Desktop auth summary is missing ${token}`);
 }
+assert.ok(workflow.includes("sidecar-stop-request.json"), "DMG isolation gate must stop its exact sidecar instance");
 assert.equal(/token|authorization|cookie/i.test(overview), false, "Desktop must not render credential material");
 
 console.log("macos-release-smoke: PASS");

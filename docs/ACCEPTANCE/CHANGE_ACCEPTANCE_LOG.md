@@ -76,6 +76,7 @@
 
 - [ ] 当 acceptance task root 与传入 root 不一致时，必须在校验 task root 自身的 Windows C: 盘策略前报告 `LINGJI_ACCEPTANCE_DATA_ROOT` 合同错误；Windows 回归与最终 DMG 首启/二启 Gate 必须 PASS。
 - 回滚：仅恢复既有 validation order；不得放宽 task-scoped acceptance root 的精确匹配。
+- [ ] DMG isolation Gate 每次启动后必须向该 runtime 的 `sidecar-stop-request.json` 发送 instance-scoped stop，再卸载 DMG；不得以全局杀进程方式清理。
 
 ---
 
