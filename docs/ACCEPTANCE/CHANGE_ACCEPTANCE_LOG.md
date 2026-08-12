@@ -54,7 +54,7 @@
 ## 2026-08-12 · PR #88 Phase 4 · Sidecar 真实退出生命周期与最终 DMG 收口
 
 - 产品分支：`feature/owner-autopilot-ui-codexpp`
-- 产品 Commit：`pending final artifact-trigger head`
+- 产品 Commit：`pending final closeout head`
 - 影响模块：packaged Sidecar 生命周期、macOS 最终 DMG 首启/二启隔离 Gate、验收清理。
 - 风险等级：P0（最终 DMG 可卸载性与 Runtime 生命周期真实性）。
 - 用户可感知变化：无新增交互；修复仅保证后台 Sidecar 真正退出后才宣告停止，避免验收或退出阶段残留进程占用安装介质。
@@ -65,7 +65,6 @@
 - [ ] `tests/test_packaged_control_api.py`：匹配 stop request 被消费且 SIGTERM 已发送后，只要进程尚未真实退出，`sidecar-state.json` 必须继续存在；不再保护“收到停止请求即删除 state”的旧错误行为。
 - [ ] `macOS Desktop Gate`：最终 DMG App 首启/二启必须 authenticated 8766 ping；每次退出后等待真实 Sidecar state 消失，再执行 DMG detach，`Resource busy` 不得出现。
 - [ ] 最终 DMG 内 App metadata、主程序 arm64、Sidecar arm64、task-scoped DataRoot 与 `Documents/acceptance` 隔离合同继续全部 PASS。
-- [ ] Final artifact trigger 必须由同一提交同时触碰 `run_packaged_control_api.py` 与本验收日志，使 macOS Gate 与 acceptance-doc-sync 绑定同一精确 Head。
 
 ### 新增或修改的真机验收
 

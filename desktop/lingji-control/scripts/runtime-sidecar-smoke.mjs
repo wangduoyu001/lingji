@@ -61,8 +61,10 @@ assert.match(pythonTests, /rejects_filesystem_root/);
 assert.match(pythonTests, /rejects_windows_system_drive/);
 assert.match(pythonTests, /keeps_production_and_acceptance_separate/);
 assert.match(pythonTests, /preserves_explicit_owner_vault/);
-assert.match(pythonTests, /matching_stop_request/);
+assert.match(pythonTests, /keeps_identity_until_process_really_exits/);
 assert.match(pythonTests, /mismatched_stop_request/);
+assert.match(entrypoint, /Keep sidecar-state\.json until the process really exits/);
+assert.match(entrypoint, /atexit\.register\(cleanup\)/);
 
 for (const token of [
   "PyInstaller", "--onedir", "--windowed", "--contents-directory", "lingji_core_lib",
