@@ -8,6 +8,7 @@ const read = (path) => readFile(resolve(here, path), "utf8");
 
 const [
   entrypoint,
+  controlEntrypoint,
   pythonTests,
   buildScript,
   sidecarConfigText,
@@ -25,6 +26,7 @@ const [
   hardwareRunner,
 ] = await Promise.all([
   read("../../../run_packaged_control_api.py"),
+  read("../../../run_control_api.py"),
   read("../../../tests/test_packaged_control_api.py"),
   read("../../../scripts/build_windows_sidecar.ps1"),
   read("../src-tauri/tauri.sidecar.conf.json"),
@@ -52,7 +54,7 @@ for (const token of [
   "LINGJI_WORKSPACE", "_ensure_standard_streams", "LINGJI_WORKSPACE_ROOT",
   "CONTROL_API_HOST", "127.0.0.1", "owner_data_outside_install_dir",
   "system_drive_runtime_data_allowed", "sidecar-state.json", "sidecar-stop-request.json",
-  "install_runtime_lifecycle", "cleanup_runtime_lifecycle", "instance_id",
+  "install_runtime_lifecycle", "cleanup_runtime_lifecycle", "shutdown_event", "instance_id",
 ]) assert.ok(entrypoint.includes(token), `Packaged entrypoint is missing ${token}`);
 assert.equal(entrypoint.includes('"0.0.0.0"'), false);
 assert.match(entrypoint, /target\.setdefault\("VAULT_DIR"/);
@@ -61,12 +63,19 @@ assert.match(pythonTests, /rejects_filesystem_root/);
 assert.match(pythonTests, /rejects_windows_system_drive/);
 assert.match(pythonTests, /keeps_production_and_acceptance_separate/);
 assert.match(pythonTests, /preserves_explicit_owner_vault/);
-assert.match(pythonTests, /keeps_identity_until_process_really_exits/);
+assert.match(pythonTests, /requests_graceful_shutdown_without_killing_process/);
+assert.match(pythonTests, /keeps_signal_fallback_for_legacy_callers/);
 assert.match(pythonTests, /cleanup_only_removes_matching_instance/);
 assert.match(pythonTests, /mismatched_stop_request/);
-assert.match(entrypoint, /Keep sidecar-state\.json while Uvicorn handles graceful SIGTERM/);
+assert.match(entrypoint, /shutdown_event\.set\(\)/);
 assert.match(entrypoint, /atexit\.register\(cleanup\)/);
+assert.match(entrypoint, /run_control_api\(shutdown_event=shutdown_event\)/);
 assert.match(entrypoint, /finally:\s*\n\s*cleanup_runtime_lifecycle/);
+
+for (const token of [
+  "threading.Event", "uvicorn.Config", "uvicorn.Server", "shutdown_event.wait()",
+  "server.should_exit = True", "lingji-control-shutdown-bridge",
+]) assert.ok(controlEntrypoint.includes(token), `Control API shutdown bridge is missing ${token}`);
 
 for (const token of [
   "PyInstaller", "--onedir", "--windowed", "--contents-directory", "lingji_core_lib",

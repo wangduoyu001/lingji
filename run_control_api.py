@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+import threading
 from pathlib import Path
 
 from src.autopilot import AutopilotEngine
@@ -31,11 +32,43 @@ def load_or_create_token(path: Path) -> str:
     return token
 
 
-def main() -> None:
+def _run_server(app, shutdown_event: threading.Event | None = None) -> None:
     try:
         import uvicorn
     except ImportError as exc:
         raise RuntimeError("Install requirements-ui.txt before starting the control API") from exc
+
+    if shutdown_event is None:
+        uvicorn.run(
+            app,
+            host=settings.control_api_host,
+            port=settings.control_api_port,
+            log_level="info",
+        )
+        return
+
+    config = uvicorn.Config(
+        app,
+        host=settings.control_api_host,
+        port=settings.control_api_port,
+        log_level="info",
+    )
+    server = uvicorn.Server(config)
+
+    def request_shutdown() -> None:
+        shutdown_event.wait()
+        server.should_exit = True
+
+    watcher = threading.Thread(
+        target=request_shutdown,
+        name="lingji-control-shutdown-bridge",
+        daemon=True,
+    )
+    watcher.start()
+    server.run()
+
+
+def main(shutdown_event: threading.Event | None = None) -> None:
     if settings.control_api_host not in {"127.0.0.1", "localhost", "::1"}:
         raise RuntimeError("Local control API may only bind to loopback addresses")
     settings.storage_path.mkdir(parents=True, exist_ok=True)
@@ -57,12 +90,7 @@ def main() -> None:
     register_settings_governance_routes(app, service, token=token)
     autopilot.start()
     try:
-        uvicorn.run(
-            app,
-            host=settings.control_api_host,
-            port=settings.control_api_port,
-            log_level="info",
-        )
+        _run_server(app, shutdown_event=shutdown_event)
     finally:
         autopilot.stop()
         service.close()

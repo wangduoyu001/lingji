@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -42,13 +43,11 @@ def runtime_tmp_path(tmp_path: Path):
 
 def test_packaged_environment_uses_absolute_workspace_paths(runtime_tmp_path: Path):
     environ: dict[str, str] = {}
-
     values = configure_packaged_environment(
         runtime_tmp_path / "LingJi" / "acceptance",
         workspace="acceptance",
         environ=environ,
     )
-
     root = (runtime_tmp_path / "LingJi" / "acceptance").resolve()
     base = root.parent
     assert values["LINGJI_OWNER_DATA_ROOT"] == str(root)
@@ -83,16 +82,11 @@ def test_packaged_environment_uses_absolute_workspace_paths(runtime_tmp_path: Pa
 def test_packaged_environment_keeps_production_and_acceptance_separate(runtime_tmp_path: Path):
     base = runtime_tmp_path / "LingJiData"
     production = configure_packaged_environment(
-        base / "production",
-        workspace="production",
-        environ={},
+        base / "production", workspace="production", environ={}
     )
     acceptance = configure_packaged_environment(
-        base / "acceptance",
-        workspace="acceptance",
-        environ={},
+        base / "acceptance", workspace="acceptance", environ={}
     )
-
     assert production["STORAGE_DIR"] != acceptance["STORAGE_DIR"]
     assert production["PRODUCTION_STORAGE_DIR"] == production["STORAGE_DIR"]
     assert acceptance["ACCEPTANCE_STORAGE_DIR"] == acceptance["STORAGE_DIR"]
@@ -105,7 +99,6 @@ def test_packaged_acceptance_runtime_rejects_a_root_outside_the_task_override(
 ):
     task_root = runtime_tmp_path / "task-root" / "runtime-data"
     rogue_root = runtime_tmp_path / "Documents" / "acceptance"
-
     with pytest.raises(ValueError, match="LINGJI_ACCEPTANCE_DATA_ROOT"):
         configure_packaged_environment(
             rogue_root,
@@ -117,13 +110,11 @@ def test_packaged_acceptance_runtime_rejects_a_root_outside_the_task_override(
 def test_packaged_environment_preserves_explicit_owner_vault(runtime_tmp_path: Path):
     explicit_vault = (runtime_tmp_path / "My Obsidian Vault").resolve()
     environ = {"VAULT_DIR": str(explicit_vault)}
-
     values = configure_packaged_environment(
         runtime_tmp_path / "LingJi" / "production",
         workspace="production",
         environ=environ,
     )
-
     assert values["VAULT_DIR"] == str(explicit_vault)
     assert environ["VAULT_DIR"] == str(explicit_vault)
     contract = packaged_runtime_contract(
@@ -157,10 +148,8 @@ def test_packaged_environment_rejects_unknown_workspace(runtime_tmp_path: Path):
 
 def test_packaged_contract_is_explicit_about_safety_boundaries(runtime_tmp_path: Path):
     contract = packaged_runtime_contract(
-        runtime_tmp_path / "LingJi" / "acceptance",
-        workspace="acceptance",
+        runtime_tmp_path / "LingJi" / "acceptance", workspace="acceptance"
     )
-
     assert contract["mode"] == "packaged_sidecar"
     assert contract["workspace"] == "acceptance"
     assert contract["owner_data_outside_install_dir"] is True
@@ -176,12 +165,13 @@ def test_packaged_contract_is_explicit_about_safety_boundaries(runtime_tmp_path:
     ).endswith(r"runtime\sidecar-state.json")
 
 
-def test_runtime_lifecycle_keeps_identity_until_process_really_exits(
+def test_runtime_lifecycle_requests_graceful_shutdown_without_killing_process(
     runtime_tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
     root = runtime_tmp_path / "LingJi" / "acceptance"
     killed: list[tuple[int, int]] = []
+    shutdown_event = threading.Event()
     monkeypatch.setattr("run_packaged_control_api.os.kill", lambda pid, sig: killed.append((pid, sig)))
 
     state = install_runtime_lifecycle(
@@ -190,23 +180,16 @@ def test_runtime_lifecycle_keeps_identity_until_process_really_exits(
         port=8766,
         workspace="acceptance",
         poll_seconds=0.01,
+        shutdown_event=shutdown_event,
     )
-
     persisted = json.loads(runtime_state_path(root).read_text(encoding="utf-8"))
-    assert persisted["mode"] == "packaged_sidecar"
-    assert persisted["workspace"] == "acceptance"
-    assert persisted["pid"] == state["pid"]
     assert persisted["instance_id"] == state["instance_id"]
 
     runtime_stop_request_path(root).write_text(
-        json.dumps({"instance_id": state["instance_id"]}),
-        encoding="utf-8",
+        json.dumps({"instance_id": state["instance_id"]}), encoding="utf-8"
     )
-    deadline = time.monotonic() + 1.0
-    while time.monotonic() < deadline and not killed:
-        time.sleep(0.01)
-
-    assert killed
+    assert shutdown_event.wait(timeout=1.0)
+    assert killed == []
     assert runtime_state_path(root).exists()
     assert not runtime_stop_request_path(root).exists()
 
@@ -214,18 +197,40 @@ def test_runtime_lifecycle_keeps_identity_until_process_really_exits(
     assert not runtime_state_path(root).exists()
 
 
+def test_runtime_lifecycle_keeps_signal_fallback_for_legacy_callers(
+    runtime_tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    root = runtime_tmp_path / "LingJi" / "acceptance"
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr("run_packaged_control_api.os.kill", lambda pid, sig: killed.append((pid, sig)))
+    state = install_runtime_lifecycle(
+        root,
+        host="127.0.0.1",
+        port=8766,
+        workspace="acceptance",
+        poll_seconds=0.01,
+    )
+    runtime_stop_request_path(root).write_text(
+        json.dumps({"instance_id": state["instance_id"]}), encoding="utf-8"
+    )
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and not killed:
+        time.sleep(0.01)
+    assert killed
+    assert runtime_state_path(root).exists()
+    cleanup_runtime_lifecycle(root, state["instance_id"])
+
+
 def test_runtime_cleanup_only_removes_matching_instance(runtime_tmp_path: Path):
     root = runtime_tmp_path / "LingJi" / "production"
     state_path = runtime_state_path(root)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(
-        json.dumps({"instance_id": "current-instance", "pid": 123}),
-        encoding="utf-8",
+        json.dumps({"instance_id": "current-instance", "pid": 123}), encoding="utf-8"
     )
-
     cleanup_runtime_lifecycle(root, "older-instance")
     assert state_path.exists()
-
     cleanup_runtime_lifecycle(root, "current-instance")
     assert not state_path.exists()
 
@@ -236,22 +241,22 @@ def test_runtime_lifecycle_ignores_mismatched_stop_request(
 ):
     root = runtime_tmp_path / "LingJi" / "production"
     killed: list[tuple[int, int]] = []
+    shutdown_event = threading.Event()
     monkeypatch.setattr("run_packaged_control_api.os.kill", lambda pid, sig: killed.append((pid, sig)))
-
     state = install_runtime_lifecycle(
         root,
         host="127.0.0.1",
         port=8766,
         workspace="production",
         poll_seconds=0.01,
+        shutdown_event=shutdown_event,
     )
     runtime_stop_request_path(root).write_text(
-        json.dumps({"instance_id": "different-instance"}),
-        encoding="utf-8",
+        json.dumps({"instance_id": "different-instance"}), encoding="utf-8"
     )
     time.sleep(0.08)
-
     assert killed == []
+    assert shutdown_event.is_set() is False
     assert runtime_state_path(root).exists()
     cleanup_runtime_lifecycle(root, state["instance_id"])
     runtime_stop_request_path(root).unlink(missing_ok=True)
@@ -265,7 +270,6 @@ def test_check_config_prints_json_without_starting_server(runtime_tmp_path: Path
         "acceptance",
         "--check-config",
     ])
-
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["host"] == "127.0.0.1"
@@ -276,7 +280,6 @@ def test_check_config_prints_json_without_starting_server(runtime_tmp_path: Path
 
 def test_check_config_writes_json_for_windowed_executable(runtime_tmp_path: Path):
     output_path = runtime_tmp_path / "contract.json"
-
     exit_code = main([
         "--data-root",
         str(runtime_tmp_path / "LingJi" / "production"),
@@ -286,7 +289,6 @@ def test_check_config_writes_json_for_windowed_executable(runtime_tmp_path: Path
         "--check-config-output",
         str(output_path),
     ])
-
     assert exit_code == 0
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert payload["host"] == "127.0.0.1"
@@ -297,9 +299,7 @@ def test_check_config_writes_json_for_windowed_executable(runtime_tmp_path: Path
 
 def test_windowed_runtime_receives_devnull_standard_streams():
     streams = SimpleNamespace(stdout=None, stderr=None)
-
     _ensure_standard_streams(streams)
-
     assert streams.stdout is not None
     assert streams.stderr is not None
     streams.stdout.close()

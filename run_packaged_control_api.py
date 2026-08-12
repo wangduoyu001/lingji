@@ -89,13 +89,7 @@ def configure_packaged_environment(
     workspace: str | None = None,
     environ: MutableMapping[str, str] | None = None,
 ) -> dict[str, str]:
-    """Configure explicit paths before importing ``src.config``.
-
-    ``data_root`` is the active workspace root. The Desktop derives it from a
-    user-selected non-system-drive base directory plus ``production`` or
-    ``acceptance``. The two workspace profiles therefore remain physically
-    separate while the small bootstrap pointer may stay under LocalAppData.
-    """
+    """Configure explicit paths before importing ``src.config``."""
 
     normalized_host = str(host or "").strip().lower()
     if normalized_host not in _LOOPBACK_HOSTS:
@@ -154,10 +148,7 @@ def configure_packaged_environment(
     ):
         (root / directory).mkdir(parents=True, exist_ok=True)
 
-    return {
-        **required_values,
-        "VAULT_DIR": target["VAULT_DIR"],
-    }
+    return {**required_values, "VAULT_DIR": target["VAULT_DIR"]}
 
 
 def packaged_runtime_contract(
@@ -229,8 +220,9 @@ def install_runtime_lifecycle(
     port: int,
     workspace: str | None = None,
     poll_seconds: float = 0.25,
+    shutdown_event: threading.Event | None = None,
 ) -> dict[str, Any]:
-    """Track a live packaged Sidecar and keep its state until real process exit."""
+    """Track a live packaged Sidecar and request graceful shutdown for matching stop requests."""
 
     root = _absolute_owner_root(data_root)
     workspace_name = _workspace_name(workspace or os.environ.get("LINGJI_WORKSPACE"))
@@ -265,10 +257,13 @@ def install_runtime_lifecycle(
                     stop_path.unlink(missing_ok=True)
                 except OSError:
                     pass
-                # Keep sidecar-state.json while Uvicorn handles graceful SIGTERM.
-                # main() removes this exact instance in a finally block after the
-                # server returns; atexit remains a fallback for ordinary exits.
-                os.kill(os.getpid(), signal.SIGTERM)
+                # Packaged callers provide an in-process shutdown event so Uvicorn
+                # can finish normally on both Windows and macOS. Keep the signal
+                # path only as a compatibility fallback for direct/legacy callers.
+                if shutdown_event is not None:
+                    shutdown_event.set()
+                else:
+                    os.kill(os.getpid(), signal.SIGTERM)
                 return
             time.sleep(max(0.05, float(poll_seconds)))
 
@@ -324,17 +319,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         port=args.port,
         workspace=workspace,
     )
+    shutdown_event = threading.Event()
     lifecycle = install_runtime_lifecycle(
         args.data_root,
         host=args.host,
         port=args.port,
         workspace=workspace,
+        shutdown_event=shutdown_event,
     )
     _ensure_standard_streams()
     from run_control_api import main as run_control_api
 
     try:
-        run_control_api()
+        run_control_api(shutdown_event=shutdown_event)
     finally:
         cleanup_runtime_lifecycle(args.data_root, str(lifecycle["instance_id"]))
     return 0
