@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from src.acceptance import AcceptanceChecker
 from src.acceptance_reports import AcceptanceReportStore
+from src.auth_state import AuthStatusService, default_credential_store
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.extraction.queue import SQLiteExtractionQueue
 from src.gateway.memory_statistics import MemoryStatisticsService
@@ -40,6 +41,7 @@ class LocalControlService:
     ):
         self.settings = settings
         self.state_db = state_db or StateDatabase(settings.state_db_path)
+        self.auth_status = AuthStatusService(self.state_db, default_credential_store())
         self.runtime_settings = RuntimeSettingsStore(settings, state_db=self.state_db)
         self.obsidian = ObsidianService(
             settings, runtime_settings=self.runtime_settings, state_db=self.state_db
@@ -309,7 +311,12 @@ class LocalControlService:
         return self.model_inventory.refresh()
 
     def health(self) -> dict[str, Any]:
-        return self.health_checker.run()
+        payload = self.health_checker.run()
+        payload["auth"] = self.auth_statuses()
+        return payload
+
+    def auth_statuses(self) -> dict[str, Any]:
+        return {"providers": self.auth_status.statuses()}
 
     def overview(self) -> dict[str, Any]:
         inventory = self.storage.inventory()
@@ -323,6 +330,7 @@ class LocalControlService:
         memory_runtime = self.memory_statistics.snapshot()
         return {
             "health": self.health(),
+            "auth_status": self.auth_statuses(),
             "memory_runtime": memory_runtime,
             "memory_stats": dict(memory_runtime.get("memory") or {}),
             "embedding_status": dict(memory_runtime.get("embedding") or {}),

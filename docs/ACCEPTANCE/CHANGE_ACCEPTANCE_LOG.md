@@ -51,6 +51,29 @@
 
 ---
 
+## 2026-08-12 · PR #88 Phase 4 · 安全认证状态同步
+
+- 产品分支：`feature/owner-autopilot-ui-codexpp`
+- 产品 Commit：`pending unified closeout head`
+- 影响模块：macOS Keychain、Windows Credential Manager、`lingji_state.db`、8766 Local Control API、Desktop Overview、Autopilot、验收证据导出。
+- 风险等级：P0（认证秘密与状态边界）。
+- 用户可感知变化：首页只显示连接结论；凭据内容、长度、路径和请求头不会显示或同步。
+
+### 新增或修改的自动验收
+
+- [ ] fake CredentialStore 的 get/set/delete/exists 与错误映射；CI 不触碰真实系统凭据。
+- [ ] AuthStatus 的 verifying、verified、expired、invalid、permission_insufficient 状态及重启恢复。
+- [ ] 8766 `/api/auth/status`、Overview 和 Autopilot 只消费非敏感结论。
+- [ ] `LOCAL_AUTH_STATUS_PR88.json` 仅由 allowlist 导出，伪造 Token/Cookie/Authorization Header 必须无法进入；仓库 secret scan PASS，`secret_export_count=0`。
+- [ ] macOS / Windows 使用相同状态模型；真实 Keychain / Credential Manager 只在对应真机验收验证。
+
+### 清理与回滚
+
+- 不创建凭据文件、SQLite Secret 或 Git Secret。回滚仅移除状态层代码；不得删除主人已有系统凭据。
+- 最终报告：`docs/TEST_REPORTS/PR88_M5_PHASE4_FAILURE_REPAIR.md`；状态快照：`docs/TEST_REPORTS/evidence/LOCAL_AUTH_STATUS_PR88.json`。
+
+---
+
 ## 2026-08-11 · PR #88 Phase 3 · Autopilot 启动架构与真机阻断修复
 
 - 产品分支：`feature/owner-autopilot-ui-codexpp`

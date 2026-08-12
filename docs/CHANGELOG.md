@@ -2,6 +2,14 @@
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
 
+## 2026-08-12
+
+### PR #88 安全认证状态同步
+
+- 新增跨平台 `CredentialStore`：macOS 使用 Keychain，Windows 使用 Credential Manager；秘密不进入 SQLite、Desktop、日志或验收材料。
+- `lingji_state.db` 新增可恢复的非敏感认证状态；8766、首页和 Autopilot 只显示“已连接 / 需重新认证 / 权限不足”等结论。
+- 验收导出采用字段 allowlist，并拒绝任何疑似凭据内容；`secret_export_count` 固定为 0。
+
 ## 2026-07-26
 
 ### P2-11B Packaged Python runtime Sidecar manager

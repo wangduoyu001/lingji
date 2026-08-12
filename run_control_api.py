@@ -48,6 +48,7 @@ def main() -> None:
         state_db=state_db,
         queue=service.queue,
         memory_statistics=service.memory_statistics,
+        auth_status_provider=service.auth_statuses,
     )
     app = create_control_app(settings, service=service, token=token)
     register_autopilot_routes(app, autopilot, token=token)

@@ -4,7 +4,7 @@ import json
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -81,6 +81,21 @@ class StateDatabase:
                     ON processing_states(status, updated_at);
                 CREATE INDEX IF NOT EXISTS idx_events_entity
                     ON events(entity_type, entity_id, created_at);
+
+                CREATE TABLE IF NOT EXISTS auth_statuses (
+                    provider TEXT PRIMARY KEY,
+                    auth_method TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    credential_present INTEGER NOT NULL,
+                    credential_valid INTEGER,
+                    permissions_ok INTEGER,
+                    account_bound INTEGER,
+                    last_verified_at TEXT,
+                    expires_at TEXT,
+                    last_error_code TEXT,
+                    last_error_at TEXT,
+                    updated_at TEXT NOT NULL
+                );
                 """
             )
 
@@ -321,3 +336,60 @@ class StateDatabase:
                 "SELECT * FROM events ORDER BY event_id DESC LIMIT ?", (int(limit),)
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def upsert_auth_status(self, status: dict[str, Any], now: datetime | None = None) -> None:
+        allowed = {
+            "provider", "auth_method", "state", "credential_present", "credential_valid",
+            "permissions_ok", "account_bound", "last_verified_at", "expires_at",
+            "last_error_code", "last_error_at",
+        }
+        if set(status) != allowed:
+            raise ValueError("Auth status must use the fixed non-secret allowlist")
+        now = now or datetime.now(timezone.utc)
+        values = {key: status.get(key) for key in allowed}
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO auth_statuses (
+                    provider, auth_method, state, credential_present, credential_valid,
+                    permissions_ok, account_bound, last_verified_at, expires_at,
+                    last_error_code, last_error_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(provider) DO UPDATE SET
+                    auth_method=excluded.auth_method, state=excluded.state,
+                    credential_present=excluded.credential_present,
+                    credential_valid=excluded.credential_valid, permissions_ok=excluded.permissions_ok,
+                    account_bound=excluded.account_bound, last_verified_at=excluded.last_verified_at,
+                    expires_at=excluded.expires_at, last_error_code=excluded.last_error_code,
+                    last_error_at=excluded.last_error_at, updated_at=excluded.updated_at
+                """,
+                (
+                    values["provider"], values["auth_method"], values["state"], int(bool(values["credential_present"])),
+                    _sqlite_bool(values["credential_valid"]), _sqlite_bool(values["permissions_ok"]),
+                    _sqlite_bool(values["account_bound"]), values["last_verified_at"], values["expires_at"],
+                    values["last_error_code"], values["last_error_at"], self._iso(now),
+                ),
+            )
+
+    def get_auth_status(self, provider: str) -> dict[str, Any] | None:
+        with self._connection() as connection:
+            row = connection.execute("SELECT * FROM auth_statuses WHERE provider = ?", (provider,)).fetchone()
+        return _auth_row(row) if row else None
+
+    def list_auth_statuses(self) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            rows = connection.execute("SELECT * FROM auth_statuses ORDER BY provider").fetchall()
+        return [_auth_row(row) for row in rows]
+
+
+def _sqlite_bool(value: Any) -> int | None:
+    return None if value is None else int(bool(value))
+
+
+def _auth_row(row: sqlite3.Row) -> dict[str, Any]:
+    payload = dict(row)
+    for key in ("credential_present", "credential_valid", "permissions_ok", "account_bound"):
+        value = payload.get(key)
+        payload[key] = None if value is None else bool(value)
+    payload.pop("updated_at", None)
+    return payload

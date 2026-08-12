@@ -20,6 +20,7 @@ class AutopilotEngine:
         state_db: Any,
         queue: Any,
         memory_statistics: Any,
+        auth_status_provider: Callable[[], Mapping[str, Any]] | None = None,
         health_factory: Callable[..., Any] = StartupHealthChecker,
         interval_seconds: float | None = None,
     ) -> None:
@@ -27,6 +28,7 @@ class AutopilotEngine:
         self.state_db = state_db
         self.queue = queue
         self.memory_statistics = memory_statistics
+        self.auth_status_provider = auth_status_provider
         self.health_factory = health_factory
         configured_interval = (
             float(interval_seconds)
@@ -113,7 +115,7 @@ class AutopilotEngine:
             repairs = self._safe_repairs(before)
             after = self.health_factory(self.settings, read_only=True).run()
             memory = self._memory_snapshot()
-            background, owner = self._classify(after, memory, self._queue_stats())
+            background, owner = self._classify(after, memory, self._queue_stats(), self._auth_status())
             if repairs:
                 self._record_repairs(repairs, after)
             with self._lock:
@@ -217,11 +219,21 @@ class AutopilotEngine:
         except Exception:
             return {}
 
+    def _auth_status(self) -> dict[str, Any]:
+        if self.auth_status_provider is None:
+            return {"providers": []}
+        try:
+            payload = self.auth_status_provider()
+            return dict(payload) if isinstance(payload, Mapping) else {"providers": []}
+        except Exception:
+            return {"providers": []}
+
     def _classify(
         self,
         health: Mapping[str, Any],
         memory: Mapping[str, Any],
         queue_stats: Mapping[str, int],
+        auth_status: Mapping[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         background: list[dict[str, Any]] = []
         owner: list[dict[str, Any]] = []
@@ -268,6 +280,14 @@ class AutopilotEngine:
                 "title": f"{failed} 个任务已停止自动重试",
                 "summary": "任务已达到自动重试上限并保留失败原因，不会无限循环。",
             })
+        for provider in (auth_status or {}).get("providers", []):
+            if not isinstance(provider, Mapping):
+                continue
+            state = str(provider.get("state") or "not_configured")
+            if state == "permission_insufficient":
+                background.append({"code": "auth_permission_insufficient", "title": "连接权限不足", "summary": "灵机会保持当前安全边界，等待权限恢复。"})
+            elif state in {"expired", "invalid"}:
+                background.append({"code": "auth_reauthentication_required", "title": "连接需要重新认证", "summary": "灵机会继续处理不依赖该连接的工作。"})
         return self._dedupe(background), self._dedupe(owner)
 
     @staticmethod

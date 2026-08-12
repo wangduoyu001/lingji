@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
-const [macConfigText, packageText, buildScript, rustMain, bootstrap, sidecarConfigText, workflow, runtimeBoundary] = await Promise.all([
+const [macConfigText, packageText, buildScript, rustMain, bootstrap, sidecarConfigText, workflow, runtimeBoundary, overview] = await Promise.all([
   read("../src-tauri/tauri.macos.conf.json"),
   read("../package.json"),
   read("../../../scripts/build_macos_sidecar.sh"),
@@ -15,6 +15,7 @@ const [macConfigText, packageText, buildScript, rustMain, bootstrap, sidecarConf
   read("../src-tauri/tauri.sidecar.conf.json"),
   read("../../../.github/workflows/macos-desktop-gate.yml"),
   read("../src/components/RuntimeBoundary.tsx"),
+  read("../src/pages/OverviewPage.tsx"),
 ]);
 
 const macConfig = JSON.parse(macConfigText);
@@ -91,5 +92,10 @@ assert.equal(
   false,
   "manual data-root selection must be an advanced fallback, not a first-run action",
 );
+
+for (const token of ["已连接", "需重新认证", "权限不足", "auth_status"]) {
+  assert.ok(overview.includes(token), `Desktop auth summary is missing ${token}`);
+}
+assert.equal(/token|authorization|cookie/i.test(overview), false, "Desktop must not render credential material");
 
 console.log("macos-release-smoke: PASS");

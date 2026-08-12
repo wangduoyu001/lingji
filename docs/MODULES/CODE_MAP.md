@@ -222,6 +222,7 @@ src/control/settings_api.py::register_settings_governance_routes
 src/control/capture_api.py::register_capture_routes
 src/control/auto_review_api.py::register_auto_review_routes
 src/control/memory_inspector.py::build_memory_inspector
+src/auth_state.py::CredentialStore / AuthStatusService / export_auth_snapshot
 
 src/mcp_server.py
 src/mcp/extraction_submission.py
@@ -238,6 +239,8 @@ stdio = default local MCP transport
 ```
 
 Desktop 只使用认证的 8766，不直连 SQLite、Qdrant、Ollama 或兼容 API。
+
+认证凭据仅存系统 Keychain / Credential Manager；`lingji_state.db` 与 8766 只传递非敏感认证状态。验收快照只能由 `export_auth_snapshot` 的 allowlist 导出，详见 `docs/AUTH_CREDENTIAL_STATE_SYNC.md`。
 
 局部验收：
 

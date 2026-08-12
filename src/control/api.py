@@ -179,6 +179,10 @@ def create_control_app(
     def runtime_ping() -> dict[str, Any]:
         return {"status": "ok"}
 
+    @app.get("/api/auth/status", dependencies=secured)
+    def auth_status() -> dict[str, Any]:
+        return control.auth_statuses()
+
     @app.get("/api/overview", dependencies=secured)
     def overview() -> dict[str, Any]:
         return control.overview()

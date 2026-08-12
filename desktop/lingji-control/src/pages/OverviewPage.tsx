@@ -25,6 +25,15 @@ function stateLabel(value: unknown): string {
   return labels[state] ?? "灵机正在运行";
 }
 
+function authLabel(value: unknown): string {
+  const state = String(value ?? "not_configured").toLowerCase();
+  if (state === "verified") return "已连接";
+  if (state === "permission_insufficient") return "权限不足";
+  if (["expired", "invalid"].includes(state)) return "需重新认证";
+  if (state === "error") return "认证暂不可用";
+  return "等待认证";
+}
+
 export default function OverviewPage({
   data,
   api,
@@ -67,6 +76,9 @@ export default function OverviewPage({
     ? autopilot.recent_actions as Record<string, unknown>[]
     : [];
   const latestAutomaticAction = recentActions[0];
+  const authProviders = Array.isArray((d.auth_status as Record<string, unknown> | undefined)?.providers)
+    ? ((d.auth_status as Record<string, unknown>).providers as Record<string, unknown>[])
+    : [];
 
   const irreversibleDecisionCount = vector.rebuild_required === true ? 1 : 0;
   const autopilotOwnerCount = Number(autopilot.owner_action_count ?? 0);
@@ -136,6 +148,17 @@ export default function OverviewPage({
       {stale && <Notice kind="warning">部分状态来自旧快照，灵机正在后台重新确认，不需要手动刷新。</Notice>}
       {autopilotResource.error && autopilotResource.data && (
         <Notice kind="warning">自动维护状态暂时同步失败，灵机会继续后台运行并自动重试。</Notice>
+      )}
+
+      {authProviders.length > 0 && (
+        <section className="assistant-autopilot-passive" aria-label="本机连接状态">
+          <span className="desktop-eyebrow">本机连接</span>
+          {authProviders.map((provider) => (
+            <div className="autopilot-background-issue" key={String(provider.provider)}>
+              <strong>{String(provider.provider)}：{authLabel(provider.state)}</strong>
+            </div>
+          ))}
+        </section>
       )}
 
       <CurrentWorkPanel api={api} active={active} onPendingReviewCount={setPendingReviewCount} />

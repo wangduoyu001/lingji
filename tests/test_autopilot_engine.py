@@ -116,17 +116,31 @@ class AutopilotEngineTests(unittest.TestCase):
             vault_path=root / "vault",
         )
 
-    def build(self, *, queue=None, memory=None, health_factory=DynamicHealth, interval_seconds=None):
+    def build(self, *, queue=None, memory=None, health_factory=DynamicHealth, interval_seconds=None, auth_status_provider=None):
         state_db = FakeStateDb()
         engine = AutopilotEngine(
             self.settings,
             state_db=state_db,
             queue=queue or FakeQueue(),
             memory_statistics=memory or FakeMemory(),
+            auth_status_provider=auth_status_provider,
             health_factory=health_factory,
             interval_seconds=interval_seconds,
         )
         return engine, state_db
+
+    def test_auth_blockers_remain_background_work(self):
+        engine, _ = self.build(auth_status_provider=lambda: {"providers": [
+            {"provider": "github", "state": "permission_insufficient"},
+            {"provider": "codex", "state": "expired"},
+        ]})
+
+        status = engine.run_once()
+
+        codes = {item["code"] for item in status["background_issues"]}
+        self.assertIn("auth_permission_insufficient", codes)
+        self.assertIn("auth_reauthentication_required", codes)
+        self.assertEqual(status["owner_action_count"], 0)
 
     def test_safe_repairs_create_only_lingji_directories_release_stale_and_verify(self):
         queue = FakeQueue(released=2, failed=1)
