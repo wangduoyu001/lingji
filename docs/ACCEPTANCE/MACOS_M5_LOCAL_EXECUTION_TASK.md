@@ -1,137 +1,129 @@
 # LingJi macOS M5 当前真机验收任务单
 
-> **当前状态：FAIL / CLOSED FOR THIS ARTIFACT。**
+> **当前状态：ACTIVE / READY_FOR_M5_REACCEPTANCE。**
 >
-> 本文件仍是 M5 真机验收的固定入口，但 `171091fe...` / Artifact `9102748834` 已失败，禁止再次验收同一包。当前工作已切回开发修复，权威任务见 `docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md`。
+> 本轮只允许验收下面指定的新 Artifact。旧 `171091fe...` / Artifact `9102748834` 永久禁止重试。
 
-## 0. 失败任务身份
+## 0. 当前任务身份
 
 ```yaml
-status: FAILED_DO_NOT_RETRY
-task_id: MACOS-M5-AUTOPILOT-PHASE4-171091FE
+status: ACTIVE
+task_id: MACOS-M5-OWNER-AUTOPILOT-REACCEPTANCE-041C5FC8
 repository: wangduoyu001/lingji
-product_commit: 171091fe764c6653cdc7325b4a1a71e0b7800822
+product_commit: 041c5fc805d2280c4d84d78bca45799f131ad61b
 product_branch: feature/owner-autopilot-ui-codexpp
 pull_request: 88
 platform: macOS Apple Silicon
 target: aarch64-apple-darwin
 artifact_name: lingji-macos-arm64
-artifact_id: 9102748834
-workflow_run_id: 31495013820
-artifact_archive_sha256: 701680b5d89ef3dc1fa669afd038a13779cb755b3adc5d104df6a1fbee36e306
+artifact_id: 9189896949
+workflow_run_id: 31722145426
+artifact_archive_sha256: dcb6945a1b6784d2d98b4994f1814dbcf3a8b279017278e4940dba398bfc8cee
 dmg_name: 灵机_0.1.0_aarch64.dmg
-dmg_size_bytes: 46271781
-dmg_sha256: 78c1b01abbe44b2800f4cfc3af5020f96d66feaa0682f909c4e2fc86d35fed9f
-verdict: FAIL
-retry_same_artifact: false
-next_stage: DEVELOPMENT_ROOT_CAUSE_REPAIR
-next_task: docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md
-expected_failure_report: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_171091fe.md
-expected_failure_report_branch: acceptance/macos-m5-autopilot-phase4-171091fe
+dmg_size_bytes: 46307971
+dmg_sha256: bef1da0fb2783a22462a5ca60ea64b3483352a3ff1dc60199bd4254b9c10ad3d
+windows_artifact_id: 9189908712
+windows_artifact_sha256: 027a59c6f0a03a452225578f506b5d0509b5b358b665e413e414fae97cf4a22d
+verdict: PENDING_PHYSICAL_M5
+retry_same_artifact: true
 ```
 
-## 1. 已确认的失败结论
+## 1. 开始前
 
-主人已确认本轮 M5 复验已经结束，不是卡住，也不是等待继续。
+先按 `docs/ACCEPTANCE/MACOS_M5_ACCEPTANCE_INSTRUCTIONS.md` 做只读环境预检：
 
-当前三类阻断：
+- 确认 Apple Silicon / arm64；
+- 确认 8765–8767 与 LingJi 残留进程；
+- 记录旧 `/Applications/灵机.app` 状态；
+- 创建本任务唯一临时根；
+- 不碰 Production DataRoot、Vault 或其他正式数据。
+
+本轮临时数据必须全部位于：
 
 ```text
-1. 安装包身份不精确
-2. 首次体验仍不清晰
-3. 错误写入 ~/Documents/acceptance
+~/Library/Caches/LingJiAcceptance/MACOS-M5-OWNER-AUTOPILOT-REACCEPTANCE-041C5FC8/
 ```
 
-因此：
+## 2. 安装包身份
+
+Codex 自行下载 Artifact `9189896949`，并先验证：
 
 ```text
-Artifact 9102748834 = REJECTED
-产品 Commit 171091fe = REQUIRES_FIX
-PR #88 = Draft / DO NOT MERGE
+Artifact ZIP SHA256 = dcb6945a1b6784d2d98b4994f1814dbcf3a8b279017278e4940dba398bfc8cee
+DMG SHA256 = bef1da0fb2783a22462a5ca60ea64b3483352a3ff1dc60199bd4254b9c10ad3d
+DMG size = 46307971
 ```
 
-## 2. 现场收尾状态
-
-主人已确认：
+必须完整替换旧 App，禁止 overlay copy。新 App 安装后先做签名与 release metadata 验证；metadata Commit 必须精确等于：
 
 ```text
-新版本已停止
-端口和后台进程已关闭
-本轮测试数据已清理到废纸篓
-旧的有效签名 App 已恢复到 /Applications/灵机.app
+041c5fc805d2280c4d84d78bca45799f131ad61b
 ```
 
-开发端不得要求主人再次执行这些收尾动作，也不得重新安装失败 Artifact 来“再确认一次”。
+不一致立即 FAIL，不继续启动。
 
-## 3. 失败报告远程状态异常
+## 3. Acceptance 隔离
 
-本机 Codex 声称失败报告和 PR #88 评论已推送，但 ChatGPT 于 2026-08-11 重新读取 GitHub 远程时发现：
+启动前设置本任务专用：
 
 ```text
-acceptance/macos-m5-autopilot-phase4-171091fe：未发现
-docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_171091fe.md：master / 产品分支未发现
-GitHub acceptance refs：未发现本轮 Phase 4 分支
+LINGJI_ACCEPTANCE_DATA_ROOT=<task-root>/runtime-data
+HOME=<task-root>/isolated-home
 ```
 
-因此开发任务第一步不是猜根因，而是：
+必须验证：
+
+- storage / logs / runtime / raw / qdrant 等只写入 task root；
+- `~/Documents/acceptance` 不得因本轮产生；
+- task root 外新增 Acceptance 数据路径数量 = 0；
+- 首次退出后 Sidecar 与 8766 真实释放；
+- 同一任务根第二次启动仍能正常进入 healthy；
+- 第二次退出后同样无残留。
+
+## 4. 主人体验检查
+
+只有到必须肉眼判断时才请主人参与。重点不是逐个点按钮，而是确认：
+
+1. 第一次打开无需理解 DataRoot、Qdrant、Embedding 或端口即可进入可用状态。
+2. 首页能直接看懂灵机已经自动做了什么、正在做什么、当前是否真的需要主人决定。
+3. Codex 工作记录数量有来源解释，不再像莫名出现的聊天窗口。
+4. 自动发现和后台处理无需反复点击刷新。
+5. 技术异常与“需要主人决定”明确分开。
+6. 只有明确授权或高风险边界才要求主人操作。
+
+## 5. 结束清理
+
+验收结束后必须：
+
+- 停止本轮 App / Sidecar；
+- 确认 8765–8767 无本轮残留；
+- 卸载 DMG；
+- 删除本轮 task root、普通成功日志、截图、重复 ZIP/DMG、临时数据库和缓存；
+- 只保留最终报告、必要失败证据摘要和后续确实复用的正式 App；
+- 不删除 Production DataRoot、Vault 或其他正式数据。
+
+## 6. 最终报告
+
+最终报告路径：
 
 ```text
-读取本机失败报告
-→ 核对本机 Git / reflog / 未推送提交
-→ 必要时补交失败报告
-→ 远程复读确认
-→ 再开始开发修复
+docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_041c5fc8.md
 ```
 
-不得把“git push 命令执行过”当成远程报告已存在。
-
-## 4. 禁止事项
-
-在新的精确产品 Head 和新 Artifact 生成前：
-
-- 禁止重新运行本任务；
-- 禁止使用 Artifact `9102748834`；
-- 禁止使用旧 DMG；
-- 禁止把本任务状态改回 ACTIVE；
-- 禁止把自动 CI PASS 当成真实 M5 PASS；
-- 禁止合并 PR #88。
-
-## 5. 下一步开发任务
-
-固定入口：
+报告分支：
 
 ```text
-https://github.com/wangduoyu001/lingji/blob/master/docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md
+acceptance/macos-m5-owner-autopilot-041c5fc8
 ```
 
-开发端必须关闭：
+报告必须记录：
 
-```text
-M5-IDENTITY-002
-M5-UX-003
-M5-ISOLATION-002
-```
+- 最终 PASS / FAIL；
+- 安装包身份；
+- 首启 / 二启；
+- Acceptance 隔离；
+- UI/Autopilot 肉眼结论；
+- 清理结果；
+- 远程报告 Commit 与 PR #88 评论。
 
-并为三个真实失败路径新增自动回归。
-
-## 6. 重新开放 M5 验收的条件
-
-只有开发端全部完成以下条件，本文件才允许原地更新为新的 `status: ACTIVE`：
-
-```text
-三个根因已修复
-三个真实失败回归测试 PASS
-Python / Desktop / Rust 全量 PASS
-P0 Windows Gate PASS
-Windows Release PASS
-macOS Gate PASS
-新的精确 product_commit
-新的 macOS artifact_id
-新的 Artifact ZIP SHA256
-新的 DMG SHA256 / size
-最终 DMG 内 release_metadata.commit 与 product_commit 精确一致
-任务根外 acceptance 写入 = 0
-PR #88 仍为 Draft
-```
-
-重新验收必须使用**新 Artifact**。真实 M5 的最终 PASS 仍只能由新一轮物理验收得出。
+PR #88 在真实 M5 PASS 前继续 Draft / DO NOT MERGE。
