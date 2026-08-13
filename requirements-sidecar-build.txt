@@ -1,2 +1,3 @@
+# Final release gates bind macOS and Windows artifacts to the same source SHA.
 -r requirements-ui.txt
 pyinstaller==6.21.0
