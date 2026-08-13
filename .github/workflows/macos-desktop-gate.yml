@@ -1,5 +1,5 @@
 name: macOS Desktop Gate
-# PR #88 closeout: rerun the final DMG gate against sidecar state that remains until real process exit.
+# PR #88 closeout: require state, PID and port release before DMG restart/detach.
 
 on:
   push:
@@ -262,25 +262,54 @@ jobs:
             return 1
           }
           cleanup_runtime() {
-            python3 - <<PY
+            SIDECAR_PID="$(python3 - <<PY
           import json
           from pathlib import Path
           runtime = Path("$TASK_ROOT/runtime-data/runtime")
           state = runtime / "sidecar-state.json"
+          sidecar_pid = ""
           if state.exists():
-              instance_id = json.loads(state.read_text(encoding="utf-8")).get("instance_id")
+              payload = json.loads(state.read_text(encoding="utf-8"))
+              instance_id = payload.get("instance_id")
+              sidecar_pid = str(payload.get("pid") or "")
               if instance_id:
                   request = runtime / "sidecar-stop-request.json"
                   temporary = request.with_suffix(".tmp")
                   temporary.write_text(json.dumps({"instance_id": instance_id}), encoding="utf-8")
                   temporary.replace(request)
+          print(sidecar_pid)
           PY
+            )"
             kill "$DESKTOP_PID" 2>/dev/null || true
             wait "$DESKTOP_PID" 2>/dev/null || true
-            for _ in $(seq 1 40); do
-              [[ ! -e "$TASK_ROOT/runtime-data/runtime/sidecar-state.json" ]] && break
+            for _ in $(seq 1 120); do
+              STATE_GONE=0
+              PID_GONE=0
+              PORT_FREE=0
+              [[ ! -e "$TASK_ROOT/runtime-data/runtime/sidecar-state.json" ]] && STATE_GONE=1
+              if [[ -z "$SIDECAR_PID" ]] || ! kill -0 "$SIDECAR_PID" 2>/dev/null; then
+                PID_GONE=1
+              fi
+              if ! lsof -nP -iTCP:8766 -sTCP:LISTEN >/dev/null 2>&1; then
+                PORT_FREE=1
+              fi
+              if [[ "$STATE_GONE" = 1 && "$PID_GONE" = 1 && "$PORT_FREE" = 1 ]]; then
+                return 0
+              fi
               sleep 0.25
             done
+            echo "[macos-isolation] runtime cleanup timed out" >&2
+            echo "[macos-isolation] sidecar_pid=${SIDECAR_PID:-unknown}" >&2
+            if [[ -e "$TASK_ROOT/runtime-data/runtime/sidecar-state.json" ]]; then
+              echo "[macos-isolation] stale sidecar state:" >&2
+              cat "$TASK_ROOT/runtime-data/runtime/sidecar-state.json" >&2 || true
+            fi
+            if [[ -n "$SIDECAR_PID" ]]; then
+              ps -p "$SIDECAR_PID" -o pid=,ppid=,state=,command= >&2 || true
+            fi
+            lsof -nP -iTCP:8766 -sTCP:LISTEN >&2 || true
+            cat "$TASK_ROOT/desktop-launch.log" >&2 || true
+            return 1
           }
           trap 'cleanup_runtime; hdiutil detach "$MOUNT_POINT" -force >/dev/null 2>&1 || true' EXIT
           launch
