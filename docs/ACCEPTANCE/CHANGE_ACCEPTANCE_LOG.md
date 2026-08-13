@@ -51,6 +51,48 @@
 
 ---
 
+## 2026-08-13 · PR #88 Phase 4 · macOS 最终 DMG 真实退出三重门禁
+
+- 产品分支：`feature/owner-autopilot-ui-codexpp`
+- 产品 Commit：`pending final closeout head`
+- 影响模块：macOS 最终 DMG 首启/二启隔离 Gate、Sidecar 退出验证、DMG 清理。
+- 风险等级：P0（最终 DMG 可卸载性、二启可靠性与验收真实性）。
+- 用户可感知变化：无新增交互；仅收紧最终安装包验收，避免把 state 文件消失误判为 Sidecar 已真实退出。
+- 数据或安全边界变化：仍只发送当前 task-scoped runtime 的精确 `instance_id` stop request；禁止 `killall`，禁止把主动 kill Sidecar PID 当正常成功路径。
+
+### 新增或修改的自动验收
+
+- [ ] `macOS Desktop Gate`：每次停止必须同时确认 `sidecar-state.json` 消失、启动时记录的 Sidecar PID 已退出、8766 已无 LISTEN，三项同时满足后才允许二启或卸载 DMG。
+- [ ] 真实退出等待最长 30 秒；超时必须打印 state、Sidecar PID 的 `ps`、`lsof -nP -iTCP:8766 -sTCP:LISTEN` 与 Desktop launch log，然后 FAIL。
+- [ ] 最终 DMG App 首启/二启继续要求 authenticated 8766 ping、task-scoped DataRoot、`~/Documents/acceptance` 不存在、metadata exact-head、主程序/Sidecar arm64、codesign 与 DMG detach 全部 PASS。
+- [ ] Windows 已通过的 Uvicorn graceful managed-stop 不得因本次 macOS Gate 修改回退。
+
+### 新增或修改的真机验收
+
+- [ ] 新精确 Artifact 在 M5 上完整替换安装后，退出和再次启动均不得留下上一实例 Sidecar 或 8766 listener；最终退出后可正常清理任务临时根。
+
+### 主人肉眼确认
+
+- [ ] 本轮不新增主人操作；真机仍只需要确认首次体验、首页智能化与必要授权边界。
+
+### 回归项
+
+- [ ] 不允许只凭 state 消失判定 Runtime 已退出。
+- [ ] 不允许全局清理 LingJi/Codex/其他 AI 进程。
+- [ ] 不放宽 `LINGJI_ACCEPTANCE_DATA_ROOT`、认证 Secret、Release exact-head 或 Windows 共用主线。
+
+### 清理与回滚
+
+- 临时数据仅在 task root；成功后清理普通日志、挂载点、重复 Artifact 与临时 Runtime。
+- 回滚只允许恢复 Gate 等待逻辑，不得回退 Sidecar 的 Uvicorn graceful shutdown bridge。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/PR88_M5_MACOS_GATE_EXIT_VERIFICATION.md`
+- PR #88 保持 Draft，直到新精确 Artifact 的真实 M5 复验 PASS。
+
+---
+
 ## 2026-08-12 · PR #88 Phase 4 · Sidecar 真实退出生命周期与最终 DMG 收口
 
 - 产品分支：`feature/owner-autopilot-ui-codexpp`
@@ -181,7 +223,7 @@
 
 - 临时数据前缀：`MACOS-M5-AUTOPILOT-PHASE3-<short-sha>`。
 - 安装方式：`whole_bundle_replace`，禁止 overlay。
-- 临时 App 备份：仅存于 `$ACCEPTANCE_ROOT/app-backup`；新版本 PASS 后随任务根删除；新版本 FAIL 时先恢复旧 App 并验证签名。
+- 临时 App 备份：仅存于 `$ACCEPTANCE_ROOT/app-backup`；新版本 PASS 后随任务根删除；新版本 FAIL 时先恢复旧 App并验证签名。
 - Runtime 测试根：`$ACCEPTANCE_ROOT/runtime-data`，结束后整体删除。
 - 失败证据仅保留最小必要内容；成功日志、截图、DMG、重复 ZIP、临时 Qdrant/SQLite 全部按 M5 协议清理。
 
