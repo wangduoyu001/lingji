@@ -2,6 +2,8 @@
 
 > **当前状态：ACTIVE / READY_FOR_M5_REACCEPTANCE。**
 >
+> **本文件是当前唯一执行入口，优先于 `LOCAL_EXECUTION_TASK.md` 中任何遗留开发状态。Codex 不得恢复旧 `171091fe` 修复流程。**
+>
 > 本轮只允许验收下面指定的新 Artifact。旧 `171091fe...` / Artifact `9102748834` 永久禁止重试。
 
 ## 0. 当前任务身份
