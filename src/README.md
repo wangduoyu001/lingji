@@ -14,3 +14,5 @@
 ## 发布约束
 
 macOS 与 Windows 共用同一 `src` 主线。最终双平台 Artifact 必须绑定同一精确产品 Commit，并通过各自正式发行 Gate 后才能进入真机验收。
+
+PR #88 在 Phase 4/5 产品改动完成后必须重新以当前最终 Head 生成双平台 Artifact；此前任何已通过但 SHA 较旧的 Artifact 只保留为历史证据，不得作为最终 M5 复验输入。
