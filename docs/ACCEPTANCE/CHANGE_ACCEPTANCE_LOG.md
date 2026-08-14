@@ -51,6 +51,53 @@
 
 ---
 
+## 2026-08-14 · PR #88 · Phase 4/5 后最终 Head Artifact 重新锁定
+
+- 产品分支：`feature/owner-autopilot-ui-codexpp`
+- 产品 Commit：`pending final relock head`
+- 影响模块：双平台 Release 身份、最终 Artifact 收口、M5 任务交接；本记录与 `src/README.md` 触发重新验证，不改变 Runtime 行为。
+- 风险等级：P0（最终真机输入必须与当前 PR #88 产品 Head 完全一致）。
+- 用户可感知变化：无新增产品交互；只重新锁定包含“找回主窗口”和“记忆进度看板”后的最终双平台包。
+- 数据或安全边界变化：无；不得放宽 Production/Acceptance 隔离、CredentialStore、AuthStatus、Secret 导出或主人授权边界。
+
+### 新增或修改的自动验收
+
+- [ ] `tests`、`P0 Windows Gate`、`Windows Desktop Release Baseline`、`macOS Desktop Gate`、`acceptance-doc-sync`、`local-execution-handoff` 必须全部绑定同一最终 Head 并 PASS。
+- [ ] macOS 与 Windows Artifact 必须由该同一精确 Head 生成；下载后独立复核 ZIP/DMG/NSIS 哈希与内嵌 Commit metadata。
+- [ ] `90398fd87f3419c598632479d2a00626b4554122` 的已通过 Artifact 只作为 Phase 5 自动验证历史证据；若最终 Head 不同，不得作为最终 M5 输入。
+
+### 新增或修改的真机验收
+
+- [ ] 仅在六道门全部对最终同一 Head 通过、双平台 Artifact 身份与哈希锁定、PR #88 任务单更新后，才允许启动新的 M5 真机复验。
+- [ ] M5 必须包含 Phase 4“找回主窗口”与 Phase 5“记忆进度看板”主人肉眼检查，同时继续回归首次启动、身份、隔离、Sidecar 真实退出与授权边界。
+
+### 主人肉眼确认
+
+- [ ] 首页应能直接看懂系统正在收纳/更新/取回什么；没有验证样本时不得把覆盖率包装成“准确率”。
+- [ ] 主窗口被最小化或移出可见区域后，“找回主窗口”必须可发现且能恢复到当前屏幕并获得焦点。
+
+### 回归项
+
+- [ ] 不允许复用任何 SHA 早于最终 Head 的 macOS / Windows Artifact 作为最终 M5 输入。
+- [ ] 不允许 Mac/Windows Artifact、任务单、结果回执和最终报告引用不同产品 SHA。
+- [ ] 不允许恢复已拒绝 Artifact `9102748834`，也不允许回退 Sidecar graceful shutdown、Acceptance 任务根隔离或认证 Secret 边界。
+
+### 清理与回滚
+
+- 本次仅产生 CI Artifact、临时验证数据和任务级报告；按既有任务协议清理，不删除主人数据。
+- 回滚仅允许回退本次 release-trigger 文档，不得回退 Phase 4/5 已验证产品能力或治理门禁。
+
+### 不在范围
+
+- 不新增 Runtime 功能，不继续扩展 PR #88 产品范围；本轮只完成最终同 SHA 收口并准备 M5 复验。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/PR88_FINAL_ARTIFACT_CLOSEOUT.md`
+- M5 报告：`docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_<final-short-sha>.md`
+
+---
+
 ## 2026-08-14 · PR #88 Phase 5 · 记忆进度看板
 
 - 产品分支：`feature/owner-autopilot-ui-codexpp`
