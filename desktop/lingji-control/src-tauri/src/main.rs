@@ -7,6 +7,7 @@ use runtime_bootstrap::RuntimeBootstrapStatus;
 use runtime_manager::{owner_data_root, RuntimeManager, RuntimeStatus};
 use serde::Serialize;
 use std::{env, fs, path::PathBuf};
+use tauri::menu::MenuBuilder;
 use tauri::{AppHandle, Manager, State};
 
 #[derive(Serialize)]
@@ -62,6 +63,15 @@ fn release_metadata_output_path() -> Option<PathBuf> {
         }
     }
     None
+}
+
+fn recover_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.center();
+        let _ = window.set_focus();
+    }
 }
 
 #[tauri::command]
@@ -209,6 +219,18 @@ fn main() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building LingJi control center");
+
+    let menu = MenuBuilder::new(&app)
+        .text("recover-main-window", "找回主窗口")
+        .build()
+        .expect("error while building LingJi window menu");
+    app.set_menu(menu)
+        .expect("error while setting LingJi window menu");
+    app.on_menu_event(|app_handle, event| {
+        if event.id().0 == "recover-main-window" {
+            recover_main_window(app_handle);
+        }
+    });
 
     app.run(|app_handle, event| match event {
         tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {

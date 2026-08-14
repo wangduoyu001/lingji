@@ -51,6 +51,45 @@
 
 ---
 
+## 2026-08-14 · PR #88 Phase 4 · 主窗口找回
+
+- 产品分支：`feature/owner-autopilot-ui-codexpp`
+- 产品 Commit：`pending window recovery commit`
+- 影响模块：Tauri 主窗口、macOS 菜单栏、Desktop smoke。
+- 风险等级：P1（窗口被拖离可见屏幕后，主人无法回到灵机）。
+- 用户可感知变化：菜单栏新增“找回主窗口”；它会取消最小化、显示、居中并置前主窗口。
+- 数据或安全边界变化：无；不访问 Runtime、DataRoot、Vault、凭据或网络。
+
+### 新增或修改的自动验收
+
+- [ ] `node desktop/lingji-control/scripts/window-recovery-smoke.mjs`：必须同时存在主窗口查找、取消最小化、显示、居中、置前和菜单入口。
+- [ ] `node desktop/lingji-control/scripts/run-smoke-suite.mjs`：统一桌面 smoke 必须包含窗口找回回归项。
+- [ ] macOS Desktop Gate：构建后的 App 必须能从菜单栏触发找回窗口，不得只依赖首次启动的居中配置。
+
+### 新增或修改的真机验收
+
+- [ ] 在 M5 上将主窗口移出可见区域或最小化后，从菜单栏点击“找回主窗口”；窗口必须回到当前屏幕中央并获得焦点。
+
+### 主人肉眼确认
+
+- [ ] “找回主窗口”是否容易发现，且是否能真正找回误放的窗口。
+
+### 回归项
+
+- [ ] 不得因自定义菜单移除现有 macOS 菜单栏能力。
+- [ ] 不得重置窗口以外的用户设置或影响 Runtime 生命周期。
+
+### 清理与回滚
+
+- 不产生临时数据；回滚仅移除菜单项和找回调用，不删除或改写用户数据。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_<new-short-sha>.md`
+- M5 任务单必须在新 macOS Artifact 生成后更新；失败的 `65de7292` Artifact 不得复用。
+
+---
+
 ## 2026-08-14 · PR #88 · 最终同 SHA Artifact 收口文档
 
 - 产品分支：`feature/owner-autopilot-ui-codexpp`
