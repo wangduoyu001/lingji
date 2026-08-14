@@ -1,150 +1,122 @@
 # LingJi 验收权威入口
 
-> 本目录是灵机所有开发、优化、修复、发布、本机执行和真实数据试运行的统一验收权威。
->
-> Codex 拉取仓库后，先读根目录 `AGENTS.md`，再读本文件。聊天记录不得作为本机任务或验收结果的权威来源。
+> 本目录只维护**当前验收治理**。历史实施过程、旧任务和旧失败保留在 Git 历史与 `docs/TEST_REPORTS/`，不得重新冒充当前任务。
 
-## 1. 权威文件
+## 1. 唯一权威文件
 
-| 文件 | 唯一职责 |
+| 文件 | 职责 |
 |---|---|
-| `README.md` | 验收治理、更新规则和读取顺序 |
-| `LOCAL_EXECUTION_TASK.md` | ChatGPT / 主开发代理下达给本机 Codex 的唯一当前任务单 |
-| `LOCAL_EXECUTION_RESULT.md` | Codex 提交给 ChatGPT / 主开发代理的唯一固定结果回执 |
-| `MEMORY_QUALITY_TRIAL.md` | Day 0 安全门槛、真实数据试运行、记忆质量问题集与评分标准 |
-| `CODEX_ACCEPTANCE_INSTRUCTIONS.md` | Codex 可直接执行的通用真机验收基线 |
-| `CHANGE_ACCEPTANCE_LOG.md` | 每次代码变更对应的新增、删除和回归验收项 |
-| `REPORT_TEMPLATE.md` | 最终验收报告固定结构 |
+| `LOCAL_EXECUTION_TASK.md` | 唯一当前本机任务单；只有 `status: ACTIVE` 才允许执行 |
+| `LOCAL_EXECUTION_RESULT.md` | 最近一次本机任务的权威结果回执 |
+| `CHANGE_ACCEPTANCE_LOG.md` | 产品变化对应的增量验收要求与历史追踪 |
+| `CODEX_ACCEPTANCE_INSTRUCTIONS.md` | 通用本机验收规则 |
+| `MACOS_M5_ACCEPTANCE_INSTRUCTIONS.md` | Apple Silicon / M5 专项协议，仅在当前任务要求 macOS 时读取 |
+| `MEMORY_QUALITY_TRIAL.md` | 真实数据记忆质量试运行专项协议，仅在任务明确引用时读取 |
+| `REPORT_TEMPLATE.md` | 报告固定结构 |
 
-历史实施报告放在 `docs/TEST_REPORTS/`，只能作为证据，不能覆盖本目录的当前规则。
+**不存在第二份“当前任务单”。** 任何旧的阶段计划、聊天摘要、PR 评论或历史报告都不能覆盖 `LOCAL_EXECUTION_TASK.md`。
 
-## 2. 人与代理的职责
+## 2. 固定读取顺序
 
-用户只负责：
-
-```text
-告诉 Codex：去看仓库任务单干活
-或
-告诉 ChatGPT：Codex 已经完成
-```
-
-真实数据试运行开始前，用户还负责明确授权允许导入的数据范围，并在固定检查点提供肉眼或内容正确性判断。
-
-用户不负责：
-
-- 复制长指令；
-- 理解 Git 分支、Commit、push 或 Artifact；
-- 选择报告路径；
-- 上传报告；
-- 检查远程分支；
-- 清理本机验收垃圾；
-- 查看底层数据库、日志或配置文件。
-
-ChatGPT / 主开发代理负责更新 `LOCAL_EXECUTION_TASK.md`，写清唯一任务身份、被测 Commit、Artifact、执行模式、试运行协议、报告分支、报告路径和清理规则。
-
-Codex 负责读取任务单、执行、生成报告、提交远程、重新读取远程结果、更新 `LOCAL_EXECUTION_RESULT.md`、清理本机垃圾，然后才允许向用户回复完成。
-
-## 3. 本机任务读取顺序
-
-Codex 收到“去看任务单干活”后固定读取：
+本机 Codex 收到“去看任务单干活”后只按以下顺序读取：
 
 ```text
 AGENTS.md
+→ docs/PROJECT_STATUS.md
 → docs/ACCEPTANCE/README.md
 → docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md
 → docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
-→ 任务单指定的专项协议（当前为 MEMORY_QUALITY_TRIAL.md）
+→ 当前任务明确引用的专项协议
 → docs/ACCEPTANCE/CODEX_ACCEPTANCE_INSTRUCTIONS.md
-→ docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md 当前任务条目
+→ docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md 当前相关条目
 → docs/ACCEPTANCE/REPORT_TEMPLATE.md
 ```
 
-只允许执行 `LOCAL_EXECUTION_TASK.md` 中：
+若任务单为：
 
 ```yaml
-status: ACTIVE
+status: IDLE
 ```
 
-的任务。不得根据聊天旧内容、本机残留目录、旧报告或自己的猜测补全任务。
+立即停止，不下载 Artifact、不安装、不启动、不创建报告分支，也不得从历史文档推断下一任务。
 
-## 4. 每次开发的强制流程
+## 3. 当前仓库状态
+
+截至 2026-08-15，PR #88 对产品 Commit `2c96b3ec54b066204cad8db75455be24822852a9` 的 M5 真机复验已完成：
 
 ```text
-理解需求和现有代码
-→ 确定受影响模块和风险
-→ 开发前定义验收标准
+verdict: FAIL
+merge: DO NOT MERGE
+current local task: IDLE
+```
+
+技术身份、签名、arm64、Acceptance 隔离和第二次 Runtime 生命周期通过；主人未通过首页自动化可见性、UI 可感知差异、信息层级、“找回主窗口”和 Memory Progress Dashboard。
+
+权威证据：
+
+```text
+report branch: acceptance/pr88-m5-reacceptance-2c96b3ec
+report commit: 9fdbacf52c22ecaac7eab3a4676f80a81e0dfa95
+cleanup receipt commit: 33982e1d5d3d567369e56484ade733a8b7228408
+```
+
+Artifact `9224368022` 已完成失败验收，不得再次作为候选重跑。历史失败 Artifact `9102748834` 同样永久禁止重试。
+
+## 4. 开发与验收流程
+
+每次产品变化固定遵循：
+
+```text
+理解需求和现有实现
+→ 搜索/核对外部依赖与规则（需要时）
+→ 定义验收标准
 → 修改代码和测试
-→ 同步 CHANGE_ACCEPTANCE_LOG.md
-→ 必要时更新 CODEX_ACCEPTANCE_INSTRUCTIONS.md
-→ 需要真实数据试运行时更新 MEMORY_QUALITY_TRIAL.md
-→ 需要本机执行时更新 LOCAL_EXECUTION_TASK.md
-→ 运行 focused 验证
-→ 最终树运行 full 或 release
-→ Codex 按任务单真机执行
-→ Codex 提交报告和结果回执
-→ ChatGPT 读取远程结果
+→ 更新 CHANGE_ACCEPTANCE_LOG.md
+→ 跑 focused 验证
+→ 最终树跑 full / release / CI
+→ 锁定单一产品 Commit
+→ 由同一精确 SHA 生成 Artifact
+→ 更新 LOCAL_EXECUTION_TASK.md 为新 task_id + ACTIVE
+→ 本机 Codex 真机执行
+→ 报告 + 结果回执 + 远程复读 + 清理
 → 决定修复、继续或合并
 ```
 
-任何产品代码、运行时、Desktop、Sidecar、连接器、数据链路、脚本、依赖或发布流程发生变化，都必须在同一个 PR 中同步更新 `docs/ACCEPTANCE/`。
+产品代码、Runtime、Desktop、连接器、数据链路、脚本、依赖或发布流程变化时，必须同步更新 `CHANGE_ACCEPTANCE_LOG.md`。不得以“小改动”为理由跳过。
 
-不得以“只是小优化”“测试已经覆盖”“以后再补”为理由跳过。人类对“以后再补”的执行率已经经过长期实验，结果并不神秘。
+## 5. 本机任务硬门禁
 
-## 5. 变更时必须更新什么
+每个 ACTIVE 任务必须明确：
 
-每次代码变更至少更新：
+- repository / product PR / product branch / 精确 product commit；
+- Artifact 名称、ID、必要哈希；
+- execution mode；
+- report branch / report path / evidence path；
+- 开始前与结束后清理；
+- 远程复读要求；
+- 主人肉眼确认范围；
+- PASS / FAIL / BLOCKED 判定；
+- 数据、Secret、Production 与回滚边界。
 
-```text
-docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md
-```
+禁止：
 
-以下情况还必须更新 `CODEX_ACCEPTANCE_INSTRUCTIONS.md`：
+- 用短 SHA、版本号或“看起来一样”替代精确身份；
+- 重跑已经被失败结论淘汰的 Artifact；
+- 在验收分支偷偷修产品；
+- force push、`reset --hard`、`clean -fdx` 处理主人环境；
+- 为了绿灯降低断言、隔离、Secret 或生命周期要求。
 
-- 用户操作流程变化；
-- 页面、按钮、路由或状态文案变化；
-- Runtime、端口、进程、安装、升级或重启行为变化；
-- 数据路径、Workspace、Vault、数据库、索引或备份行为变化；
-- MCP、API、认证、Token 或连接器变化；
-- 导入、队列、幂等、审核或永久记忆边界变化；
-- 新增外部客户端、模型、插件或依赖；
-- 新增必须由主人肉眼确认的行为；
-- 新增安全、隐私或回滚风险；
-- 发布 Artifact、安装器或构建合同变化。
+## 6. 平台专项协议
 
-需要真实数据试运行时必须更新或明确引用：
+专项文档是**协议**，不是任务单。
 
-```text
-docs/ACCEPTANCE/MEMORY_QUALITY_TRIAL.md
-```
+- macOS / Apple Silicon / M5：读取 `MACOS_M5_ACCEPTANCE_INSTRUCTIONS.md`；具体 Commit、Artifact、路径和 task_id 永远以 `LOCAL_EXECUTION_TASK.md` 为准。
+- 真实数据记忆质量试运行：只有任务单显式指定 `DAY0_THEN_REAL_DATA_TRIAL` 时才读取 `MEMORY_QUALITY_TRIAL.md`。
+- Windows 或普通本机验证：以 `CODEX_ACCEPTANCE_INSTRUCTIONS.md` 和任务单为准。
 
-需要本机执行时还必须更新：
+专项协议中若存在示例值，与当前任务单冲突时以任务单为准；若安全边界冲突，采用更严格规则并在报告记录。
 
-```text
-docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md
-```
-
-任务完成时 Codex 必须在报告分支更新：
-
-```text
-docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
-```
-
-## 6. 每条验收要求的最低信息
-
-`CHANGE_ACCEPTANCE_LOG.md` 中每次变更必须记录：
-
-```text
-变更标识
-影响范围
-风险
-新增或修改的验收项
-自动测试
-真机测试
-主人肉眼确认
-清理与回滚
-不在范围
-最终报告路径
-```
+## 7. 报告与回执
 
 验收结论只允许：
 
@@ -156,172 +128,61 @@ NOT_TESTED
 SKIPPED_NOT_INSTALLED
 ```
 
-禁止写“应该可以”“大致正常”“代码上没问题”。
+不得使用“应该可以”“基本正常”“代码看起来没问题”。
 
-## 7. 真实数据试运行硬门禁
+最终报告必须区分：
 
-采用 `DAY0_THEN_REAL_DATA_TRIAL` 模式时：
+- 自动检查结果；
+- 主人肉眼观察；
+- 未测试项；
+- 已知限制；
+- 清理与回滚；
+- 产品 Commit、Artifact 与哈希；
+- 报告 Commit 与远程确认。
 
-```text
-Day 0 安全门槛 PASS
-→ 主人明确授权数据范围
-→ Stage 1 小批量真实数据
-→ Stage 2 逐步扩容
-→ 质量问题集和主人抽查
-→ 报告、远程复读和清理
-```
+`git push` 不等于完成。必须远程重新确认报告分支、报告 Commit、报告、结果回执和 PR 评论均可读取。
 
-强制规则：
+## 8. 清理与恢复
 
-- Day 0 未 PASS，禁止导入真实数据；
-- 未经主人明确授权，禁止读取或导入真实资料；
-- PASS 至少执行 20 道质量题，主人至少抽查 10 题；
-- quality score 不低于 90%；
-- source accuracy 不低于 95%；
-- false positive rate 不高于 5%；
-- Codex MCP 真实调用成功率不低于 95%；
-- Production 污染、重复正式内容、自动写永久记忆和配置破坏必须为 0；
-- 详细规则以 `MEMORY_QUALITY_TRIAL.md` 为准。
+开始前：
 
-## 8. 开始前清理硬门禁
+- 只处理确认属于当前任务的临时目录、进程和端口；
+- Production、Vault、正式记忆、主人配置与未知文件不可删除；
+- 不得使用全局 kill 处理 Python、Node、Codex 等进程。
 
-每次本机任务开始前必须：
+结束后：
 
-```text
-拉取最新任务单
-→ 确认 task_id 和产品身份
-→ 删除上一轮临时验收目录
-→ 删除重复 Artifact、解压内容、普通成功日志、截图、fixture、checkpoint 和临时配置副本
-→ 关闭 LingJi 残留进程
-→ 释放 8766 / 8767
-→ 确认没有孤儿 MCP
-→ 才能开始测试
-```
+- PASS：清理本轮 Artifact、解压、普通日志、截图、fixture、checkpoint、临时配置、临时 worktree 和任务根；按任务要求保留正式安装。
+- FAIL：停止本轮精确 Runtime，恢复任务规定的旧安装/配置，保存最小失败证据，清理本轮临时数据。
+- 清理失败：不得写 COMPLETED PASS。
 
-默认直接覆盖安装，不卸载旧版，不删除主人正式数据。
+## 9. 主人与代理边界
 
-禁止删除：
+Codex 负责命令、安装、进程、端口、哈希、日志、Git、报告、远程复读和清理。
 
-- Production DataRoot；
-- 主人正式 Acceptance 数据；
-- Obsidian Vault；
-- 正式记忆；
-- 用户自己的 Codex、Claude、WorkBuddy 配置。
+主人只负责机器无法自动证明的体验与内容判断，例如：
 
-开始前清理未通过时，结果必须为 `BLOCKED_PRE_CLEANUP`，不得继续验收。
-
-## 9. 报告提交与远程确认硬门禁
-
-执行 `git push` 不代表提交成功。Codex 必须从 GitHub 远程重新读取并确认：
-
-- 报告分支存在；
-- 报告内容 Commit 存在；
-- 最终报告可读取；
-- 公开证据可读取；
-- `LOCAL_EXECUTION_RESULT.md` 可读取；
-- 产品 PR 评论包含 task_id、产品 Commit、报告分支、报告 Commit、报告路径和结论。
-
-任何一项远程复读失败，必须写：
-
-```text
-BLOCKED_REPORT_NOT_VISIBLE_ON_GITHUB
-```
-
-不得对用户声称“已上传”或“已完成”。用户不需要也不应该参与排查 Git 提交。
-
-## 10. 完成后清理硬门禁
-
-远程报告第一次确认后，Codex 必须清理：
-
-- 本轮 Artifact 和重复安装包；
-- 临时解压目录；
-- fixture 和 checkpoint；
-- 临时配置副本；
-- 普通成功日志和截图；
-- 临时 worktree；
-- 带本轮前缀的 Acceptance 测试数据；
-- 本轮临时验收根目录。
-
-主人授权导入的真实资料是否保留，必须按任务单和主人选择处理，Codex不得擅自删除。
-
-清理后更新 `LOCAL_EXECUTION_RESULT.md`，再次提交、push 并从远程复读。
-
-只有以下字段全部成立才算完成：
-
-```text
-cleanup_before: PASS
-cleanup_after: PASS
-remote_branch_verified: true
-remote_commit_verified: true
-remote_report_verified: true
-remote_result_verified: true
-pr_comment_verified: true
-local_temp_root_absent: true
-```
-
-结束清理未通过时，结果必须为 `BLOCKED_POST_CLEANUP`。
-
-允许保留：
-
-- 最终 Markdown 验收报告；
-- 脱敏公开证据摘要；
-- 哈希清单；
-- 远程报告 Commit；
-- 主人明确要求保留的失败证据。
-
-## 11. 自动验收与主人验收边界
-
-Codex 可以自动完成：
-
-- Git、Commit、Artifact 和 SHA256 核验；
-- 单元、Smoke、构建和发布合同测试；
-- 进程、端口、文件、配置差异和 API 检查；
-- MCP 工具调用；
-- 导入、队列、候选和审计链检查；
-- 问题集执行、指标统计和脱敏证据；
-- 报告生成、Git 提交、push、远程复读和本地清理。
-
-必须由主人最终确认：
-
-- 是否出现 PowerShell、CMD 或黑窗；
 - 第一次打开是否知道下一步；
-- 页面是否能看懂；
-- 真实客户端 GUI 的连接结果；
-- 候选批准和拒绝操作；
-- Windows 重启后的主观窗口行为；
-- 抽查真实资料问题的答案和来源是否正确；
-- 任何无法被自动证据可靠证明的 UI 或内容质量。
+- 首页是否能看懂；
+- 自动化过程是否真的可见；
+- 窗口行为是否符合预期；
+- 真实内容答案和来源是否正确。
 
-Codex 只能记录主人结论，不能替主人声称“肉眼已确认”或“真实内容全部正确”。
+Codex 不得替主人宣称肉眼体验 PASS。
 
-## 12. 自动门禁
+## 10. 合并边界
 
-仓库必须运行：
+产品 PR 只有在当前候选对应的：
 
-```powershell
-python scripts/check_acceptance_sync.py
-python scripts/check_local_execution_handoff.py
-python -m pytest -q tests/test_acceptance_sync.py
-python -m pytest -q tests/test_local_execution_handoff.py
-```
+- 精确产品 Commit 自动门禁通过；
+- 同 SHA Artifact 锁定；
+- 当前任务真机 PASS；
+- 主人观察 PASS；
+- 无未披露 P0/P1 blocker；
+- Production 污染为 0；
+- 报告与回执远程可读；
+- 清理完成；
 
-`local-execution-handoff` CI 必须验证 Day 0、真实数据授权、质量题数量、评分阈值、远程确认和清理字段。`acceptance/**` 报告分支上的最终回执不是 `COMPLETED` 时必须失败。
+之后才允许进入最终合并判断。
 
-## 13. 合并边界
-
-以下条件全部满足前不得合并产品 PR：
-
-- 精确产品 Commit 的 CI 通过；
-- 精确 Artifact 身份和哈希通过；
-- Day 0 安全门槛通过；
-- Stage 1 小批量真实数据通过；
-- 强制记忆质量指标通过；
-- 主人观察和内容抽查已确认；
-- 没有 Production 污染、数据丢失、自动永久记忆或配置破坏；
-- 最终报告已提交并远程复读；
-- 结果回执为 `COMPLETED`；
-- 开始前和结束后清理均通过；
-- `docs/ACCEPTANCE/` 已与本次代码同步；
-- 没有未披露的 P0/P1 阻塞缺陷。
-
-验收报告必须与被测产品 Commit 分离提交，避免为了补报告移动产品 Head，导致安装包和代码身份再次错位。
+验收失败后必须先把任务转为 `IDLE`，完成产品修复并形成**新 Commit + 新 Artifact + 新 ACTIVE task**，不能继续沿用旧失败候选。
