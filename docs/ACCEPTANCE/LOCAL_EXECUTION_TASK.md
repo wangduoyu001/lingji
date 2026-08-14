@@ -2,502 +2,256 @@
 
 > 本文件是 ChatGPT / 主开发代理向本机 Codex 下达当前任务的唯一权威入口。
 >
-> 当前不是再次 M5 验收。旧产品 `171091fe...` / Artifact `9102748834` 已在真实 M5 上 **FAIL**，永久禁止重试。
+> **当前状态：READY FOR M5 REACCEPTANCE。** PR #88 的产品代码已经锁定在 `2c96b3ec54b066204cad8db75455be24822852a9`；六道远程门禁全部 PASS，macOS / Windows 最终 Artifact 已由同一精确产品 Commit 生成并独立复核。
 >
-> **本任务现在切换为一次性 Closeout 模式：从读取本文件开始，Codex 必须连续执行到“新的精确 M5 Artifact 已准备好”或出现无法自行解决的真实外部阻断。阶段性进展只写仓库，不得作为停止条件。**
+> 旧失败产品 `171091fe...` / Artifact `9102748834` 永久禁止重试。本轮只做 M5 真机复验、报告、远程回执和安全清理；**不得继续修改产品代码，不得为了让验收通过而放宽门禁。**
 
 ## 1. 当前任务元数据
 
 ```yaml
-task_id: PR88-M5-PHASE4-FAILURE-REPAIR-171091FE
+task_id: PR88-M5-REACCEPTANCE-2C96B3EC
 status: ACTIVE
-execution_mode: FAILURE_REPORT_FIRST_THEN_ROOT_CAUSE_REPAIR
+execution_mode: MACOS_M5_PHYSICAL_REACCEPTANCE
 repository: wangduoyu001/lingji
 product_pr: 88
 product_branch: feature/owner-autopilot-ui-codexpp
-product_commit: 171091fe764c6653cdc7325b4a1a71e0b7800822
-artifact_name: REJECTED-lingji-macos-arm64-171091fe
-artifact_id: 9102748834
-report_branch: acceptance/pr88-m5-phase4-failure-repair-171091fe
-report_path: docs/TEST_REPORTS/PR88_M5_PHASE4_FAILURE_REPAIR.md
-public_summary_path: docs/TEST_REPORTS/evidence/PR88_M5_PHASE4_FAILURE_REPAIR_SUMMARY.json
-public_hashes_path: docs/TEST_REPORTS/evidence/PR88_M5_PHASE4_FAILURE_REPAIR_HASHES.txt
+product_commit: 2c96b3ec54b066204cad8db75455be24822852a9
+artifact_name: lingji-macos-arm64
+artifact_id: 9224368022
+artifact_workflow_run_id: 31813880672
+artifact_zip_sha256: 6d7b4b8155d5f98abf3ec66fd2b793b51bac39833b08a92984781a7a07ac926e
+dmg_name: 灵机_0.1.0_aarch64.dmg
+dmg_sha256: 95b72565a30ca86c1eee1c2b0dd4c8239fcce774f32e66e7f24b33fe6b986372
+dmg_bytes: 46320432
+windows_artifact_name: lingji-windows-0.1.0-2c96b3ec
+windows_artifact_id: 9224405293
+windows_artifact_workflow_run_id: 31813880675
+windows_artifact_zip_sha256: 33e5090e3e7052c9b38514d7c1c3fc7538a58eed609494acfa810b66e04d4d95
+windows_installer_sha256: 1fb1bb26b23521fa7726c054304bc0ffa63a694dc49d83b1685f38b7034e97e3
+windows_portable_sha256: af32bb8b417ac3c2ae67ae74520be141c04a3ab6289a8ff8d56f4af00feae40a
+report_branch: acceptance/pr88-m5-reacceptance-2c96b3ec
+report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_2c96b3ec.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR88_M5_REACCEPTANCE_SUMMARY_2c96b3ec.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR88_M5_REACCEPTANCE_HASHES_2c96b3ec.txt
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
 cleanup_before_required: true
 cleanup_after_required: true
 remote_verification_required: true
 owner_confirmation_required: true
-failed_m5_task: MACOS-M5-AUTOPILOT-PHASE4-171091FE
-failed_workflow_run_id: 31495013820
-failed_dmg_sha256: 78c1b01abbe44b2800f4cfc3af5020f96d66feaa0682f909c4e2fc86d35fed9f
-retry_same_artifact: false
-physical_reacceptance_before_new_artifact: false
-source_failure_report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_171091fe.md
-source_failure_report_branch: acceptance/pr88-m5-phase4-failure-repair-171091fe
-auth_sync_contract_path: docs/AUTH_CREDENTIAL_STATE_SYNC.md
-auth_state_sync_required: true
+product_code_changes_forbidden: true
+same_sha_artifacts_required: true
 secret_export_count_required: 0
-single_pass_closeout_required: true
-intermediate_owner_updates_forbidden: true
-intermediate_artifacts_forbidden: true
-stop_only_on_new_artifact_or_external_blocker: true
+rejected_artifact_id: 9102748834
+retry_rejected_artifact: false
 ```
 
-## 2. 已确认事实，不得重复做
+## 2. 已锁定的远程证据，不得重新发包
 
-真实 M5 失败结论已经远程闭环：
+同一产品 Commit `2c96b3ec54b066204cad8db75455be24822852a9` 已通过：
 
 ```text
-physical verdict = FAIL
-failed product commit = 171091fe764c6653cdc7325b4a1a71e0b7800822
-failed artifact id = 9102748834
-failed DMG sha256 = 78c1b01abbe44b2800f4cfc3af5020f96d66feaa0682f909c4e2fc86d35fed9f
-failure report branch = acceptance/pr88-m5-phase4-failure-repair-171091fe
-failure report content commit = 602d5326e8990796e8e9206f82d6fd9a37366adc
-failure report remote verification commit = 36421dba21b3f36040493119a062988b77129c37
-PR #88 FAIL / DO NOT MERGE comment id = 5254742686
+local-execution-handoff       run 31813880612  PASS
+acceptance-doc-sync           run 31813880621  PASS
+tests                         run 31813880671  PASS
+P0 Windows Gate               run 31813880659  PASS
+macOS Desktop Gate            run 31813880672  PASS
+Windows Desktop Release       run 31813880675  PASS
 ```
 
-三个真实缺陷仍是：
+macOS Gate 已真实完成：精确源码身份、Apple Silicon、Rust tests、App bundle、内嵌 Commit、packaged Sidecar、鉴权 Control API、DMG 创建、最终 DMG 挂载验证、安装后 Acceptance 隔离、Sidecar 真实退出与 Artifact 上传。
+
+Windows 同 SHA Release 已完成 packaged runtime、鉴权健康/managed stop、NSIS 安装器、Artifact 合同；`build-metadata.json` 内嵌 Commit 精确为 `2c96b3ec54b066204cad8db75455be24822852a9`。
+
+因此本机 Codex **不得**：
 
 ```text
-M5-IDENTITY-002   安装包 / 已安装 App 身份不精确
-M5-UX-003         首次使用体验仍不清晰
-M5-ISOLATION-002  错误写入 ~/Documents/acceptance
-```
-
-主人已完成失败现场收尾：旧失败 Runtime 已停止、8766/8767 已释放、测试数据已清理、旧有效签名 `/Applications/灵机.app` 已恢复。不得要求主人重复这些动作。
-
-## 3. 已完成开发检查点，不得从头重做
-
-### UX 检查点
-
-已完成：
-
-```text
-手动选择资料目录不再与“自动准备”并列
-手动路径选择降为高级兜底
-对应 UI 回归先 FAIL、修复后 PASS
-前端构建 PASS
-```
-
-这只是已完成开发检查点。只有统一最终产品 Head + 完整 CI + 新 Artifact 通过后，才可把 `first_run_ux_root_cause_fixed=true`。
-
-### Identity 检查点
-
-已发布修复链：
-
-```text
-fix/pr88-m5-phase4-171091fe
-90b7a70de2a5053c1224ee810949256a378f582a
-```
-
-macOS Gate 已改为从最终 DMG 挂载后的真实 App 导出 release metadata，并验证：
-
-```text
-metadata.commit == exact product Head
-主程序 arm64
-Sidecar arm64 且来自同一 App bundle
-build 前 App metadata == 最终 DMG App metadata
-不再仅依赖 strings | grep
-```
-
-当前环境曾缺少 cargo，所以该检查点不能单独宣称 Identity 已关闭。最终统一 Head 必须由 CI 真正跑 Rust/Tauri 与 macOS Gate。
-
-### Isolation 检查点
-
-当前连续修复分支：
-
-```text
-fix/pr88-m5-isolation-171091fe
-latest verified head = 41a4ba832ab9253ec3bfb53fad89578cdfdfb79f
-```
-
-已完成：
-
-```text
-Sidecar acceptance 模式存在 LINGJI_ACCEPTANCE_DATA_ROOT 时必须精确使用同一目录
-不同 data_root 直接拒绝
-对应回归先 FAIL、修复后 PASS
-```
-
-并已发布最终 DMG Desktop 启动链 Gate：
-
-```text
-挂载最终 DMG
-→ 启动真实 App 主程序
-→ 注入 isolated HOME + task-scoped LINGJI_ACCEPTANCE_DATA_ROOT
-→ 等待 8766 token + authenticated ping
-→ 停止
-→ 第二次启动
-→ 再次 authenticated ping
-→ 检查 runtime-data
-→ 检查 isolated HOME/Documents/acceptance 不存在
-```
-
-该 Gate 尚未在真实 macOS CI 上 PASS，所以 `M5-ISOLATION-002` 仍未关闭。
-
-## 4. 一次性 Closeout 执行规则
-
-从现在开始，不再采用：
-
-```text
-修一个点
-→ 停下来给主人汇报
-→ 等“继续”
-→ 再修下一个点
-```
-
-改为：
-
-```text
-继续隔离真实链验证
-→ 实现最小安全 CredentialStore / AuthStatus
-→ 整合 UX + Identity + Isolation + Auth
-→ 建立一个统一候选产品 Head
-→ 跑焦点测试
-→ 跑全量双平台 CI / Release
-→ 自动分析红灯并修复
-→ 重新跑直到全部 Gate PASS
-→ 锁定最终产品 Head
-→ 生成新的 macOS / Windows Artifact
-→ 下载 Artifact 并独立复核
-→ 更新报告 / 回执 / M5 固定任务单
-→ 才结束本轮开发任务
-```
-
-### 中途不得停止的情况
-
-以下都不是停止理由：
-
-- 某一个焦点测试 PASS；
-- 某一个修复分支已经 push；
-- 前端 build PASS；
-- 没有本地 cargo，但 GitHub macOS/Windows CI 可继续验证；
-- 某一个 CI job 红灯，但日志足以定位并继续修；
-- 已实现 CredentialStore 但尚未跑 Release；
-- 已生成中间 commit；
-- 已写阶段性报告。
-
-### 只有两种允许结束
-
-**A. READY_FOR_M5_REACCEPTANCE**
-
-必须已经有新的精确产品 Head、新 macOS Artifact、新 Windows Artifact、所有要求 Gate PASS、哈希与最终 DMG metadata 独立复核完成，并更新 M5 固定任务单。
-
-**B. BLOCKED_EXTERNAL**
-
-仅限 Codex 无法自行解决的真实外部阻断，例如：
-
-```text
-GitHub 权限/认证实际失效且无法恢复
-CI 平台长期不可用
-需要主人真实 Keychain / Credential Manager 交互且系统不给非交互路径
-需要主人做不可替代的物理视觉判断
-```
-
-如果属于 B，必须先完成所有不依赖该阻断的工作，并在结果回执中写清：`blocker / attempted / remaining / exact owner action`。不得用“环境没有 cargo”作为阻断，因为正式 Rust/Tauri 可交给远程 CI。
-
-## 5. 剩余任务 A：完整关闭 M5-ISOLATION-002
-
-当前不要继续堆纯函数测试。使用已经发布的最终 DMG Desktop 首启/二启 Gate 作为核心证据。
-
-必须让真实 macOS Gate 证明：
-
-```text
-HOME=<isolated-home>
-LINGJI_ACCEPTANCE_DATA_ROOT=<task-root>/runtime-data
-最终 DMG App 主程序真实启动
-Sidecar 真实启动
-8766 authenticated ping PASS
-首次启动 PASS
-第二次启动 PASS
-SQLite/Qdrant/log/raw/runtime/token 等均位于 task root
-<isolated-home>/Documents/acceptance 不存在
-任务根外新增 LingJi acceptance 路径数量 = 0
-```
-
-如果真实 Gate FAIL：直接读取日志追 `RuntimeManager → bootstrap → child env → packaged Sidecar → workspace/settings fallback`，最小修复后重跑。不得先生成 Artifact 交给主人试错。
-
-## 6. 剩余任务 B：一次完成认证状态安全同步
-
-权威规范：`docs/AUTH_CREDENTIAL_STATE_SYNC.md`。
-
-永久原则：
-
-```text
-Secrets never sync. Secret state syncs.
-```
-
-仓库审计已经确认没有现成 CredentialStore/AuthStatus，因此实现**最小跨平台抽象**，禁止过度设计。
-
-目标：
-
-```text
-macOS Keychain / Windows Credential Manager
-→ CredentialStore interface
-→ 本机认证验证
-→ lingji_state.db 只存非敏感 AuthStatus
-→ Desktop / Health / Autopilot 只显示结论
-→ allowlist sanitized snapshot
-→ GitHub 只保存认证状态
-```
-
-CredentialStore 只负责 Secret 的 get/set/delete/exists 与标准错误映射；Provider 不得各自创建 Secret 文件。
-
-统一状态至少支持：
-
-```text
-not_configured
-credential_present
-verifying
-verified
-expired
-permission_insufficient
-invalid
-error
-```
-
-`lingji_state.db` 只允许：
-
-```text
-provider
-auth_method
-state
-credential_present
-credential_valid
-permissions_ok
-account_bound
-last_verified_at
-expires_at
-last_error_code
-last_error_at
-```
-
-严禁进入 SQLite / JSON / Markdown / Git / 日志：
-
-```text
-Token
-Refresh Token
-API Key
-Cookie
-Authorization Header
-密码
-Secret 片段
-Secret hash / fingerprint
-```
-
-CI 使用 fake / in-memory backend，不操作真实系统凭据。真实 Keychain / Credential Manager 只留给最终本机验收验证。
-
-必须生成：
-
-```text
-docs/TEST_REPORTS/evidence/LOCAL_AUTH_STATUS_PR88.json
-```
-
-采用 allowlist schema，禁止先 dump 全对象再 redact。
-
-至少回归：
-
-```text
-CredentialStore fake backend get/set/delete/exists/error
-AuthStatus 状态转换
-Runtime 重启恢复非敏感状态
-snapshot allowlist
-fake Token/Cookie/Authorization Header 不得进入 snapshot
-仓库 evidence secret scan
-Desktop 只展示“已连接/需重新认证/权限不足”等结论
-Windows / macOS 使用同一状态模型
-```
-
-硬门禁：
-
-```text
-secret_export_count = 0
-```
-
-发现疑似 Secret 时，快照生成 / 提交 / 验收必须 FAIL。
-
-## 7. 统一候选产品 Head
-
-完成剩余实现后，把已有：
-
-```text
-UX 修复
-Identity 修复
-Isolation guard + 最终 DMG Desktop Gate
-CredentialStore / AuthStatus / sanitized snapshot
-```
-
-收敛到**一个新的产品候选 Head**。不得保留互相漂移的多条发布候选分支，不得 force push，不得引入 Mac 专用业务分叉。
-
-统一 Head 产生后，后续所有自动门禁、Windows Artifact、macOS Artifact、报告和哈希都必须绑定这一 SHA。
-
-## 8. 测试与自动修红灯循环
-
-先跑焦点：
-
-```text
-Identity 专项
-Desktop first-run smoke
-packaged acceptance isolation
-Autopilot
-packaged runtime
-CredentialStore / AuthStatus / snapshot / secret scan
-```
-
-然后完整执行：
-
-```text
-Python 3.11 / 3.12 full
-Windows Python
-Desktop full smoke + React production build
-Rust/Tauri
-MCP / Obsidian / browser smoke
-acceptance-doc-sync
-local-execution-handoff
-P0 Windows Gate
-Windows Desktop Release Baseline
-macOS Desktop Gate
-```
-
-如果任何 Gate FAIL：
-
-```text
-读取失败 job / logs
-→ 判断产品缺陷还是过期测试合同
-→ 最小修复
-→ 增加/更新回归
-→ 形成新统一 Head
-→ 重跑受影响焦点
-→ 重跑最终全量 Gate
-```
-
-不得为了绿灯删除真实失败回归或降低验收标准。
-
-## 9. 新 Artifact 硬门禁
-
-只有全部成立才允许创建/认定新 M5 包：
-
-```text
-identity_root_cause_fixed = true
-first_run_ux_root_cause_fixed = true
-acceptance_isolation_root_cause_fixed = true
-three_real_failure_regressions = PASS
-auth_state_sync_implemented = true
-auth_status_regressions = PASS
-auth_snapshot_generated = true
-secret_export_count = 0
-full_ci = PASS
-windows_release = PASS
-macos_release = PASS
-```
-
-必须记录全新的：
-
-```text
-product_commit
-macOS workflow_run_id
-macOS artifact_id
-Artifact ZIP sha256
-DMG sha256
-DMG size
-Windows artifact identity
-auth_snapshot_path
-secret_export_count = 0
-```
-
-Codex 必须下载新 Artifact 独立核对 ZIP/DMG 哈希，并从最终 DMG 内真实 App 导出 release metadata，确认等于最终产品 Head。
-
-以下旧身份永久拒绝：
-
-```text
-171091fe764c6653cdc7325b4a1a71e0b7800822
-Artifact 9102748834
-DMG 78c1b01abbe44b2800f4cfc3af5020f96d66feaa0682f909c4e2fc86d35fed9f
-```
-
-## 10. 安全与双平台边界
-
-不得破坏：
-
-```text
-Windows NSIS / RuntimeManager
-Windows DataRoot 合同
-8766 loopback + token
-MCP 8767 / stdio
-Autopilot Doctor-Repair-Verify
-永久记忆人工确认
-Qdrant destructive action 人工确认
-真实 AI 正文授权
-Production DataRoot / Vault
-```
-
-禁止：
-
-```text
+重新生成 Artifact
+切换到较旧 SHA
+使用 90398fd8 / 041c5fc8 / 171091fe 的包代替本轮包
+提交产品修复
 force push / reset --hard / clean -fdx
-删除未知 worktree/主人数据/第三方 AI 配置
-把 Secret 写入仓库或 lingji_state.db
-自动批准永久记忆
-自动执行 destructive Qdrant rebuild
-新增第二套 Runtime / DB / Queue
-为了 Mac 修复破坏 Windows
+为了验收绿灯降低身份、隔离、Secret 或生命周期要求
 ```
 
-## 11. 报告与进度规则
+如果真机发现产品缺陷，直接 `FAIL / DO NOT MERGE`，保留最小证据并回传；不要在本轮 M5 分支上继续开发。
 
-阶段性进展仍需写仓库，但**只作为 checkpoint，不作为停止点**：
+## 3. M5 任务根与安装规则
+
+在 M5 上创建唯一任务根：
 
 ```text
-docs/TEST_REPORTS/PR88_M5_PHASE4_FAILURE_REPAIR.md
-docs/TEST_REPORTS/evidence/PR88_M5_PHASE4_FAILURE_REPAIR_SUMMARY.json
-docs/TEST_REPORTS/evidence/PR88_M5_PHASE4_FAILURE_REPAIR_HASHES.txt
-docs/TEST_REPORTS/evidence/LOCAL_AUTH_STATUS_PR88.json
-docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
-docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md
-docs/MODULES/CODE_MAP.md（入口/所有权变化时）
-docs/CHANGELOG.md
-PR #88 body/comment
+ACCEPTANCE_ROOT="$HOME/LingJiAcceptance/PR88-M5-REACCEPTANCE-2c96b3ec"
+LINGJI_ACCEPTANCE_DATA_ROOT="$ACCEPTANCE_ROOT/runtime-data"
+ISOLATED_HOME="$ACCEPTANCE_ROOT/isolated-home"
+APP_BACKUP="$ACCEPTANCE_ROOT/app-backup/灵机.app"
 ```
 
-每个大功能/大段代码测试完成后更新 Markdown 报告。不要创建大量临时报告。
+开始前必须：
 
-## 12. 完成条件
+1. 确认机器为 Apple Silicon / arm64，Gatekeeper 开启；
+2. 确认 8766 / 8767 没有 LingJi 遗留 listener；只处理本轮 LingJi 精确实例，不得全局 kill AI/Codex 进程；
+3. 记录 `/Applications/灵机.app` 当前状态与签名；
+4. 检查 `~/Documents/acceptance`。若开始前已存在，不得擅自删除，先记录为环境阻断；若开始前不存在，本轮结束时必须仍不存在；
+5. 下载 Artifact `9224368022`，先校验 ZIP 与 DMG SHA256，任何一个不一致立即 FAIL；
+6. 挂载 DMG，复核 App 内嵌产品 Commit 必须精确等于 `2c96b3ec54b066204cad8db75455be24822852a9`，主程序与 Sidecar 必须 arm64；
+7. 旧 `/Applications/灵机.app` 必须整体移动到 `$APP_BACKUP`；完整复制新 App 后执行严格 codesign 验证。**禁止 overlay copy。**
 
-只有以下全部成立，结果回执才可标记 `COMPLETED`：
+若新版本 FAIL：停止本轮精确 Runtime，释放 8766/8767，移除失败 App，整体恢复 `$APP_BACKUP` 并复核签名。若 PASS：保留新 App，报告远程确认后删除临时备份与任务根。
+
+## 4. 真机必须关闭的原始三个 Blocker
+
+### M5-IDENTITY-002
+
+必须证明：
 
 ```text
-source_failure_report_read = true
-remote_failure_report_verified = true
-identity_root_cause_fixed = true
-first_run_ux_root_cause_fixed = true
-acceptance_isolation_root_cause_fixed = true
-three_real_failure_regressions = PASS
-auth_state_sync_implemented = true
-auth_status_regressions = PASS
-auth_snapshot_generated = true
+Artifact ID / ZIP / DMG hash 全部与任务单一致
+最终 DMG 内 App metadata.commit == 2c96b3ec54b066204cad8db75455be24822852a9
+安装后的 /Applications/灵机.app 诊断仍指向同一 Commit
+Desktop 主程序 arm64
+Sidecar arm64
+codesign --verify --deep --strict PASS
+```
+
+任何“看起来像同版本”、短 SHA 推断或字符串猜测都不算 PASS。
+
+### M5-UX-003
+
+首次正常打开必须：
+
+```text
+不要求主人理解或选择 DataRoot / Workspace / Qdrant / SQLite / 端口 / acceptance
+自动准备并进入可用首页
+手动目录选择只能在自动准备失败后的高级兜底出现
+首页首先说明：有没有必须由主人决定的事、系统正在做什么、已自动处理什么
+无主人事项时界面应安静明确，不靠技术指标堆满屏幕证明“系统活着”
+```
+
+主人肉眼确认失败即 FAIL，不允许用自动测试代替。
+
+### M5-ISOLATION-002
+
+以 task-scoped Acceptance 环境启动真实安装 App：
+
+```text
+HOME="$ISOLATED_HOME"
+LINGJI_ACCEPTANCE_DATA_ROOT="$ACCEPTANCE_ROOT/runtime-data"
+```
+
+必须证明所有本轮 SQLite、Qdrant、logs、raw、vault、backup、runtime state、token 均在 `$ACCEPTANCE_ROOT` 范围内；不得创建 `~/Documents/acceptance` 或其他任务根外 Acceptance 数据。
+
+## 5. Phase 4 / Phase 5 新功能真机检查
+
+### 找回主窗口
+
+1. 正常启动后，把主窗口最小化或移动到不可见区域；
+2. 从 macOS 菜单栏使用 **“找回主窗口”**；
+3. 主窗口必须重新可见、回到当前屏幕合理位置并获得焦点；
+4. 不得重置其他用户设置，不得影响 Runtime。
+
+主人必须肉眼确认入口容易发现且确实能找回窗口。
+
+### 记忆进度看板
+
+首页必须能直接看出：
+
+```text
+正在收纳什么
+正在更新什么
+当前可取回/检索的覆盖状态
+有没有必须由主人决定的授权或异常
+```
+
+若没有已验证质量样本，界面不得把向量数量、覆盖率或“可检索”包装成“准确率”。高级诊断信息应留在高级工具/健康细节，不占据日常首页主流程。
+
+## 6. 认证状态与 Secret 边界
+
+必须回归：
+
+```text
+Credential Secret 只在 macOS Keychain / 系统安全凭据存储
+Overview / Autopilot / 报告只读取脱敏 AuthStatus
+Token、Cookie、Authorization Header、Secret 长度、Secret 文件路径不得进入 UI、日志、JSON、Markdown 或 Git
+public auth evidence 只能使用 allowlist 字段
 secret_export_count = 0
-full_ci = PASS
-windows_release = PASS
-macos_release = PASS
-new_exact_product_head = recorded
-new_artifact_id = recorded
-new_artifact_hashes_verified = true
-old_artifact_retry = false
-cleanup_before = PASS
-cleanup_after = PASS
-remote_branch_verified = true
-remote_commit_verified = true
-remote_report_verified = true
-remote_result_verified = true
-pr_comment_verified = true
-local_temp_root_absent = true
-PR #88 = Draft / DO_NOT_MERGE
 ```
 
-完成开发后：
+若某 Provider 未配置，可以显示未配置；不得伪造 verified。
 
-1. 原地更新 `MACOS_M5_LOCAL_EXECUTION_TASK.md` 为**新的精确 Artifact**并设为 ACTIVE；
-2. 不得自行宣称真实 M5 PASS；
-3. 最终只向主人回报“新 M5 验收包已准备好 + 固定任务链接”，不再提交阶段性请求让主人决定是否继续。
+## 7. Runtime 生命周期
+
+至少完成：
+
+```text
+第一次启动 -> authenticated 8766 healthy
+精确 instance stop -> sidecar-state.json 消失 + 记录的 Sidecar PID 退出 + 8766 无 LISTEN
+同一任务根第二次启动 -> authenticated 8766 healthy
+再次精确 stop -> 三重退出条件再次 PASS
+```
+
+禁止把“state 文件消失”单独当成 Runtime 已退出；禁止 `killall` 作为正常成功路径。
+
+## 8. 主人只需要确认的内容
+
+Codex 负责安装、命令、日志、哈希、端口、进程、报告、Git 和清理。主人只确认：
+
+```text
+A 首次打开是否无需技术配置即可理解并使用
+B 首页是否清楚告诉自己系统正在做什么、有没有必须决定的事
+C “找回主窗口”是否容易发现且有效
+D 记忆进度看板是否清楚，并且没有伪造“准确率”
+E 真正需要授权时，动作是否清晰且只有必要选择
+```
+
+除上述肉眼判断外，不要求主人填写路径、执行命令、上传文件、清理目录或解释技术日志。
+
+## 9. PASS / FAIL 判定
+
+只有以下全部成立才允许 `PASS`：
+
+```text
+精确 Artifact 身份 PASS
+整体替换与 codesign PASS
+首次体验主人确认 PASS
+Acceptance 物理隔离 PASS
+主窗口找回 PASS
+记忆进度看板 PASS
+Credential/AuthStatus/secret_export_count=0 PASS
+首启 -> 停止 -> 二启 -> 停止生命周期 PASS
+Production / 主人真实数据污染 = 0
+8766 / 8767 本轮结束后释放
+远程报告、结果回执、PR #88 评论均复读确认
+本轮临时数据与备份按 PASS/FAIL 规则完成安全清理或恢复
+```
+
+任一 P0/P1 项失败：
+
+```text
+Verdict = FAIL
+PR #88 = Draft / DO NOT MERGE
+不继续使用当前 Artifact
+不在 M5 验收分支自行修产品
+```
+
+## 10. 报告与远程回执
+
+报告分支：
+
+```text
+acceptance/pr88-m5-reacceptance-2c96b3ec
+```
+
+必须提交：
+
+```text
+docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_2c96b3ec.md
+docs/TEST_REPORTS/evidence/PR88_M5_REACCEPTANCE_SUMMARY_2c96b3ec.json
+docs/TEST_REPORTS/evidence/PR88_M5_REACCEPTANCE_HASHES_2c96b3ec.txt
+docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
+```
+
+报告中不得提交真实 Secret、绝对私人资料路径、对话正文或不必要截图原件。只保留判定所需的最小脱敏证据和哈希。
+
+第一次 push 后必须远程复读分支、Commit、报告和结果回执；清理本轮临时垃圾后更新回执，再 push 并再次远程复读；最后把 PASS/FAIL 结论与报告 Commit 写入 PR #88 评论。
+
+**PR #88 在主人真机 PASS 之前始终保持 Draft / DO NOT MERGE。**
