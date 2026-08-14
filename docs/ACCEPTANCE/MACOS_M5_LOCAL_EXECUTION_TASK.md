@@ -10,10 +10,10 @@
 
 ```yaml
 status: ACTIVE
-task_id: MACOS-M5-AUTOPILOT-PHASE3-C7734CDB
+task_id: MACOS-M5-AUTOPILOT-PHASE5-90398FD
 execution_mode: FRESH_ENVIRONMENT_THEN_LOCAL_ACCEPTANCE
 repository: wangduoyu001/lingji
-product_commit: c7734cdb3a865d16bc12d5e8c96aae9c6d1892aa
+product_commit: 90398fd87f3419c598632479d2a00626b4554122
 product_branch: feature/owner-autopilot-ui-codexpp
 pull_request: 88
 platform: macOS Apple Silicon
@@ -21,30 +21,30 @@ target: aarch64-apple-darwin
 app_version: 0.1.0
 bundle_format: dmg
 artifact_name: lingji-macos-arm64
-artifact_id: 9099532827
-workflow_run_id: 31486602857
+artifact_id: 9215481793
+workflow_run_id: 31790726207
 workflow_name: macOS Desktop Gate
 workflow_result: success
-artifact_archive_sha256: cb89f447fc7c0b11db9349505dfb248b9976e36113d1fd9808ed4c4971211de4
+artifact_archive_sha256: 7da451ae16a2e651647fa81114783aa60bcf7033b0a1a468984366e676c17f43
 dmg_name: 灵机_0.1.0_aarch64.dmg
-dmg_size_bytes: 46242086
-dmg_sha256: 20aed5342788f51058206e1a9c346d16cbf94582402638c9338969ca498696e3
+dmg_size_bytes: 46320916
+dmg_sha256: 795c5099db13033812bc7006966246e6650ea362002722807b7e8aa8d655689d
 protocol_path: docs/ACCEPTANCE/MACOS_M5_ACCEPTANCE_INSTRUCTIONS.md
-implementation_report: docs/TEST_REPORTS/OWNER_AUTOPILOT_PHASE3_IMPLEMENTATION.md
-report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_c7734cdb.md
-report_branch: acceptance/macos-m5-autopilot-phase3-c7734cdb
+implementation_report: docs/TEST_REPORTS/PR88_FINAL_ARTIFACT_CLOSEOUT.md
+report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_90398fd.md
+report_branch: acceptance/macos-m5-physical-acceptance-90398fd
 ```
 
 GitHub Actions Run：
 
 ```text
-https://github.com/wangduoyu001/lingji/actions/runs/31486602857
+https://github.com/wangduoyu001/lingji/actions/runs/31790726207
 ```
 
 Artifact：
 
 ```text
-https://github.com/wangduoyu001/lingji/actions/runs/31486602857/artifacts/9099532827
+https://github.com/wangduoyu001/lingji/actions/runs/31790726207/artifacts/9215481793
 ```
 
 PR：
@@ -56,7 +56,7 @@ https://github.com/wangduoyu001/lingji/pull/88
 被测产品身份必须始终保持：
 
 ```text
-c7734cdb3a865d16bc12d5e8c96aae9c6d1892aa
+90398fd87f3419c598632479d2a00626b4554122
 ```
 
 本任务单和验收协议后续产生的文档 Commit **不改变被测产品 Commit**。
@@ -69,8 +69,8 @@ c7734cdb3a865d16bc12d5e8c96aae9c6d1892aa
 本文件
 → docs/ACCEPTANCE/MACOS_M5_ACCEPTANCE_INSTRUCTIONS.md
 → PR #88 当前说明
-→ feature/owner-autopilot-ui-codexpp @ c7734cdb 的相关代码与配置
-→ docs/TEST_REPORTS/OWNER_AUTOPILOT_PHASE3_IMPLEMENTATION.md
+→ feature/owner-autopilot-ui-codexpp @ 90398fd 的相关代码与配置
+→ docs/TEST_REPORTS/PR88_FINAL_ARTIFACT_CLOSEOUT.md
 ```
 
 macOS 专项规则与通用规则冲突时，优先级固定为：
@@ -90,7 +90,7 @@ MACOS_M5_LOCAL_EXECUTION_TASK.md
 先创建唯一任务根：
 
 ```bash
-export ACCEPTANCE_ROOT="$HOME/Library/Caches/LingJiAcceptance/MACOS-M5-AUTOPILOT-PHASE3-C7734CDB-c7734cdb"
+export ACCEPTANCE_ROOT="$HOME/Library/Caches/LingJiAcceptance/MACOS-M5-AUTOPILOT-PHASE5-90398FD-90398fd"
 rm -rf "$ACCEPTANCE_ROOT"
 mkdir -p "$ACCEPTANCE_ROOT/artifact" "$ACCEPTANCE_ROOT/logs" "$ACCEPTANCE_ROOT/app-backup" "$ACCEPTANCE_ROOT/runtime-data"
 ```
@@ -100,7 +100,7 @@ mkdir -p "$ACCEPTANCE_ROOT/artifact" "$ACCEPTANCE_ROOT/logs" "$ACCEPTANCE_ROOT/a
 优先使用 GitHub CLI：
 
 ```bash
-gh run download 31486602857 \
+gh run download 31790726207 \
   -R wangduoyu001/lingji \
   -n lingji-macos-arm64 \
   --dir "$ACCEPTANCE_ROOT/artifact"
@@ -121,13 +121,13 @@ shasum -a 256 "$ACCEPTANCE_ROOT/artifact/灵机_0.1.0_aarch64.dmg"
 期望：
 
 ```text
-20aed5342788f51058206e1a9c346d16cbf94582402638c9338969ca498696e3
+795c5099db13033812bc7006966246e6650ea362002722807b7e8aa8d655689d
 ```
 
 文件大小必须为：
 
 ```text
-46242086 bytes
+46320916 bytes
 ```
 
 如果 GitHub Artifact 因鉴权无法下载：
@@ -135,13 +135,13 @@ shasum -a 256 "$ACCEPTANCE_ROOT/artifact/灵机_0.1.0_aarch64.dmg"
 1. 记录脱敏 `gh auth status`；
 2. 尝试当前仓库已有 GitHub 认证；
 3. 禁止改用旧 DMG；
-4. 只有确认无法取得 **Artifact ID 9099532827** 时才标记：
+4. 只有确认无法取得 **Artifact ID 9215481793** 时才标记：
 
 ```text
 BLOCKED_ARTIFACT_DOWNLOAD_AUTH
 ```
 
-此时才允许向用户索取 **同一个 Artifact ID 9099532827 对应的文件**。
+此时才允许向用户索取 **同一个 Artifact ID 9215481793 对应的文件**。
 
 ---
 
@@ -273,8 +273,8 @@ Artifact / DMG SHA 匹配
 App 主二进制 arm64
 Sidecar arm64
 codesign PASS
-Release Metadata commit == c7734cdb3a865d16bc12d5e8c96aae9c6d1892aa
-UI/诊断显示的产品 commit == c7734cdb3a865d16bc12d5e8c96aae9c6d1892aa
+Release Metadata commit == 90398fd87f3419c598632479d2a00626b4554122
+UI/诊断显示的产品 commit == 90398fd87f3419c598632479d2a00626b4554122
 ```
 
 任何 PR merge commit、旧 commit 或未知 commit 都不能通过。
@@ -324,6 +324,17 @@ checkpoint
 ```
 
 它们必须保留在高级工具/诊断中，而不是删除功能。
+
+本轮新增的“记忆进度看板”必须在首页主区域说明：
+
+```text
+正在收纳：文档与内容块的实际数量
+自动更新：运行中、排队中、已完成的实际数量
+可验证取回：索引覆盖度；尚未建立验证样本时，必须明确说明不能宣称准确率
+永久记忆仍需主人确认
+```
+
+不得把“已覆盖”写成“检索准确率”，也不得展示没有依据的精确百分比。
 
 ## D. AI 来源自动接管
 
@@ -384,6 +395,19 @@ runtime_binary_available=true
 ```
 
 不得留下重复 Core 或孤儿 MCP。
+
+## G. 窗口找回
+
+必须在正常首页可见时，从菜单栏执行“找回主窗口”，并确认主窗口会：
+
+```text
+取消最小化
+显示
+回到可见屏幕中央
+获得焦点
+```
+
+该入口必须保持日常 macOS 菜单的基本可用性；不得为添加找回入口而让常规菜单消失。
 
 ---
 
@@ -516,13 +540,13 @@ BLOCKED_POST_CLEANUP
 写入：
 
 ```text
-docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_c7734cdb.md
+docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_90398fd.md
 ```
 
 提交到：
 
 ```text
-acceptance/macos-m5-autopilot-phase3-c7734cdb
+acceptance/macos-m5-physical-acceptance-90398fd
 ```
 
 至少包含：
