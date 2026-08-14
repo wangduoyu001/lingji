@@ -195,6 +195,10 @@ def create_control_app(
     def memory_status() -> dict[str, Any]:
         return control.memory_status()
 
+    @app.get("/api/memory/progress", dependencies=secured)
+    def memory_progress() -> dict[str, Any]:
+        return control.memory_progress()
+
     @app.get("/api/vector/status", dependencies=secured)
     def vector_status() -> dict[str, Any]:
         return control.vector_status()

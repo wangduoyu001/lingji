@@ -144,6 +144,19 @@ class ControlApiTests(unittest.TestCase):
         self.assertEqual(brain.json()["embed_model"], "bge-m3")
         self.assertFalse(brain.json()["status_stale"])
 
+    def test_memory_progress_quantifies_intake_updates_and_retrieval_readiness(self):
+        response = self.client.get("/api/memory/progress")
+        self.assertEqual(response.status_code, 401)
+
+        response = self.client.get("/api/memory/progress", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["intake"], {"documents": 7, "chunks": 12, "core_memories": 2})
+        self.assertEqual(payload["updates"]["queued"], 0)
+        self.assertEqual(payload["retrieval"]["coverage_percent"], 100)
+        self.assertEqual(payload["retrieval"]["precision_state"], "not_measured")
+        self.assertIn("尚未建立验证样本", payload["retrieval"]["precision_message"])
+
 
 if __name__ == "__main__":
     unittest.main()

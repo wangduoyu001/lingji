@@ -34,6 +34,10 @@ function authLabel(value: unknown): string {
   return "等待认证";
 }
 
+function quantity(value: unknown): string {
+  return typeof value === "number" ? value.toLocaleString("zh-CN") : "正在确认";
+}
+
 export default function OverviewPage({
   data,
   api,
@@ -66,6 +70,10 @@ export default function OverviewPage({
   const queue = ((d.queue as Record<string, unknown> | undefined)?.stats ?? {}) as Record<string, unknown>;
   const storageRoot = (d.storage ?? {}) as Record<string, unknown>;
   const storageAlerts = (storageRoot.alerts ?? {}) as Record<string, unknown>;
+  const progress = (d.memory_progress ?? {}) as Record<string, unknown>;
+  const intake = (progress.intake ?? {}) as Record<string, unknown>;
+  const updates = (progress.updates ?? {}) as Record<string, unknown>;
+  const retrieval = (progress.retrieval ?? {}) as Record<string, unknown>;
   const memoryRuntime = (d.memory_runtime ?? {}) as Record<string, unknown>;
   const vector = (memoryRuntime.vector ?? d.vector_status ?? {}) as Record<string, unknown>;
   const runtimeState = memoryRuntime.state ?? health.status;
@@ -149,6 +157,18 @@ export default function OverviewPage({
       {autopilotResource.error && autopilotResource.data && (
         <Notice kind="warning">自动维护状态暂时同步失败，灵机会继续后台运行并自动重试。</Notice>
       )}
+
+      <section className="panel current-work-panel" aria-label="记忆进度看板">
+        <span className="desktop-eyebrow">记忆进度看板</span>
+        <h2>灵机正在持续整理你的信息</h2>
+        <p>这里展示已经自动完成的收纳、正在更新的内容，以及取回能力的真实验证状态。</p>
+        <div className="current-work-inline-facts">
+          <span><small>正在收纳</small><strong>{quantity(intake.documents)} 份资料</strong><em>{quantity(intake.chunks)} 个可取回片段</em></span>
+          <span><small>自动更新</small><strong>{quantity(updates.running)} 项进行中</strong><em>待处理 {quantity(updates.queued)} · 已完成 {quantity(updates.completed)}</em></span>
+          <span><small>可验证取回</small><strong>{retrieval.coverage_percent == null ? "正在建立索引" : `已覆盖 ${quantity(retrieval.coverage_percent)}%`}</strong><em>{String(retrieval.precision_message ?? "正在确认取回质量")}</em></span>
+        </div>
+        <small>永久记忆仍须由你确认；灵机不会静默写入。</small>
+      </section>
 
       {authProviders.length > 0 && (
         <section className="assistant-autopilot-passive" aria-label="本机连接状态">

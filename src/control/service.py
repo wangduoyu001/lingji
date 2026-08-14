@@ -249,6 +249,43 @@ class LocalControlService:
     def vector_coverage(self) -> dict[str, Any]:
         return self.memory_statistics.vector_coverage()
 
+    def memory_progress(self) -> dict[str, Any]:
+        """Return owner-readable progress without inventing retrieval accuracy."""
+
+        snapshot = self.memory_statistics.snapshot()
+        memory = dict(snapshot.get("memory") or {})
+        coverage = dict(snapshot.get("coverage") or {})
+        queue = self.queue.stats()
+        raw_coverage = coverage.get("coverage")
+        coverage_percent = (
+            round(float(raw_coverage) * 100)
+            if isinstance(raw_coverage, (int, float))
+            else None
+        )
+        return {
+            "state": snapshot.get("state", "unknown"),
+            "as_of": snapshot.get("as_of"),
+            "intake": {
+                "documents": memory.get("documents"),
+                "chunks": memory.get("chunks"),
+                "core_memories": memory.get("core_memories"),
+            },
+            "updates": {
+                "queued": queue.get("queued", 0),
+                "retrying": queue.get("retrying", 0),
+                "running": queue.get("running", 0),
+                "completed": queue.get("completed", 0),
+                "failed": queue.get("failed", 0),
+            },
+            "retrieval": {
+                "coverage_percent": coverage_percent,
+                "indexed": coverage.get("indexed"),
+                "expected": coverage.get("expected"),
+                "precision_state": "not_measured",
+                "precision_message": "尚未建立验证样本，灵机暂不宣称准确率。",
+            },
+        }
+
     def get_settings(self) -> dict[str, Any]:
         return self.runtime_settings.snapshot()
 
@@ -336,6 +373,7 @@ class LocalControlService:
             "embedding_status": dict(memory_runtime.get("embedding") or {}),
             "vector_status": dict(memory_runtime.get("vector") or {}),
             "vector_coverage": dict(memory_runtime.get("coverage") or {}),
+            "memory_progress": self.memory_progress(),
             "queue": {
                 "stats": self.queue.stats(),
                 "recent": self.queue.list(limit=20),
