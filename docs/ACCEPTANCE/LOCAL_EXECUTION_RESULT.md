@@ -6,7 +6,7 @@
 
 ```yaml
 task_id: MACOS-M5-AUTOPILOT-PHASE5-90398FD
-status: PENDING
+status: RUNNING
 verdict: PENDING
 execution_mode: FRESH_ENVIRONMENT_THEN_LOCAL_ACCEPTANCE
 repository: wangduoyu001/lingji
@@ -14,7 +14,7 @@ product_pr: 88
 product_branch: feature/owner-autopilot-ui-codexpp
 product_commit: 90398fd87f3419c598632479d2a00626b4554122
 task_instruction_branch: docs/pr88-m5-task-90398fd
-task_instruction_commit: PENDING
+task_instruction_commit: aa20f9f8d3ec0e81050ee560fd94ff65eb11c114
 report_branch: acceptance/macos-m5-physical-acceptance-90398fd
 report_commit: PENDING
 report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_90398fd.md
@@ -30,7 +30,7 @@ remote_result_verified: false
 pr_comment_verified: NOT_REQUIRED
 local_temp_root_absent: PENDING
 owner_observation: REQUIRED_FOR_PASS
-started_at: PENDING
+started_at: 2026-08-14T18:17:00+08:00
 finished_at: PENDING
 artifact_name: lingji-macos-arm64
 artifact_id: 9215481793
@@ -39,10 +39,10 @@ artifact_archive_sha256: 7da451ae16a2e651647fa81114783aa60bcf7033b0a1a468984366e
 dmg_name: 灵机_0.1.0_aarch64.dmg
 dmg_size_bytes: 46320916
 dmg_sha256: 795c5099db13033812bc7006966246e6650ea362002722807b7e8aa8d655689d
-embedded_commit_exact: PENDING
+embedded_commit_exact: PENDING_UI_DIAGNOSTIC
 ci_exact_head: PASS
 artifact_integrity_precheck: PASS
-physical_m5_acceptance: PENDING
+physical_m5_acceptance: RUNNING
 production_pollution_count: 1
 ```
 
@@ -63,12 +63,12 @@ macOS DMG SHA256: PASS
 ## 3. 本机必须回填
 
 ```text
-预检与安全快照：PENDING
-whole-bundle replace：PENDING
-安装后 codesign：PENDING
-首次启动 / 自动资料目录：PENDING
-首页进度看板与窗口找回的主人观察：PENDING
-Runtime / 8766 / 生命周期：PENDING
+预检与安全快照：PASS
+whole-bundle replace：PASS_WITH_INSTALL_PROCESS_DEVIATION
+安装后 codesign：PASS
+首次启动 / 自动资料目录：PASS
+首页进度看板与窗口找回的主人观察：REQUIRED_FOR_PASS
+Runtime / 8766 / 生命周期：RUNNING
 二次启动：PENDING
 Production 污染检查：PENDING
 结束清理：PENDING
