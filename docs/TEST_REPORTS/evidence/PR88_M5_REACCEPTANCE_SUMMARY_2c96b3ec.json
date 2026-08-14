@@ -1,0 +1,14 @@
+{
+  "task_id": "PR88-M5-REACCEPTANCE-2C96B3EC",
+  "product_commit": "2c96b3ec54b066204cad8db75455be24822852a9",
+  "artifact_id": 9224368022,
+  "verdict": "FAIL",
+  "merge_recommendation": "DO_NOT_MERGE",
+  "identity_result": "PASS",
+  "acceptance_isolation_result": "PASS",
+  "second_lifecycle_result": "PASS",
+  "owner_observation": "FAIL",
+  "blocking_defects": ["M5-UX-003", "M5-UX-004", "M5-UX-005"],
+  "secret_export_count": 0,
+  "production_pollution_count": 0
+}
