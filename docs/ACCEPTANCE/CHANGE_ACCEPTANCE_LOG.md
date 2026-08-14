@@ -51,6 +51,44 @@
 
 ---
 
+## 2026-08-14 · PR #88 · 最终同 SHA Artifact 收口文档
+
+- 产品分支：`feature/owner-autopilot-ui-codexpp`
+- 产品 Commit：`041c5fc805d2280c4d84d78bca45799f131ad61b`
+- 影响模块：`src/` 主线职责说明、PR #88 最终 Artifact 收口报告。
+- 风险等级：P1（发布身份和验收结论一致性）。
+- 用户可感知变化：无产品交互变化；明确 macOS 与 Windows 最终包必须来自同一精确产品 Commit。
+- 数据或安全边界变化：无；不改变 Runtime、数据根、凭据或授权边界。
+
+### 新增或修改的自动验收
+
+- [ ] `acceptance-doc-sync`：`src/README.md` 与 `PR88_FINAL_ARTIFACT_CLOSEOUT.md` 必须在同一变更中有本条验收记录。
+- [ ] macOS Desktop Gate、P0 Windows Gate、Windows Desktop Release Baseline：均绑定同一产品 Commit；Artifact 下载后复核哈希与内嵌 metadata。
+
+### 新增或修改的真机验收
+
+- [ ] 仅使用同 SHA 的新 macOS DMG 和 Windows Artifact 进入 M5 / Windows 真机验收；旧 Artifact 不得复用。
+
+### 主人肉眼确认
+
+- [ ] M5 真机验收仍仅确认首次体验、首页信息层级与必要授权边界；PR #88 保持 Draft。
+
+### 回归项
+
+- [ ] 不允许 Mac/Windows Artifact、报告或任务单引用不同产品 SHA。
+
+### 清理与回滚
+
+- 临时 Artifact、解压目录、日志和测试 Runtime 在远程核验后按任务协议清理；不删除主人数据。
+- 回滚仅回退发布收口文档，不回退已验证的 Runtime / Sidecar 修复。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/PR88_FINAL_ARTIFACT_CLOSEOUT.md`
+- M5 报告：`docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_<short-sha>.md`
+
+---
+
 ## 2026-08-13 · PR #88 Phase 4 · macOS 最终 DMG 真实退出三重门禁
 
 - 产品分支：`feature/owner-autopilot-ui-codexpp`
