@@ -7,7 +7,7 @@
 ```yaml
 task_id: MACOS-M5-AUTOPILOT-PHASE4-65DE7292
 status: RUNNING
-verdict: PENDING
+verdict: FAIL
 execution_mode: FRESH_ENVIRONMENT_THEN_LOCAL_ACCEPTANCE
 repository: wangduoyu001/lingji
 product_pr: 88
@@ -41,8 +41,8 @@ dmg_sha256: 4666b0cda78baa81fc9150254f406f4c91faed520a2df850e4c8f52d2a1ff354
 embedded_commit_exact: PRECHECK_PASS
 ci_exact_head: PASS
 artifact_integrity_precheck: PASS
-physical_m5_acceptance: NOT_RUN
-production_pollution_count: PENDING
+physical_m5_acceptance: FAIL
+production_pollution_count: 1
 ```
 
 ## 2. 已完成的远程与 Artifact 预检
@@ -60,7 +60,7 @@ Windows package SHA256SUMS: PASS
 Windows build metadata Commit: PASS
 ```
 
-这些预检不替代 M5 真机安装、启动、肉眼观察、退出和清理。当前结论仍为 `PENDING`。
+这些预检不替代 M5 真机安装、启动、肉眼观察、退出和清理。本轮已因窗口找回缺失和 Production 根目录污染判定为 `FAIL`；临时根清理与最终远程回执仍待完成。
 
 ## 3. 本机必须回填
 

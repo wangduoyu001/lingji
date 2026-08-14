@@ -3,15 +3,15 @@
 ## 1. 当前结论
 
 ```text
-Verdict: PENDING
-Merge recommendation: DO NOT MERGE YET
+Verdict: FAIL
+Merge recommendation: DO NOT MERGE
 Product commit: 65de729228b200869b118fd9c0798af6ad658bca
 Artifact: lingji-macos-arm64 / 灵机_0.1.0_aarch64.dmg
 Artifact ID: 9213728587
 Report branch: acceptance/macos-m5-physical-acceptance-65de7292
 ```
 
-本报告先固定被测身份和已完成的远程预检。M5 真机尚未进行 whole-bundle 安装、启动、主人肉眼确认、退出和清理，故不得写为 PASS。
+本报告已完成首次 M5 本机执行。Artifact 身份、整包替换、签名、隔离启动和本地 API 均通过；但主人确认主窗口容易丢失且无法找回，随后验收观察工具触发了一次无 task-scoped 环境的正常启动并创建新的 Production 根目录。该 Artifact 不得继续验收或合并。
 
 ## 2. 产品与 Artifact 身份预检
 
@@ -39,16 +39,42 @@ Report branch: acceptance/macos-m5-physical-acceptance-65de7292
 | acceptance-doc-sync `31786135745` | `65de729` | PASS |
 | local-execution-handoff `31786135834` | `65de729` | PASS |
 
-## 4. 仍待完成的 M5 真机项目
+## 4. M5 真机执行结果
 
-- [ ] 环境与正式数据的只读盘点。
-- [ ] whole-bundle replace、签名复验和失败回滚演练。
-- [ ] task-scoped `LINGJI_ACCEPTANCE_DATA_ROOT` 下首次启动、8766 连通和二次启动。
-- [ ] 自动资料目录、首页清晰度、自动接管与授权边界的主人肉眼确认。
-- [ ] Runtime / Sidecar / 8766 / 8767 正常退出、无孤儿进程与 DMG 卸载。
-- [ ] 正式数据污染检查、临时根清理、报告 Commit 推送和远程复读。
+- [x] 环境盘点：原生 arm64、Gatekeeper 开启、端口空闲、验收前 `Documents/acceptance` 不存在。
+- [x] Artifact：DMG 哈希、挂载、arm64 主程序/Sidecar、签名和内部 Commit 全部通过。
+- [x] 安装：whole-bundle replace 与安装后 `codesign --verify --deep --strict` 通过；原 App 已保留为任务专属备份。
+- [x] 隔离首启：Runtime、SQLite、Qdrant、日志和 Vault 均位于 task-scoped root；8766 仅监听 `127.0.0.1`。
+- [x] 自动资料目录：正常首启不要求主人选择目录。
+- [x] 首页、正在做什么、需要我决定和高级工具可打开；无主人事项时能显示“暂时不需要你决定”。
+- [x] 旧 Runtime 已正常退出，8766/8767 已释放。
+- [ ] task-scoped root 清理：保留至失败报告远程复读后执行。
 
-## 5. 约束
+## 5. 阻塞缺陷
+
+### M5-WINDOW-001 · P1 · 主窗口丢失后没有找回入口
+
+- 复现：将部分页面或主窗口移出可见区域后，主人无法在界面中找到并恢复窗口。
+- 预期：有固定、容易发现的入口将主窗口取消最小化、显示、居中和置前。
+- 实际：产品仅配置首次 `center`，没有后续找回动作。
+- 主人观察：FAIL。
+- 修复：产品提交 `661ae4d286fecbc90b2e815479dbb7d0f94d4062` 新增 macOS 菜单栏“找回主窗口”；必须由新 Artifact 重新真机验证。
+
+### M5-ISOLATION-002 · P0 · 验收观察过程创建新的 Production 根目录
+
+- 复现：task-scoped App 退出后，外部窗口观察工具按普通启动路径再次打开 App。
+- 预期：验收期间不得创建新的 Production 根目录。
+- 实际：验收前不存在的 Production 根目录被创建；随后已正常退出该实例并释放端口。
+- 数据影响：未读取或删除主人既有资料；新根目录未擅自删除，等待主人确认。
+- 结论：`production_pollution_count = 1`；本轮 Artifact 验收 FAIL。
+
+## 6. 后续处理
+
+- 新产品 Commit `661ae4d` 正在通过 macOS/Windows/P0/测试门禁。
+- 只有新 macOS Artifact 的身份、隔离、窗口找回和主人观察全部通过，才能生成新的 M5 任务单。
+- 旧 Artifact `9213728587` 禁止复用。
+
+## 7. 约束
 
 - 执行入口：`docs/ACCEPTANCE/MACOS_M5_LOCAL_EXECUTION_TASK.md`。
 - 不得使用任何旧 Artifact 或以 CI 成功替代 M5 真机结论。
