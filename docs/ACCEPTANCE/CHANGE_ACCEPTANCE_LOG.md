@@ -51,6 +51,47 @@
 
 ---
 
+## 2026-08-14 · PR #88 Phase 4 · 65de7292 M5 真机任务重置
+
+- 产品分支：`feature/owner-autopilot-ui-codexpp`
+- 产品 Commit：`65de729228b200869b118fd9c0798af6ad658bca`
+- 影响模块：macOS M5 任务身份、Artifact 绑定和本机结果回执。
+- 风险等级：P0（真机验收若使用旧 DMG 会产生错误结论）。
+- 用户可感知变化：无产品交互变化；本机验收只使用当前精确 Commit 的新 DMG。
+- 数据或安全边界变化：无；继续要求 task-scoped `LINGJI_ACCEPTANCE_DATA_ROOT`，不得触碰正式数据。
+
+### 新增或修改的自动验收
+
+- [ ] macOS Desktop Gate run `31786165138`、P0 Windows Gate run `31786165020`、Windows Desktop Release Baseline run `31786165341` 与普通 CI 必须同为 `65de729228b200869b118fd9c0798af6ad658bca`。
+- [ ] 下载 Artifact `9213728587` 后，DMG SHA256 必须为 `4666b0cda78baa81fc9150254f406f4c91faed520a2df850e4c8f52d2a1ff354`，嵌入 metadata Commit 必须精确一致。
+
+### 新增或修改的真机验收
+
+- [ ] 严格按 `MACOS_M5_LOCAL_EXECUTION_TASK.md` 对新 DMG 进行完整替换、首启、二启、退出和清理；不得复用任何旧 Artifact。
+
+### 主人肉眼确认
+
+- [ ] 仅确认首次启动无需选择资料目录、首页是否一眼可懂、自动接管状态和需要授权的边界是否清楚；PR #88 保持 Draft。
+
+### 回归项
+
+- [ ] 不允许任务单、Artifact、内部 Release Metadata、CI 或最终报告引用不同产品 SHA。
+- [ ] 不允许自动发现的 AI 元数据被误写为必须手工处理的任务。
+
+### 清理与回滚
+
+- 临时根：`~/Library/Caches/LingJiAcceptance/MACOS-M5-AUTOPILOT-PHASE4-65DE7292-65de7292/`；仅确认其为本轮临时目录后删除。
+- 覆盖安装使用 whole-bundle replace；失败时恢复任务根中的完整旧 App 备份，不删除正式 DataRoot、Vault 或其他软件数据。
+
+### 最终报告
+
+- 任务单：`docs/ACCEPTANCE/MACOS_M5_LOCAL_EXECUTION_TASK.md`
+- 回执：`docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md`
+- 报告路径：`docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_65de7292.md`
+- 报告分支：`acceptance/macos-m5-physical-acceptance-65de7292`
+
+---
+
 ## 2026-08-14 · PR #88 · 最终同 SHA Artifact 收口文档
 
 - 产品分支：`feature/owner-autopilot-ui-codexpp`
