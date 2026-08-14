@@ -3,6 +3,7 @@
 > 正式主线：`master`  
 > 架构权威：`docs/ARCHITECTURE.md`  
 > 当前状态：`docs/PROJECT_STATUS.md`  
+> 产品进度与用户需求总账：`docs/PROJECT_PROGRESS.md`  
 > 代码导航：`docs/MODULES/CODE_MAP.md`  
 > 验收权威：`docs/ACCEPTANCE/README.md`  
 > 本机任务单：`docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md`  
@@ -14,29 +15,32 @@
 ## 1. 每次任务的最小读取顺序
 
 1. 检查当前分支、HEAD、上游和工作区状态。
-2. 阅读 `docs/PROJECT_STATUS.md` 中与任务相关的章节。
-3. 在 `docs/MODULES/CODE_MAP.md` 定位模块入口、所有权、相关测试和局部验收命令。
-4. 任何开发、优化、修复、发布或验收任务都必须阅读 `docs/ACCEPTANCE/README.md`。
-5. 本机 Codex 收到“去看任务单干活”时，必须继续读取 `LOCAL_EXECUTION_TASK.md`、`LOCAL_EXECUTION_RESULT.md`、`CODEX_ACCEPTANCE_INSTRUCTIONS.md`、`CHANGE_ACCEPTANCE_LOG.md` 当前条目和 `REPORT_TEMPLATE.md`。
-6. 只允许执行 `LOCAL_EXECUTION_TASK.md` 中 `status: ACTIVE` 的任务。聊天记录、旧报告、本机残留目录和口头摘要不能替代任务单。
-7. 阅读直接受影响的源代码、直接调用方和对应测试。
-8. 只有当任务改变架构边界、数据权威、端口、主线职责或兼容策略时，才阅读 `docs/ARCHITECTURE.md`。
-9. 只有当任务涉及治理、发布、跨模块测试或文档职责时，才阅读 `docs/DEVELOPMENT_RULES.md` 的对应章节。
-10. 历史模块计划和测试报告只在核对历史结论、回归边界或兼容承诺时读取。
+2. 阅读 `docs/PROJECT_PROGRESS.md`，确认产品核心、当前项目主线、用户需求编号和执行队列；任何新的 LingJi 产品需求必须先登记到该总账。
+3. 阅读 `docs/PROJECT_STATUS.md` 中与任务相关的章节。
+4. 在 `docs/MODULES/CODE_MAP.md` 定位模块入口、所有权、相关测试和局部验收命令。
+5. 任何开发、优化、修复、发布或验收任务都必须阅读 `docs/ACCEPTANCE/README.md`。
+6. 本机 Codex 收到“去看任务单干活”时，必须继续读取 `LOCAL_EXECUTION_TASK.md`、`LOCAL_EXECUTION_RESULT.md`、`CODEX_ACCEPTANCE_INSTRUCTIONS.md`、`CHANGE_ACCEPTANCE_LOG.md` 当前条目和 `REPORT_TEMPLATE.md`。
+7. 只允许执行 `LOCAL_EXECUTION_TASK.md` 中 `status: ACTIVE` 的任务。聊天记录、旧报告、本机残留目录和口头摘要不能替代任务单。
+8. 阅读直接受影响的源代码、直接调用方和对应测试。
+9. 只有当任务改变架构边界、数据权威、端口、主线职责或兼容策略时，才阅读 `docs/ARCHITECTURE.md`。
+10. 只有当任务涉及治理、发布、跨模块测试或文档职责时，才阅读 `docs/DEVELOPMENT_RULES.md` 的对应章节。
+11. 历史模块计划和测试报告只在核对历史结论、回归边界或兼容承诺时读取。
 
 禁止默认通读整个仓库、全部文档或全部历史报告。文档冲突时以当前代码和上述权威文件为准，并修正文档冲突。聊天中的旧验收指令不得覆盖仓库当前验收权威。
 
 ## 2. 开发流程
 
 1. 先理解用户需求和现有代码。
-2. 外部技术、依赖或规则可能变化时，先查官方文档和可靠实现。
-3. 在开发前定义本次自动测试、真机测试、主人观察、回归、清理和回滚要求，并写入 `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`。
-4. 需要本机执行时，由 ChatGPT / 主开发代理更新 `docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md`；不得让用户复制长指令。
-5. 给出有边界的落地计划，再修改代码。
-6. 使用最少、清晰、可维护的代码完成任务，优先扩展现有模块。
-7. 不为“更整齐”做无关的大规模重构，不建立第二套数据库、检索器、队列、API、UI 或配置中心。
-8. 每个功能或较大代码修改必须有对应测试，并在现有权威文档或 `docs/TEST_REPORTS/` 留下 Markdown 记录。
-9. 代码、运行时、Desktop、连接器、数据链路、脚本、依赖或发布流程变化时，必须在同一 PR 同步更新 `docs/ACCEPTANCE/`；未同步不得宣布完成或请求合并。
+2. 用户提出新的 LingJi 产品需求时，先在 `docs/PROJECT_PROGRESS.md` 分配需求编号、关联项目、优先级、状态和可验证验收结果，再开始开发。
+3. 外部技术、依赖或规则可能变化时，先查官方文档和可靠实现。
+4. 在开发前定义本次自动测试、真机测试、主人观察、回归、清理和回滚要求，并写入 `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`。
+5. 需要本机执行时，由 ChatGPT / 主开发代理更新 `docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md`；不得让用户复制长指令。
+6. 给出有边界的落地计划，再修改代码。
+7. 使用最少、清晰、可维护的代码完成任务，优先扩展现有模块。
+8. 不为“更整齐”做无关的大规模重构，不建立第二套数据库、检索器、队列、API、UI 或配置中心。
+9. 每个功能或较大代码修改必须有对应测试，并在现有权威文档或 `docs/TEST_REPORTS/` 留下 Markdown 记录。
+10. 代码、运行时、Desktop、连接器、数据链路、脚本、依赖或发布流程变化时，必须在同一 PR 同步更新 `docs/ACCEPTANCE/`；未同步不得宣布完成或请求合并。
+11. 每轮开发结束必须回填 `docs/PROJECT_PROGRESS.md`：需求状态、实现 Commit/PR、测试/真机证据、已知限制和下一批执行项。
 
 ## 3. 长期架构边界
 
@@ -123,6 +127,7 @@ python scripts/check_local_execution_handoff.py
 
 - `docs/ARCHITECTURE.md`：稳定架构与边界。
 - `docs/PROJECT_STATUS.md`：当前阶段、风险、阻塞和下一步。
+- `docs/PROJECT_PROGRESS.md`：长期产品项目、用户需求、优先级、执行队列和每轮开发回填。
 - `docs/MODULES/CODE_MAP.md`：代码入口、所有权、相关测试和局部验收。
 - `docs/DEVELOPMENT_RULES.md`：完整长期治理规则。
 - `docs/ACCEPTANCE/README.md`：当前验收与本机交接总规则。
