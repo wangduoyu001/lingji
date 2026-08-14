@@ -7,7 +7,7 @@
 ```yaml
 task_id: MACOS-M5-AUTOPILOT-PHASE5-90398FD
 status: RUNNING
-verdict: PENDING
+verdict: FAIL
 execution_mode: FRESH_ENVIRONMENT_THEN_LOCAL_ACCEPTANCE
 repository: wangduoyu001/lingji
 product_pr: 88
@@ -29,7 +29,7 @@ remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: NOT_REQUIRED
 local_temp_root_absent: PENDING
-owner_observation: REQUIRED_FOR_PASS
+owner_observation: COMPLETE_FAIL
 started_at: 2026-08-14T18:17:00+08:00
 finished_at: PENDING
 artifact_name: lingji-macos-arm64
@@ -42,7 +42,7 @@ dmg_sha256: 795c5099db13033812bc7006966246e6650ea362002722807b7e8aa8d655689d
 embedded_commit_exact: PENDING_UI_DIAGNOSTIC
 ci_exact_head: PASS
 artifact_integrity_precheck: PASS
-physical_m5_acceptance: RUNNING
+physical_m5_acceptance: FAIL_OWNER_UX
 production_pollution_count: 1
 ```
 
@@ -67,10 +67,18 @@ macOS DMG SHA256: PASS
 whole-bundle replace：PASS_WITH_INSTALL_PROCESS_DEVIATION
 安装后 codesign：PASS
 首次启动 / 自动资料目录：PASS
-首页进度看板与窗口找回的主人观察：REQUIRED_FOR_PASS
+首页进度看板与窗口找回的主人观察：FAIL（信息量增加，但仍不够智能化、细致，未达到完整进度看板预期）
 Runtime / 8766 / 生命周期：RUNNING
 二次启动：PENDING
 Production 污染检查：PENDING
 结束清理：PENDING
 远程报告复读：PENDING
+```
+
+## 4. 主人观察（2026-08-14）
+
+```text
+结论：FAIL（仅针对当前 UI 智能化与细致程度）
+反馈：信息量确有增加；但首页仍不像一个自动持续运行、可全面了解状态的完整进度看板，信息粒度也不够细致。
+后续：继续保留“窗口找回”和已有进度数据；下一轮需把自动收纳、更新、取回、异常处理和待主人决策组织成可追溯的进度链路，而不是只增加几张统计卡片。
 ```
