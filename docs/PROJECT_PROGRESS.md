@@ -118,7 +118,7 @@ SUPERSEDED
 | R-20260814-07 | 2026-08-14 | Memory Inspector / Vector / 模型状态要让普通用户看懂，不要只显示技术错误 | P08,P09 | P1 | `BACKLOG` | 每个异常显示原因、影响、系统正在做什么、是否需要主人行动 |
 | R-20260814-08 | 2026-08-14 | Mac 与 Windows 是同一个 LingJi 产品的双平台发行，不得修好 Mac 又破坏 Windows | P10 | P0 | `IN_PROGRESS` | 同一 exact product SHA 上 Win/Mac 门禁与 Artifact 全部通过 |
 | R-20260814-09 | 2026-08-14 | 修正 M5 首次 whole-bundle replace 的流程偏差 | P10 | P1 | `READY` | backup root 先验证，再整体替换、签名校验；失败可安全恢复 |
-| R-20260814-10 | 2026-08-14 | 创建长期项目进度文档，每次记录所有项目、用户后续需求、开发状态并逐步执行 | P01-P11 | P0 | `IN_PROGRESS` | 本文档存在；后续 Agent 必读；每个新需求先登记再开发 |
+| R-20260814-10 | 2026-08-14 | 创建长期项目进度文档，每次记录所有项目、用户后续需求、开发状态并逐步执行 | P01-P11 | P0 | `ACCEPTED` | 本文档存在；后续 Agent 必读；每个新需求先登记再开发 |
 
 ---
 
@@ -131,7 +131,7 @@ SUPERSEDED
 目标：解决代码、验收和状态文档互相漂移，建立统一需求总账。
 
 - [x] 创建 `docs/PROJECT_PROGRESS.md`。
-- [ ] 在 `AGENTS.md` 把本文档加入每轮开发的必读与必更新规则。
+- [x] 在 `AGENTS.md` 把本文档加入每轮开发的必读与必更新规则。
 - [ ] 盘点并修正 `PROJECT_STATUS.md`、旧 `UNIFIED_MEMORY_EXECUTION_STATUS.md`、当前 PR88/M5 的状态漂移。
 - [ ] 确认旧 PR60 `LOCAL_EXECUTION_TASK` 不再被当前产品开发误判为 ACTIVE 权威。
 - [ ] 形成一次 Markdown 治理记录并通过 acceptance-doc-sync。
@@ -343,6 +343,21 @@ M5 verdict: FAIL / DO NOT MERGE
 - 下一批：
 ```
 
+## 2026-08-14 · 开发批次 Project Progress Ledger
+
+- 关联需求：`R-20260814-10`
+- 关联项目：`P01-P11`
+- 开始状态：没有统一的长期产品需求/项目进度总账，需求主要散落在聊天、状态文档和验收报告中。
+- 本轮目标：建立唯一长期进度台账，并把它接进所有 Agent 的强制开发流程。
+- 修改文件：`docs/PROJECT_PROGRESS.md`、`AGENTS.md`。
+- 自动测试：纯文档治理变更，无 Runtime 行为测试。
+- 远程验证：GitHub 已重新读取 `PROJECT_PROGRESS.md` 与 `AGENTS.md`，内容可见。
+- 首次总账 Commit：`a075aa6e721517c3f4079517342d81dbe9b9aaba`
+- AGENTS 接入 Commit：`bc9c712e07d9926507c10acf66259a2eee7600a6`
+- 结束状态：`ACCEPTED`，长期维护规则正式生效。
+- 未完成：Stage 0 仍需清理 `PROJECT_STATUS` / 旧执行状态 / PR60 ACTIVE 任务漂移。
+- 下一批：继续 Stage 0“项目防失忆治理”。
+
 ---
 
 # 8. 决策记录
@@ -387,6 +402,13 @@ Codex/其他 AI = 交互与推理入口
 ---
 
 # 9. 更新日志
+
+## 2026-08-14 · v1.1
+
+- `PROJECT_PROGRESS.md` 已创建并完成远程复读。
+- `AGENTS.md` 已要求所有 Agent 每轮先读项目总账，新需求先登记、开发结束后回填。
+- `R-20260814-10` 从 `IN_PROGRESS` 更新为 `ACCEPTED`。
+- Stage 0 前两项完成，下一步进入仓库状态文档和旧任务权威漂移治理。
 
 ## 2026-08-14 · v1
 
