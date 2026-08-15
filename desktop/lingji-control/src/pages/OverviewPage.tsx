@@ -30,7 +30,7 @@ function relativeTime(value: unknown): string {
 }
 
 function workItemTarget(item: OwnerWorkItem): PageId {
-  if (item.ownerActionRequired) return "attention";
+  if (item.ownerActionRequired) return "memory_review";
   if (item.stage === "issue") return "activity";
   return "memory_inspector";
 }
@@ -99,10 +99,11 @@ export default function OverviewPage({ data, api, active, onNavigate }: {
       target: "attention",
     });
   }
-  if (pendingReviewCount > 0) {
+  const reviewDecisionCount = Math.max(pendingReviewCount, feed.summary.needsOwner);
+  if (reviewDecisionCount > 0) {
     ownerActions.push({
       id: "memory-review",
-      title: `${pendingReviewCount} 条候选记忆等待你确认`,
+      title: `${reviewDecisionCount} 条候选记忆等待你确认`,
       detail: "确认后才会成为长期记忆；灵机不会替你决定。",
       target: "memory_review",
     });
