@@ -22,6 +22,7 @@ const [
   desktopCss,
   releaseCss,
   autopilotCss,
+  ownerHomeCss,
 ] = await Promise.all([
   read("../src/navigation.ts"),
   read("../src/types.ts"),
@@ -38,6 +39,7 @@ const [
   read("../src/DesktopUX.css"),
   read("../src/ReleaseUX.css"),
   read("../src/AssistantAutopilot.css"),
+  read("../src/OwnerHomeV2.css"),
 ]);
 
 for (const page of ["overview", "activity", "attention", "diagnostics"]) {
@@ -63,6 +65,7 @@ assert.match(shell, /返回高级诊断/);
 
 assert.match(app, /autoRecoveryActive/);
 assert.match(app, /RuntimeBoundary/);
+assert.match(app, /OwnerHomeV2\.css/);
 assert.match(boundary, /自动恢复/);
 assert.match(boundary, /自动准备未完成/);
 assert.match(boundary, /让灵机重新自动准备/);
@@ -78,12 +81,21 @@ assert.match(connection, /ownerStopped/);
 assert.match(connection, /autoRecoveryActive/);
 assert.match(connection, /后台自动恢复已暂停/);
 
-assert.match(overview, /owner-autopilot-home/);
+assert.match(overview, /owner-home-v2/);
+assert.match(overview, /autopilot-command-center/);
+assert.match(overview, /灵机自动驾驶/);
+assert.match(overview, /autopilot-flow-surface/);
+assert.match(overview, /buildWorkflow/);
+for (const stage of ["发现来源", "收纳", "解析", "候选", "确认", "索引", "取回"]) {
+  assert.ok(overview.includes(stage), `Owner home workflow is missing ${stage}`);
+}
+assert.match(overview, /Array\.isArray\(d\.events\)/);
+assert.match(overview, /最近自动完成/);
+assert.match(overview, /不是“在线”，而是真的做过什么/);
 assert.match(overview, /AssistantDiscoveryPanel/);
 assert.match(overview, /ownerDecisionCount/);
 assert.match(overview, /systemIssueCount/);
-assert.match(overview, /没有需要你操作的事项/);
-assert.match(overview, /除非确认无法自动解决，否则不会打断你/);
+assert.match(overview, /当前没有需要你操作的事项/);
 assert.equal(overview.includes("overview-technical-summary"), false, "Technical health dashboard must not remain on the daily home surface");
 assert.equal(overview.includes("Metric"), false, "Daily home must not render a grid of technical metrics");
 assert.equal(overview.includes("刷新本机状态"), false, "Overview must not require manual refresh");
@@ -107,7 +119,8 @@ assert.match(diagnostics, /<details/);
 assert.match(diagnostics, /ADVANCED_NAVIGATION/);
 
 assert.match(currentWork, /intervalMs: 5_000/);
-assert.match(currentWork, /系统当前空闲/);
+assert.match(currentWork, /if \(!activity && pendingReviewCount === 0 && !resource\.error\) return null/);
+assert.match(currentWork, /当前真实任务/);
 assert.match(currentWork, /current-work-progress/);
 assert.match(currentWork, /aria-label={`任务进度/);
 assert.match(currentWork, /onPendingReviewCount/);
@@ -125,7 +138,13 @@ for (const cssToken of [
   ".assistant-passive-row",
   ".autopilot-background-issue",
   ".runtime-manual-fallback",
-]) assert.ok(autopilotCss.includes(cssToken), `Autopilot phase-3 styles are missing ${cssToken}`);
+]) assert.ok(autopilotCss.includes(cssToken), `Autopilot styles are missing ${cssToken}`);
+for (const cssToken of [
+  ".autopilot-command-center",
+  ".autopilot-flow-track",
+  ".autopilot-event-stream",
+  ".memory-progress-v2",
+]) assert.ok(ownerHomeCss.includes(cssToken), `Owner home v2 styles are missing ${cssToken}`);
 assert.match(releaseCss, /\.desktop-runtime-tools/);
 
 console.log("observation-first-ui-smoke: PASS");
