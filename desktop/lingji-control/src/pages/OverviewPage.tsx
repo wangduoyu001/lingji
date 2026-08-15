@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import AssistantDiscoveryPanel from "../components/AssistantDiscoveryPanel";
 import CurrentWorkPanel from "../components/CurrentWorkPanel";
 import { Empty, Notice } from "../components/ui";
@@ -82,55 +82,52 @@ export default function OverviewPage({ data, api, active, onNavigate }: {
   const coveragePercent = numberOrNull(retrieval.coverage_percent);
   const autopilot = (autopilotResource.data ?? {}) as Record<string, unknown>;
 
-  const feed = useMemo(() => buildOwnerWorkFeed({
+  const feed = buildOwnerWorkFeed({
     memoryResponse: memoryResource.data,
     queueResponse: queueRoot,
     events,
     expectedDocuments,
     limit: 20,
-  }), [memoryResource.data, queueRoot, events, expectedDocuments]);
+  });
 
-  const ownerActions = useMemo<OwnerAction[]>(() => {
-    const items: OwnerAction[] = [];
-    if (importDecisionCount > 0) {
-      items.push({
-        id: "assistant-import",
-        title: `${importDecisionCount} 类 AI 历史等待你授权读取`,
-        detail: "灵机只发现了资料位置，还没有读取正文。",
-        target: "attention",
-      });
-    }
-    if (pendingReviewCount > 0) {
-      items.push({
-        id: "memory-review",
-        title: `${pendingReviewCount} 条候选记忆等待你确认`,
-        detail: "确认后才会成为长期记忆；灵机不会替你决定。",
-        target: "memory_review",
-      });
-    }
-    if (vector.rebuild_required === true) {
-      items.push({
-        id: "vector-rebuild",
-        title: "向量索引是否重建需要你确认",
-        detail: "这是不可逆维护，灵机不会擅自执行。",
-        target: "vector_center",
-      });
-    }
-    const autopilotActions = Array.isArray(autopilot.owner_actions)
-      ? autopilot.owner_actions.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
-      : [];
-    for (const action of autopilotActions) {
-      const title = String(action.title ?? "需要你确认一项系统操作");
-      if (items.some((item) => item.title === title)) continue;
-      items.push({
-        id: String(action.code ?? title),
-        title,
-        detail: String(action.summary ?? "灵机已经停在安全边界，等待你的决定。"),
-        target: "attention",
-      });
-    }
-    return items;
-  }, [autopilot.owner_actions, importDecisionCount, pendingReviewCount, vector.rebuild_required]);
+  const ownerActions: OwnerAction[] = [];
+  if (importDecisionCount > 0) {
+    ownerActions.push({
+      id: "assistant-import",
+      title: `${importDecisionCount} 类 AI 历史等待你授权读取`,
+      detail: "灵机只发现了资料位置，还没有读取正文。",
+      target: "attention",
+    });
+  }
+  if (pendingReviewCount > 0) {
+    ownerActions.push({
+      id: "memory-review",
+      title: `${pendingReviewCount} 条候选记忆等待你确认`,
+      detail: "确认后才会成为长期记忆；灵机不会替你决定。",
+      target: "memory_review",
+    });
+  }
+  if (vector.rebuild_required === true) {
+    ownerActions.push({
+      id: "vector-rebuild",
+      title: "向量索引是否重建需要你确认",
+      detail: "这是不可逆维护，灵机不会擅自执行。",
+      target: "vector_center",
+    });
+  }
+  const autopilotActions = Array.isArray(autopilot.owner_actions)
+    ? autopilot.owner_actions.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    : [];
+  for (const action of autopilotActions) {
+    const title = String(action.title ?? "需要你确认一项系统操作");
+    if (ownerActions.some((item) => item.title === title)) continue;
+    ownerActions.push({
+      id: String(action.code ?? title),
+      title,
+      detail: String(action.summary ?? "灵机已经停在安全边界，等待你的决定。"),
+      target: "attention",
+    });
+  }
 
   const activeItem = feed.items.find((item) => ["queued", "leased", "running", "retrying"].includes(item.status.toLowerCase()));
   const latestItem = feed.items[0] ?? null;
