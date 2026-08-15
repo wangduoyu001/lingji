@@ -51,7 +51,7 @@ Owner Home v2 前端只保留了极少 queue 字段，再把数据做成数量�
 → 系统统计与高级状态（折叠）
 ```
 
-七阶段流程仍然作为内部生命周期语义存在，但不再以 7 张汇总卡作为首页主结构。阶段只附着在真实资料对象上。
+七阶段流程仍作为内部生命周期语义存在，但不再以 7 张汇总卡作为首页主结构。阶段只附着在真实资料对象上。
 
 ## 4. 数据投影
 
@@ -62,6 +62,7 @@ Owner Home v2 前端只保留了极少 queue 字段，再把数据做成数量�
 - 不投影 `payload.text / transcript / html / selected_text`；
 - 不投影 raw snapshot 路径；
 - 未知内部 event 不进入主人活动流；
+- 缺少 source type 时明确显示“知识库资料”，禁止出现空白来源；
 - 没有验证样本时继续不宣称准确率。
 
 如果统计层显示 `expectedDocuments > 0` 但 Memory Inspector 返回 0 个具体对象，投影必须进入：
@@ -79,7 +80,24 @@ detailsState: unavailable
 
 禁止再次退化为“只显示 N 份”。
 
-## 5. 已修改文件
+## 5. Owner Action 一致性
+
+首页顶部待办不得和资料行互相打架。
+
+规则：
+
+```text
+reviewDecisionCount = max(CurrentWork pending review count, Owner Work Feed concrete owner-required rows)
+```
+
+因此：
+
+- 只要任一具体资料已经是 `pending_review`，顶部不能显示“现在不用你做任何事”；
+- 顶部必须出现候选记忆待确认；
+- 资料行“去确认”必须直达 `memory_review`，不经过模糊的通用状态页；
+- 即使另一个异步计数接口还没返回，具体对象本身仍能驱动顶部主人动作。
+
+## 6. 已修改文件
 
 ```text
 desktop/lingji-control/src/pages/OverviewPage.tsx
@@ -87,16 +105,18 @@ desktop/lingji-control/src/ownerWorkFeed.ts
 desktop/lingji-control/src/OwnerWorkFeed.css
 desktop/lingji-control/src/App.tsx
 desktop/lingji-control/scripts/owner-work-feed-smoke.mjs
+desktop/lingji-control/scripts/owner-home-action-consistency-smoke.mjs
 desktop/lingji-control/scripts/observation-first-ui-smoke.mjs
 desktop/lingji-control/scripts/memory-progress-smoke.mjs
 desktop/lingji-control/scripts/macos-release-smoke.mjs
 desktop/lingji-control/scripts/assistant-autopilot-smoke.mjs
 desktop/lingji-control/scripts/run-smoke-suite.mjs
+docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md
 ```
 
 旧 `OwnerHomeV2.css` 已移除，避免失败的信息架构继续作为活跃样式合同存在。
 
-## 6. 自动测试合同
+## 7. 自动测试合同
 
 `owner-work-feed-smoke.mjs` 覆盖：
 
@@ -105,7 +125,14 @@ desktop/lingji-control/scripts/run-smoke-suite.mjs
 3. `pending_review` 必须明确 `ownerActionRequired=true`；
 4. 统计有 2 份但明细为空必须 `detailsState=unavailable`；
 5. 投影 JSON 不得出现绝对私人路径、正文或 raw snapshot 路径；
-6. 未知内部事件不得冒充主人可见活动。
+6. 未知内部事件不得冒充主人可见活动；
+7. source type 缺失时必须显示“知识库资料”，不得输出空标签。
+
+`owner-home-action-consistency-smoke.mjs` 覆盖：
+
+1. 顶部 review count 必须合并 `feed.summary.needsOwner`；
+2. owner-required 资料行必须直接进入 `memory_review`；
+3. “现在不用你做任何事”和“需要你处理”两个状态的选择逻辑必须有明确代码合同。
 
 同时更新：
 
@@ -113,9 +140,9 @@ desktop/lingji-control/scripts/run-smoke-suite.mjs
 - `memory-progress-smoke.mjs`：统计与质量边界下沉到折叠高级状态；
 - `macos-release-smoke.mjs`：继续锁定 credential 不上首页、M5 release identity 与窗口恢复合同；
 - `assistant-autopilot-smoke.mjs`：首页必须明确显示 AI 历史授权、候选记忆确认和向量重建等具体主人动作；
-- `run-smoke-suite.mjs`：加入真实 Owner Work Feed 数据语义测试。
+- `run-smoke-suite.mjs`：统一执行真实 Owner Work Feed 数据语义和 Owner Action 一致性测试。
 
-## 7. 验收标准
+## 8. 新 M5 验收标准
 
 新 M5 不再问“七阶段是不是显示了”，而是给真实数据后要求主人能在首页直接回答：
 
@@ -128,7 +155,14 @@ desktop/lingji-control/scripts/run-smoke-suite.mjs
 
 任一问题无法直接回答即 `FAIL / DO NOT MERGE`。
 
-## 8. 技术回归边界
+额外硬门：
+
+- 统计显示有资料但明细拿不到时，必须明确报“明细不可用”，不能只显示数量；
+- 资料行若标记“需要你处理”，首页顶部必须同步为主人待办；
+- 真实 pending review 的“去确认”必须直达审核页面；
+- Activity 不允许用未知内部事件制造“系统很忙”的假象。
+
+## 9. 技术回归边界
 
 本轮不得破坏：
 
@@ -139,10 +173,23 @@ desktop/lingji-control/scripts/run-smoke-suite.mjs
 - CredentialStore / AuthStatus 边界；
 - first/second exact-instance stop；
 - `state gone + PID gone + port free`；
+- Window Recovery 菜单、快捷键、Dock Reopen；
 - Windows 与 macOS 同一业务 UI/Runtime 主线。
 
-## 9. 验证状态
+## 10. 验证状态
 
-当前代码已进入开发分支 `fix/pr88-owner-work-feed-v3`。
+开发分支：`fix/pr88-owner-work-feed-v3`，产品修复 PR：`#99`。
 
-最终结果只有在该分支精确 Head 的 Desktop smoke、TypeScript build、仓库 tests、Windows/macOS release gates 全部通过后才能回填为 PASS。任何 CI 失败必须修复并从新 Head 重跑，不继承旧绿灯。
+已确认在此前 PR Head 上通过：
+
+- Owner Work Feed 真实数据 smoke；
+- Desktop smoke；
+- React/TypeScript production build；
+- Tauri configuration validation；
+- `local-execution-handoff`。
+
+首轮 `acceptance-doc-sync` 因缺少 change-specific `CHANGE_ACCEPTANCE_LOG.md` 记录而失败，未降低门禁；现已在本分支顶部补充 Owner Work Feed v3 验收条目，历史记录完整保留。
+
+本报告自身、Owner Action 一致性 smoke 与来源空标签修复完成后，必须以**最新精确 Head**重新跑全部 PR 门禁。旧 Head 的绿灯不继承。
+
+只有该最新 Head 的 Desktop smoke、TypeScript build、仓库 tests、`acceptance-doc-sync`、`local-execution-handoff`、macOS Gate 全部 PASS 后，才允许 squash 合入产品分支。合入后必须再由新的产品 Commit 重新跑双平台 release gates 并生成全新 Artifact；任何旧 Artifact 不得复用。
