@@ -4,6 +4,70 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-15 · PR #88 M5 UX 修复 · Owner Home v2
+
+- 产品分支：`fix/pr88-owner-home-v2` → `feature/owner-autopilot-ui-codexpp`
+- 产品 Commit：`pending exact PR head`
+- 来源失败：`PR88-M5-REACCEPTANCE-2C96B3EC / FAIL / DO NOT MERGE`
+- 影响模块：Desktop 首页信息架构、真实事件流投影、Memory Progress、空闲 CurrentWork 降噪、macOS 主窗口找回入口、Desktop smoke。
+- 风险等级：P1。
+- 用户可感知变化：首页改成“现在发生什么 → 自动工作流走到哪一步 → 最近真正自动做过什么”；七阶段流程直接展示 `发现来源 → 收纳 → 解析 → 候选 → 确认 → 索引 → 取回`；空闲 Codex 工作块不再占首页；主窗口入口改为 `窗口 → 将灵机带到当前屏幕` 并增加快捷键与 Dock Reopen。
+- 数据或安全边界变化：不新增事实源；首页只读现有 `overview.events`、queue、memory progress、vector 和 Autopilot 状态；不扩大正文读取、永久记忆批准、Qdrant 重建、Secret、Production/Acceptance 或外部客户端权限。
+
+### 新增或修改的自动验收
+
+- [ ] `node desktop/lingji-control/scripts/observation-first-ui-smoke.mjs`：锁定自动驾驶首屏、七阶段真实流程、`overview.events` 事件流、空闲 CurrentWork 隐藏与技术指标下沉。
+- [ ] `node desktop/lingji-control/scripts/memory-progress-smoke.mjs`：锁定 Memory Progress v2 的真实 coverage / queue 状态和 `not_measured` 质量边界，禁止伪造准确率。
+- [ ] `node desktop/lingji-control/scripts/window-recovery-smoke.mjs`：锁定 `窗口` 子菜单、`将灵机带到当前屏幕`、`CmdOrCtrl+Shift+L`、unminimize/show/center/focus 与 macOS `RunEvent::Reopen`。
+- [ ] `node desktop/lingji-control/scripts/run-smoke-suite.mjs` 与 `npm run build`：Desktop 回归与生产构建 PASS。
+- [ ] Rust/Tauri `cargo test` / `cargo check`：macOS 条件事件和跨平台主线不能破坏编译。
+- [ ] GitHub `tests`、`P0 Windows Gate`、`macOS Desktop Gate`、`Windows Desktop Release Baseline`、`acceptance-doc-sync`、`local-execution-handoff`：新精确 Head 全部 PASS 后才允许进入新 Artifact 阶段。
+
+### 新增或修改的真机验收
+
+- [ ] 只使用本轮修复合并后的**新产品 Commit**生成的新 macOS/Windows Artifact；失败 Artifact `9224368022` 与历史 `9102748834` 永久禁止重跑。
+- [ ] M5 首屏在不打开高级工具的情况下，能直接回答：是否需要主人决定、此刻系统正在做什么、自动流程走到哪、最近真实做过什么、下一步是什么。
+- [ ] 七阶段流程的状态必须能与真实 queue / memory / review / vector 数据对应；空闲时不得用假的“正在工作”动画或默认绿色掩盖未知状态。
+- [ ] “最近自动完成”必须来自已有 StateDatabase events；没有事件时明确没有新记录，不伪造活动。
+- [ ] Memory Progress 必须能看懂收纳、更新和索引覆盖；无验证样本继续明确“不宣称准确率”。
+- [ ] 将主窗口最小化、隐藏或移动离屏后，菜单 `窗口 → 将灵机带到当前屏幕`、快捷键和 macOS Dock Reopen 至少各验证一条真实找回路径；恢复后窗口可见、居中并获得焦点。
+
+### 主人肉眼确认
+
+- [ ] 首页与上一失败版有明显、可感知的首屏结构差异，而不是在旧页面上增加几个卡片。
+- [ ] 不看技术文档即可理解灵机已经自动做了什么、正在做什么、是否真的需要操作。
+- [ ] 信息层级先给行动与流程，端口、数据库、Qdrant、Embedding 等技术信息不占日常首屏。
+- [ ] Memory Progress 看起来是工作进度，不是统计数字堆积。
+- [ ] 主窗口找回入口容易发现，且实际有效。
+
+### 回归项
+
+- [ ] 未经主人授权不得读取真实 ChatGPT/Codex 正文；自动发现继续只读元数据。
+- [ ] 不允许自动批准永久记忆，不允许自动删除/重建 Production Qdrant，不允许自动修改第三方 AI 客户端配置。
+- [ ] Production/Acceptance 物理隔离、CredentialStore/AuthStatus、`secret_export_count=0`、Sidecar exact-instance stop 和 release exact-head 身份合同不得回退。
+- [ ] Windows 与 macOS 继续使用同一业务 UI/Runtime 代码；macOS 仅允许平台窗口事件条件分支。
+- [ ] PR #88 在新精确 Artifact 的 M5 主人体验 PASS 之前保持 Draft / DO NOT MERGE。
+
+### 清理与回滚
+
+- 本轮开发分支不触碰主人 Production 数据；CI 临时产物按 workflow 清理。
+- 新真机任务必须重新创建 task-scoped Acceptance root，whole-bundle 替换安装；FAIL 时恢复原 App，PASS 后按任务协议删除临时备份与任务根。
+- 回滚只允许回退 Owner Home v2 UI 投影与窗口入口，不得回退已经通过的认证、隔离、Sidecar 生命周期和 release identity 修复。
+
+### 不在范围
+
+- 不新增新的自动导入正文权限。
+- 不实现自动永久记忆批准。
+- 不把 Activity/Diagnostics 全部重做一遍。
+- 不在本轮开发分支直接激活 `LOCAL_EXECUTION_TASK.md`；只有新产品 Commit、新双平台 Artifact 和哈希全部锁定后，才允许在 `master` 创建新的 ACTIVE M5 任务。
+
+### 最终报告
+
+- 实施报告：`docs/TEST_REPORTS/PR88_OWNER_HOME_V2_IMPLEMENTATION.md`
+- 新 M5 报告：`docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_<new-short-sha>.md`
+
+---
+
 ## 填写模板
 
 ```markdown
