@@ -7,12 +7,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
 const [
-  panel, currentWork, overview, attention, codex, api, discovery, imports, styles,
+  panel, currentWork, overview, workFeed, attention, codex, api, discovery, imports, styles,
   boundary, connection, bootstrap, autopilotEngine, autopilotApi, runtimeEntrypoint,
 ] = await Promise.all([
   read("../src/components/AssistantDiscoveryPanel.tsx"),
   read("../src/components/CurrentWorkPanel.tsx"),
   read("../src/pages/OverviewPage.tsx"),
+  read("../src/ownerWorkFeed.ts"),
   read("../src/pages/AttentionPage.tsx"),
   read("../src/pages/CodexWorkspacePage.tsx"),
   read("../../../src/control/capture_api.py"),
@@ -48,20 +49,18 @@ assert.match(currentWork, /if \(!activity && pendingReviewCount === 0 && !resour
 assert.match(currentWork, /当前真实任务/);
 assert.match(currentWork, /current-work-details/);
 
-assert.match(overview, /owner-autopilot-home/);
-assert.match(overview, /owner-home-v2/);
 assert.match(overview, /\/api\/autopilot\/status/);
-assert.match(overview, /autopilot\.owner_action_count/);
-assert.match(overview, /autopilot\.background_issue_count/);
-assert.match(overview, /recent_actions/);
-assert.match(overview, /刚自动处理/);
-assert.match(overview, /自动复验/);
-assert.match(overview, /Array\.isArray\(d\.events\)/);
-assert.match(overview, /最近自动完成/);
-assert.match(overview, /buildWorkflow/);
-for (const stage of ["发现来源", "收纳", "解析", "候选", "确认", "索引", "取回"]) {
-  assert.ok(overview.includes(stage), `Owner autopilot flow is missing ${stage}`);
-}
+assert.match(overview, /autopilot\.owner_actions/);
+assert.match(overview, /AI 历史等待你授权读取/);
+assert.match(overview, /候选记忆等待你确认/);
+assert.match(overview, /向量索引是否重建需要你确认/);
+assert.match(overview, /你现在需要做什么/);
+assert.match(overview, /灵机现在在做什么/);
+assert.match(overview, /资料工作清单/);
+assert.match(overview, /buildOwnerWorkFeed/);
+assert.match(workFeed, /ownerActionRequired/);
+assert.match(workFeed, /需要你确认这条候选是否保留/);
+assert.equal(overview.includes("buildWorkflow"), false, "Autopilot home must not use aggregate stage cards as the primary story");
 assert.equal(overview.includes("overview-technical-summary"), false, "Daily home must not expose the technical metric dashboard");
 assert.equal(overview.includes("Metric"), false, "Daily home must not render technical metric tiles");
 
