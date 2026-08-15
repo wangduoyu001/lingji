@@ -1,0 +1,424 @@
+.owner-home-v2 {
+  gap: 14px;
+}
+
+.autopilot-command-center {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, .55fr);
+  gap: 18px;
+  padding: 26px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(119,214,179,.11), transparent 34%),
+    linear-gradient(145deg, rgba(25,30,39,.98), rgba(12,15,21,.99));
+  box-shadow: 0 18px 44px rgba(0,0,0,.18);
+}
+
+.autopilot-command-center.needs-owner {
+  border-color: rgba(230,184,107,.34);
+  background:
+    radial-gradient(circle at 82% 18%, rgba(230,184,107,.12), transparent 34%),
+    linear-gradient(145deg, rgba(36,31,22,.98), rgba(12,15,21,.99));
+}
+
+.autopilot-command-center.has-issue {
+  border-color: rgba(241,139,139,.22);
+}
+
+.autopilot-command-copy {
+  align-self: center;
+  min-width: 0;
+}
+
+.autopilot-command-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: .02em;
+}
+
+.autopilot-command-kicker .status-dot {
+  width: 7px;
+  height: 7px;
+}
+
+.autopilot-command-divider {
+  width: 18px;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.autopilot-command-copy h1 {
+  max-width: 760px;
+  margin: 10px 0 0;
+  color: var(--text);
+  font-size: clamp(30px, 4vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -.05em;
+}
+
+.autopilot-command-copy p {
+  max-width: 720px;
+  margin: 13px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.autopilot-command-copy .button,
+.autopilot-command-copy .text-button {
+  margin-top: 16px;
+}
+
+.autopilot-now-card {
+  display: grid;
+  align-content: center;
+  min-height: 150px;
+  padding: 18px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 15px;
+  background: rgba(7,10,14,.48);
+}
+
+.autopilot-now-card strong {
+  display: block;
+  margin-top: 7px;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.autopilot-now-card p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.autopilot-now-card > small {
+  margin-top: 14px;
+  color: var(--muted-2);
+  font-size: 9px;
+}
+
+.autopilot-flow-surface,
+.autopilot-event-stream,
+.memory-progress-v2 {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(13,16,22,.72);
+}
+
+.autopilot-flow-surface {
+  padding: 18px;
+}
+
+.autopilot-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.autopilot-section-heading.compact {
+  align-items: center;
+}
+
+.autopilot-section-heading h2,
+.autopilot-event-stream h2,
+.memory-progress-v2 h2 {
+  margin: 5px 0 0;
+  font-size: 15px;
+  letter-spacing: -.02em;
+}
+
+.autopilot-flow-track {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 15px;
+}
+
+.autopilot-flow-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 118px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(7,10,14,.32);
+}
+
+.autopilot-flow-stage::after {
+  content: "";
+  position: absolute;
+  top: 24px;
+  right: -8px;
+  width: 8px;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.autopilot-flow-stage:last-child::after {
+  display: none;
+}
+
+.autopilot-flow-stage.done {
+  border-color: rgba(119,214,163,.18);
+  background: rgba(35,80,61,.12);
+}
+
+.autopilot-flow-stage.active {
+  border-color: rgba(119,214,179,.28);
+  background: rgba(39,80,74,.16);
+}
+
+.autopilot-flow-stage.owner {
+  border-color: rgba(230,184,107,.3);
+  background: var(--warning-soft);
+}
+
+.autopilot-flow-stage.issue {
+  border-color: rgba(241,139,139,.24);
+  background: var(--danger-soft);
+}
+
+.autopilot-flow-index {
+  display: grid;
+  place-items: center;
+  align-self: start;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  color: var(--muted-2);
+  font-size: 8px;
+}
+
+.autopilot-flow-stage > div:last-child > span,
+.autopilot-flow-stage > div:last-child > strong,
+.autopilot-flow-stage > div:last-child > small {
+  display: block;
+}
+
+.autopilot-flow-stage > div:last-child > span {
+  color: var(--muted-2);
+  font-size: 8px;
+}
+
+.autopilot-flow-stage > div:last-child > strong {
+  margin-top: 5px;
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.autopilot-flow-stage > div:last-child > small {
+  margin-top: 6px;
+  color: var(--muted-2);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.autopilot-home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(270px, .65fr);
+  gap: 12px;
+}
+
+.autopilot-event-stream,
+.memory-progress-v2 {
+  min-width: 0;
+  padding: 17px;
+}
+
+.autopilot-event-list {
+  display: grid;
+  gap: 0;
+  margin-top: 11px;
+}
+
+.autopilot-event-item {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 11px 0;
+}
+
+.autopilot-event-item + .autopilot-event-item {
+  border-top: 1px solid var(--line);
+}
+
+.autopilot-event-marker {
+  width: 7px;
+  height: 7px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--muted-2);
+}
+
+.autopilot-event-item.done .autopilot-event-marker { background: var(--good); }
+.autopilot-event-item.active .autopilot-event-marker { background: var(--accent); }
+.autopilot-event-item.owner .autopilot-event-marker { background: #d5b77f; }
+.autopilot-event-item.issue .autopilot-event-marker { background: var(--danger); }
+
+.autopilot-event-item strong {
+  display: block;
+  font-size: 10px;
+}
+
+.autopilot-event-item p {
+  margin: 4px 0 0;
+  color: var(--muted-2);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.autopilot-event-item time {
+  color: var(--muted-2);
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.autopilot-empty-stream {
+  margin-top: 12px;
+  padding: 26px 12px;
+  text-align: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: 11px;
+}
+
+.autopilot-empty-stream strong {
+  font-size: 11px;
+}
+
+.autopilot-empty-stream p {
+  margin: 6px 0 0;
+  color: var(--muted-2);
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.memory-progress-v2 > p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.memory-progress-v2-meter {
+  height: 7px;
+  margin-top: 15px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255,255,255,.06);
+}
+
+.memory-progress-v2-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width .25s ease;
+}
+
+.memory-progress-v2-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.memory-progress-v2-status span {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(7,10,14,.25);
+}
+
+.memory-progress-v2-status small,
+.memory-progress-v2-status strong {
+  display: block;
+}
+
+.memory-progress-v2-status small {
+  color: var(--muted-2);
+  font-size: 8px;
+}
+
+.memory-progress-v2-status strong {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.memory-progress-v2-footnote {
+  display: block;
+  margin-top: 12px;
+  color: var(--muted-2);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.owner-home-v2 > .current-work-panel {
+  margin-top: 0;
+}
+
+@media (max-width: 1280px) {
+  .autopilot-flow-track {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .autopilot-flow-stage:nth-child(4)::after,
+  .autopilot-flow-stage:last-child::after {
+    display: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .autopilot-command-center,
+  .autopilot-home-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .autopilot-flow-track {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .autopilot-flow-stage:nth-child(even)::after {
+    display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .autopilot-command-center {
+    padding: 19px;
+  }
+
+  .autopilot-command-copy h1 {
+    font-size: 30px;
+  }
+
+  .autopilot-flow-track,
+  .memory-progress-v2-status {
+    grid-template-columns: 1fr;
+  }
+
+  .autopilot-flow-stage::after {
+    display: none;
+  }
+
+  .autopilot-event-item {
+    grid-template-columns: 10px minmax(0, 1fr);
+  }
+
+  .autopilot-event-item time {
+    grid-column: 2;
+  }
+}

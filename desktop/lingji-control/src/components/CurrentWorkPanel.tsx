@@ -56,26 +56,28 @@ export default function CurrentWorkPanel({
     onPendingReviewCount?.(pendingReviewCount);
   }, [onPendingReviewCount, pendingReviewCount]);
 
-  if (!active) {
-    return <section className="panel current-work-panel"><h2>当前工作</h2><p>灵机核心连接后会自动显示。</p></section>;
-  }
+  if (!active) return null;
+
+  // The daily home should not invent a "current work" card when nothing is happening.
+  // Keep polling so owner decisions still surface, but render only real work, review or an actual read failure.
+  if (!activity && pendingReviewCount === 0 && !resource.error) return null;
 
   return (
     <section className="panel current-work-panel current-work-compact">
       <div className="current-work-heading">
         <div>
-          <span className="desktop-eyebrow">当前工作</span>
-          <h2>{activity?.summary || (session?.title ? "正在跟踪 Codex 工作" : "系统当前空闲")}</h2>
+          <span className="desktop-eyebrow">当前真实任务</span>
+          <h2>{activity?.summary || `${pendingReviewCount} 条候选记忆等待确认`}</h2>
           <p className="current-work-description">
             {activity
               ? `${value(project?.name, "未绑定项目")} · ${value(session?.title, "无活动工作记录")}`
-              : "没有前台任务；自动发现、状态检查和维护仍在后台继续。"}
+              : "没有正在运行的 Codex 任务，只保留需要你确认的候选。"}
           </p>
         </div>
         <div className="observation-live-state">
           <span className={activity ? "status-dot online" : "status-dot"} />
           <div>
-            <strong>{activity ? stageLabel(activity.stage) : "等待新任务"}</strong>
+            <strong>{activity ? stageLabel(activity.stage) : "等待确认"}</strong>
             <small>{resource.refreshing ? "同步中" : "自动更新"}</small>
           </div>
         </div>
@@ -84,8 +86,8 @@ export default function CurrentWorkPanel({
       {resource.error && <p className="current-work-warning">最近一次同步失败，已有状态会保留，灵机会自动重试。</p>}
 
       <div className="current-work-inline-facts">
-        <span><small>当前项目</small><strong>{value(project?.name, "未绑定")}</strong></span>
-        <span><small>Codex 工作记录</small><strong>{value(session?.title, "无活动记录")}</strong></span>
+        {activity && <span><small>当前项目</small><strong>{value(project?.name, "未绑定")}</strong></span>}
+        {activity && <span><small>Codex 工作记录</small><strong>{value(session?.title, "无活动记录")}</strong></span>}
         {pendingReviewCount > 0 && <span className="warning"><small>需要你决定</small><strong>{pendingReviewCount} 条候选记忆</strong></span>}
       </div>
 
@@ -96,14 +98,16 @@ export default function CurrentWorkPanel({
         </div>
       )}
 
-      <details className="current-work-details">
-        <summary>工作细节</summary>
-        <div>
-          <span>分支 {value(project?.branch)}</span>
-          <span>最近检查点 {value(current?.last_checkpoint_at)}</span>
-          <span>记忆索引 {value(current?.memory_index_state)}</span>
-        </div>
-      </details>
+      {activity && (
+        <details className="current-work-details">
+          <summary>工作细节</summary>
+          <div>
+            <span>分支 {value(project?.branch)}</span>
+            <span>最近检查点 {value(current?.last_checkpoint_at)}</span>
+            <span>记忆索引 {value(current?.memory_index_state)}</span>
+          </div>
+        </details>
+      )}
     </section>
   );
 }

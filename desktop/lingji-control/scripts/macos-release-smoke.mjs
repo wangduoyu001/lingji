@@ -6,7 +6,18 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
-const [macConfigText, packageText, buildScript, rustMain, bootstrap, sidecarConfigText, workflow, runtimeBoundary, overview] = await Promise.all([
+const [
+  macConfigText,
+  packageText,
+  buildScript,
+  rustMain,
+  bootstrap,
+  sidecarConfigText,
+  workflow,
+  runtimeBoundary,
+  overview,
+  autopilotEngine,
+] = await Promise.all([
   read("../src-tauri/tauri.macos.conf.json"),
   read("../package.json"),
   read("../../../scripts/build_macos_sidecar.sh"),
@@ -16,6 +27,7 @@ const [macConfigText, packageText, buildScript, rustMain, bootstrap, sidecarConf
   read("../../../.github/workflows/macos-desktop-gate.yml"),
   read("../src/components/RuntimeBoundary.tsx"),
   read("../src/pages/OverviewPage.tsx"),
+  read("../../../src/autopilot/engine.py"),
 ]);
 
 const macConfig = JSON.parse(macConfigText);
@@ -23,10 +35,7 @@ const pkg = JSON.parse(packageText);
 const sidecarConfig = JSON.parse(sidecarConfigText);
 
 assert.deepEqual(macConfig.bundle.targets, ["dmg"]);
-assert.equal(
-  macConfig.bundle.resources["binaries/lingji-core-aarch64-apple-darwin"],
-  "lingji-core.exe",
-);
+assert.equal(macConfig.bundle.resources["binaries/lingji-core-aarch64-apple-darwin"], "lingji-core.exe");
 assert.equal(macConfig.bundle.macOS.signingIdentity, "-");
 assert.deepEqual(sidecarConfig.bundle.externalBin, ["binaries/lingji-core"]);
 
@@ -43,9 +52,7 @@ for (const token of [
   "Do not build the M5 sidecar through Rosetta",
   "--check-config",
   "owner_data_outside_install_dir",
-]) {
-  assert.ok(buildScript.includes(token), `macOS sidecar builder is missing ${token}`);
-}
+]) assert.ok(buildScript.includes(token), `macOS sidecar builder is missing ${token}`);
 
 for (const token of [
   '#[cfg(target_os = "macos")]',
@@ -55,9 +62,12 @@ for (const token of [
   "prepare_platform_environment();",
   "runtime_autoconfigure",
   "configure_default()",
-]) {
-  assert.ok(rustMain.includes(token), `macOS desktop bootstrap is missing ${token}`);
-}
+  "SubmenuBuilder",
+  '"窗口"',
+  '"将灵机带到当前屏幕"',
+  'CmdOrCtrl+Shift+L',
+  "tauri::RunEvent::Reopen",
+]) assert.ok(rustMain.includes(token), `macOS desktop bootstrap/window contract is missing ${token}`);
 
 for (const token of [
   "LINGJI_ACCEPTANCE_DATA_ROOT",
@@ -65,9 +75,7 @@ for (const token of [
   "auto_selected",
   "persisted acceptance workspace is never reused",
   'join("LingJiData")',
-]) {
-  assert.ok(bootstrap.includes(token), `macOS autopilot bootstrap is missing ${token}`);
-}
+]) assert.ok(bootstrap.includes(token), `macOS autopilot bootstrap is missing ${token}`);
 
 for (const token of [
   "Checkout exact product source",
@@ -79,13 +87,10 @@ for (const token of [
   "Verify installed App acceptance isolation",
   "LINGJI_ACCEPTANCE_DATA_ROOT=\"$TASK_ROOT/runtime-data\"",
   "isolated-home",
-]) {
-  assert.ok(workflow.includes(token), `macOS release identity contract is missing ${token}`);
-}
+]) assert.ok(workflow.includes(token), `macOS release identity contract is missing ${token}`);
 
 assert.match(rustMain, /release_metadata_output_path/);
 assert.match(rustMain, /--release-metadata-output/);
-
 assert.match(runtimeBoundary, /<details className="runtime-advanced-setup">[\s\S]*手动选择位置/);
 assert.equal(
   runtimeBoundary.match(/<div className="toolbar runtime-fallback-actions">[\s\S]*?<\/div>/)?.[0].includes("手动选择位置"),
@@ -93,10 +98,15 @@ assert.equal(
   "manual data-root selection must be an advanced fallback, not a first-run action",
 );
 
-for (const token of ["已连接", "需重新认证", "权限不足", "auth_status"]) {
-  assert.ok(overview.includes(token), `Desktop auth summary is missing ${token}`);
-}
+// Owner Home v2 deliberately removes provider/auth tiles from the daily surface.
+// Auth state still feeds the bounded Autopilot classifier and never exports credential material.
+assert.match(autopilotEngine, /auth_status_provider/);
+assert.match(autopilotEngine, /auth_permission_insufficient/);
+assert.match(autopilotEngine, /auth_reauthentication_required/);
+assert.equal(/token|authorization|cookie/i.test(overview), false, "Daily home must not render credential material");
+assert.match(overview, /灵机自动驾驶/);
+assert.match(overview, /最近自动完成/);
+
 assert.ok(workflow.includes("sidecar-stop-request.json"), "DMG isolation gate must stop its exact sidecar instance");
-assert.equal(/token|authorization|cookie/i.test(overview), false, "Desktop must not render credential material");
 
 console.log("macos-release-smoke: PASS");

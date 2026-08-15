@@ -13,7 +13,13 @@ assert.match(main, /window\.show\(\)/);
 assert.match(main, /window\.center\(\)/);
 assert.match(main, /window\.set_focus\(\)/);
 assert.match(main, /MenuBuilder/);
+assert.match(main, /MenuItemBuilder/);
+assert.match(main, /SubmenuBuilder/);
 assert.match(main, /recover-main-window/);
-assert.match(main, /找回主窗口/);
+assert.match(main, /将灵机带到当前屏幕/);
+assert.match(main, /\.accelerator\("CmdOrCtrl\+Shift\+L"\)/);
+assert.match(main, /SubmenuBuilder::new\(&app, "窗口"\)/);
+assert.match(main, /tauri::RunEvent::Reopen/);
+assert.match(main, /recover_main_window\(app_handle\)/);
 
 console.log("window-recovery-smoke: PASS");
