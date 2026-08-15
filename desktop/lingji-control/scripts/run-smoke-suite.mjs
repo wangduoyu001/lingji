@@ -5,6 +5,7 @@ const scripts = [
   "window-recovery-smoke.mjs",
   "memory-progress-smoke.mjs",
   "owner-work-feed-smoke.mjs",
+  "owner-home-action-consistency-smoke.mjs",
   "memory-workspace-ui-smoke.mjs",
   "windows-release-smoke.mjs",
   "runtime-sidecar-smoke.mjs",
