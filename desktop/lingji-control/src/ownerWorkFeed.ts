@@ -73,7 +73,7 @@ function safeFilename(value: unknown): string {
 
 function sourceLabel(value: unknown): string {
   const key = text(value).toLowerCase();
-  return SOURCE_LABELS[key] ?? key ?? "知识库资料";
+  return SOURCE_LABELS[key] ?? (key || "知识库资料");
 }
 
 function jobTime(job: QueueJob): string {
