@@ -3,71 +3,164 @@
 > Updated: 2026-08-15
 > Formal/default branch: `master`
 > Current product PR: `#88`
-> Current product candidate: `2c96b3ec54b066204cad8db75455be24822852a9`
+> Current product candidate: `f3cba4136bd169619277279a55007fcd4ef609f4`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
 > Acceptance authority: `docs/ACCEPTANCE/README.md`
 
 ## 1. 当前结论
 
-PR #88 的云端代码门禁和同 SHA macOS / Windows Artifact 构建已经完成，但真实 M5 验收最终为：
+PR #88 已完成上一轮 M5 失败后的 Owner Home v2 产品修复。当前新候选：
 
 ```text
-FAIL / DO NOT MERGE
+f3cba4136bd169619277279a55007fcd4ef609f4
+READY FOR M5 REACCEPTANCE
+DRAFT / DO NOT MERGE
 ```
 
-当前不是发布完成状态，也不是“待主人点一下确认”的状态。阻塞已经明确收敛到产品体验层：
+当前状态**不是 PASS**。它只表示：新的产品代码、同 SHA 自动门禁、macOS Artifact 与 Windows Artifact 已经锁定，可以进入新的真实 M5 主人体验复验。
+
+上一候选 `2c96b3ec...` 的真实 M5 结论保持 `FAIL / DO NOT MERGE`，其 Artifact `9224368022` 永久禁止重跑。
+
+## 2. Owner Home v2 已完成的修复
+
+上一轮阻塞：
 
 - `M5-UX-003`：首页看不出系统自动执行了什么；
-- `M5-UX-004`：新 UI 与旧版没有形成明显、可感知差异；
-- `M5-UX-005`：信息层级不友好，重点、进度和下一步不清楚；
-- “找回主窗口”未获得主人通过；
-- Memory Progress Dashboard 未获得主人通过。
+- `M5-UX-004`：新 UI 与旧版没有明显、可感知差异；
+- `M5-UX-005`：信息层级不友好；
+- 主窗口找回未通过主人观察；
+- Memory Progress 未通过主人观察。
 
-因此当前本机任务已经转为 `IDLE`。不得继续重跑失败 Artifact，必须先进入新的产品修复周期。
-
-## 2. 已通过的技术边界
-
-当前候选 `2c96b3ec54b066204cad8db75455be24822852a9` 已验证：
-
-- 六道同 SHA 远程门禁通过；
-- macOS Artifact / DMG / 内嵌 Commit 身份一致；
-- Apple Silicon arm64；
-- whole-bundle 安装与 codesign；
-- Acceptance Runtime 数据物理隔离；
-- Secret 不导出，`secret_export_count=0`；
-- 第二次启动与精确停止通过；
-- 失败后恢复原先安装 App；
-- Production 数据未被删除或污染；
-- 本轮临时验收数据已清理。
-
-这些通过项不等于产品整体 PASS。UI 主人验收为 P1 blocker，足以阻止合并。
-
-## 3. 权威失败证据
+当前候选已实现：
 
 ```text
-Task ID:
-PR88-M5-REACCEPTANCE-2C96B3EC
-
-Report branch:
-acceptance/pr88-m5-reacceptance-2c96b3ec
-
-Report commit:
-9fdbacf52c22ecaac7eab3a4676f80a81e0dfa95
-
-Cleanup receipt commit:
-33982e1d5d3d567369e56484ade733a8b7228408
-
-Report:
-docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_2c96b3ec.md
-
-PR #88 result comment:
-5295519058
+现在发生什么
+→ 自动工作流走到哪一步
+→ 最近真正自动做过什么
 ```
 
-最近一次结果以 `docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md` 为准；当前是否存在可执行任务以 `docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md` 为准。
+具体包括：
 
-## 4. 当前产品主线
+- 首屏“灵机自动驾驶”，主人事项优先；
+- “此刻正在做”读取真实 queue / recent action；
+- 七阶段流程：`发现来源 → 收纳 → 解析 → 候选 → 确认 → 索引 → 取回`；
+- “最近自动完成”直接读取已有 `overview.events`；
+- 空闲 Codex / CurrentWork 不再常驻首页；
+- Memory Progress v2 展示真实收纳、更新、coverage 与未测量质量状态；
+- macOS `窗口 → 将灵机带到当前屏幕`；
+- `Cmd/Ctrl + Shift + L` 快捷键；
+- macOS Dock Reopen 找回窗口。
+
+不新增第二事实源，不扩大正文读取、永久记忆批准或破坏性 Qdrant 权限。
+
+## 3. 当前精确产品门禁
+
+Commit `f3cba4136bd169619277279a55007fcd4ef609f4`：
+
+```text
+tests                            run 31894132471  PASS
+P0 Windows Gate                  run 31894132505  PASS
+macOS Desktop Gate               run 31894132498  PASS
+Windows Desktop Release Baseline run 31894132475  PASS
+acceptance-doc-sync              run 31894132538  PASS
+local-execution-handoff          run 31894132477  PASS
+```
+
+## 4. 当前 Artifact
+
+### macOS
+
+```text
+Run: 31894132498
+Artifact: 9249367672
+Name: lingji-macos-arm64
+Artifact ZIP SHA256:
+3e0c2cee26f485ac339cb1db544799f8e40c61b01a9f28d23300aa9f4ff2cc36
+
+DMG: 灵机_0.1.0_aarch64.dmg
+DMG bytes: 46339959
+DMG SHA256:
+a2dfaad32a77b8853bac6fe720667618fe65e6ffbfb1b3342d0f64fc0ecbe6cd
+```
+
+### Windows
+
+```text
+Run: 31894132475
+Artifact: 9249378683
+Name: lingji-windows-0.1.0-f3cba413
+Artifact ZIP SHA256:
+3415fb914d2ec50620634cc03ed5b5961424e314a0b2cdacdedebf5c72e7a049
+
+NSIS SHA256:
+e8261683f6e4a1afc4bd50094a80115684641095121050b152d122b25a83a13b
+
+Portable SHA256:
+6346a503bcad1fd1def02f4eca126ffb1298df1b5b7815a7cedacdd5c87b4cf2
+```
+
+Windows `build-metadata.json.commit` 已独立复核为精确产品 Commit `f3cba4136bd169619277279a55007fcd4ef609f4`。
+
+## 5. 当前 M5 任务
+
+唯一权威入口：
+
+```text
+docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md
+```
+
+当前任务：
+
+```text
+PR88-M5-OWNER-HOME-V2-F3CBA413
+status: ACTIVE
+execution_mode: MACOS_M5_PHYSICAL_REACCEPTANCE
+```
+
+结果回执：
+
+```text
+docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
+status: PENDING
+verdict: PENDING
+```
+
+本轮重点不是再证明 CI，而是证明主人真实看到的新产品体验确实解决上一轮失败。
+
+## 6. 真机必须关闭的体验项
+
+主人必须实际确认：
+
+1. 首屏几秒内能判断是否需要自己决定；
+2. 能看懂“此刻正在做什么”；
+3. 七阶段自动流程可见且有真实状态；
+4. “最近自动完成”是真事件，不是假忙碌；
+5. 信息层级明显区别于上一失败版；
+6. Memory Progress 像工作进度而不是数字墙；
+7. `窗口 → 将灵机带到当前屏幕` 容易发现且实际有效；
+8. 快捷键与 Dock Reopen 至少完成真实路径回归。
+
+主人未明确 PASS 前不得合并 PR #88。
+
+## 7. 技术回归仍然强制
+
+即使本轮重点是 UX，以下历史通过项仍需真机回归：
+
+- macOS Artifact / DMG / embedded Commit 精确身份；
+- Apple Silicon arm64；
+- whole-bundle 安装与 codesign；
+- Acceptance Runtime 物理隔离；
+- AuthStatus / Secret 边界，`secret_export_count=0`；
+- 两轮启动与 exact-instance stop；
+- 每次停止前保存 Sidecar PID，随后 `state gone + PID gone + port free`；
+- Production pollution count = 0；
+- FAIL 时恢复原 App；
+- 最终远程报告与本机垃圾清理。
+
+上一轮第一次停止没有保存可复读 PID，因此是 `NOT_TESTED`；本轮必须补齐，不能用推断冒充 PASS。
+
+## 8. 当前产品主线
 
 ```text
 src/
@@ -80,94 +173,40 @@ second_brain/
 = Compatibility / Migration Runtime
 ```
 
-规则不变：
+规则：
 
 - 新正式能力进入 `src/`；
 - 新正式 Desktop 能力进入 `desktop/lingji-control/`；
-- Desktop 只通过认证的 `127.0.0.1:8766` Local Control API 访问后端；
-- MCP 默认 stdio，可选 HTTP 使用 8767；
+- Desktop 只通过认证的 `127.0.0.1:8766` Local Control API；
+- MCP 默认 stdio，可选 HTTP 8767；
 - 8765 仅为迁移期兼容 API；
 - `second_brain/` 不接收新的正式产品能力。
 
-## 5. 数据与安全权威
+## 9. 数据与安全权威
 
 ```text
-Obsidian Vault + Git
-= 永久记忆与正式知识正文
-
-storage/raw
-= 原始导入材料
-
-lingji_state.db
-= 任务、队列、运行状态与审计事件
-
-lingji_memory.db
-= 可重建全文与元数据索引
-
-Qdrant
-= 可重建语义索引
+Obsidian Vault + Git = 永久记忆与正式知识正文
+storage/raw = 原始导入材料
+lingji_state.db = 任务、队列、运行状态与审计事件
+lingji_memory.db = 可重建全文与元数据索引
+Qdrant = 可重建语义索引
 ```
 
-长期安全边界：
+长期边界：
 
 - AI 不静默修改 Core Memory；
-- 不自动删除或重建 Production Qdrant；
+- 不自动删除/重建 Production Qdrant；
 - 不自动下载大型模型；
-- 默认只绑定 `127.0.0.1`；
-- Production 与 Acceptance 必须物理隔离；
-- Secret 只进入系统安全凭据存储，UI/日志/报告只使用脱敏状态；
-- 停止 Runtime 只处理精确实例/PID/端口，不全局杀进程。
+- 默认仅绑定 `127.0.0.1`；
+- Production / Acceptance 物理隔离；
+- Secret 只进入系统安全凭据存储；
+- Runtime stop 只处理精确实例。
 
-## 6. 当前必须做的产品修复
-
-下一轮不是继续堆统计卡片，而是重构首页信息架构，让自动化过程成为产品主结构。
-
-最低要求：
-
-1. 首页顶部先回答“现在有没有必须由我决定的事”；
-2. 明确显示系统已经自动完成什么、正在处理什么、哪里失败/重试、下一步是什么；
-3. 用真实事件和状态串起来源发现、收纳、解析、候选、确认、索引、取回、更新；
-4. 技术指标、端口、数据库、向量细节下沉到高级诊断；
-5. 新 UI 在首屏结构、交互路径和视觉层级上必须与旧版有明显差异；
-6. “找回主窗口”必须变成主人能发现、能理解、能验证的真实入口；
-7. Memory Progress Dashboard 必须表达真实工作进度，不能只是静态统计。
-
-## 7. 下一轮发布条件
-
-必须按新周期执行：
+## 10. 历史失败 Artifact
 
 ```text
-修复产品 UI / 信息架构
-→ 新产品 Commit
-→ focused + full + CI
-→ 同一精确 SHA 的 macOS / Windows Artifact
-→ Artifact 哈希锁定
-→ 更新 CHANGE_ACCEPTANCE_LOG.md
-→ 创建新的 LOCAL_EXECUTION_TASK.md（status: ACTIVE）
-→ M5 真机复验
-→ 报告 / 结果回执 / 清理
-→ 只有 PASS 后才进入最终合并判断
+9224368022 / 2c96b3ec: DO NOT RETRY
+9102748834 / 171091fe: DO NOT RETRY
 ```
 
-失败候选：
-
-```text
-Artifact 9224368022: DO NOT RETRY
-Artifact 9102748834: DO NOT RETRY
-```
-
-## 8. 文档治理状态
-
-当前文档职责：
-
-- `README.md`：仓库落地页；
-- `AGENTS.md`：开发者与 AI 最小入口；
-- `docs/PROJECT_STATUS.md`：只维护当前状态、阻塞和下一步；
-- `docs/ARCHITECTURE.md`：稳定架构边界；
-- `docs/MODULES/CODE_MAP.md`：代码入口和局部测试；
-- `docs/ACCEPTANCE/README.md`：验收治理；
-- `LOCAL_EXECUTION_TASK.md`：唯一当前本机任务；
-- `LOCAL_EXECUTION_RESULT.md`：最近一次权威回执；
-- `docs/TEST_REPORTS/`：历史与当前验收证据。
-
-历史计划与旧验收任务不再承担当前状态职责。
+历史失败报告保留为证据，不覆盖当前 ACTIVE 任务。
