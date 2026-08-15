@@ -14,11 +14,9 @@
 | `MEMORY_QUALITY_TRIAL.md` | 真实数据记忆质量试运行专项协议，仅在任务明确引用时读取 |
 | `REPORT_TEMPLATE.md` | 报告固定结构 |
 
-**不存在第二份“当前任务单”。** 任何旧的阶段计划、聊天摘要、PR 评论或历史报告都不能覆盖 `LOCAL_EXECUTION_TASK.md`。
+**不存在第二份“当前任务单”。** 任何旧阶段计划、聊天摘要、PR 评论或历史报告都不能覆盖 `LOCAL_EXECUTION_TASK.md`。
 
 ## 2. 固定读取顺序
-
-本机 Codex 收到“去看任务单干活”后只按以下顺序读取：
 
 ```text
 AGENTS.md
@@ -44,32 +42,34 @@ status: IDLE
 
 ## 3. 当前仓库状态
 
-截至 2026-08-15，PR #88 已完成上一轮 M5 失败后的 Owner Home v2 产品修复，并锁定新候选：
+截至 2026-08-16，PR #88 的 Owner Home v2 已完成真实 M5 复验：
 
 ```text
 product commit: f3cba4136bd169619277279a55007fcd4ef609f4
 task: PR88-M5-OWNER-HOME-V2-F3CBA413
-current local task: ACTIVE
-current result: PENDING / PENDING
+result: COMPLETED / FAIL
+current local task: IDLE
 product PR: DRAFT / DO NOT MERGE
 ```
 
-当前状态是 **READY FOR M5 REACCEPTANCE**，不是 PASS。只有新的真实 M5 主人体验和技术回归全部通过后，才允许进入最终合并判断。
+技术通过：包身份、arm64、签名、Acceptance 隔离、Secret 边界、首次与第二次启动/精确停止、Production pollution=0、失败回滚和清理。
 
-六道同 SHA 自动门禁均已通过：
+主人体验未通过：
+
+- `M5-OWNER-HOME-001`：看到“已收纳 2 份资料”，但不知道资料是什么；
+- `M5-OWNER-HOME-002`：不知道系统做了什么、接下来做什么、是否需要主人行动；
+- `M5-OWNER-HOME-003`：七阶段没有形成可理解、可追溯的实际工作流。
+
+权威证据：
 
 ```text
-tests                            run 31894132471  PASS
-P0 Windows Gate                  run 31894132505  PASS
-macOS Desktop Gate               run 31894132498  PASS
-Windows Desktop Release Baseline run 31894132475  PASS
-acceptance-doc-sync              run 31894132538  PASS
-local-execution-handoff          run 31894132477  PASS
+report branch: acceptance/pr88-m5-owner-home-v2-f3cba413
+report commit: d9a32e28ceb5505546e3bb45d16bb459b6d5a051
+cleanup receipt: 2a515a04540274809557d7f12ccdee1308a355e3
+PR #88 comment: 5303141355
 ```
 
-当前 macOS Artifact：`9249367672 / lingji-macos-arm64`。当前 Windows Artifact：`9249378683 / lingji-windows-0.1.0-f3cba413`。具体哈希只认 `LOCAL_EXECUTION_TASK.md`。
-
-上一候选 `2c96b3ec...` 的真实 M5 结论仍为 `FAIL / DO NOT MERGE`；Artifact `9224368022` 不得重跑。更早的 Artifact `9102748834` 同样永久禁止重试。
+Artifact `9249367672` 已完成失败验收，不得重跑。`9224368022` 与 `9102748834` 同样永久禁止重试。
 
 ## 4. 开发与验收流程
 
@@ -77,7 +77,7 @@ local-execution-handoff          run 31894132477  PASS
 
 ```text
 理解需求和现有实现
-→ 搜索/核对外部依赖与规则（需要时）
+→ 搜索/核对相关实现与外部依赖（需要时）
 → 定义验收标准
 → 修改代码和测试
 → 更新 CHANGE_ACCEPTANCE_LOG.md
@@ -91,7 +91,7 @@ local-execution-handoff          run 31894132477  PASS
 → 决定修复、继续或合并
 ```
 
-产品代码、Runtime、Desktop、连接器、数据链路、脚本、依赖或发布流程变化时，必须同步更新 `CHANGE_ACCEPTANCE_LOG.md`。不得以“小改动”为理由跳过。
+产品代码、Runtime、Desktop、连接器、数据链路、脚本、依赖或发布流程变化时，必须同步更新 `CHANGE_ACCEPTANCE_LOG.md`。
 
 ## 5. 本机任务硬门禁
 
@@ -139,59 +139,30 @@ SKIPPED_NOT_INSTALLED
 
 不得使用“应该可以”“基本正常”“代码看起来没问题”。
 
-最终报告必须区分：
-
-- 自动检查结果；
-- 主人肉眼观察；
-- 未测试项；
-- 已知限制；
-- 清理与回滚；
-- 产品 Commit、Artifact 与哈希；
-- 报告 Commit 与远程确认。
+最终报告必须区分自动检查、主人肉眼观察、未测试项、已知限制、清理与回滚，以及精确产品/Artifact/报告身份。
 
 `git push` 不等于完成。必须远程重新确认报告分支、报告 Commit、报告、结果回执和 PR 评论均可读取。
 
 ## 8. 清理与恢复
 
-开始前：
-
-- 只处理确认属于当前任务的临时目录、进程和端口；
-- Production、Vault、正式记忆、主人配置与未知文件不可删除；
-- 不得使用全局 kill 处理 Python、Node、Codex 等进程。
+开始前只处理确认属于当前任务的临时目录、进程和端口；Production、Vault、正式记忆、主人配置与未知文件不可删除。
 
 结束后：
 
-- PASS：清理本轮 Artifact、解压、普通日志、截图、fixture、checkpoint、临时配置、临时 worktree 和任务根；按任务要求保留正式安装。
-- FAIL：停止本轮精确 Runtime，恢复任务规定的旧安装/配置，保存最小失败证据，清理本轮临时数据。
+- PASS：按任务要求保留正式安装，清理本轮临时材料；
+- FAIL：停止本轮精确 Runtime，恢复任务规定的旧安装/配置，保存最小失败证据并清理临时数据；
 - 清理失败：不得写 COMPLETED PASS。
 
 ## 9. 主人与代理边界
 
 Codex 负责命令、安装、进程、端口、哈希、日志、Git、报告、远程复读和清理。
 
-主人只负责机器无法自动证明的体验与内容判断，例如：
-
-- 第一次打开是否知道下一步；
-- 首页是否能看懂；
-- 自动化过程是否真的可见；
-- 窗口行为是否符合预期；
-- 真实内容答案和来源是否正确。
+主人只负责机器无法自动证明的体验与内容判断，例如首页是否看懂、自动化过程是否可见、窗口行为是否符合预期、真实内容是否正确。
 
 Codex 不得替主人宣称肉眼体验 PASS。
 
 ## 10. 合并边界
 
-产品 PR 只有在当前候选对应的：
+产品 PR 只有在当前候选对应的精确自动门禁、同 SHA Artifact、真机、主人观察、Production 隔离、报告闭环和清理全部通过后，才允许进入最终合并判断。
 
-- 精确产品 Commit 自动门禁通过；
-- 同 SHA Artifact 锁定；
-- 当前任务真机 PASS；
-- 主人观察 PASS；
-- 无未披露 P0/P1 blocker；
-- Production 污染为 0；
-- 报告与回执远程可读；
-- 清理完成；
-
-之后才允许进入最终合并判断。
-
-验收失败后必须先把任务转为 `IDLE`，完成产品修复并形成**新 Commit + 新 Artifact + 新 ACTIVE task**，不能继续沿用旧失败候选。
+验收失败后必须先把任务转为 `IDLE`，完成产品修复并形成**新 Commit + 新 Artifact + 新 ACTIVE task**，不能沿用旧失败候选。
