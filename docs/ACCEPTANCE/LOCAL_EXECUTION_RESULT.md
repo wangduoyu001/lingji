@@ -2,7 +2,7 @@
 
 ```yaml
 task_id: PR88-M5-OWNER-HOME-V2-F3CBA413
-status: RUNNING
+status: COMPLETED
 verdict: FAIL
 execution_mode: MACOS_M5_PHYSICAL_REACCEPTANCE
 repository: wangduoyu001/lingji
@@ -10,18 +10,18 @@ product_pr: 88
 product_commit: f3cba4136bd169619277279a55007fcd4ef609f4
 task_instruction_commit: 88438f36c4f4bee088be8dd7af010fadc328fb35
 report_branch: acceptance/pr88-m5-owner-home-v2-f3cba413
-report_commit: PENDING
+report_commit: d9a32e28ceb5505546e3bb45d16bb459b6d5a051
 report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_f3cba413.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR88_M5_OWNER_HOME_V2_SUMMARY_f3cba413.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR88_M5_OWNER_HOME_V2_HASHES_f3cba413.txt
 cleanup_before: PASS
-cleanup_after: PENDING
+cleanup_after: PASS
 remote_branch_verified: false
 remote_commit_verified: false
 remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
-local_temp_root_absent: false
+local_temp_root_absent: true
 owner_observation: FAIL
 started_at: 2026-08-16T00:16:00+08:00
 finished_at: 2026-08-16T00:21:00+08:00
