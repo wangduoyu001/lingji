@@ -44,17 +44,24 @@ assert.equal(panel.includes("setInterval"), false, "Assistant discovery should r
 
 assert.match(currentWork, /onPendingReviewCount/);
 assert.match(currentWork, /Codex 工作记录/);
-assert.match(currentWork, /没有前台任务；自动发现、状态检查和维护仍在后台继续/);
+assert.match(currentWork, /if \(!activity && pendingReviewCount === 0 && !resource\.error\) return null/);
+assert.match(currentWork, /当前真实任务/);
 assert.match(currentWork, /current-work-details/);
 
 assert.match(overview, /owner-autopilot-home/);
+assert.match(overview, /owner-home-v2/);
 assert.match(overview, /\/api\/autopilot\/status/);
-assert.match(overview, /autopilotOwnerCount/);
-assert.match(overview, /autopilotBackgroundCount/);
+assert.match(overview, /autopilot\.owner_action_count/);
+assert.match(overview, /autopilot\.background_issue_count/);
 assert.match(overview, /recent_actions/);
 assert.match(overview, /刚自动处理/);
-assert.match(overview, /已自动复验/);
-assert.match(overview, /诊断、安全修复、复验并保留记录/);
+assert.match(overview, /自动复验/);
+assert.match(overview, /Array\.isArray\(d\.events\)/);
+assert.match(overview, /最近自动完成/);
+assert.match(overview, /buildWorkflow/);
+for (const stage of ["发现来源", "收纳", "解析", "候选", "确认", "索引", "取回"]) {
+  assert.ok(overview.includes(stage), `Owner autopilot flow is missing ${stage}`);
+}
 assert.equal(overview.includes("overview-technical-summary"), false, "Daily home must not expose the technical metric dashboard");
 assert.equal(overview.includes("Metric"), false, "Daily home must not render technical metric tiles");
 
