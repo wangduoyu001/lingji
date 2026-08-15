@@ -7,7 +7,7 @@
 | 文件 | 职责 |
 |---|---|
 | `LOCAL_EXECUTION_TASK.md` | 唯一当前本机任务单；只有 `status: ACTIVE` 才允许执行 |
-| `LOCAL_EXECUTION_RESULT.md` | 最近一次本机任务的权威结果回执 |
+| `LOCAL_EXECUTION_RESULT.md` | 当前/最近一次本机任务的权威结果回执 |
 | `CHANGE_ACCEPTANCE_LOG.md` | 产品变化对应的增量验收要求与历史追踪 |
 | `CODEX_ACCEPTANCE_INSTRUCTIONS.md` | 通用本机验收规则 |
 | `MACOS_M5_ACCEPTANCE_INSTRUCTIONS.md` | Apple Silicon / M5 专项协议，仅在当前任务要求 macOS 时读取 |
@@ -40,27 +40,36 @@ status: IDLE
 
 立即停止，不下载 Artifact、不安装、不启动、不创建报告分支，也不得从历史文档推断下一任务。
 
+若任务单为 `ACTIVE`，只执行其中给出的精确产品 Commit、Artifact、哈希、报告路径和清理规则。
+
 ## 3. 当前仓库状态
 
-截至 2026-08-15，PR #88 对产品 Commit `2c96b3ec54b066204cad8db75455be24822852a9` 的 M5 真机复验已完成：
+截至 2026-08-15，PR #88 已完成上一轮 M5 失败后的 Owner Home v2 产品修复，并锁定新候选：
 
 ```text
-verdict: FAIL
-merge: DO NOT MERGE
-current local task: IDLE
+product commit: f3cba4136bd169619277279a55007fcd4ef609f4
+task: PR88-M5-OWNER-HOME-V2-F3CBA413
+current local task: ACTIVE
+current result: PENDING / PENDING
+product PR: DRAFT / DO NOT MERGE
 ```
 
-技术身份、签名、arm64、Acceptance 隔离和第二次 Runtime 生命周期通过；主人未通过首页自动化可见性、UI 可感知差异、信息层级、“找回主窗口”和 Memory Progress Dashboard。
+当前状态是 **READY FOR M5 REACCEPTANCE**，不是 PASS。只有新的真实 M5 主人体验和技术回归全部通过后，才允许进入最终合并判断。
 
-权威证据：
+六道同 SHA 自动门禁均已通过：
 
 ```text
-report branch: acceptance/pr88-m5-reacceptance-2c96b3ec
-report commit: 9fdbacf52c22ecaac7eab3a4676f80a81e0dfa95
-cleanup receipt commit: 33982e1d5d3d567369e56484ade733a8b7228408
+tests                            run 31894132471  PASS
+P0 Windows Gate                  run 31894132505  PASS
+macOS Desktop Gate               run 31894132498  PASS
+Windows Desktop Release Baseline run 31894132475  PASS
+acceptance-doc-sync              run 31894132538  PASS
+local-execution-handoff          run 31894132477  PASS
 ```
 
-Artifact `9224368022` 已完成失败验收，不得再次作为候选重跑。历史失败 Artifact `9102748834` 同样永久禁止重试。
+当前 macOS Artifact：`9249367672 / lingji-macos-arm64`。当前 Windows Artifact：`9249378683 / lingji-windows-0.1.0-f3cba413`。具体哈希只认 `LOCAL_EXECUTION_TASK.md`。
+
+上一候选 `2c96b3ec...` 的真实 M5 结论仍为 `FAIL / DO NOT MERGE`；Artifact `9224368022` 不得重跑。更早的 Artifact `9102748834` 同样永久禁止重试。
 
 ## 4. 开发与验收流程
 
