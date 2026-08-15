@@ -7,7 +7,7 @@ use runtime_bootstrap::RuntimeBootstrapStatus;
 use runtime_manager::{owner_data_root, RuntimeManager, RuntimeStatus};
 use serde::Serialize;
 use std::{env, fs, path::PathBuf};
-use tauri::menu::MenuBuilder;
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{AppHandle, Manager, State};
 
 #[derive(Serialize)]
@@ -220,8 +220,16 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building LingJi control center");
 
+    let recover_item = MenuItemBuilder::with_id("recover-main-window", "将灵机带到当前屏幕")
+        .accelerator("CmdOrCtrl+Shift+L")
+        .build(&app)
+        .expect("error while building LingJi recovery menu item");
+    let window_menu = SubmenuBuilder::new(&app, "窗口")
+        .item(&recover_item)
+        .build()
+        .expect("error while building LingJi window submenu");
     let menu = MenuBuilder::new(&app)
-        .text("recover-main-window", "找回主窗口")
+        .item(&window_menu)
         .build()
         .expect("error while building LingJi window menu");
     app.set_menu(menu)
@@ -233,6 +241,10 @@ fn main() {
     });
 
     app.run(|app_handle, event| match event {
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { .. } => {
+            recover_main_window(app_handle);
+        }
         tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
             app_handle.state::<RuntimeManager>().shutdown();
         }
