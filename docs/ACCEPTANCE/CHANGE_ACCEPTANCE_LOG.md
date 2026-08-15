@@ -4,6 +4,75 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-16 · PR #99 / PR #88 修复 · Owner Work Feed v3
+
+- 产品分支：`fix/pr88-owner-work-feed-v3` → `feature/owner-autopilot-ui-codexpp`
+- 产品 Commit：`pending exact PR head`
+- 来源失败：`PR88-M5-OWNER-HOME-V2-F3CBA413 / f3cba4136bd169619277279a55007fcd4ef609f4 / Artifact 9249367672 / FAIL / DO NOT MERGE`
+- 影响模块：Desktop 首页、Memory Inspector 明细投影、extraction queue 结果关联、Owner actions、Desktop smoke、macOS release smoke。
+- 风险等级：P1。
+- 用户可感知变化：首页从“汇总阶段卡”改为“你现在要不要做事 → 具体资料 → 灵机已做 → 下一步 → 是否需要主人行动”；每份资料成为首页主单位，统计与 recent activity 下沉为折叠次级信息。
+- 数据或安全边界变化：不新增持久化事实源；只读现有 authenticated Memory Inspector、overview queue/events、Autopilot status；Owner Work Feed 投影禁止输出正文、绝对私人路径、raw snapshot 或 Credential/Secret。
+
+### 新增或修改的自动验收
+
+- [ ] `tsx desktop/lingji-control/scripts/owner-work-feed-smoke.mjs`：真实数据语义验证。已完成并索引的资料必须显示具体标题/来源/已做/下一步；处理中但尚未产生 memory row 的 queue job 仍必须显示；pending review 必须变成主人动作；未知 source 必须显示“知识库资料”而不是空白。
+- [ ] 同一 smoke 必须验证 `expectedDocuments > 0` 但明细为空时进入 `detailsState=unavailable`，明确提示“不会用一个数字代替资料列表”，禁止再次退化成只显示“已收纳 N 份”。
+- [ ] 同一 smoke 必须验证前端投影不包含 captured body、Authorization/Cookie/Token、绝对私人路径、raw snapshot 路径；未知内部 event 不得冒充主人活动。
+- [ ] `observation-first-ui-smoke.mjs`：首页必须存在“你现在需要做什么 / 灵机现在在做什么 / 资料工作清单 / 灵机已做 / 下一步”，并禁止 `buildWorkflow`、七阶段汇总卡和技术 Metric 网格回归为首页主结构。
+- [ ] `memory-progress-smoke.mjs`：资料数量、片段、覆盖率只能留在折叠高级状态；没有验证样本继续明确 `not_measured`，禁止把覆盖率或片段数包装成准确率。
+- [ ] `assistant-autopilot-smoke.mjs`：AI 历史读取授权、候选记忆确认、向量重建等真正需要主人决定的事项必须直接进入首页行动区；普通后台故障不得伪装成主人待办。
+- [ ] `macos-release-smoke.mjs`：Owner Work Feed 不得暴露 Credential/Secret，且继续回归 macOS exact-head、arm64、Sidecar、窗口找回和 Acceptance isolation 合同。
+- [ ] `npm run test:smoke` 与 `npm run build`：Owner Work Feed 数据语义、Desktop smoke、TypeScript 与生产构建全部 PASS。
+- [ ] 新精确 Head 的 `tests`、`acceptance-doc-sync`、`local-execution-handoff`、`macOS Desktop Gate` 全部 PASS；合入产品分支后再要求 `P0 Windows Gate` 与 `Windows Desktop Release Baseline` 对同一新产品 Commit PASS。
+
+### 新增或修改的真机验收
+
+- [ ] 只允许使用本轮修复合并后**新产品 Commit**生成的全新 macOS/Windows Artifact；失败 Artifact `9249367672`、`9224368022`、`9102748834` 永久禁止重跑。
+- [ ] 使用至少 2 份真实或任务专用资料复验：首页必须直接显示它们各自的具体标题/安全来源，不能只显示“已收纳 2 份”。
+- [ ] 对每一份可见资料，主人必须能在不打开技术文档的情况下回答：`灵机已经做了什么`、`下一步是什么`、`这一步由灵机自动做还是需要我做`。
+- [ ] 若系统统计有资料但 Memory Inspector 明细不可读，首页必须显式显示“明细暂不可用/正在重试”，该状态不得被视为 Owner Home PASS。
+- [ ] 首页顶部必须明确二选一：`现在不用你做任何事`，或列出具体主人动作及“去处理”入口；不得要求主人根据阶段卡自行推断。
+- [ ] 最近活动只能来自真实 allowlisted events；没有真实活动时明确空闲，不制造虚假“系统很忙”的动画或文案。
+- [ ] Window Recovery 仍为最终 PASS 必测项：菜单、快捷键、Dock Reopen 至少按任务协议完成真实找回；不能因首页先通过就跳过。
+- [ ] 继续回归 exact Artifact identity、arm64、strict codesign、whole-bundle replace、Acceptance/Production 隔离、AuthStatus、`secret_export_count=0`、first/second exact-instance stop、`state gone + PID gone + port free` 和 Production pollution=0。
+
+### 主人肉眼确认
+
+- [ ] 不看任何开发/验收文档，主人能直接回答四个问题：`目前有哪些具体资料？`、`每份灵机做了什么？`、`下一步是什么？`、`我要做吗？`。
+- [ ] “已收纳 N 份”“7 个阶段”“覆盖率”等汇总信息单独存在不能算通过；具体对象与下一步必须先于统计。
+- [ ] 首页与失败的 Owner Home v2 有明显结构差异，不是在原七阶段页面上追加一张明细卡。
+- [ ] 技术统计、Qdrant、Embedding、端口、SQLite 等不占日常首屏。
+- [ ] 真正需要授权/确认时入口唯一、文案明确；没有主人事项时界面明确说明无需操作。
+
+### 回归项
+
+- [ ] Owner Work Feed 不得输出 `payload.text`、transcript/html/selected_text、raw snapshot、绝对私人路径或 Credential/Secret。
+- [ ] 未经主人授权不得读取真实 AI 对话正文；不得自动批准永久记忆、自动删除/重建 Production Qdrant 或自动修改第三方 AI 客户端配置。
+- [ ] Production/Acceptance 物理隔离、CredentialStore/AuthStatus、`secret_export_count=0`、Sidecar exact-instance stop 与 release exact-head 身份合同不得回退。
+- [ ] Windows 与 macOS 继续使用同一业务 UI/Runtime 代码；本轮不能演变成 Mac 特供逻辑。
+- [ ] PR #88 在新精确 Artifact 的真实 M5 主人体验 PASS 之前保持 Draft / DO NOT MERGE。
+
+### 清理与回滚
+
+- 本轮开发分支不触碰主人 Production 数据；CI 临时产物按 workflow 清理。
+- 新真机任务必须使用新的 task-scoped Acceptance root 和 whole-bundle replace；FAIL 时恢复原 App，并仅保留最小必要失败证据。
+- 回滚仅允许移除 Owner Work Feed v3 的纯派生投影、首页结构和样式；不得回退已经通过的认证、隔离、Sidecar 生命周期、窗口找回或 release identity 修复。
+
+### 不在范围
+
+- 不新增新的自动导入正文权限。
+- 不新增第二个持久化数据库或 Owner Feed 事实源。
+- 不实现自动永久记忆批准。
+- 不在本轮开发分支激活 `LOCAL_EXECUTION_TASK.md`；只有新产品 Commit、六道同 SHA 门禁、新双平台 Artifact 与哈希全部锁定后，才允许在 `master` 创建新的 ACTIVE M5 任务。
+
+### 最终报告
+
+- 实施报告：`docs/TEST_REPORTS/PR88_OWNER_WORK_FEED_V3_IMPLEMENTATION.md`
+- 新 M5 报告：`docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_<new-short-sha>.md`
+
+---
+
 ## 2026-08-15 · PR #88 M5 UX 修复 · Owner Home v2
 
 - 产品分支：`fix/pr88-owner-home-v2` → `feature/owner-autopilot-ui-codexpp`

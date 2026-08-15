@@ -14,6 +14,7 @@ const [
   boundary,
   pages,
   overview,
+  workFeed,
   activity,
   attention,
   diagnostics,
@@ -22,7 +23,7 @@ const [
   desktopCss,
   releaseCss,
   autopilotCss,
-  ownerHomeCss,
+  ownerWorkCss,
 ] = await Promise.all([
   read("../src/navigation.ts"),
   read("../src/types.ts"),
@@ -31,6 +32,7 @@ const [
   read("../src/components/RuntimeBoundary.tsx"),
   read("../src/AppPages.tsx"),
   read("../src/pages/OverviewPage.tsx"),
+  read("../src/ownerWorkFeed.ts"),
   read("../src/pages/ActivityPage.tsx"),
   read("../src/pages/AttentionPage.tsx"),
   read("../src/pages/DiagnosticsPage.tsx"),
@@ -39,7 +41,7 @@ const [
   read("../src/DesktopUX.css"),
   read("../src/ReleaseUX.css"),
   read("../src/AssistantAutopilot.css"),
-  read("../src/OwnerHomeV2.css"),
+  read("../src/OwnerWorkFeed.css"),
 ]);
 
 for (const page of ["overview", "activity", "attention", "diagnostics"]) {
@@ -65,7 +67,8 @@ assert.match(shell, /返回高级诊断/);
 
 assert.match(app, /autoRecoveryActive/);
 assert.match(app, /RuntimeBoundary/);
-assert.match(app, /OwnerHomeV2\.css/);
+assert.match(app, /OwnerWorkFeed\.css/);
+assert.equal(app.includes("OwnerHomeV2.css"), false, "Failed Owner Home v2 stylesheet must not remain active");
 assert.match(boundary, /自动恢复/);
 assert.match(boundary, /自动准备未完成/);
 assert.match(boundary, /让灵机重新自动准备/);
@@ -81,24 +84,35 @@ assert.match(connection, /ownerStopped/);
 assert.match(connection, /autoRecoveryActive/);
 assert.match(connection, /后台自动恢复已暂停/);
 
-assert.match(overview, /owner-home-v2/);
-assert.match(overview, /autopilot-command-center/);
-assert.match(overview, /灵机自动驾驶/);
-assert.match(overview, /autopilot-flow-surface/);
-assert.match(overview, /buildWorkflow/);
-for (const stage of ["发现来源", "收纳", "解析", "候选", "确认", "索引", "取回"]) {
-  assert.ok(overview.includes(stage), `Owner home workflow is missing ${stage}`);
-}
-assert.match(overview, /Array\.isArray\(d\.events\)/);
-assert.match(overview, /最近自动完成/);
-assert.match(overview, /不是“在线”，而是真的做过什么/);
+assert.match(overview, /owner-work-home/);
+assert.match(overview, /你现在需要做什么/);
+assert.match(overview, /灵机现在在做什么/);
+assert.match(overview, /资料工作清单/);
+assert.match(overview, /每一份资料，都说清楚做到哪了/);
+assert.match(overview, /灵机已做/);
+assert.match(overview, /下一步/);
+assert.match(overview, /现在不用你做任何事/);
+assert.match(overview, /\/api\/memory\/inspector\/memories\?limit=20&offset=0/);
+assert.match(overview, /buildOwnerWorkFeed/);
+assert.match(overview, /feed\.detailsState === "unavailable"/);
+assert.match(overview, /需要你处理/);
+assert.match(overview, /系统统计与高级状态/);
 assert.match(overview, /AssistantDiscoveryPanel/);
-assert.match(overview, /ownerDecisionCount/);
-assert.match(overview, /systemIssueCount/);
-assert.match(overview, /当前没有需要你操作的事项/);
+assert.match(overview, /CurrentWorkPanel/);
+assert.equal(overview.includes("buildWorkflow"), false, "Aggregate seven-stage cards must not remain the home primary structure");
+assert.equal(overview.includes("autopilot-flow-surface"), false, "Failed seven-stage home surface must be removed");
 assert.equal(overview.includes("overview-technical-summary"), false, "Technical health dashboard must not remain on the daily home surface");
 assert.equal(overview.includes("Metric"), false, "Daily home must not render a grid of technical metrics");
 assert.equal(overview.includes("刷新本机状态"), false, "Overview must not require manual refresh");
+
+assert.match(workFeed, /memory\.title/);
+assert.match(workFeed, /resultLinks/);
+assert.match(workFeed, /ownerActionRequired/);
+assert.match(workFeed, /灵机不会用一个数字代替资料列表/);
+assert.match(workFeed, /safeRelativePath/);
+assert.match(workFeed, /safeFilename/);
+assert.equal(workFeed.includes("payload.text"), false, "Owner feed must not project captured body text");
+assert.equal(workFeed.includes("raw_snapshot"), false, "Owner feed must not project raw snapshot paths");
 
 assert.match(activity, /每 4 秒自动更新/);
 assert.match(activity, /当前任务/);
@@ -140,11 +154,14 @@ for (const cssToken of [
   ".runtime-manual-fallback",
 ]) assert.ok(autopilotCss.includes(cssToken), `Autopilot styles are missing ${cssToken}`);
 for (const cssToken of [
-  ".autopilot-command-center",
-  ".autopilot-flow-track",
-  ".autopilot-event-stream",
-  ".memory-progress-v2",
-]) assert.ok(ownerHomeCss.includes(cssToken), `Owner home v2 styles are missing ${cssToken}`);
+  ".owner-action-hero",
+  ".owner-now-card",
+  ".owner-work-list",
+  ".owner-work-item",
+  ".owner-work-fact",
+  ".owner-work-stats",
+]) assert.ok(ownerWorkCss.includes(cssToken), `Owner Work Feed styles are missing ${cssToken}`);
+assert.equal(ownerWorkCss.includes("repeat(7"), false, "Owner home must not return to a seven-card stage grid");
 assert.match(releaseCss, /\.desktop-runtime-tools/);
 
 console.log("observation-first-ui-smoke: PASS");
