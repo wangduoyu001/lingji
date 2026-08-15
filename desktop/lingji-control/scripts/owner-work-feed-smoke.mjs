@@ -100,6 +100,21 @@ assert.equal(unavailable.detailsState, "unavailable");
 assert.match(unavailable.detailsMessage, /2 份资料/);
 assert.match(unavailable.detailsMessage, /不会用一个数字代替资料列表/);
 
+const genericSource = buildOwnerWorkFeed({
+  memoryResponse: { items: [] },
+  queueResponse: {
+    recent: [{
+      job_id: "LJ-JOB-GENERIC",
+      status: "running",
+      payload: { title: "普通资料" },
+      updated_at: "2026-08-16T00:32:00+08:00",
+    }],
+  },
+  events: [],
+  expectedDocuments: 0,
+});
+assert.equal(genericSource.items[0]?.source, "知识库资料", "missing source type must never render as a blank label");
+
 const empty = buildOwnerWorkFeed({
   memoryResponse: { items: [] },
   queueResponse: { recent: [] },
