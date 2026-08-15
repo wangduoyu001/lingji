@@ -4,7 +4,7 @@ import DesktopShell from "./components/DesktopShell";
 import RuntimeBoundary from "./components/RuntimeBoundary";
 import "./DesktopUX.css";
 import "./ReleaseUX.css";
-import "./OwnerHomeV2.css";
+import "./OwnerWorkFeed.css";
 import { useLingJiConnection } from "./hooks/useLingJiConnection";
 import { useReleaseMetadata } from "./hooks/useReleaseMetadata";
 import { NAVIGATION } from "./navigation";
