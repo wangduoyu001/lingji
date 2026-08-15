@@ -16,6 +16,7 @@ const [
   workflow,
   runtimeBoundary,
   overview,
+  workFeed,
   autopilotEngine,
 ] = await Promise.all([
   read("../src-tauri/tauri.macos.conf.json"),
@@ -27,6 +28,7 @@ const [
   read("../../../.github/workflows/macos-desktop-gate.yml"),
   read("../src/components/RuntimeBoundary.tsx"),
   read("../src/pages/OverviewPage.tsx"),
+  read("../src/ownerWorkFeed.ts"),
   read("../../../src/autopilot/engine.py"),
 ]);
 
@@ -98,14 +100,19 @@ assert.equal(
   "manual data-root selection must be an advanced fallback, not a first-run action",
 );
 
-// Owner Home v2 deliberately removes provider/auth tiles from the daily surface.
-// Auth state still feeds the bounded Autopilot classifier and never exports credential material.
+// Daily home consumes sanitized projections only. Auth state still feeds the bounded
+// Autopilot classifier and credential material never belongs on the owner surface.
 assert.match(autopilotEngine, /auth_status_provider/);
 assert.match(autopilotEngine, /auth_permission_insufficient/);
 assert.match(autopilotEngine, /auth_reauthentication_required/);
 assert.equal(/token|authorization|cookie/i.test(overview), false, "Daily home must not render credential material");
-assert.match(overview, /灵机自动驾驶/);
-assert.match(overview, /最近自动完成/);
+assert.match(overview, /你现在需要做什么/);
+assert.match(overview, /资料工作清单/);
+assert.match(overview, /灵机已做/);
+assert.match(overview, /下一步/);
+assert.match(workFeed, /safeRelativePath/);
+assert.equal(workFeed.includes("payload.text"), false, "Owner projection must not expose captured content");
+assert.equal(workFeed.includes("raw_snapshot"), false, "Owner projection must not expose raw snapshot paths");
 
 assert.ok(workflow.includes("sidecar-stop-request.json"), "DMG isolation gate must stop its exact sidecar instance");
 
