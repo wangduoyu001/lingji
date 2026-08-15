@@ -1,0 +1,15 @@
+{
+  "task_id": "PR88-M5-OWNER-HOME-V2-F3CBA413",
+  "product_commit": "f3cba4136bd169619277279a55007fcd4ef609f4",
+  "artifact_id": 9249367672,
+  "verdict": "FAIL",
+  "merge_recommendation": "DO_NOT_MERGE",
+  "identity_result": "PASS",
+  "acceptance_isolation_result": "PASS",
+  "first_lifecycle_result": "PASS",
+  "second_lifecycle_result": "PASS",
+  "owner_observation": "FAIL",
+  "blocking_defects": ["M5-OWNER-HOME-001", "M5-OWNER-HOME-002", "M5-OWNER-HOME-003"],
+  "secret_export_count": 0,
+  "production_pollution_count": 0
+}
