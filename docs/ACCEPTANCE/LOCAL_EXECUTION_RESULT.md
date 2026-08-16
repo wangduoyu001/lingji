@@ -16,11 +16,11 @@ public_summary_path: docs/TEST_REPORTS/evidence/PR88_M5_OWNER_WORK_FEED_V3_SUMMA
 public_hashes_path: docs/TEST_REPORTS/evidence/PR88_M5_OWNER_WORK_FEED_V3_HASHES_1d99d10c.txt
 cleanup_before: PASS
 cleanup_after: PASS
-remote_branch_verified: false
-remote_commit_verified: false
-remote_report_verified: false
-remote_result_verified: false
-pr_comment_verified: false
+remote_branch_verified: true
+remote_commit_verified: true
+remote_report_verified: true
+remote_result_verified: true
+pr_comment_verified: true
 local_temp_root_absent: true
 owner_observation: FAIL
 started_at: 2026-08-16T09:55:00+08:00
