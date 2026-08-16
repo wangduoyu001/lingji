@@ -4,6 +4,7 @@ export type Row = Record<string, unknown>;
 
 export type PageId =
   | "overview"
+  | "memory"
   | "activity"
   | "attention"
   | "diagnostics"
