@@ -30,6 +30,7 @@ _SOURCE_ADAPTERS = {
     "chatgpt_export": "chatgpt_export",
     "codex": "codex_work_report",
     "codex_report": "codex_work_report",
+    "text": "web_capture",
     "web": "web_capture",
     "browser": "web_capture",
     "wechat_article": "web_capture",
@@ -108,7 +109,7 @@ class CaptureService:
         self._submitted += 1
         return result
 
-    def submit_text(self, text: str, *, source_type: str = "web", **kwargs: Any) -> CaptureResult:
+    def submit_text(self, text: str, *, source_type: str = "text", **kwargs: Any) -> CaptureResult:
         kwargs = self._manual_defaults(kwargs)
         envelope = self._manual_envelope(text, selected_kind=ManualCaptureKind.TEXT, source_type=source_type, **kwargs)
         return self.submit(envelope)
