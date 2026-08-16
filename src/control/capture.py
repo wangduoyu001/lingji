@@ -112,7 +112,7 @@ class CaptureControlService:
         return self._submit(
             self._envelope(
                 payload,
-                source_type=str(payload.get("source_type") or "web"),
+                source_type=str(payload.get("source_type") or "text"),
                 capture_method=str(payload.get("capture_method") or "manual_text"),
                 text=text,
             ),
