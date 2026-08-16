@@ -1,0 +1,5 @@
+product_commit bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9
+artifact_id 9258682849
+artifact_zip_sha256 c26408c350bf35701bdf6aa97e75f65e7bead42fb6ed92d11838334274e1a888
+dmg_name 灵机_0.1.0_aarch64.dmg
+dmg_sha256 a5d54cba4f99411541527be7230d568f32a8fba90efed14ff9756df6b393bb46
