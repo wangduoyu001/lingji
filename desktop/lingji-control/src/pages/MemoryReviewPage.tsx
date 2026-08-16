@@ -16,6 +16,7 @@ export default function MemoryReviewPage({ api, active }: PageProps) {
   const client = useMemo(() => new MemoryReviewApi(api), [api]);
   const [filters, setFilters] = useState<ReviewFilters>({ projectId: "", agent: "", type: "", importance: "", q: "", limit: REVIEW_LIMIT, offset: 0 });
   const [items, setItems] = useState<MemoryCandidate[]>([]);
+  const [hasMore, setHasMore] = useState(false);
   const [selected, setSelected] = useState<MemoryCandidate | null>(null);
   const [editContent, setEditContent] = useState("");
   const [rejectReason, setRejectReason] = useState("");
@@ -36,7 +37,13 @@ export default function MemoryReviewPage({ api, active }: PageProps) {
     try {
       const response = await client.candidates(filters, abort.signal);
       if (id === requestId.current) {
-        setItems(response.items ?? []);
+        const nextItems = response.items ?? [];
+        const total = response.pagination?.total ?? null;
+        setItems(nextItems);
+        setHasMore(
+          response.pagination?.has_more
+          ?? (total !== null ? filters.offset + REVIEW_LIMIT < total : nextItems.length >= REVIEW_LIMIT),
+        );
         setError(null);
       }
     } catch (reason) {
@@ -176,7 +183,11 @@ export default function MemoryReviewPage({ api, active }: PageProps) {
             </button>
           )) : <Empty text={hasFilters(filters) ? "筛选后没有候选记忆。" : "没有待审核记忆。"} />}
         </div>
-        <div className="loop-pager"><button disabled={filters.offset === 0} onClick={() => setFilters({ ...filters, offset: Math.max(0, filters.offset - REVIEW_LIMIT) })}>上一页</button><span>第 {Math.floor(filters.offset / REVIEW_LIMIT) + 1} 页</span><button onClick={() => setFilters({ ...filters, offset: filters.offset + REVIEW_LIMIT })}>下一页</button></div>
+        <div className="loop-pager">
+          <button disabled={filters.offset === 0} onClick={() => setFilters({ ...filters, offset: Math.max(0, filters.offset - REVIEW_LIMIT) })}>上一页</button>
+          <span>第 {Math.floor(filters.offset / REVIEW_LIMIT) + 1} 页</span>
+          <button disabled={!hasMore} onClick={() => setFilters({ ...filters, offset: filters.offset + REVIEW_LIMIT })}>下一页</button>
+        </div>
       </aside>
 
       <section className="loop-panel review-detail-panel">
