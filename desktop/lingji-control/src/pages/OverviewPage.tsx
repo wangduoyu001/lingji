@@ -57,6 +57,7 @@ type OwnerDecision = {
   title: string;
   detail: string;
   target: PageId;
+  memoryId?: string;
 };
 
 const numberOrNull = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -90,11 +91,12 @@ function safeMemoryTitle(value: unknown): string {
   return String(row.title ?? row.memory_id ?? "记忆").slice(0, 160);
 }
 
-export default function OverviewPage({ data, api, active, onNavigate }: {
+export default function OverviewPage({ data, api, active, onNavigate, onOpenReview }: {
   data: Row | null;
   api: LingJiApi;
   active: boolean;
   onNavigate: (page: PageId) => void;
+  onOpenReview: (memoryId: string) => void;
 }) {
   const load = useCallback(async (signal: AbortSignal): Promise<HomeSnapshot> => {
     const results = await Promise.allSettled([
@@ -149,6 +151,7 @@ export default function OverviewPage({ data, api, active, onNavigate }: {
         title: candidate.title || "一条候选记忆等待确认",
         detail: candidate.proposal_reason || candidate.content_preview || "这条内容只有确认后才会进入永久记忆。",
         target: "memory_review",
+        memoryId: candidate.memory_id,
       });
     }
     for (const item of importCandidates.slice(0, 3)) {
@@ -214,7 +217,11 @@ export default function OverviewPage({ data, api, active, onNavigate }: {
           <div className="v4-section-heading"><div><span className="v4-kicker">需要我</span><h3>只有真正跨过主人边界的事</h3></div><button className="v4-link" onClick={() => onNavigate("attention")}>查看全部</button></div>
           <div className="v4-decision-list">
             {decisions.map((decision) => (
-              <button className="v4-decision-row" key={decision.id} onClick={() => onNavigate(decision.target)}>
+              <button
+                className="v4-decision-row"
+                key={decision.id}
+                onClick={() => decision.memoryId ? onOpenReview(decision.memoryId) : onNavigate(decision.target)}
+              >
                 <span><strong>{decision.title}</strong><small>{decision.detail}</small></span><b>处理</b>
               </button>
             ))}
