@@ -81,8 +81,10 @@ def test_all_capture_inputs_enqueue_and_service_is_long_lived(harness, tmp_path)
     ]
 
     assert all(item["status"] == "queued" for item in results)
+    assert all(item["capture_id"] for item in results)
     assert all(item["job_id"] for item in results)
     assert len(pipeline.calls) == 4
+    assert pipeline.calls[0][0] == "text"
     assert pipeline.execute_calls == []
     assert id(service.capture_service) == service_id
     assert pipeline.calls[-1][1]["options"]["allow_ocr"] is True
@@ -99,6 +101,12 @@ def test_duplicate_returns_same_job_and_audit_event(harness):
         "capture_submitted",
         "capture_duplicate",
     ]
+    submitted_event = state_db.events[-2]
+    assert submitted_event[1] == "capture"
+    assert submitted_event[2] == first["capture_id"]
+    assert submitted_event[3]["capture_id"] == first["capture_id"]
+    assert submitted_event[3]["job_id"] == first["job_id"]
+    assert submitted_event[3]["source_type"] == "text"
 
 
 def test_capture_mode_persists_pause_rejects_and_resume_restores(harness):
@@ -119,25 +127,26 @@ def test_capture_mode_persists_pause_rejects_and_resume_restores(harness):
 
 def test_queue_pagination_filtering_cancel_retry_and_conflicts(harness):
     _, queue, _, _, service = harness
-    web1 = service.submit_text({"text": "alpha"})
+    text1 = service.submit_text({"text": "alpha"})
     service.submit_text({"text": "beta"})
     media_path = Path(queue.path.parent) / "media.mp4"
     media_path.write_bytes(b"x")
     service.submit_media({"input_path": str(media_path)})
 
-    page = service.list_jobs(source_type="web", q="LJ-JOB", limit=1, offset=1)
+    page = service.list_jobs(source_type="text", q="LJ-JOB", limit=1, offset=1)
     assert page["pagination"]["limit"] == 1
     assert page["pagination"]["offset"] == 1
     assert page["pagination"]["total"] == 2
     assert len(page["items"]) == 1
+    assert page["items"][0]["source_type"] == "text"
 
-    assert service.cancel_job(web1["job_id"])["status"] == "cancelled"
-    retried = service.retry_job(web1["job_id"])
+    assert service.cancel_job(text1["job_id"])["status"] == "cancelled"
+    retried = service.retry_job(text1["job_id"])
     assert retried["status"] == "queued"
     assert retried["attempts"] == 0
-    assert service.cancel_job(web1["job_id"])["status"] == "cancelled"
+    assert service.cancel_job(text1["job_id"])["status"] == "cancelled"
     with pytest.raises(CaptureControlError) as cancel_again:
-        service.cancel_job(web1["job_id"])
+        service.cancel_job(text1["job_id"])
     assert cancel_again.value.code == CAPTURE_JOB_NOT_CANCELLABLE
 
     running_job = service.submit_text({"text": "running"})
