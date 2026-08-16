@@ -3,169 +3,120 @@
 > Updated: 2026-08-16
 > Formal/default branch: `master`
 > Current product PR: `#88`
-> Current product candidate: `1d99d10cdcb151c0a0257f7d0a93937cdb817b49`
+> Last rejected product candidate: `1d99d10cdcb151c0a0257f7d0a93937cdb817b49`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
 > Acceptance authority: `docs/ACCEPTANCE/README.md`
 
 ## 1. 当前结论
 
-PR #88 已完成针对上一轮真实 M5 失败的第三版产品修复：**Owner Work Feed v3**。
-
-当前状态：
+PR #88 的 Owner Work Feed v3 已完成真实 macOS M5 复验：
 
 ```text
-READY FOR M5 REACCEPTANCE
-current local task: ACTIVE
-product PR: Draft / DO NOT MERGE
+FAIL / DO NOT MERGE
+current local task: IDLE
+product PR: Draft
 ```
 
-这不是产品 PASS。六道同 SHA 自动门禁与新 macOS / Windows Artifact 已完成，只代表可以进入新的真实 M5 主人验收。
+技术发布链不是本轮阻塞。产品身份、arm64、签名、隔离、Secret 边界、两轮 Runtime 生命周期和失败回滚均通过。
 
-## 2. 上一轮失败与本轮修复
+阻塞是**产品信息架构与真实数据链不成立**：界面仍然让主人解释状态，而不是让系统交代事实和动作。
 
-上一候选 `f3cba4136bd169619277279a55007fcd4ef609f4` / Artifact `9249367672` 的主人反馈：
+## 2. 当前四个 P1 blocker
 
-- 只知道“已收纳 2 份资料”，不知道资料是什么；
-- 不知道灵机做了什么；
-- 不知道下一步；
-- 不知道是否需要主人行动。
+### M5-WORK-FEED-001 · 动作语义不可理解
 
-对应：`M5-OWNER-HOME-001 / 002 / 003`。
+“灵机已做”和“下一步”虽然有文字，但主人无法理解真实发生了什么。下一版不得继续用状态枚举拼句子，必须绑定真实事件/执行步骤/结果，并用自然语言说明结果、影响和下一动作。
 
-本轮根因确认：后端已经有真实 memory / queue result / events / owner actions，但旧首页把它们压缩成数量和阶段汇总。
+### M5-WORK-FEED-002 · 假待办入口
 
-Owner Work Feed v3 改为：
+“去处理”可进入一个没有待办对象的空页面。下一版只有存在**具体 pending action ID** 且目标页能加载同一对象时才允许显示处理按钮；否则必须显示“当前没有可处理事项”或一致性异常。
+
+### M5-WORK-FEED-003 · 分页合同错误
+
+Memory Inspector 存在无限“下一页”。前端必须使用后端 `has_more/cursor/total` 的真实分页合同，不能用未知 total 推断永远还有下一页，并要审计所有分页页面。
+
+### M5-WORK-FEED-004 · 工作台、待确认、记忆和自动化割裂
+
+待确认和记忆页为空，自动化过程不可见。下一版必须让 Workbench、Pending Action、Memory、Trace 指向同一真实对象链：
 
 ```text
-你现在需要做什么
-→ 灵机现在在做什么
-→ 每一份真实资料
-→ 灵机已做
-→ 下一步
-→ 是否需要主人行动
+资料/任务对象
+→ 实际执行事件
+→ 结果/记忆对象
+→ 可执行待办（如有）
+→ 下一系统动作
 ```
 
-七阶段仍保留为每份资料的内部生命周期状态，但不再以 7 张汇总卡要求主人自己拼故事。
+空状态也必须解释“为什么空、当前影响、系统是否会自动继续、主人是否需要操作”。
 
-## 3. 当前产品身份与六道门禁
+Window Recovery 上轮仍为 `NOT_TESTED`，下一次真实 M5 必须单独完成主人验证。
 
-产品 Commit：
+## 3. 权威失败证据
 
 ```text
-1d99d10cdcb151c0a0257f7d0a93937cdb817b49
+Task: PR88-M5-OWNER-WORK-FEED-V3-1D99D10C
+Product: 1d99d10cdcb151c0a0257f7d0a93937cdb817b49
+macOS Artifact: 9250384637 / lingji-macos-arm64
+Report branch: acceptance/pr88-m5-owner-work-feed-v3-1d99d10c
+Report commit: 74ec2bf67795387ca1ae23377a3deda299cbcfd5
+Cleanup receipt: d81713833d3d421554f35305f52459f4b4a3b236
+PR #88 comment: 5305293579
 ```
 
-同 SHA PASS：
+`docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md` 保存最终回执。
+
+## 4. 下一轮产品方向：Owner Workbench
+
+不再做 Owner Home / Work Feed 的局部补丁。正式进入**工作台信息架构重构**：
 
 ```text
-tests                            31897950526
-P0 Windows Gate                  31897950577
-macOS Desktop Gate               31897950589
-Windows Desktop Release Baseline 31897950511
-acceptance-doc-sync              31897950532
-local-execution-handoff          31897950587
+Sidebar
+├─ 工作台：真实对象列表 + 选中对象详情
+├─ 待办：只显示真实 pending action
+├─ 记忆：真实已入库对象
+├─ 自动化：真实 execution / trace
+└─ 设置与诊断：技术状态
 ```
 
-## 4. 当前 Artifact
+工作台采用稳定的 list/detail 结构；首页不再用大卡片解释系统。核心对象必须有结构化状态、真实最近动作、下一动作 actor、真实 pending action 和可展开 trace。
 
-macOS：
+视觉目标：低噪声、桌面级、清晰层级、紧凑状态标签、单一上下文主操作；减少彩色大卡和重复统计。
 
-```text
-Artifact: 9250384637 / lingji-macos-arm64
-ZIP SHA256: 8be6bc89dcbc9869d310879e23168f3f9474233e41c23c39526afdc5c9d665c0
-DMG: 灵机_0.1.0_aarch64.dmg
-DMG bytes: 46344072
-DMG SHA256: 2973311a02311e0fad1f6ccc666a90d966509e95f54a8e3895dbea283d6fdc49
-```
+## 5. 必须保持的技术边界
 
-Windows：
-
-```text
-Artifact: 9250362769 / lingji-windows-0.1.0-1d99d10c
-ZIP SHA256: a7612cd57036a8d46c5f93399d14f8509ab00dc801be5c04c7bff38a877ee9bb
-NSIS SHA256: d263bb43ca4d86465a5eedd7637b9da5a625c72d28a0006909c1c943f81cf08e
-Portable SHA256: bbb4c3d198d9c6e3ffa19773c1cac78788cb78750d75ca758383c37d96e8582f
-```
-
-两个 Artifact 已独立下载复核，Windows metadata 内嵌 Commit 与当前产品 Commit 完全一致。
-
-## 5. 当前 M5 任务
-
-```text
-Task ID:
-PR88-M5-OWNER-WORK-FEED-V3-1D99D10C
-
-Task:
-docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md
-
-Result:
-docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
-
-Report branch:
-acceptance/pr88-m5-owner-work-feed-v3-1d99d10c
-```
-
-本轮核心不是看“页面有没有阶段”，而是至少使用 2 份资料后，主人不看开发文档即可回答：
-
-```text
-有哪些具体资料？
-每份灵机做了什么？
-每份下一步是什么？
-我要做吗？
-```
-
-任一问题不能直接回答即 FAIL。
-
-上一轮未完成主人确认的 Window Recovery 本轮必须实际验菜单、快捷键和 Dock Reopen，不能再保持 `NOT_TESTED`。
-
-## 6. 已通过但必须继续回归的技术边界
-
-- exact product Commit / Artifact identity；
-- Apple Silicon arm64；
-- strict codesign；
-- whole-bundle 安装；
+- `src/` 为长期平台主线；
+- `desktop/lingji-control/` 为唯一正式 Desktop UI；
+- `second_brain/` 只做兼容/迁移；
+- Desktop 只通过认证的 `127.0.0.1:8766` Local Control API；
+- Obsidian Vault + Git 为永久记忆正文；
+- SQLite/Qdrant 是可重建索引与运行状态；
 - Acceptance / Production 物理隔离；
 - `secret_export_count=0`；
-- AuthStatus 只含脱敏状态；
-- 两轮启动与 exact-instance stop；
-- stop 后 `state gone + PID gone + port free`；
-- Production pollution count = 0；
-- FAIL 后完整恢复上一 App 并清理本轮任务根。
+- Runtime stop 只处理精确实例；
+- 不创建第二事实源来“美化状态”。
 
-## 7. 当前产品主线
+## 6. 下一轮发布条件
 
 ```text
-src/
-= 长期平台主线
-
-desktop/lingji-control/
-= 唯一正式 Desktop UI
-
-second_brain/
-= Compatibility / Migration Runtime
+搜索学习成熟 Agent / Task / Trace / Knowledge UI
+→ 审计当前真实数据合同与分页
+→ 建立统一 Owner Workbench 模型
+→ 重构工作台 / 待办 / 记忆 / 自动化
+→ 统一设计 tokens 与桌面布局
+→ 真实场景 smoke + full tests
+→ 更新 CHANGE_ACCEPTANCE_LOG + 实施报告
+→ 新产品 Commit
+→ 同 SHA macOS / Windows release gates
+→ 新 Artifact + 哈希
+→ 新 ACTIVE M5 task
 ```
 
-规则不变：新正式能力进入 `src/` 或正式 Desktop；Desktop 只通过认证的 `127.0.0.1:8766` Local Control API 访问后端；MCP 默认 stdio，可选 HTTP 8767；8765 仅迁移兼容。
-
-## 8. 数据与安全权威
+## 7. 历史失败 Artifact
 
 ```text
-Obsidian Vault + Git = 永久记忆与正式知识正文
-storage/raw = 原始导入材料
-lingji_state.db = 任务、队列、运行状态与审计事件
-lingji_memory.db = 可重建全文与元数据索引
-Qdrant = 可重建语义索引
-```
-
-Owner Work Feed 不创建第二事实源，只读现有事实并做主人可理解的安全投影；不得暴露正文、绝对私人路径、raw snapshot 或 Secret。
-
-## 9. 历史失败 Artifact
-
-```text
+9250384637 / 1d99d10c: DO NOT RETRY
 9249367672 / f3cba413: DO NOT RETRY
 9224368022 / 2c96b3ec: DO NOT RETRY
 9102748834 / 171091fe: DO NOT RETRY
 ```
-
-新 Artifact `9250384637` 只有本轮真实 M5 PASS 后才可继续；若本轮 FAIL，它也必须永久淘汰。
