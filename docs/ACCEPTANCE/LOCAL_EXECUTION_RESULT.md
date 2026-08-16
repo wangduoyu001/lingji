@@ -26,6 +26,8 @@ artifact_id: 9258682849
 artifact_workflow_run_id: 31928631105
 artifact_zip_sha256: c26408c350bf35701bdf6aa97e75f65e7bead42fb6ed92d11838334274e1a888
 dmg_sha256: a5d54cba4f99411541527be7230d568f32a8fba90efed14ff9756df6b393bb46
+started_at: PENDING
+finished_at: PENDING
 cleanup_before: NOT_RUN
 cleanup_after: NOT_RUN
 remote_branch_verified: false
