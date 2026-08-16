@@ -12,6 +12,7 @@ import DiagnosticsPage from "./pages/DiagnosticsPage";
 import JobsPage from "./pages/JobsPage";
 import LogsPage from "./pages/LogsPage";
 import MediaPage from "./pages/MediaPage";
+import MemoryHomePage from "./pages/MemoryHomePage";
 import MemoryInspectorLoopPage from "./pages/MemoryInspectorLoopPage";
 import MemoryReviewPage from "./pages/MemoryReviewPage";
 import ModelsPage from "./pages/ModelsPage";
@@ -39,7 +40,8 @@ export default function AppPages(props: AppPagesProps) {
   const { page, api, connected, overview, inspectorTarget, onOpenInspector, onNavigate } = props;
   return <section className="page-content">
     {page === "overview" && <OverviewPage data={overview} api={api} active={connected} onNavigate={onNavigate} />}
-    {page === "activity" && <ActivityPage api={api} active={connected} />}
+    {page === "memory" && <MemoryHomePage api={api} active={connected} onNavigate={onNavigate} />}
+    {page === "activity" && <ActivityPage api={api} active={connected} onNavigate={onNavigate} />}
     {page === "attention" && <AttentionPage api={api} active={connected} overview={overview} onNavigate={onNavigate} />}
     {page === "diagnostics" && <DiagnosticsPage onNavigate={onNavigate} />}
     {page === "brain_status" && <BrainStatusPage api={api} active={connected} />}
