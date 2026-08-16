@@ -4,6 +4,83 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-16 · PR #102 / PR #88 · Active Permanent-Memory Workbench v4
+
+- 产品分支：`fix/pr88-owner-workbench-v4` → `feature/owner-autopilot-ui-codexpp`
+- 产品基线：`1d99d10cdcb151c0a0257f7d0a93937cdb817b49`
+- 来源失败：`PR88-M5-OWNER-WORK-FEED-V3-1D99D10C / FAIL / DO NOT MERGE`
+- 影响模块：Desktop 主导航、Owner Briefing 首页、一级永久记忆、工作履历、主人待办、全局输入、分页、统一视觉系统、Desktop smoke、macOS release smoke、跨平台集成测试。
+- 风险等级：P1。
+- 用户可感知变化：从“监控仪表盘/工具仓库”重构为“第二永久记忆大脑 + 主动型本地智能助手”的主人工作台。日常主导航收敛为 `首页 / 记忆 / 工作 / 需要我 / 高级`；首页回答系统做了什么、正在做什么、接下来做什么和主人是否需要行动；记忆成为一级可浏览、可搜索、可验证来源的产品表面。
+- 数据或安全边界变化：不新增永久记忆事实源；Obsidian Vault + Git 继续作为永久记忆与正式知识权威。V4 只组合现有 authenticated Control API、Memory Inspector、Review、Assistant Hub、Jobs、Codex Current 与 Capture；不扩大正文读取权限、不自动批准永久记忆、不自动执行破坏性 Qdrant 重建、不导出 Credential/Secret。
+
+### 新增或修改的自动验收
+
+- [ ] `desktop/lingji-control/scripts/observation-first-ui-smoke.mjs`：锁定 5 个一级主人入口、Owner Briefing 六问、一级记忆来源证据、真实工作履历、对象级待办、全局输入和统一 V4 视觉系统。
+- [ ] `owner-home-action-consistency-smoke.mjs`：主人行动必须来自真实 `memory_id` / `candidate_id`；汇总计数与对象明细不一致时必须显示 degraded/consistency 状态，禁止生成会打开空页面的按钮。
+- [ ] `memory-progress-smoke.mjs`：永久记忆成为一级表面；没有验证样本不得宣称准确率；语义检索不可用时必须明确保留全文检索能力。
+- [ ] `assistant-autopilot-smoke.mjs`：主动发现继续只读安全元数据；正文授权必须绑定精确 candidate；后台技术问题不得冒充主人待办；Autopilot 不得自动批准永久记忆、无限重试或破坏性重建 Qdrant。
+- [ ] `MemoryHomePage`：必须使用真实 `/api/memory/inspector/memories`、`/status`、`/{id}/source`、`/{id}/vector`，展示“记住了什么 / 为什么能相信它 / 来源证据”；没有主人专属证据时不得用通用模板捏造“记忆缺口”。
+- [ ] `GlobalOwnerCommand`：`Cmd/Ctrl+K` 可聚焦；`记住：...` 必须真实调用 `/api/capture/text`，失败时不得宣称已记录，重复内容不得重复创建；其他尚未支持的自然语言命令必须明确能力边界。
+- [ ] `ActivityPage`：工作履历必须来自真实 `/api/jobs` 和 `/api/codex/current`，说明“发生了什么 / 灵机做了什么 / 结果 / 下一步”；普通失败不得自动升级为主人待办。
+- [ ] `AttentionPage`：只能展示真实 Review candidate、Assistant import candidate 或真实不可逆维护边界；无真实对象时页面必须为空态或未知态，不得依赖 `pending_review_count` 生成按钮。
+- [ ] `MemoryReviewPage`、`MemoryInspectorPage`、`CaptureCenterPage`、一级 `MemoryHomePage`：所有“下一页”必须服从后端 `has_more` 或可验证 `total` 边界，`has_more=false` 时禁止继续翻页。
+- [ ] Owner UI 投影继续禁止泄漏 captured body、Authorization/Cookie/Token、Credential/Secret、raw snapshot 和私人绝对路径。
+- [ ] `npm run test:smoke`、`npm run build`、Python 3.11/3.12/Windows、MCP、Obsidian plugin、browser capture、Rust/Tauri 回归全部 PASS。
+- [ ] PR #102 精确 Head 的 `tests`、`macOS Desktop Gate`、`acceptance-doc-sync`、`local-execution-handoff` 必须全部 PASS；这里只是开发分支自动门禁，不得直接作为 M5 产品 Artifact。
+- [ ] PR #102 合入产品分支后，新的**精确产品 Commit**必须重新通过 `tests`、`P0 Windows Gate`、`macOS Desktop Gate`、`Windows Desktop Release Baseline`、`acceptance-doc-sync`、`local-execution-handoff` 六道同 SHA 门禁，才允许选择双平台 Artifact。
+
+### 新增或修改的真机验收
+
+- [ ] **当前禁止激活真机验收。** PR #102 自动验收或合并后六道产品门禁任何一项未通过时，`docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md` 必须保持 `IDLE`。
+- [ ] 只有新的精确产品 Commit 六道门 6/6 PASS、Mac/Windows 新 Artifact 身份与哈希独立复核完成后，才允许在 `master` 创建新的 ACTIVE M5 任务。
+- [ ] 后续 M5 首屏 5 秒内必须能回答：`灵机刚刚做了什么`、`现在在做什么`、`接下来会做什么`、`我现在需要做什么`。
+- [ ] 一级“记忆”必须能够查看真实记忆对象、内容/安全预览、来源证据和取回状态；不能再只看到“2 份资料 / 11 个片段”等统计数字。
+- [ ] “需要我”中每个可点击动作必须有真实对象；点击后目标页面必须存在同一对象或直接执行该对象的明确授权动作，不允许空待办。
+- [ ] 全局输入必须可真实提交一条任务专用记录并在失败/重复情况下给出真实反馈。
+- [ ] 视觉与结构必须与 V3 明显不同：稳定侧栏、紧凑列表/详情、时间线、少量状态标签；技术 PID/端口/路径/Commit 默认隐藏在高级详情。
+- [ ] Window Recovery 仍为强制主人验证：菜单 `窗口 → 将灵机带到当前屏幕`、快捷键和 macOS Dock Reopen 至少按任务协议完成真实找回。
+- [ ] 继续回归 exact Artifact identity、arm64、strict codesign、whole-bundle replace、Acceptance/Production 物理隔离、AuthStatus、`secret_export_count=0`、两轮 exact-instance Sidecar stop、`state gone + PID gone + port free`、Production pollution=0。
+
+### 主人肉眼确认
+
+- [ ] 不看技术文档，主人能够明确理解：系统刚刚替我做了什么、现在做什么、下一步谁做、我是否需要行动。
+- [ ] “记忆”看起来是第二永久记忆大脑，而不是数据库检查器：能看到具体记忆及其来源，空状态也能说明系统会继续自动处理还是确实没有内容。
+- [ ] “工作”看起来是灵机的工作履历，而不是原始队列/日志。
+- [ ] “需要我”只在真的需要授权、永久记忆判断、冲突或不可逆操作时打扰主人。
+- [ ] 全局 `⌘K` 入口容易发现，不要求主人先理解内部模块名称。
+- [ ] 端口、Qdrant、Embedding、SQLite、PID、Commit、DataRoot 等技术信息不占日常首屏。
+
+### 回归项
+
+- [ ] 不新增第二个永久记忆事实源；`lingji_memory.db` 与 Qdrant 仍为可重建索引。
+- [ ] 未经主人授权不得读取真实 AI 对话/导出正文；主动扫描不得全盘递归或跟随符号链接。
+- [ ] 不允许自动批准永久记忆、自动删除/重建 Production Qdrant、自动修改第三方 AI 客户端配置或自动发布内容。
+- [ ] Production/Acceptance 物理隔离、CredentialStore/AuthStatus、Sidecar exact-instance stop、release exact-head 和 Windows/macOS 同代码主线不得回退。
+- [ ] 旧失败 Artifact `9250384637`、`9249367672`、`9224368022`、`9102748834` 不得作为新 M5 输入。
+- [ ] PR #88 在新精确 Artifact 的真实 M5 与主人体验 PASS 前继续保持 Draft / DO NOT MERGE。
+
+### 清理与回滚
+
+- 本轮开发与 CI 不触碰主人 Production 数据；临时产物由 workflow 清理。
+- PR #102 阶段不创建 M5 task-scoped Runtime，也不选择正式 Artifact。
+- 后续真机任务必须使用新的 task-scoped Acceptance root 和 whole-bundle replace；FAIL 时恢复原 App并只保留最小必要失败证据。
+- 回滚允许撤销 V4 主人投影、导航和样式，但不得回退已经通过的认证、隔离、Sidecar 生命周期、窗口找回与 release identity 修复。
+
+### 不在范围
+
+- 不在 V4 UI 重构中自动批准 Permanent/Core Memory。
+- 不新增全盘文件扫描。
+- 不宣称已实现开放式 Agent 命令执行；当前全局入口只执行可验证的记录与导航能力。
+- 不在 PR #102 开发分支激活 `LOCAL_EXECUTION_TASK.md`。
+
+### 最终报告
+
+- 实施与自动验收报告：`docs/TEST_REPORTS/PR88_OWNER_WORKBENCH_V4_IMPLEMENTATION.md`
+- 新 M5 报告：仅在合并后产品同 SHA 六道门和新 Artifact 锁定后创建 `docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_<new-short-sha>.md`。
+
+---
+
 ## 2026-08-16 · PR #99 / PR #88 修复 · Owner Work Feed v3
 
 - 产品分支：`fix/pr88-owner-work-feed-v3` → `feature/owner-autopilot-ui-codexpp`
