@@ -1,0 +1,15 @@
+{
+  "task_id": "PR88-M5-OWNER-WORK-FEED-V3-1D99D10C",
+  "product_commit": "1d99d10cdcb151c0a0257f7d0a93937cdb817b49",
+  "artifact_id": 9250384637,
+  "verdict": "FAIL",
+  "merge_recommendation": "DO_NOT_MERGE",
+  "identity_result": "PASS",
+  "acceptance_isolation_result": "PASS",
+  "first_lifecycle_result": "PASS",
+  "second_lifecycle_result": "PASS",
+  "owner_observation": "FAIL",
+  "blocking_defects": ["M5-WORK-FEED-001", "M5-WORK-FEED-002", "M5-WORK-FEED-003", "M5-WORK-FEED-004"],
+  "secret_export_count": 0,
+  "production_pollution_count": 0
+}
