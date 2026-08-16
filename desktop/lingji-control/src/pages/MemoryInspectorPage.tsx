@@ -86,6 +86,7 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
   const [error, setError] = useState<ApiError | null>(null);
   const [offsets, setOffsets] = useState({ source: 0, conversation: 0, message: 0 });
   const [totals, setTotals] = useState<{ source: number | null; conversation: number | null; message: number | null }>({ source: null, conversation: null, message: null });
+  const [hasMore, setHasMore] = useState({ source: false, conversation: false, message: false });
   const listController = useRef<AbortController | null>(null);
   const listRequestId = useRef(0);
   const messageController = useRef<AbortController | null>(null);
@@ -132,6 +133,11 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
         source: sourceResponse.pagination?.total ?? null,
         conversation: conversationResponse.pagination?.total ?? null,
         message: messageResponse.pagination?.total ?? null,
+      });
+      setHasMore({
+        source: sourceResponse.pagination?.has_more === true,
+        conversation: conversationResponse.pagination?.has_more === true,
+        message: messageResponse.pagination?.has_more === true,
       });
     } catch (reason) {
       if (requestId === listRequestId.current && !(reason instanceof ApiError && reason.code === "REQUEST_CANCELLED")) {
@@ -224,9 +230,7 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
             setMemoryLinks(mapped.memoryLinks);
           }
         }
-        if (target.memory_id) {
-          await openMemory({ memory_id: target.memory_id, relation_type: "shortcut" });
-        }
+        if (target.memory_id) await openMemory({ memory_id: target.memory_id, relation_type: "shortcut" });
       } catch (reason) {
         if (requestId === targetRequestId.current && !(reason instanceof ApiError && reason.code === "REQUEST_CANCELLED")) {
           setDetailError(reason instanceof ApiError ? reason : new ApiError(0, "UNKNOWN", "Unknown error"));
@@ -243,13 +247,7 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
   return (
     <div className="memory-inspector">
       <div className="inspector-status">
-        {[
-          ["Source", status?.sources],
-          ["Conversation", status?.conversations],
-          ["Message", status?.messages],
-          ["Memory", status?.memories],
-          ["Chunk", status?.chunks],
-        ].map(([label, value]) => <div key={String(label)}><span>{label}</span><strong>{countLabel(value)}</strong></div>)}
+        {[["Source", status?.sources], ["Conversation", status?.conversations], ["Message", status?.messages], ["Memory", status?.memories], ["Chunk", status?.chunks]].map(([label, value]) => <div key={String(label)}><span>{label}</span><strong>{countLabel(value)}</strong></div>)}
         <div><span>Vector 覆盖</span><strong>{typeof status?.vectorCoverage === "number" ? `${(status.vectorCoverage * 100).toFixed(2)}%` : "未知"}</strong></div>
         <div><span>Vector 状态</span><strong>{text(status?.vectorState)}</strong></div>
         <div><span>重建状态</span><strong>{rebuildLabel(status?.rebuildRequired)}</strong></div>
@@ -274,31 +272,15 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
         <section>
           <h2>Source 来源 <small>{countLabel(totals.source)}</small></h2>
           <StateView error={null} empty={!loading && sources.length === 0} filtered={Boolean(filters.sourceType || filters.project || filters.privacy || filters.status || debouncedQ)} />
-          {sources.map((row) => (
-            <button key={row.source_id} className={`inspector-item${privacyClass(row)} ${selectedSource?.source_id === row.source_id ? "active" : ""}`} onClick={() => { setSelectedSource(row); setSelectedConversation(null); setSelectedMessage(null); }}>
-              <strong>{text(row.display_name)}</strong>
-              <span>{text(row.source_type)} · {text(row.privacy)}</span>
-              <span>项目 {formatList(row.projects)} · 状态 {text(row.status)}</span>
-              <span>对话 {countLabel(row.conversation_count)} · 消息 {countLabel(row.message_count)}</span>
-              <small>{dateTime(row.updated_at)}</small>
-            </button>
-          ))}
-          <Pager offset={offsets.source} total={totals.source} onChange={(source) => setOffsets({ ...offsets, source })} />
+          {sources.map((row) => <button key={row.source_id} className={`inspector-item${privacyClass(row)} ${selectedSource?.source_id === row.source_id ? "active" : ""}`} onClick={() => { setSelectedSource(row); setSelectedConversation(null); setSelectedMessage(null); }}><strong>{text(row.display_name)}</strong><span>{text(row.source_type)} · {text(row.privacy)}</span><span>项目 {formatList(row.projects)} · 状态 {text(row.status)}</span><span>对话 {countLabel(row.conversation_count)} · 消息 {countLabel(row.message_count)}</span><small>{dateTime(row.updated_at)}</small></button>)}
+          <Pager offset={offsets.source} total={totals.source} hasMore={hasMore.source} onChange={(source) => setOffsets({ ...offsets, source })} />
         </section>
 
         <section>
           <h2>Conversation 对话 <small>{countLabel(totals.conversation)}</small></h2>
           <StateView error={null} empty={!loading && conversations.length === 0} filtered={Boolean(selectedSource || filters.project || filters.privacy || debouncedQ)} />
-          {conversations.map((row) => (
-            <button key={row.conversation_id} className={`inspector-item${privacyClass(row)} ${selectedConversation?.conversation_id === row.conversation_id ? "active" : ""}`} onClick={() => { setSelectedConversation(row); setSelectedMessage(null); }}>
-              <strong>{text(row.title)}</strong>
-              <span>参与者 {formatList(row.participants)}</span>
-              <span>{dateTime(row.started_at)} → {dateTime(row.ended_at)}</span>
-              <span>项目 {formatList(row.projects)} · 隐私 {text(row.privacy)}</span>
-              <small>消息 {countLabel(row.message_count)}</small>
-            </button>
-          ))}
-          <Pager offset={offsets.conversation} total={totals.conversation} onChange={(conversation) => setOffsets({ ...offsets, conversation })} />
+          {conversations.map((row) => <button key={row.conversation_id} className={`inspector-item${privacyClass(row)} ${selectedConversation?.conversation_id === row.conversation_id ? "active" : ""}`} onClick={() => { setSelectedConversation(row); setSelectedMessage(null); }}><strong>{text(row.title)}</strong><span>参与者 {formatList(row.participants)}</span><span>{dateTime(row.started_at)} → {dateTime(row.ended_at)}</span><span>项目 {formatList(row.projects)} · 隐私 {text(row.privacy)}</span><small>消息 {countLabel(row.message_count)}</small></button>)}
+          <Pager offset={offsets.conversation} total={totals.conversation} hasMore={hasMore.conversation} onChange={(conversation) => setOffsets({ ...offsets, conversation })} />
         </section>
 
         <section>
@@ -306,16 +288,9 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
           <StateView error={null} empty={!loading && messages.length === 0} filtered={Boolean(selectedConversation || filters.role || debouncedQ)} />
           {messages.map((row) => {
             const restricted = isRestricted(row);
-            return (
-              <button key={row.message_id} className={`inspector-item${privacyClass(row)} ${selectedMessage?.message_id === row.message_id ? "active" : ""}`} onClick={() => void openMessage(row)}>
-                <strong>{text(row.role)} · {text(row.author)}</strong>
-                <span>{dateTime(row.occurred_at)}</span>
-                <span>模型 {text(row.metadata?.model)} · 分支 {row.metadata?.is_branch === true ? "是" : row.metadata?.is_branch === false ? "否" : "未知"}</span>
-                <small>{restricted ? "restricted 受限内容，点击查看" : text(row.content_preview)}</small>
-              </button>
-            );
+            return <button key={row.message_id} className={`inspector-item${privacyClass(row)} ${selectedMessage?.message_id === row.message_id ? "active" : ""}`} onClick={() => void openMessage(row)}><strong>{text(row.role)} · {text(row.author)}</strong><span>{dateTime(row.occurred_at)}</span><span>模型 {text(row.metadata?.model)} · 分支 {row.metadata?.is_branch === true ? "是" : row.metadata?.is_branch === false ? "否" : "未知"}</span><small>{restricted ? "restricted 受限内容，点击查看" : text(row.content_preview)}</small></button>;
           })}
-          <Pager offset={offsets.message} total={totals.message} onChange={(message) => setOffsets({ ...offsets, message })} />
+          <Pager offset={offsets.message} total={totals.message} hasMore={hasMore.message} onChange={(message) => setOffsets({ ...offsets, message })} />
         </section>
       </div>
 
@@ -323,15 +298,8 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
         <aside className="relation-panel">
           <header><div><h2>Message 详情与 Memory 关系</h2><span>{selectedMessage?.message_id ?? selectedMemory?.memory_id}</span></div><button onClick={() => { setSelectedMessage(null); setSelectedMemory(null); }}>关闭</button></header>
           {detailError && <div className="inspector-state error">详情读取失败，已保留当前可用数据</div>}
-          {selectedMessage && <div className={`message-content${privacyClass(selectedMessage)}`}>
-            {isRestricted(selectedMessage) ? <details><summary>restricted 受限内容，主动展开</summary><pre>{text(selectedMessage.content)}</pre></details> : <pre>{text(selectedMessage.content)}</pre>}
-          </div>}
-          {selectedMessage && <><h3>关联 Memory</h3>
-          {memoryLinks.length ? memoryLinks.map((link) => (
-            <button className="memory-link" key={`${link.memory_id}-${link.relation_type ?? "unknown"}`} onClick={() => void openMemory(link)}>
-              <strong>{link.memory_id}</strong><span>关系 {text(link.relation_type)} · 置信度 {typeof link.confidence === "number" ? link.confidence.toFixed(3) : "未知"}</span>
-            </button>
-          )) : <p>当前 Message 没有关联 Memory。</p>}</>}
+          {selectedMessage && <div className={`message-content${privacyClass(selectedMessage)}`}>{isRestricted(selectedMessage) ? <details><summary>restricted 受限内容，主动展开</summary><pre>{text(selectedMessage.content)}</pre></details> : <pre>{text(selectedMessage.content)}</pre>}</div>}
+          {selectedMessage && <><h3>关联 Memory</h3>{memoryLinks.length ? memoryLinks.map((link) => <button className="memory-link" key={`${link.memory_id}-${link.relation_type ?? "unknown"}`} onClick={() => void openMemory(link)}><strong>{link.memory_id}</strong><span>关系 {text(link.relation_type)} · 置信度 {typeof link.confidence === "number" ? link.confidence.toFixed(3) : "未知"}</span></button>) : <p>当前 Message 没有关联 Memory。</p>}</>}
 
           {selectedMemory && (
             <div className="memory-detail">
@@ -340,23 +308,11 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
                 <dt>Memory ID</dt><dd>{selectedMemory.memory_id}</dd>
                 <dt>类型</dt><dd>{text(selectedMemory.memory_type)}</dd>
                 <dt>状态</dt><dd>{text(selectedMemory.status)}</dd>
-                <dt>Chunk 数量</dt><dd>{
-                  typeof selectedMemory.chunk_count === "number"
-                    ? selectedMemory.chunk_count.toLocaleString()
-                    : Array.isArray(selectedMemory.chunks)
-                      ? selectedMemory.chunks.length.toLocaleString()
-                      : "未知"
-                }</dd>
+                <dt>Chunk 数量</dt><dd>{typeof selectedMemory.chunk_count === "number" ? selectedMemory.chunk_count.toLocaleString() : Array.isArray(selectedMemory.chunks) ? selectedMemory.chunks.length.toLocaleString() : "未知"}</dd>
                 <dt>Vector 状态</dt><dd>{text(memoryVector?.state)}</dd>
                 <dt>rebuild_required</dt><dd>{rebuildLabel(memoryVector?.rebuild_required)}</dd>
                 <dt>Vault 相对路径</dt><dd>{text(memorySource?.canonical?.relative_path)}</dd>
-                <dt>Citations</dt><dd>{
-                  Array.isArray(memorySource?.canonical?.citations) && memorySource.canonical.citations.length > 0
-                    ? memorySource.canonical.citations.map((c: Citation) =>
-                        `${c.chunk_id}${c.relative_path ? ` (${c.relative_path})` : ""}${c.start_line != null ? ` L${c.start_line}` : ""}${c.end_line != null ? `-${c.end_line}` : ""}`
-                      ).join("; ")
-                    : "无引用来源"
-                }</dd>
+                <dt>Citations</dt><dd>{Array.isArray(memorySource?.canonical?.citations) && memorySource.canonical.citations.length > 0 ? memorySource.canonical.citations.map((c: Citation) => `${c.chunk_id}${c.relative_path ? ` (${c.relative_path})` : ""}${c.start_line != null ? ` L${c.start_line}` : ""}${c.end_line != null ? `-${c.end_line}` : ""}`).join("; ") : "无引用来源"}</dd>
               </dl>
               <h4>来源 Message Links</h4>
               {memorySource?.links?.length ? memorySource.links.map((link, index) => <p key={`${link.message_id ?? "unknown"}-${index}`}>{text(link.message_id)} · {text(link.relation_type)} · {text(link.citation)}</p>) : <p>未知或没有来源 Message Link。</p>}
@@ -370,12 +326,12 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
   );
 }
 
-function Pager({ offset, total, onChange }: { offset: number; total: number | null; onChange: (value: number) => void }) {
+function Pager({ offset, total, hasMore, onChange }: { offset: number; total: number | null; hasMore: boolean; onChange: (value: number) => void }) {
   return (
     <div className="inspector-pager">
       <button disabled={offset === 0} onClick={() => onChange(Math.max(0, offset - INSPECTOR_LIMIT))}>上一页</button>
       <span>{Math.floor(offset / INSPECTOR_LIMIT) + 1} / {total === null ? "未知" : Math.max(1, Math.ceil(total / INSPECTOR_LIMIT))}</span>
-      <button disabled={total !== null && offset + INSPECTOR_LIMIT >= total} onClick={() => onChange(offset + INSPECTOR_LIMIT)}>下一页</button>
+      <button disabled={!hasMore} onClick={() => onChange(offset + INSPECTOR_LIMIT)}>下一页</button>
     </div>
   );
 }
