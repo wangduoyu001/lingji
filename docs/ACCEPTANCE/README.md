@@ -8,10 +8,10 @@
 |---|---|
 | `LOCAL_EXECUTION_TASK.md` | 唯一当前本机任务单；只有 `status: ACTIVE` 才允许执行 |
 | `LOCAL_EXECUTION_RESULT.md` | 当前/最近一次本机任务的权威结果回执 |
-| `CHANGE_ACCEPTANCE_LOG.md` | 产品变化对应的增量验收要求与历史追踪；当前产品 V4 条目应从任务指定的精确产品 Commit 读取 |
+| `CHANGE_ACCEPTANCE_LOG.md` | 产品变化对应的增量验收要求与历史追踪 |
 | `CODEX_ACCEPTANCE_INSTRUCTIONS.md` | 通用本机验收规则 |
 | `MACOS_M5_ACCEPTANCE_INSTRUCTIONS.md` | Apple Silicon / M5 专项协议，仅在当前任务要求 macOS 时读取 |
-| `MEMORY_QUALITY_TRIAL.md` | 真实数据记忆质量试运行专项协议，仅在任务明确引用时读取 |
+| `MEMORY_QUALITY_TRIAL.md` | 真实数据记忆质量试运行专项协议，仅在任务明确引用时执行 |
 | `REPORT_TEMPLATE.md` | 报告固定结构 |
 
 **不存在第二份“当前任务单”。** 任何旧阶段计划、聊天摘要、PR 评论或历史报告都不能覆盖 `LOCAL_EXECUTION_TASK.md`。
@@ -26,7 +26,7 @@ AGENTS.md
 → docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
 → 当前任务明确引用的专项协议
 → docs/ACCEPTANCE/CODEX_ACCEPTANCE_INSTRUCTIONS.md
-→ 精确 product_commit 的 docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md 当前相关条目
+→ docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md 当前相关条目
 → docs/ACCEPTANCE/REPORT_TEMPLATE.md
 ```
 
@@ -36,72 +36,75 @@ AGENTS.md
 
 ## 3. 当前仓库状态
 
-截至 2026-08-16，PR #88 的新 Owner Workbench V4 候选已完成自动产品门禁并进入真实 M5 复验：
+截至 2026-08-16，PR #88 的 Owner Workbench V4 已完成真实 M5 复验：
 
 ```text
 product commit: bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9
 task: PR88-M5-OWNER-WORKBENCH-V4-BD1E7A17
-result: PENDING
-current local task: ACTIVE
+result: COMPLETED / FAIL
+current local task: IDLE
 product PR: DRAFT / DO NOT MERGE
-macOS Artifact: 9258682849 / lingji-macos-arm64
+macOS Artifact: 9258682849 / DO NOT RETRY
 ```
 
-同一精确产品 SHA 的六道自动门禁已全部 PASS：
+主人明确观察：看不出灵机实际做了什么、接管了什么，与旧版没有明显差异。
+
+主要阻塞：
+
+- 首页候选与“需要我 0 待办”矛盾；
+- 工作履历为空；
+- `Cmd+K` 真实记录失败；
+- 记忆缺少可读正文/摘要和可验证来源；
+- 自动发现缺少真实接管/执行链；
+- Window Recovery 三路径没有全部完成主人确认。
+
+技术上已经确认：产品/Artifact 身份、arm64、strict codesign、Acceptance 隔离、两轮 exact-instance Runtime 生命周期、分页终点、Secret 边界与 Production pollution=0 均通过。
+
+## 4. 当前无可执行 Artifact
+
+以下 macOS Artifact 均已由最终失败结论淘汰，永久 `DO NOT RETRY`：
 
 ```text
-tests 31928631115
-P0 Windows Gate 31928631099
-macOS Desktop Gate 31928631105
-Windows Desktop Release Baseline 31928631101
-acceptance-doc-sync 31928631103
-local-execution-handoff 31928631118
+9258682849 / bd1e7a17
+9250384637 / 1d99d10c
+9249367672 / f3cba413
+9224368022 / 2c96b3ec
+9102748834 / 171091fe
 ```
 
-本轮 V4 重点验证上一轮真实 M5 暴露的四个 P1：主人动作语义、空待办、无限分页、记忆/自动化割裂；并强制补测 Window Recovery。
+Codex 不得因为文件仍存在、CI 曾经通过或 PR 仍为 Draft 而重跑这些 Artifact。
 
-历史失败 Artifact `9250384637`、`9249367672`、`9224368022`、`9102748834` 永久 `DO NOT RETRY`。
+## 5. 下一轮进入 M5 的前置条件
 
-## 4. 当前 Artifact 身份
-
-macOS M5 本轮只能使用：
+下一轮不得先做新的首页外观。必须先建立并自动证明同一真实事实链：
 
 ```text
-Artifact ID: 9258682849
-Name: lingji-macos-arm64
-Workflow: 31928631105
-ZIP SHA256: c26408c350bf35701bdf6aa97e75f65e7bead42fb6ed92d11838334274e1a888
-DMG SHA256: a5d54cba4f99411541527be7230d568f32a8fba90efed14ff9756df6b393bb46
-Product: bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9
+SourceObject
+→ Discovery / Intent
+→ WorkItem
+→ ExecutionEvent
+→ Outcome
+→ NextAction + actor
+→ PendingAction（如确实需要主人）
+→ MemoryRecord（如产生日常永久记忆）
 ```
 
-Windows 同 SHA 发布包只用于跨平台身份与发布链证据，本轮 M5 不安装：
+首页、工作、需要我、记忆、Capture 只能投影这条同一事实链。
+
+新的 M5 任务只能在以下条件全部完成后激活：
 
 ```text
-Artifact ID: 9258675881
-Name: lingji-windows-0.1.0-bd1e7a17
-ZIP SHA256: 0696ae6615d8afc44f46efc264fd7852e7d971866efc1285f2397d87a36ce4b1
+搜索学习成熟 Agent / Task / Trace / Knowledge 产品
+→ 审计当前真实数据合同
+→ 实现统一 WorkItem / Event / Outcome / PendingAction / MemoryRecord 链
+→ 真实端到端场景测试
+→ 更新 CHANGE_ACCEPTANCE_LOG + 实施报告
+→ focused + full + release CI
+→ 新产品 Commit
+→ 同 SHA macOS / Windows Artifact
+→ 哈希锁定
+→ 新 task_id + status: ACTIVE
 ```
-
-## 5. 开发与验收流程
-
-```text
-理解需求和现有实现
-→ 搜索/学习相关成熟项目与交互案例
-→ 定义统一数据合同和验收标准
-→ 修改代码和测试
-→ 更新 CHANGE_ACCEPTANCE_LOG.md
-→ focused 验证
-→ 最终树 full / release / CI
-→ 锁定单一产品 Commit
-→ 同 SHA 生成 Artifact
-→ 更新 LOCAL_EXECUTION_TASK.md 为新 task_id + ACTIVE
-→ 本机 Codex 真机执行
-→ 报告 + 结果回执 + 远程复读 + 清理
-→ 决定修复、继续或合并
-```
-
-产品代码、Runtime、Desktop、连接器、数据链路、脚本、依赖或发布流程变化时，必须同步更新 `CHANGE_ACCEPTANCE_LOG.md`。
 
 ## 6. 本机任务硬门禁
 
@@ -121,9 +124,18 @@ ZIP SHA256: 0696ae6615d8afc44f46efc264fd7852e7d971866efc1285f2397d87a36ce4b1
 
 ## 8. 报告与回执
 
-验收结论只允许 `PASS / FAIL / BLOCKED / NOT_TESTED / SKIPPED_NOT_INSTALLED`。最终报告必须区分自动检查、主人肉眼观察、未测试项、清理与回滚，以及精确产品/Artifact/报告身份。
+最近一次失败证据：
 
-`git push` 不等于完成。必须远程重新确认报告分支、报告 Commit、报告、证据、结果回执和 PR 评论均可读取。
+```text
+Report branch: acceptance/pr88-m5-owner-workbench-v4-bd1e7a17
+Report commit: 5793e4ae22e17d1f4db2c57ecc66bf18ec65af2e
+Cleanup/result commit: 3011d796ff1bb5bff7d5e37c24e0c6236ee51d34
+PR #88 comment: 5306178636
+```
+
+原报告中的自引用 `PENDING` 占位不覆盖最终回执；最终状态以 `LOCAL_EXECUTION_RESULT.md`、验收分支最终结果和 PR 评论为准。
+
+验收结论只允许 `PASS / FAIL / BLOCKED / NOT_TESTED / SKIPPED_NOT_INSTALLED`。`git push` 不等于完成，必须远程重新确认报告分支、报告 Commit、证据、结果回执和 PR 评论均可读取。
 
 ## 9. 清理与恢复
 
@@ -139,4 +151,4 @@ Codex 负责命令、安装、进程、端口、哈希、日志、Git、报告�
 
 产品 PR 只有在当前候选对应的精确自动门禁、同 SHA Artifact、真机、主人观察、Production 隔离、报告闭环和清理全部通过后，才允许进入最终合并判断。
 
-**PR #88 当前仍是 Draft / DO NOT MERGE。当前唯一 ACTIVE 本机任务是 `PR88-M5-OWNER-WORKBENCH-V4-BD1E7A17`。**
+**PR #88 当前仍是 Draft / DO NOT MERGE。当前没有 ACTIVE 本机任务。**
