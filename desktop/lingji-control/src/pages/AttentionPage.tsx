@@ -148,7 +148,7 @@ export default function AttentionPage({
         <div className="attention-owner-count"><strong>{ownerItems.length}</strong><span>真实待办</span></div>
       </section>
 
-      {message && <Notice kind={message.includes("没有成功") ? "warning" : "success"}>{message}</Notice>}
+      {message && <Notice kind={message.includes("没有成功") ? "warning" : "info"}>{message}</Notice>}
       {resource.error && <Notice kind="warning">待办来源的最近一次刷新出现问题，灵机正在自动重试。</Notice>}
 
       {ownerItems.length ? (
