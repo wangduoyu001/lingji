@@ -1,6 +1,6 @@
 # DEVELOPMENT_RULES.md — LingJi Development Rules
 
-> Updated: 2026-07-29
+> Updated: 2026-08-16
 > Architecture authority: `docs/ARCHITECTURE.md`
 > Current-state authority: `docs/PROJECT_STATUS.md`
 > Acceptance authority: `docs/ACCEPTANCE/README.md`
@@ -153,6 +153,7 @@ Rules:
 8. The UI must never fabricate success, zero counts, GPU use, vector readiness or task completion.
 9. Brain Status, Memory Inspector, Vector Center and MCP must use shared statistics providers.
 10. Every changed page must be exercised in the real packaged Desktop; all visible controls require a real effect or an explicit unavailable state.
+11. Daily owner-facing UI must follow the active permanent-second-brain contract in Section 16; technical visibility requirements belong in Advanced unless they directly block owner capability.
 
 ## 10. Data and Ingestion Boundaries
 
@@ -243,3 +244,281 @@ Final task output must distinguish:
 - planned only
 - compatibility-only behavior
 - known blockers
+
+## 16. Active Permanent-Second-Brain Product Contract
+
+This section is the durable product-development contract for the next LingJi Desktop architecture.
+
+### 16.1 Product Goal
+
+LingJi must be developed as both:
+
+1. **the owner's second permanent memory brain**; and
+2. **an active local intelligent assistant**.
+
+Neither role is optional. A build that only stores memory but waits for manual operation is incomplete. A build that automates work but cannot transparently preserve, retrieve and correct long-term owner memory is also incomplete.
+
+The daily product promise is:
+
+> 灵机长期记住我，并持续替我观察、整理和推进数字工作；它能自己安全完成的事情自己完成，只在必须由我决定时打扰我。
+
+### 16.2 Active System Loop
+
+All supported sources should converge on one owner-comprehensible loop:
+
+```text
+Discovery
+  -> Understanding
+  -> Decision
+  -> Action
+  -> Verification
+  -> Memory
+  -> Briefing
+```
+
+A discovery must not disappear into anonymous counters. Where evidence exists, the system must retain the causal chain from discovered object to decision, action, result and memory effect.
+
+### 16.3 Decision Classes
+
+Every automatically discovered item that needs handling should resolve to one of these decision classes:
+
+```text
+AUTO    = safe, reversible and permitted; execute automatically
+RETRY   = transient failure; retry automatically within policy
+OBSERVE = insufficient evidence; keep observing without interrupting owner
+IGNORE  = duplicate, irrelevant or intentionally unsupported; record reason and stop
+ASK     = permission, privacy, conflict, irreversible action or owner-only judgment required
+```
+
+Rules:
+
+1. Only `ASK` may create a primary owner-interruption item.
+2. Technical errors that can be retried or degraded safely are not owner decisions.
+3. The reason for each non-trivial decision must be traceable to evidence or explicit policy.
+4. A UI label may simplify the wording but may not change the underlying decision class.
+
+### 16.4 Owner Work Item Contract
+
+The daily UI must not derive owner truth from unrelated summary counts. The backend/projector should expose real work items carrying, when applicable:
+
+```text
+object_id
+object_type
+title
+source
+provenance
+discovered_at
+why_it_matters
+decision_class
+decision_reason
+current_stage
+what_was_done
+result
+next_action
+next_actor
+owner_action_required
+owner_action_id
+evidence_id
+memory_effect
+```
+
+Rules:
+
+1. No `owner_action_id` means no clickable owner action.
+2. No evidence means the UI must not present a specific claim as confirmed fact.
+3. `next_actor` must resolve to a human concept such as `LingJi`, `Owner`, `External system`, or `None/completed`.
+4. Pagination controls must follow backend-confirmed `has_more`/cursor/total semantics. Frontend code may not invent another page merely because the current page is full.
+5. If summary counts and object-level details disagree, show a consistency/degraded state rather than hiding the mismatch.
+
+### 16.5 Daily Information Architecture
+
+Primary navigation should converge toward:
+
+```text
+首页
+记忆
+工作
+需要我
+高级
+```
+
+The homepage is a briefing, not a monitoring dashboard. It should answer in this order:
+
+1. **我现在需要做什么？**
+2. **灵机刚刚替我做了什么？**
+3. **灵机现在正在做什么？**
+4. **接下来灵机会做什么？**
+5. **记忆发生了什么变化？**
+6. **有什么重要冲突、缺口或未知？**
+
+Do not fill the homepage with technical statistics simply because they are available.
+
+### 16.6 Memory Is a Primary Surface
+
+Memory must not remain hidden as an advanced inspector.
+
+The primary Memory experience must eventually support:
+
+- natural-language memory query;
+- browsable durable memories;
+- project / decision / preference / fact / plan or equivalent human-readable grouping;
+- source and evidence inspection;
+- confidence / verification state;
+- corrections and governed forgetting;
+- superseded or conflicting memory;
+- recent memory changes;
+- justified memory gaps.
+
+A graph view is optional and secondary. It does not substitute for browse/search/evidence.
+
+### 16.7 Memory Layers
+
+The product should distinguish at least these conceptual layers even if the physical storage implementation differs:
+
+```text
+Raw Source
+= imported or observed evidence, provenance preserved
+
+Working Memory
+= temporary/project/task context that LingJi may update automatically under policy
+
+Permanent/Core Memory
+= durable owner knowledge, preferences, decisions and important facts governed by permanent-memory policy
+```
+
+The permanent-memory policy must remain consistent with the architecture authority and safety rules. Product UX may propose safer automation later, but it may not silently weaken the current permanent-memory approval boundary without an explicit architecture and acceptance change.
+
+### 16.8 Memory Gap and Conflict Detection
+
+The system should not make the owner manually guess what is missing.
+
+Where evidence is sufficient, LingJi may surface:
+
+- a decision with no recorded reason;
+- a project with no current goal or completion criterion;
+- conflicting owner preferences or project priorities;
+- frequently repeated information that has not yet become durable memory;
+- stale memory contradicted by newer evidence;
+- a source that should contribute memory but has stopped syncing.
+
+Each gap/conflict must explain why it was surfaced and what evidence supports it. Do not invent gaps from generic templates when there is no owner-specific evidence.
+
+### 16.9 Active Source Discovery
+
+For approved source classes, prefer this interaction:
+
+```text
+safe metadata scan
+-> source/tool detection
+-> capability judgment
+-> safe automatic handling
+-> permission only at the boundary where content/privacy/irreversible access begins
+```
+
+Rules:
+
+1. No drive-wide scanning.
+2. Discovery scopes must be explicit and safe.
+3. Explain what was found and what LingJi can do with it.
+4. Explain why authorization is needed before asking for it.
+5. After an approved persistent permission, do not repeatedly ask for the same low-risk scope unless permission expires or the scope changes.
+6. Connection state should be expressed in owner value terms, not only protocol/auth jargon.
+
+### 16.10 Global Owner Input
+
+Manual capture remains necessary, but it should not require the owner to understand internal module routing.
+
+The product should converge on one obvious global input/command entry that can route intents such as:
+
+```text
+记住：……
+查找：……
+我为什么之前决定……？
+把这份资料加入灵机
+最近灵机自动做了什么？
+```
+
+Existing Capture Center contracts should be reused behind this experience rather than duplicated.
+
+### 16.11 Work History, Not Raw Logs
+
+The normal owner activity page should describe meaningful work history:
+
+```text
+发现了什么
+为什么处理
+采取了什么动作
+结果是什么
+是否影响记忆
+下一步是什么
+```
+
+Raw logs remain Advanced diagnostics.
+
+### 16.12 Capability-Oriented Degradation
+
+Daily UI must describe degraded capabilities rather than internal implementation names where possible.
+
+Prefer:
+
+```text
+语义检索暂不可用，已使用全文检索
+```
+
+instead of:
+
+```text
+Qdrant unavailable / embedding offline
+```
+
+Technical detail remains available under Advanced.
+
+### 16.13 V4 Automatic Acceptance Before Owner-Machine Acceptance
+
+A new real-machine M5 task must not be activated merely because the UI builds.
+
+Before a new Artifact may be handed to the owner machine, the exact product SHA must automatically pass scenario-level acceptance covering at minimum:
+
+1. no data / first-run state;
+2. approved source discovered automatically;
+3. source requiring permission;
+4. new item discovered and automatically processed;
+5. duplicate item ignored with reason;
+6. transient failure retried automatically;
+7. item that genuinely requires owner decision;
+8. no real pending action -> no `去处理` control;
+9. real pending action -> target page contains the exact object/action;
+10. backend `has_more=false` -> no active next-page control;
+11. summary/detail inconsistency -> explicit degraded/consistency state;
+12. real execution trace visible for a selected work item;
+13. memory created/updated state is traceable to source evidence;
+14. memory browse/search can show what is actually remembered;
+15. memory-empty state explains whether the system will continue automatically or needs the owner;
+16. vector/semantic failure preserves lexical retrieval and reports capability degradation truthfully;
+17. privacy projection removes secret/token/auth material, private absolute paths and raw content where the UI contract does not require them;
+18. Mac and Windows package/build/runtime regressions remain green on the same product SHA.
+
+Only after all automatic gates for the exact candidate SHA pass may `docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md` be switched to a new `ACTIVE` M5 task and new Mac/Windows Artifacts be selected.
+
+Real-machine acceptance should then concentrate on things automation cannot fully prove: immediate comprehension, visual quality, actual local discovery, packaged behavior, window recovery, native lifecycle and physical production-data isolation.
+
+### 16.14 Owner-Comprehension Exit Criterion
+
+The V4 daily experience is not considered complete until a first-time owner can answer within roughly five seconds, without reading technical documentation:
+
+```text
+灵机刚刚做了什么？
+灵机现在在做什么？
+灵机接下来会做什么？
+我现在需要做什么？
+```
+
+And from the primary Memory surface, the owner must be able to determine:
+
+```text
+灵机到底记住了什么？
+这些记忆来自哪里？
+哪些重要信息仍然缺失或冲突？
+```
+
+Passing API/build tests without satisfying this product comprehension contract is not sufficient for M5 acceptance.
