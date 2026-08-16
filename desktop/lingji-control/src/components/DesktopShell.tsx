@@ -1,16 +1,15 @@
 import { useState, type ReactNode } from "react";
+import type { LingJiApi } from "../api";
 import { NAVIGATION_GROUPS, PRIMARY_NAVIGATION } from "../navigation";
 import type { ReleaseMetadata } from "../hooks/useReleaseMetadata";
 import type { ConnectionState } from "../hooks/useLingJiConnection";
-import {
-  runtimeStateLabel,
-  type RuntimeBootstrapStatus,
-  type RuntimeStatus,
-} from "../runtimeTypes";
+import { runtimeStateLabel, type RuntimeBootstrapStatus, type RuntimeStatus } from "../runtimeTypes";
 import type { NavigationItem, PageId } from "../types";
+import GlobalOwnerCommand from "./GlobalOwnerCommand";
 import NavIcon from "./NavIcon";
 
 type Props = {
+  api: LingJiApi;
   page: PageId;
   current: NavigationItem;
   connected: boolean;
@@ -30,6 +29,7 @@ type Props = {
 };
 
 export default function DesktopShell({
+  api,
   page,
   current,
   connected,
@@ -56,7 +56,7 @@ export default function DesktopShell({
   const externalRuntime = runtimeHealthy && runtimeStatus?.managed === false;
   const runtimeAvailable = runtimeStatus?.binary_available !== false;
   const runtimeConfigured = bootstrapStatus?.configured === true && !bootstrapStatus.c_drive_write_detected;
-  const advancedPage = current.group === "advanced";
+  const advancedPage = current.group === "advanced" || page === "diagnostics";
 
   const copyDiagnostics = async () => {
     try {
@@ -68,23 +68,28 @@ export default function DesktopShell({
     window.setTimeout(() => setCopyState("idle"), 2200);
   };
 
-  const shellStateLabel = connectionState === "configuration_required"
-    ? "等待数据目录配置"
-    : runtimeStateLabel(runtimeStatus);
+  const ownerState = connectionState === "configuration_required"
+    ? { title: "需要设置资料位置", detail: "灵机还没有开始工作", tone: "warning" }
+    : ownerStopped
+      ? { title: "灵机已暂停", detail: "后台观察和处理已暂停", tone: "paused" }
+      : connected && runtimeHealthy
+        ? { title: "灵机正在工作", detail: "会继续观察已授权环境", tone: "ok" }
+        : autoRecoveryActive || connectionState === "booting"
+          ? { title: "灵机正在恢复", detail: "无需手动刷新", tone: "working" }
+          : { title: "灵机暂时不可用", detail: "正在等待本机核心恢复", tone: "warning" };
 
   return (
-    <div className="desktop-frame">
-      <aside className="desktop-sidebar" aria-label="灵机主导航">
-        <div className="desktop-brand">
+    <div className="desktop-frame workbench-shell-v4">
+      <aside className="desktop-sidebar v4-sidebar" aria-label="灵机主导航">
+        <div className="desktop-brand v4-brand">
           <div className="desktop-brand-mark">灵</div>
           <div className="desktop-brand-copy">
             <strong>灵机</strong>
-            <span>个人记忆操作系统</span>
+            <span>第二永久记忆大脑</span>
           </div>
         </div>
 
-        <nav className="desktop-nav desktop-nav-primary">
-          <div className="desktop-nav-group-title">运行观察</div>
+        <nav className="desktop-nav desktop-nav-primary v4-primary-nav">
           <div className="desktop-nav-items">
             {PRIMARY_NAVIGATION.map((item) => (
               <button
@@ -95,108 +100,79 @@ export default function DesktopShell({
                 aria-current={page === item.id ? "page" : undefined}
               >
                 <span className="desktop-nav-icon"><NavIcon name={item.icon} /></span>
-                <span className="desktop-nav-copy">
-                  <strong>{item.label}</strong>
-                  <small>{item.hint}</small>
-                </span>
+                <span className="desktop-nav-copy"><strong>{item.label}</strong><small>{item.hint}</small></span>
               </button>
             ))}
           </div>
         </nav>
 
-        <div className="desktop-sidebar-status">
-          <div className="desktop-status-line">
-            <span className={runtimeHealthy ? "status-dot online" : "status-dot"} />
-            <div>
-              <strong>{shellStateLabel}</strong>
-              <small>
-                {runtimeStatus
-                  ? `${runtimeStatus.host}:${runtimeStatus.port}${externalRuntime ? " · 外部进程" : managedRuntime ? ` · PID ${runtimeStatus.pid ?? "未知"}` : ""}`
-                  : connectionState === "configuration_required"
-                    ? "核心尚未启动"
-                    : "正在读取本机核心"}
-              </small>
+        <div className="v4-sidebar-spacer" />
+
+        <div className={`v4-owner-runtime ${ownerState.tone}`}>
+          <div className="v4-owner-runtime-summary">
+            <span className={`v4-runtime-dot ${ownerState.tone}`} />
+            <div><strong>{ownerState.title}</strong><small>{ownerState.detail}</small></div>
+          </div>
+
+          {(bootstrapStatus?.c_drive_write_detected || runtimeStatus?.last_error) && (
+            <div className="v4-runtime-owner-warning">
+              {bootstrapStatus?.c_drive_write_detected ? "检测到不允许的运行数据位置，核心已阻止启动。" : "最近一次核心恢复没有成功。"}
             </div>
-          </div>
-
-          {bootstrapStatus?.active_workspace && (
-            <small className="desktop-runtime-path">
-              {bootstrapStatus.active_workspace} · {bootstrapStatus.data_root_display || "数据根未知"}
-            </small>
-          )}
-          {bootstrapStatus?.c_drive_write_detected && (
-            <small className="desktop-runtime-error">检测到 C 盘运行数据路径，核心已阻止启动。</small>
-          )}
-          {autoRecoveryActive && <small className="desktop-runtime-warning">连接中断，灵机会自动恢复，无需手动操作。</small>}
-          {ownerStopped && <small className="desktop-runtime-warning">主人已停止核心，自动恢复暂时暂停。</small>}
-          {runtimeStatus?.last_error && <small className="desktop-runtime-error">{runtimeStatus.last_error}</small>}
-          {!runtimeAvailable && runtimeConfigured && connectionState !== "unsupported" && (
-            <small className="desktop-runtime-warning">当前安装包未包含灵机核心，仍可连接手动启动的8766服务。</small>
           )}
 
-          <div className="desktop-release-line">
-            <span>v{releaseMetadata?.version ?? "0.1.0"}</span>
-            <span>{releaseMetadata?.channel ?? "development"}</span>
-            <span>{shortCommit}</span>
-          </div>
+          <details className="desktop-runtime-tools v4-runtime-details" open={ownerStopped}>
+            <summary>运行与诊断详情</summary>
+            <div className="v4-runtime-facts">
+              <span>状态 <strong>{connectionState === "configuration_required" ? "等待配置" : runtimeStateLabel(runtimeStatus)}</strong></span>
+              <span>核心 <strong>{runtimeStatus ? `${runtimeStatus.host}:${runtimeStatus.port}` : "读取中"}</strong></span>
+              {managedRuntime && <span>进程 <strong>PID {runtimeStatus?.pid ?? "未知"}</strong></span>}
+              {externalRuntime && <span>进程 <strong>外部核心</strong></span>}
+              {bootstrapStatus?.active_workspace && <span>工作区 <strong>{bootstrapStatus.active_workspace}</strong></span>}
+              {bootstrapStatus?.data_root_display && <span>资料位置 <strong>{bootstrapStatus.data_root_display}</strong></span>}
+              <span>版本 <strong>v{releaseMetadata?.version ?? "0.1.0"} · {shortCommit}</strong></span>
+            </div>
 
-          {connectionState !== "unsupported" && connectionState !== "configuration_required" && (
-            <details className="desktop-runtime-tools" open={ownerStopped}>
-              <summary>{runtimeHealthy ? "运行详情" : ownerStopped ? "恢复与诊断" : "故障工具"}</summary>
-              <div className="desktop-sidebar-actions">
-                {!runtimeHealthy && (
-                  <button className="desktop-retry-button" disabled={Boolean(runtimeBusy)} onClick={onRetry}>
-                    {runtimeBusy === "ensure" ? "恢复中…" : ownerStopped ? "恢复运行" : "立即重试"}
-                  </button>
-                )}
-                {managedRuntime && (
-                  <>
-                    <button className="desktop-retry-button" disabled={Boolean(runtimeBusy)} onClick={onRestartRuntime}>
-                      {runtimeBusy === "restart" ? "重启中…" : "重启核心"}
-                    </button>
-                    <button className="desktop-stop-button" disabled={Boolean(runtimeBusy)} onClick={onStopRuntime}>
-                      {runtimeBusy === "stop" ? "停止中…" : "停止核心"}
-                    </button>
-                  </>
-                )}
-                {externalRuntime && !connected && (
-                  <button className="desktop-retry-button" disabled={Boolean(runtimeBusy)} onClick={onRetry}>重新连接</button>
-                )}
-                <button className="desktop-diagnostics-button" onClick={() => void copyDiagnostics()}>
-                  {copyState === "copied" ? "诊断信息已复制" : copyState === "failed" ? "复制失败" : "复制诊断信息"}
+            {!runtimeAvailable && runtimeConfigured && connectionState !== "unsupported" && (
+              <small className="desktop-runtime-warning">当前安装包没有内置核心，只能连接手动启动的本机服务。</small>
+            )}
+            {autoRecoveryActive && <small className="desktop-runtime-warning">连接中断后正在自动恢复。</small>}
+            {runtimeStatus?.last_error && <small className="desktop-runtime-error">{runtimeStatus.last_error}</small>}
+
+            <div className="desktop-sidebar-actions">
+              {!runtimeHealthy && connectionState !== "configuration_required" && (
+                <button className="desktop-retry-button" disabled={Boolean(runtimeBusy)} onClick={onRetry}>
+                  {runtimeBusy === "ensure" ? "恢复中…" : ownerStopped ? "恢复运行" : "重新连接"}
                 </button>
-              </div>
-            </details>
-          )}
+              )}
+              {managedRuntime && (
+                <>
+                  <button className="desktop-retry-button" disabled={Boolean(runtimeBusy)} onClick={onRestartRuntime}>{runtimeBusy === "restart" ? "重启中…" : "重启核心"}</button>
+                  <button className="desktop-stop-button" disabled={Boolean(runtimeBusy)} onClick={onStopRuntime}>{runtimeBusy === "stop" ? "停止中…" : "暂停核心"}</button>
+                </>
+              )}
+              {externalRuntime && !connected && <button className="desktop-retry-button" disabled={Boolean(runtimeBusy)} onClick={onRetry}>重新连接</button>}
+              <button className="desktop-diagnostics-button" onClick={() => void copyDiagnostics()}>{copyState === "copied" ? "诊断信息已复制" : copyState === "failed" ? "复制失败" : "复制诊断信息"}</button>
+            </div>
+          </details>
         </div>
       </aside>
 
-      <main className="desktop-main">
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-copy">
-            <div className="desktop-breadcrumb">
-              灵机 / {NAVIGATION_GROUPS.find((group) => group.id === current.group)?.label}
-              {advancedPage && <button className="toolbar-back-button" onClick={() => onNavigate("diagnostics")}>返回高级诊断</button>}
+      <main className="desktop-main v4-main">
+        <header className="desktop-toolbar v4-toolbar">
+          <div className="v4-toolbar-topline">
+            <div className="desktop-toolbar-copy">
+              <div className="desktop-breadcrumb">
+                {advancedPage ? `灵机 / ${NAVIGATION_GROUPS.find((group) => group.id === "advanced")?.label ?? "高级"}` : "灵机 / 日常"}
+                {current.group === "advanced" && <button className="toolbar-back-button" onClick={() => onNavigate("diagnostics")}>返回高级</button>}
+              </div>
+              <h1>{current.label}</h1>
+              <p>{current.hint}</p>
             </div>
-            <h1>{current.label}</h1>
-            <p>{current.hint}</p>
+            <div className={`v4-connection-chip ${connected ? "connected" : ""}`}><span className={`v4-runtime-dot ${runtimeHealthy ? "ok" : "warning"}`} /><span>{connected ? "在线" : connectionState === "booting" ? "启动中" : ownerStopped ? "已暂停" : "恢复中"}</span></div>
           </div>
-          <div className={connected ? "desktop-connection-badge connected" : "desktop-connection-badge"}>
-            <span className={connected ? "status-dot online" : "status-dot"} />
-            <span>
-              {connected
-                ? "运行中"
-                : connectionState === "booting"
-                  ? "启动中"
-                  : connectionState === "configuration_required"
-                    ? "需要配置"
-                    : ownerStopped
-                      ? "已暂停"
-                      : "自动恢复中"}
-            </span>
-          </div>
+          <GlobalOwnerCommand api={api} connected={connected} onNavigate={onNavigate} />
         </header>
-        <div className="desktop-content">{children}</div>
+        <div className="desktop-content v4-content">{children}</div>
       </main>
     </div>
   );
