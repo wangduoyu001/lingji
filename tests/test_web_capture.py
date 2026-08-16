@@ -31,6 +31,24 @@ class WebCaptureTests(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
+    def test_manual_text_is_routed_and_remains_text_source(self):
+        result = self.pipeline.execute(
+            "text",
+            payload={
+                "title": "用户偏好",
+                "text": "Mac 版优先使用云端生图。",
+                "capture_method": "manual_text",
+            },
+            adapter_name="web_capture",
+        )
+        self.assertEqual(result["documents"], 1)
+        self.assertEqual(result["summary"]["source_type"], "text")
+        self.assertEqual(result["summary"]["platform"], "manual_text")
+        path = Path(result["created"][0]["path"])
+        body = path.read_text(encoding="utf-8")
+        self.assertIn("用户偏好", body)
+        self.assertIn("Mac 版优先使用云端生图", body)
+
     def test_video_channel_payload_is_routed_and_indexed(self):
         result = self.pipeline.execute(
             "video_channel",
