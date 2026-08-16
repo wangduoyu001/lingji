@@ -5,6 +5,7 @@ import RuntimeBoundary from "./components/RuntimeBoundary";
 import "./DesktopUX.css";
 import "./ReleaseUX.css";
 import "./OwnerWorkFeed.css";
+import "./WorkbenchV4.css";
 import { useLingJiConnection } from "./hooks/useLingJiConnection";
 import { useReleaseMetadata } from "./hooks/useReleaseMetadata";
 import { NAVIGATION } from "./navigation";
@@ -14,17 +15,30 @@ import type { PageId } from "./types";
 export default function App() {
   const [page, setPage] = useState<PageId>("overview");
   const [inspectorTarget, setInspectorTarget] = useState<CaptureInspectorTarget | null>(null);
+  const [reviewTargetId, setReviewTargetId] = useState<string | null>(null);
   const connection = useLingJiConnection();
   const release = useReleaseMetadata();
   const current = NAVIGATION.find((item) => item.id === page) ?? NAVIGATION[0];
 
+  const navigate = (nextPage: PageId) => {
+    setReviewTargetId(null);
+    setPage(nextPage);
+  };
+
   const openInspector = (target: CaptureInspectorTarget) => {
     setInspectorTarget(target);
+    setReviewTargetId(null);
     setPage("memory_inspector");
+  };
+
+  const openReview = (memoryId: string) => {
+    setReviewTargetId(memoryId);
+    setPage("memory_review");
   };
 
   return (
     <DesktopShell
+      api={connection.api}
       page={page}
       current={current}
       connected={connection.connected}
@@ -35,7 +49,7 @@ export default function App() {
       runtimeBusy={connection.runtimeBusy}
       ownerStopped={connection.ownerStopped}
       autoRecoveryActive={connection.autoRecoveryActive}
-      onNavigate={setPage}
+      onNavigate={navigate}
       onRetry={() => void connection.connect()}
       onStopRuntime={() => void connection.stopRuntime()}
       onRestartRuntime={() => void connection.restartRuntime()}
@@ -64,8 +78,10 @@ export default function App() {
           connected={connection.connected}
           overview={connection.overview}
           inspectorTarget={inspectorTarget}
+          reviewTargetId={reviewTargetId}
           onOpenInspector={openInspector}
-          onNavigate={setPage}
+          onOpenReview={openReview}
+          onNavigate={navigate}
         />
       </RuntimeBoundary>
     </DesktopShell>

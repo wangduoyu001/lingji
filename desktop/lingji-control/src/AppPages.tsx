@@ -12,6 +12,7 @@ import DiagnosticsPage from "./pages/DiagnosticsPage";
 import JobsPage from "./pages/JobsPage";
 import LogsPage from "./pages/LogsPage";
 import MediaPage from "./pages/MediaPage";
+import MemoryHomePage from "./pages/MemoryHomePage";
 import MemoryInspectorLoopPage from "./pages/MemoryInspectorLoopPage";
 import MemoryReviewPage from "./pages/MemoryReviewPage";
 import ModelsPage from "./pages/ModelsPage";
@@ -31,21 +32,24 @@ type AppPagesProps = {
   connected: boolean;
   overview: Row | null;
   inspectorTarget: CaptureInspectorTarget | null;
+  reviewTargetId: string | null;
   onOpenInspector: (target: CaptureInspectorTarget) => void;
+  onOpenReview: (memoryId: string) => void;
   onNavigate: (page: PageId) => void;
 };
 
 export default function AppPages(props: AppPagesProps) {
-  const { page, api, connected, overview, inspectorTarget, onOpenInspector, onNavigate } = props;
+  const { page, api, connected, overview, inspectorTarget, reviewTargetId, onOpenInspector, onOpenReview, onNavigate } = props;
   return <section className="page-content">
-    {page === "overview" && <OverviewPage data={overview} api={api} active={connected} onNavigate={onNavigate} />}
-    {page === "activity" && <ActivityPage api={api} active={connected} />}
-    {page === "attention" && <AttentionPage api={api} active={connected} overview={overview} onNavigate={onNavigate} />}
+    {page === "overview" && <OverviewPage data={overview} api={api} active={connected} onNavigate={onNavigate} onOpenReview={onOpenReview} />}
+    {page === "memory" && <MemoryHomePage api={api} active={connected} onNavigate={onNavigate} />}
+    {page === "activity" && <ActivityPage api={api} active={connected} onNavigate={onNavigate} />}
+    {page === "attention" && <AttentionPage api={api} active={connected} overview={overview} onNavigate={onNavigate} onOpenReview={onOpenReview} />}
     {page === "diagnostics" && <DiagnosticsPage onNavigate={onNavigate} />}
     {page === "brain_status" && <BrainStatusPage api={api} active={connected} />}
     {page === "memory_inspector" && <MemoryInspectorLoopPage api={api} active={connected} target={inspectorTarget} />}
     {page === "codex_workspace" && <CodexWorkspacePage api={api} active={connected} onOpenInspector={onOpenInspector} />}
-    {page === "memory_review" && <MemoryReviewPage api={api} active={connected} />}
+    {page === "memory_review" && <MemoryReviewPage api={api} active={connected} targetMemoryId={reviewTargetId} />}
     {page === "auto_review" && <AutoReviewPage api={api} active={connected} />}
     {page === "capture_center" && <CaptureCenterPage api={api} active={connected} onOpenInspector={onOpenInspector} />}
     {page === "obsidian" && <ObsidianLoopPage api={api} active={connected} />}

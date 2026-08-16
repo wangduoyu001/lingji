@@ -19,7 +19,12 @@ assert.match(shell, /PRIMARY_NAVIGATION/);
 assert.match(shell, /connectionState/);
 assert.match(navigation, /id: "auto_review"/);
 assert.match(navigation, /ADVANCED_NAVIGATION/);
-assert.equal((navigation.match(/group: "observe"/g) ?? []).length, 4);
+const primaryBlock = navigation.match(/PRIMARY_NAVIGATION:[\s\S]*?\];/)?.[0] ?? "";
+assert.equal((primaryBlock.match(/group: "observe"/g) ?? []).length, 5, "V4 owner navigation must contain five primary entries");
+for (const id of ["overview", "memory", "activity", "attention", "diagnostics"]) {
+  assert.ok(primaryBlock.includes(`id: "${id}"`), `V4 primary navigation is missing ${id}`);
+}
+assert.equal(primaryBlock.includes('id: "auto_review"'), false, "Auto Review must remain an advanced diagnostic surface");
 
 for (const endpoint of [
   "/api/auto-review/status",

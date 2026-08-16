@@ -12,10 +12,11 @@ const dt = (value?: string) => value ? new Date(value).toLocaleString() : "未�
 const hasFilters = (filters: ReviewFilters) => Boolean(filters.projectId || filters.agent || filters.type || filters.importance || filters.q);
 const confidenceLabel = (value: unknown) => typeof value === "number" ? `${Math.round(value * 100)}%` : value == null || value === "" ? "未知" : String(value);
 
-export default function MemoryReviewPage({ api, active }: PageProps) {
+export default function MemoryReviewPage({ api, active, targetMemoryId = null }: PageProps & { targetMemoryId?: string | null }) {
   const client = useMemo(() => new MemoryReviewApi(api), [api]);
   const [filters, setFilters] = useState<ReviewFilters>({ projectId: "", agent: "", type: "", importance: "", q: "", limit: REVIEW_LIMIT, offset: 0 });
   const [items, setItems] = useState<MemoryCandidate[]>([]);
+  const [hasMore, setHasMore] = useState(false);
   const [selected, setSelected] = useState<MemoryCandidate | null>(null);
   const [editContent, setEditContent] = useState("");
   const [rejectReason, setRejectReason] = useState("");
@@ -36,7 +37,13 @@ export default function MemoryReviewPage({ api, active }: PageProps) {
     try {
       const response = await client.candidates(filters, abort.signal);
       if (id === requestId.current) {
-        setItems(response.items ?? []);
+        const nextItems = response.items ?? [];
+        const total = response.pagination?.total ?? null;
+        setItems(nextItems);
+        setHasMore(
+          response.pagination?.has_more
+          ?? (total !== null ? filters.offset + REVIEW_LIMIT < total : nextItems.length >= REVIEW_LIMIT),
+        );
         setError(null);
       }
     } catch (reason) {
@@ -45,6 +52,26 @@ export default function MemoryReviewPage({ api, active }: PageProps) {
   }, [active, client, filters]);
 
   useEffect(() => { void load(); return () => abortRef.current?.abort(); }, [load]);
+
+  useEffect(() => {
+    if (!active || !targetMemoryId) return;
+    let cancelled = false;
+    setBusy(`target:${targetMemoryId}`);
+    client.candidate(targetMemoryId)
+      .then((detail) => {
+        if (cancelled) return;
+        setSelected(detail);
+        setEditContent(detail.content ?? "");
+        setRejectReason("");
+        setIntegrity(null);
+        setError(null);
+      })
+      .catch((reason) => {
+        if (!cancelled && reason instanceof ApiError) setError(reason);
+      })
+      .finally(() => { if (!cancelled) setBusy(""); });
+    return () => { cancelled = true; };
+  }, [active, client, targetMemoryId]);
 
   const openCandidate = async (row: MemoryCandidate) => {
     setBusy(`detail:${row.memory_id}`);
@@ -146,6 +173,7 @@ export default function MemoryReviewPage({ api, active }: PageProps) {
     </section>
 
     <Notice kind="warning"><strong>这里是唯一的记忆变更入口。</strong> Auto Review SHADOW 只提供建议和风险解释，不会代替主人点击批准、拒绝、归档或新增长期记忆。</Notice>
+    {targetMemoryId && selected?.memory_id === targetMemoryId && <Notice kind="info">已直接定位到你刚才选择的候选记忆，不需要再从列表里寻找。</Notice>}
     {error && <div className="loop-state error">{error.status === 409 ? "候选内容已变化，请刷新后重新审核。" : error.status === 401 ? "需要本地授权" : error.status === 503 ? "服务暂不可用" : "操作失败，已保留编辑内容。"}</div>}
 
     <section className="review-workbench">
@@ -176,7 +204,11 @@ export default function MemoryReviewPage({ api, active }: PageProps) {
             </button>
           )) : <Empty text={hasFilters(filters) ? "筛选后没有候选记忆。" : "没有待审核记忆。"} />}
         </div>
-        <div className="loop-pager"><button disabled={filters.offset === 0} onClick={() => setFilters({ ...filters, offset: Math.max(0, filters.offset - REVIEW_LIMIT) })}>上一页</button><span>第 {Math.floor(filters.offset / REVIEW_LIMIT) + 1} 页</span><button onClick={() => setFilters({ ...filters, offset: filters.offset + REVIEW_LIMIT })}>下一页</button></div>
+        <div className="loop-pager">
+          <button disabled={filters.offset === 0} onClick={() => setFilters({ ...filters, offset: Math.max(0, filters.offset - REVIEW_LIMIT) })}>上一页</button>
+          <span>第 {Math.floor(filters.offset / REVIEW_LIMIT) + 1} 页</span>
+          <button disabled={!hasMore} onClick={() => setFilters({ ...filters, offset: filters.offset + REVIEW_LIMIT })}>下一页</button>
+        </div>
       </aside>
 
       <section className="loop-panel review-detail-panel">
