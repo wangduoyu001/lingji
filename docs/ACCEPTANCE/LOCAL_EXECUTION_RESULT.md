@@ -17,6 +17,8 @@ report_branch: acceptance/pr88-m5-owner-work-feed-v3-1d99d10c
 report_commit: 74ec2bf67795387ca1ae23377a3deda299cbcfd5
 cleanup_receipt_commit: d81713833d3d421554f35305f52459f4b4a3b236
 report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_1d99d10c.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR88_M5_OWNER_WORK_FEED_V3_SUMMARY_1d99d10c.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR88_M5_OWNER_WORK_FEED_V3_HASHES_1d99d10c.txt
 cleanup_before: PASS
 cleanup_after: PASS
 remote_branch_verified: true
