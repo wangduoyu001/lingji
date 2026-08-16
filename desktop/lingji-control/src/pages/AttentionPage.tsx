@@ -56,11 +56,13 @@ export default function AttentionPage({
   active,
   overview,
   onNavigate,
+  onOpenReview,
 }: {
   api: LingJiApi;
   active: boolean;
   overview: Row | null;
   onNavigate: (page: PageId) => void;
+  onOpenReview: (memoryId: string) => void;
 }) {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
@@ -161,7 +163,7 @@ export default function AttentionPage({
                 {item.kind === "import" && <small>对象：{item.candidate.candidate_id} · 来源 {item.source.label}</small>}
               </div>
               <div className="attention-object-action">
-                {item.kind === "memory" && <button className="v4-button primary" onClick={() => onNavigate("memory_review")}>审核这条记忆</button>}
+                {item.kind === "memory" && <button className="v4-button primary" onClick={() => onOpenReview(item.candidate.memory_id)}>审核这条记忆</button>}
                 {item.kind === "import" && <button className="v4-button primary" disabled={Boolean(busy)} onClick={() => void authorizeImport(item)}>{busy === item.id ? "授权中…" : "允许读取"}</button>}
                 {item.kind === "vector" && <button className="v4-button" onClick={() => onNavigate("vector_center")}>查看重建说明</button>}
               </div>
