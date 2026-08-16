@@ -16,6 +16,9 @@ const [
   workflow,
   runtimeBoundary,
   overview,
+  memory,
+  attention,
+  shell,
   workFeed,
   autopilotEngine,
 ] = await Promise.all([
@@ -28,6 +31,9 @@ const [
   read("../../../.github/workflows/macos-desktop-gate.yml"),
   read("../src/components/RuntimeBoundary.tsx"),
   read("../src/pages/OverviewPage.tsx"),
+  read("../src/pages/MemoryHomePage.tsx"),
+  read("../src/pages/AttentionPage.tsx"),
+  read("../src/components/DesktopShell.tsx"),
   read("../src/ownerWorkFeed.ts"),
   read("../../../src/autopilot/engine.py"),
 ]);
@@ -100,20 +106,44 @@ assert.equal(
   "manual data-root selection must be an advanced fallback, not a first-run action",
 );
 
-// Daily home consumes sanitized projections only. Auth state still feeds the bounded
-// Autopilot classifier and credential material never belongs on the owner surface.
+// Daily owner surfaces consume sanitized projections only. Credential state still feeds
+// the bounded Autopilot classifier and credential material never belongs on owner surfaces.
 assert.match(autopilotEngine, /auth_status_provider/);
 assert.match(autopilotEngine, /auth_permission_insufficient/);
 assert.match(autopilotEngine, /auth_reauthentication_required/);
-assert.equal(/token|authorization|cookie/i.test(overview), false, "Daily home must not render credential material");
-assert.match(overview, /你现在需要做什么/);
-assert.match(overview, /资料工作清单/);
-assert.match(overview, /灵机已做/);
-assert.match(overview, /下一步/);
+for (const surface of [overview, memory, attention]) {
+  assert.equal(/authorization|cookie|control_token/i.test(surface), false, "Daily owner surfaces must not render credential material");
+}
+
+// V4 owner contract: briefing, permanent-memory evidence, object-backed attention and
+// technical runtime details hidden behind an explicit advanced disclosure.
+for (const token of [
+  "现在需要你吗",
+  "刚刚替你做了什么",
+  "现在正在做什么",
+  "接下来灵机会做什么",
+  "记忆发生了什么变化",
+  "主动发现",
+]) assert.ok(overview.includes(token), `V4 home is missing ${token}`);
+assert.match(overview, /\/api\/memory\/review\/candidates/);
+assert.match(overview, /candidate\.memory_id/);
+assert.match(overview, /candidate\.candidate_id/);
+assert.match(overview, /reviewMismatch/);
+assert.equal(overview.includes("CurrentWorkPanel"), false, "V4 home must not restore the old status-card composition");
+
+for (const token of ["第二永久记忆大脑", "记住了什么", "为什么能相信它", "来源证据", "记忆缺口"]) {
+  assert.ok(memory.includes(token), `Primary memory surface is missing ${token}`);
+}
+assert.match(memory, /pagination\?\.has_more/);
+assert.match(attention, /每个按钮背后都有一个真实对象/);
+assert.match(attention, /AUTHORIZE_ASSISTANT_IMPORT_/);
+assert.equal(attention.includes("pending_review_count"), false, "Owner inbox must not create actions from a summary count");
+assert.match(shell, /第二永久记忆大脑/);
+assert.match(shell, /运行与诊断详情/);
+
 assert.match(workFeed, /safeRelativePath/);
 assert.equal(workFeed.includes("payload.text"), false, "Owner projection must not expose captured content");
 assert.equal(workFeed.includes("raw_snapshot"), false, "Owner projection must not expose raw snapshot paths");
-
 assert.ok(workflow.includes("sidecar-stop-request.json"), "DMG isolation gate must stop its exact sidecar instance");
 
 console.log("macos-release-smoke: PASS");
