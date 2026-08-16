@@ -1,23 +1,23 @@
 # LingJi 本机执行结果回执
 
-> 当前任务：`PR88-M5-OWNER-WORKBENCH-V4-BD1E7A17`。
+> 最近一次任务已完成。权威结论：`COMPLETED / FAIL / DO NOT MERGE`。
 >
-> **状态：PENDING / verdict: PENDING。** 真机未完成前，不得把自动 CI、静态 smoke 或构建成功写成主人体验 PASS。
+> 原始验收分支：`acceptance/pr88-m5-owner-workbench-v4-bd1e7a17`。报告提交为 `5793e4ae22e17d1f4db2c57ecc66bf18ec65af2e`，清理/最终结果回执提交为 `3011d796ff1bb5bff7d5e37c24e0c6236ee51d34`。原报告正文中自引用字段仍保留 `PENDING` 占位；最终状态以本回执、验收分支最终 `LOCAL_EXECUTION_RESULT.md` 与 PR #88 评论 `5306178636` 为准。
 
-## 1. 当前回执
+## 1. 最终回执
 
 ```yaml
 task_id: PR88-M5-OWNER-WORKBENCH-V4-BD1E7A17
-status: PENDING
-verdict: PENDING
+status: COMPLETED
+verdict: FAIL
 execution_mode: MACOS_M5_PHYSICAL_REACCEPTANCE
 repository: wangduoyu001/lingji
 product_pr: 88
 product_commit: bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9
-task_instruction_commit: PENDING
+task_instruction_commit: 5d5c1b9261085416d3f34eeb2321007972a6e46f
 report_branch: acceptance/pr88-m5-owner-workbench-v4-bd1e7a17
-report_commit: PENDING
-cleanup_receipt_commit: PENDING
+report_commit: 5793e4ae22e17d1f4db2c57ecc66bf18ec65af2e
+cleanup_receipt_commit: 3011d796ff1bb5bff7d5e37c24e0c6236ee51d34
 report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_bd1e7a17.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR88_M5_OWNER_WORKBENCH_V4_SUMMARY_bd1e7a17.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR88_M5_OWNER_WORKBENCH_V4_HASHES_bd1e7a17.txt
@@ -26,66 +26,73 @@ artifact_id: 9258682849
 artifact_workflow_run_id: 31928631105
 artifact_zip_sha256: c26408c350bf35701bdf6aa97e75f65e7bead42fb6ed92d11838334274e1a888
 dmg_sha256: a5d54cba4f99411541527be7230d568f32a8fba90efed14ff9756df6b393bb46
-started_at: PENDING
-finished_at: PENDING
-cleanup_before: NOT_RUN
-cleanup_after: NOT_RUN
-remote_branch_verified: false
-remote_commit_verified: false
-remote_report_verified: false
-remote_result_verified: false
-pr_comment_verified: false
-local_temp_root_absent: false
-owner_observation: NOT_RUN
-identity_result: NOT_RUN
-first_run_ux_result: NOT_RUN
-primary_navigation_result: NOT_RUN
-memory_workspace_result: NOT_RUN
-owner_attention_result: NOT_RUN
-exact_memory_target_result: NOT_RUN
-work_history_result: NOT_RUN
-global_command_result: NOT_RUN
-pagination_boundary_result: NOT_RUN
-automatic_discovery_result: NOT_RUN
-advanced_information_result: NOT_RUN
-window_recovery_menu_result: NOT_RUN
-window_recovery_shortcut_result: NOT_RUN
-window_recovery_dock_result: NOT_RUN
-acceptance_isolation_result: NOT_RUN
-auth_status_boundary_result: NOT_RUN
-secret_export_count: NOT_RUN
-first_launch_result: NOT_RUN
-first_stop_result: NOT_RUN
-first_stop_saved_pid_result: NOT_RUN
-second_launch_result: NOT_RUN
-second_stop_result: NOT_RUN
-production_pollution_count: NOT_RUN
+started_at: 2026-08-16T14:20:00+08:00
+finished_at: 2026-08-16T14:46:00+08:00
+cleanup_before: PASS
+cleanup_after: PASS
+remote_branch_verified: true
+remote_commit_verified: true
+remote_report_verified: true
+remote_result_verified: true
+pr_comment_verified: true
+local_temp_root_absent: true
+owner_observation: FAIL
+identity_result: PASS
+arm64_result: PASS
+strict_codesign_result: PASS
+first_run_ux_result: FAIL
+primary_navigation_result: PASS
+memory_workspace_result: FAIL
+owner_attention_result: FAIL
+exact_memory_target_result: FAIL
+work_history_result: FAIL
+global_command_result: FAIL
+pagination_boundary_result: PASS
+automatic_discovery_result: FAIL
+advanced_information_result: PASS
+window_recovery_menu_result: NOT_TESTED
+window_recovery_shortcut_result: NOT_TESTED
+window_recovery_dock_result: NOT_TESTED
+acceptance_isolation_result: PASS
+auth_status_boundary_result: PASS
+secret_export_count: 0
+first_launch_result: PASS
+first_stop_result: PASS
+first_stop_saved_pid_result: PASS
+second_launch_result: PASS
+second_stop_result: PASS
+production_pollution_count: 0
 rejected_artifact_retry: false
 ```
 
-## 2. 自动产品门禁
+## 2. 主人失败观察
 
-产品 SHA `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9` 已完成同 SHA 自动产品门禁：
+主人明确结论：**看不出灵机实际做了什么、接管了什么，与旧版没有明显差异。**
+
+具体失败：
+
+- 首页“待确认候选”与“需要我 0 待办”相互矛盾；
+- 工作履历为空，无法解释真实结果、下一步和执行者；
+- `Cmd+K` 真实“记住”提交失败；
+- 记忆缺少可读正文/摘要和可验证来源；
+- 主动发现仅为静态说明，无法体现真实接管/执行链；
+- Window Recovery 菜单、快捷键、Dock Reopen 三路径未全部得到主人确认。
+
+对应阻塞：`M5-V4-WORKBENCH-001 / P1`。
+
+## 3. 已通过技术项与清理
+
+产品/Artifact 身份、arm64、strict codesign、whole-bundle replace、Acceptance 隔离、认证状态边界、两轮 exact-instance Runtime 生命周期与分页终点通过；`secret_export_count=0`，`production_pollution_count=0`。
+
+失败后被测 Runtime 已停止，验收前应用已整体恢复并保持签名有效，本轮临时任务根已安全清理，远程报告/结果/PR 评论已复核。
+
+## 4. 结论
 
 ```text
-tests 31928631115: PASS
-P0 Windows Gate 31928631099: PASS
-macOS Desktop Gate 31928631105: PASS
-Windows Desktop Release Baseline 31928631101: PASS
-acceptance-doc-sync 31928631103: PASS
-local-execution-handoff 31928631118: PASS
+FAIL / DO NOT MERGE
+Artifact 9258682849: DO NOT RETRY
+PR #88: KEEP DRAFT
+current local task: IDLE
 ```
 
-这些结果只说明进入 M5 的技术前置条件成立，不代表主人体验通过。
-
-## 3. 最终填写规则
-
-Codex 真机执行后必须把所有 `NOT_RUN/PENDING` 改成真实结果，并遵守：
-
-- 主人明确体验 FAIL 时最终只能 `COMPLETED / FAIL / DO NOT MERGE`；
-- 任一 Window Recovery 路径未执行则不得 PASS；
-- 第一轮 stop 没有保存并验证 Sidecar PID 则不得 PASS；
-- `secret_export_count` 必须为 `0`；
-- `production_pollution_count` 必须为 `0`；
-- 报告、远程复读和清理未闭环不得 PASS；
-- 当前 Artifact 一旦得到最终 FAIL 即永久 `DO NOT RETRY`。
+下一轮不得通过修改验收标准、复用当前 Artifact 或继续堆首页展示规避本次失败。必须先修真实对象与执行数据链，产生新的产品 Commit 与新的同 SHA Artifact。
