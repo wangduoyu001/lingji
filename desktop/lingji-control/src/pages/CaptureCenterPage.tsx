@@ -28,6 +28,7 @@ import type {
   CaptureJob,
   CaptureJobFilters,
   CaptureStatusResponse,
+  CaptureSubmissionResponse,
 } from "./captureCenterTypes";
 import "./CaptureCenterPage.css";
 
@@ -39,6 +40,16 @@ const emptyCommon: CommonForm = { title: "", projects: "", tags: "", privacy: "p
 const emptyFilters: CaptureJobFilters = { status: "", sourceType: "", q: "" };
 const count = (value: number | null | undefined): string => typeof value === "number" ? value.toLocaleString() : "未知";
 const time = (value?: string | null): string => value ? new Date(value).toLocaleString() : "未知";
+
+function submissionLabel(response: CaptureSubmissionResponse): string {
+  const captureId = response.capture_id?.trim();
+  const jobId = response.job_id?.trim();
+  if (!captureId) return "服务接受了提交，但没有返回可追踪的资料编号；灵机不会把它显示成已完成。";
+  if (response.duplicate) return `内容已存在，未重复创建。资料 ${captureId}${jobId ? ` · 处理任务 ${jobId}` : ""}`;
+  if (response.status === "queued" && jobId) return `已接收。资料 ${captureId} · 处理任务 ${jobId} 已进入自动处理队列`;
+  if (response.status === "executed") return `已执行。资料 ${captureId}${jobId ? ` · 执行 ${jobId}` : ""}。是否形成记忆以真实结果为准`;
+  return `已接收。资料 ${captureId}${jobId ? ` · 处理任务 ${jobId}` : ""} · 状态 ${response.status || "未知"}`;
+}
 
 function ErrorState({ error }: { error: ApiError | null }) {
   if (!error) return null;
@@ -179,13 +190,13 @@ export default function CaptureCenterPage({ api, active, onOpenInspector }: Prop
     setSubmitting(true);
     try {
       const response = tab === "text"
-        ? await client.submitText({ ...commonPayload, text: textBody, source_type: "web" })
+        ? await client.submitText({ ...commonPayload, text: textBody, source_type: "text" })
         : tab === "web"
           ? await client.submitWeb({ ...commonPayload, url, text: webText || undefined, author: author || undefined, published_at: publishedAt || undefined, platform: platform || undefined })
           : tab === "media"
             ? await client.submitMedia({ ...commonPayload, input_path: selectedPath, allow_ocr: mediaOptions.ocr, allow_transcription: mediaOptions.transcription, extract_keyframes: mediaOptions.keyframes, extract_audio: mediaOptions.extractAudio })
             : await client.submitFile({ ...commonPayload, input_path: selectedPath, source_type: effectiveMode === "web_snapshot" ? "web" : effectiveMode, adapter_name: effectiveMode });
-      setSubmissionMessage(response.duplicate ? "内容已存在，未重复创建任务" : `提交成功${response.job_id ? `：${response.job_id}` : ""}`);
+      setSubmissionMessage(submissionLabel(response));
       await load();
     } catch (reason) {
       const apiError = reason instanceof ApiError ? reason : new ApiError(0, "UNKNOWN", "Submission failed");
