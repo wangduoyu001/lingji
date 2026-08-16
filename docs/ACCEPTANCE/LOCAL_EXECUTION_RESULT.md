@@ -11,7 +11,7 @@ product_commit: bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9
 task_instruction_commit: 5d5c1b9261085416d3f34eeb2321007972a6e46f
 report_branch: acceptance/pr88-m5-owner-workbench-v4-bd1e7a17
 report_commit: 5793e4ae22e17d1f4db2c57ecc66bf18ec65af2e
-cleanup_receipt_commit: PENDING
+cleanup_receipt_commit: 3011d796ff1bb5bff7d5e37c24e0c6236ee51d34
 report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_bd1e7a17.md
 public_summary_path: docs/TEST_REPORTS/evidence/PR88_M5_OWNER_WORKBENCH_V4_SUMMARY_bd1e7a17.json
 public_hashes_path: docs/TEST_REPORTS/evidence/PR88_M5_OWNER_WORKBENCH_V4_HASHES_bd1e7a17.txt
@@ -28,7 +28,7 @@ remote_branch_verified: true
 remote_commit_verified: true
 remote_report_verified: true
 remote_result_verified: true
-pr_comment_verified: false
+pr_comment_verified: true
 local_temp_root_absent: true
 owner_observation: FAIL
 identity_result: PASS
