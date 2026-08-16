@@ -23,8 +23,17 @@ report_branch: acceptance/pr88-m5-owner-work-feed-v3-1d99d10c
 report_commit: 74ec2bf67795387ca1ae23377a3deda299cbcfd5
 cleanup_receipt_commit: d81713833d3d421554f35305f52459f4b4a3b236
 report_path: docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_1d99d10c.md
+public_summary_path: docs/TEST_REPORTS/evidence/PR88_M5_OWNER_WORK_FEED_V3_SUMMARY_1d99d10c.json
+public_hashes_path: docs/TEST_REPORTS/evidence/PR88_M5_OWNER_WORK_FEED_V3_HASHES_1d99d10c.txt
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
 pr_receipt_comment: 5305293579
+cleanup_before_required: true
+cleanup_after_required: true
+remote_verification_required: true
+owner_confirmation_required: true
+product_code_changes_forbidden: true
+same_sha_artifacts_required: true
+secret_export_count_required: 0
 retry_rejected_artifact: false
 ```
 
