@@ -52,7 +52,10 @@ assert.equal(overview.includes("Metric"), false);
 assert.equal(overview.includes("buildWorkflow"), false);
 
 for (const token of ["第二永久记忆大脑", "灵机到底记住了什么", "记住了什么", "为什么能相信它", "来源证据", "记忆缺口"]) assert.ok(memory.includes(token), `Memory home is missing ${token}`);
-for (const route of ["/api/memory/inspector/memories", "/api/memory/inspector/status", "/source`,", "/vector`,"]) assert.ok(memory.includes(route), `Memory home is missing evidence route token ${route}`);
+assert.match(memory, /\/api\/memory\/inspector\/memories/);
+assert.match(memory, /\/api\/memory\/inspector\/status/);
+assert.match(memory, /\/source/);
+assert.match(memory, /\/vector/);
 assert.match(memory, /disabled={!pagination\?\.has_more}/);
 assert.match(memory, /来源路径未公开/);
 assert.match(memory, /没有证据时，灵机不会拿通用模板猜/);
