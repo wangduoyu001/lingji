@@ -1,5 +1,16 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildOwnerWorkFeed } from "../src/ownerWorkFeed.ts";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const jobsPage = await readFile(resolve(here, "../src/pages/JobsPage.tsx"), "utf8");
+assert.match(jobsPage, /\/api\/capture\/jobs\?limit=200&offset=0/);
+assert.equal(jobsPage.includes("/api/jobs"), false, "advanced jobs UI must not read raw queue rows");
+assert.equal(jobsPage.includes("last_error"), false, "advanced jobs UI must not render raw errors");
+assert.match(jobsPage, /outcome_summary/);
+assert.match(jobsPage, /error_message/);
 
 const completedJob = {
   job_id: "LJ-JOB-1",
