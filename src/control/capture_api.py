@@ -33,7 +33,7 @@ class CaptureCommonRequest(BaseModel):
 
 class CaptureTextRequest(CaptureCommonRequest):
     text: str = Field(min_length=1)
-    source_type: str = "web"
+    source_type: str = "text"
 
 
 class CaptureWebRequest(CaptureCommonRequest):
@@ -269,7 +269,14 @@ def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str
     @app.get("/api/capture/status", dependencies=secured)
     def capture_status() -> dict[str, Any]:
         try:
-            return capture_control().status()
+            payload = capture_control().status()
+            processor = getattr(control, "capture_processing_runtime", None)
+            if processor is not None:
+                processor_status = processor.status()
+                payload["worker_state"] = "running" if processor_status.get("running") else "stopped"
+            else:
+                payload["worker_state"] = "unknown"
+            return payload
         except Exception as exc:
             raise translate(exc) from exc
 
