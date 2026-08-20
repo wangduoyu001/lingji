@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from src.capture.models import CaptureEnvelope
 from src.capture.policy import CaptureMode, CapturePolicy
 from src.capture.service import CaptureService
+from src.control.capture import CaptureControlService
 from src.control.capture_processing import PackagedCaptureProcessingRuntime
 from src.storage import StateDatabase
 
@@ -75,6 +76,15 @@ def test_packaged_capture_text_processes_to_readable_memory_without_qdrant(tmp_p
     created = job["result"]["created"]
     assert len(created) == 1
     memory_id = created[0]["id"]
+    assert job["result"]["memory_id"] == memory_id
+    assert job["result"]["memory_ids"] == [memory_id]
+
+    owner_projection = CaptureControlService.job_dto(object.__new__(CaptureControlService), job)
+    assert owner_projection["work_item_id"] == submitted.extraction_job_id
+    assert owner_projection["capture_id"] == "LJ-CAP-E2E-V5"
+    assert owner_projection["result_refs"]["memory_id"] == memory_id
+    assert memory_id in owner_projection["result_object_ids"]
+
     memory = processor.memory_db.fetch_memory(memory_id, include_chunks=True)
     assert memory is not None
     assert memory["memory_id"] == memory_id
