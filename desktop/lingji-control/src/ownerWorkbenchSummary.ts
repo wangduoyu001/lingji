@@ -13,6 +13,7 @@ export type OwnerSummaryItem = {
   title: string;
   detail: string;
   nextActor: OwnerNextActor;
+  nextStep: string;
   evidence: OwnerSummaryEvidence;
 };
 
@@ -22,6 +23,13 @@ export type OwnerWorkbenchSummary = {
   decisions: OwnerSummaryItem[];
   nextSteps: OwnerSummaryItem[];
 };
+
+function actor(value: string | undefined): OwnerNextActor {
+  if (value === "system") return "灵机";
+  if (value === "owner") return "你";
+  if (value === "external") return "外部";
+  return "无需操作";
+}
 
 export function buildOwnerWorkbenchSummary({
   attentionItems,
@@ -35,7 +43,9 @@ export function buildOwnerWorkbenchSummary({
     title?: string;
     outcome?: string;
     status?: string;
-    nextActor?: OwnerNextActor;
+    nextActor?: string;
+    nextStep?: string;
+    resultId?: string;
   }>;
 }): OwnerWorkbenchSummary {
   const completed: OwnerSummaryItem[] = [];
@@ -45,11 +55,13 @@ export function buildOwnerWorkbenchSummary({
     const summary: OwnerSummaryItem = {
       title: item.title || "未命名工作",
       detail: item.outcome || "已有真实 WorkItem，但暂无可展示结果。",
-      nextActor: item.nextActor || "无需操作",
+      nextActor: actor(item.nextActor),
+      nextStep: item.nextStep || "查看工作结果",
       evidence: {
         workItemId: item.workItemId,
         captureId: item.captureId,
         jobId: item.jobId,
+        resultId: item.resultId,
       },
     };
 
@@ -61,6 +73,7 @@ export function buildOwnerWorkbenchSummary({
     title: item.title,
     detail: item.detail,
     nextActor: "你" as const,
+    nextStep: "等待你的确认",
     evidence: { workItemId: item.objectId },
   }));
 
@@ -69,10 +82,7 @@ export function buildOwnerWorkbenchSummary({
     running,
     decisions,
     nextSteps: [
-      ...running.map((item) => ({
-        ...item,
-        nextActor: item.nextActor || "灵机",
-      })),
+      ...running,
       ...decisions,
     ],
   };
