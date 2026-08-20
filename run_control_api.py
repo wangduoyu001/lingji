@@ -70,7 +70,7 @@ def _run_server(app, shutdown_event: threading.Event | None = None) -> None:
 
 
 def _packaged_capture_processor(service, state_db):
-    if os.environ.get("LINGJI_PACKAGED_CONTROL_RUNTIME") != "1":
+    if os.environ.get("LINGJI_PACKAGED_RUNTIME") != "1":
         return None
     from src.control.capture_processing import PackagedCaptureProcessingRuntime
 
