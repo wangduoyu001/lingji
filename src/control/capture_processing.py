@@ -65,7 +65,13 @@ class PackagedCaptureProcessingRuntime:
             "queue": dict(state.get("queue") or {}),
         }
 
-    def _on_documents_written(self, result: Mapping[str, Any]) -> None:
+    def _on_documents_written(self, result: dict[str, Any]) -> None:
+        """Synchronize rebuildable lexical state and enrich the same work outcome.
+
+        The callback receives the extraction response object before the queue stores it.
+        Adding stable memory identifiers here keeps Capture -> WorkItem -> MemoryRecord
+        traceable without creating another database or fact source.
+        """
         synchronized: list[dict[str, Any]] = []
         failures: list[dict[str, str]] = []
         seen_paths: set[str] = set()
@@ -102,6 +108,12 @@ class PackagedCaptureProcessingRuntime:
                             "error_type": type(exc).__name__,
                         }
                     )
+
+        memory_ids = [str(item["memory_id"]) for item in synchronized if item.get("memory_id")]
+        if memory_ids:
+            result["memory_ids"] = memory_ids
+            if len(memory_ids) == 1:
+                result["memory_id"] = memory_ids[0]
 
         event_payload = {
             "documents": len(synchronized),
