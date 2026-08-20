@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LingJiApi } from "../api";
 import { Empty, Notice } from "../components/ui";
 import { usePollingResource } from "../hooks/usePollingResource";
+import type { ReviewResponse } from "../ownerWorkbenchModel";
 import type { PageId } from "../types";
-import type { CodexCurrent } from "./codexWorkspaceTypes";
 import type {
   InspectorStatusResponse,
   MemoryDetailResponse,
@@ -16,7 +16,7 @@ import type {
 type Snapshot = {
   page: PageResponse<MemoryItem>;
   status: InspectorStatusResponse;
-  current: CodexCurrent;
+  reviews: ReviewResponse | null;
 };
 
 type MemoryEvidence = {
@@ -102,12 +102,12 @@ export default function MemoryHomePage({
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
     if (debouncedQuery) params.set("q", debouncedQuery);
     if (memoryType) params.set("memory_type", memoryType);
-    const [page, status, current] = await Promise.all([
+    const [page, status, reviews] = await Promise.all([
       api.get<PageResponse<MemoryItem>>(`/api/memory/inspector/memories?${params}`, { signal }),
       api.get<InspectorStatusResponse>("/api/memory/inspector/status", { signal }),
-      api.get<CodexCurrent>("/api/codex/current", { signal }),
+      api.get<ReviewResponse>("/api/memory/review/candidates?limit=1&offset=0", { signal }).catch(() => null),
     ]);
-    return { page, status, current };
+    return { page, status, reviews };
   }, [api, debouncedQuery, memoryType, offset]);
 
   const resource = usePollingResource({
@@ -121,7 +121,12 @@ export default function MemoryHomePage({
   const items = resource.data?.page.items ?? [];
   const pagination = resource.data?.page.pagination;
   const status = resource.data?.status;
-  const pendingReview = Number(resource.data?.current.pending_review_count ?? 0);
+  const reviewItems = resource.data?.reviews?.items ?? [];
+  const reviewSourceUnknown = resource.data?.reviews === null;
+  const hasReviewObject = reviewItems.length > 0;
+  const pendingReview = hasReviewObject
+    ? Number(resource.data?.reviews?.pagination?.total ?? reviewItems.length)
+    : 0;
   const memoryCount = status?.memory?.documents ?? pagination?.total ?? null;
   const chunkCount = status?.memory?.chunks ?? null;
   const vectorState = String(status?.vector?.state ?? "unknown").toLowerCase();
@@ -179,8 +184,8 @@ export default function MemoryHomePage({
         </div>
         <div className="v4-intro-actions">
           <button className="v4-button primary" onClick={() => onNavigate("capture_center")}>添加资料</button>
-          <button className="v4-button" disabled={pendingReview <= 0} onClick={() => onNavigate("memory_review")}>
-            {pendingReview > 0 ? `${pendingReview} 条待确认` : "暂无待确认"}
+          <button className="v4-button" disabled={!hasReviewObject} onClick={() => onNavigate("memory_review")}>
+            {hasReviewObject ? `${pendingReview} 条待确认` : reviewSourceUnknown ? "待确认状态未知" : "暂无待确认"}
           </button>
         </div>
       </section>
@@ -288,10 +293,10 @@ export default function MemoryHomePage({
       <section className="memory-gap-surface">
         <div>
           <span className="v4-kicker">记忆缺口</span>
-          <h3>{pendingReview > 0 ? `有 ${pendingReview} 条候选还没有成为永久记忆` : "当前没有可验证的记忆缺口结论"}</h3>
-          <p>{pendingReview > 0 ? "这些是系统真实生成、仍需主人确认的候选。" : "缺口分析必须有你的真实数据证据。没有证据时，灵机不会拿通用模板猜“你可能忘了什么”。"}</p>
+          <h3>{hasReviewObject ? `有 ${pendingReview} 条候选还没有成为永久记忆` : reviewSourceUnknown ? "待确认候选状态暂时无法验证" : "当前没有可验证的记忆缺口结论"}</h3>
+          <p>{hasReviewObject ? "这些是系统真实生成、仍需主人确认的候选。" : reviewSourceUnknown ? "候选来源读取失败时，灵机不会用汇总计数制造一个可能为空的审核入口。" : "缺口分析必须有你的真实数据证据。没有证据时，灵机不会拿通用模板猜“你可能忘了什么”。"}</p>
         </div>
-        {pendingReview > 0 && <button className="v4-button" onClick={() => onNavigate("memory_review")}>查看真实候选</button>}
+        {hasReviewObject && <button className="v4-button" onClick={() => onNavigate("memory_review")}>查看真实候选</button>}
       </section>
     </div>
   );
