@@ -38,7 +38,6 @@ export type CaptureJob = {
   max_attempts?: number | null;
   progress_current?: number | null;
   progress_total?: number | null;
-  progress_message?: string | null;
   error_code?: string | null;
   error_message?: string | null;
   result_summary?: string | null;
