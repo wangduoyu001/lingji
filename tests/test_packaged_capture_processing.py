@@ -83,7 +83,8 @@ def test_packaged_capture_text_processes_to_readable_memory_without_qdrant(tmp_p
     readable_text = "\n".join(str(chunk.get("text") or "") for chunk in memory["chunks"])
     assert "# 主人快速记录" in readable_text
     assert "V5 packaged capture must become readable memory evidence." in readable_text
-    assert memory["relative_path"].startswith("07-Sources/")
+    assert memory["relative_path"].startswith("02-Sources/Documents/")
+    assert (settings.vault_path / memory["relative_path"]).is_file()
 
     # The packaged processor intentionally has no semantic provider/Qdrant client.
     assert not hasattr(processor, "semantic_provider")
