@@ -1,6 +1,6 @@
 # CODE_MAP.md — LingJi 代码地图
 
-> Updated: 2026-07-26  
+> Updated: 2026-08-20  
 > Scope: code entry points, ownership and focused validation only  
 > Architecture: `docs/ARCHITECTURE.md`  
 > Current status: `docs/PROJECT_STATUS.md`  
@@ -126,7 +126,7 @@ cd desktop/lingji-control
 npm run test:inspector
 ```
 
-## 5. 来源、Capture 与 Extraction
+## 5. 来源、Capture、WorkItem 与 Extraction
 
 ```text
 src/sources/read_model.py::SourceReadModel
@@ -137,6 +137,9 @@ src/capture/policy.py
 src/capture/deduplication.py::CaptureDeduplicator
 src/capture/manual.py
 src/capture/service.py::CaptureService
+
+src/control/capture.py::CaptureControlService
+= Capture API 编排 + 安全 Owner WorkItem DTO
 
 src/extraction/models.py
 src/extraction/registry.py
@@ -153,9 +156,11 @@ src/extraction/structured_sink.py
 
 ```text
 Capture Input
+-> CaptureEnvelope(capture_id)
 -> CaptureService
 -> ExtractionPipeline.enqueue
--> SQLite extraction_jobs
+-> SQLite extraction_jobs(job_id = Capture WorkItem identity)
+   payload.capture_id = durable Capture identity
 -> Adapter.extract
 -> Raw Snapshot
 -> VaultExtractionSink / StructuredReadModelSink
@@ -163,12 +168,32 @@ Capture Input
 -> MemoryGateway
 ```
 
+V5 主人工作事实合同：
+
+```text
+extraction_jobs
+-> CaptureControlService.job_dto() 白名单投影
+-> /api/capture/jobs
+-> desktop/lingji-control/src/ownerWorkFeed.ts
+-> Home + Work
+```
+
+规则：
+
+- 不新增第二套 WorkItem 数据库；Capture/Extraction 工作继续以现有 `extraction_jobs` 为持久权威。
+- `job_id` 是 WorkItem identity；`capture_id` 必须持久进 job payload，不能只存在内存或 audit event。
+- Owner DTO 只返回稳定 ID、状态、可读 outcome、下一 actor/action、稳定 result refs/object IDs；不返回 captured body、raw payload、原始错误、绝对输入路径、worker 原始进度文案或 Secret。
+- `completed` 不自动等于“形成永久记忆”；只有真实 `memory_id` 或明确结果对象时才能展示对应结果。
+
 重点测试：
 
 ```text
+tests/test_capture_control.py
+tests/test_owner_work_projection.py
 tests/test_extraction_idempotency.py
 tests/test_mcp_extraction_submission.py
 desktop/lingji-control/scripts/capture-center-smoke.mjs
+desktop/lingji-control/scripts/owner-work-feed-smoke.mjs
 ```
 
 局部验收：
@@ -220,6 +245,7 @@ src/control/service.py::LocalControlService
 src/control/governed_service.py::GovernedLocalControlService
 src/control/settings_api.py::register_settings_governance_routes
 src/control/capture_api.py::register_capture_routes
+src/control/capture.py::CaptureControlService
 src/control/auto_review_api.py::register_auto_review_routes
 src/control/memory_inspector.py::build_memory_inspector
 src/auth_state.py::CredentialStore / AuthStatusService / export_auth_snapshot
@@ -264,17 +290,39 @@ desktop/lingji-control/src/AppPages.tsx
 desktop/lingji-control/src/navigation.ts
 desktop/lingji-control/src/components/DesktopShell.tsx
 desktop/lingji-control/src/components/RuntimeBoundary.tsx
-desktop/lingji-control/src/components/CurrentWorkPanel.tsx
+desktop/lingji-control/src/components/GlobalOwnerCommand.tsx
 ```
 
-Observation-first 页面：
+主人日常页面：
 
 ```text
 desktop/lingji-control/src/pages/OverviewPage.tsx
+= Home：共享 WorkItem + PendingAction 投影
+
 desktop/lingji-control/src/pages/ActivityPage.tsx
+= Work：共享 WorkItem 投影
+
 desktop/lingji-control/src/pages/AttentionPage.tsx
+= 需要我：Concrete PendingAction
+
+desktop/lingji-control/src/pages/MemoryHomePage.tsx
+= 永久记忆浏览/来源证据
+
 desktop/lingji-control/src/pages/DiagnosticsPage.tsx
+= 高级诊断
 ```
+
+共享主人事实投影：
+
+```text
+desktop/lingji-control/src/ownerWorkFeed.ts
+= /api/capture/jobs -> Home + Work 单一 WorkItem projector
+
+desktop/lingji-control/src/ownerWorkbenchModel.ts
+= memory review / import candidate / vector rebuild -> Home + Attention 单一 PendingAction projector
+```
+
+禁止 Home/Work 重新通过 `relative_path`、generic event、记忆数量或 Codex 当前状态推测业务 WorkItem。禁止 Home/Attention 各自实现第二套 PendingAction 判断。
 
 共享状态与轮询：
 
@@ -303,6 +351,16 @@ Tauri Desktop
 -> Rust RuntimeManager
 -> packaged lingji-core.exe
 -> authenticated 127.0.0.1:8766
+```
+
+V5 Desktop 重点 smoke：
+
+```text
+desktop/lingji-control/scripts/owner-work-feed-smoke.mjs
+desktop/lingji-control/scripts/owner-home-action-consistency-smoke.mjs
+desktop/lingji-control/scripts/observation-first-ui-smoke.mjs
+desktop/lingji-control/scripts/assistant-autopilot-smoke.mjs
+desktop/lingji-control/scripts/memory-progress-smoke.mjs
 ```
 
 局部验收：
@@ -373,5 +431,7 @@ desktop/lingji-control/scripts/windows-release-smoke.mjs
 合并前最终树 -> full，一次
 正式发布    -> release
 ```
+
+PR #105 / V5 额外规则：CI 全绿仍不是 M5 前置 PASS；必须先完成 `docs/TEST_REPORTS/PR88_OWNER_FACT_CHAIN_V5_IMPLEMENTATION.md` 的独立自审，并得到 `PASS_FOR_M5_PREPARATION`。之后产品 exact SHA 仍需六道同 SHA门和新 Mac/Windows Artifact。
 
 成功时只读取 `output/validation/.../summary.json` 或 `summary.md`；失败时再读取对应日志。具体历史通过结果只记录在 `docs/TEST_REPORTS/` 和 `docs/PROJECT_STATUS.md`。

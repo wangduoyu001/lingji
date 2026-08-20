@@ -1,127 +1,112 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildOwnerWorkFeed } from "../src/ownerWorkFeed.ts";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const jobsPage = await readFile(resolve(here, "../src/pages/JobsPage.tsx"), "utf8");
+assert.match(jobsPage, /\/api\/capture\/jobs\?limit=200&offset=0/);
+assert.equal(jobsPage.includes("/api/jobs"), false, "advanced jobs UI must not read raw queue rows");
+assert.equal(jobsPage.includes("last_error"), false, "advanced jobs UI must not render raw errors");
+assert.match(jobsPage, /outcome_summary/);
+assert.match(jobsPage, /error_message/);
 
 const completedJob = {
   job_id: "LJ-JOB-1",
+  work_item_id: "LJ-JOB-1",
+  capture_id: "LJ-CAP-1",
+  title: "ChatGPT 导入 2026-08",
   source_type: "chatgpt_export",
   status: "completed",
-  input_path: "/Users/private/secret/conversations.json",
-  payload: { title: "ChatGPT 导入 2026-08", text: "TOP_SECRET_BODY" },
+  outcome_state: "succeeded",
+  outcome_summary: "新增 1 条，索引同步完成。",
+  next_actor: "none",
+  next_action: "工作已完成；可从结果对象或记忆页面继续查看。",
+  result_refs: { memory_id: "MEM-1" },
+  result_object_ids: ["DOC-1"],
   completed_at: "2026-08-16T00:30:00+08:00",
-  result: {
-    indexed: true,
-    created: [{ relative_path: "02-Sources/chatgpt/对话整理.md", raw_path: "/Users/private/raw/secret.json" }],
-    updated: [],
-    skipped: [],
-    paths: ["/Users/private/vault/02-Sources/chatgpt/对话整理.md"],
-  },
+  payload: { text: "TOP_SECRET_BODY", input_path: "/Users/private/secret.json" },
 };
 
 const runningJob = {
   job_id: "LJ-JOB-2",
+  work_item_id: "LJ-JOB-2",
+  capture_id: "LJ-CAP-2",
+  title: "产品视频素材",
   source_type: "media",
   status: "running",
-  input_path: "/Users/private/Desktop/产品视频.mp4",
-  payload: { title: "产品视频素材" },
+  outcome_state: "running",
+  outcome_summary: "正在执行解析和整理。",
+  next_actor: "system",
+  next_action: "继续当前执行直到产生真实结果。",
   updated_at: "2026-08-16T00:31:00+08:00",
 };
 
-const memoryResponse = {
-  items: [
-    {
-      memory_id: "MEM-1",
-      title: "ChatGPT 对话整理",
-      relative_path: "02-Sources/chatgpt/对话整理.md",
-      memory_type: "source",
-      status: "active",
-      review_status: "",
-      updated_at: "2026-08-16T00:30:00+08:00",
-    },
-    {
-      memory_id: "MEM-2",
-      title: "待确认的项目决策",
-      relative_path: "05-Operations/Decisions/Candidates/decision-1.md",
-      memory_type: "decision_candidate",
-      status: "active",
-      review_status: "pending_review",
-      updated_at: "2026-08-16T00:29:00+08:00",
-    },
-  ],
-};
-
 const feed = buildOwnerWorkFeed({
-  memoryResponse,
-  queueResponse: { recent: [runningJob, completedJob] },
-  events: [
-    { event_id: 1, event_type: "capture_submitted", created_at: "2026-08-16T00:31:00+08:00", payload: { source_type: "media", text: "DO_NOT_EXPORT" } },
-    { event_id: 2, event_type: "unknown_internal_event", payload: { secret: "DO_NOT_EXPORT" } },
-  ],
+  jobsResponse: {
+    items: [runningJob, completedJob],
+    pagination: { limit: 24, offset: 0, total: 2, has_more: false },
+  },
   expectedDocuments: 2,
 });
 
 assert.equal(feed.detailsState, "ready");
 assert.equal(feed.summary.expectedDocuments, 2);
-assert.equal(feed.summary.needsOwner, 1);
+assert.equal(feed.summary.needsOwner, 0, "work history must not manufacture owner PendingActions");
+assert.equal(feed.summary.active, 1);
 
-const completed = feed.items.find((item) => item.memoryId === "MEM-1");
-assert.ok(completed, "completed memory must be visible as a concrete object");
-assert.equal(completed.title, "ChatGPT 对话整理");
+const completed = feed.items.find((item) => item.workItemId === "LJ-JOB-1");
+assert.ok(completed, "completed WorkItem must remain visible");
+assert.equal(completed.captureId, "LJ-CAP-1");
+assert.equal(completed.memoryId, "MEM-1");
+assert.deepEqual(completed.resultObjectIds, ["DOC-1"]);
 assert.equal(completed.source, "ChatGPT 历史");
-assert.equal(completed.stage, "retrieve");
-assert.match(completed.done, /收纳、解析并更新索引/);
-assert.match(completed.nextStep, /不用操作/);
+assert.equal(completed.stage, "memory");
+assert.match(completed.done, /索引同步完成/);
+assert.equal(completed.nextActor, "none");
 
-const review = feed.items.find((item) => item.memoryId === "MEM-2");
-assert.ok(review, "review candidate must be visible");
-assert.equal(review.ownerActionRequired, true);
-assert.equal(review.stage, "confirm");
-assert.match(review.nextStep, /需要你确认/);
-
-const running = feed.items.find((item) => item.id === "LJ-JOB-2");
-assert.ok(running, "active queue item must remain visible before a memory row exists");
-assert.equal(running.title, "产品视频素材");
+const running = feed.items.find((item) => item.workItemId === "LJ-JOB-2");
+assert.ok(running, "active WorkItem must be visible before any memory exists");
+assert.equal(running.captureId, "LJ-CAP-2");
 assert.equal(running.stage, "parse");
-assert.match(running.nextStep, /不用操作/);
+assert.equal(running.nextActor, "system");
+assert.match(running.nextStep, /继续当前执行/);
 
 const serialized = JSON.stringify(feed);
-for (const forbidden of ["TOP_SECRET_BODY", "DO_NOT_EXPORT", "/Users/private", "secret.json"]) {
-  assert.equal(serialized.includes(forbidden), false, `owner feed leaked private field: ${forbidden}`);
+for (const forbidden of ["TOP_SECRET_BODY", "/Users/private", "secret.json", "payload"]) {
+  assert.equal(serialized.includes(forbidden), false, `owner work projection leaked non-owner field: ${forbidden}`);
 }
-assert.equal(feed.recentActivity.length, 1, "unknown internal events must not become owner-facing activity");
-assert.match(feed.recentActivity[0].title, /媒体资料/);
+assert.equal(feed.recentActivity.length, 1, "only terminal WorkItems become recent outcomes");
+assert.equal(feed.recentActivity[0].workItemId, "LJ-JOB-1");
 
-const unavailable = buildOwnerWorkFeed({
-  memoryResponse: { items: [] },
-  queueResponse: { recent: [] },
-  events: [],
-  expectedDocuments: 2,
-});
+const unavailable = buildOwnerWorkFeed({ jobsResponse: null, expectedDocuments: 2 });
 assert.equal(unavailable.detailsState, "unavailable");
-assert.match(unavailable.detailsMessage, /2 份资料/);
-assert.match(unavailable.detailsMessage, /不会用一个数字代替资料列表/);
+assert.match(unavailable.detailsMessage, /WorkItem/);
+assert.match(unavailable.detailsMessage, /不会用记忆数量/);
 
 const genericSource = buildOwnerWorkFeed({
-  memoryResponse: { items: [] },
-  queueResponse: {
-    recent: [{
+  jobsResponse: {
+    items: [{
       job_id: "LJ-JOB-GENERIC",
+      work_item_id: "LJ-JOB-GENERIC",
       status: "running",
-      payload: { title: "普通资料" },
+      outcome_summary: "正在处理。",
+      next_actor: "system",
+      next_action: "继续处理。",
       updated_at: "2026-08-16T00:32:00+08:00",
     }],
+    pagination: { limit: 24, offset: 0, total: 1, has_more: false },
   },
-  events: [],
   expectedDocuments: 0,
 });
-assert.equal(genericSource.items[0]?.source, "知识库资料", "missing source type must never render as a blank label");
+assert.equal(genericSource.items[0]?.source, "资料", "missing source type must never render blank");
 
 const empty = buildOwnerWorkFeed({
-  memoryResponse: { items: [] },
-  queueResponse: { recent: [] },
-  events: [],
-  expectedDocuments: 0,
+  jobsResponse: { items: [], pagination: { limit: 24, offset: 0, total: 0, has_more: false } },
+  expectedDocuments: 7,
 });
 assert.equal(empty.detailsState, "ready");
-assert.equal(empty.items.length, 0);
+assert.equal(empty.items.length, 0, "existing memory count must not be converted into fake work history");
 
 console.log("owner-work-feed-smoke: PASS");

@@ -6,9 +6,10 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
-const [overview, attention, command, codex, api, discovery, imports, boundary, connection, bootstrap, autopilotEngine, autopilotApi, runtimeEntrypoint] = await Promise.all([
+const [overview, attention, ownerModel, command, codex, api, discovery, imports, boundary, connection, bootstrap, autopilotEngine, autopilotApi, runtimeEntrypoint] = await Promise.all([
   read("../src/pages/OverviewPage.tsx"),
   read("../src/pages/AttentionPage.tsx"),
+  read("../src/ownerWorkbenchModel.ts"),
   read("../src/components/GlobalOwnerCommand.tsx"),
   read("../src/pages/CodexWorkspacePage.tsx"),
   read("../../../src/control/capture_api.py"),
@@ -25,29 +26,35 @@ const [overview, attention, command, codex, api, discovery, imports, boundary, c
 assert.match(overview, /\/api\/assistant-hub\/status/);
 assert.match(overview, /detectedAssistants/);
 assert.match(overview, /主动发现/);
-assert.match(overview, /扫描是后台行为，不需要你手动刷新/);
+assert.match(overview, /发现不等于已授权、已接管或已执行/);
 assert.match(overview, /\/api\/memory\/review\/candidates/);
-assert.match(overview, /candidate\.memory_id/);
-assert.match(overview, /candidate\.candidate_id/);
-assert.match(overview, /reviewMismatch/);
-assert.match(overview, /向量索引重建需要你确认/);
-assert.match(overview, /buildOwnerWorkFeed/);
-assert.equal(overview.includes("buildWorkflow"), false, "V4 home must not use aggregate stage cards");
-assert.equal(overview.includes("Metric"), false, "V4 home must not render technical metric tiles");
+assert.match(overview, /buildOwnerAttentionItems/);
+assert.match(overview, /hasReviewConsistencyIssue/);
+assert.match(overview, /ownerAttentionSummary/);
+assert.match(overview, /\/api\/capture\/jobs\?limit=24&offset=0/);
+assert.match(overview, /有 WorkItem 才显示结果/);
+assert.equal(overview.includes("已发现 ${detectedAssistants.length} 个可接管工具"), false, "Detection must not be presented as takeover");
+assert.equal(overview.includes("buildWorkflow"), false, "Home must not use aggregate stage cards");
+assert.equal(overview.includes("Metric"), false, "Home must not render technical metric tiles");
 
 assert.match(attention, /\/api\/assistant-hub\/status/);
 assert.match(attention, /\/api\/memory\/review\/candidates/);
-assert.match(attention, /import-candidates\/\$\{encodeURIComponent\(item\.candidate\.candidate_id\)\}\/authorize/);
-assert.match(attention, /AUTHORIZE_ASSISTANT_IMPORT_/);
-assert.match(attention, /读取正文会跨过隐私边界/);
-assert.match(attention, /所以停下来等你/);
+assert.match(attention, /buildOwnerAttentionItems/);
+assert.match(attention, /import-candidates\/\$\{encodeURIComponent\(item\.candidateId\)\}\/authorize/);
+assert.match(attention, /AUTHORIZE_ASSISTANT_IMPORT_\$\{item\.candidateId\.toUpperCase\(\)\}/);
+assert.match(ownerModel, /读取正文会跨过隐私边界/);
+assert.match(ownerModel, /所以停下来等你/);
+assert.match(ownerModel, /candidateId: candidate\.candidate_id/);
 assert.match(attention, /灵机自己处理/);
 assert.match(attention, /不把运维工作冒充成主人待办/);
 assert.equal(attention.includes("pending_review_count"), false, "Owner inbox must not create actions from a summary count");
 
 assert.match(command, /\/api\/capture\/text/);
+assert.match(command, /source_type: "text"/);
 assert.match(command, /owner_command_bar/);
-assert.match(command, /记住/);
+assert.match(command, /资料 \$\{captureId\}/);
+assert.match(command, /处理任务 \$\{jobId\}/);
+assert.match(command, /记忆结果以“记忆”页面的真实证据为准/);
 assert.match(command, /当前全局入口只执行可验证的记录和导航指令/);
 
 assert.match(codex, /Codex 工作记录/);

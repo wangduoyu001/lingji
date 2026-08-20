@@ -106,8 +106,6 @@ assert.equal(
   "manual data-root selection must be an advanced fallback, not a first-run action",
 );
 
-// Daily owner surfaces consume sanitized projections only. Credential state still feeds
-// the bounded Autopilot classifier and credential material never belongs on owner surfaces.
 assert.match(autopilotEngine, /auth_status_provider/);
 assert.match(autopilotEngine, /auth_permission_insufficient/);
 assert.match(autopilotEngine, /auth_reauthentication_required/);
@@ -115,21 +113,23 @@ for (const surface of [overview, memory, attention]) {
   assert.equal(/authorization|cookie|control_token/i.test(surface), false, "Daily owner surfaces must not render credential material");
 }
 
-// V4 owner contract: briefing, permanent-memory evidence, object-backed attention and
-// technical runtime details hidden behind an explicit advanced disclosure.
+// V5 owner contract: Home and Work consume one sanitized WorkItem projection; discovery
+// and owner attention remain concrete-object facts rather than inferred activity.
 for (const token of [
   "现在需要你吗",
   "刚刚替你做了什么",
   "现在正在做什么",
-  "接下来灵机会做什么",
+  "下一步",
   "记忆发生了什么变化",
   "主动发现",
-]) assert.ok(overview.includes(token), `V4 home is missing ${token}`);
-assert.match(overview, /\/api\/memory\/review\/candidates/);
-assert.match(overview, /candidate\.memory_id/);
-assert.match(overview, /candidate\.candidate_id/);
-assert.match(overview, /reviewMismatch/);
-assert.equal(overview.includes("CurrentWorkPanel"), false, "V4 home must not restore the old status-card composition");
+]) assert.ok(overview.includes(token), `V5 home is missing ${token}`);
+assert.match(overview, /\/api\/capture\/jobs\?limit=24&offset=0/);
+assert.match(overview, /buildOwnerAttentionItems/);
+assert.match(overview, /ownerAttentionSummary/);
+assert.match(overview, /有 WorkItem 才显示结果/);
+assert.match(overview, /发现不等于已授权、已接管或已执行/);
+assert.equal(overview.includes("CurrentWorkPanel"), false, "V5 home must not restore the old status-card composition");
+assert.equal(overview.includes("queueRoot"), false, "V5 home must not infer work from raw overview queue");
 
 for (const token of ["第二永久记忆大脑", "记住了什么", "为什么能相信它", "来源证据", "记忆缺口"]) {
   assert.ok(memory.includes(token), `Primary memory surface is missing ${token}`);
@@ -141,9 +141,14 @@ assert.equal(attention.includes("pending_review_count"), false, "Owner inbox mus
 assert.match(shell, /第二永久记忆大脑/);
 assert.match(shell, /运行与诊断详情/);
 
-assert.match(workFeed, /safeRelativePath/);
+assert.match(workFeed, /CaptureJobsResponse/);
+assert.match(workFeed, /workItemId/);
+assert.match(workFeed, /captureId/);
+assert.match(workFeed, /nextActor/);
+assert.equal(workFeed.includes("safeRelativePath"), false, "V5 WorkItem identity must not depend on path guessing");
 assert.equal(workFeed.includes("payload.text"), false, "Owner projection must not expose captured content");
 assert.equal(workFeed.includes("raw_snapshot"), false, "Owner projection must not expose raw snapshot paths");
+assert.equal(workFeed.includes("event_type"), false, "Generic events must not become WorkItems");
 assert.ok(workflow.includes("sidecar-stop-request.json"), "DMG isolation gate must stop its exact sidecar instance");
 
 console.log("macos-release-smoke: PASS");

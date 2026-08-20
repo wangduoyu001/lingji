@@ -93,7 +93,7 @@ def classify_manual_input(
         )
     return ManualCaptureClassification(
         ManualCaptureKind.TEXT,
-        source_type="web",
+        source_type="text",
         capture_method="manual_text",
         adapter_name="web_capture",
         text=raw,

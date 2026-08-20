@@ -104,7 +104,7 @@ class _ReadableHTMLParser(HTMLParser):
 
 
 class WebCaptureAdapter(ExtractionAdapter):
-    """Capture browser snapshots and safely fetch simple public pages when allowed.
+    """Capture browser snapshots and manual text, and safely fetch public pages when allowed.
 
     Dynamic/login-only platforms should submit rendered HTML/text through a browser
     extension or Playwright capture. This adapter never steals browser credentials.
@@ -113,6 +113,7 @@ class WebCaptureAdapter(ExtractionAdapter):
     name = "web_capture"
     version = "1.0.0"
     source_types = (
+        "text",
         "web",
         "browser",
         "wechat_article",
@@ -144,7 +145,7 @@ class WebCaptureAdapter(ExtractionAdapter):
             parsed.get("og:title"),
             parsed.get("twitter:title"),
             parsed.get("title"),
-            "未命名网页",
+            "手动记录" if source_type == "text" else "未命名网页",
         )
         author = self._first(
             data.get("author"),
@@ -339,6 +340,8 @@ class WebCaptureAdapter(ExtractionAdapter):
     @staticmethod
     def _platform(url: str, requested: str, data: Mapping[str, Any]) -> tuple[str, str]:
         hinted = str(data.get("platform") or "").strip().lower().replace("-", "_")
+        if requested == "text" and not url:
+            return "manual_text", "text"
         if hinted in {"video_channel", "wechat_channels", "视频号"} or requested == "video_channel":
             return "video_channel", "video_channel"
         host = (urlsplit(url).hostname or "").lower()

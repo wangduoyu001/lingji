@@ -40,6 +40,7 @@ def test_manual_helpers_use_formal_methods_and_queue_by_default(tmp_path):
     media_path.write_bytes(b"media")
 
     assert service.submit_text("hello").status is CaptureStatus.QUEUED
+    assert pipeline.enqueued[-1][0] == "text"
     assert pipeline.enqueued[-1][1]["payload"]["capture_method"] == "manual_text"
     assert service.submit_web("https://example.com").status is CaptureStatus.QUEUED
     assert pipeline.enqueued[-1][1]["payload"]["capture_method"] == "manual_web"
@@ -80,7 +81,7 @@ def test_codex_requires_explicit_mode_and_plain_json_is_web(tmp_path):
     assert explicit.adapter_name == "codex_work_report"
 
 
-def test_html_txt_url_and_raw_html_map_to_web(tmp_path):
+def test_web_files_urls_and_raw_html_map_to_web(tmp_path):
     html_file = tmp_path / "page.html"
     html_file.write_text("<html><body>x</body></html>", encoding="utf-8")
     txt_file = tmp_path / "page.txt"
@@ -90,6 +91,14 @@ def test_html_txt_url_and_raw_html_map_to_web(tmp_path):
         assert result.kind in {ManualCaptureKind.WEB, ManualCaptureKind.TEXT}
         assert result.source_type == "web"
         assert result.adapter_name == "web_capture"
+
+
+def test_plain_manual_text_is_first_class_text_source():
+    result = classify_manual_input("owner preference: prefer cloud rendering")
+    assert result.kind is ManualCaptureKind.TEXT
+    assert result.source_type == "text"
+    assert result.capture_method == "manual_text"
+    assert result.adapter_name == "web_capture"
 
 
 def test_media_extensions_use_existing_media_adapter(tmp_path):
@@ -188,6 +197,7 @@ def test_long_manual_text_does_not_fail_path_probe():
     value = "manual text " * 1000
     result = classify_manual_input(value)
     assert result.kind is ManualCaptureKind.TEXT
+    assert result.source_type == "text"
     assert result.text == value.strip()
 
 

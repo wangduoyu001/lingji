@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { LingJiApi } from "../api";
+import type { CaptureSubmissionResponse } from "../pages/captureCenterTypes";
 import type { PageId } from "../types";
 
 type Props = {
@@ -8,13 +9,25 @@ type Props = {
   onNavigate: (page: PageId) => void;
 };
 
-type CaptureResponse = {
-  duplicate?: boolean;
-  job_id?: string;
-  existing_job_id?: string;
-};
-
 const cleanPrefix = (input: string) => input.replace(/^(记住|记录)\s*[：:]/, "").trim();
+
+function captureFeedback(response: CaptureSubmissionResponse): string {
+  const captureId = response.capture_id?.trim();
+  const jobId = response.job_id?.trim();
+  if (!captureId) {
+    return "服务接受了这次提交，但没有返回可追踪的资料编号。灵机不会把它显示成“已经记住”。";
+  }
+  if (response.duplicate) {
+    return `这条资料已经存在，未重复创建。资料 ${captureId}${jobId ? ` · 处理任务 ${jobId}` : ""}。`;
+  }
+  if (response.status === "queued" && jobId) {
+    return `已接收文本资料。资料 ${captureId} · 处理任务 ${jobId} 已进入自动处理队列。`;
+  }
+  if (response.status === "executed") {
+    return `已接收并执行文本资料。资料 ${captureId}${jobId ? ` · 执行 ${jobId}` : ""}。记忆结果以“记忆”页面的真实证据为准。`;
+  }
+  return `已接收文本资料。资料 ${captureId}${jobId ? ` · 处理任务 ${jobId}` : ""} · 状态 ${response.status || "未知"}。`;
+}
 
 export default function GlobalOwnerCommand({ api, connected, onNavigate }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -50,10 +63,10 @@ export default function GlobalOwnerCommand({ api, connected, onNavigate }: Props
       }
       setBusy(true);
       try {
-        const response = await api.post<CaptureResponse>("/api/capture/text", {
-          title: content.slice(0, 48),
+        const response = await api.post<CaptureSubmissionResponse>("/api/capture/text", {
+          title: "主人快速记录",
           text: content,
-          source_type: "web",
+          source_type: "text",
           project_ids: [],
           tags: ["owner_quick_capture"],
           privacy: "private",
@@ -61,9 +74,7 @@ export default function GlobalOwnerCommand({ api, connected, onNavigate }: Props
           process_later: true,
           metadata: { capture_method: "owner_command_bar" },
         });
-        setFeedback(response.duplicate
-          ? "这条资料已经存在，灵机没有重复创建。"
-          : "已交给灵机。后续整理、去重和索引会自动进行。");
+        setFeedback(captureFeedback(response));
         setValue("");
       } catch {
         setFeedback("这次记录没有提交成功。灵机会保留现有数据，不会假装已经记住。");

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from src.config import Settings
 from src.gateway.bootstrap import build_memory_gateway
+from src.retrieval.semantic_freshness import CoverageGuardedSemanticProvider
 from src.runtime import WorkspaceResolver
 
 
@@ -119,7 +120,7 @@ class SemanticRuntimeWiringTests(unittest.TestCase):
         self.context.vault_path.mkdir(parents=True, exist_ok=True)
         self.context.storage_path.mkdir(parents=True, exist_ok=True)
 
-    def test_enabled_runtime_injects_one_provider_into_retriever_and_coordinator(self):
+    def test_enabled_runtime_injects_guarded_reader_and_direct_writer_provider(self):
         embedding = FakeEmbeddingProvider()
         semantic = FakeSemanticProvider()
         with patch("src.gateway.bootstrap.build_embedding_provider", return_value=embedding), patch(
@@ -131,8 +132,12 @@ class SemanticRuntimeWiringTests(unittest.TestCase):
                 workspace=self.context,
             )
 
-        self.assertIs(gateway.retriever.semantic_provider, semantic)
+        guarded = gateway.retriever.semantic_provider
+        self.assertIsInstance(guarded, CoverageGuardedSemanticProvider)
+        self.assertIs(guarded.provider, semantic)
+        self.assertIs(guarded.database, gateway.database)
         self.assertIs(gateway.index_coordinator.semantic_provider, semantic)
+        self.assertIsNot(guarded, gateway.index_coordinator.semantic_provider)
         self.assertEqual(gateway.runtime_warnings, [])
         self.assertIs(gateway.workspace, self.context)
 

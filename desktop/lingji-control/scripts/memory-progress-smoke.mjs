@@ -26,10 +26,21 @@ assert.match(memory, /为什么能相信它/);
 assert.match(memory, /来源证据/);
 assert.match(memory, /记忆缺口/);
 assert.match(memory, /pagination\?\.has_more/);
+assert.match(memory, /\/api\/memory\/review\/candidates\?limit=1&offset=0/);
+assert.match(memory, /hasReviewObject/);
+assert.match(memory, /候选来源读取失败时，灵机不会用汇总计数制造一个可能为空的审核入口/);
+assert.equal(memory.includes("/api/codex/current"), false, "Memory review actions must not depend on Codex summary state");
+assert.equal(memory.includes("pending_review_count"), false, "Memory review actions require concrete candidate objects");
 
+// V5 keeps memory progress and work history as separate facts. Memory/document counts may
+// describe the second brain, but they must never be converted into fake WorkItems.
 assert.match(workFeed, /expectedDocuments/);
 assert.match(workFeed, /detailsState/);
-assert.match(workFeed, /灵机不会用一个数字代替资料列表/);
+assert.match(workFeed, /真实 WorkItem 列表暂时不可用/);
+assert.match(workFeed, /不会用记忆数量或静态事件冒充工作履历/);
+assert.match(workFeed, /CaptureJobsResponse/);
+assert.equal(workFeed.includes("safeRelativePath"), false, "V5 work identity must not be reconstructed from memory paths");
+assert.equal(workFeed.includes("event_type"), false, "Memory/runtime events must not be promoted into WorkItems");
 assert.match(service, /"precision_state": "not_measured"/);
 assert.match(service, /尚未建立验证样本/);
 assert.match(css, /\.memory-brief-strip/);

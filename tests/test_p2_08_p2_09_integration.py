@@ -114,6 +114,7 @@ def test_desktop_uses_shared_polling_and_shadow_dashboard_without_execution_cont
     dashboard = read("desktop/lingji-control/src/pages/AutoReviewPage.tsx")
     polling = read("desktop/lingji-control/src/hooks/usePollingResource.ts")
     attention = read("desktop/lingji-control/src/pages/AttentionPage.tsx")
+    projector = read("desktop/lingji-control/src/ownerWorkbenchModel.ts")
     diagnostics = read("desktop/lingji-control/src/pages/DiagnosticsPage.tsx")
 
     for page_id in ("overview", "memory", "activity", "attention", "diagnostics"):
@@ -128,8 +129,11 @@ def test_desktop_uses_shared_polling_and_shadow_dashboard_without_execution_cont
     assert 'page === "attention"' in app_pages
     assert "ADVANCED_NAVIGATION" in diagnostics
     assert "/api/memory/review/candidates" in attention
-    assert "candidate.memory_id" in attention
-    assert "candidate.candidate_id" in attention
+    assert "buildOwnerAttentionItems" in attention
+    assert "item.memoryId" in attention
+    assert "item.candidateId" in attention
+    assert "candidate.memory_id" in projector
+    assert "candidate.candidate_id" in projector
     assert "pending_review_count" not in attention
     assert "/api/auto-review/metrics" not in attention
     assert "灵机自己处理" in attention

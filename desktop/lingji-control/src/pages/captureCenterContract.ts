@@ -29,7 +29,7 @@ export const hasActiveJobs = (jobs: CaptureJob[]): boolean => jobs.some((job) =>
 export const restrictedClass = (privacy?: string | null): string => privacy === "restricted" ? " restricted" : "";
 export const progressLabel = (job: CaptureJob): string => {
   if (typeof job.progress_current === "number" && typeof job.progress_total === "number" && job.progress_total > 0) return `${job.progress_current}/${job.progress_total}`;
-  return job.progress_message || "未知";
+  return job.outcome_summary || "未知";
 };
 export const safeName = (job: CaptureJob): string => job.file_name || job.filename || job.title || job.job_id;
 export const resultTarget = (job: CaptureJob): CaptureResultRefs | null => job.result_refs && Object.values(job.result_refs).some(Boolean) ? job.result_refs : null;
