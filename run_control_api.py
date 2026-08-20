@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import secrets
 import threading
 from pathlib import Path
@@ -68,6 +69,24 @@ def _run_server(app, shutdown_event: threading.Event | None = None) -> None:
     server.run()
 
 
+def _packaged_capture_processor(service, state_db):
+    if os.environ.get("LINGJI_PACKAGED_CONTROL_RUNTIME") != "1":
+        return None
+    from src.control.capture_processing import PackagedCaptureProcessingRuntime
+
+    processor = PackagedCaptureProcessingRuntime(
+        settings,
+        state_db=state_db,
+        runtime_settings=service.runtime_settings,
+    )
+    # Capture API reuses these exact queue/pipeline objects. The packaged 8766
+    # process therefore owns queue consumption but never opens Qdrant.
+    service.pipeline = processor.pipeline
+    service.queue = processor.pipeline.queue
+    service.capture_processing_runtime = processor
+    return processor
+
+
 def main(shutdown_event: threading.Event | None = None) -> None:
     if settings.control_api_host not in {"127.0.0.1", "localhost", "::1"}:
         raise RuntimeError("Local control API may only bind to loopback addresses")
@@ -76,6 +95,7 @@ def main(shutdown_event: threading.Event | None = None) -> None:
     token = load_or_create_token(token_path)
     state_db = StateDatabase(settings.state_db_path)
     service = GovernedLocalControlService(settings, state_db=state_db)
+    capture_processor = _packaged_capture_processor(service, state_db)
     autopilot = AutopilotEngine(
         settings,
         state_db=state_db,
@@ -88,11 +108,15 @@ def main(shutdown_event: threading.Event | None = None) -> None:
     register_p2_07_routes(app, settings, service, token=token)
     register_auto_review_routes(app, settings, service, token=token)
     register_settings_governance_routes(app, service, token=token)
+    if capture_processor is not None:
+        capture_processor.start()
     autopilot.start()
     try:
         _run_server(app, shutdown_event=shutdown_event)
     finally:
         autopilot.stop()
+        if capture_processor is not None:
+            capture_processor.stop()
         service.close()
 
 
