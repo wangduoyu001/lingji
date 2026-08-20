@@ -304,7 +304,6 @@ class CaptureControlService:
             "max_attempts": int(row.get("max_attempts") or 0),
             "progress_current": int(row.get("progress_current") or 0),
             "progress_total": int(row.get("progress_total") or 0),
-            "progress_message": str(row.get("progress_message") or "")[:200] or None,
             "created_at": row.get("created_at"),
             "updated_at": row.get("updated_at"),
             "completed_at": row.get("completed_at"),
