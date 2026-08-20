@@ -220,6 +220,7 @@ class CaptureService:
 
     def _pipeline_input(self, envelope: CaptureEnvelope) -> tuple[dict[str, Any], dict[str, Any]]:
         payload = {
+            "capture_id": envelope.capture_id,
             "title": envelope.title,
             "url": envelope.url,
             "text": envelope.text,
