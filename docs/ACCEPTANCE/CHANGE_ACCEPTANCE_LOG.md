@@ -4,6 +4,84 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-20 · PR #105 / PR #88 · Owner Fact Chain V5 + 验收前独立自审
+
+- 产品分支：`fix/pr88-owner-fact-chain-v5` → `feature/owner-autopilot-ui-codexpp`
+- 产品基线：`bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`（M5 已拒绝，Artifact `9258682849` 永久 `DO NOT RETRY`）
+- 来源失败：`PR88-M5-OWNER-WORKBENCH-V4-BD1E7A17 / FAIL / DO NOT MERGE`
+- 影响模块：Capture 身份、extraction queue 工作对象、Capture Control 安全投影、首页、工作履历、主人待办一致性、Desktop smoke、macOS release smoke、验收治理。
+- 风险等级：P1。
+- 用户可感知变化：`Cmd/Ctrl+K` 或 Capture 提交后，必须得到真实 `capture_id + job_id`；同一 `job_id` 作为唯一 WorkItem 贯穿工作状态和结果。首页与“工作”读取同一个 `/api/capture/jobs` 投影，不再通过记忆数量、`relative_path`、通用 event 或 Codex 当前状态推测“灵机做了什么”。主动发现只表示“发现”，不得提前宣称“已接管/已执行”。
+- 数据或安全边界变化：不新增 WorkItem 数据库，不新增第二事实源。现有 `extraction_jobs` 继续承担持久 WorkItem；`capture_id` 持久写入该 job payload。Owner DTO 只暴露白名单字段、稳定 ID、结果引用和可读 outcome，不暴露 captured body、raw payload、绝对路径、raw snapshot、Token/Cookie/Authorization/Credential/Secret。
+
+### 新增或修改的自动验收
+
+- [ ] `tests/test_capture_control.py`：证明 `capture_id` 持久进入 queue job，`job_id == work_item_id`，重启 `CaptureControlService` 后同一内容仍复用同一 WorkItem 与 canonical `capture_id`，不得依赖内存 `_job_by_key` 才成立。
+- [ ] 同一测试必须覆盖 queued/running/completed/failed/cancelled 的 `outcome_state + next_actor + next_action`；未知状态不得推测下一动作，普通失败不得自动创建主人待办。
+- [ ] 同一测试必须证明 completed 结果只暴露稳定 `result_object_ids/result_refs`，伪造的私人绝对路径、正文、原始 error、Token 等不得进入 owner DTO。
+- [ ] `owner-work-feed-smoke.mjs`：Owner Work Feed 只消费 `CaptureJobsResponse`；禁止 `relative_path` 猜关联、禁止 generic event 冒充 WorkItem、禁止记忆数量制造工作履历。
+- [ ] `observation-first-ui-smoke.mjs`：首页和“工作”必须共享 WorkItem projector；首页读取 `/api/capture/jobs`，工作页不得重新读取/解释原始 `/api/jobs` 或把 `/api/codex/current` 冒充 LingJi WorkItem。
+- [ ] `assistant-autopilot-smoke.mjs`：发现来源必须明确“发现不等于已授权、已接管或已执行”；Owner PendingAction 继续只来自真实 Memory Review candidate、Assistant import candidate、不可逆 vector rebuild 对象。
+- [ ] `macos-release-smoke.mjs`：Mac Release 静态门禁同步 V5 WorkItem 合同，同时继续验证 exact-head、arm64、Sidecar、Acceptance isolation、窗口找回和 Secret 边界。
+- [ ] `GlobalOwnerCommand`：文本必须使用 `source_type=text`；成功反馈显示真实 `capture_id/job_id/status`；没有 `capture_id` 或请求失败时不得说“已经记住”。
+- [ ] `npm run test:smoke`、`npm run build`、Python 3.11/3.12/Windows、MCP、Obsidian、browser、Rust/Tauri 全部回归；不得删除、skip 或弱化旧断言换取绿灯。
+- [ ] PR #105 精确 Head 的 `tests`、`macOS Desktop Gate`、`acceptance-doc-sync`、`local-execution-handoff` 必须全部 PASS。开发分支通过仍不等于可以 M5。
+- [ ] PR #105 合入产品分支后，新的精确产品 SHA 必须重新通过 `tests`、`P0 Windows Gate`、`macOS Desktop Gate`、`Windows Desktop Release Baseline`、`acceptance-doc-sync`、`local-execution-handoff` 六道同 SHA 门禁，并生成新的同 SHA Mac/Windows Artifact。
+
+### 验收前强制独立自审
+
+- [ ] **新增硬门禁：任何新的 M5 任务创建前，实施代理必须先完成独立代码审计与端到端事实链复核，不允许把“CI 全绿”直接当验收前置 PASS。**
+- [ ] 自审必须检查：无第二事实源/重复队列；Capture → WorkItem → Outcome → Memory/PendingAction 可追踪；关系重启后仍成立；Owner UI 不会无对象宣称“已做/已记住/需要你”；失败与未知状态不被美化；Owner DTO 不泄露正文、私人绝对路径或 Secret；Mac/Windows 使用同一业务实现；测试未被弱化。
+- [ ] 自审报告必须写入 `docs/TEST_REPORTS/PR88_OWNER_FACT_CHAIN_V5_IMPLEMENTATION.md`，并明确列出“发现的问题 → 修复 → 剩余限制 → verdict”。
+- [ ] 自审 verdict 只允许：`PASS_FOR_M5_PREPARATION / FAIL_FIX_REQUIRED / BLOCKED`。
+- [ ] 只有 `PASS_FOR_M5_PREPARATION`，且随后 focused/full/release、同 SHA 双平台 Artifact 与哈希锁定全部完成，才允许把 `LOCAL_EXECUTION_TASK.md` 从 `IDLE` 改成新的 `ACTIVE` M5 task。
+
+### 新增或修改的真机验收
+
+- [ ] **当前仍禁止激活 M5。** PR #105 未完成自审、六道产品级门禁和同 SHA 双平台 Artifact 前，`LOCAL_EXECUTION_TASK.md` 必须保持 `IDLE`。
+- [ ] `Cmd+K → 记住：<task fixture>`：界面必须显示真实 `capture_id/job_id`；进入“工作”后能找到同一 WorkItem；刷新/重启后身份不变。
+- [ ] WorkItem 从 queued/running 到 completed/failed 后，首页与“工作”的状态、结果、下一动作和下一执行者必须一致。
+- [ ] completed 只有在真实 result refs/object IDs 存在时才允许跳转/声称产生结果；不能因为 job completed 就宣称“形成永久记忆”。
+- [ ] “需要我”每个动作必须有真实对象；首页不得从 pending count、WorkItem failure 或静态发现说明制造主人待办。
+- [ ] 主动发现必须能区分 `发现 → 等授权 → 已创建 WorkItem → 执行 → 结果`；本轮如果只完成“发现”，必须明确停在发现而不是写“接管完成”。
+- [ ] 继续回归 Window Recovery 菜单、快捷键、Dock Reopen 三路径主人肉眼确认，以及 exact Artifact identity、arm64、strict codesign、whole-bundle replace、Acceptance/Production 物理隔离、`secret_export_count=0`、两轮 exact-instance Runtime stop、Production pollution=0。
+
+### 主人肉眼确认
+
+- [ ] 不看技术文档，主人 10 秒内能回答：`这是什么对象`、`灵机具体做了什么`、`结果是什么`、`下一步谁做`、`我是否需要操作`。
+- [ ] 首页与“工作”描述同一 WorkItem 时不存在相互矛盾；没有 WorkItem 时首页明确没有已执行工作。
+- [ ] “发现工具/来源”不会被误解为“灵机已经接管”。
+- [ ] “记忆”只有真实可读内容/摘要和来源证据时才被视为第二永久记忆大脑能力成立。
+
+### 回归项
+
+- [ ] 不新增第二个永久记忆事实源，不新增第二个 WorkItem 数据库或编排器；`extraction_jobs` 是当前 Capture 工作的唯一持久 WorkItem。
+- [ ] Obsidian Vault + Git 仍是永久记忆正文权威；SQLite/Qdrant 仍为可重建派生状态/索引。
+- [ ] 未经主人授权不得读取真实 AI 对话正文，不自动批准 Permanent/Core Memory，不自动执行破坏性 Production Qdrant rebuild。
+- [ ] Production/Acceptance 物理隔离、CredentialStore/AuthStatus、release exact-head、Sidecar exact-instance lifecycle 与跨平台同代码主线不得回退。
+- [ ] 历史失败 Artifact `9258682849 / 9250384637 / 9249367672 / 9224368022 / 9102748834` 均不得作为新 M5 输入。
+
+### 清理与回滚
+
+- PR #105 开发只修改代码、测试和文档，不触碰主人 Production 数据。
+- 若 V5 回归 Capture/Extraction，可回退 PR #105 的 V5 commits；不得通过恢复 V4 的路径猜测、generic event 工作履历或降低 Secret/隔离门禁来“修复”。
+- 真机阶段仍使用全新 task-scoped Acceptance root、whole-bundle replace 与失败恢复旧 App 的既有协议。
+
+### 不在范围
+
+- 不在 V5 事实链修复中新增第二套 Agent 编排框架。
+- 不实现自动 Permanent/Core Memory 批准。
+- 不把通用健康检查事件包装为业务 WorkItem。
+- 不因当前 PR 修复 UI 投影就宣称“所有自动发现来源已经实现完整接管”。
+
+### 最终报告
+
+- 计划与自审门禁：`docs/TEST_REPORTS/PR88_OWNER_FACT_CHAIN_V5_PLAN.md`
+- 实施、自测与独立自审：`docs/TEST_REPORTS/PR88_OWNER_FACT_CHAIN_V5_IMPLEMENTATION.md`
+- 新 M5 报告：仅在上述前置全部满足后创建 `docs/TEST_REPORTS/MACOS_M5_PHYSICAL_ACCEPTANCE_<new-short-sha>.md`。
+
+---
+
 ## 2026-08-16 · PR #102 / PR #88 · Active Permanent-Memory Workbench v4
 
 - 产品分支：`fix/pr88-owner-workbench-v4` → `feature/owner-autopilot-ui-codexpp`
