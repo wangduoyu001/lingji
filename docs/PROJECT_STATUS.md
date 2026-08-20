@@ -1,236 +1,204 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
-> Updated: 2026-08-20
-> Formal/default branch: `master`
-> Current product PR: `#88`
-> Current development PR: `#105 / fix/pr88-owner-fact-chain-v5`
-> Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
-> Current local task: `IDLE / NO ACTIVE LOCAL TASK`
-> Architecture: `docs/ARCHITECTURE.md`
-> Code entry points: `docs/MODULES/CODE_MAP.md`
+> Updated: 2026-08-21  
+> Formal/default branch: `master`  
+> Current product PR: `#88`  
+> Current development PR: `#105 / fix/pr88-owner-fact-chain-v5`  
+> V5 implementation SHA: `79955a09f42b7eb525fff1f11c454c373df8aa6c`  
+> V5 self-review verdict: `PASS_FOR_M5_PREPARATION`  
+> Current local task: `IDLE / NO ACTIVE M5 TASK`  
+> Architecture: `docs/ARCHITECTURE.md`  
+> Product ledger: `docs/PROJECT_PROGRESS.md`  
 > Acceptance authority: `docs/ACCEPTANCE/README.md`
 
 ## 1. 当前结论
 
-PR #88 的 Owner Workbench V4 已完成真实 macOS M5 复验：
+上一轮 PR #88 Owner Workbench V4 在真实 macOS M5 上结论仍是：
 
 ```text
 FAIL / DO NOT MERGE
-current local task: IDLE
-product PR: Draft
-Artifact 9258682849: DO NOT RETRY
+Artifact 9258682849 / bd1e7a17 = DO NOT RETRY
 ```
 
-技术发布链不是上一轮主要阻塞。精确产品/Artifact 身份、arm64、strict codesign、Acceptance 隔离、Secret 边界、两轮 Runtime 生命周期、分页终点、Production pollution=0、失败回滚与清理均通过。
+失败核心不是打包，而是主人看不出灵机真实接管、执行和完成了什么。
 
-真正阻塞是：**灵机没有形成主人可见、可追踪、可验证的“接管并完成工作”闭环。**
-
-主人最终观察：
-
-> 看不出灵机实际做了什么、接管了什么，与旧版没有明显差异。
-
-当前正在 PR #105 修复该问题。PR #105 仍为开发中 / Draft；没有新的可执行 M5 Artifact，也不得提前激活本机任务。
-
-## 2. 当前 P1 blocker：M5-V4-WORKBENCH-001
-
-V4 的问题不是某个页面少一个字段，而是同一件真实工作没有贯穿所有主人界面。
-
-### 2.1 首页和待办互相矛盾
-
-首页说存在“待确认候选”，但“需要我”页面显示 `0` 个真实待办。说明首页仍能从聚合/推导状态制造动作语义，而没有绑定同一真实对象。
-
-### 2.2 工作履历没有真实执行事实
-
-首页声称系统刚做过事情，但“工作”页面为 `0` 记录。主人无法确认：
+PR #105 已完成 V5 事实链修复与独立自审，当前代码候选达到：
 
 ```text
-发生了什么
-灵机具体执行了什么
-结果是什么
-下一步是什么
-下一执行者是谁
+PASS_FOR_M5_PREPARATION
 ```
 
-### 2.3 Capture 没有进入真实工作链
+这不等于 M5 PASS。下一步必须先把 #105 squash merge 到产品分支，再对新的产品 exact SHA 重跑六道门并锁定同 SHA Mac/Windows Artifact，之后才允许激活新的 M5 本机任务。
 
-`Cmd+K` 提交“记住”时真实失败，没有生成可追踪 Capture / Work / Memory 对象。入口存在，但能力没有闭环。
+## 2. V5 已完成的产品修复
 
-### 2.4 记忆不是可检查的第二大脑
-
-“记忆”只有泛化标题，缺少主人可读正文/摘要与可验证来源链。对象存在不等于记忆能力成立。
-
-### 2.5 主动发现没有体现接管
-
-能看到发现 Codex / WorkBuddy 等静态说明，但看不出：
-
-```text
-发现了什么
-是否获授权
-是否已经接管
-当前做到了哪一步
-结果是什么
-下一步系统会自动做什么
-```
-
-### 2.6 Window Recovery 仍未完整验收
-
-快捷键仅有自动观察；菜单与 Dock Reopen 未完成主人三路径肉眼确认，最终保持 `NOT_TESTED`。
-
-## 3. PR #105 当前修复状态
-
-状态：`IN_PROGRESS / SELF_REVIEW_REQUIRED / NO_M5`
-
-当前架构决定：
+### 2.1 Capture → WorkItem 可追踪
 
 ```text
 CaptureEnvelope.capture_id
-        ↓ 持久化
+        ↓ durable payload
 extraction_jobs.job_id = WorkItem identity
         ↓
-Capture Control sanitized WorkItem DTO
+CaptureControlService owner-safe DTO
         ↓
-shared ownerWorkFeed projector
-        ↓
-Home + Work
+/api/capture/jobs
 ```
 
-主人待办继续走独立且具体的对象边界：
+- 不新增第二 WorkItem 数据库；
+- `capture_id` 持久化，重启后可恢复；
+- duplicate 复用 canonical WorkItem identity；
+- queued/running/retrying/completed/failed/cancelled 都有真实 outcome、next_actor、next_action。
+
+### 2.2 首页 / 工作统一事实源
 
 ```text
-Memory Review candidate(memory_id)
-Assistant import candidate(candidate_id)
+/api/capture/jobs
+→ ownerWorkFeed
+→ Home + Work
+```
+
+禁止继续使用：
+
+- 记忆数量制造工作履历；
+- `relative_path` 猜关联；
+- generic event 冒充 WorkItem；
+- Codex current 冒充 LingJi 工作事实。
+
+### 2.3 首页 / 需要我统一 PendingAction
+
+```text
+Memory Review candidate
+Assistant import candidate
 Irreversible vector rebuild object
         ↓
-ownerWorkbenchModel shared PendingAction projector
+ownerWorkbenchModel
         ↓
 Home + 需要我
 ```
 
-当前已落地：
+没有 concrete object 就没有主人动作。普通失败、汇总计数、静态发现说明不得制造待办。
 
-- 纯文本使用一等 `source_type=text`，不再冒充网页；
-- `capture_id` 持久进入已有 extraction job payload，进程重启后仍可追踪；
-- `job_id` 直接作为现有 Capture/Extraction WorkItem，不新建第二套工作数据库；
-- `/api/capture/jobs` 输出安全白名单 WorkItem：真实状态、结果、下一动作、下一执行者、稳定结果引用；
-- Owner DTO 不输出 captured body、raw payload、原始错误、绝对输入路径或 worker 原始进度文案；
-- Cmd+K 返回真实 `capture_id/job_id/status`，不再提前宣称“已经记住”，快速记录标题不复制正文；
-- 首页与“工作”共享同一 WorkItem projector，不再通过 `relative_path`、记忆数量、generic event 或 Codex 当前状态猜“灵机做了什么”；
-- 主动发现明确区分“发现”与“已授权/已接管/已执行”；
-- Home 与“需要我”共享 concrete PendingAction projector；没有真实对象不创建主人动作；
-- 新增 V5 计划、自测和隐私回归测试；旧 V3/V4 smoke 正在按新事实合同收口，而不是删除测试换绿灯。
+### 2.4 Cmd+K / Capture 真实反馈
 
-尚未允许宣称完成：
+- 文本为一等 `source_type=text`；
+- 返回真实 `capture_id/job_id/status`；
+- 已入队不再写“已经记住”；
+- 是否形成永久记忆以真实 MemoryRecord/result ref 为准。
 
-- PR #105 精确 Head 的完整自动门禁仍需全部绿；
-- 必须完成独立代码自审并生成 `PR88_OWNER_FACT_CHAIN_V5_IMPLEMENTATION.md`；
-- 必须检查代码地图、状态、验收记录和变更日志同步；
-- PR #105 合入产品分支后，产品 exact SHA 必须重新跑六道门并生成同 SHA Mac/Windows Artifact；
-- M5 仍不得激活，Window Recovery 三路径和主人 10 秒理解检查仍属于未来真机门禁。
+### 2.5 记忆一级页可验证
 
-## 4. 已确认通过，不要重复返工
+“记忆”已经展示：
 
-以下不是下一轮主要矛盾：
+- 可读正文片段；
+- 正式来源；
+- 行级引用（存在时）；
+- 关联证据；
+- 向量/取回状态。
 
-- 精确产品/Artifact 身份；
+没有证据时显示未知/缺失，不补写猜测。
+
+### 2.6 主动发现语义修正
+
+“发现”只表示检测到支持来源。只有授权并创建真实 WorkItem 后，才允许显示“接管/执行”。
+
+## 3. 独立自审结论
+
+自审发现未接线的 `ownerWorkbenchSummary.ts` 会成为第三层 presentation model，增加事实漂移风险。已在 `79955a09...` 删除，不再强行套一层状态翻译。
+
+当前单一投影规则：
+
+```text
+WorkItem      → ownerWorkFeed       → Home + Work
+PendingAction → ownerWorkbenchModel → Home + 需要我
+MemoryRecord  → Memory Inspector    → 记忆
+```
+
+完整自审：`docs/TEST_REPORTS/PR88_OWNER_FACT_CHAIN_V5_IMPLEMENTATION.md`。
+
+## 4. 精确代码候选自动门禁
+
+Implementation SHA `79955a09f42b7eb525fff1f11c454c373df8aa6c`：
+
+```text
+tests                     PASS  run 32391549495
+macOS Desktop Gate        PASS  run 32391549584
+acceptance-doc-sync       PASS  run 32391549523
+local-execution-handoff   PASS  run 32391549512
+```
+
+`tests` 内 Python 3.11、Python 3.12、Windows、Desktop full smoke/build、MCP、browser capture、Obsidian plugin 均 PASS。
+
+新增 `owner-10-second-smoke.mjs` 已纳入全量 Desktop smoke 并通过。
+
+## 5. 功能可见性
+
+当前正式 UI 仍只有：
+
+```text
+desktop/lingji-control/
+```
+
+一级入口：
+
+```text
+首页 / 记忆 / 工作 / 需要我 / 高级
+```
+
+功能可见性审计已写入：
+
+```text
+docs/MODULES/FUNCTION_VISIBILITY_MATRIX.md
+```
+
+当前仍属于后续阶段、不能冒充本轮已完成的项目：
+
+- Retrieval Quality 真实样本评测；
+- Inspector / Vector 普通用户语言进一步产品化；
+- Codex 之外其他 AI 共享记忆的真实端到端验证；
+- 机会系统恢复开发。
+
+## 6. 当前唯一剩余门禁
+
+PR #105 代码阶段已达到产品分支准备标准。接下来只允许：
+
+```text
+1. squash merge #105 → feature/owner-autopilot-ui-codexpp
+2. 获取新的 product exact SHA
+3. 同 SHA：tests
+4. 同 SHA：P0 Windows Gate
+5. 同 SHA：Windows Desktop Release Baseline
+6. 同 SHA：macOS Desktop Gate
+7. 同 SHA：acceptance-doc-sync
+8. 同 SHA：local-execution-handoff
+9. 锁定 Mac/Windows Artifact 与哈希
+10. 更新 LOCAL_EXECUTION_TASK 为新的 ACTIVE M5
+11. 主人真机：10 秒理解 + Window Recovery 三路径 + Production pollution=0 + 清理
+```
+
+在第 9 步以前：
+
+```text
+LOCAL_EXECUTION_TASK = IDLE
+```
+
+## 7. 已稳定，不重复返工
+
+以下只做必要回归：
+
 - Apple Silicon arm64；
 - strict codesign；
-- whole-bundle replace；
+- whole-bundle replace 合同；
 - Acceptance / Production 物理隔离；
-- AuthStatus / Secret 边界；
+- Credential/Secret 边界；
 - `secret_export_count=0`；
-- 两轮 exact-instance Runtime start/stop；
-- 第一轮保存 PID 后验证 state/PID/8766 全释放；
-- `production_pollution_count=0`；
-- 记忆分页 `has_more=false` 时正确停止；
-- 高级技术信息已下沉。
+- exact-instance Runtime start/stop；
+- 记忆分页终点；
+- Production pollution 保护；
+- Qdrant destructive rebuild 禁止自动执行。
 
-后续只做必要回归，不应再把主要开发时间消耗在这些已稳定项上。
+## 8. 历史失败 Artifact
 
-## 5. 唯一主人事实链
-
-产品目标仍是：
-
-```text
-SourceObject      真实资料 / 工具 / 主人输入
-    ↓
-Discovery/Intent  为什么系统注意到它
-    ↓
-WorkItem          灵机决定接管的具体工作
-    ↓
-ExecutionEvent    每一步真实执行事件
-    ↓
-Outcome           成功 / 失败 / 跳过及可读结果
-    ↓
-NextAction        下一步 + actor(system/owner/external)
-    ↓
-PendingAction?    只有真的需要主人决定才存在
-    ↓
-MemoryRecord?     可读正文/摘要 + 来源/证据
-```
-
-**首页、需要我、工作、记忆、Capture 只能投影这条同一事实链。**
-
-硬规则：
-
-1. 没有真实 `WorkItem`，首页不得宣称“灵机做了”；
-2. 没有真实 `PendingAction`，任何地方不得宣称“需要你确认”；
-3. “工作”必须能看到每个真实 WorkItem 的状态、结果、下一 actor；
-4. Capture 成功必须创建真实 WorkItem，并最终落到 Outcome / Memory 或明确 Failure；
-5. MemoryRecord 必须给主人可读内容和来源证据，而不是只给标题；
-6. 自动发现必须如实显示停在哪一阶段；只完成“发现”时不得写“已接管”；
-7. 空状态必须解释为什么空，不得通过统计或静态事件制造活动感。
-
-## 6. 验收前开发顺序
-
-```text
-1. 审计当前后端真实表/API/事件
-2. 复用 extraction_jobs 建立稳定 Capture → WorkItem 身份
-3. 建立单一安全 WorkItem projector
-4. Home/Work 共享 WorkItem；Home/Attention 共享 PendingAction
-5. 用真实 fixture 验证重启、重复、成功、失败、隐私和未知状态
-6. 更新对应 Desktop smoke / Python tests
-7. 独立自审并记录发现的问题与修复
-8. self-review verdict 必须为 PASS_FOR_M5_PREPARATION
-9. focused/full/release 与双平台产品门禁
-10. 新产品 Commit + 同 SHA Mac/Windows Artifact
-11. 最后才允许新 ACTIVE M5 任务
-```
-
-下一轮 M5 不接受“页面看起来有内容”作为前置，必须先通过自动端到端事实链和独立自审门禁。
-
-## 7. 权威失败证据
-
-```text
-Task: PR88-M5-OWNER-WORKBENCH-V4-BD1E7A17
-Product: bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9
-macOS Artifact: 9258682849 / lingji-macos-arm64
-Report branch: acceptance/pr88-m5-owner-workbench-v4-bd1e7a17
-Report commit: 5793e4ae22e17d1f4db2c57ecc66bf18ec65af2e
-Cleanup receipt: 3011d796ff1bb5bff7d5e37c24e0c6236ee51d34
-PR #88 comment: 5306178636
-```
-
-最终结构化结果见 `docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md`。
-
-## 8. 技术边界保持不变
-
-- `src/` 为长期平台主线；
-- `desktop/lingji-control/` 为唯一正式 Desktop UI；
-- `second_brain/` 只做兼容/迁移；
-- Desktop 只通过认证的 `127.0.0.1:8766` Local Control API；
-- Obsidian Vault + Git 为永久记忆正文权威；
-- SQLite/Qdrant 为可重建索引与运行状态；
-- `extraction_jobs` 继续承担 Capture 工作状态，不新增第二套 WorkItem 数据库；
-- Acceptance / Production 物理隔离；
-- Secret 只留在系统安全凭据边界；
-- Runtime stop 只处理精确实例；
-- 不创建第二事实源来美化状态；
-- AI 不能自动批准永久记忆；
-- 不自动执行破坏性 Qdrant rebuild。
-
-## 9. 历史失败 Artifact
-
-以下均永久 `DO NOT RETRY`：
+以下永久 `DO NOT RETRY`：
 
 ```text
 9258682849 / bd1e7a17
@@ -240,12 +208,12 @@ PR #88 comment: 5306178636
 9102748834 / 171091fe
 ```
 
-## 10. 合并与 M5 边界
+## 9. 合并边界
 
-PR #88 当前仍是：
+PR #88 继续保持：
 
 ```text
 DRAFT / DO NOT MERGE
 ```
 
-PR #105 当前仍是开发 PR。不得因部分 CI 通过而激活 M5。新的 M5 只能在独立自审 `PASS_FOR_M5_PREPARATION`、产品同 SHA 六道门、双平台新 Artifact 和哈希锁定后创建。
+直到新的产品 exact SHA 完成同 SHA 双平台门禁、Artifact 锁定和主人 M5 真机验收。
