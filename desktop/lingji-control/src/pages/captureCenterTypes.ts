@@ -1,5 +1,7 @@
 export type CaptureMode = "normal" | "low_power" | "paused" | string;
 export type CaptureJobStatus = "queued" | "running" | "retrying" | "completed" | "failed" | "cancelled" | string;
+export type OwnerOutcomeState = "pending" | "running" | "retrying" | "succeeded" | "failed" | "cancelled" | "unknown" | string;
+export type OwnerNextActor = "system" | "owner" | "external" | "none" | string;
 
 export type Pagination = {
   limit: number;
@@ -17,12 +19,20 @@ export type CaptureResultRefs = {
 
 export type CaptureJob = {
   job_id: string;
+  work_item_id?: string | null;
+  capture_id?: string | null;
   title?: string | null;
+  capture_method?: string | null;
   file_name?: string | null;
   filename?: string | null;
   source_type?: string | null;
   adapter_name?: string | null;
   status: CaptureJobStatus;
+  outcome_state?: OwnerOutcomeState | null;
+  outcome_summary?: string | null;
+  next_actor?: OwnerNextActor | null;
+  next_action?: string | null;
+  result_object_ids?: string[];
   priority?: number | null;
   attempts?: number | null;
   max_attempts?: number | null;
