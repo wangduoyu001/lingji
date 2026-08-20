@@ -25,10 +25,15 @@ assert.equal(overview.includes("assistantSources.flatMap"), false, "Home must no
 
 assert.match(attention, /buildOwnerAttentionItems/);
 assert.match(attention, /resource\.data\?\.reviews\?\.items/);
+assert.match(attention, /ownerAttentionSummary/);
+assert.match(attention, /ownerSourcesUnknown/);
 assert.match(attention, /每个按钮背后都有一个真实对象/);
-assert.match(attention, /onOpenReview\(item\.candidate\.memory_id\)/);
-assert.match(attention, /authorizeImport/);
+assert.match(attention, /onOpenReview\(item\.memoryId\)/);
+assert.match(attention, /authorizeImport\(item\)/);
+assert.match(attention, /item\.candidateId/);
 assert.match(attention, /AUTHORIZE_ASSISTANT_IMPORT_/);
+assert.equal(attention.includes("type OwnerItem ="), false, "Attention must not define a second PendingAction model");
+assert.equal(attention.includes("const result: OwnerItem[]"), false, "Attention must not rebuild PendingActions locally");
 assert.equal(attention.includes("pending_review_count"), false, "Owner inbox count must come from actual candidate objects, not a summary count");
 
 assert.match(projector, /memory:\$\{candidate\.memory_id\}/);
