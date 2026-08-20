@@ -3,7 +3,14 @@ import type { LingJiApi } from "../api";
 import { Empty, Notice } from "../components/ui";
 import { usePollingResource } from "../hooks/usePollingResource";
 import { buildOwnerWorkFeed, type OwnerWorkItem } from "../ownerWorkFeed";
+import {
+  buildOwnerAttentionItems,
+  hasReviewConsistencyIssue,
+  ownerAttentionSummary,
+  ownerSourcesUnknown,
+} from "../ownerWorkbenchModel";
 import type { PageId, Row } from "../types";
+import type { CaptureJobsResponse } from "./captureCenterTypes";
 import type { CodexCurrent } from "./codexWorkspaceTypes";
 
 type ReviewCandidate = {
@@ -50,14 +57,7 @@ type HomeSnapshot = {
   assistants: AssistantHub | null;
   current: CodexCurrent | null;
   reviews: ReviewResponse | null;
-};
-
-type OwnerDecision = {
-  id: string;
-  title: string;
-  detail: string;
-  target: PageId;
-  memoryId?: string;
+  work: CaptureJobsResponse | null;
 };
 
 const numberOrNull = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -91,6 +91,13 @@ function safeMemoryTitle(value: unknown): string {
   return String(row.title ?? row.memory_id ?? "记忆").slice(0, 160);
 }
 
+function nextActorLabel(value: string | null | undefined): string {
+  if (value === "system") return "灵机";
+  if (value === "owner") return "你";
+  if (value === "external") return "外部系统";
+  return "无待执行者";
+}
+
 export default function OverviewPage({ data, api, active, onNavigate, onOpenReview }: {
   data: Row | null;
   api: LingJiApi;
@@ -105,6 +112,7 @@ export default function OverviewPage({ data, api, active, onNavigate, onOpenRevi
       api.get<AssistantHub>("/api/assistant-hub/status", { signal }),
       api.get<CodexCurrent>("/api/codex/current", { signal }),
       api.get<ReviewResponse>("/api/memory/review/candidates?limit=8&offset=0", { signal }),
+      api.get<CaptureJobsResponse>("/api/capture/jobs?limit=24&offset=0", { signal }),
     ]);
     return {
       autopilot: settledValue(results[0]),
@@ -112,6 +120,7 @@ export default function OverviewPage({ data, api, active, onNavigate, onOpenRevi
       assistants: settledValue(results[2]),
       current: settledValue(results[3]),
       reviews: settledValue(results[4]),
+      work: settledValue(results[5]),
     };
   }, [api]);
 
@@ -123,55 +132,34 @@ export default function OverviewPage({ data, api, active, onNavigate, onOpenRevi
     pauseWhenHidden: true,
   });
 
-  if (!data) return <Empty text="灵机核心连接后，会先自动扫描已授权环境，再告诉你发生了什么。" />;
+  if (!data) return <Empty text="灵机核心连接后，会读取真实工作对象和主人边界状态。" />;
 
   const d = data as Record<string, unknown>;
-  const queueRoot = asRecord(d.queue);
   const progress = asRecord(d.memory_progress);
   const intake = asRecord(progress.intake);
   const memoryRuntime = asRecord(d.memory_runtime);
   const vector = asRecord(memoryRuntime.vector ?? d.vector_status);
-  const events = Array.isArray(d.events) ? d.events : [];
   const expectedDocuments = numberOrNull(intake.documents);
   const memories = resource.data?.memories ?? null;
-  const feed = buildOwnerWorkFeed({ memoryResponse: memories, queueResponse: queueRoot, events, expectedDocuments, limit: 24 });
+  const feed = buildOwnerWorkFeed({ jobsResponse: resource.data?.work ?? null, expectedDocuments, limit: 24 });
 
   const reviewItems = resource.data?.reviews?.items ?? [];
   const assistantSources = resource.data?.assistants?.import_plan?.sources ?? [];
-  const importCandidates = assistantSources.flatMap((source) => (source.candidates ?? []).map((candidate) => ({ source, candidate })));
   const detectedAssistants = resource.data?.assistants?.assistants?.filter((assistant) => assistant.detection_state === "detected") ?? [];
   const pendingReviewCount = Number(resource.data?.current?.pending_review_count ?? 0);
-  const reviewMismatch = pendingReviewCount > 0 && resource.data?.reviews !== null && reviewItems.length === 0;
+  const reviewsLoaded = resource.data?.reviews !== null;
+  const assistantsLoaded = resource.data?.assistants !== null;
+  const reviewMismatch = hasReviewConsistencyIssue({ pendingReviewCount, reviewsLoaded, reviewItems });
+  const unknownOwnerState = ownerSourcesUnknown({ reviewsLoaded, assistantsLoaded });
 
-  const decisions = useMemo<OwnerDecision[]>(() => {
-    const result: OwnerDecision[] = [];
-    for (const candidate of reviewItems.slice(0, 3)) {
-      result.push({
-        id: `memory:${candidate.memory_id}`,
-        title: candidate.title || "一条候选记忆等待确认",
-        detail: candidate.proposal_reason || candidate.content_preview || "这条内容只有确认后才会进入永久记忆。",
-        target: "memory_review",
-        memoryId: candidate.memory_id,
-      });
-    }
-    for (const item of importCandidates.slice(0, 3)) {
-      result.push({
-        id: `import:${item.candidate.candidate_id}`,
-        title: `允许读取 ${item.source.label} · ${item.candidate.display_name || "发现的新资料"}`,
-        detail: "目前只读取了文件元数据。正文访问需要你的明确授权。",
-        target: "attention",
-      });
-    }
-    if (vector.rebuild_required === true) {
-      result.push({
-        id: "vector-rebuild",
-        title: "向量索引重建需要你确认",
-        detail: "这是不可逆维护动作，因此灵机停在主人边界，没有自动执行。",
-        target: "vector_center",
-      });
-    }
-    return result;
-  }, [importCandidates, reviewItems, vector.rebuild_required]);
+  const decisions = useMemo(
+    () => buildOwnerAttentionItems({
+      reviewItems,
+      importSources: assistantSources,
+      vectorRebuildRequired: vector.rebuild_required === true,
+    }),
+    [assistantSources, reviewItems, vector.rebuild_required],
+  );
 
   const activeItems = feed.items.filter((item) => ["queued", "leased", "running", "retrying"].includes(item.status.toLowerCase()));
   const recentOutcome = feed.recentActivity.slice(0, 4);
@@ -179,48 +167,34 @@ export default function OverviewPage({ data, api, active, onNavigate, onOpenRevi
     ? ((memories as Record<string, unknown>).items as unknown[]).slice(0, 4)
     : [];
   const nextItem = activeItems[0] ?? feed.items[0] ?? null;
-  const currentCodex = resource.data?.current?.activity ?? null;
-  const unknownOwnerState = resource.data?.reviews === null || resource.data?.assistants === null;
-
-  const heroTitle = decisions.length > 0
-    ? `有 ${decisions.length} 件事真的需要你`
-    : unknownOwnerState
-      ? "正在确认有没有事情需要你"
-      : "现在不用你做任何事";
-  const heroDetail = decisions.length > 0
-    ? "这些事项都有真实对象和明确原因。其余扫描、整理、重试和索引由灵机自己继续。"
-    : unknownOwnerState
-      ? "部分主人边界状态暂时没读到，灵机正在自动重试；未知不会被显示成“没有待办”。"
-      : activeItems.length > 0
-        ? `灵机正在自动处理 ${activeItems.length} 项工作，你不用守着它。`
-        : "没有权限、冲突或不可逆事项等你处理。灵机会继续观察已授权来源。";
+  const attention = ownerAttentionSummary({ items: decisions, sourceUnknown: unknownOwnerState, activeWorkCount: activeItems.length });
 
   return (
     <div className="workbench-v4 home-v4">
-      <section className={`v4-brief-hero ${decisions.length ? "needs-owner" : unknownOwnerState ? "unknown" : "clear"}`}>
+      <section className={`v4-brief-hero ${attention.state === "owner" ? "needs-owner" : attention.state === "unknown" ? "unknown" : "clear"}`}>
         <div className="v4-brief-copy">
           <span className="v4-kicker">现在需要你吗</span>
-          <h2>{heroTitle}</h2>
-          <p>{heroDetail}</p>
+          <h2>{attention.title}</h2>
+          <p>{attention.detail}</p>
         </div>
         <div className="v4-brief-state">
-          <span className={`v4-state-orb ${decisions.length ? "warning" : unknownOwnerState ? "unknown" : "ok"}`} />
-          <div><strong>{decisions.length ? "等待主人" : unknownOwnerState ? "确认中" : "灵机自己继续"}</strong><small>{resource.refreshing ? "正在同步最新事实" : "后台自动更新"}</small></div>
+          <span className={`v4-state-orb ${attention.state === "owner" ? "warning" : attention.state === "unknown" ? "unknown" : "ok"}`} />
+          <div><strong>{attention.state === "owner" ? "等待主人" : attention.state === "unknown" ? "确认中" : "没有主人待办"}</strong><small>{resource.refreshing ? "正在同步最新事实" : "后台自动更新"}</small></div>
         </div>
       </section>
 
-      {reviewMismatch && <Notice kind="warning">系统报告有待确认记忆，但当前没有读到对应候选对象。灵机不会给你一个会打开空页面的“去处理”按钮。</Notice>}
+      {reviewMismatch && <Notice kind="warning">系统汇总报告有待确认记忆，但当前没有读到对应候选对象。灵机不会生成会打开空页面的动作。</Notice>}
       {feed.detailsState === "unavailable" && <Notice kind="warning">{feed.detailsMessage}</Notice>}
 
       {decisions.length > 0 && (
         <section className="v4-owner-inbox">
-          <div className="v4-section-heading"><div><span className="v4-kicker">需要我</span><h3>只有真正跨过主人边界的事</h3></div><button className="v4-link" onClick={() => onNavigate("attention")}>查看全部</button></div>
+          <div className="v4-section-heading"><div><span className="v4-kicker">需要我</span><h3>只有真实 PendingAction 对象</h3></div><button className="v4-link" onClick={() => onNavigate("attention")}>查看全部</button></div>
           <div className="v4-decision-list">
             {decisions.map((decision) => (
               <button
                 className="v4-decision-row"
                 key={decision.id}
-                onClick={() => decision.memoryId ? onOpenReview(decision.memoryId) : onNavigate(decision.target)}
+                onClick={() => decision.kind === "memory" ? onOpenReview(decision.memoryId) : onNavigate(decision.target)}
               >
                 <span><strong>{decision.title}</strong><small>{decision.detail}</small></span><b>处理</b>
               </button>
@@ -231,7 +205,7 @@ export default function OverviewPage({ data, api, active, onNavigate, onOpenRevi
 
       <section className="v4-home-grid">
         <article className="v4-surface v4-outcomes">
-          <div className="v4-section-heading compact"><div><span className="v4-kicker">刚刚替你做了什么</span><h3>真实结果</h3></div><button className="v4-link" onClick={() => onNavigate("activity")}>工作履历</button></div>
+          <div className="v4-section-heading compact"><div><span className="v4-kicker">刚刚替你做了什么</span><h3>有 WorkItem 才显示结果</h3></div><button className="v4-link" onClick={() => onNavigate("activity")}>工作履历</button></div>
           {recentOutcome.length ? (
             <div className="v4-timeline">
               {recentOutcome.map((event) => (
@@ -243,37 +217,35 @@ export default function OverviewPage({ data, api, active, onNavigate, onOpenRevi
               ))}
             </div>
           ) : (
-            <div className="v4-empty-state compact"><strong>最近没有新的完成动作</strong><p>没有实际动作时，这里不会制造“系统很忙”的假动态。</p></div>
+            <div className="v4-empty-state compact"><strong>最近没有新的 WorkItem 结果</strong><p>静态扫描说明、统计数字和孤立事件不会冒充“灵机刚做了什么”。</p></div>
           )}
         </article>
 
         <article className="v4-surface v4-now">
-          <div className="v4-section-heading compact"><div><span className="v4-kicker">现在正在做什么</span><h3>{activeItems.length ? `${activeItems.length} 项自动工作` : currentCodex ? "Codex 工作正在进行" : "当前没有前台工作"}</h3></div></div>
+          <div className="v4-section-heading compact"><div><span className="v4-kicker">现在正在做什么</span><h3>{activeItems.length ? `${activeItems.length} 项真实工作` : "当前没有运行中的 WorkItem"}</h3></div></div>
           {activeItems.length ? (
             <div className="v4-work-stack">
               {activeItems.slice(0, 3).map((item) => (
-                <button className="v4-work-row" key={item.id} onClick={() => onNavigate(item.memoryId ? "memory" : "activity")}>
+                <button className="v4-work-row" key={item.id} onClick={() => onNavigate("activity")}>
                   <span className={`v4-work-state ${workTone(item)}`}>{item.stageLabel}</span>
                   <div><strong>{item.title}</strong><small>{item.done}</small></div>
                 </button>
               ))}
             </div>
-          ) : currentCodex ? (
-            <div className="v4-current-callout"><strong>{currentCodex.summary || "Codex 工作正在进行"}</strong><p>阶段：{currentCodex.stage || "状态更新中"}</p></div>
           ) : (
-            <div className="v4-empty-state compact"><strong>系统空闲</strong><p>没有需要等待的任务。后台发现和状态检查仍按已授权范围继续。</p></div>
+            <div className="v4-empty-state compact"><strong>没有已记录的前台工作</strong><p>发现来源本身不等于已经接管或执行。只有创建 WorkItem 后才会显示在这里。</p></div>
           )}
         </article>
       </section>
 
       <section className="v4-surface v4-next-surface">
-        <div className="v4-section-heading"><div><span className="v4-kicker">接下来灵机会做什么</span><h3>{nextItem ? nextItem.nextStep : "继续观察已授权来源"}</h3></div><span className="v4-next-actor">下一执行者：{nextItem?.ownerActionRequired ? "你" : "灵机"}</span></div>
-        <p>{nextItem ? `${nextItem.title} · 当前：${nextItem.done}` : "目前没有排队资料。发现新的可信变化后，灵机会先判断能否安全自动处理；只有必须由你决定时才会打扰你。"}</p>
+        <div className="v4-section-heading"><div><span className="v4-kicker">下一步</span><h3>{nextItem ? nextItem.nextStep : "当前没有 WorkItem 后续动作"}</h3></div><span className="v4-next-actor">下一执行者：{nextActorLabel(nextItem?.nextActor)}</span></div>
+        <p>{nextItem ? `${nextItem.title} · 当前事实：${nextItem.done}` : "系统没有可证明的后续工作时，不会用“继续自动处理”之类文案制造活动感。"}</p>
       </section>
 
       <section className="v4-home-grid secondary">
         <article className="v4-surface">
-          <div className="v4-section-heading compact"><div><span className="v4-kicker">记忆发生了什么变化</span><h3>最近进入第二永久记忆大脑的内容</h3></div><button className="v4-link" onClick={() => onNavigate("memory")}>打开记忆</button></div>
+          <div className="v4-section-heading compact"><div><span className="v4-kicker">记忆发生了什么变化</span><h3>真实记忆对象</h3></div><button className="v4-link" onClick={() => onNavigate("memory")}>打开记忆</button></div>
           {recentMemories.length ? (
             <div className="v4-memory-mini-list">
               {recentMemories.map((item, index) => <button key={index} onClick={() => onNavigate("memory")}><strong>{safeMemoryTitle(item)}</strong><small>查看真实内容和来源证据</small></button>)}
@@ -282,15 +254,15 @@ export default function OverviewPage({ data, api, active, onNavigate, onOpenRevi
         </article>
 
         <article className="v4-surface">
-          <div className="v4-section-heading compact"><div><span className="v4-kicker">主动发现</span><h3>{detectedAssistants.length ? `已发现 ${detectedAssistants.length} 个可接管工具` : "继续扫描已支持环境"}</h3></div></div>
+          <div className="v4-section-heading compact"><div><span className="v4-kicker">主动发现</span><h3>{detectedAssistants.length ? `已发现 ${detectedAssistants.length} 个支持来源` : "继续检查已支持环境"}</h3></div></div>
           {detectedAssistants.length ? (
             <div className="v4-discovery-list">
               {detectedAssistants.slice(0, 5).map((assistant) => (
-                <div key={assistant.id}><span className="v4-discovery-dot" /><div><strong>{assistant.label}</strong><small>{assistant.message || `已识别 ${Number(assistant.candidate_count ?? 0).toLocaleString()} 条记录元数据`}</small></div></div>
+                <div key={assistant.id}><span className="v4-discovery-dot" /><div><strong>{assistant.label}</strong><small>{assistant.message || `只确认到 ${Number(assistant.candidate_count ?? 0).toLocaleString()} 条可用元数据；发现不等于已授权、已接管或已执行`}</small></div></div>
               ))}
             </div>
-          ) : <div className="v4-empty-state compact"><strong>暂未发现新的支持来源</strong><p>扫描是后台行为，不需要你手动刷新。</p></div>}
-          {importCandidates.length > 0 && <button className="v4-inline-alert" onClick={() => onNavigate("attention")}>发现 {importCandidates.length} 份资料需要正文读取授权</button>}
+          ) : <div className="v4-empty-state compact"><strong>暂未发现新的支持来源</strong><p>没有发现时不创建虚假工作。</p></div>}
+          {assistantSources.some((source) => (source.candidates?.length ?? 0) > 0) && <button className="v4-inline-alert" onClick={() => onNavigate("attention")}>发现资料需要正文读取授权</button>}
         </article>
       </section>
 
@@ -298,7 +270,7 @@ export default function OverviewPage({ data, api, active, onNavigate, onOpenRevi
         <summary>高级状态与系统统计</summary>
         <div>
           <span>资料统计：{expectedDocuments ?? "待确认"}</span>
-          <span>自动驾驶：{String(resource.data?.autopilot?.state ?? "状态待确认")}</span>
+          <span>自动维护：{String(resource.data?.autopilot?.state ?? "状态待确认")}</span>
           <span>向量：{String(vector.state ?? "状态待确认")}</span>
         </div>
       </details>
