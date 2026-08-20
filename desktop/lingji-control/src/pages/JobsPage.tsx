@@ -35,12 +35,12 @@ export default function JobsPage({ api, active }: PageProps) {
       {resource.error && <Notice kind="error">刷新失败：{resource.error.message}。已保留最近一次成功数据。</Notice>}
       <Panel title="任务队列">
         <DataTable
-          headers={["任务 ID", "来源", "状态", "进度", "尝试", "错误", "更新时间"]}
+          headers={["任务 ID", "来源", "状态", "结果/进度", "尝试", "错误", "更新时间"]}
           rows={(data.items ?? []).map((job: CaptureJob) => [
             job.work_item_id || job.job_id,
             String(job.source_type ?? ""),
             String(job.status ?? "unknown"),
-            String(job.progress_message ?? "-"),
+            String(job.outcome_summary ?? "-"),
             `${Number(job.attempts ?? 0)}/${Number(job.max_attempts ?? 0)}`,
             String(job.error_message ?? "-"),
             String(job.updated_at ?? ""),
