@@ -19,6 +19,13 @@ IN_PROGRESS
 
 The new `ownerWorkbenchSummary.ts` provides a single presentation model. It does not create a new source of truth. It only transforms existing WorkItem and OwnerAttention objects.
 
+## Next Implementation Batch
+
+- Connect OwnerWorkbench summary into desktop Home presentation.
+- Verify Work and Attention surfaces consume the same projection.
+- Add 10-second owner experience smoke validation.
+- Complete acceptance evidence before changing verdict.
+
 ## Verification Required
 
 - Desktop smoke tests.
