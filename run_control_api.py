@@ -79,7 +79,7 @@ def _packaged_capture_processor(service, state_db):
         state_db=state_db,
         runtime_settings=service.runtime_settings,
     )
-    # Capture API reuses these exact queue/pipeline objects. The packaged 8766
+    # Capture API reuses these exact queue/pipeline objects. The packaged control
     # process therefore owns queue consumption but never opens Qdrant.
     service.pipeline = processor.pipeline
     service.queue = processor.pipeline.queue
