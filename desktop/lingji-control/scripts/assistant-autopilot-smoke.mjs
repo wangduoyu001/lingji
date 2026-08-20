@@ -6,9 +6,10 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
 
-const [overview, attention, command, codex, api, discovery, imports, boundary, connection, bootstrap, autopilotEngine, autopilotApi, runtimeEntrypoint] = await Promise.all([
+const [overview, attention, ownerModel, command, codex, api, discovery, imports, boundary, connection, bootstrap, autopilotEngine, autopilotApi, runtimeEntrypoint] = await Promise.all([
   read("../src/pages/OverviewPage.tsx"),
   read("../src/pages/AttentionPage.tsx"),
+  read("../src/ownerWorkbenchModel.ts"),
   read("../src/components/GlobalOwnerCommand.tsx"),
   read("../src/pages/CodexWorkspacePage.tsx"),
   read("../../../src/control/capture_api.py"),
@@ -38,10 +39,12 @@ assert.equal(overview.includes("Metric"), false, "Home must not render technical
 
 assert.match(attention, /\/api\/assistant-hub\/status/);
 assert.match(attention, /\/api\/memory\/review\/candidates/);
+assert.match(attention, /buildOwnerAttentionItems/);
 assert.match(attention, /import-candidates\/\$\{encodeURIComponent\(item\.candidateId\)\}\/authorize/);
 assert.match(attention, /AUTHORIZE_ASSISTANT_IMPORT_\$\{item\.candidateId\.toUpperCase\(\)\}/);
-assert.match(attention, /读取正文会跨过隐私边界/);
-assert.match(attention, /所以停下来等你/);
+assert.match(ownerModel, /读取正文会跨过隐私边界/);
+assert.match(ownerModel, /所以停下来等你/);
+assert.match(ownerModel, /candidateId: candidate\.candidate_id/);
 assert.match(attention, /灵机自己处理/);
 assert.match(attention, /不把运维工作冒充成主人待办/);
 assert.equal(attention.includes("pending_review_count"), false, "Owner inbox must not create actions from a summary count");
