@@ -240,6 +240,69 @@ def test_job_dto_is_sanitized_and_uses_basename(harness, tmp_path):
         assert forbidden not in serialized
 
 
+def test_legacy_jobs_routes_reuse_sanitized_projection(harness, tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from src.control.capture_api import register_capture_routes
+
+    settings, queue, _, _, service = harness
+    private_file = tmp_path / "Private" / "secret.txt"
+    private_file.parent.mkdir()
+    private_file.write_text("owner-private-body", encoding="utf-8")
+    submitted = service.submit_file({
+        "input_path": str(private_file),
+        "source_type": "web",
+        "metadata": {"safe": "yes"},
+    })
+    for _ in range(3):
+        claimed = queue.claim("worker", job_id=submitted["job_id"])
+        queue.fail(
+            claimed["job_id"],
+            r"failed D:\Users\Private\state.db token=legacy-secret",
+            retry_delay_seconds=0,
+        )
+
+    app = FastAPI()
+
+    @app.get("/api/jobs")
+    def unsafe_jobs():
+        return {"jobs": queue.list(limit=100)}
+
+    @app.get("/api/jobs/{job_id}")
+    def unsafe_job(job_id: str):
+        return queue.get(job_id)
+
+    control = SimpleNamespace(capture_control=service, queue=queue)
+    register_capture_routes(app, settings, control, token="test-token")
+    client = TestClient(app)
+    headers = {"X-LingJi-Token": "test-token"}
+
+    list_response = client.get("/api/jobs", headers=headers)
+    assert list_response.status_code == 200
+    payload = list_response.json()
+    assert payload["jobs"]
+    assert payload["jobs"][0]["work_item_id"]
+
+    detail_response = client.get(f"/api/jobs/{submitted['job_id']}", headers=headers)
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["capture_id"] == submitted["capture_id"]
+    assert detail["error_message"] == "Capture processing failed; see local logs"
+
+    serialized = json.dumps({"list": payload, "detail": detail})
+    for forbidden in (
+        "owner-private-body",
+        "legacy-secret",
+        "D:\\Users\\Private",
+        '"payload"',
+        '"input_path"',
+        '"last_error"',
+        '"lease_token"',
+    ):
+        assert forbidden not in serialized
+
+
 def test_audit_failure_does_not_break_operations(tmp_path):
     settings = SimpleNamespace(storage_path=tmp_path / "storage", runtime_settings_file=Path("runtime-settings.json"))
     settings.storage_path.mkdir(parents=True)
