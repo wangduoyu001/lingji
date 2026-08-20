@@ -33,8 +33,11 @@ class CoverageGuardedSemanticProvider:
     def is_fresh(self) -> bool:
         revision = int(self.database.revision)
         with self._lock:
-            if self._checked_revision == revision:
-                return self._ready
+            # A proven-fresh semantic mirror may be cached for the current Memory
+            # DB revision. A stale mirror is rechecked so it can recover as soon
+            # as the semantic owner catches up without requiring another DB write.
+            if self._checked_revision == revision and self._ready:
+                return True
             self._refresh_locked(revision)
             return self._ready
 
