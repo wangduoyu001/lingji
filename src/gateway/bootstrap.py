@@ -19,6 +19,7 @@ from src.retrieval import (
     QdrantSemanticProvider,
 )
 from src.retrieval.context_pack import ContextPackBuilder
+from src.retrieval.semantic_freshness import CoverageGuardedSemanticProvider
 from src.runtime.workspace import (
     WorkspaceContext,
     WorkspaceName,
@@ -38,6 +39,10 @@ def build_memory_gateway(
     Existing production Vault and SQLite paths remain the transition mapping when
     no explicit WorkspaceContext is supplied. Any semantic configuration or
     dependency failure leaves a lexical-only gateway with structured warnings.
+
+    Semantic search is additionally guarded by exact Memory DB chunk coverage.
+    Vault/lexical updates may arrive before Qdrant catches up; stale vectors are
+    never fused with current lexical results during that window.
     """
 
     if workspace is not None:
@@ -61,6 +66,7 @@ def build_memory_gateway(
     runtime_warnings: list[dict[str, Any]] = []
     closeables: list[Any] = []
     semantic_provider = None
+    guarded_semantic_provider = None
     runtime_workspace = workspace
     semantic_batch_size = int(settings.semantic_batch_size)
     embedding_provider = None
@@ -103,6 +109,10 @@ def build_memory_gateway(
                         values.get("qdrant_collection_schema", settings.qdrant_collection_schema)
                     ),
                 )
+                guarded_semantic_provider = CoverageGuardedSemanticProvider(
+                    memory_db,
+                    semantic_provider,
+                )
                 closeables.extend([embedding_provider, semantic_provider])
     except Exception as exc:
         if embedding_provider is not None:
@@ -116,11 +126,12 @@ def build_memory_gateway(
         runtime_warnings.append(warning)
         _record_warning(state_db, warning)
         semantic_provider = None
+        guarded_semantic_provider = None
         semantic_batch_size = int(settings.semantic_batch_size)
 
     retriever = HybridRetriever(
         memory_db,
-        semantic_provider=semantic_provider,
+        semantic_provider=guarded_semantic_provider,
         cache_size=settings.memory_search_cache_size,
         cache_ttl_seconds=settings.memory_search_cache_ttl_seconds,
     )
