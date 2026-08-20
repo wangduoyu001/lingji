@@ -74,8 +74,10 @@ assert.equal(activity.includes("/api/codex/current"), false, "Codex activity mus
 for (const token of ["需要我", "真实待办", "每个按钮背后都有一个真实对象", "灵机自己处理"]) assert.ok(attention.includes(token), `Owner inbox is missing ${token}`);
 assert.match(attention, /\/api\/memory\/review\/candidates/);
 assert.match(attention, /\/api\/assistant-hub\/status/);
-assert.match(attention, /import-candidates\/\$\{encodeURIComponent\(item\.candidate\.candidate_id\)\}\/authorize/);
+assert.match(attention, /import-candidates\/\$\{encodeURIComponent\(item\.candidateId\)\}\/authorize/);
 assert.match(attention, /AUTHORIZE_ASSISTANT_IMPORT_/);
+assert.match(attention, /buildOwnerAttentionItems/);
+assert.equal(attention.includes("type OwnerItem ="), false, "Attention must not rebuild PendingActions locally");
 
 assert.match(command, /metaKey \|\| event\.ctrlKey/);
 assert.match(command, /\/api\/capture\/text/);
