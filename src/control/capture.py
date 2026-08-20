@@ -281,13 +281,24 @@ class CaptureControlService:
         return self.status()
 
     def job_dto(self, row: Mapping[str, Any]) -> dict[str, Any]:
+        payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
         result = row.get("result") if isinstance(row.get("result"), Mapping) else {}
-        status = str(row.get("status") or "")
+        status = str(row.get("status") or "").lower()
+        refs = self._result_refs(result)
+        outcome = self._work_outcome(status, result)
         return {
             "job_id": str(row.get("job_id") or ""),
+            "work_item_id": str(row.get("job_id") or ""),
+            "capture_id": str(payload.get("capture_id") or "") or None,
+            "title": self._job_title(payload, row),
+            "capture_method": str(payload.get("capture_method") or "") or None,
             "source_type": str(row.get("source_type") or ""),
             "adapter_name": str(row.get("adapter_name") or "") or None,
             "status": status,
+            "outcome_state": outcome["state"],
+            "outcome_summary": outcome["summary"],
+            "next_actor": outcome["next_actor"],
+            "next_action": outcome["next_action"],
             "priority": int(row.get("priority") or 0),
             "attempts": int(row.get("attempts") or 0),
             "max_attempts": int(row.get("max_attempts") or 0),
@@ -300,7 +311,8 @@ class CaptureControlService:
             "error_code": "CAPTURE_JOB_FAILED" if status == "failed" else None,
             "error_message": _FAILED_MESSAGE if status == "failed" else None,
             "result_summary": self._result_summary(result),
-            "result_refs": self._result_refs(result),
+            "result_refs": refs,
+            "result_object_ids": self._result_object_ids(result),
             "file_name": self._basename(str(row.get("input_path") or "")),
         }
 
@@ -356,13 +368,19 @@ class CaptureControlService:
 
         outcome = self._proxy.last_outcome
         job_id = str(result.extraction_job_id or outcome.get("job_id") or "")
-        duplicate = result.status is CaptureStatus.DUPLICATE or bool(outcome.get("duplicate"))
+        duplicate = (
+            result.status is CaptureStatus.DUPLICATE
+            or bool(outcome.get("duplicate"))
+            or bool(outcome.get("existing_job"))
+        )
         if result.deduplication_key and job_id:
             self._job_by_key[result.deduplication_key] = job_id
         if not job_id and result.deduplication_key:
             job_id = self._job_by_key.get(result.deduplication_key, "")
+        canonical_capture_id = self._job_capture_id(job_id) if duplicate and job_id else ""
+        canonical_capture_id = canonical_capture_id or result.capture_id
         response = {
-            "capture_id": result.capture_id,
+            "capture_id": canonical_capture_id,
             "status": "duplicate" if duplicate else result.status.value,
             "job_id": job_id or None,
             "duplicate": duplicate,
@@ -370,8 +388,14 @@ class CaptureControlService:
         }
         self._audit(
             "capture_duplicate" if duplicate else "capture_submitted",
-            result.capture_id,
-            {"capture_id": result.capture_id, "job_id": job_id or None, "source_type": envelope.source_type, "duplicate": duplicate},
+            canonical_capture_id,
+            {
+                "capture_id": canonical_capture_id,
+                "request_capture_id": result.capture_id,
+                "job_id": job_id or None,
+                "source_type": envelope.source_type,
+                "duplicate": duplicate,
+            },
         )
         return response
 
@@ -411,6 +435,16 @@ class CaptureControlService:
         except Exception:
             logger.exception("Capture audit event failed: %s", event_type)
 
+    def _job_capture_id(self, job_id: str) -> str:
+        if not job_id:
+            return ""
+        try:
+            row = self.queue.get(job_id)
+        except LookupError:
+            return ""
+        payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
+        return str(payload.get("capture_id") or "")
+
     @staticmethod
     def _invalid(message: str) -> None:
         raise CaptureControlError(CAPTURE_INVALID_INPUT, message, status_code=422)
@@ -436,6 +470,52 @@ class CaptureControlService:
         posix_name = Path(value).name
         return windows_name if "\\" in value else posix_name
 
+    @classmethod
+    def _job_title(cls, payload: Mapping[str, Any], row: Mapping[str, Any]) -> str:
+        title = str(payload.get("title") or "").strip()
+        if title:
+            return title[:180]
+        filename = cls._basename(str(row.get("input_path") or ""))
+        if filename:
+            return filename[:180]
+        source_type = str(row.get("source_type") or "资料").strip()
+        return source_type[:180] or "资料"
+
+    @staticmethod
+    def _work_outcome(status: str, result: Mapping[str, Any]) -> dict[str, str]:
+        created = len(result.get("created") or []) if isinstance(result.get("created"), list) else 0
+        updated = len(result.get("updated") or []) if isinstance(result.get("updated"), list) else 0
+        skipped = len(result.get("skipped") or []) if isinstance(result.get("skipped"), list) else 0
+        if status == "queued":
+            return {"state": "pending", "summary": "已进入处理队列，尚未产生执行结果。", "next_actor": "system", "next_action": "开始解析和整理这项工作。"}
+        if status in {"leased", "running"}:
+            return {"state": "running", "summary": "正在执行解析和整理。", "next_actor": "system", "next_action": "继续当前执行直到产生真实结果。"}
+        if status == "retrying":
+            return {"state": "retrying", "summary": "上一次执行未完成，正在按既定策略自动重试。", "next_actor": "system", "next_action": "继续重试，直到成功或达到重试上限。"}
+        if status == "failed":
+            return {"state": "failed", "summary": "自动执行和既定重试已结束，失败证据已保留。", "next_actor": "none", "next_action": "没有自动生成主人待办；需要排查时可查看高级任务记录并手动重试。"}
+        if status == "cancelled":
+            return {"state": "cancelled", "summary": "这项工作已停止，原始资料和历史记录未被删除。", "next_actor": "none", "next_action": "除非重新提交，否则不会继续执行。"}
+        if status == "completed":
+            parts = []
+            if created:
+                parts.append(f"新增 {created} 条")
+            if updated:
+                parts.append(f"更新 {updated} 条")
+            if skipped:
+                parts.append(f"去重跳过 {skipped} 条")
+            detail = "，".join(parts) if parts else "任务结果已持久化"
+            if result.get("indexed") is True:
+                detail += "，索引同步完成"
+                next_action = "工作已完成；可从结果对象或记忆页面继续查看。"
+            elif result.get("indexed") is False:
+                detail += "，但索引同步未完成"
+                next_action = "正文结果已保留；当前不宣称索引会自动恢复，可在高级状态中检查。"
+            else:
+                next_action = "工作已完成；是否形成可取回记忆以真实结果对象为准。"
+            return {"state": "succeeded", "summary": detail + "。", "next_actor": "none", "next_action": next_action}
+        return {"state": "unknown", "summary": "已记录这项工作，但没有足够事实解释当前结果。", "next_actor": "none", "next_action": "等待真实状态更新，不推测后续动作。"}
+
     @staticmethod
     def _result_summary(result: Mapping[str, Any]) -> str | None:
         allowed = ("execution_id", "source_type", "adapter", "adapter_version", "indexed", "document_count", "memory_count")
@@ -457,3 +537,18 @@ class CaptureControlService:
                 if isinstance(value, str) and value:
                     refs[key] = value
         return refs or None
+
+    @staticmethod
+    def _result_object_ids(result: Mapping[str, Any]) -> list[str]:
+        output: list[str] = []
+        for bucket in ("created", "updated", "skipped"):
+            items = result.get(bucket)
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, Mapping):
+                    continue
+                value = str(item.get("id") or "").strip()
+                if value and value not in output:
+                    output.append(value)
+        return output[:100]
