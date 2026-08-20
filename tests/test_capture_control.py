@@ -66,7 +66,7 @@ def harness(tmp_path):
 
 
 def test_all_capture_inputs_enqueue_and_service_is_long_lived(harness, tmp_path):
-    _, _, pipeline, _, service = harness
+    _, queue, pipeline, _, service = harness
     service_id = id(service.capture_service)
     note = tmp_path / "note.txt"
     note.write_text("note", encoding="utf-8")
@@ -89,6 +89,14 @@ def test_all_capture_inputs_enqueue_and_service_is_long_lived(harness, tmp_path)
     assert id(service.capture_service) == service_id
     assert pipeline.calls[-1][1]["options"]["allow_ocr"] is True
 
+    stored = queue.get(results[0]["job_id"])
+    assert stored["payload"]["capture_id"] == results[0]["capture_id"]
+    projected = service.get_job(results[0]["job_id"])
+    assert projected["work_item_id"] == results[0]["job_id"]
+    assert projected["capture_id"] == results[0]["capture_id"]
+    assert projected["outcome_state"] == "pending"
+    assert projected["next_actor"] == "system"
+
 
 def test_duplicate_returns_same_job_and_audit_event(harness):
     _, _, _, state_db, service = harness
@@ -97,6 +105,7 @@ def test_duplicate_returns_same_job_and_audit_event(harness):
     assert second["duplicate"] is True
     assert second["status"] == "duplicate"
     assert second["job_id"] == first["job_id"]
+    assert second["capture_id"] == first["capture_id"]
     assert [event[0] for event in state_db.events][-2:] == [
         "capture_submitted",
         "capture_duplicate",
@@ -107,6 +116,27 @@ def test_duplicate_returns_same_job_and_audit_event(harness):
     assert submitted_event[3]["capture_id"] == first["capture_id"]
     assert submitted_event[3]["job_id"] == first["job_id"]
     assert submitted_event[3]["source_type"] == "text"
+
+
+def test_duplicate_after_service_restart_reuses_durable_work_item(harness):
+    settings, queue, pipeline, state_db, service = harness
+    first = service.submit_text({"text": "restart-safe duplicate"})
+
+    restarted = CaptureControlService(
+        settings,
+        pipeline=pipeline,
+        queue=queue,
+        runtime_settings=CaptureRuntimeSettingsStore(settings, state_db=state_db),
+        state_db=state_db,
+    )
+    second = restarted.submit_text({"text": "restart-safe duplicate"})
+
+    assert second["duplicate"] is True
+    assert second["job_id"] == first["job_id"]
+    assert second["capture_id"] == first["capture_id"]
+    stored = queue.get(first["job_id"])
+    assert stored["payload"]["capture_id"] == first["capture_id"]
+    assert restarted.get_job(first["job_id"])["capture_id"] == first["capture_id"]
 
 
 def test_capture_mode_persists_pause_rejects_and_resume_restores(harness):
@@ -151,6 +181,9 @@ def test_queue_pagination_filtering_cancel_retry_and_conflicts(harness):
 
     running_job = service.submit_text({"text": "running"})
     queue.claim("worker", job_id=running_job["job_id"])
+    running_dto = service.get_job(running_job["job_id"])
+    assert running_dto["outcome_state"] == "running"
+    assert running_dto["next_actor"] == "system"
     with pytest.raises(CaptureControlError) as running_cancel:
         service.cancel_job(running_job["job_id"])
     assert running_cancel.value.code == CAPTURE_JOB_RUNNING
@@ -159,8 +192,23 @@ def test_queue_pagination_filtering_cancel_retry_and_conflicts(harness):
     assert running_retry.value.code == CAPTURE_JOB_RUNNING
 
     complete_job = service.submit_text({"text": "complete"})
-    queue.claim("worker", job_id=complete_job["job_id"])
-    queue.complete(complete_job["job_id"], {"memory_id": "MEM-1"})
+    claimed = queue.claim("worker", job_id=complete_job["job_id"])
+    queue.complete(
+        complete_job["job_id"],
+        {
+            "memory_id": "MEM-1",
+            "created": [{"id": "DOC-1", "path": r"D:\Users\Secret\DOC-1.md", "relative_path": "05-Operations/DOC-1.md"}],
+            "indexed": True,
+        },
+        worker_id="worker",
+        lease_token=claimed["lease_token"],
+    )
+    completed_dto = service.get_job(complete_job["job_id"])
+    assert completed_dto["outcome_state"] == "succeeded"
+    assert completed_dto["next_actor"] == "none"
+    assert completed_dto["result_refs"] == {"memory_id": "MEM-1"}
+    assert completed_dto["result_object_ids"] == ["DOC-1"]
+    assert "D:\\Users\\Secret" not in json.dumps(completed_dto)
     with pytest.raises(CaptureControlError) as completed_cancel:
         service.cancel_job(complete_job["job_id"])
     assert completed_cancel.value.code == CAPTURE_JOB_NOT_CANCELLABLE
@@ -181,6 +229,9 @@ def test_job_dto_is_sanitized_and_uses_basename(harness, tmp_path):
     dto = service.get_job(submitted["job_id"])
     serialized = json.dumps(dto)
     assert dto["file_name"] == "private.txt"
+    assert dto["capture_id"] == submitted["capture_id"]
+    assert dto["outcome_state"] == "failed"
+    assert dto["next_actor"] == "none"
     assert dto["error_message"] == "Capture processing failed; see local logs"
     for forbidden in (
         "payload", "options", "input_path", "last_error", "lease_token",
