@@ -38,8 +38,8 @@ assert.equal(overview.includes("Metric"), false, "Home must not render technical
 
 assert.match(attention, /\/api\/assistant-hub\/status/);
 assert.match(attention, /\/api\/memory\/review\/candidates/);
-assert.match(attention, /import-candidates\/\$\{encodeURIComponent\(item\.candidate\.candidate_id\)\}\/authorize/);
-assert.match(attention, /AUTHORIZE_ASSISTANT_IMPORT_/);
+assert.match(attention, /import-candidates\/\$\{encodeURIComponent\(item\.candidateId\)\}\/authorize/);
+assert.match(attention, /AUTHORIZE_ASSISTANT_IMPORT_\$\{item\.candidateId\.toUpperCase\(\)\}/);
 assert.match(attention, /读取正文会跨过隐私边界/);
 assert.match(attention, /所以停下来等你/);
 assert.match(attention, /灵机自己处理/);
