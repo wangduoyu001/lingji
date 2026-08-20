@@ -123,13 +123,27 @@ def validate_trial_task(task: dict[str, object]) -> None:
 
 
 def validate_task(task: dict[str, object]) -> None:
-    required = {
+    common = {
         "task_id",
         "status",
-        "execution_mode",
         "repository",
         "product_pr",
         "product_branch",
+    }
+    require_fields("task", task, common)
+    if task["status"] not in {"ACTIVE", "IDLE"}:
+        raise HandoffError("task status must be ACTIVE or IDLE")
+
+    if task["status"] == "IDLE":
+        require_fields("idle task", task, {"local_execution_allowed"})
+        if task["task_id"] != "NONE":
+            raise HandoffError("IDLE task_id must be NONE")
+        if task["local_execution_allowed"] is not False:
+            raise HandoffError("IDLE task must set local_execution_allowed: false")
+        return
+
+    required = {
+        "execution_mode",
         "product_commit",
         "artifact_name",
         "artifact_id",
@@ -143,9 +157,7 @@ def validate_task(task: dict[str, object]) -> None:
         "remote_verification_required",
         "owner_confirmation_required",
     }
-    require_fields("task", task, required)
-    if task["status"] not in {"ACTIVE", "IDLE"}:
-        raise HandoffError("task status must be ACTIVE or IDLE")
+    require_fields("active task", task, required)
     if not isinstance(task["product_commit"], str) or not SHA40.fullmatch(task["product_commit"]):
         raise HandoffError("task product_commit must be a lowercase 40-character SHA")
     for field in (
@@ -229,6 +241,23 @@ def validate_trial_result(task: dict[str, object], result: dict[str, object]) ->
 
 
 def validate_result(task: dict[str, object], result: dict[str, object]) -> None:
+    if task.get("status") == "IDLE":
+        required = {
+            "task_id",
+            "status",
+            "verdict",
+            "repository",
+            "product_pr",
+        }
+        require_fields("idle result", result, required)
+        for field in ("task_id", "repository", "product_pr"):
+            expect_equal(field, task, result)
+        if result["status"] != "IDLE":
+            raise HandoffError("IDLE task requires result status IDLE")
+        if result["verdict"] != "NOT_RUN":
+            raise HandoffError("IDLE task requires result verdict NOT_RUN")
+        return
+
     required = {
         "task_id",
         "status",
@@ -324,10 +353,11 @@ def validate(ref_name: str | None = None) -> None:
     validate_task(task)
     validate_result(task, result)
 
-    if ref_name and ref_name.startswith("acceptance/") and result["status"] != "COMPLETED":
-        raise HandoffError(
-            "acceptance/* branch must end with LOCAL_EXECUTION_RESULT status COMPLETED"
-        )
+    if ref_name and ref_name.startswith("acceptance/"):
+        if task["status"] != "ACTIVE" or result["status"] != "COMPLETED":
+            raise HandoffError(
+                "acceptance/* branch requires an ACTIVE task with LOCAL_EXECUTION_RESULT status COMPLETED"
+            )
 
 
 def main() -> int:

@@ -35,6 +35,23 @@ TASK = {
     "owner_confirmation_required": True,
 }
 
+IDLE_TASK = {
+    "task_id": "NONE",
+    "status": "IDLE",
+    "repository": "wangduoyu001/lingji",
+    "product_pr": "88",
+    "product_branch": "feature/owner-autopilot-ui-codexpp",
+    "local_execution_allowed": False,
+}
+
+IDLE_RESULT = {
+    "task_id": "NONE",
+    "status": "IDLE",
+    "verdict": "NOT_RUN",
+    "repository": "wangduoyu001/lingji",
+    "product_pr": "88",
+}
+
 
 def pending_result() -> dict[str, object]:
     return {
@@ -116,9 +133,50 @@ def completed_pass_result() -> dict[str, object]:
     return result
 
 
+def test_idle_task_and_result_are_valid_without_artifact_identity() -> None:
+    validate_task(dict(IDLE_TASK))
+    validate_result(dict(IDLE_TASK), dict(IDLE_RESULT))
+
+
+def test_idle_task_cannot_allow_local_execution() -> None:
+    task = dict(IDLE_TASK)
+    task["local_execution_allowed"] = True
+    with pytest.raises(HandoffError):
+        validate_task(task)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("task_id", "STALE-TASK"), ("status", "ACTIVE")],
+)
+def test_idle_task_identity_cannot_be_runnable(field: str, value: object) -> None:
+    task = dict(IDLE_TASK)
+    task[field] = value
+    with pytest.raises(HandoffError):
+        validate_task(task)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("status", "RUNNING"), ("verdict", "PASS")],
+)
+def test_idle_result_cannot_claim_execution_or_pass(field: str, value: object) -> None:
+    result = dict(IDLE_RESULT)
+    result[field] = value
+    with pytest.raises(HandoffError):
+        validate_result(dict(IDLE_TASK), result)
+
+
 def test_active_trial_task_and_pending_result_are_valid() -> None:
     validate_task(dict(TASK))
     validate_result(dict(TASK), pending_result())
+
+
+def test_active_task_still_requires_artifact_and_acceptance_fields() -> None:
+    task = dict(TASK)
+    task.pop("artifact_id")
+    with pytest.raises(HandoffError):
+        validate_task(task)
 
 
 def test_completed_trial_pass_requires_all_thresholds_and_hard_gates() -> None:
