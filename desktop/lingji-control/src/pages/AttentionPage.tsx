@@ -23,7 +23,7 @@ function confidence(value: unknown): string {
   return typeof value === "number" ? `${Math.round(value * 100)}%` : "未量化";
 }
 
-function authorizationMessage(response: CaptureSubmissionResponse): string {
+function importResultMessage(response: CaptureSubmissionResponse): string {
   const captureId = response.capture_id?.trim();
   const jobId = response.job_id?.trim();
   if (response.duplicate) {
@@ -97,7 +97,7 @@ export default function AttentionPage({
         `/api/assistant-hub/import-candidates/${encodeURIComponent(item.candidateId)}/authorize`,
         { confirmation: `AUTHORIZE_ASSISTANT_IMPORT_${item.candidateId.toUpperCase()}` },
       );
-      setMessage(authorizationMessage(response));
+      setMessage(importResultMessage(response));
       await resource.refresh();
     } catch {
       setMessage("这次授权没有成功，系统没有读取正文，也没有假装已经处理。");
