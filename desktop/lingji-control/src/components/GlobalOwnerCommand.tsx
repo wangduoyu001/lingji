@@ -64,7 +64,7 @@ export default function GlobalOwnerCommand({ api, connected, onNavigate }: Props
       setBusy(true);
       try {
         const response = await api.post<CaptureSubmissionResponse>("/api/capture/text", {
-          title: content.slice(0, 48),
+          title: "主人快速记录",
           text: content,
           source_type: "text",
           project_ids: [],
