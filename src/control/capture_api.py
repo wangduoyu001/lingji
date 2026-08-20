@@ -228,12 +228,21 @@ def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str
             },
         }
 
+    # Replace the legacy raw queue GET routes with aliases that reuse the exact same
+    # sanitized WorkItem projector as /api/capture/jobs. Compatibility remains, but
+    # no official 8766 route may expose payloads, private paths, worker leases or raw errors.
     app.router.routes[:] = [
         route
         for route in app.router.routes
         if not (
-            getattr(route, "path", None) == "/api/share"
-            and "POST" in (getattr(route, "methods", set()) or set())
+            (
+                getattr(route, "path", None) == "/api/share"
+                and "POST" in (getattr(route, "methods", set()) or set())
+            )
+            or (
+                getattr(route, "path", None) in {"/api/jobs", "/api/jobs/{job_id}"}
+                and "GET" in (getattr(route, "methods", set()) or set())
+            )
         )
     ]
     secured = [Depends(authorize)]
@@ -308,6 +317,24 @@ def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str
 
     @app.get("/api/capture/jobs/{job_id}", dependencies=secured)
     def capture_job(job_id: str) -> dict[str, Any]:
+        try:
+            return capture_control().get_job(job_id)
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.get("/api/jobs", dependencies=secured)
+    def legacy_jobs(
+        status: str | None = Query(default=None),
+        limit: int = Query(default=100, ge=1, le=200),
+    ) -> dict[str, Any]:
+        try:
+            payload = capture_control().list_jobs(status=status, limit=limit, offset=0)
+            return {"stats": payload.get("stats", {}), "jobs": payload.get("items", [])}
+        except Exception as exc:
+            raise translate(exc) from exc
+
+    @app.get("/api/jobs/{job_id}", dependencies=secured)
+    def legacy_job(job_id: str) -> dict[str, Any]:
         try:
             return capture_control().get_job(job_id)
         except Exception as exc:
