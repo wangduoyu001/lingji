@@ -1,0 +1,23 @@
+{
+  "source": {
+    "id": "capture-demo-001",
+    "type": "capture",
+    "title": "示例输入"
+  },
+  "work_item": {
+    "id": "work-demo-001",
+    "status": "running",
+    "stage": "processing"
+  },
+  "execution_events": [
+    {
+      "type": "started",
+      "actor": "system"
+    }
+  ],
+  "outcome": null,
+  "next_action": {
+    "actor": "owner",
+    "status": "pending"
+  }
+}
