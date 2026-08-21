@@ -1,36 +1,37 @@
 ---
 type: dashboard
-updated: 2026-06-22T21:24:48.569111
+updated: 2026-08-21
 system_state: NORMAL
 ---
 
 # PEMIS Control Center
 
 ## System Status
+
 - State: **NORMAL**
-- TopK: 10
-- Healthy: True
-- Distillation: normal
+- Source: `PEMIS/status/current.md`
 
-## Top 3 Decisions
+## Current Work
 
-### [FAST] Walt Disney Company's Nostalgia Monetization Strategy
-- Score: 0.81 | MoneyScore: 0.972
-- Monetization: service
+> Source: `PEMIS/status/current_work.md`
 
-### [FAST] Agent Skills Repository
-- Score: 0.8 | MoneyScore: 0.96
-- Monetization: tool
+- Current execution items are rendered from the work projection.
+- Dashboard does not create task state by itself.
 
-### [FAST] Real-World Skill Learning Platform
-- Score: 0.81 | MoneyScore: 0.875
-- Monetization: saas
+## Pending Actions
 
-## Pipeline
-- P95 Latency: 0.0ms
-- Total Evaluated: 50
-- Last Decision: 2026-06-22T21:15:59.340123
+> Source: `PEMIS/status/pending_actions.md`
 
-## Index
-- Total Entries: 119
-- Opportunities: 100
+- Items requiring owner confirmation are listed here.
+
+## Work Timeline
+
+> Source: `PEMIS/status/work_timeline.md`
+
+- Timeline records execution progress and outcomes.
+
+## Opportunities
+
+> Source: `PEMIS/opportunities/`
+
+Existing opportunity scoring and monetization paths remain available.
