@@ -1,0 +1,16 @@
+{
+  "flow": "capture_to_outcome",
+  "required_chain": [
+    "Source",
+    "WorkItem",
+    "ExecutionEvent",
+    "Outcome",
+    "NextAction"
+  ],
+  "assertions": {
+    "ui_must_not_invent_state": true,
+    "pending_action_requires_owner_reason": true,
+    "timeline_requires_work_id": true,
+    "empty_state_is_valid": true
+  }
+}
