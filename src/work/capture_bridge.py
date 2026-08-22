@@ -150,6 +150,7 @@ class CaptureWorkBridge:
         *,
         detail: dict[str, Any] | None = None,
     ) -> WorkItem:
+        self.store.clear_outcome(work_id)
         work = self.store.update_work_status(work_id, "accepted")
         self.store.append_event(
             ExecutionEvent(
