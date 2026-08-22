@@ -1,16 +1,19 @@
 # ARCHITECTURE.md — LingJi Unified Architecture
 
-> Updated: 2026-07-26
+> Updated: 2026-08-22
 > Status: Active architecture contract
 > Formal branch: `master`
 > Primary authority: this file
-> Historical migration detail: `docs/MODULES/UNIFIED_MEMORY_ARCHITECTURE_PLAN.md`
+> Product phase priority: `docs/PROJECT_STATUS.md`
+> Historical migration plans: Git history and `docs/TEST_REPORTS/`
 
 ## 1. Product Definition
 
 LingJi is one local-first private second brain, one shared memory system for approved AI clients, and one desktop control center.
 
 The repository contains compatibility code during migration, but it must not evolve into multiple long-term products.
+
+Architecture defines stable ownership and boundaries. Current product priority and phase gates are defined only by `docs/PROJECT_STATUS.md`.
 
 ## 2. Long-Term Ownership
 
@@ -149,6 +152,8 @@ It must expose truthful read models for:
 - logs and diagnostics
 
 PySide6 may remain during migration for acceptance and diagnosis, but it must not receive new competing product features.
+
+The presence of a capability in this architecture does not determine when it is developed. Current phase ordering is governed by `docs/PROJECT_STATUS.md`.
 
 ## 8. Workspace and Path Contract
 
