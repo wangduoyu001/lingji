@@ -1,17 +1,74 @@
-# PROJECT_STATUS.md — LingJi 当前状态
+# PROJECT_STATUS.md — LingJi 当前状态与开发指挥
 
 > Updated: 2026-08-22
 > Formal/default branch: `master`
-> Product-code baseline before documentation cleanup: `3d7225f58fb5b5a9b035cfd72f92cb2267b48559`
+> Active development branch: `feat/sb0-work-fact-contract`
+> Active development PR: `#106` / Draft / DO NOT MERGE
+> Current product commit: `c02f73fde7fb4492a665b4c1fd3f93c900499d52`
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
-> Current engineering gate: `WORK-FACT CONTRACT REPAIR`
+> Last completed engineering node: `SB-0 — WORK FACT CONTRACT REPAIR / AUTOMATED GATES PASS`
+> Current engineering node: `SB-1 — CAPTURE → WORK → OUTCOME`
 > Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
 > Future backlog: `docs/MODULES/FUTURE_DEVELOPMENT_TODO.md`
 > Acceptance authority: `docs/ACCEPTANCE/README.md`
+
+## 0. 跨对话开发接力协议
+
+本文件是**唯一当前开发指挥文档**。聊天上下文、PR 评论、历史计划、旧测试报告都不能代替本文件记录“当前做到哪里、下一步做什么”。
+
+由于开发会频繁跨对话窗口，任何继续开发的会话必须先执行以下最小读取顺序：
+
+```text
+AGENTS.md
+→ docs/PROJECT_STATUS.md
+→ docs/MODULES/CODE_MAP.md 当前节点相关章节
+→ docs/ACCEPTANCE/README.md
+→ docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md 当前节点条目
+→ 当前节点直接相关代码与测试
+```
+
+每个工程节点必须在本文件维护以下状态：
+
+```text
+节点编号 / 名称
+状态: NOT_STARTED | ACTIVE | BLOCKED | AUTOMATED_PASS | OWNER_PASS | CLOSED
+开发分支 / PR / 精确产品 SHA
+已完成事实
+尚未完成事实
+自动验收结果
+平台 Artifact（如有）
+下一节点启动条件
+下一步代码入口
+```
+
+硬规则：
+
+1. 一个节点开始前，先把它写成 `ACTIVE`，并把前一节点的真实结果写清楚。
+2. 每完成一个可验证子节点，立即更新本文件，不等整轮开发结束后靠聊天回忆补写。
+3. 节点自动门禁完成后写 `AUTOMATED_PASS`；需要主人真机/肉眼确认的，不得提前写 `OWNER_PASS` 或 `CLOSED`。
+4. 新窗口不得从聊天历史猜测进度。仓库文档与当前远端代码冲突时，以当前远端代码和 CI 事实纠正文档。
+5. `PROJECT_STATUS.md` 只记录当前阶段、节点和下一步；未来需求继续进入 `FUTURE_DEVELOPMENT_TODO.md`，验收细节继续进入 Acceptance 文档，避免再次堆出多份“最终计划”。
+6. 产品影响代码提交后，必须在同一开发节点更新本文件中的精确 SHA 与验收状态。
+
+### 0.1 当前接力快照
+
+```text
+Phase: PHASE 1 — SECOND BRAIN COMPLETION
+Branch: feat/sb0-work-fact-contract
+PR: #106 Draft / DO NOT MERGE
+Product SHA: c02f73fde7fb4492a665b4c1fd3f93c900499d52
+Completed: SB-0 automated implementation + cross-platform CI/release gates
+Active: SB-1 Capture → Work → Outcome
+Next after SB-1: SB-2 Work → Memory / Evidence
+Owner M5: NOT ACTIVE
+Opportunity Center: FROZEN
+```
+
+新对话读取到这里后，不需要重新审计整个仓库。先继续 SB-1 当前未完成项。
 
 ## 1. 当前唯一产品目标
 
@@ -48,6 +105,8 @@ FAIL / DO NOT MERGE
 - 记忆缺少主人可读正文/摘要和清楚来源证据；
 - 主动发现更像静态说明，不是“发现 → 授权 → 接管 → 执行 → 结果”的真实状态；
 - Window Recovery 的菜单 / 快捷键 / Dock Reopen 三路径仍缺最终主人肉眼验收。
+
+SB-0 已修复“没有可信统一 Work Fact contract”的底层阻塞，但还没有完成真实主人输入到 Outcome/Memory 的全链，所以旧 M5 结论仍然有效，当前不激活新的主人验收。
 
 ## 3. Phase 1 的“第二大脑完成”定义
 
@@ -180,9 +239,9 @@ desktop/lingji-control/
 
 ## 4. 当前代码真实进度
 
-### 4.1 已经存在的基础
+### 4.1 已经存在的正式基础
 
-当前 `master` 已有：
+当前开发树已有：
 
 ```text
 src/work/models.py
@@ -202,53 +261,137 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 
 方向已经从“UI 根据聚合状态猜系统在干什么”转为“UI 投影真实工作事实”。
 
-### 4.2 当前 P0 工程阻塞：Work Fact 尚未真正接通
+### 4.2 SB-0 — AUTOMATED_PASS
 
-截至本次审计，必须先修：
+开发分支：`feat/sb0-work-fact-contract`  
+PR：`#106` Draft / DO NOT MERGE  
+产品代码 SHA：`c02f73fde7fb4492a665b4c1fd3f93c900499d52`
 
-1. `CaptureWorkBridge.create_from_capture()` 与 `WorkStore` 写入接口不一致；
-2. `WorkProjector` 需要的读取方法与 `WorkStore` 当前能力不完整匹配；
-3. `/api/work/*` 必须在正式 `create_control_app()` 8766 路径真实注册；
-4. `LocalControlService` / Work service / projector 必须共享同一正式 Store；
-5. Python DTO 与 TypeScript Work Fact 合同必须统一字段名、状态和 nullable 语义；
-6. 必须新增专门覆盖 Store → Projector → Control API → Desktop contract 的测试；
-7. Capture 成功后必须能以同一 `work_id` 查询到事件、结果和下一 actor。
+已完成：
 
-在以上门禁通过前，**禁止继续以视觉扩展为主的 UI 开发。**
+- WorkItem / ExecutionEvent / Outcome / NextAction / PendingAction DTO 统一；
+- WorkStore 补齐安全 schema migration、create/get/list/update、events、Outcome、NextAction、PendingAction 与 resolve；
+- CaptureWorkBridge 改为使用正式 WorkStore；
+- WorkProjector / WorkControlService / LocalControlService 共用正式 Store；
+- `/api/work/current`、`/api/work/recent`、`/api/work/{work_id}`、`/api/work/timeline/{work_id}`、`/api/work/pending-actions` 注册到认证 8766；
+- Python 与 Desktop TypeScript Work Fact contract 对齐；
+- Home / Activity / Attention 不再把 API 失败伪装成真实空状态；
+- 新增 `test_work_store.py`、`test_work_projector.py`、`test_work_control_api.py`、`test_capture_work_bridge.py` 和 `work-fact-smoke.mjs`；
+- 修复同秒事件顺序与旧 schema Outcome 状态兼容；
+- 清理与新事实合同冲突的旧 Desktop smoke 断言。
 
-## 5. Phase 1 重新规划后的开发顺序
-
-### SB-0 — Work Fact Contract Repair
-
-目标：先让事实链真的能读写和通过 8766。
-
-完成条件：
-
-- Domain / SQLite / Service / API / TypeScript 合同一致；
-- `/api/work/current`、timeline、pending 等正式接口可运行；
-- 一条测试 WorkItem 可持久化、读取、投影；
-- focused tests 覆盖正常、空状态、失败状态和重启后读取。
-
-### SB-1 — Capture → Work → Outcome 闭环
-
-目标：所有主人输入都能追踪。
-
-优先验证 `Cmd+K` 文本“记住”路径，再覆盖 web / file / supported media 等已有 Capture 类型。
-
-完成条件：
+自动验收事实：
 
 ```text
-Capture accepted
--> WorkItem created
--> processing events
--> extraction result
--> Outcome success/failure
--> next actor
+Linux Python 3.11: 579 passed / 11 skipped / 0 failed
+Linux Python 3.12: 579 passed / 11 skipped / 0 failed
+Windows Python 3.12: 579 passed / 11 skipped / 0 failed
+Desktop smoke/build: PASS
+MCP smoke: PASS
+Browser capture smoke: PASS
+Obsidian plugin smoke: PASS
+acceptance-doc-sync: PASS
+local-execution-handoff: PASS
+P0 Windows Gate: PASS
+macOS Desktop Gate: PASS
+Windows Desktop Release Baseline: PASS
 ```
 
-不得出现“提交成功但没有工作对象”。
+同 SHA Artifact：
 
-### SB-2 — Work → Memory / Evidence 闭环
+```text
+macOS arm64
+artifact: lingji-macos-arm64
+artifact_id: 9469111722
+sha256: 7b1a4fe313da5ae4d709651fc9a18f43ee0281b57f15c7bddab9260fdeb559e8
+product_sha: c02f73fde7fb4492a665b4c1fd3f93c900499d52
+
+Windows
+artifact: lingji-windows-0.1.0-c02f73fd
+artifact_id: 9469187504
+sha256: e4fe344ad4b023da24e9a8ca125b9c6756da4057f01426b5c520d01fdd277eb6
+product_sha: c02f73fde7fb4492a665b4c1fd3f93c900499d52
+```
+
+SB-0 当前状态：`AUTOMATED_PASS`。它尚未单独激活主人验收，因为 Phase 1 的主人产品价值仍取决于 SB-1/SB-2 等后续闭环。
+
+### 4.3 SB-1 — ACTIVE
+
+目标：把真实主人输入与已经验收通过的 Work Fact 基础连接起来。
+
+当前优先路径：
+
+```text
+Cmd+K 文本“记住”
+-> formal Capture endpoint
+-> capture_id
+-> WorkItem(work_id)
+-> capture.accepted
+-> extraction queued/running
+-> extraction completed/failed
+-> Outcome success/failure/skipped
+-> NextAction actor
+-> Desktop 可按同一 work_id 查询
+```
+
+本节点必须检查并修复：
+
+1. Cmd+K 当前实际调用的 Capture API 与响应 contract；
+2. CaptureService / control capture route 是否在真实接受时调用 CaptureWorkBridge；
+3. Extraction enqueue / worker 生命周期如何把 job 状态映射成同一 WorkItem 的 ExecutionEvent；
+4. success/failure 是否都会落 Outcome，而不是只 toast；
+5. capture_id / source_id / import_id / job_id / work_id 的稳定关联位置；
+6. 幂等重复提交不得制造多个互相矛盾的 WorkItem；
+7. Desktop Capture 成功响应必须携带 `work_id`，并能跳到同一工作事实；
+8. 真实失败必须保留可查询 WorkItem 与失败事件。
+
+SB-1 自动验收最低要求：
+
+```text
+one text capture
+-> response contains stable capture_id + work_id
+-> same work_id visible through /api/work/{work_id}
+-> timeline contains accepted + processing + completed/failed
+-> Outcome persisted after process restart
+-> failure path remains visible
+-> duplicate/idempotent path is deterministic
+-> Desktop smoke verifies work_id handoff
+```
+
+SB-1 下一步代码入口：
+
+```text
+src/control/capture_api.py
+src/capture/service.py
+src/work/capture_bridge.py
+src/extraction/pipeline.py
+src/extraction/queue.py
+src/extraction/worker.py
+src/extraction/structured_sink.py
+desktop/lingji-control/src/* Cmd+K / Capture call sites
+tests/test_capture_api.py
+tests/test_capture_control.py
+tests/test_capture_service.py
+tests/test_capture_work_bridge.py
+```
+
+SB-1 结束前不得进入 SB-2 的 Memory UI 扩展，也不得开发 Opportunity Center。
+
+## 5. Phase 1 开发节点总表
+
+| Node | Scope | Status | Exit gate |
+|---|---|---|---|
+| SB-0 | Work Fact Contract Repair | `AUTOMATED_PASS` | unified DTO/store/8766/Desktop + cross-platform gates |
+| SB-1 | Capture → Work → Outcome | `ACTIVE` | real capture produces traceable work/events/outcome |
+| SB-2 | Work → Memory / Evidence | `NOT_STARTED` | readable memory + provenance + bidirectional trace |
+| SB-3 | Retrieval / Vector / Inspector verification | `NOT_STARTED` | lexical/semantic/Qdrant/embedding truth consistent |
+| SB-4 | AI Memory Access / Context Pack / MCP | `NOT_STARTED` | one governed memory access path |
+| SB-5 | Owner UI continuity | `NOT_STARTED` | Home/Work/Attention/Capture/Memory same facts |
+| SB-6 | Compatibility / Migration completion | `NOT_STARTED` | formal flow independent of compatibility runtime |
+| SB-7 | Automatic E2E Acceptance Gate | `NOT_STARTED` | end-to-end fixture + full validation |
+| SB-8 | Release + Owner Final Acceptance | `NOT_STARTED` | same-SHA artifacts + real-machine + owner PASS |
+
+### SB-2 — Work → Memory / Evidence
 
 目标：系统说“记住了”时，主人能够证明它真的记住了什么。
 
