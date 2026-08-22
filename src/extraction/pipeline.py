@@ -4,6 +4,7 @@ import logging
 import os
 import socket
 import threading
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from uuid import uuid4
@@ -24,6 +25,7 @@ DefaultPriorityProvider = Callable[[str], int]
 JobStartedCallback = Callable[[Mapping[str, Any]], None]
 JobCompletedCallback = Callable[[Mapping[str, Any], Mapping[str, Any]], None]
 JobFailedCallback = Callable[[Mapping[str, Any], str], None]
+_WORK_ID_OPTION = "_lingji_work_id"
 
 
 class ExtractionPipeline:
@@ -133,7 +135,7 @@ class ExtractionPipeline:
             preferred=adapter_name,
         )
         raw_snapshot = self.sink.preserve_raw(request.input_path, source_type)
-        batch = adapter.extract(request)
+        batch = self._with_work_relationship(adapter.extract(request), request.options)
         result = self.sink.write_batch(
             batch,
             adapter_name=adapter.name,
@@ -172,6 +174,34 @@ class ExtractionPipeline:
         )
         return response
 
+    @staticmethod
+    def _with_work_relationship(batch: Any, options: Mapping[str, Any]) -> Any:
+        """Persist the originating WorkItem as canonical Vault metadata.
+
+        The Vault frontmatter is the durable authority. Downstream SQLite indexes
+        only project this relationship and may be rebuilt without inventing it.
+        Generic extraction jobs without a Capture Work ID remain unchanged.
+        """
+
+        work_id = str(options.get(_WORK_ID_OPTION) or "").strip()
+        if not work_id or not getattr(batch, "documents", ()): 
+            return batch
+        documents = []
+        for document in batch.documents:
+            metadata = dict(document.metadata or {})
+            raw = metadata.get("work")
+            if raw in (None, ""):
+                work_ids: list[str] = []
+            elif isinstance(raw, (list, tuple, set)):
+                work_ids = [str(item).strip() for item in raw if str(item).strip()]
+            else:
+                work_ids = [str(raw).strip()]
+            if work_id not in work_ids:
+                work_ids.append(work_id)
+            metadata["work"] = list(dict.fromkeys(work_ids))
+            documents.append(replace(document, metadata=metadata))
+        return replace(batch, documents=tuple(documents))
+
     def _write_structured(
         self,
         *,
@@ -191,6 +221,10 @@ class ExtractionPipeline:
                 "messages": 0,
                 "links": 0,
                 "warnings": [],
+                "source_ids": [],
+                "conversation_ids": [],
+                "message_ids": [],
+                "memory_ids": [],
             }
         return self.structured_sink.write_batch(
             batch,
