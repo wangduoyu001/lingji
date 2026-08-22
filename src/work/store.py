@@ -397,6 +397,19 @@ class WorkStore:
             ).fetchone()
         return self._outcome_from_row(row) if row else None
 
+    def clear_outcome(self, work_id: str) -> None:
+        """Remove a terminal Outcome before an explicit retry reopens the same WorkItem."""
+        with self.state._lock, self.state._connection() as connection:
+            if not connection.execute(
+                "SELECT 1 FROM work_items WHERE work_id = ?",
+                (work_id,),
+            ).fetchone():
+                raise LookupError(f"Unknown work item: {work_id}")
+            connection.execute(
+                "DELETE FROM work_outcomes WHERE work_id = ?",
+                (work_id,),
+            )
+
     def save_next_action(self, action: NextAction) -> NextAction:
         if str(action.actor) not in WORK_ACTORS:
             raise ValueError(f"Unsupported next-action actor: {action.actor}")
