@@ -21,6 +21,7 @@ RELATION_FIELDS = (
     "sources",
     "tasks",
     "decisions",
+    "work",
     "related",
     "related_ids",
 )
