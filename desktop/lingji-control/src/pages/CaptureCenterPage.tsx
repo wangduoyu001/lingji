@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api";
-import type { PageId, PageProps } from "../types";
+import type { PageProps } from "../types";
 import { CaptureCenterApi } from "./captureCenterApi";
 import {
   ACTIVE_POLL_MS,
@@ -36,7 +36,7 @@ type CommonForm = { title: string; projects: string; tags: string; privacy: "pri
 
 type Props = PageProps & {
   onOpenInspector: (target: CaptureInspectorTarget) => void;
-  onNavigate: (page: PageId) => void;
+  onOpenWork: (workId: string) => void;
 };
 
 const emptyCommon: CommonForm = { title: "", projects: "", tags: "", privacy: "private", priority: 0 };
@@ -61,7 +61,7 @@ function CommonFields({ value, onChange }: { value: CommonForm; onChange: (value
   );
 }
 
-export default function CaptureCenterPage({ api, active, onOpenInspector, onNavigate }: Props) {
+export default function CaptureCenterPage({ api, active, onOpenInspector, onOpenWork }: Props) {
   const client = useMemo(() => new CaptureCenterApi(api), [api]);
   const [tab, setTab] = useState<Tab>("text");
   const [common, setCommon] = useState(emptyCommon);
@@ -248,7 +248,7 @@ export default function CaptureCenterPage({ api, active, onOpenInspector, onNavi
       {paused && <div className="capture-notice warning">采集已暂停，新提交可能被拒绝。</div>}
       {capabilities?.state === "configuration_required" && <div className="capture-notice warning">需要配置 Capture Service 后才能使用全部能力。</div>}
       <ErrorState error={error} />
-      {submissionMessage && <div className="capture-notice"><span>{submissionMessage}</span>{submittedWorkId ? <button onClick={() => onNavigate("activity")}>查看工作</button> : null}</div>}
+      {submissionMessage && <div className="capture-notice"><span>{submissionMessage}</span>{submittedWorkId ? <button onClick={() => onOpenWork(submittedWorkId)}>查看工作</button> : null}</div>}
 
       <section className="capture-submit-panel">
         <div className="capture-tabs">
@@ -274,14 +274,14 @@ export default function CaptureCenterPage({ api, active, onOpenInspector, onNavi
           {jobs.map((job) => (
             <article key={job.job_id} className={`capture-job${restrictedClass(job.privacy)}`}>
               <button className="capture-job-main" onClick={() => setSelectedJob(job)}><strong>{safeName(job)}</strong><span>{job.source_type ?? "未知"} · {job.adapter_name ?? "未知"}</span><span>{job.status} · 进度 {progressLabel(job)}</span><span>Work {job.work_id ?? "未关联"}</span><span>尝试 {count(job.attempts)}/{count(job.max_attempts)}</span><small>{job.error_message || job.result_summary || "无错误摘要"}</small><small>{time(job.created_at)} → {time(job.updated_at)}</small></button>
-              <div className="capture-job-actions"><button disabled={!canCancel(job.status) || operatingJobId === job.job_id} onClick={() => void operate(job, "cancel")}>取消</button><button disabled={!canRetry(job.status) || operatingJobId === job.job_id} onClick={() => void operate(job, "retry")}>重试</button>{job.work_id && <button onClick={() => onNavigate("activity")}>查看工作</button>}{job.status === "running" && <span>处理中，当前版本不支持强制终止</span>}{job.status === "completed" && resultTarget(job) && <button onClick={() => onOpenInspector(resultTarget(job)!)}>查看结果</button>}</div>
+              <div className="capture-job-actions"><button disabled={!canCancel(job.status) || operatingJobId === job.job_id} onClick={() => void operate(job, "cancel")}>取消</button><button disabled={!canRetry(job.status) || operatingJobId === job.job_id} onClick={() => void operate(job, "retry")}>重试</button>{job.work_id && <button onClick={() => onOpenWork(job.work_id!)}>查看工作</button>}{job.status === "running" && <span>处理中，当前版本不支持强制终止</span>}{job.status === "completed" && resultTarget(job) && <button onClick={() => onOpenInspector(resultTarget(job)!)}>查看结果</button>}</div>
             </article>
           ))}
         </div>
         <div className="capture-pager"><button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - CAPTURE_PAGE_SIZE))}>上一页</button><span>{Math.floor(offset / CAPTURE_PAGE_SIZE) + 1} / {total === null ? "未知" : Math.max(1, Math.ceil(total / CAPTURE_PAGE_SIZE))}</span><button disabled={total !== null && offset + CAPTURE_PAGE_SIZE >= total} onClick={() => setOffset(offset + CAPTURE_PAGE_SIZE)}>下一页</button></div>
       </section>
 
-      {selectedJob && <aside className="capture-detail"><header><div><h2>任务详情</h2><span>{selectedJob.job_id}</span></div><button onClick={() => setSelectedJob(null)}>关闭</button></header><dl><dt>Work ID</dt><dd>{selectedJob.work_id ?? "未关联"}</dd><dt>名称</dt><dd>{safeName(selectedJob)}</dd><dt>来源</dt><dd>{selectedJob.source_type ?? "未知"}</dd><dt>Adapter</dt><dd>{selectedJob.adapter_name ?? "未知"}</dd><dt>状态</dt><dd>{selectedJob.status}</dd><dt>进度</dt><dd>{progressLabel(selectedJob)}</dd><dt>尝试</dt><dd>{count(selectedJob.attempts)}/{count(selectedJob.max_attempts)}</dd><dt>错误代码</dt><dd>{selectedJob.error_code ?? "未知"}</dd><dt>稳定错误摘要</dt><dd>{selectedJob.error_message ?? "未知"}</dd><dt>创建</dt><dd>{time(selectedJob.created_at)}</dd><dt>更新</dt><dd>{time(selectedJob.updated_at)}</dd><dt>完成</dt><dd>{time(selectedJob.completed_at)}</dd></dl>{selectedJob.work_id && <button className="button" onClick={() => onNavigate("activity")}>查看工作事实</button>}{selectedJob.status === "completed" && resultTarget(selectedJob) && <button className="button primary" onClick={() => onOpenInspector(resultTarget(selectedJob)!)}>在 Memory Inspector 查看结果</button>}</aside>}
+      {selectedJob && <aside className="capture-detail"><header><div><h2>任务详情</h2><span>{selectedJob.job_id}</span></div><button onClick={() => setSelectedJob(null)}>关闭</button></header><dl><dt>Work ID</dt><dd>{selectedJob.work_id ?? "未关联"}</dd><dt>名称</dt><dd>{safeName(selectedJob)}</dd><dt>来源</dt><dd>{selectedJob.source_type ?? "未知"}</dd><dt>Adapter</dt><dd>{selectedJob.adapter_name ?? "未知"}</dd><dt>状态</dt><dd>{selectedJob.status}</dd><dt>进度</dt><dd>{progressLabel(selectedJob)}</dd><dt>尝试</dt><dd>{count(selectedJob.attempts)}/{count(selectedJob.max_attempts)}</dd><dt>错误代码</dt><dd>{selectedJob.error_code ?? "未知"}</dd><dt>稳定错误摘要</dt><dd>{selectedJob.error_message ?? "未知"}</dd><dt>创建</dt><dd>{time(selectedJob.created_at)}</dd><dt>更新</dt><dd>{time(selectedJob.updated_at)}</dd><dt>完成</dt><dd>{time(selectedJob.completed_at)}</dd></dl>{selectedJob.work_id && <button className="button" onClick={() => onOpenWork(selectedJob.work_id!)}>查看工作事实</button>}{selectedJob.status === "completed" && resultTarget(selectedJob) && <button className="button primary" onClick={() => onOpenInspector(resultTarget(selectedJob)!)}>在 Memory Inspector 查看结果</button>}</aside>}
     </div>
   );
 }
