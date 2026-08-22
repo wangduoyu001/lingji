@@ -8,10 +8,12 @@ const api = readFileSync(new URL("src/pages/captureCenterApi.ts", root), "utf8")
 const types = readFileSync(new URL("src/pages/captureCenterTypes.ts", root), "utf8");
 
 assert.ok(app.includes("<QuickCapture"));
+assert.ok(app.includes("<RuntimeBoundary"));
+assert.ok(app.includes("NAVIGATION"));
 assert.ok(quick.includes("event.metaKey || event.ctrlKey"));
 assert.ok(quick.includes('event.key.toLowerCase() !== "k"'));
 assert.ok(quick.includes("client.submitText"));
-assert.ok(api.includes('post<CaptureSubmissionResponse>("/api/capture/text"'));
+assert.ok(api.includes('this.api.post("/api/capture/text"'));
 assert.ok(types.includes("work_id?: string | null"));
 assert.ok(quick.includes("result.work_id"));
 assert.ok(quick.includes('onNavigate("activity")'));
