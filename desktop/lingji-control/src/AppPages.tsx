@@ -47,7 +47,7 @@ export default function AppPages(props: AppPagesProps) {
     {page === "codex_workspace" && <CodexWorkspacePage api={api} active={connected} onOpenInspector={onOpenInspector} />}
     {page === "memory_review" && <MemoryReviewPage api={api} active={connected} />}
     {page === "auto_review" && <AutoReviewPage api={api} active={connected} />}
-    {page === "capture_center" && <CaptureCenterPage api={api} active={connected} onOpenInspector={onOpenInspector} />}
+    {page === "capture_center" && <CaptureCenterPage api={api} active={connected} onOpenInspector={onOpenInspector} onNavigate={onNavigate} />}
     {page === "obsidian" && <ObsidianLoopPage api={api} active={connected} />}
     {page === "vector_center" && <VectorCenterPage api={api} active={connected} />}
     {page === "system_compute" && <SystemComputePage api={api} active={connected} />}
