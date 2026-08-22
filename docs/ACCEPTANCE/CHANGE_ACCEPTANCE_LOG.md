@@ -51,10 +51,80 @@
 
 ---
 
-## 2026-08-22 · SB-0 · Work Fact 合同与 8766 正式链路修复
+## 2026-08-22 · SB-1 · Capture → Work → Outcome 真实生命周期闭环
 
 - 产品分支：`feat/sb0-work-fact-contract`
 - 产品 Commit：`pending`
+- 影响模块：`src/control/capture.py`、`src/control/capture_api.py`、`src/capture/`、`src/extraction/`、`src/work/capture_bridge.py`、WorkStore、Desktop Capture/Cmd+K contract、Capture/Work/Extraction focused tests
+- 风险等级：P0
+- 用户可感知变化：每一条被正式接受的主人输入必须立即得到稳定 `capture_id + work_id`；随后排队、执行、完成、失败或重试都能通过同一 `work_id` 看到真实事件与 Outcome，不再只有“提交成功”toast 和孤立的 extraction `job_id`。
+- 数据或安全边界变化：不新增数据库或第二事实源；Capture/Extraction 与 Work Fact 均继续使用正式 runtime state SQLite 边界。稳定关联通过同一 Capture idempotency identity 与 extraction job 持久数据建立；Desktop 仍只访问认证 `127.0.0.1:8766`。永久记忆正文权威仍为 Obsidian Vault + Git，本节点不自动批准永久记忆。
+
+### 新增或修改的自动验收
+
+- [ ] `tests/test_capture_control.py`：文本/网页/文件/媒体接受响应含稳定 `capture_id + work_id + job_id`；重复提交及服务重建后仍复用同一 WorkItem，不产生第二份工作事实。
+- [ ] `tests/test_capture_api.py`：正式认证 8766 Capture API 返回 `work_id`，并能立即通过 `/api/work/{work_id}` 读取同一对象。
+- [ ] `tests/test_capture_work_bridge.py`：验证 accepted / queued / started / retrying / completed / failed / cancelled 等实际需要的事件与状态转换，且 NextAction actor 真实。
+- [ ] Extraction pipeline/worker focused tests：验证 queue claim 后写 processing 事件；完成落 success Outcome；重试只写 retrying/system-next-action；最终失败落 failure Outcome；回调失败不得伪造 extraction 成功或破坏队列事实。
+- [ ] durable idempotency 回归：同一内容跨 `CaptureControlService`/进程重建后通过 SQLite idempotency job 找回相同 `work_id`，不依赖进程内 `_job_by_key` 才正确。
+- [ ] `desktop/lingji-control/scripts/capture-center-smoke.mjs` 与 Work Fact smoke：Capture response contract 包含 `work_id`，成功后可进入同一 Work 事实；接口失败保留输入并显示真实错误。
+- [ ] Cmd+K smoke：正式 Desktop 存在可发现的快速“记住”入口；提交调用同一 `/api/capture/text`，不创建另一套记忆写入路径。
+- [ ] `python -m pytest -q --tb=short -k "capture or extraction or work"`：SB-1 focused 回归。
+- [ ] `.\scripts\validate.ps1 -Mode focused -Area capture`：Capture/Extraction 回归。
+- [ ] `.\scripts\validate.ps1 -Mode focused -Area control`：8766 Capture + Work API 回归。
+- [ ] `.\scripts\validate.ps1 -Mode focused -Area desktop`：Desktop Capture/Cmd+K/Work handoff 回归。
+- [ ] `python scripts/check_acceptance_sync.py`：产品变更与本条验收要求同步。
+
+### 新增或修改的真机验收
+
+- [ ] Acceptance workspace 的 packaged Desktop 中用文本入口提交一条唯一测试内容；接受响应产生 `capture_id + work_id`，Work 页能追到同一个对象。
+- [ ] 同一内容再次提交，不得产生第二个 WorkItem；Runtime 重启后再次提交仍映射到原有工作事实或明确的既有 job/work 链。
+- [ ] 执行一个真实成功 extraction：timeline 至少出现 accepted → queued/processing → completed，Outcome=success；Runtime 重启后仍可读取。
+- [ ] 构造一个隔离失败 extraction：WorkItem 必须保留并显示 failed event + failure Outcome，不得只显示 Capture toast 或把失败当“无工作”。
+- [ ] Cmd+K 快速“记住”与 Capture Center 文本输入使用同一后端事实链、相同失败语义和同一 Work 页面跳转。
+
+### 主人肉眼确认
+
+- [ ] 本节点最终随 Phase 1 M5 一并确认：主人从“记住”提交后能自然看懂灵机已经接手、现在处理到哪一步、最后成功还是失败；SB-1 自动门禁通过本身不等于最终 UI 主人 PASS。
+
+### 回归项
+
+- [ ] 未通过 Capture validation / paused / rejected 的输入不得凭空创建“已接手”的 WorkItem。
+- [ ] 没有真实 PendingAction 时不得把 extraction failure 自动写成“需要主人处理”。
+- [ ] duplicate / idempotent 重放不得产生互相矛盾的 WorkItem、Outcome 或第二永久记忆。
+- [ ] Extraction Worker 的队列状态仍是队列执行事实；Work Fact 只投影同一任务生命周期，不另建平行任务队列。
+- [ ] Tauri 不直连 SQLite、Qdrant、Ollama 或 8765。
+- [ ] `second_brain/` 不新增正式 Capture→Work 实现。
+- [ ] Production/Acceptance 隔离和 Secret 边界不退化。
+
+### 清理与回滚
+
+- 临时数据前缀：`SB1_CAPTURE_WORK_`
+- 覆盖安装或迁移方式：代码开发不触碰主人 Production；真机阶段继续使用 Acceptance workspace 与同 SHA Artifact 覆盖安装。
+- 临时备份删除条件：对应验收报告首次远程确认后只删除本任务专用临时数据；不得删除主人 Vault、正式记忆或未知 SQLite。
+- 测试数据清理方式：pytest 临时 state DB 自动隔离；真机 fixture 只清理 `SB1_CAPTURE_WORK_` 前缀对象与任务目录。
+- 回滚：回退 SB-1 Capture/Extraction lifecycle wiring；必须保留 SB-0 Work Fact schema 向后可读，不允许 destructive reset 或删除历史 WorkItem。
+
+### 不在范围
+
+- 不完成 SB-2 Work→Memory/Evidence 双向可追踪。
+- 不改变永久记忆 owner-review / Core Memory 权限规则。
+- 不进行 Home/Work/Attention/Memory 大规模视觉重做。
+- 不启动 Opportunity Center、Opportunity Score 或机会数据模型开发。
+- 不删除 compatibility runtime。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/SB1_CAPTURE_WORK_OUTCOME.md`
+- 报告分支：后续 Phase 1 本机验收按最终候选精确产品 SHA 创建。
+
+---
+
+## 2026-08-22 · SB-0 · Work Fact 合同与 8766 正式链路修复
+
+- 产品分支：`feat/sb0-work-fact-contract`
+- 产品 Commit：`c02f73fde7fb4492a665b4c1fd3f93c900499d52`
+- 状态：`AUTOMATED_PASS`；主人最终体验随 Phase 1 M5 验收，不单独宣称 OWNER_PASS。
 - 影响模块：`src/work/`、`src/control/`、Capture→Work bridge、8766 Local Control API、Desktop Work Fact DTO、Work Fact focused tests
 - 风险等级：P0
 - 用户可感知变化：首页/工作/需要我不再依赖拼凑状态；同一个真实 `work_id` 可从正式 8766 API 查询当前工作、最近工作、事件时间线、结果、下一执行者和主人待办。
@@ -62,16 +132,32 @@
 
 ### 新增或修改的自动验收
 
-- [ ] `tests/test_work_store.py`：验证 WorkItem/Event/Outcome/NextAction/PendingAction 持久化、状态更新、时间排序、重开数据库后读取和稳定 action id。
-- [ ] `tests/test_work_projector.py`：验证 current/recent/timeline/pending 投影只来自真实 WorkStore，空状态与失败状态不伪造成功。
-- [ ] `tests/test_work_control_api.py`：验证 `/api/work/current`、`/api/work/recent`、`/api/work/{work_id}`、`/api/work/timeline/{work_id}`、`/api/work/pending-actions` 已注册到正式 `create_control_app()` 且字段合同稳定。
-- [ ] `tests/test_capture_work_bridge.py`：验证 Capture bridge 使用正式 `WorkStore.create_work()`，同一 Capture 产生稳定可查询 `work_id`，失败路径写真实事件而不是静默丢失。
-- [ ] `desktop/lingji-control/scripts/work-fact-smoke.mjs`：验证 TypeScript Work Fact DTO 与正式 API 字段、状态、nullable 语义一致，API unavailable 不被当成“0 条/没有待办”。
-- [ ] `python -m pytest -q --tb=short -k "work or capture_work"`：Work Fact focused 回归。
-- [ ] `.\scripts\validate.ps1 -Mode focused -Area control`：正式 8766 与 Control 回归。
-- [ ] `.\scripts\validate.ps1 -Mode focused -Area capture`：Capture 既有合同回归。
-- [ ] `.\scripts\validate.ps1 -Mode focused -Area desktop`：Desktop contract/smoke 回归。
-- [ ] `python scripts/check_acceptance_sync.py`：产品变更与本记录同步。
+- [x] `tests/test_work_store.py`：WorkItem/Event/Outcome/NextAction/PendingAction 持久化、状态更新、时间排序、重开数据库后读取和稳定 action id 已进入整库测试。
+- [x] `tests/test_work_projector.py`：current/recent/timeline/pending 投影只来自真实 WorkStore，空状态与失败状态不伪造成功。
+- [x] `tests/test_work_control_api.py`：正式 `create_control_app()` 的 `/api/work/*` 路由与字段合同已验证。
+- [x] `tests/test_capture_work_bridge.py`：Capture bridge 使用正式 WorkStore，成功/失败基础转换已验证。
+- [x] `desktop/lingji-control/scripts/work-fact-smoke.mjs`：TypeScript Work Fact DTO 与正式 API 字段/状态一致，unavailable 不冒充空列表。
+- [x] Linux Python 3.11：`579 passed / 11 skipped / 0 failed`。
+- [x] Linux Python 3.12：`579 passed / 11 skipped / 0 failed`。
+- [x] Windows Python 3.12：`579 passed / 11 skipped / 0 failed`。
+- [x] Desktop smoke/build、MCP smoke、Browser Capture smoke、Obsidian plugin smoke。
+- [x] `acceptance-doc-sync`、`local-execution-handoff`、P0 Windows Gate、macOS Desktop Gate、Windows Desktop Release Baseline。
+
+### 同 SHA 自动发布证据
+
+```text
+macOS arm64
+artifact: lingji-macos-arm64
+artifact_id: 9469111722
+sha256: 7b1a4fe313da5ae4d709651fc9a18f43ee0281b57f15c7bddab9260fdeb559e8
+product_sha: c02f73fde7fb4492a665b4c1fd3f93c900499d52
+
+Windows
+artifact: lingji-windows-0.1.0-c02f73fd
+artifact_id: 9469187504
+sha256: e4fe344ad4b023da24e9a8ca125b9c6756da4057f01426b5c520d01fdd277eb6
+product_sha: c02f73fde7fb4492a665b4c1fd3f93c900499d52
+```
 
 ### 新增或修改的真机验收
 
@@ -86,13 +172,13 @@
 
 ### 回归项
 
-- [ ] Tauri 不直连 SQLite、Qdrant、Ollama 或 8765。
-- [ ] 没有真实 WorkItem 时不得宣称灵机正在工作或已完成工作。
-- [ ] 没有真实 PendingAction 时不得宣称需要主人处理。
-- [ ] API 不可用与真实空列表严格区分。
-- [ ] Python/TypeScript 状态枚举统一为 `pending | accepted | running | completed | failed | skipped`。
-- [ ] `second_brain/` 不新增 Work Fact 正式实现。
-- [ ] Production/Acceptance storage 物理隔离不退化。
+- [x] Tauri 不直连 SQLite、Qdrant、Ollama 或 8765。
+- [x] 没有真实 WorkItem 时不得宣称灵机正在工作或已完成工作。
+- [x] 没有真实 PendingAction 时不得宣称需要主人处理。
+- [x] API 不可用与真实空列表严格区分。
+- [x] Python/TypeScript 状态枚举统一为 `pending | accepted | running | completed | failed | skipped`。
+- [x] `second_brain/` 未新增 Work Fact 正式实现。
+- [x] Production/Acceptance storage 隔离门禁未退化。
 
 ### 清理与回滚
 
