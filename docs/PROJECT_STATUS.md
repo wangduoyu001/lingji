@@ -62,7 +62,7 @@ Owner M5: NOT ACTIVE
 Opportunity Center: FROZEN
 ```
 
-当前动作：**先审计现有 Work→Memory/Evidence 链，明确真实缺口，然后只修缺口。不得在未审计前重做 Memory 系统或 UI。**
+当前动作：**SB-2 审计已形成精确缺口，下一步先登记 acceptance change，再做最小 canonical extension。不得重做 Memory 系统或 UI。**
 
 ## 2. 已完成节点
 
@@ -174,58 +174,128 @@ WorkItem(work_id)
 - Desktop 仍只通过认证 8766；
 - 不建立第二套 Memory 页面、队列、API 或数据库。
 
-### 3.3 当前已知可复用基础
+### 3.3 审计完成：可复用基础
 
-SB-1 已经把 extraction result refs 写入 Work Outcome evidence，当前代码会尝试携带：
+已经确认：
+
+1. `VaultExtractionSink` 写入的 Markdown 正文是可读 Memory 内容，frontmatter 会保留非保留 metadata；永久正文权威仍在 Vault。
+2. `PEMISIndex._parse_md_file()` 会把完整 Vault frontmatter 保留在 `entry.properties`，并单独抽取关系字段。
+3. `MemoryDatabase` 是派生索引，会把指定关系投影到 `relationships_json`，Memory Inspector 已能从 chunks/citation renderer 返回可读内容。
+4. `SourceReadModel` 已有 `message_memory_links`，支持 `memory_links(memory_id)` 反查 `message_id/conversation_id/source_id`；不需要新建 Source↔Memory 表。
+5. `MemoryReviewService` 与 lifecycle 已保留 owner-confirmed review/Core 权限边界，SB-2 不需要重新设计审核系统。
+6. `ExtractionRequest.options` 已携带 SB-1 的 `_lingji_work_id`，所以 Work origin 可以在提取执行时进入 canonical Memory metadata，无需 UI 猜测。
+
+### 3.4 审计完成：真实缺口
+
+#### Gap A — Structured sink 丢失实际 IDs
+
+`StructuredReadModelSink.write_batch()` 当前只返回：
+
+```text
+state
+sources/conversations/messages/links counts
+warnings
+```
+
+虽然内部 `SourceReadModel.upsert_bundle()` 会生成真实 `source_id`，并建立 message→memory link，但这些实际 IDs 没返回给 extraction result。
+
+结果：SB-1 `_result_evidence()` 预留了 ref 容器，却经常拿不到真正的 source/message/memory refs。
+
+#### Gap B — Work evidence 只接受单值 string
+
+`src/extraction/bootstrap.py::_result_evidence()` 只读取：
 
 ```text
 memory_id
 source_id
 conversation_id
 message_id
-job_id
 ```
 
-但这**不等于 SB-2 已完成**。必须继续验证：
+而且只接受单个字符串。多 documents、多 conversations、多 messages、多 memories 会静默丢失。
 
-1. 现有 extraction/structured sink 实际是否稳定产出这些 refs；
-2. 多 Memory 结果是否会丢失；
-3. Memory 本体是否有主人可读正文/摘要；
-4. Memory provenance 是否可验证；
-5. Memory detail 是否能反向找到 `work_id`；
-6. 重启/reindex 后双向关联是否仍成立；
-7. no-memory 与 failure 是否能区分；
-8. owner-review/lifecycle 是否被 Capture 自动链绕过。
+#### Gap C — Memory 没有 durable origin Work relationship
 
-### 3.4 当前审计入口
+Capture 产生的 `ExtractedDocument.metadata` 当前没有稳定 Work relationship。Memory Inspector 因而无法从 Memory 反向找到 originating `work_id`。
 
-按顺序读取，不全仓乱翻：
+不能用 UI state 或文本匹配补这个洞。
+
+#### Gap D — 任意 frontmatter properties 不会直接进入 MemoryDatabase
+
+`PEMISIndex` 虽保留完整 `properties`，但 `MemoryDatabase._upsert_document()` 只投影已知字段。单纯新增一个任意 `origin_work_id` frontmatter 会在派生数据库/Inspector 层消失。
+
+因此最小 canonical 方案固定为：
 
 ```text
+Vault frontmatter: work relation = source of truth
+PEMISIndex RELATION_FIELDS: project the relation
+MemoryDatabase relationships_json: rebuildable derived projection
+Memory Inspector: derive origin_work_id/work_ids from relationships
+```
+
+不新增第二永久关系表，不把 SQLite 变成关系权威。
+
+#### Gap E — no-memory 与 produced-memory 尚未显式区分
+
+Extraction completed 目前总是生成 success Outcome，但 evidence 可能没有 memory refs。SB-2 必须让 evidence 明确记录：
+
+```text
+memory_state = produced | not_applicable | unavailable/failed
+memory_ids = [...]
+```
+
+不能让“提取成功”和“永久记忆已产生”继续混成一句话。
+
+### 3.5 第一批实现范围
+
+在第一笔 SB-2 产品提交前，先登记 acceptance change。随后只做这些最小改动：
+
+```text
+1. Pipeline 将 _lingji_work_id 注入 ExtractedDocument 的 canonical `work` relationship metadata；
+2. PEMISIndex 将 `work` 纳入 RELATION_FIELDS；
+3. MemoryDatabase 将 `work` 纳入 relationships_json 派生投影，不新增 schema column；
+4. StructuredReadModelSink 返回稳定 source_ids/conversation_ids/message_ids/memory_ids；
+5. _result_evidence 保存数组 refs 和明确 memory_state，不静默截断；
+6. Memory Inspector/detail 暴露由 relationships 派生的 origin_work_id/work_ids；
+7. Work/Desktop 只使用这些 stable refs 做 exact Memory handoff；
+8. 增加真实 Work↔Memory/restart/reindex/multiple/no-memory/failure/non-Work fixtures。
+```
+
+### 3.6 当前代码入口
+
+```text
+src/extraction/pipeline.py
+src/extraction/models.py
 src/extraction/structured_sink.py
+src/extraction/bootstrap.py
 src/extraction/sink.py
-src/project_memory/
+src/indexer/index.py
 src/retrieval/memory_db.py
-src/gateway/memory.py
 src/gateway/memory_inspector.py
 src/sources/read_model.py
-src/control/* memory inspector/detail routes
-Desktop Memory Inspector / Memory Review pages
-对应 tests
+Desktop Work / Memory Inspector exact-ID handoff
+相关 tests
 ```
 
-### 3.5 SB-2 下一步
+注意代码地图里的旧 `src/gateway/memory.py` 路径已过时，真实 MemoryGateway 是：
 
 ```text
-A. audit existing memory write/read/provenance contracts
-B. write exact gap list into this document
-C. if code change is needed, update CHANGE_ACCEPTANCE_LOG before first SB-2 product commit
-D. implement smallest canonical extension
-E. add real Work<->Memory lifecycle tests
-F. focused gates
-G. current-tree full/platform gates
-H. SB-2 report + AUTOMATED_PASS
-I. activate SB-3
+src/gateway/memory_gateway.py
+```
+
+Code Map 在本节点后续文档同步中修正。
+
+### 3.7 SB-2 下一步
+
+```text
+A. update CHANGE_ACCEPTANCE_LOG for the audited change scope
+B. implement canonical work relationship + multi-ref evidence
+C. add real Work<->Memory lifecycle tests
+D. add exact Work→Memory / Memory→Work Desktop smoke
+E. focused gates
+F. current-tree full/platform gates
+G. SB-2 report + AUTOMATED_PASS
+H. activate SB-3
 ```
 
 SB-2 未 `AUTOMATED_PASS` 前，不开始 SB-3 功能实现。
