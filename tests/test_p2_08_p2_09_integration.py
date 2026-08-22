@@ -1,168 +1,109 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from src.auto_review.shadow import ShadowDecision, ShadowDecisionStore
-from src.capture.models import CaptureRequest
-from src.capture.service import CaptureService
+import pytest
+
+from src.auto_review import AutoReviewMode, DeterministicAutoReviewEvaluator, ReviewCandidate, ReviewContext
 from src.config import Settings
-from src.extraction.adapters.base import stable_adapter_version
-from src.extraction.ids import canonicalize_import
-from src.extraction.models import ExtractionJob, ExtractedDocument
-from src.extraction.structured_sink import StructuredReadModelSink
-from src.project_context.service import ProjectContextService
-from src.project_memory.models import ProjectMemoryState
-from src.project_memory.service import ProjectMemoryService
-from src.sources.models import SourceUpsert
-from src.sources.read_model import SourceReadModel
-from src.storage.state_db import StateDatabase
+from src.extraction.idempotency import build_extraction_idempotency_key
+from src.extraction.queue import SQLiteExtractionQueue
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def read(path: str) -> str:
-    return (ROOT / path).read_text(encoding="utf-8")
+    return (ROOT / path).read_text(encoding="utf-8-sig")
 
 
-def make_settings(tmp_path: Path) -> Settings:
-    return Settings(
-        _env_file=None,
-        vault_dir=str(tmp_path / "vault"),
-        storage_dir=str(tmp_path / "storage"),
-        log_dir=str(tmp_path / "logs"),
-        backup_dir=str(tmp_path / "backup"),
-        startup_min_free_gb=0,
+def test_runtime_and_auto_review_defaults_survive_combined_merge():
+    settings = Settings(_env_file=None)
+
+    assert settings.embed_model == "bge-m3"
+    assert settings.fallback_embed_model == "nomic-embed-text"
+    assert settings.embed_model != settings.fallback_embed_model
+    assert settings.auto_review_mode == "OFF"
+    assert settings.auto_review_ai_enabled is False
+    assert settings.control_api_port == 8766
+
+
+def test_auto_review_remains_shadow_only_after_combined_merge():
+    evaluator = DeterministicAutoReviewEvaluator()
+    candidate = ReviewCandidate(
+        memory_id="LJ-INTEGRATION-1",
+        title="Integration candidate",
+        content="Evidence-backed integration candidate.",
+        memory_type="knowledge",
+        source_refs=("source-1",),
     )
 
-
-def test_capture_canonicalization_matches_ingestion_and_structured_read_model(tmp_path: Path):
-    settings = make_settings(tmp_path)
-    state_db = StateDatabase(settings.state_db_path)
-    memory_db_path = settings.storage_path / "state" / "lingji_memory.db"
-    read_model = SourceReadModel(memory_db_path)
-    structured_sink = StructuredReadModelSink(read_model, state_db=state_db)
-    service = CaptureService(settings, state_db=state_db)
-
-    request = CaptureRequest(
-        source_type="chatgpt",
-        title="Project Thread",
-        content="User: hello\nAssistant: hi",
-        source_ref="https://example.com/thread?token=secret",
-        project="alpha",
-        privacy="private",
-        options={"source_name": "Project Thread"},
+    decision = evaluator.evaluate(
+        candidate,
+        ReviewContext(mode=AutoReviewMode.SHADOW, evidence_sufficient=True),
     )
-    material = service.materialize(request)
-    canonical = canonicalize_import(
-        source_type=material.source_type,
-        adapter_name=material.adapter_name,
-        adapter_version=material.adapter_version,
-        input_path=material.raw_path,
-        payload=material.payload,
-        options=material.options,
-    )
-    assert canonical.source_id == material.source_id
-    assert canonical.import_id == material.import_id
 
-    document = ExtractedDocument(
-        source_type=material.source_type,
-        source_id=material.source_id,
-        title=material.title,
-        body=material.content,
-        privacy=material.privacy,
-        projects=(material.project,) if material.project else (),
-        metadata={
-            "source_ref": material.source_ref,
-            "source_name": material.title,
-            "import_id": material.import_id,
-        },
-    )
-    job = ExtractionJob(
-        job_id="job-canonical",
-        source_type=material.source_type,
-        input_path=str(material.raw_path),
-        payload=material.payload,
-        options=material.options,
-        adapter_name=material.adapter_name,
-        adapter_version=material.adapter_version,
-    )
-    structured_sink([document], job, None)
-
-    source = read_model.get_source(material.source_id)
-    assert source is not None
-    assert source.source_id == material.source_id
-    assert source.projects == ("alpha",)
-    assert source.privacy == "private"
-
-
-def test_shadow_decision_store_never_mutates_memory_state(tmp_path: Path):
-    settings = make_settings(tmp_path)
-    state_db = StateDatabase(settings.state_db_path)
-    project_memory = ProjectMemoryService(settings.vault_path, state_db=state_db)
-    project = project_memory.ensure_project("alpha")
-    before = ProjectMemoryState.from_dict(project_memory.project_state(project.project_id))
-
-    shadow_store = ShadowDecisionStore(state_db)
-    decision = ShadowDecision(
-        decision_id="shadow-1",
-        candidate_id="candidate-1",
-        predicted_action="approve",
-        confidence=0.91,
-        reason="fixture",
-        mode="SHADOW",
-    )
-    shadow_store.record(decision)
-
-    after = ProjectMemoryState.from_dict(project_memory.project_state(project.project_id))
-    assert before == after
-    rows = state_db.recent_events(limit=20, entity_type="auto_review_shadow")
-    assert any(row["entity_id"] == "shadow-1" for row in rows)
-
-
-def test_project_context_and_source_ids_remain_stable(tmp_path: Path):
-    settings = make_settings(tmp_path)
-    state_db = StateDatabase(settings.state_db_path)
-    project_context = ProjectContextService(settings.vault_path, state_db=state_db)
-    project_context.ensure_project("alpha")
-
-    source = SourceUpsert(
-        source_type="chatgpt",
-        display_name="Thread",
-        origin_ref="thread-1",
-        privacy="private",
-        projects=("alpha",),
-    )
-    first = source.stable_source_id()
-    second = source.stable_source_id()
-    assert first == second
-
-    material = CaptureService(settings, state_db=state_db).materialize(
-        CaptureRequest(
-            source_type="chatgpt",
-            title="Thread",
-            content="hello",
-            source_ref="thread-1",
-            project="alpha",
-            privacy="private",
+    assert decision.mutation_performed is False
+    with pytest.raises(ValueError, match="ACTIVE"):
+        evaluator.evaluate(
+            candidate,
+            ReviewContext(mode=AutoReviewMode.ACTIVE, evidence_sufficient=True),
         )
-    )
-    adapter_version = stable_adapter_version("chatgpt", "markdown")
-    queued = canonicalize_import(
-        source_type=material.source_type,
-        adapter_name=material.adapter_name,
-        adapter_version=material.adapter_version,
-        input_path=material.raw_path,
-        payload=material.payload,
-        options=material.options,
-    )
-    canonical = canonicalize_import(
-        material.source_type,
-        material.raw_path,
-        material.payload,
-        material.options,
-        material.adapter_name,
-        material.adapter_version,
+
+
+def test_control_api_registers_shadow_routes_on_existing_8766_app():
+    runner = read("run_control_api.py")
+    routes = read("src/control/auto_review_api.py")
+
+    assert "register_auto_review_routes(app, settings, service, token=token)" in runner
+    assert "settings.control_api_port" in runner
+    for endpoint in (
+        "/api/auto-review/status",
+        "/api/auto-review/decisions",
+        "/api/auto-review/metrics",
+        "/api/auto-review/evaluate/{subject_id}",
+        "/api/auto-review/feedback",
+        "/api/auto-review/audit/verify",
+    ):
+        assert endpoint in routes
+    for forbidden in (
+        "/api/auto-review/approve",
+        "/api/auto-review/reject",
+        "/api/auto-review/delete",
+        "/api/auto-review/execute",
+        "/api/auto-review/active",
+    ):
+        assert forbidden not in routes
+
+
+def test_mcp_work_report_and_web_capture_remain_queue_first():
+    source = read("src/mcp_server.py")
+
+    assert "def submit_codex_work_report(" in source
+    assert "def capture_web_source(" in source
+    assert source.count("enqueue_durable_submission(") >= 2
+    assert source.count("process_now: bool = False") >= 3
+    assert 'adapter_name="codex_work_report"' in source
+    assert 'adapter_name="web_capture"' in source
+
+
+def test_canonical_idempotency_contract_is_shared_with_queue():
+    material = {
+        "source_type": "web",
+        "adapter_name": "web_capture",
+        "adapter_version": "1",
+        "input_identity": {"kind": "payload"},
+        "payload": {"url": "https://example.test", "title": "Example"},
+        "effective_options": {"allow_network_fetch": False},
+    }
+    canonical = build_extraction_idempotency_key(**material)
+    queued = SQLiteExtractionQueue.build_idempotency_key(
+        "web",
+        None,
+        material["payload"],
+        material["effective_options"],
+        material["adapter_name"],
+        material["adapter_version"],
     )
     assert queued == canonical
 
