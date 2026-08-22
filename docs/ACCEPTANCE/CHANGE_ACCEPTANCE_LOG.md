@@ -51,6 +51,72 @@
 
 ---
 
+## 2026-08-22 · SB-0 · Work Fact 合同与 8766 正式链路修复
+
+- 产品分支：`feat/sb0-work-fact-contract`
+- 产品 Commit：`pending`
+- 影响模块：`src/work/`、`src/control/`、Capture→Work bridge、8766 Local Control API、Desktop Work Fact DTO、Work Fact focused tests
+- 风险等级：P0
+- 用户可感知变化：首页/工作/需要我不再依赖拼凑状态；同一个真实 `work_id` 可从正式 8766 API 查询当前工作、最近工作、事件时间线、结果、下一执行者和主人待办。
+- 数据或安全边界变化：Work Fact 继续写入正式 runtime state SQLite 边界，不新增第二数据库；Desktop 仍只访问认证的 `127.0.0.1:8766`；不修改永久记忆权威，不直接写 Production Vault/Qdrant。
+
+### 新增或修改的自动验收
+
+- [ ] `tests/test_work_store.py`：验证 WorkItem/Event/Outcome/NextAction/PendingAction 持久化、状态更新、时间排序、重开数据库后读取和稳定 action id。
+- [ ] `tests/test_work_projector.py`：验证 current/recent/timeline/pending 投影只来自真实 WorkStore，空状态与失败状态不伪造成功。
+- [ ] `tests/test_work_control_api.py`：验证 `/api/work/current`、`/api/work/recent`、`/api/work/{work_id}`、`/api/work/timeline/{work_id}`、`/api/work/pending-actions` 已注册到正式 `create_control_app()` 且字段合同稳定。
+- [ ] `tests/test_capture_work_bridge.py`：验证 Capture bridge 使用正式 `WorkStore.create_work()`，同一 Capture 产生稳定可查询 `work_id`，失败路径写真实事件而不是静默丢失。
+- [ ] `desktop/lingji-control/scripts/work-fact-smoke.mjs`：验证 TypeScript Work Fact DTO 与正式 API 字段、状态、nullable 语义一致，API unavailable 不被当成“0 条/没有待办”。
+- [ ] `python -m pytest -q --tb=short -k "work or capture_work"`：Work Fact focused 回归。
+- [ ] `.\scripts\validate.ps1 -Mode focused -Area control`：正式 8766 与 Control 回归。
+- [ ] `.\scripts\validate.ps1 -Mode focused -Area capture`：Capture 既有合同回归。
+- [ ] `.\scripts\validate.ps1 -Mode focused -Area desktop`：Desktop contract/smoke 回归。
+- [ ] `python scripts/check_acceptance_sync.py`：产品变更与本记录同步。
+
+### 新增或修改的真机验收
+
+- [ ] 使用 Acceptance workspace 启动真实 packaged Desktop/Sidecar，8766 可用时首页能读取真实 current work；8766 不可用时必须显示不可用/错误，不得显示“当前无工作”冒充成功。
+- [ ] 创建一个隔离测试 WorkItem，重启 Runtime 后仍能通过同一 `work_id` 查询 WorkItem 和 timeline。
+- [ ] 构造一个真实 PendingAction，Home 与“需要我”数量和对象一致；不存在 PendingAction 时两处均为 0/空状态。
+- [ ] 构造 failed WorkItem，Activity/Work 显示真实失败，不得被空状态或成功 Outcome 覆盖。
+
+### 主人肉眼确认
+
+- [ ] SB-0 不要求主人判断最终视觉设计；只需在后续 Phase 1 M5 中确认“当前工作/工作履历/需要我”三处不再互相矛盾。SB-0 本身不得宣称第二大脑 UI 已最终验收。
+
+### 回归项
+
+- [ ] Tauri 不直连 SQLite、Qdrant、Ollama 或 8765。
+- [ ] 没有真实 WorkItem 时不得宣称灵机正在工作或已完成工作。
+- [ ] 没有真实 PendingAction 时不得宣称需要主人处理。
+- [ ] API 不可用与真实空列表严格区分。
+- [ ] Python/TypeScript 状态枚举统一为 `pending | accepted | running | completed | failed | skipped`。
+- [ ] `second_brain/` 不新增 Work Fact 正式实现。
+- [ ] Production/Acceptance storage 物理隔离不退化。
+
+### 清理与回滚
+
+- 临时数据前缀：`SB0_WORK_FACT_`
+- 覆盖安装或迁移方式：本轮代码开发不触碰主人 Production；真机验收沿用正式 Acceptance workspace 和覆盖安装规则。
+- 临时备份删除条件：仅在对应验收报告首次远程确认后删除任务专用临时数据；Production 数据永不由本任务清理。
+- 测试数据清理方式：测试使用临时 SQLite/Acceptance workspace，结束后删除任务前缀数据；不得清理未知数据库或 Vault。
+- 回滚：以产品分支提交为单位回退 Work Fact schema/service/API/DTO 变更；若需要 schema 兼容迁移，回滚必须保留旧列/数据可读，不允许 destructive reset。
+
+### 不在范围
+
+- 不完成 SB-1 Capture→Work→Outcome 全输入类型闭环。
+- 不完成 SB-2 Work→Memory/Evidence 产品闭环。
+- 不重做 Home/Work/Attention 视觉设计。
+- 不启动机会面板、Opportunity Score 或机会数据模型扩展。
+- 不删除 `second_brain/` compatibility runtime。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/SB0_WORK_FACT_CONTRACT.md`
+- 报告分支：后续本机验收时按精确产品 Head 创建 `acceptance/sb0-work-fact-<short-sha>`。
+
+---
+
 ## 2026-08-01 · PR #60 后续 · 代码发布验证临时目录安全清理修复
 
 - 产品分支：`fix/cleanup-code-validation-workspace`
