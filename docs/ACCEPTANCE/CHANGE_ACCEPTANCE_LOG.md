@@ -51,29 +51,114 @@
 
 ---
 
-## 2026-08-22 · SB-1 · Capture → Work → Outcome 真实生命周期闭环
+## 2026-08-22 · SB-2 · Work → Memory / Evidence 双向可追踪
 
 - 产品分支：`feat/sb0-work-fact-contract`
 - 产品 Commit：`pending`
-- 影响模块：`src/control/capture.py`、`src/control/capture_api.py`、`src/capture/`、`src/extraction/`、`src/work/capture_bridge.py`、WorkStore、Desktop Capture/Cmd+K contract、Capture/Work/Extraction focused tests
+- 影响模块：`src/extraction/pipeline.py`、`src/extraction/structured_sink.py`、`src/extraction/bootstrap.py`、`src/indexer/index.py`、`src/retrieval/memory_db.py`、`src/gateway/memory_inspector.py`、`src/sources/read_model.py`、Work/Memory exact-ID Desktop handoff、Work↔Memory focused tests
 - 风险等级：P0
-- 用户可感知变化：每一条被正式接受的主人输入必须立即得到稳定 `capture_id + work_id`；随后排队、执行、完成、失败或重试都能通过同一 `work_id` 看到真实事件与 Outcome，不再只有“提交成功”toast 和孤立的 extraction `job_id`。
-- 数据或安全边界变化：不新增数据库或第二事实源；Capture/Extraction 与 Work Fact 均继续使用正式 runtime state SQLite 边界。稳定关联通过同一 Capture idempotency identity 与 extraction job 持久数据建立；Desktop 仍只访问认证 `127.0.0.1:8766`。永久记忆正文权威仍为 Obsidian Vault + Git，本节点不自动批准永久记忆。
+- 用户可感知变化：当 Capture/Work 完成后，主人必须能看见“是否真的产生了记忆、产生了哪些 memory_id、来源在哪里”，并能从 Work 精确进入 Memory、再从 Memory 返回 originating Work。提取成功不再等价于“永久记忆已产生”。
+- 数据或安全边界变化：不新增永久记忆数据库或第二关系事实源；Work origin 作为 Vault frontmatter 的正式 relationship 保存，`PEMISIndex`/`lingji_memory.db` 只做可重建派生投影。`message_memory_links` 继续作为 Source read model 的派生 Source↔Memory 关系。Desktop 仍只访问认证 `127.0.0.1:8766`；不绕过 owner-review/Core Memory 权限，不自动 destructive rebuild Qdrant。
 
 ### 新增或修改的自动验收
 
-- [ ] `tests/test_capture_control.py`：文本/网页/文件/媒体接受响应含稳定 `capture_id + work_id + job_id`；重复提交及服务重建后仍复用同一 WorkItem，不产生第二份工作事实。
-- [ ] `tests/test_capture_api.py`：正式认证 8766 Capture API 返回 `work_id`，并能立即通过 `/api/work/{work_id}` 读取同一对象。
-- [ ] `tests/test_capture_work_bridge.py`：验证 accepted / queued / started / retrying / completed / failed / cancelled 等实际需要的事件与状态转换，且 NextAction actor 真实。
-- [ ] Extraction pipeline/worker focused tests：验证 queue claim 后写 processing 事件；完成落 success Outcome；重试只写 retrying/system-next-action；最终失败落 failure Outcome；回调失败不得伪造 extraction 成功或破坏队列事实。
-- [ ] durable idempotency 回归：同一内容跨 `CaptureControlService`/进程重建后通过 SQLite idempotency job 找回相同 `work_id`，不依赖进程内 `_job_by_key` 才正确。
-- [ ] `desktop/lingji-control/scripts/capture-center-smoke.mjs` 与 Work Fact smoke：Capture response contract 包含 `work_id`，成功后可进入同一 Work 事实；接口失败保留输入并显示真实错误。
-- [ ] Cmd+K smoke：正式 Desktop 存在可发现的快速“记住”入口；提交调用同一 `/api/capture/text`，不创建另一套记忆写入路径。
-- [ ] `python -m pytest -q --tb=short -k "capture or extraction or work"`：SB-1 focused 回归。
-- [ ] `.\scripts\validate.ps1 -Mode focused -Area capture`：Capture/Extraction 回归。
-- [ ] `.\scripts\validate.ps1 -Mode focused -Area control`：8766 Capture + Work API 回归。
-- [ ] `.\scripts\validate.ps1 -Mode focused -Area desktop`：Desktop Capture/Cmd+K/Work handoff 回归。
-- [ ] `python scripts/check_acceptance_sync.py`：产品变更与本条验收要求同步。
+- [ ] real Work→Memory fixture：正式 Capture/Extraction 产生稳定 `work_id` 与一个或多个 `memory_id`，Work Outcome evidence 不静默丢失多 Memory refs。
+- [ ] Work origin canonical metadata：Capture Work 的 `_lingji_work_id` 写入产生的 Vault Memory relationship；reindex/restart 后 Memory detail 仍能得到相同 originating `work_id`。
+- [ ] `StructuredReadModelSink`：返回实际 `source_ids/conversation_ids/message_ids/memory_ids`，同时保持现有 counts/warnings contract；多 source/conversation/message 不被截断成单值。
+- [ ] `src/extraction/bootstrap.py::_result_evidence`：支持数组 refs，并显式记录 `memory_state = produced | not_applicable | unavailable/failed`；不能把 extraction success 冒充 memory produced。
+- [ ] `SourceReadModel.memory_links(memory_id)`：反向来源链继续返回正确 `message_id/conversation_id/source_id`；不新增平行来源表。
+- [ ] Memory index/rebuild：canonical Work relationship 经 `PEMISIndex` 进入 `relationships_json` 派生层；不要求新增第二 schema authority。
+- [ ] Memory Inspector/detail：返回 owner-readable content/chunks/citation，并暴露从 canonical relationship 派生的 `origin_work_id/work_ids`。
+- [ ] non-Work memory fixture：没有 originating Work 的 Memory 保持有效，不制造假的 WorkItem/work_id。
+- [ ] no-memory fixture：Extraction 可完成但没有 Memory 时，Work evidence 明确为 not_applicable/无 memory_ids，而非声称“已记住”。
+- [ ] memory/source projection failure fixture：失败或 unavailable 必须显式进入 evidence/diagnostic state，不得显示为空即成功。
+- [ ] owner-review/Core Memory 回归：SB-2 wiring 不自动批准 candidate，不绕过主人确认，不改变 Core Memory owner-only 规则。
+- [ ] Desktop smoke：Work exact memory ref → Memory Inspector exact target；Memory detail originating work → exact Work；接口 unavailable 与真实无关联严格区分。
+- [ ] `python scripts/check_acceptance_sync.py`：产品变化与本验收条目保持同步。
+
+### 新增或修改的真机验收
+
+- [ ] 后续 Phase 1 同 SHA packaged Acceptance candidate 中提交一条唯一“记住”文本：从 Work 看到实际 memory_id，再打开该 Memory 读取正文和来源，最后返回同一 work_id。
+- [ ] 提交一个不会产生正式 Memory 的输入或隔离 fixture：界面必须说明“工作完成但未产生记忆”，不能显示“已记住”。
+- [ ] 构造隔离的 Memory/source projection failure：主人应看到明确失败/不可用状态，不得看到假空白或假成功。
+- [ ] Runtime 重启后重复检查同一 Work↔Memory 双向 ID 与来源链，不得改变身份。
+
+### 主人肉眼确认
+
+- [ ] 最终随 Phase 1 M5：主人能自然区分“灵机完成处理”“产生了候选/记忆”“主人已批准永久记忆”三种不同语义，并能验证来源。
+
+### 回归项
+
+- [ ] Obsidian Vault + Git 继续是永久正文权威；`lingji_state.db` 不存第二份 Memory 正文。
+- [ ] `lingji_memory.db` 与 Qdrant 继续是可重建派生层；重建不得改变 canonical Work origin。
+- [ ] 不为 Work↔Memory 新增独立永久关系数据库或 UI-local/localStorage 事实源。
+- [ ] 多 memory/source/message refs 不静默截断。
+- [ ] 非 Work Memory 不制造 WorkItem。
+- [ ] candidate/owner-review/Core Memory 权限不退化。
+- [ ] Tauri 不直连 SQLite、Qdrant、Ollama 或 8765。
+- [ ] `second_brain/` 不新增正式 Work→Memory 实现。
+- [ ] Production/Acceptance 隔离和 Secret 边界不退化。
+
+### 清理与回滚
+
+- 临时数据前缀：`SB2_WORK_MEMORY_`
+- 覆盖安装或迁移方式：开发和 CI 使用隔离 Vault/SQLite；真机验收仍使用 Acceptance workspace 与最终同 SHA Artifact 覆盖安装。
+- 临时备份删除条件：验收报告首次远程确认后只删除本任务临时数据；不得删除主人 Vault/正式 Memory/未知 SQLite/Qdrant。
+- 测试数据清理方式：pytest 临时目录自动隔离；真机只清理 `SB2_WORK_MEMORY_` fixture。
+- 回滚：回退 Work relationship 注入、structured refs/evidence 和 projection/UI handoff；Vault 已存在的新增 relationship metadata 必须向后可忽略，禁止 destructive migration/reset。
+
+### 不在范围
+
+- 不完成 SB-3 Retrieval/Vector/Inspector 全面真实性验证。
+- 不完成 SB-4 AI Memory Access / Context Pack / MCP 总核验。
+- 不进行 SB-5 Home/Work/Attention/Capture/Memory 大规模视觉重做。
+- 不启动 Opportunity Center、Opportunity Score 或机会数据模型开发。
+- 不删除 compatibility runtime。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/SB2_WORK_MEMORY_EVIDENCE.md`
+- 报告分支：后续 Phase 1 本机验收按最终候选精确产品 SHA 创建。
+
+---
+
+## 2026-08-22 · SB-1 · Capture → Work → Outcome 真实生命周期闭环
+
+- 产品分支：`feat/sb0-work-fact-contract`
+- 产品 Commit：`f23c20c6692d0390ae3c6930b5eba1882bbffb22`
+- 状态：`AUTOMATED_PASS`；最终主人体验继续随 Phase 1 M5 验收，不单独宣称 OWNER_PASS。
+- 影响模块：`src/control/capture.py`、`src/control/capture_api.py`、`src/capture/`、`src/extraction/`、`src/work/capture_bridge.py`、WorkStore、Desktop Capture/Cmd+K contract、Capture/Work/Extraction focused tests
+- 风险等级：P0
+- 用户可感知变化：每一条被正式接受的主人输入立即得到稳定 `capture_id + work_id`；随后排队、执行、完成、失败或重试都能通过同一 `work_id` 看到真实事件与 Outcome，不再只有“提交成功”toast 和孤立 extraction `job_id`。
+- 数据或安全边界变化：不新增数据库或第二事实源；Capture/Extraction 与 Work Fact 均继续使用正式 runtime state SQLite 边界。Desktop 仍只访问认证 `127.0.0.1:8766`。永久记忆正文权威仍为 Obsidian Vault + Git，本节点不自动批准永久记忆。
+
+### 已通过的自动验收
+
+- [x] `tests/test_capture_work_lifecycle.py`：real CaptureControl + real ExtractionPipeline + SQLite 验证稳定 `capture_id/work_id/job_id`、duplicate/restart、success/failure 与 rejected input。
+- [x] `tests/test_capture_work_bridge.py`：accepted / queued / started / retrying / completed / failed / cancelled 生命周期和 NextAction actor。
+- [x] Extraction pipeline/worker full regression：queue claim、retry、success/failure Outcome 与 callback failure isolation 已进入整库测试。
+- [x] `desktop/lingji-control/scripts/capture-center-smoke.mjs`、`quick-capture-smoke.mjs`、Work Fact smoke：正式 work_id contract 与 exact-ID handoff。
+- [x] Linux Python 3.11：`585 passed / 11 skipped / 0 failed`。
+- [x] Linux Python 3.12：`585 passed / 11 skipped / 0 failed`。
+- [x] Windows Python 3.12：`585 passed / 11 skipped / 0 failed`。
+- [x] Desktop smoke/build、MCP smoke、Browser Capture smoke、Obsidian plugin smoke。
+- [x] `acceptance-doc-sync`、`local-execution-handoff`、P0 Windows Gate、macOS Desktop Gate、Windows Desktop Release Baseline。
+
+### 自动发布证据
+
+```text
+verified repository head: 441d1d2ed50a38f4e6dfb7e9c7c3d28e4404e66a
+
+macOS
+artifact: lingji-macos-arm64
+artifact_id: 9471250404
+sha256: 256577b01f934708b2109032b4b4ac1c269a9188f3958ad590c27d3e2b8f3fe3
+
+Windows
+artifact: lingji-windows-0.1.0-441d1d2e
+artifact_id: 9471266207
+sha256: 5d375dad7e965f7a8929f24dc8bfa1a15165041166fd50614b66ef04038e7464
+```
 
 ### 新增或修改的真机验收
 
@@ -81,7 +166,7 @@
 - [ ] 同一内容再次提交，不得产生第二个 WorkItem；Runtime 重启后再次提交仍映射到原有工作事实或明确的既有 job/work 链。
 - [ ] 执行一个真实成功 extraction：timeline 至少出现 accepted → queued/processing → completed，Outcome=success；Runtime 重启后仍可读取。
 - [ ] 构造一个隔离失败 extraction：WorkItem 必须保留并显示 failed event + failure Outcome，不得只显示 Capture toast 或把失败当“无工作”。
-- [ ] Cmd+K 快速“记住”与 Capture Center 文本输入使用同一后端事实链、相同失败语义和同一 Work 页面跳转。
+- [ ] Cmd+K 快速“记住”与 Capture Center 文本输入使用同一后端事实链、相同失败语义和 exact Work 页面跳转。
 
 ### 主人肉眼确认
 
@@ -89,13 +174,13 @@
 
 ### 回归项
 
-- [ ] 未通过 Capture validation / paused / rejected 的输入不得凭空创建“已接手”的 WorkItem。
-- [ ] 没有真实 PendingAction 时不得把 extraction failure 自动写成“需要主人处理”。
-- [ ] duplicate / idempotent 重放不得产生互相矛盾的 WorkItem、Outcome 或第二永久记忆。
-- [ ] Extraction Worker 的队列状态仍是队列执行事实；Work Fact 只投影同一任务生命周期，不另建平行任务队列。
-- [ ] Tauri 不直连 SQLite、Qdrant、Ollama 或 8765。
-- [ ] `second_brain/` 不新增正式 Capture→Work 实现。
-- [ ] Production/Acceptance 隔离和 Secret 边界不退化。
+- [x] 未通过 Capture validation / paused / rejected 的输入不得凭空创建“已接手”的 WorkItem。
+- [x] 没有真实 PendingAction 时 extraction failure 不自动写成“需要主人处理”。
+- [x] duplicate / idempotent 重放不产生互相矛盾的 WorkItem/Outcome。
+- [x] Extraction Worker 队列仍是执行事实；Work Fact 只投影同一任务生命周期。
+- [x] Tauri 不直连 SQLite、Qdrant、Ollama 或 8765。
+- [x] `second_brain/` 未新增正式 Capture→Work 实现。
+- [x] Production/Acceptance 隔离和 Secret 边界未退化。
 
 ### 清理与回滚
 
