@@ -341,12 +341,13 @@ class WorkStore:
             rows = connection.execute(
                 """
                 SELECT * FROM (
-                    SELECT * FROM execution_events
+                    SELECT rowid AS insertion_order, *
+                    FROM execution_events
                     WHERE work_id = ?
-                    ORDER BY created_at DESC, event_id DESC
+                    ORDER BY created_at DESC, rowid DESC
                     LIMIT ?
                 ) recent
-                ORDER BY created_at ASC, event_id ASC
+                ORDER BY created_at ASC, insertion_order ASC
                 """,
                 (work_id, selected_limit),
             ).fetchall()
