@@ -1,9 +1,9 @@
 # CODE_MAP.md — LingJi 代码地图
 
-> Updated: 2026-07-26  
+> Updated: 2026-08-22  
 > Scope: code entry points, ownership and focused validation only  
 > Architecture: `docs/ARCHITECTURE.md`  
-> Current status: `docs/PROJECT_STATUS.md`  
+> Current status and development order: `docs/PROJECT_STATUS.md`  
 > Full test evidence: `docs/TEST_REPORTS/`
 
 本文件只回答三件事：代码在哪里、谁负责什么、修改后先跑什么。阶段状态、提交 SHA、CI 编号和历史测试结果不在此重复维护。
@@ -15,7 +15,7 @@ src/
 = 长期平台主线
 
 second_brain/
-= 兼容、迁移与验收来源
+= 兼容、迁移与验收来源，不新增主产品能力
 
 desktop/lingji-control/
 = 唯一正式 Desktop UI
@@ -52,7 +52,7 @@ start_lingji.py
 start_lingji.bat
 ```
 
-旧入口只启动原有 Core 链路，不得接入 Second Brain 服务或替代正式 8766/Sidecar 生命周期。
+旧入口只启动兼容 Core 链路，不得替代正式 8766/Sidecar 生命周期。
 
 相关验收：
 
@@ -113,6 +113,15 @@ src/gateway/memory_inspector.py::MemoryInspectorFacade
 
 Qdrant 失败时 Lexical 检索继续工作；维度不匹配只标记 `rebuild_required`，不得自动删除生产 Collection。
 
+重点测试：
+
+```text
+tests/test_memory_capability_contract.py
+tests/test_memory_inspector_api.py
+tests/test_memory_retrieval.py
+tests/test_qdrant_semantic_provider.py
+```
+
 局部验收：
 
 ```powershell
@@ -149,7 +158,7 @@ src/extraction/sink.py
 src/extraction/structured_sink.py
 ```
 
-正式链路：
+正式数据处理链：
 
 ```text
 Capture Input
@@ -166,6 +175,9 @@ Capture Input
 重点测试：
 
 ```text
+tests/test_capture_api.py
+tests/test_capture_control.py
+tests/test_capture_service.py
 tests/test_extraction_idempotency.py
 tests/test_mcp_extraction_submission.py
 desktop/lingji-control/scripts/capture-center-smoke.mjs
@@ -177,7 +189,104 @@ desktop/lingji-control/scripts/capture-center-smoke.mjs
 .\scripts\validate.ps1 -Mode focused -Area capture
 ```
 
-## 6. 记忆审核与 Auto Review
+## 6. Work Fact 主人事实链
+
+这是 2026-08-22 起 Home / Work / Attention / Capture / Memory UI 的唯一工作语义来源。
+
+### 6.1 Domain 与 persistence
+
+```text
+src/work/models.py
+= WorkItem / ExecutionEvent / Outcome / NextAction / PendingAction
+
+src/work/store.py::WorkStore
+= Work fact SQLite persistence
+
+src/work/capture_bridge.py::CaptureWorkBridge
+= Capture / extraction 向 Work fact 转换
+
+src/work/projector.py::WorkProjector
+= Desktop/read API 的工作事实投影
+```
+
+### 6.2 Control 层
+
+```text
+src/control/work_routes.py
+= 目标正式 /api/work/* route helper
+
+src/control/work_service.py::WorkControlService
+= work read-model adapter
+
+src/control/service.py::LocalControlService
+= 正式 8766 service boundary
+
+src/control/api.py::create_control_app
+= 正式路由注册入口
+```
+
+### 6.3 Desktop 合同与页面
+
+```text
+desktop/lingji-control/src/contracts/workFact.ts
+= Desktop Work Fact DTO
+
+desktop/lingji-control/src/components/CurrentWorkPanel.tsx
+= Home 当前工作投影
+
+desktop/lingji-control/src/pages/ActivityPage.tsx
+= Work/Activity 当前事实展示
+
+desktop/lingji-control/src/pages/AttentionPage.tsx
+= PendingAction 投影
+```
+
+### 6.4 当前必须先修的合同缺口
+
+截至 2026-08-22，以上代码已经存在但**不能视为闭环完成**：
+
+```text
+CaptureWorkBridge.save_work
+!= WorkStore.create_work
+
+WorkProjector 需要 list_work/list_pending/list_events
+但 WorkStore 当前未提供
+
+LocalControlService 当前未正式暴露 current_work/pending_actions/work_timeline
+
+create_control_app 当前未完成 work_routes 注册
+
+Python work dataclass 字段/状态
+!= desktop workFact.ts 字段/状态
+```
+
+详细开发顺序与 UI 门禁见 `docs/PROJECT_STATUS.md` 的 WF-0 / UI-1 ... UI-8。
+
+### 6.5 测试缺口
+
+当前 `tests/` 没有专门覆盖完整 Work Fact 链的测试。下一次实现变更必须补：
+
+```text
+tests/test_work_store.py
+tests/test_work_projector.py
+tests/test_work_control_api.py
+tests/test_capture_work_bridge.py
+
+desktop/lingji-control/scripts/work-fact-smoke.mjs
+```
+
+在这些门禁存在并通过前，不把 `/api/work/*` 视为正式 Desktop contract。
+
+建议局部验收：
+
+```powershell
+python -m pytest -q --tb=short -k "work or capture_work"
+.\scripts\validate.ps1 -Mode focused -Area control
+.\scripts\validate.ps1 -Mode focused -Area capture
+.\scripts\validate.ps1 -Mode focused -Area desktop
+```
+
+## 7. 记忆审核与 Auto Review
 
 ```text
 src/project_memory/review_service.py::MemoryReviewService
@@ -204,15 +313,7 @@ desktop/lingji-control/scripts/memory-review-smoke.mjs
 desktop/lingji-control/scripts/auto-review-shadow-smoke.mjs
 ```
 
-局部验收：
-
-```powershell
-python -m pytest -q --tb=short -k "memory_review or memory_lifecycle or auto_review"
-cd desktop/lingji-control
-npm run test:memory-review
-```
-
-## 7. Local Control API 与 MCP
+## 8. Local Control API 与 MCP
 
 ```text
 src/control/api.py::create_control_app
@@ -245,13 +346,7 @@ Desktop 只使用认证的 8766，不直连 SQLite、Qdrant、Ollama 或兼容 A
 .\scripts\validate.ps1 -Mode focused -Area control
 ```
 
-MCP 提交链路变化额外运行：
-
-```powershell
-python -m pytest -q --tb=short -k "mcp or extraction_submission or project_context"
-```
-
-## 8. Desktop 与 Windows Sidecar
+## 9. Desktop 与 Windows Sidecar
 
 React 主入口：
 
@@ -261,10 +356,9 @@ desktop/lingji-control/src/AppPages.tsx
 desktop/lingji-control/src/navigation.ts
 desktop/lingji-control/src/components/DesktopShell.tsx
 desktop/lingji-control/src/components/RuntimeBoundary.tsx
-desktop/lingji-control/src/components/CurrentWorkPanel.tsx
 ```
 
-Observation-first 页面：
+主人核心页面：
 
 ```text
 desktop/lingji-control/src/pages/OverviewPage.tsx
@@ -280,6 +374,7 @@ desktop/lingji-control/src/hooks/usePollingResource.ts
 desktop/lingji-control/src/hooks/useLingJiConnection.ts
 desktop/lingji-control/src/contracts/resourceState.ts
 desktop/lingji-control/src/contracts/brainStatus.ts
+desktop/lingji-control/src/contracts/workFact.ts
 ```
 
 Tauri/Sidecar：
@@ -315,7 +410,7 @@ Tauri Desktop
 .\scripts\validate.ps1 -Mode release
 ```
 
-## 9. Obsidian
+## 10. Obsidian
 
 正式实现：
 
@@ -342,7 +437,7 @@ second_brain/obsidian_cli.py
 .\scripts\validate.ps1 -Mode focused -Area obsidian
 ```
 
-## 10. 构建、测试与 CI 入口
+## 11. 构建、测试与 CI 入口
 
 ```text
 scripts/validate.ps1
@@ -366,9 +461,9 @@ desktop/lingji-control/scripts/windows-release-smoke.mjs
 使用规则：
 
 ```text
-开发中      -> focused
+开发中       -> focused
 合并前最终树 -> full，一次
-正式发布    -> release
+正式发布     -> release
 ```
 
-成功时只读取 `output/validation/.../summary.json` 或 `summary.md`；失败时再读取对应日志。具体历史通过结果只记录在 `docs/TEST_REPORTS/` 和 `docs/PROJECT_STATUS.md`。
+成功时只读取 `output/validation/.../summary.json` 或 `summary.md`；失败时再读取对应日志。历史通过结果只记录在 `docs/TEST_REPORTS/`，当前结论只记录在 `docs/PROJECT_STATUS.md`。
