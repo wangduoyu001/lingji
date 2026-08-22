@@ -21,6 +21,9 @@ logger = logging.getLogger("lingji.extraction")
 DocumentsWrittenCallback = Callable[[dict[str, Any]], None]
 DefaultOptionsProvider = Callable[[str], Mapping[str, Any]]
 DefaultPriorityProvider = Callable[[str], int]
+JobStartedCallback = Callable[[Mapping[str, Any]], None]
+JobCompletedCallback = Callable[[Mapping[str, Any], Mapping[str, Any]], None]
+JobFailedCallback = Callable[[Mapping[str, Any], str], None]
 
 
 class ExtractionPipeline:
@@ -37,6 +40,9 @@ class ExtractionPipeline:
         on_documents_written: DocumentsWrittenCallback | None = None,
         default_options_provider: DefaultOptionsProvider | None = None,
         default_priority_provider: DefaultPriorityProvider | None = None,
+        on_job_started: JobStartedCallback | None = None,
+        on_job_completed: JobCompletedCallback | None = None,
+        on_job_failed: JobFailedCallback | None = None,
     ):
         self.queue = queue
         self.registry = registry
@@ -48,6 +54,9 @@ class ExtractionPipeline:
         self.on_documents_written = on_documents_written
         self.default_options_provider = default_options_provider
         self.default_priority_provider = default_priority_provider
+        self.on_job_started = on_job_started
+        self.on_job_completed = on_job_completed
+        self.on_job_failed = on_job_failed
 
     def enqueue(
         self,
@@ -203,6 +212,7 @@ class ExtractionPipeline:
         job = self.queue.claim(worker_id, job_id=job_id)
         if not job:
             return None
+        self._notify("job started", self.on_job_started, job)
         lease_token = str(job.get("lease_token") or "")
         stop_heartbeat = threading.Event()
         heartbeat_thread = threading.Thread(
@@ -227,6 +237,7 @@ class ExtractionPipeline:
                 worker_id=worker_id,
                 lease_token=lease_token,
             )
+            self._notify("job completed", self.on_job_completed, completed, result)
             return {"job": completed, "result": result}
         except Exception as exc:
             logger.exception("Extraction job failed: %s", job["job_id"])
@@ -244,10 +255,20 @@ class ExtractionPipeline:
                     "error": str(exc),
                     "lease_error": str(lease_error),
                 }
+            self._notify("job failed", self.on_job_failed, failed, str(exc))
             return {"job": failed, "error": str(exc)}
         finally:
             stop_heartbeat.set()
             heartbeat_thread.join(timeout=max(self.lease_heartbeat_seconds, 2.0))
+
+    @staticmethod
+    def _notify(label: str, callback: Callable[..., None] | None, *args: Any) -> None:
+        if callback is None:
+            return
+        try:
+            callback(*args)
+        except Exception:
+            logger.exception("Extraction lifecycle callback failed: %s", label)
 
     def _heartbeat_loop(
         self,
