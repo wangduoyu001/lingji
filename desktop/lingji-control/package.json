@@ -10,6 +10,7 @@
     "test:codex-loop": "tsx scripts/codex-workspace-smoke.mjs",
     "test:memory-review": "tsx scripts/memory-review-smoke.mjs",
     "test:obsidian-operations": "tsx scripts/obsidian-operations-smoke.mjs",
+    "test:work-fact": "tsx scripts/work-fact-smoke.mjs",
     "test:release": "tsx scripts/windows-release-smoke.mjs",
     "test:runtime": "tsx scripts/runtime-sidecar-smoke.mjs",
     "test:macos-release": "tsx scripts/macos-release-smoke.mjs",
