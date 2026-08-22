@@ -2,64 +2,193 @@
 
 > Updated: 2026-08-22
 > Formal/default branch: `master`
-> Latest product-code baseline before this documentation cleanup: `3d7225f58fb5b5a9b035cfd72f92cb2267b48559`
+> Product-code baseline before documentation cleanup: `3d7225f58fb5b5a9b035cfd72f92cb2267b48559`
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
-> Current development stage: `WORK-FACT CONTRACT REPAIR / UI EXPANSION BLOCKED`
+> Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
+> Current engineering gate: `WORK-FACT CONTRACT REPAIR`
+> Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
+> Future backlog: `docs/MODULES/FUTURE_DEVELOPMENT_TODO.md`
 > Acceptance authority: `docs/ACCEPTANCE/README.md`
 
-## 1. 当前结论
+## 1. 当前唯一产品目标
 
-最后一次主人真实 M5 验收仍然是：
+当前只做一件事：**把灵机的第二大脑做成完整、可理解、可追踪、可验证的正式产品，并完成全部规定验收。**
+
+在 Phase 1 最终 PASS 之前：
+
+- 不开发新的机会面板；
+- 不重做 Opportunity Score；
+- 不扩展机会数据模型；
+- 不增加机会自动验证产品流程；
+- 不让每日简报、LLM Router、AnySearch 或其他新产品阶段插队；
+- 现有 `src/opp_generator.py`、`src/opportunities/` 只允许必要的兼容和回归修复。
+
+Phase 1 PASS 后，Phase 2 第一优先级固定为 **Opportunity Center / 机会面板**。
+
+## 2. 最近一次主人验收结论
+
+最后一次真实 M5 验收仍然是：
 
 ```text
 FAIL / DO NOT MERGE
 ```
 
-失败不是安装、签名、Sidecar、隔离或发布链问题。真正阻塞仍是：**主人无法从产品中清楚看见灵机正在接管什么、做过什么、结果是什么、下一步由谁执行。**
+失败不是安装、签名、Sidecar、隔离或发布链问题。技术发布链的大部分基础已经证明可用。
 
-最后一次验收暴露的关键问题：
+真正阻塞是：**主人无法从产品中清楚看见灵机接管了什么、执行了什么、结果是什么、下一步由谁执行，也无法稳定验证一条输入如何变成可追溯记忆。**
 
-- 首页能暗示存在待确认事项，但“需要我”没有真实 `PendingAction`；
-- 首页能暗示系统完成了工作，但“工作”没有真实履历；
+关键失败观察：
+
+- 首页暗示存在待确认事项，但“需要我”没有同一个真实 `PendingAction`；
+- 首页暗示系统完成了工作，但“工作”没有真实履历；
 - `Cmd+K` 的“记住”真实提交失败，没有形成 Capture → Work → Memory 闭环；
 - 记忆缺少主人可读正文/摘要和清楚来源证据；
-- 主动发现更像静态说明，而不是“发现 → 授权 → 接管 → 执行 → 结果”的真实状态；
+- 主动发现更像静态说明，不是“发现 → 授权 → 接管 → 执行 → 结果”的真实状态；
 - Window Recovery 的菜单 / 快捷键 / Dock Reopen 三路径仍缺最终主人肉眼验收。
 
-自该验收之后，`master` 已开始补 `src/work/` 事实模型和 Desktop 投影，但截至 2026-08-22 **仍未形成可运行的端到端事实链，因此不能把当前 UI 接线视为已完成能力。**
+## 3. Phase 1 的“第二大脑完成”定义
 
-## 2. 2026-08-22 代码审计：当前事实链实际进度
+第二大脑不是某一个 Memory 页面。Phase 1 必须同时成立以下九个能力面。
 
-### 2.1 已经有的基础
+### 3.1 单一事实与记忆权威
 
-当前已经出现以下真实代码骨架：
+```text
+Permanent memory / formal knowledge
+= Obsidian Vault + Git
+
+Runtime work / task / audit facts
+= lingji_state.db / formal Work Fact persistence
+
+Lexical / metadata index
+= lingji_memory.db
+
+Semantic index
+= Qdrant
+```
+
+不得引入第二套永久记忆正文、第二套任务事实源或第二套正式 UI。
+
+### 3.2 Capture 与来源链
+
+真实输入必须形成可追踪链：
+
+```text
+Input
+-> Capture
+-> Extraction
+-> Raw snapshot / provenance
+-> Source / Conversation / Message
+-> WorkItem
+-> Memory candidate / formal knowledge outcome / explicit failure
+```
+
+主人必须能知道：输入是什么、来自哪里、系统做到了哪一步、失败在哪里。
+
+### 3.3 Work Fact 工作事实链
+
+唯一工作语义：
+
+```text
+SourceObject
+-> Discovery / Intent
+-> WorkItem
+-> ExecutionEvent
+-> Outcome
+-> NextAction + actor
+-> PendingAction? only when owner is required
+-> MemoryRecord? when memory is produced
+```
+
+Home / Work / Attention / Capture / Memory 只能投影同一条事实链。
+
+### 3.4 Memory lifecycle
+
+必须能稳定证明：
+
+- 记忆正文可读；
+- 来源和 citation 可验证；
+- candidate / owner review / accepted / rejected / core / superseded 等状态真实；
+- AI 不静默批准永久记忆；
+- Core Memory 不被自动覆盖；
+- 记忆、索引和来源 ID 可关联。
+
+### 3.5 Retrieval / Vector / Embedding
+
+必须证明：
+
+- lexical 与 semantic 使用同一正式检索流程；
+- Qdrant 状态、collection、dimension、coverage 和错误真实；
+- Embedding 模型和状态真实；
+- semantic 不可用时 lexical 正常降级；
+- 维度不匹配只进入 `rebuild_required`，不自动破坏生产 collection；
+- Memory Inspector / Brain Status / MCP 的统计不能互相矛盾。
+
+### 3.6 AI 统一记忆访问
+
+正式 AI 客户必须通过统一 MemoryGateway / Context Pack / MCP 权限边界读取记忆。
+
+必须证明：
+
+- privacy / project / Agent Scope 生效；
+- restricted memory 不越权；
+- Context Pack 有 citation；
+- 不存在每个 AI 各存一份正式记忆的行为。
+
+### 3.7 Obsidian 正式集成
+
+Obsidian 已迁入 `src/obsidian/` 正式主线。Phase 1 需要做的是最终产品闭环验证，而不是重新迁移。
+
+必须证明：
+
+- Workspace Vault 路径正确；
+- Production / Acceptance 隔离；
+- 安全读写、Dry Run、错误和路径边界；
+- Desktop 状态和设置真实；
+- 不写入旧机器专属目录。
+
+### 3.8 唯一 Desktop 体验
+
+正式 UI 只有：
+
+```text
+desktop/lingji-control/
+```
+
+正常主人体验首先回答：
+
+1. 灵机现在在做什么？
+2. 最近完成或失败了什么？
+3. 是否有事情真的需要主人？
+4. 灵机记住了什么，证据在哪里？
+
+高级技术页继续保留，但不能用大量状态卡替代工作事实。
+
+### 3.9 Runtime / Packaging / Recovery
+
+必须保持：
+
+- authenticated `127.0.0.1:8766`；
+- Tauri → Rust RuntimeManager → packaged Sidecar；
+- exact-instance start / stop；
+- Production / Acceptance 物理隔离；
+- Secret 不出安全凭据边界；
+- macOS / Windows 构建与发布门禁；
+- Window Recovery 规定路径完成真实验证。
+
+## 4. 当前代码真实进度
+
+### 4.1 已经存在的基础
+
+当前 `master` 已有：
 
 ```text
 src/work/models.py
-- WorkItem
-- ExecutionEvent
-- Outcome
-- NextAction
-- PendingAction
-
 src/work/store.py
-- work_items
-- execution_events
-- work_outcomes
-- pending_actions
-
 src/work/capture_bridge.py
-- Capture -> WorkItem
-- Extraction completion -> Outcome / ExecutionEvent
-
 src/work/projector.py
-- current_work
-- pending_actions
-- timeline
-
 src/control/work_routes.py
 src/control/work_service.py
 
@@ -69,560 +198,247 @@ desktop/lingji-control/src/pages/ActivityPage.tsx
 desktop/lingji-control/src/pages/AttentionPage.tsx
 ```
 
-方向是正确的：UI 开始从“聚合猜状态”转向“投影真实工作事实”。
+并已有 Capture、Extraction、MemoryGateway、Qdrant provider、Memory Inspector、Source read model、Memory lifecycle、MCP、Obsidian、Sidecar 等基础模块。
 
-### 2.2 当前 P0 阻塞缺陷
+方向已经从“UI 根据聚合状态猜系统在干什么”转为“UI 投影真实工作事实”。
 
-这些问题必须在继续扩 UI 前修完。
+### 4.2 当前 P0 工程阻塞：Work Fact 尚未真正接通
 
-#### A. Store 写接口不一致
+截至本次审计，必须先修：
 
-`CaptureWorkBridge.create_from_capture()` 调用 `store.save_work()`，但当前 `WorkStore` 实际提供的是 `create_work()`。
+1. `CaptureWorkBridge.create_from_capture()` 与 `WorkStore` 写入接口不一致；
+2. `WorkProjector` 需要的读取方法与 `WorkStore` 当前能力不完整匹配；
+3. `/api/work/*` 必须在正式 `create_control_app()` 8766 路径真实注册；
+4. `LocalControlService` / Work service / projector 必须共享同一正式 Store；
+5. Python DTO 与 TypeScript Work Fact 合同必须统一字段名、状态和 nullable 语义；
+6. 必须新增专门覆盖 Store → Projector → Control API → Desktop contract 的测试；
+7. Capture 成功后必须能以同一 `work_id` 查询到事件、结果和下一 actor。
 
-结果：真实 Capture 一旦走入该 bridge，会在创建 WorkItem 时失败。
+在以上门禁通过前，**禁止继续以视觉扩展为主的 UI 开发。**
 
-#### B. Projector 依赖的读取方法不存在
+## 5. Phase 1 重新规划后的开发顺序
 
-`WorkProjector` 调用：
+### SB-0 — Work Fact Contract Repair
 
-```text
-list_work()
-list_pending()
-list_events()
-```
+目标：先让事实链真的能读写和通过 8766。
 
-当前 `WorkStore` 没有这些读取方法。
+完成条件：
 
-结果：即便数据库已有记录，Desktop read model 也无法正常读取。
+- Domain / SQLite / Service / API / TypeScript 合同一致；
+- `/api/work/current`、timeline、pending 等正式接口可运行；
+- 一条测试 WorkItem 可持久化、读取、投影；
+- focused tests 覆盖正常、空状态、失败状态和重启后读取。
 
-#### C. Work API 没接进正式 8766 应用
+### SB-1 — Capture → Work → Outcome 闭环
 
-当前正式 `create_control_app()` 结尾注册了 Obsidian / Capture 路由，但没有注册 `work_routes`。
+目标：所有主人输入都能追踪。
 
-同时 `LocalControlService` 当前没有 `current_work()` / `pending_actions()` / `work_timeline()` 正式方法。
+优先验证 `Cmd+K` 文本“记住”路径，再覆盖 web / file / supported media 等已有 Capture 类型。
 
-结果：Desktop 最新代码调用 `/api/work/*` 时，正式发布链上没有完整可用接口。
-
-#### D. Python 与 TypeScript 合同不一致
-
-当前典型差异包括：
-
-```text
-Python WorkItem:      work_id
-Desktop WorkItem:     id
-
-Python ExecutionEvent: event_id / event_type / detail(dict)
-Desktop Event:         id / event / detail(string)
-
-Python NextAction:     description
-Desktop NextAction:    summary
-
-Python PendingAction:  description / resolved
-Desktop PendingAction: id / summary / reason
-
-Python Work status:    pending / accepted ...
-Desktop status:        queued / running / completed / failed
-```
-
-结果：就算接口注册成功，UI 也无法可靠消费当前 Python 对象。
-
-#### E. 缺少针对新事实链的专门测试
-
-现有测试覆盖 Capture、Control API、Memory、Desktop 等大量旧能力，但没有独立覆盖：
-
-```text
-WorkStore
--> WorkProjector
--> LocalControlService
--> /api/work/*
--> Desktop workFact contract
-```
-
-这也是上述合同错位能够进入 `master` 的直接工程原因。
-
-## 3. 唯一主人事实链
-
-后续所有产品 UI 只允许投影这一条链：
-
-```text
-SourceObject
-    ↓
-Discovery / Intent
-    ↓
-WorkItem
-    ↓
-ExecutionEvent * N
-    ↓
-Outcome
-    ↓
-NextAction
-    ↓
-PendingAction?      只有真正需要主人决定才存在
-    ↓
-MemoryRecord?       可读内容 + 来源 + 证据
-```
-
-硬规则保持不变：
-
-1. 没有真实 `WorkItem`，UI 不得宣称“灵机正在做 / 已经做了”；
-2. 没有真实 `PendingAction`，UI 不得宣称“需要主人确认”；
-3. 不允许用 memory count、generic event、queue length 推断工作语义；
-4. Capture 成功后必须有稳定关联的 `capture_id + work_id`；
-5. Work 必须能追到事件、结果、下一 actor；
-6. Memory 必须能追到来源和证据；
-7. API 不可用时显示 unavailable/error，不得伪装成 `0` 或“无事项”；
-8. 所有页面对同一个 WorkItem 必须使用同一个 `work_id`，不得各自制造本地状态。
-
-## 4. UI 开发前置里程碑：WF-0 事实合同修复
-
-**在 WF-0 通过前，暂停 Home / Work / Attention 的功能扩张和视觉重构。**
-
-### WF-0.1 冻结外部 API DTO
-
-内部 dataclass 可以保留实现细节，但 8766 对 Desktop 输出的 DTO 必须唯一、稳定、带版本意识。
-
-最小合同：
-
-```text
-WorkItem
-- work_id
-- title
-- status: pending | accepted | running | completed | failed | skipped
-- source_id?
-- owner_approved
-- created_at
-- updated_at?
-
-ExecutionEvent
-- event_id
-- work_id
-- event_type
-- detail
-- created_at
-
-Outcome
-- work_id
-- status: success | failure | skipped
-- summary
-- evidence
-- completed_at?
-
-NextAction
-- work_id
-- actor: system | owner | external | none
-- description
-
-PendingAction
-- action_id
-- work_id
-- description
-- reason?
-- resolved
-- created_at
-- resolved_at?
-```
-
-Desktop `workFact.ts` 必须由此合同一一对应，不再另起命名体系。
-
-### WF-0.2 修通持久化与 read model
-
-必须完成：
-
-- 统一 `create_work/save_work`；
-- 增加 `get_work/list_work/list_events/list_pending/get_outcome/get_next_action`；
-- WorkItem 状态变化必须持久化；
-- PendingAction 必须有稳定 `action_id`；
-- 所有读取按时间稳定排序；
-- 不可通过 UI 临时拼接 Outcome / NextAction。
-
-### WF-0.3 接通正式 Control API
-
-正式 8766 至少提供：
-
-```text
-GET /api/work/current
-GET /api/work/recent?limit=N
-GET /api/work/{work_id}
-GET /api/work/timeline/{work_id}
-GET /api/work/pending-actions
-```
-
-如需要主人完成确认，再增加受控 mutation endpoint，不允许 Desktop 直接改 SQLite。
-
-### WF-0.4 Capture 串入事实链
-
-真实流程：
+完成条件：
 
 ```text
 Capture accepted
--> create WorkItem
--> append capture.accepted
--> extraction queued/running events
--> extraction completed/failed
+-> WorkItem created
+-> processing events
+-> extraction result
+-> Outcome success/failure
+-> next actor
+```
+
+不得出现“提交成功但没有工作对象”。
+
+### SB-2 — Work → Memory / Evidence 闭环
+
+目标：系统说“记住了”时，主人能够证明它真的记住了什么。
+
+完成条件：
+
+- Memory 有可读正文或摘要；
+- Source / citation / provenance 可打开；
+- WorkItem 与 Memory ID 互相可追踪；
+- Failure 明确显示而不是降级成空结果；
+- candidate / owner review 行为不被绕过。
+
+### SB-3 — Retrieval / Vector / Memory Inspector 总核验
+
+目标：不重新开发已经存在的 Qdrant / Inspector，而是补齐产品真实性与一致性。
+
+完成条件：
+
+- lexical + semantic 正式查询链通过；
+- Qdrant available / unavailable 两种模式；
+- embedding / dimension / coverage / rebuild_required 真值；
+- per-memory / per-chunk vector existence；
+- Inspector / Brain Status / MCP counts 一致；
+- source、conversation、message、memory、chunk、vector 可连续追踪。
+
+### SB-4 — AI Memory Access / Context Pack / MCP 核验
+
+目标：证明第二大脑不仅 Desktop 能看，批准的 AI 也真正共享同一记忆。
+
+完成条件：
+
+- MemoryGateway 是统一出口；
+- Context Pack citation 完整；
+- project / privacy / Agent Scope 合同测试；
+- MCP 正常与降级路径；
+- compatibility runtime disabled 时正式 AI memory flow 仍成立。
+
+### SB-5 — Owner UI 连续性
+
+目标：基于已经通过的事实合同完成 UI，而不是反过来。
+
+顺序：
+
+```text
+Home
+-> Work
+-> Attention
+-> Capture
+-> Memory
+-> Discovery status
+-> Advanced diagnostics continuity
+```
+
+硬规则：
+
+- Home 没有 WorkItem 不得宣称“灵机做了”；
+- 没有 PendingAction 不得宣称“需要你”；
+- Activity / Work 必须显示真实事件和 Outcome；
+- 空状态解释为什么空、系统是否会继续自动工作；
+- 同一对象跨页面保持同一 ID 和状态。
+
+### SB-6 — Compatibility / Migration Completion Check
+
+目标：确认 `second_brain/` 不再承载任何正式必需能力。
+
+完成条件：
+
+- 正式流程在 compatibility runtime disabled 状态下通过；
+- 旧数据有可验证 export / rollback 路径；
+- 不急于物理删除兼容目录；
+- 不允许新正式能力回流 `second_brain/`。
+
+### SB-7 — Automatic End-to-End Acceptance Gate
+
+必须至少覆盖真实 fixture：
+
+```text
+输入
+-> Capture
+-> Work
+-> Events
 -> Outcome
--> optional MemoryRecord
--> NextAction
+-> Memory / PendingAction / Failure
+-> Retrieval
+-> Desktop projection
+-> MCP / Context Pack where applicable
 ```
 
-任何一步失败都必须落真实失败事件，而不是只 toast 一句错误后消失。
+运行：
 
-### WF-0.5 自动化门禁
+```powershell
+.\scripts\validate.ps1 -Mode focused -Area <affected-area>
+.\scripts\validate.ps1 -Mode full
+python scripts/check_acceptance_sync.py
+```
 
-至少新增：
+产品影响变化同步更新 `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`。
+
+### SB-8 — Release + Owner Final Acceptance
+
+自动门禁通过后才允许生成新产品候选。
+
+顺序：
 
 ```text
-tests/test_work_store.py
-tests/test_work_projector.py
-tests/test_work_control_api.py
-tests/test_capture_work_bridge.py
+final product commit
+-> full gate
+-> release gate
+-> same-SHA platform artifacts
+-> hash lock
+-> new ACTIVE acceptance task
+-> packaged Desktop real-machine acceptance
+-> owner observations
+-> result / cleanup / remote reread
 ```
 
-并增加 Desktop 合同/场景 smoke：
+只有最终结论为 PASS，Phase 1 才算完成。
+
+## 6. Phase 1 最终 PASS 条件
+
+以下全部满足，才允许进入机会面板：
+
+- Work Fact 合同端到端通过；
+- Capture → Work → Memory / Failure 可追踪；
+- Memory 内容和来源可读、可验证；
+- owner review / Core / supersede 等生命周期无越权；
+- lexical / semantic / Qdrant / embedding 真值一致；
+- Source / Conversation / Message provenance 成立；
+- MemoryGateway / Context Pack / MCP 共享同一记忆与权限；
+- Home / Work / Attention / Capture / Memory 不互相矛盾；
+- compatibility runtime disabled 后正式能力仍可用；
+- Production / Acceptance 无污染；
+- focused / full / required release gates 通过；
+- 新候选 Artifact 身份锁定；
+- 当前验收任务执行完成；
+- 主人无法自动证明的体验项由主人实际确认；
+- 最终结果为 `PASS`。
+
+任何一项 FAIL / BLOCKED / NOT_TESTED，都不能把 Phase 1 写成完成。
+
+## 7. Phase 2：机会面板启动门禁
+
+Phase 1 PASS 后，才更新本文进入：
 
 ```text
-desktop/lingji-control/scripts/work-fact-smoke.mjs
+PHASE 2 — OPPORTUNITY CENTER
 ```
 
-WF-0 Definition of Done：
-
-- 一个真实 Capture 能产生 WorkItem；
-- API 能读到同一 `work_id`；
-- timeline 至少包含 accepted → processing → completed/failed；
-- Desktop 合同与返回 JSON 完全一致；
-- API unavailable 不会显示成空列表；
-- focused tests 全绿后才进入 UI-1。
-
-## 5. UI-1：首页 Home，先回答三个问题
-
-首页第一屏只负责让主人 5 秒内知道：
+届时第一步不是画页面，而是审计现有：
 
 ```text
-1. 灵机现在在做什么？
-2. 最近真正完成了什么？
-3. 现在有没有事情必须由我处理？
+src/opp_generator.py
+src/opportunities/
+旧 PEMIS Opportunity 数据与评分
+现有 Vault / scheduler / feedback 路径
 ```
 
-### 5.1 当前工作区
+然后让机会对象进入已经验收通过的 Source + Work Fact + Evidence 基础设施，再开发 Opportunity Center。
 
-数据只来自 `/api/work/current`。
+详细未来需求只记录在 `docs/MODULES/FUTURE_DEVELOPMENT_TODO.md`。
 
-显示：
+## 8. 已确认稳定项，不要重复返工
 
-- Work title；
-- 当前 status；
-- 最近一个 ExecutionEvent；
-- 已运行/等待时间；
-- NextAction + actor；
-- 进入 Work detail 的入口。
+除非新的回归证据表明失败，否则不要把主要时间重新消耗在：
 
-没有当前工作时明确显示：`当前没有正在执行的工作`，同时说明后台是否仍会继续发现/处理，而不是用空白卡片冒充正常。
-
-### 5.2 最近完成
-
-显示最近 3~5 个真实 completed/failed WorkItem：
-
-- 标题；
-- 结果摘要；
-- 完成时间；
-- 来源；
-- 点击进入完整履历。
-
-禁止从 generic events 反推“最近完成”。
-
-### 5.3 需要主人
-
-数量和内容只来自 `PendingAction`。
-
-首页只做摘要，不复制 Attention 业务逻辑。
-
-### UI-1 DoD
-
-- Home 与 Attention 的待办数量严格一致；
-- Home 与 Work 的当前工作严格指向同一 `work_id`；
-- 断网/Sidecar 错误显示错误态，不显示 `0`；
-- 空、加载、过期、错误四种状态均有明确视觉语义。
-
-## 6. UI-2：Work 作为唯一工作履历
-
-Work 页面不是“日志页”，而是灵机实际承担过的工作账本。
-
-### 6.1 列表
-
-首版只保留必要筛选：
-
-- Active；
-- Completed；
-- Failed；
-- All。
-
-每行显示：标题、状态、来源、更新时间、Outcome 摘要、Next actor。
-
-### 6.2 Detail
-
-点击 WorkItem 后显示统一详情：
-
-1. 工作标题和来源；
-2. 为什么被接管；
-3. 时间线 ExecutionEvent；
-4. Outcome；
-5. Evidence；
-6. NextAction；
-7. 若存在 PendingAction，则显示主人要做什么；
-8. 若形成 MemoryRecord，则可跳到对应记忆。
-
-### 6.3 Timeline
-
-时间线只显示真实事件，不把前端生命周期状态写成执行事实。
-
-事件默认显示人类可读标题；原始 JSON/detail 放到展开层，避免首页式技术噪音重新污染主人界面。
-
-### UI-2 DoD
-
-主人可以从任意完成记录回答：
-
-```text
-它为什么开始？
-它做了哪几步？
-最终结果是什么？
-证据在哪里？
-下一步谁负责？
-```
-
-## 7. UI-3：Attention 只呈现真实主人决策
-
-Attention 的唯一数据源是未解决 `PendingAction`。
-
-每项必须显示：
-
-- 要主人决定什么；
-- 为什么需要主人；
-- 关联 WorkItem；
-- 如果不处理会发生什么；
-- backend 明确允许的 action。
-
-不得继续出现“系统觉得你可能需要看”的软提示混入 PendingAction。
-
-如只是通知，放 Activity/Work；如系统能自行处理，就继续执行，不得甩给主人。
-
-### UI-3 DoD
-
-- `pending_actions = 0` 时全产品都不得出现“待确认 1”；
-- 解决一个 action 后 Home / Attention / Work 同步刷新；
-- action mutation 有审计事件；
-- UI 不自行决定 approve/reject 的业务后果。
-
-## 8. UI-4：Capture / Cmd+K 变成可追踪入口
-
-Capture 的产品反馈必须从“提交成功 toast”升级为“提交后可追踪”。
-
-成功提交后立即显示：
-
-```text
-已接收
-work_id: ...
-当前阶段: accepted / queued / processing / completed / failed
-```
-
-主人可直接跳入 Work detail。
-
-失败时：
-
-- 保留输入；
-- 显示真实失败原因；
-- 若 backend 已创建 WorkItem，则显示失败履历；
-- 未创建 WorkItem 时不得伪造 work_id。
-
-### UI-4 DoD
-
-真实执行一次“记住这段内容”：
-
-```text
-Cmd+K
--> Capture accepted
--> Work visible
--> Extraction events visible
--> Outcome visible
--> Memory visible or explicit Failure
-```
-
-这是下一次 M5 的必测主路径。
-
-## 9. UI-5：Memory 变成可检查的第二大脑
-
-Memory 首屏优先展示主人能读懂的内容，不再只显示泛化标题。
-
-每条至少可查看：
-
-- 可读摘要/正文；
-- 来源 SourceObject；
-- 创建/更新时间；
-- 来源片段或证据；
-- 若由灵机工作产生，显示 originating `work_id`；
-- 向量/索引技术信息放到二级详情或 Diagnostics。
-
-### UI-5 DoD
-
-主人随机打开一条记忆，可以回答：
-
-```text
-灵机记住了什么？
-从哪里来的？
-为什么可信？
-它和哪次工作有关？
-```
-
-## 10. UI-6：主动发现 / 授权 / 接管状态
-
-在核心工作闭环稳定后再做主动发现，不提前造“机会发现”大屏。
-
-同一对象必须能区分：
-
-```text
-discovered
-needs_authorization
-authorized
-accepted
-running
-completed
-failed
-skipped
-```
-
-主人看到的不是“发现了 Codex”一句话，而是：
-
-- 发现对象；
-- 发现原因；
-- 当前是否有权限；
-- 是否已变成 WorkItem；
-- 当前执行阶段；
-- Outcome；
-- 下一步。
-
-如果只发现、没有授权，UI 必须明确停在 `needs_authorization`，不能写成“已接管”。
-
-## 11. UI-7：跨页面连续性
-
-完成前述页面后统一以下行为：
-
-- 所有 Work 链接使用同一 `work_id`；
-- Home / Attention / Capture / Memory 点击后进入同一 Work detail；
-- 全局 Cmd+K 只负责入口与导航，不保存另一套临时状态；
-- 共用 loading / empty / stale / error 组件；
-- 共用 status label 与 actor label；
-- 统一中文主人语义，技术字段放二级层；
-- 页面刷新后仍能从后端恢复同一事实，不依赖前端内存。
-
-## 12. UI-8：验收与发布门禁
-
-顺序固定：
-
-```text
-A. backend contract tests
-B. control API integration tests
-C. desktop work-fact smoke
-D. focused validation: work/capture/control/desktop
-E. full validation
-F. macOS + Windows release CI
-G. 安装真实 Artifact
-H. 主人 M5 肉眼验收
-```
-
-下一次 M5 至少必须真实走通：
-
-1. 打开首页，看见真实当前工作或诚实空状态；
-2. Cmd+K 提交一条“记住”内容；
-3. 立即进入对应 WorkItem；
-4. 看见执行事件推进；
-5. 看见 Outcome；
-6. 打开对应 Memory，看到可读内容和来源；
-7. 制造一个真实 PendingAction，Home 与 Attention 一致；
-8. 主人解决该 action，跨页面状态同步；
-9. 验证一个失败 WorkItem，不能消失或伪装成功；
-10. 完成 Window Recovery 菜单 / 快捷键 / Dock Reopen 三路径肉眼验收。
-
-任何一步依赖 fixture 假装真实生产链，M5 不通过。
-
-## 13. 开发顺序与并行边界
-
-建议按以下提交序列推进，避免再次出现“UI 已接线但 API 根本不存在”的情况：
-
-```text
-Commit A  canonical work DTO + model/status normalization
-Commit B  WorkStore read/write completion + migrations
-Commit C  WorkProjector + LocalControlService + /api/work routes
-Commit D  Capture -> Work -> Outcome integration
-Commit E  backend tests + API contract tests
-Commit F  Desktop workFact contract + shared resource states
-Commit G  Home
-Commit H  Work
-Commit I  Attention
-Commit J  Capture / Cmd+K traceability
-Commit K  Memory provenance
-Commit L  discovery/authorization projection
-Commit M  cross-page smoke + full validation
-Commit N  release candidate + new M5
-```
-
-可并行：
-
-- backend store 与 DTO tests；
-- UI loading/error/empty shared components；
-- Memory inspector 现有 API 的只读梳理。
-
-不可并行抢跑：
-
-- DTO 未冻结前写页面字段；
-- `/api/work/*` 未通过 contract tests 前扩 Home/Work/Attention；
-- Capture 未形成真实 WorkItem 前做“已接管”视觉；
-- 自动门禁未绿前创建新 M5 Artifact。
-
-## 14. 已确认通过，不要重复返工
-
-以下不是下一轮主要矛盾，只做必要回归：
-
-- 精确产品/Artifact 身份；
+- 产品 / Artifact 精确身份机制；
 - Apple Silicon arm64；
 - strict codesign；
 - whole-bundle replace；
-- Acceptance / Production 物理隔离；
-- AuthStatus / Secret 边界；
-- `secret_export_count=0`；
-- 两轮 exact-instance Runtime start/stop；
-- 第一轮保存 PID 后验证 state/PID/8766 全释放；
-- `production_pollution_count=0`；
-- 记忆分页 `has_more=false` 正确停止；
-- 高级技术信息下沉。
+- Acceptance / Production 物理隔离原则；
+- Secret export 边界；
+- exact-instance Runtime stop 原则；
+- 记忆分页终点规则；
+- 高级技术信息下沉原则。
 
-## 15. 权威失败证据
+这些仍需随相关变化回归，但不是当前产品主矛盾。
 
-```text
-Task: PR88-M5-OWNER-WORKBENCH-V4-BD1E7A17
-Product: bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9
-macOS Artifact: 9258682849 / lingji-macos-arm64
-Report branch: acceptance/pr88-m5-owner-workbench-v4-bd1e7a17
-Report commit: 5793e4ae22e17d1f4db2c57ecc66bf18ec65af2e
-Cleanup receipt: 3011d796ff1bb5bff7d5e37c24e0c6236ee51d34
-PR #88 comment: 5306178636
-```
-
-最终结构化结果见 `docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md`。
-
-## 16. 技术边界保持不变
+## 9. 技术边界保持不变
 
 - `src/` 为长期平台主线；
 - `desktop/lingji-control/` 为唯一正式 Desktop UI；
-- `second_brain/` 只做兼容/迁移；
-- Desktop 只通过认证的 `127.0.0.1:8766` Local Control API；
+- `second_brain/` 只做兼容、迁移和验收来源；
+- Desktop 只通过认证的 `127.0.0.1:8766`；
 - Obsidian Vault + Git 为永久记忆正文权威；
-- SQLite/Qdrant 为可重建索引与运行状态；
-- Acceptance / Production 物理隔离；
-- Secret 只留在系统安全凭据边界；
-- Runtime stop 只处理精确实例；
-- 不创建第二事实源来美化状态；
-- AI 不能自动批准永久记忆；
-- 不自动执行破坏性 Qdrant rebuild。
+- SQLite / Qdrant 为运行状态或可重建派生层；
+- Acceptance / Production 必须物理隔离；
+- AI 不自动批准永久记忆；
+- 不自动破坏性 rebuild Qdrant；
+- 不建立第二事实源来美化 UI。
 
-## 17. 历史失败 Artifact
+## 10. 历史失败 Artifact
 
 以下均永久 `DO NOT RETRY`：
 
@@ -634,4 +450,4 @@ PR #88 comment: 5306178636
 9102748834 / 171091fe
 ```
 
-下一候选必须产生新的产品 Commit 和新 Artifact，并重新完成真实事实链自动门禁与主人 M5。
+当前没有 ACTIVE 本机验收任务。旧 Artifact 不得因为仍可下载而重跑。
