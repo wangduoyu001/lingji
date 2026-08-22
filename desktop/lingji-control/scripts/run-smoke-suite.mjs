@@ -16,6 +16,7 @@ const scripts = [
   "memory-review-smoke.mjs",
   "obsidian-operations-smoke.mjs",
   "polling-data-smoke.mjs",
+  "work-fact-smoke.mjs",
   "auto-review-shadow-smoke.mjs",
   "settings-governance-smoke.mjs",
 ];
