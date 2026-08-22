@@ -4,8 +4,8 @@
 > Formal/default branch: `master`
 > Active development branch: `feat/sb0-work-fact-contract`
 > Active PR: `#106` / Draft / DO NOT MERGE
-> Current product code SHA: `1c1b6b9ceffa08f5d4638bdf001a4ca9702b2b2d`
-> Latest coordination/docs head at this snapshot: `1a95b53db74f357d7f8af3e36357eb729c366903`
+> Current product code SHA: `f23c20c6692d0390ae3c6930b5eba1882bbffb22`
+> Latest test-only head before this status update: `af607bdea3203136017dbecf038dcf1d74bd837a`
 > Product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
 > Last completed node: `SB-0 — WORK FACT CONTRACT REPAIR / AUTOMATED_PASS`
 > Active node: `SB-1 — CAPTURE → WORK → OUTCOME / ACTIVE`
@@ -38,7 +38,7 @@ AGENTS.md
 
 不需要重新全仓审计，除非当前远端代码与本文件明显冲突。
 
-每个节点只能使用这些状态：
+节点状态只使用：
 
 ```text
 NOT_STARTED
@@ -49,7 +49,7 @@ OWNER_PASS
 CLOSED
 ```
 
-每个节点必须持续记录：
+每个节点持续记录：
 
 ```text
 分支 / PR / 精确产品 SHA
@@ -64,7 +64,7 @@ CLOSED
 更新规则：
 
 1. 节点开始前先标 `ACTIVE`。
-2. 每完成一个可验证子节点就更新，不等整轮结束后靠聊天回忆。
+2. 每完成一个可验证子节点立即更新，不等整轮结束后靠聊天回忆。
 3. 产品代码变化后更新精确产品 SHA；docs/test-only commit 不冒充产品 SHA。
 4. 自动门禁真实通过后才写 `AUTOMATED_PASS`。
 5. 需要主人观察的内容未经主人确认不得写 `OWNER_PASS`。
@@ -84,7 +84,7 @@ PR:
   #106 Draft / DO NOT MERGE
 
 Current product code:
-  1c1b6b9ceffa08f5d4638bdf001a4ca9702b2b2d
+  f23c20c6692d0390ae3c6930b5eba1882bbffb22
 
 Completed:
   SB-0 Work Fact Contract Repair = AUTOMATED_PASS
@@ -93,13 +93,15 @@ Active:
   SB-1 Capture → Work → Outcome
 
 SB-1 current verification:
-  backend real lifecycle tests passed on earlier SB-1 tree
-  latest product tree includes retry-outcome fix + Desktop Cmd+K handoff
-  latest full cross-platform gates are RUNNING / NOT YET FINAL
+  backend lifecycle tests = PASS on current functional line
+  7807b926 gate showed Python/Linux/Windows backend PASS
+  7807b926 Desktop failed for two exact-work-id integration defects
+  both defects are now repaired
+  new full cross-platform gate for current head = REQUIRED / RUNNING AFTER PUSH
 
 Next:
-  finish SB-1 gates + report/status sync
-  then activate SB-2 Work → Memory / Evidence
+  current-tree Desktop smoke/build + platform gates
+  if all green: SB-1 report/acceptance sync, then SB-2 ACTIVE
 
 Owner M5:
   NOT ACTIVE
@@ -116,7 +118,7 @@ Opportunity Center:
 FAIL / DO NOT MERGE
 ```
 
-上次核心失败：
+核心失败：
 
 - 看不清灵机到底接手了什么、执行了什么、结果是什么；
 - Home / Work / Attention 没有同一真实事实链；
@@ -125,7 +127,7 @@ FAIL / DO NOT MERGE
 - 主动发现仍不像真实状态机；
 - Window Recovery 仍需最终主人观察。
 
-SB-0 和正在开发的 SB-1 正在逐层消除这些失败原因，但**没有新 M5 之前旧 FAIL 结论仍有效**。
+SB-0 与 SB-1 正在消除前半部分失败原因，但没有新 M5 前旧 FAIL 仍有效。
 
 ## 2. SB-0 — Work Fact Contract Repair
 
@@ -189,7 +191,7 @@ SB-0 不单独宣称主人体验 PASS，最终随 Phase 1 M5 验收。
 当前产品代码 SHA：
 
 ```text
-1c1b6b9ceffa08f5d4638bdf001a4ca9702b2b2d
+f23c20c6692d0390ae3c6930b5eba1882bbffb22
 ```
 
 验收定义：`docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md` 顶部 SB-1 条目。
@@ -210,20 +212,18 @@ Cmd+K / Capture Center / approved input
 -> extraction.completed | extraction.failed | extraction.cancelled
 -> Outcome success | failure | skipped
 -> NextAction actor
--> Desktop uses same work_id
+-> Desktop exact work_id projection
 ```
 
 ### 3.2 已完成子节点
 
 #### A. Stable Capture → Work identity
 
-已完成：
-
-- `work_id` 由 Capture idempotency identity 确定，不依赖随机 UI 状态；
-- Capture 接受响应增加 `capture_id + work_id + job_id`；
+- `work_id` 由 Capture idempotency identity 确定；
+- Capture 响应为 `capture_id + work_id + job_id`；
 - extraction job options 持久保存 `_lingji_work_id / _lingji_capture_id / _lingji_capture_identity`；
-- 同一内容跨 CaptureControlService / Runtime 重建仍复用同一 WorkItem；
-- duplicate 会记录真实 `capture.duplicate`，不生成第二份主人工作事实。
+- Runtime/Service 重建后 duplicate 仍复用同一 WorkItem；
+- duplicate 记录真实 `capture.duplicate`，不制造第二 WorkItem。
 
 主要代码：
 
@@ -235,15 +235,13 @@ src/work/capture_bridge.py
 
 #### B. Extraction worker → Work lifecycle
 
-已完成：
-
 - queue claim → `extraction.started`；
 - transient retry → `extraction.retrying` + system NextAction；
 - completed → success Outcome；
 - final failed → failure Outcome；
 - cancelled → skipped Outcome；
-- lifecycle callback 自身失败只记录日志，不篡改 extraction queue 结果；
-- 没有 `_lingji_work_id` 的通用 extraction job 不被伪装成 Capture Work。
+- lifecycle callback 失败只记日志，不篡改 extraction queue；
+- 无 `_lingji_work_id` 的普通 extraction job 不冒充主人 Work。
 
 主要代码：
 
@@ -255,80 +253,84 @@ src/work/capture_bridge.py
 
 #### C. Retry truth fix
 
-已完成：
-
 - `WorkStore.clear_outcome(work_id)`；
-- failed/cancelled Work 重试前删除旧 terminal Outcome；
-- 同一 WorkItem 重新进入 accepted/running 时不会同时保留“上次失败仍是当前结果”的矛盾状态。
-
-主要代码：
-
-```text
-src/work/store.py
-src/work/capture_bridge.py
-```
+- failed/cancelled 重试前清除旧 terminal Outcome；
+- running/accepted Work 不再同时暴露上次失败为“当前结果”。
 
 #### D. Real integration tests
-
-已完成并在较早 SB-1 tree 的真实 GitHub Actions 中通过：
 
 ```text
 tests/test_capture_work_lifecycle.py
 ```
 
-覆盖：
+已覆盖：
 
 - real CaptureControl → real ExtractionPipeline → same SQLite → completed Outcome；
-- Runtime/Service 重建后 duplicate 仍是 same job_id + same work_id；
+- Runtime/Service 重建 duplicate → same job_id + same work_id；
 - real Worker failure → failed Work + safe failure Outcome；
-- rejected input 不创建主人 WorkItem。
+- rejected input 不创建 WorkItem。
 
-该批进入整库测试后：
+中间 CI 证据：
 
 ```text
 Linux Python 3.11: 583 passed / 11 skipped / 0 failed
 Linux Python 3.12: PASS
-Windows Python: PASS on subsequent SB-1 tree before latest retry/Desktop fixes
+Windows Python: PASS
 ```
-
-这只是中间证据，**不能替代当前产品 SHA 的最终门禁**。
 
 #### E. Desktop Capture work handoff
 
-已实现：
-
 - `CaptureSubmissionResponse.work_id`；
 - Capture job DTO 展示 `work_id`；
-- Capture Center 成功后只有拿到真实 work_id 才宣称“灵机已接手”；
+- 有真实 work_id 才允许宣称“灵机已接手”；
 - job/detail 提供“查看工作”；
-- API 没返回 work_id 时明确显示不能宣称已接手。
-
-主要代码：
-
-```text
-desktop/lingji-control/src/pages/captureCenterTypes.ts
-desktop/lingji-control/src/pages/CaptureCenterPage.tsx
-desktop/lingji-control/src/AppPages.tsx
-```
+- 无 work_id 时明确表示不能宣称已接手。
 
 #### F. Cmd/Ctrl+K 快速“记住”
 
-已实现：
-
-- Cmd+K / Ctrl+K 打开快速“记住”；
-- Cmd/Ctrl+Enter 提交；Esc 关闭；
+- Cmd/Ctrl+K 打开；Cmd/Ctrl+Enter 提交；Esc 关闭；
 - 与 Capture Center 共用 `CaptureCenterApi.submitText()`；
-- 唯一后端入口仍是 `/api/capture/text`；
+- 唯一后端入口 `/api/capture/text`；
 - 不直写 `/api/memory`，不使用 localStorage 作为事实源；
-- 提交失败保留输入并显示真实 API 错误；
-- 成功后显示 capture/work/job ID；有 work_id 才允许“查看工作”。
+- 失败保留输入并显示真实 API 错误；
+- 成功显示 capture/work/job ID。
+
+#### G. Exact work-id navigation
+
+已完成产品修复：
+
+```text
+Capture / Cmd+K result work_id
+-> App.openWork(work_id)
+-> workTargetId
+-> ActivityPage(workId)
+-> GET /api/work/{work_id}
+```
+
+没有指定 work_id 时 Activity 才使用：
+
+```text
+GET /api/work/current
+```
+
+Capture Center 的三处入口均传递真实 ID：
+
+```text
+latest submit result
+job list item
+selected job detail
+```
+
+不会再出现“点历史 Work A，却因为当前 Work B 而展示 B”的事实链错位。
 
 主要代码：
 
 ```text
-desktop/lingji-control/src/components/QuickCapture.tsx
-desktop/lingji-control/src/components/QuickCapture.css
 desktop/lingji-control/src/App.tsx
+desktop/lingji-control/src/AppPages.tsx
+desktop/lingji-control/src/components/QuickCapture.tsx
+desktop/lingji-control/src/pages/CaptureCenterPage.tsx
+desktop/lingji-control/src/pages/ActivityPage.tsx
 ```
 
 门禁：
@@ -340,30 +342,50 @@ desktop/lingji-control/scripts/capture-center-smoke.mjs
 
 ### 3.3 已发现并修复的 SB-1 回归
 
-一次 QuickCapture 接入误把 `App.tsx` 覆盖成过时简版，导致旧正式壳中的：
+#### 回归 1：QuickCapture 曾误覆盖正式 App shell
+
+CI 已抓住并修复。正式 `NAVIGATION / RuntimeBoundary / release metadata / runtime controls` 已恢复。
+
+#### 回归 2：exact work-id 第一版 Desktop 合同不一致
+
+产品 SHA `7807b9265b56cc69917087942ab7dd7e1163c949` 的真实 CI 结果：
 
 ```text
-NAVIGATION
-RuntimeBoundary
-release metadata
-runtime lifecycle controls
+Linux Python 3.11: PASS
+Linux Python 3.12: PASS
+Windows Python: PASS
+MCP smoke: PASS
+Browser Capture smoke: PASS
+Obsidian smoke: PASS
+acceptance-doc-sync: PASS
+local-execution-handoff: PASS
+Desktop smoke: FAIL
+macOS frontend build: FAIL
+Windows Desktop/P0: FAIL because Desktop gate failed first
 ```
 
-被删除。
+失败原因只有两类：
 
-GitHub Desktop smoke 在 `b2f8d217...` 及时失败并定位该问题。当前产品代码已恢复正式 App shell，仅在 RuntimeBoundary 内嵌入 QuickCapture。
+1. `quick-capture-smoke.mjs` 仍要求旧 `onNavigate("activity")`；
+2. `AppPages` 已传 `onOpenWork`，但 `CaptureCenterPage` Props 仍声明旧 `onNavigate`，触发 TS2322。
 
-**该失败不能被忽略，也不能把旧 b2f8d217 tree 标成通过。**
+修复：
+
+- 产品修复 commit：`f23c20c6692d0390ae3c6930b5eba1882bbffb22`
+- QuickCapture smoke 修复：`239dacd857f8339a02386ffdcd4d6e3b5826c100`
+- Capture exact-ID smoke 加固：`af607bdea3203136017dbecf038dcf1d74bd837a`
+
+旧 `7807b926...` 明确不得标记为 PASS。
 
 ### 3.4 当前未完成 / 正在验证
 
-当前最新产品代码需要完成以下真实门禁：
+当前产品代码 `f23c20c...` + 后续 test/docs-only commits 需要完成：
 
 ```text
 1. Linux Python 3.11 full tests
 2. Linux Python 3.12 full tests
 3. Windows Python full tests
-4. Desktop smoke 21 scripts
+4. Desktop smoke full suite
 5. React production build
 6. Tauri configuration / Rust gate
 7. acceptance-doc-sync
@@ -373,27 +395,28 @@ GitHub Desktop smoke 在 `b2f8d217...` 及时失败并定位该问题。当前�
 11. Windows Desktop Release Baseline
 ```
 
-当前状态：`RUNNING / NOT YET FINAL`。
+状态：`CURRENT-TREE GATES REQUIRED / NOT YET FINAL`。
 
-不得在上述当前树门禁完成前把 SB-1 标成 `AUTOMATED_PASS`。
+不得提前把 SB-1 标成 `AUTOMATED_PASS`。
 
-### 3.5 SB-1 剩余代码/文档收口
+### 3.5 SB-1 收口动作
 
-自动门禁若发现红灯：
+如果当前门禁红：
 
 ```text
-先按真实日志修复
+读真实失败 job log
+→ 只修对应模块
 → 补回归断言
-→ 更新本节点产品 SHA
+→ 更新产品 SHA（仅产品代码变化时）
 → 重跑门禁
 ```
 
-自动门禁全绿后：
+全绿后：
 
 ```text
 更新 docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md
-  product Commit: exact SB-1 SHA
-  自动验收 checkbox -> real result
+  product Commit: exact SB-1 product SHA
+  自动验收 -> real result
 
 生成/更新
   docs/TEST_REPORTS/SB1_CAPTURE_WORK_OUTCOME.md
@@ -405,16 +428,11 @@ GitHub Desktop smoke 在 `b2f8d217...` 及时失败并定位该问题。当前�
 
 ### 3.6 下一步代码入口
 
-若当前门禁红：
+门禁红：直接读取失败 job，只修对应模块。
+
+门禁绿后开始 SB-2 audit：
 
 ```text
-直接读取失败 job log，然后只修对应模块。
-```
-
-若门禁绿：
-
-```text
-SB-2 first audit:
 src/extraction/structured_sink.py
 src/project_memory/
 src/gateway/memory.py
@@ -424,7 +442,7 @@ Desktop Memory Inspector / Memory pages
 相关 tests
 ```
 
-SB-1 结束前不得进入 SB-2 功能实现，也不得开发 Opportunity Center。
+SB-1 未自动通过前不得进入 SB-2 功能实现，也不得开发 Opportunity Center。
 
 ## 4. Phase 1 节点总表
 
@@ -442,12 +460,12 @@ SB-1 结束前不得进入 SB-2 功能实现，也不得开发 Opportunity Cente
 
 ## 5. Phase 1 最终 PASS 合同
 
-Phase 1 只有以下全部成立才能进入机会面板：
+以下全部成立才允许进入机会面板：
 
 - Work Fact 合同端到端通过；
 - Capture → Work → Memory / Failure 可追踪；
 - Memory 内容和来源可读、可验证；
-- owner review / Core / supersede 等生命周期无越权；
+- owner review / Core / supersede 生命周期无越权；
 - lexical / semantic / Qdrant / embedding 真值一致；
 - Source / Conversation / Message provenance 成立；
 - MemoryGateway / Context Pack / MCP 共享同一记忆与权限；
@@ -460,7 +478,7 @@ Phase 1 只有以下全部成立才能进入机会面板：
 - 主人无法自动证明的体验项由主人实际确认；
 - 最终 M5 = `PASS`。
 
-任何一项为 `FAIL / BLOCKED / NOT_TESTED`，Phase 1 都不能写成完成。
+任何一项 `FAIL / BLOCKED / NOT_TESTED`，Phase 1 都不能写成完成。
 
 ## 6. Phase 2 启动门禁
 
@@ -470,7 +488,7 @@ Phase 1 只有以下全部成立才能进入机会面板：
 PHASE 2 — OPPORTUNITY CENTER
 ```
 
-届时先审计现有：
+届时先审计：
 
 ```text
 src/opp_generator.py
@@ -479,15 +497,15 @@ src/opportunities/
 现有 Vault / scheduler / feedback 路径
 ```
 
-机会对象必须复用已经验收通过的 Source + Work Fact + Evidence 基础设施，然后才开发 Opportunity Center。
+机会对象必须复用验收通过的 Source + Work Fact + Evidence 基础设施，然后才开发 Opportunity Center。
 
 ## 7. 技术边界与冻结项
 
-保持不变：
+保持：
 
 - `src/` = 长期平台主线；
 - `desktop/lingji-control/` = 唯一正式 Desktop UI；
-- `second_brain/` = 兼容、迁移和验收来源，不新增主产品能力；
+- `second_brain/` = 兼容、迁移、验收来源，不新增主产品能力；
 - Desktop 只通过认证 `127.0.0.1:8766`；
 - Obsidian Vault + Git = 永久记忆正文权威；
 - SQLite / Qdrant = 运行状态或可重建派生层；
@@ -510,7 +528,7 @@ AnySearch 新阶段
 
 ## 8. 不要重复返工的稳定基础
 
-除非新回归证据明确失败，不要把主要时间重新消耗在：
+除非新回归证据明确失败，不重新把主要时间消耗在：
 
 - 产品 / Artifact 精确身份机制；
 - Apple Silicon arm64 基础构建；
@@ -521,8 +539,6 @@ AnySearch 新阶段
 - exact-instance Runtime stop 原则；
 - 记忆分页终点规则；
 - 高级技术信息下沉原则。
-
-相关模块变化时仍需回归，但它们不是当前主矛盾。
 
 ## 9. 历史失败 Artifact
 
