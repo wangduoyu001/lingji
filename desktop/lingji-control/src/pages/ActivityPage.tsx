@@ -7,8 +7,17 @@ import { formatWorkDetail, type CurrentWorkFact } from "../contracts/workFact";
 const value = (v: unknown, fallback = "未知") =>
   v === null || v === undefined || v === "" ? fallback : String(v);
 
-export default function ActivityPage({ api, active }: { api: LingJiApi; active: boolean }) {
-  const load = useCallback((signal: AbortSignal) => api.get<CurrentWorkFact>("/api/work/current", { signal }), [api]);
+type Props = {
+  api: LingJiApi;
+  active: boolean;
+  workId?: string | null;
+};
+
+export default function ActivityPage({ api, active, workId }: Props) {
+  const load = useCallback((signal: AbortSignal) => {
+    const path = workId ? `/api/work/${encodeURIComponent(workId)}` : "/api/work/current";
+    return api.get<CurrentWorkFact>(path, { signal });
+  }, [api, workId]);
   const resource = usePollingResource({ fetcher: load, enabled: active, intervalMs: 5000, staleAfterMs: 15000, pauseWhenHidden: true });
 
   if (!active) return <Empty text="连接灵机后显示活动记录。" />;
