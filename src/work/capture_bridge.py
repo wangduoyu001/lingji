@@ -7,7 +7,7 @@ from .store import WorkStore
 
 
 class CaptureWorkBridge:
-    """Turns successful capture submissions into traceable work facts."""
+    """Translate capture/extraction lifecycle facts into the canonical WorkStore."""
 
     def __init__(self, store: WorkStore):
         self.store = store
@@ -27,12 +27,28 @@ class CaptureWorkBridge:
             owner_approved=approved,
             status="accepted",
         )
-        self.store.save_work(work)
+        self.store.create_work(work)
         self.store.append_event(
             ExecutionEvent(
                 work_id=work.work_id,
                 event_type="capture.accepted",
                 detail={"capture_id": capture_id, "metadata": metadata or {}},
+            )
+        )
+        return work
+
+    def start_extraction(
+        self,
+        work_id: str,
+        *,
+        detail: dict[str, Any] | None = None,
+    ) -> WorkItem:
+        work = self.store.update_work_status(work_id, "running")
+        self.store.append_event(
+            ExecutionEvent(
+                work_id=work_id,
+                event_type="extraction.started",
+                detail=detail or {},
             )
         )
         return work
@@ -44,13 +60,6 @@ class CaptureWorkBridge:
         *,
         evidence: dict[str, Any] | None = None,
     ) -> Outcome:
-        outcome = Outcome(
-            work_id=work_id,
-            status="completed",
-            summary=summary,
-            evidence=evidence or {},
-        )
-        self.store.save_outcome(outcome)
         self.store.append_event(
             ExecutionEvent(
                 work_id=work_id,
@@ -58,4 +67,34 @@ class CaptureWorkBridge:
                 detail={"summary": summary},
             )
         )
+        outcome = Outcome(
+            work_id=work_id,
+            status="success",
+            summary=summary,
+            evidence=evidence or {},
+        )
+        self.store.save_outcome(outcome)
+        return outcome
+
+    def fail_extraction(
+        self,
+        work_id: str,
+        summary: str,
+        *,
+        evidence: dict[str, Any] | None = None,
+    ) -> Outcome:
+        self.store.append_event(
+            ExecutionEvent(
+                work_id=work_id,
+                event_type="extraction.failed",
+                detail={"summary": summary},
+            )
+        )
+        outcome = Outcome(
+            work_id=work_id,
+            status="failure",
+            summary=summary,
+            evidence=evidence or {},
+        )
+        self.store.save_outcome(outcome)
         return outcome
