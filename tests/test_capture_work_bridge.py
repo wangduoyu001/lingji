@@ -32,6 +32,22 @@ class CaptureWorkBridgeTests(unittest.TestCase):
         self.assertEqual(events[0].event_type, "capture.accepted")
         self.assertEqual(events[0].detail["capture_id"], "capture-1")
 
+    def test_same_capture_identity_reuses_same_work_id(self) -> None:
+        first, first_created = self.bridge.ensure_from_capture(
+            "capture-a",
+            "稳定身份",
+            identity="same-idempotency-key",
+        )
+        second, second_created = self.bridge.ensure_from_capture(
+            "capture-b",
+            "稳定身份重复提交",
+            identity="same-idempotency-key",
+        )
+        self.assertTrue(first_created)
+        self.assertFalse(second_created)
+        self.assertEqual(first.work_id, second.work_id)
+        self.assertEqual(len(self.store.list_work(limit=20)), 1)
+
     def test_capture_start_and_complete_updates_same_work(self) -> None:
         work = self.bridge.create_from_capture("capture-2", "完整流程")
         self.bridge.start_extraction(work.work_id, detail={"adapter": "text"})
@@ -78,6 +94,29 @@ class CaptureWorkBridgeTests(unittest.TestCase):
         assert persisted is not None
         self.assertEqual(persisted.summary, "解析失败")
         self.assertEqual(persisted.evidence["error_code"], "EXTRACT_FAILED")
+
+    def test_retry_clears_old_terminal_outcome_before_reopening_work(self) -> None:
+        work = self.bridge.create_from_capture("capture-retry", "失败后重试")
+        self.bridge.start_extraction(work.work_id)
+        self.bridge.fail_extraction(
+            work.work_id,
+            "第一次失败",
+            evidence={"job_id": "job-retry", "error_code": "EXTRACT_FAILED"},
+        )
+        self.assertIsNotNone(self.store.get_outcome(work.work_id))
+
+        reopened = self.bridge.retry_extraction(
+            work.work_id,
+            detail={"job_id": "job-retry", "manual_retry": True},
+        )
+
+        self.assertEqual(reopened.status, "accepted")
+        self.assertIsNone(self.store.get_outcome(work.work_id))
+        action = self.store.get_next_action(work.work_id)
+        self.assertIsNotNone(action)
+        assert action is not None
+        self.assertEqual(action.actor, "system")
+        self.assertEqual(self.store.list_events(work.work_id)[-1].event_type, "extraction.retrying")
 
     def test_work_id_and_timeline_survive_runtime_reopen(self) -> None:
         work = self.bridge.create_from_capture("capture-4", "重启测试")
