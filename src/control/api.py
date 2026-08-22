@@ -13,6 +13,7 @@ from src.runtime import mcp_runtime_status
 from .memory_inspector import build_memory_inspector
 from .obsidian_api import register_obsidian_routes
 from .service import LocalControlService
+from .work_routes import register_work_routes
 from .capture_api import (
     CaptureCommonRequest,
     CaptureFileRequest,
@@ -577,4 +578,5 @@ def create_control_app(
         app, control, dependencies=secured, translate_error=translate_error
     )
     register_capture_routes(app, settings, control, token=token)
+    register_work_routes(app, control, secured, translate_error=translate_error)
     return app

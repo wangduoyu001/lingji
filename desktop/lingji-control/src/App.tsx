@@ -1,6 +1,7 @@
 import { useState } from "react";
 import AppPages from "./AppPages";
 import DesktopShell from "./components/DesktopShell";
+import QuickCapture from "./components/QuickCapture";
 import RuntimeBoundary from "./components/RuntimeBoundary";
 import "./DesktopUX.css";
 import "./ReleaseUX.css";
@@ -13,6 +14,7 @@ import type { PageId } from "./types";
 export default function App() {
   const [page, setPage] = useState<PageId>("overview");
   const [inspectorTarget, setInspectorTarget] = useState<CaptureInspectorTarget | null>(null);
+  const [workTargetId, setWorkTargetId] = useState<string | null>(null);
   const connection = useLingJiConnection();
   const release = useReleaseMetadata();
   const current = NAVIGATION.find((item) => item.id === page) ?? NAVIGATION[0];
@@ -20,6 +22,16 @@ export default function App() {
   const openInspector = (target: CaptureInspectorTarget) => {
     setInspectorTarget(target);
     setPage("memory_inspector");
+  };
+
+  const openWork = (workId: string) => {
+    setWorkTargetId(workId);
+    setPage("activity");
+  };
+
+  const navigate = (target: PageId) => {
+    setWorkTargetId(null);
+    setPage(target);
   };
 
   return (
@@ -34,7 +46,7 @@ export default function App() {
       runtimeBusy={connection.runtimeBusy}
       ownerStopped={connection.ownerStopped}
       autoRecoveryActive={connection.autoRecoveryActive}
-      onNavigate={setPage}
+      onNavigate={navigate}
       onRetry={() => void connection.connect()}
       onStopRuntime={() => void connection.stopRuntime()}
       onRestartRuntime={() => void connection.restartRuntime()}
@@ -57,14 +69,17 @@ export default function App() {
         onConfigure={connection.configureRuntime}
         onResume={() => void connection.connect()}
       >
+        <QuickCapture api={connection.api} active={connection.connected} onOpenWork={openWork} />
         <AppPages
           page={page}
           api={connection.api}
           connected={connection.connected}
           overview={connection.overview}
           inspectorTarget={inspectorTarget}
+          workTargetId={workTargetId}
           onOpenInspector={openInspector}
-          onNavigate={setPage}
+          onOpenWork={openWork}
+          onNavigate={navigate}
         />
       </RuntimeBoundary>
     </DesktopShell>

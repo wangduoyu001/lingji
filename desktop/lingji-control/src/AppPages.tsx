@@ -31,23 +31,25 @@ type AppPagesProps = {
   connected: boolean;
   overview: Row | null;
   inspectorTarget: CaptureInspectorTarget | null;
+  workTargetId: string | null;
   onOpenInspector: (target: CaptureInspectorTarget) => void;
+  onOpenWork: (workId: string) => void;
   onNavigate: (page: PageId) => void;
 };
 
 export default function AppPages(props: AppPagesProps) {
-  const { page, api, connected, overview, inspectorTarget, onOpenInspector, onNavigate } = props;
+  const { page, api, connected, overview, inspectorTarget, workTargetId, onOpenInspector, onOpenWork, onNavigate } = props;
   return <section className="page-content">
     {page === "overview" && <OverviewPage data={overview} api={api} active={connected} onNavigate={onNavigate} />}
-    {page === "activity" && <ActivityPage api={api} active={connected} />}
-    {page === "attention" && <AttentionPage api={api} active={connected} overview={overview} onNavigate={onNavigate} />}
+    {page === "activity" && <ActivityPage api={api} active={connected} workId={workTargetId} />}
+    {page === "attention" && <AttentionPage api={api} active={connected} />}
     {page === "diagnostics" && <DiagnosticsPage onNavigate={onNavigate} />}
     {page === "brain_status" && <BrainStatusPage api={api} active={connected} />}
     {page === "memory_inspector" && <MemoryInspectorLoopPage api={api} active={connected} target={inspectorTarget} />}
     {page === "codex_workspace" && <CodexWorkspacePage api={api} active={connected} onOpenInspector={onOpenInspector} />}
     {page === "memory_review" && <MemoryReviewPage api={api} active={connected} />}
     {page === "auto_review" && <AutoReviewPage api={api} active={connected} />}
-    {page === "capture_center" && <CaptureCenterPage api={api} active={connected} onOpenInspector={onOpenInspector} />}
+    {page === "capture_center" && <CaptureCenterPage api={api} active={connected} onOpenInspector={onOpenInspector} onOpenWork={onOpenWork} />}
     {page === "obsidian" && <ObsidianLoopPage api={api} active={connected} />}
     {page === "vector_center" && <VectorCenterPage api={api} active={connected} />}
     {page === "system_compute" && <SystemComputePage api={api} active={connected} />}

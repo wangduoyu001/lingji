@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from src.work.capture_bridge import CaptureWorkBridge
+
 from .capture import (
     CAPTURE_SERVICE_UNAVAILABLE,
     CaptureControlError,
@@ -120,12 +122,16 @@ def register_capture_routes(app: Any, settings: Any, control: Any, *, token: str
                 except Exception:
                     pass
             queue = getattr(pipeline, "queue", None) or getattr(control, "queue", None)
+            work_control = getattr(control, "work_control", None)
+            work_store = getattr(work_control, "store", None)
+            work_bridge = CaptureWorkBridge(work_store) if work_store is not None else None
             capture = CaptureControlService(
                 settings,
                 pipeline=pipeline,
                 queue=queue,
                 runtime_settings=runtime_settings,
                 state_db=state_db,
+                work_bridge=work_bridge,
             )
             try:
                 control.capture_control = capture

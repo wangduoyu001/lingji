@@ -51,6 +51,243 @@
 
 ---
 
+## 2026-08-22 · SB-2 · Work → Memory / Evidence 双向可追踪
+
+- 产品分支：`feat/sb0-work-fact-contract`
+- 产品 Commit：`pending`
+- 影响模块：`src/extraction/pipeline.py`、`src/extraction/structured_sink.py`、`src/extraction/bootstrap.py`、`src/indexer/index.py`、`src/retrieval/memory_db.py`、`src/gateway/memory_inspector.py`、`src/sources/read_model.py`、Work/Memory exact-ID Desktop handoff、Work↔Memory focused tests
+- 风险等级：P0
+- 用户可感知变化：当 Capture/Work 完成后，主人必须能看见“是否真的产生了记忆、产生了哪些 memory_id、来源在哪里”，并能从 Work 精确进入 Memory、再从 Memory 返回 originating Work。提取成功不再等价于“永久记忆已产生”。
+- 数据或安全边界变化：不新增永久记忆数据库或第二关系事实源；Work origin 作为 Vault frontmatter 的正式 relationship 保存，`PEMISIndex`/`lingji_memory.db` 只做可重建派生投影。`message_memory_links` 继续作为 Source read model 的派生 Source↔Memory 关系。Desktop 仍只访问认证 `127.0.0.1:8766`；不绕过 owner-review/Core Memory 权限，不自动 destructive rebuild Qdrant。
+
+### 新增或修改的自动验收
+
+- [ ] real Work→Memory fixture：正式 Capture/Extraction 产生稳定 `work_id` 与一个或多个 `memory_id`，Work Outcome evidence 不静默丢失多 Memory refs。
+- [ ] Work origin canonical metadata：Capture Work 的 `_lingji_work_id` 写入产生的 Vault Memory relationship；reindex/restart 后 Memory detail 仍能得到相同 originating `work_id`。
+- [ ] `StructuredReadModelSink`：返回实际 `source_ids/conversation_ids/message_ids/memory_ids`，同时保持现有 counts/warnings contract；多 source/conversation/message 不被截断成单值。
+- [ ] `src/extraction/bootstrap.py::_result_evidence`：支持数组 refs，并显式记录 `memory_state = produced | not_applicable | unavailable/failed`；不能把 extraction success 冒充 memory produced。
+- [ ] `SourceReadModel.memory_links(memory_id)`：反向来源链继续返回正确 `message_id/conversation_id/source_id`；不新增平行来源表。
+- [ ] Memory index/rebuild：canonical Work relationship 经 `PEMISIndex` 进入 `relationships_json` 派生层；不要求新增第二 schema authority。
+- [ ] Memory Inspector/detail：返回 owner-readable content/chunks/citation，并暴露从 canonical relationship 派生的 `origin_work_id/work_ids`。
+- [ ] non-Work memory fixture：没有 originating Work 的 Memory 保持有效，不制造假的 WorkItem/work_id。
+- [ ] no-memory fixture：Extraction 可完成但没有 Memory 时，Work evidence 明确为 not_applicable/无 memory_ids，而非声称“已记住”。
+- [ ] memory/source projection failure fixture：失败或 unavailable 必须显式进入 evidence/diagnostic state，不得显示为空即成功。
+- [ ] owner-review/Core Memory 回归：SB-2 wiring 不自动批准 candidate，不绕过主人确认，不改变 Core Memory owner-only 规则。
+- [ ] Desktop smoke：Work exact memory ref → Memory Inspector exact target；Memory detail originating work → exact Work；接口 unavailable 与真实无关联严格区分。
+- [ ] `python scripts/check_acceptance_sync.py`：产品变化与本验收条目保持同步。
+
+### 新增或修改的真机验收
+
+- [ ] 后续 Phase 1 同 SHA packaged Acceptance candidate 中提交一条唯一“记住”文本：从 Work 看到实际 memory_id，再打开该 Memory 读取正文和来源，最后返回同一 work_id。
+- [ ] 提交一个不会产生正式 Memory 的输入或隔离 fixture：界面必须说明“工作完成但未产生记忆”，不能显示“已记住”。
+- [ ] 构造隔离的 Memory/source projection failure：主人应看到明确失败/不可用状态，不得看到假空白或假成功。
+- [ ] Runtime 重启后重复检查同一 Work↔Memory 双向 ID 与来源链，不得改变身份。
+
+### 主人肉眼确认
+
+- [ ] 最终随 Phase 1 M5：主人能自然区分“灵机完成处理”“产生了候选/记忆”“主人已批准永久记忆”三种不同语义，并能验证来源。
+
+### 回归项
+
+- [ ] Obsidian Vault + Git 继续是永久正文权威；`lingji_state.db` 不存第二份 Memory 正文。
+- [ ] `lingji_memory.db` 与 Qdrant 继续是可重建派生层；重建不得改变 canonical Work origin。
+- [ ] 不为 Work↔Memory 新增独立永久关系数据库或 UI-local/localStorage 事实源。
+- [ ] 多 memory/source/message refs 不静默截断。
+- [ ] 非 Work Memory 不制造 WorkItem。
+- [ ] candidate/owner-review/Core Memory 权限不退化。
+- [ ] Tauri 不直连 SQLite、Qdrant、Ollama 或 8765。
+- [ ] `second_brain/` 不新增正式 Work→Memory 实现。
+- [ ] Production/Acceptance 隔离和 Secret 边界不退化。
+
+### 清理与回滚
+
+- 临时数据前缀：`SB2_WORK_MEMORY_`
+- 覆盖安装或迁移方式：开发和 CI 使用隔离 Vault/SQLite；真机验收仍使用 Acceptance workspace 与最终同 SHA Artifact 覆盖安装。
+- 临时备份删除条件：验收报告首次远程确认后只删除本任务临时数据；不得删除主人 Vault/正式 Memory/未知 SQLite/Qdrant。
+- 测试数据清理方式：pytest 临时目录自动隔离；真机只清理 `SB2_WORK_MEMORY_` fixture。
+- 回滚：回退 Work relationship 注入、structured refs/evidence 和 projection/UI handoff；Vault 已存在的新增 relationship metadata 必须向后可忽略，禁止 destructive migration/reset。
+
+### 不在范围
+
+- 不完成 SB-3 Retrieval/Vector/Inspector 全面真实性验证。
+- 不完成 SB-4 AI Memory Access / Context Pack / MCP 总核验。
+- 不进行 SB-5 Home/Work/Attention/Capture/Memory 大规模视觉重做。
+- 不启动 Opportunity Center、Opportunity Score 或机会数据模型开发。
+- 不删除 compatibility runtime。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/SB2_WORK_MEMORY_EVIDENCE.md`
+- 报告分支：后续 Phase 1 本机验收按最终候选精确产品 SHA 创建。
+
+---
+
+## 2026-08-22 · SB-1 · Capture → Work → Outcome 真实生命周期闭环
+
+- 产品分支：`feat/sb0-work-fact-contract`
+- 产品 Commit：`f23c20c6692d0390ae3c6930b5eba1882bbffb22`
+- 状态：`AUTOMATED_PASS`；最终主人体验继续随 Phase 1 M5 验收，不单独宣称 OWNER_PASS。
+- 影响模块：`src/control/capture.py`、`src/control/capture_api.py`、`src/capture/`、`src/extraction/`、`src/work/capture_bridge.py`、WorkStore、Desktop Capture/Cmd+K contract、Capture/Work/Extraction focused tests
+- 风险等级：P0
+- 用户可感知变化：每一条被正式接受的主人输入立即得到稳定 `capture_id + work_id`；随后排队、执行、完成、失败或重试都能通过同一 `work_id` 看到真实事件与 Outcome，不再只有“提交成功”toast 和孤立 extraction `job_id`。
+- 数据或安全边界变化：不新增数据库或第二事实源；Capture/Extraction 与 Work Fact 均继续使用正式 runtime state SQLite 边界。Desktop 仍只访问认证 `127.0.0.1:8766`。永久记忆正文权威仍为 Obsidian Vault + Git，本节点不自动批准永久记忆。
+
+### 已通过的自动验收
+
+- [x] `tests/test_capture_work_lifecycle.py`：real CaptureControl + real ExtractionPipeline + SQLite 验证稳定 `capture_id/work_id/job_id`、duplicate/restart、success/failure 与 rejected input。
+- [x] `tests/test_capture_work_bridge.py`：accepted / queued / started / retrying / completed / failed / cancelled 生命周期和 NextAction actor。
+- [x] Extraction pipeline/worker full regression：queue claim、retry、success/failure Outcome 与 callback failure isolation 已进入整库测试。
+- [x] `desktop/lingji-control/scripts/capture-center-smoke.mjs`、`quick-capture-smoke.mjs`、Work Fact smoke：正式 work_id contract 与 exact-ID handoff。
+- [x] Linux Python 3.11：`585 passed / 11 skipped / 0 failed`。
+- [x] Linux Python 3.12：`585 passed / 11 skipped / 0 failed`。
+- [x] Windows Python 3.12：`585 passed / 11 skipped / 0 failed`。
+- [x] Desktop smoke/build、MCP smoke、Browser Capture smoke、Obsidian plugin smoke。
+- [x] `acceptance-doc-sync`、`local-execution-handoff`、P0 Windows Gate、macOS Desktop Gate、Windows Desktop Release Baseline。
+
+### 自动发布证据
+
+```text
+verified repository head: 441d1d2ed50a38f4e6dfb7e9c7c3d28e4404e66a
+
+macOS
+artifact: lingji-macos-arm64
+artifact_id: 9471250404
+sha256: 256577b01f934708b2109032b4b4ac1c269a9188f3958ad590c27d3e2b8f3fe3
+
+Windows
+artifact: lingji-windows-0.1.0-441d1d2e
+artifact_id: 9471266207
+sha256: 5d375dad7e965f7a8929f24dc8bfa1a15165041166fd50614b66ef04038e7464
+```
+
+### 新增或修改的真机验收
+
+- [ ] Acceptance workspace 的 packaged Desktop 中用文本入口提交一条唯一测试内容；接受响应产生 `capture_id + work_id`，Work 页能追到同一个对象。
+- [ ] 同一内容再次提交，不得产生第二个 WorkItem；Runtime 重启后再次提交仍映射到原有工作事实或明确的既有 job/work 链。
+- [ ] 执行一个真实成功 extraction：timeline 至少出现 accepted → queued/processing → completed，Outcome=success；Runtime 重启后仍可读取。
+- [ ] 构造一个隔离失败 extraction：WorkItem 必须保留并显示 failed event + failure Outcome，不得只显示 Capture toast 或把失败当“无工作”。
+- [ ] Cmd+K 快速“记住”与 Capture Center 文本输入使用同一后端事实链、相同失败语义和 exact Work 页面跳转。
+
+### 主人肉眼确认
+
+- [ ] 本节点最终随 Phase 1 M5 一并确认：主人从“记住”提交后能自然看懂灵机已经接手、现在处理到哪一步、最后成功还是失败；SB-1 自动门禁通过本身不等于最终 UI 主人 PASS。
+
+### 回归项
+
+- [x] 未通过 Capture validation / paused / rejected 的输入不得凭空创建“已接手”的 WorkItem。
+- [x] 没有真实 PendingAction 时 extraction failure 不自动写成“需要主人处理”。
+- [x] duplicate / idempotent 重放不产生互相矛盾的 WorkItem/Outcome。
+- [x] Extraction Worker 队列仍是执行事实；Work Fact 只投影同一任务生命周期。
+- [x] Tauri 不直连 SQLite、Qdrant、Ollama 或 8765。
+- [x] `second_brain/` 未新增正式 Capture→Work 实现。
+- [x] Production/Acceptance 隔离和 Secret 边界未退化。
+
+### 清理与回滚
+
+- 临时数据前缀：`SB1_CAPTURE_WORK_`
+- 覆盖安装或迁移方式：代码开发不触碰主人 Production；真机阶段继续使用 Acceptance workspace 与同 SHA Artifact 覆盖安装。
+- 临时备份删除条件：对应验收报告首次远程确认后只删除本任务专用临时数据；不得删除主人 Vault、正式记忆或未知 SQLite。
+- 测试数据清理方式：pytest 临时 state DB 自动隔离；真机 fixture 只清理 `SB1_CAPTURE_WORK_` 前缀对象与任务目录。
+- 回滚：回退 SB-1 Capture/Extraction lifecycle wiring；必须保留 SB-0 Work Fact schema 向后可读，不允许 destructive reset 或删除历史 WorkItem。
+
+### 不在范围
+
+- 不完成 SB-2 Work→Memory/Evidence 双向可追踪。
+- 不改变永久记忆 owner-review / Core Memory 权限规则。
+- 不进行 Home/Work/Attention/Memory 大规模视觉重做。
+- 不启动 Opportunity Center、Opportunity Score 或机会数据模型开发。
+- 不删除 compatibility runtime。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/SB1_CAPTURE_WORK_OUTCOME.md`
+- 报告分支：后续 Phase 1 本机验收按最终候选精确产品 SHA 创建。
+
+---
+
+## 2026-08-22 · SB-0 · Work Fact 合同与 8766 正式链路修复
+
+- 产品分支：`feat/sb0-work-fact-contract`
+- 产品 Commit：`c02f73fde7fb4492a665b4c1fd3f93c900499d52`
+- 状态：`AUTOMATED_PASS`；主人最终体验随 Phase 1 M5 验收，不单独宣称 OWNER_PASS。
+- 影响模块：`src/work/`、`src/control/`、Capture→Work bridge、8766 Local Control API、Desktop Work Fact DTO、Work Fact focused tests
+- 风险等级：P0
+- 用户可感知变化：首页/工作/需要我不再依赖拼凑状态；同一个真实 `work_id` 可从正式 8766 API 查询当前工作、最近工作、事件时间线、结果、下一执行者和主人待办。
+- 数据或安全边界变化：Work Fact 继续写入正式 runtime state SQLite 边界，不新增第二数据库；Desktop 仍只访问认证的 `127.0.0.1:8766`；不修改永久记忆权威，不直接写 Production Vault/Qdrant。
+
+### 新增或修改的自动验收
+
+- [x] `tests/test_work_store.py`：WorkItem/Event/Outcome/NextAction/PendingAction 持久化、状态更新、时间排序、重开数据库后读取和稳定 action id 已进入整库测试。
+- [x] `tests/test_work_projector.py`：current/recent/timeline/pending 投影只来自真实 WorkStore，空状态与失败状态不伪造成功。
+- [x] `tests/test_work_control_api.py`：正式 `create_control_app()` 的 `/api/work/*` 路由与字段合同已验证。
+- [x] `tests/test_capture_work_bridge.py`：Capture bridge 使用正式 WorkStore，成功/失败基础转换已验证。
+- [x] `desktop/lingji-control/scripts/work-fact-smoke.mjs`：TypeScript Work Fact DTO 与正式 API 字段/状态一致，unavailable 不冒充空列表。
+- [x] Linux Python 3.11：`579 passed / 11 skipped / 0 failed`。
+- [x] Linux Python 3.12：`579 passed / 11 skipped / 0 failed`。
+- [x] Windows Python 3.12：`579 passed / 11 skipped / 0 failed`。
+- [x] Desktop smoke/build、MCP smoke、Browser Capture smoke、Obsidian plugin smoke。
+- [x] `acceptance-doc-sync`、`local-execution-handoff`、P0 Windows Gate、macOS Desktop Gate、Windows Desktop Release Baseline。
+
+### 同 SHA 自动发布证据
+
+```text
+macOS arm64
+artifact: lingji-macos-arm64
+artifact_id: 9469111722
+sha256: 7b1a4fe313da5ae4d709651fc9a18f43ee0281b57f15c7bddab9260fdeb559e8
+product_sha: c02f73fde7fb4492a665b4c1fd3f93c900499d52
+
+Windows
+artifact: lingji-windows-0.1.0-c02f73fd
+artifact_id: 9469187504
+sha256: e4fe344ad4b023da24e9a8ca125b9c6756da4057f01426b5c520d01fdd277eb6
+product_sha: c02f73fde7fb4492a665b4c1fd3f93c900499d52
+```
+
+### 新增或修改的真机验收
+
+- [ ] 使用 Acceptance workspace 启动真实 packaged Desktop/Sidecar，8766 可用时首页能读取真实 current work；8766 不可用时必须显示不可用/错误，不得显示“当前无工作”冒充成功。
+- [ ] 创建一个隔离测试 WorkItem，重启 Runtime 后仍能通过同一 `work_id` 查询 WorkItem 和 timeline。
+- [ ] 构造一个真实 PendingAction，Home 与“需要我”数量和对象一致；不存在 PendingAction 时两处均为 0/空状态。
+- [ ] 构造 failed WorkItem，Activity/Work 显示真实失败，不得被空状态或成功 Outcome 覆盖。
+
+### 主人肉眼确认
+
+- [ ] SB-0 不要求主人判断最终视觉设计；只需在后续 Phase 1 M5 中确认“当前工作/工作履历/需要我”三处不再互相矛盾。SB-0 本身不得宣称第二大脑 UI 已最终验收。
+
+### 回归项
+
+- [x] Tauri 不直连 SQLite、Qdrant、Ollama 或 8765。
+- [x] 没有真实 WorkItem 时不得宣称灵机正在工作或已完成工作。
+- [x] 没有真实 PendingAction 时不得宣称需要主人处理。
+- [x] API 不可用与真实空列表严格区分。
+- [x] Python/TypeScript 状态枚举统一为 `pending | accepted | running | completed | failed | skipped`。
+- [x] `second_brain/` 未新增 Work Fact 正式实现。
+- [x] Production/Acceptance storage 隔离门禁未退化。
+
+### 清理与回滚
+
+- 临时数据前缀：`SB0_WORK_FACT_`
+- 覆盖安装或迁移方式：本轮代码开发不触碰主人 Production；真机验收沿用正式 Acceptance workspace 和覆盖安装规则。
+- 临时备份删除条件：仅在对应验收报告首次远程确认后删除任务专用临时数据；Production 数据永不由本任务清理。
+- 测试数据清理方式：测试使用临时 SQLite/Acceptance workspace，结束后删除任务前缀数据；不得清理未知数据库或 Vault。
+- 回滚：以产品分支提交为单位回退 Work Fact schema/service/API/DTO 变更；若需要 schema 兼容迁移，回滚必须保留旧列/数据可读，不允许 destructive reset。
+
+### 不在范围
+
+- 不完成 SB-1 Capture→Work→Outcome 全输入类型闭环。
+- 不完成 SB-2 Work→Memory/Evidence 产品闭环。
+- 不重做 Home/Work/Attention 视觉设计。
+- 不启动机会面板、Opportunity Score 或机会数据模型扩展。
+- 不删除 `second_brain/` compatibility runtime。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/SB0_WORK_FACT_CONTRACT.md`
+- 报告分支：后续本机验收时按精确产品 Head 创建 `acceptance/sb0-work-fact-<short-sha>`。
+
+---
+
 ## 2026-08-01 · PR #60 后续 · 代码发布验证临时目录安全清理修复
 
 - 产品分支：`fix/cleanup-code-validation-workspace`

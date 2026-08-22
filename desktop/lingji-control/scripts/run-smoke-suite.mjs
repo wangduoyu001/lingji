@@ -11,11 +11,13 @@ const scripts = [
   "models-smoke.mjs",
   "memory-inspector-smoke.mjs",
   "capture-center-smoke.mjs",
+  "quick-capture-smoke.mjs",
   "obsidian-smoke.mjs",
   "codex-workspace-smoke.mjs",
   "memory-review-smoke.mjs",
   "obsidian-operations-smoke.mjs",
   "polling-data-smoke.mjs",
+  "work-fact-smoke.mjs",
   "auto-review-shadow-smoke.mjs",
   "settings-governance-smoke.mjs",
 ];

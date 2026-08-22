@@ -17,6 +17,7 @@ export type CaptureResultRefs = {
 
 export type CaptureJob = {
   job_id: string;
+  work_id?: string | null;
   title?: string | null;
   file_name?: string | null;
   filename?: string | null;
@@ -81,6 +82,7 @@ export type CaptureCommon = {
 
 export type CaptureSubmissionResponse = {
   capture_id?: string;
+  work_id?: string | null;
   status?: string;
   job_id?: string;
   duplicate?: boolean;

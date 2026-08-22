@@ -4,6 +4,7 @@ import logging
 import os
 import socket
 import threading
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from uuid import uuid4
@@ -21,6 +22,10 @@ logger = logging.getLogger("lingji.extraction")
 DocumentsWrittenCallback = Callable[[dict[str, Any]], None]
 DefaultOptionsProvider = Callable[[str], Mapping[str, Any]]
 DefaultPriorityProvider = Callable[[str], int]
+JobStartedCallback = Callable[[Mapping[str, Any]], None]
+JobCompletedCallback = Callable[[Mapping[str, Any], Mapping[str, Any]], None]
+JobFailedCallback = Callable[[Mapping[str, Any], str], None]
+_WORK_ID_OPTION = "_lingji_work_id"
 
 
 class ExtractionPipeline:
@@ -37,6 +42,9 @@ class ExtractionPipeline:
         on_documents_written: DocumentsWrittenCallback | None = None,
         default_options_provider: DefaultOptionsProvider | None = None,
         default_priority_provider: DefaultPriorityProvider | None = None,
+        on_job_started: JobStartedCallback | None = None,
+        on_job_completed: JobCompletedCallback | None = None,
+        on_job_failed: JobFailedCallback | None = None,
     ):
         self.queue = queue
         self.registry = registry
@@ -48,6 +56,9 @@ class ExtractionPipeline:
         self.on_documents_written = on_documents_written
         self.default_options_provider = default_options_provider
         self.default_priority_provider = default_priority_provider
+        self.on_job_started = on_job_started
+        self.on_job_completed = on_job_completed
+        self.on_job_failed = on_job_failed
 
     def enqueue(
         self,
@@ -124,7 +135,7 @@ class ExtractionPipeline:
             preferred=adapter_name,
         )
         raw_snapshot = self.sink.preserve_raw(request.input_path, source_type)
-        batch = adapter.extract(request)
+        batch = self._with_work_relationship(adapter.extract(request), request.options)
         result = self.sink.write_batch(
             batch,
             adapter_name=adapter.name,
@@ -163,6 +174,34 @@ class ExtractionPipeline:
         )
         return response
 
+    @staticmethod
+    def _with_work_relationship(batch: Any, options: Mapping[str, Any]) -> Any:
+        """Persist the originating WorkItem as canonical Vault metadata.
+
+        The Vault frontmatter is the durable authority. Downstream SQLite indexes
+        only project this relationship and may be rebuilt without inventing it.
+        Generic extraction jobs without a Capture Work ID remain unchanged.
+        """
+
+        work_id = str(options.get(_WORK_ID_OPTION) or "").strip()
+        if not work_id or not getattr(batch, "documents", ()): 
+            return batch
+        documents = []
+        for document in batch.documents:
+            metadata = dict(document.metadata or {})
+            raw = metadata.get("work")
+            if raw in (None, ""):
+                work_ids: list[str] = []
+            elif isinstance(raw, (list, tuple, set)):
+                work_ids = [str(item).strip() for item in raw if str(item).strip()]
+            else:
+                work_ids = [str(raw).strip()]
+            if work_id not in work_ids:
+                work_ids.append(work_id)
+            metadata["work"] = list(dict.fromkeys(work_ids))
+            documents.append(replace(document, metadata=metadata))
+        return replace(batch, documents=tuple(documents))
+
     def _write_structured(
         self,
         *,
@@ -182,6 +221,10 @@ class ExtractionPipeline:
                 "messages": 0,
                 "links": 0,
                 "warnings": [],
+                "source_ids": [],
+                "conversation_ids": [],
+                "message_ids": [],
+                "memory_ids": [],
             }
         return self.structured_sink.write_batch(
             batch,
@@ -203,6 +246,7 @@ class ExtractionPipeline:
         job = self.queue.claim(worker_id, job_id=job_id)
         if not job:
             return None
+        self._notify("job started", self.on_job_started, job)
         lease_token = str(job.get("lease_token") or "")
         stop_heartbeat = threading.Event()
         heartbeat_thread = threading.Thread(
@@ -227,6 +271,7 @@ class ExtractionPipeline:
                 worker_id=worker_id,
                 lease_token=lease_token,
             )
+            self._notify("job completed", self.on_job_completed, completed, result)
             return {"job": completed, "result": result}
         except Exception as exc:
             logger.exception("Extraction job failed: %s", job["job_id"])
@@ -244,10 +289,20 @@ class ExtractionPipeline:
                     "error": str(exc),
                     "lease_error": str(lease_error),
                 }
+            self._notify("job failed", self.on_job_failed, failed, str(exc))
             return {"job": failed, "error": str(exc)}
         finally:
             stop_heartbeat.set()
             heartbeat_thread.join(timeout=max(self.lease_heartbeat_seconds, 2.0))
+
+    @staticmethod
+    def _notify(label: str, callback: Callable[..., None] | None, *args: Any) -> None:
+        if callback is None:
+            return
+        try:
+            callback(*args)
+        except Exception:
+            logger.exception("Extraction lifecycle callback failed: %s", label)
 
     def _heartbeat_loop(
         self,

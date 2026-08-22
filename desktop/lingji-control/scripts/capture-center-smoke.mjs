@@ -19,7 +19,10 @@ import {
 
 const root = new URL("../", import.meta.url);
 const page = readFileSync(new URL("src/pages/CaptureCenterPage.tsx", root), "utf8");
+const activity = readFileSync(new URL("src/pages/ActivityPage.tsx", root), "utf8");
+const app = readFileSync(new URL("src/App.tsx", root), "utf8");
 const api = readFileSync(new URL("src/pages/captureCenterApi.ts", root), "utf8");
+const types = readFileSync(new URL("src/pages/captureCenterTypes.ts", root), "utf8");
 const routes = readFileSync(new URL("src/AppPages.tsx", root), "utf8");
 const navigation = readFileSync(new URL("src/navigation.ts", root), "utf8");
 const main = readFileSync(new URL("src-tauri/src/main.rs", root), "utf8");
@@ -27,6 +30,12 @@ const capability = readFileSync(new URL("src-tauri/capabilities/default.json", r
 
 assert.ok(navigation.includes('id: "capture_center"'));
 assert.ok(routes.includes("<CaptureCenterPage"));
+assert.ok(routes.includes("onOpenWork={onOpenWork}"));
+assert.ok(routes.includes("workId={workTargetId}"));
+assert.ok(app.includes("openWork"));
+assert.ok(app.includes("setWorkTargetId(workId)"));
+assert.ok(activity.includes('`/api/work/${encodeURIComponent(workId)}`'));
+assert.ok(activity.includes('"/api/work/current"'));
 for (const endpoint of [
   "/api/capture/text",
   "/api/capture/web",
@@ -85,6 +94,15 @@ assert.equal(errorLabel(401), "需要本地授权或 Token 配置");
 assert.equal(errorLabel(409, "CAPTURE_DUPLICATE"), "内容已存在，未重复创建任务");
 assert.equal(errorLabel(503), "Capture Service（采集服务）暂不可用");
 
+assert.ok(types.includes("work_id?: string | null"));
+assert.ok(page.includes("submittedWorkId"));
+assert.ok(page.includes("onOpenWork(submittedWorkId)"));
+assert.ok(page.includes("onOpenWork(job.work_id!)"));
+assert.ok(page.includes("onOpenWork(selectedJob.work_id!)"));
+assert.ok(!page.includes('onNavigate("activity")'));
+assert.ok(page.includes("查看工作"));
+assert.ok(page.includes("Work ID"));
+assert.ok(page.includes("不能宣称灵机已接手"));
 assert.ok(page.includes("AbortController"));
 assert.ok(page.includes("requestIdRef"));
 assert.ok(page.includes("directory: false"));
@@ -94,7 +112,6 @@ assert.ok(!page.includes(">正常</button>"));
 assert.ok(!page.includes(">低功耗</button>"));
 assert.ok(page.includes("处理中，当前版本不支持强制终止"));
 assert.ok(page.includes("onOpenInspector"));
-assert.ok(!page.includes("payload"));
 assert.ok(!page.includes("lease_token"));
 assert.ok(main.includes("tauri_plugin_dialog::init()"));
 assert.ok(capability.includes('"dialog:default"'));

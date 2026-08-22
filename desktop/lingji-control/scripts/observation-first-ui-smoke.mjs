@@ -84,28 +84,40 @@ assert.equal(overview.includes("健康检查"), false, "Detailed health checks b
 assert.equal(overview.includes("本地 Provider"), false, "Provider internals belong in diagnostics");
 assert.equal(overview.includes("定时任务"), false, "Scheduler internals belong in diagnostics");
 
-assert.match(activity, /每 4 秒自动更新/);
-assert.match(activity, /当前任务/);
-assert.match(activity, /最近结果/);
+// Activity is now a direct projection of the canonical Work Fact endpoint.
+assert.match(activity, /\/api\/work\/current/);
+assert.match(activity, /intervalMs: 5000/);
+assert.match(activity, /当前工作事实/);
+assert.match(activity, /执行事件/);
+assert.match(activity, /Work ID/);
+assert.match(activity, /当前状态未知/);
 assert.equal(activity.includes("刷新看板"), false, "Activity page must not expose manual refresh");
+assert.equal(activity.includes("/api/jobs"), false, "Activity must not reconstruct work semantics from generic jobs");
+assert.equal(activity.includes("/api/codex/current"), false, "Activity must not reconstruct work semantics from Codex status");
 
-assert.match(attention, /系统不能自行决定/);
-assert.match(attention, /暂时不需要你处理/);
-assert.match(attention, /部分待办状态暂时未知/);
-assert.match(attention, /不会把未知状态显示成一切正常/);
-assert.match(attention, /vector-rebuild/);
-assert.match(attention, /pending_review_count/);
-assert.match(attention, /SHADOW 决策目前是审计历史/);
+// Owner attention only contains unresolved canonical PendingAction facts.
+assert.match(attention, /\/api\/work\/pending-actions/);
+assert.match(attention, /intervalMs: 8000/);
+assert.match(attention, /需要主人处理/);
+assert.match(attention, /当前没有需要主人决定的事项/);
+assert.match(attention, /不能按 0 项处理/);
+assert.match(attention, /action\.action_id/);
+assert.match(attention, /action\.work_id/);
+assert.equal(attention.includes("vector-rebuild"), false, "Vector diagnostics must not masquerade as owner work without PendingAction");
+assert.equal(attention.includes("pending_review_count"), false, "Aggregated review counts must not become a second owner-task truth");
 assert.equal(attention.includes("/api/auto-review/metrics"), false, "Cumulative SHADOW metrics must not masquerade as unresolved owner tasks");
-assert.equal(attention.includes("catch {\n      return { current: null }"), false, "Attention polling must not swallow unknown-state failures");
 
 assert.match(diagnostics, /日常不需要进入这里/);
 assert.match(diagnostics, /<details/);
 assert.match(diagnostics, /ADVANCED_NAVIGATION/);
 
-assert.match(currentWork, /intervalMs: 5_000/);
-assert.match(currentWork, /系统当前空闲/);
-assert.match(currentWork, /处理进度/);
+assert.match(currentWork, /\/api\/work\/current/);
+assert.match(currentWork, /intervalMs: 5000/);
+assert.match(currentWork, /当前没有进行中的工作/);
+assert.match(currentWork, /不能把接口不可用当成“没有工作”/);
+assert.match(currentWork, /work\?\.work_id/);
+assert.match(currentWork, /event\.event_id/);
+assert.match(currentWork, /event\.event_type/);
 
 for (const cssToken of [
   ".observation-hero",

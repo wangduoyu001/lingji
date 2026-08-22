@@ -19,6 +19,7 @@ class FakeCaptureControl:
         duplicate = payload.get("text") == "duplicate"
         return {
             "capture_id": f"cap-{kind}",
+            "work_id": f"work-{kind}",
             "status": "duplicate" if duplicate else "queued",
             "job_id": "job-existing" if duplicate else f"job-{kind}",
             "duplicate": duplicate,
@@ -61,17 +62,17 @@ class FakeCaptureControl:
     def get_job(self, job_id):
         if job_id == "missing":
             raise CaptureControlError("CAPTURE_JOB_NOT_FOUND", "Capture job not found", status_code=404)
-        return {"job_id": job_id, "status": "queued", "result_refs": {"memory_id": "MEM-1"}, "result_summary": "{\"memory_count\": 1}"}
+        return {"job_id": job_id, "work_id": f"work-{job_id}", "status": "queued", "result_refs": {"memory_id": "MEM-1"}, "result_summary": "{\"memory_count\": 1}"}
 
     def retry_job(self, job_id):
         if job_id == "running":
             raise CaptureControlError("CAPTURE_JOB_RUNNING", "Running capture jobs cannot be retried", status_code=409)
-        return {"job_id": job_id, "status": "queued"}
+        return {"job_id": job_id, "work_id": f"work-{job_id}", "status": "queued"}
 
     def cancel_job(self, job_id):
         if job_id == "running":
             raise CaptureControlError("CAPTURE_JOB_RUNNING", "Running capture jobs cannot be cancelled", status_code=409)
-        return {"job_id": job_id, "status": "cancelled"}
+        return {"job_id": job_id, "work_id": f"work-{job_id}", "status": "cancelled"}
 
     def pause(self):
         self.paused = True
@@ -110,9 +111,12 @@ def test_capture_submission_status_codes_and_share_forwarding():
         share = api.post("/api/share", headers=headers, json={"text": "legacy"})
     assert queued.status_code == 202
     assert queued.json()["job_id"] == "job-text"
+    assert queued.json()["work_id"] == "work-text"
     assert duplicate.status_code == 200
     assert duplicate.json()["duplicate"] is True
+    assert duplicate.json()["work_id"] == "work-text"
     assert share.status_code == 202
+    assert share.json()["work_id"] == "work-share"
     assert control.capture_control.calls[-1][0] == "share"
 
 
@@ -150,7 +154,6 @@ def test_invalid_capture_payload_returns_422():
         assert api.get("/api/capture/jobs?limit=201", headers=headers).status_code == 422
 
 
-
 def test_capture_http_contract_matches_desktop_client():
     context, _ = client()
     headers = {"X-LingJi-Token": "secret"}
@@ -165,5 +168,6 @@ def test_capture_http_contract_matches_desktop_client():
     assert status["updated_at"]
     assert capabilities["file_modes"] == ["web_snapshot", "chatgpt_export", "codex_report"]
     assert "media" in capabilities
+    assert job["work_id"] == "work-job-1"
     assert job["result_refs"] == {"memory_id": "MEM-1"}
     assert isinstance(job["result_summary"], str)

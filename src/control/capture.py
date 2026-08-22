@@ -12,6 +12,8 @@ from src.capture.models import CaptureEnvelope, CaptureStatus
 from src.capture.policy import CaptureMode, CapturePolicy
 from src.capture.service import CaptureService
 from src.extraction.queue import SQLiteExtractionQueue
+from src.work.capture_bridge import CaptureWorkBridge
+from src.work.store import WorkStore
 
 from .runtime_settings import RuntimeSettingsStore
 
@@ -29,6 +31,9 @@ CAPTURE_INVALID_INPUT = "CAPTURE_INVALID_INPUT"
 
 _FAILED_MESSAGE = "Capture processing failed; see local logs"
 _MODE_LABELS = {"normal": "NORMAL", "low_power": "LOW_POWER", "paused": "PAUSED"}
+_WORK_ID_OPTION = "_lingji_work_id"
+_CAPTURE_ID_OPTION = "_lingji_capture_id"
+_CAPTURE_IDENTITY_OPTION = "_lingji_capture_identity"
 
 
 class CaptureControlError(RuntimeError):
@@ -86,6 +91,7 @@ class CaptureControlService:
         runtime_settings: CaptureRuntimeSettingsStore | None = None,
         state_db: Any | None = None,
         capture_service: CaptureService | None = None,
+        work_bridge: CaptureWorkBridge | None = None,
     ):
         self.settings = settings
         self.pipeline = pipeline
@@ -101,6 +107,12 @@ class CaptureControlService:
         self.capture_service = capture_service or CaptureService(
             self._proxy, policy=CapturePolicy.for_mode(mode)
         )
+        if work_bridge is not None:
+            self.work_bridge = work_bridge
+        elif state_db is not None and hasattr(state_db, "_connection"):
+            self.work_bridge = CaptureWorkBridge(WorkStore(state_db))
+        else:
+            self.work_bridge = None
         self._lock = threading.RLock()
         self._job_by_key: dict[str, str] = {}
         self._apply_mode(mode)
@@ -254,7 +266,10 @@ class CaptureControlService:
         if status not in {"queued", "retrying"}:
             raise CaptureControlError(CAPTURE_JOB_NOT_CANCELLABLE, "Capture job is not cancellable", status_code=409)
         row = self.queue.cancel(job_id)
-        self._audit("capture_job_cancelled", job_id, {"job_id": job_id})
+        work_id = self._work_id_from_job(current)
+        if work_id and self.work_bridge:
+            self.work_bridge.cancel_extraction(work_id, job_id=job_id)
+        self._audit("capture_job_cancelled", job_id, {"job_id": job_id, "work_id": work_id})
         return self.job_dto(row)
 
     def retry_job(self, job_id: str) -> dict[str, Any]:
@@ -265,7 +280,10 @@ class CaptureControlService:
         if status not in {"failed", "cancelled"}:
             raise CaptureControlError(CAPTURE_JOB_NOT_RETRYABLE, "Capture job is not retryable", status_code=409)
         row = self.queue.retry(job_id)
-        self._audit("capture_job_retried", job_id, {"job_id": job_id})
+        work_id = self._work_id_from_job(current)
+        if work_id and self.work_bridge:
+            self.work_bridge.retry_extraction(work_id, detail={"job_id": job_id, "manual_retry": True})
+        self._audit("capture_job_retried", job_id, {"job_id": job_id, "work_id": work_id})
         return self.job_dto(row)
 
     def pause(self) -> dict[str, Any]:
@@ -285,6 +303,7 @@ class CaptureControlService:
         status = str(row.get("status") or "")
         return {
             "job_id": str(row.get("job_id") or ""),
+            "work_id": self._work_id_from_job(row) or None,
             "source_type": str(row.get("source_type") or ""),
             "adapter_name": str(row.get("adapter_name") or "") or None,
             "status": status,
@@ -333,9 +352,22 @@ class CaptureControlService:
         self._apply_mode(mode)
         if mode is CaptureMode.PAUSED:
             raise CaptureControlError(CAPTURE_PAUSED, "Capture is paused", status_code=409)
+
+        identity, identity_reason = self.capture_service.deduplicator.key_for(envelope)
+        work_id = self.work_bridge.work_id_for_identity(identity) if self.work_bridge else None
+        persisted_options = dict(option_overrides or {})
+        if work_id:
+            persisted_options.update(
+                {
+                    _WORK_ID_OPTION: work_id,
+                    _CAPTURE_ID_OPTION: envelope.capture_id,
+                    _CAPTURE_IDENTITY_OPTION: identity,
+                }
+            )
+
         with self._lock:
             self._proxy.adapter_name = adapter_name
-            self._proxy.option_overrides = dict(option_overrides or {})
+            self._proxy.option_overrides = persisted_options
             self._proxy.last_outcome = {}
             try:
                 result = self.capture_service.submit(envelope)
@@ -356,13 +388,44 @@ class CaptureControlService:
 
         outcome = self._proxy.last_outcome
         job_id = str(result.extraction_job_id or outcome.get("job_id") or "")
-        duplicate = result.status is CaptureStatus.DUPLICATE or bool(outcome.get("duplicate"))
+        duplicate = (
+            result.status is CaptureStatus.DUPLICATE
+            or bool(outcome.get("existing_job"))
+            or bool(outcome.get("duplicate"))
+        )
         if result.deduplication_key and job_id:
             self._job_by_key[result.deduplication_key] = job_id
         if not job_id and result.deduplication_key:
             job_id = self._job_by_key.get(result.deduplication_key, "")
+
+        work_created = False
+        if self.work_bridge and result.status in {CaptureStatus.QUEUED, CaptureStatus.EXECUTED, CaptureStatus.DUPLICATE}:
+            work, work_created = self.work_bridge.ensure_from_capture(
+                result.capture_id,
+                envelope.title or self._capture_title(envelope),
+                identity=result.deduplication_key or identity,
+                source_id=result.capture_id,
+                metadata={
+                    "source_type": envelope.source_type,
+                    "capture_method": envelope.capture_method,
+                    "identity_reason": identity_reason,
+                },
+            )
+            work_id = work.work_id
+            if duplicate:
+                self.work_bridge.record_duplicate(work_id, capture_id=result.capture_id, job_id=job_id or None)
+            elif job_id:
+                self.work_bridge.queue_extraction(
+                    work_id,
+                    job_id=job_id,
+                    detail={"source_type": envelope.source_type},
+                )
+            if job_id:
+                self._sync_existing_job(work_id, job_id, created=work_created)
+
         response = {
             "capture_id": result.capture_id,
+            "work_id": work_id,
             "status": "duplicate" if duplicate else result.status.value,
             "job_id": job_id or None,
             "duplicate": duplicate,
@@ -371,9 +434,47 @@ class CaptureControlService:
         self._audit(
             "capture_duplicate" if duplicate else "capture_submitted",
             result.capture_id,
-            {"capture_id": result.capture_id, "job_id": job_id or None, "source_type": envelope.source_type, "duplicate": duplicate},
+            {
+                "capture_id": result.capture_id,
+                "work_id": work_id,
+                "job_id": job_id or None,
+                "source_type": envelope.source_type,
+                "duplicate": duplicate,
+            },
         )
         return response
+
+    def _sync_existing_job(self, work_id: str, job_id: str, *, created: bool) -> None:
+        if not self.work_bridge:
+            return
+        try:
+            row = self.queue.get(job_id)
+        except LookupError:
+            return
+        status = str(row.get("status") or "")
+        if status == "running" and created:
+            self.work_bridge.start_extraction(work_id, detail={"job_id": job_id, "recovered": True})
+            return
+        if status == "retrying" and created:
+            self.work_bridge.retry_extraction(work_id, detail={"job_id": job_id, "recovered": True})
+            return
+        if self.work_bridge.store.get_outcome(work_id) is not None:
+            return
+        if status == "completed":
+            result = row.get("result") if isinstance(row.get("result"), Mapping) else {}
+            self.work_bridge.complete_extraction(
+                work_id,
+                "Capture 提取已完成",
+                evidence=self._work_evidence(job_id, result),
+            )
+        elif status == "failed":
+            self.work_bridge.fail_extraction(
+                work_id,
+                "Capture 提取失败",
+                evidence={"job_id": job_id, "error_code": "CAPTURE_JOB_FAILED"},
+            )
+        elif status == "cancelled":
+            self.work_bridge.cancel_extraction(work_id, job_id=job_id)
 
     def _envelope(self, payload: Mapping[str, Any], *, source_type: str, capture_method: str = "local_control_share", **content: Any) -> CaptureEnvelope:
         return CaptureEnvelope(
@@ -435,6 +536,35 @@ class CaptureControlService:
         windows_name = PureWindowsPath(value).name
         posix_name = Path(value).name
         return windows_name if "\\" in value else posix_name
+
+    @staticmethod
+    def _capture_title(envelope: CaptureEnvelope) -> str:
+        if envelope.title.strip():
+            return envelope.title.strip()
+        if envelope.url.strip():
+            return envelope.url.strip()[:120]
+        if envelope.input_path:
+            return envelope.input_path.name
+        if envelope.text.strip():
+            return envelope.text.strip().replace("\n", " ")[:80]
+        return f"Capture {envelope.capture_id}"
+
+    @staticmethod
+    def _work_id_from_job(row: Mapping[str, Any]) -> str:
+        options = row.get("options") if isinstance(row.get("options"), Mapping) else {}
+        return str(options.get(_WORK_ID_OPTION) or "")
+
+    @classmethod
+    def _work_evidence(cls, job_id: str, result: Mapping[str, Any]) -> dict[str, Any]:
+        evidence: dict[str, Any] = {"job_id": job_id}
+        refs = cls._result_refs(result)
+        if refs:
+            evidence["result_refs"] = refs
+        for key in ("source_type", "adapter", "adapter_version", "indexed", "document_count", "memory_count"):
+            value = result.get(key)
+            if isinstance(value, (str, int, float, bool, type(None))) and value is not None:
+                evidence[key] = value
+        return evidence
 
     @staticmethod
     def _result_summary(result: Mapping[str, Any]) -> str | None:
