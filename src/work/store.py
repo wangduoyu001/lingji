@@ -102,6 +102,12 @@ class WorkStore:
 
             self._add_column_if_missing(connection, "work_outcomes", "completed_at", "TEXT")
             connection.execute(
+                "UPDATE work_outcomes SET status = 'success' WHERE status = 'completed'"
+            )
+            connection.execute(
+                "UPDATE work_outcomes SET status = 'failure' WHERE status = 'failed'"
+            )
+            connection.execute(
                 """
                 UPDATE work_outcomes
                 SET completed_at = COALESCE(
@@ -320,21 +326,29 @@ class WorkStore:
                 ),
             )
             connection.execute(
-                "UPDATE work_items SET updated_at = ? WHERE work_id = ?",
-                (event.created_at, event.work_id),
+                """
+                UPDATE work_items
+                SET updated_at = CASE WHEN updated_at < ? THEN ? ELSE updated_at END
+                WHERE work_id = ?
+                """,
+                (event.created_at, event.created_at, event.work_id),
             )
         return event
 
     def list_events(self, work_id: str, *, limit: int = 100) -> list[ExecutionEvent]:
+        selected_limit = self._limit(limit, maximum=1000)
         with self.state._connection() as connection:
             rows = connection.execute(
                 """
-                SELECT * FROM execution_events
-                WHERE work_id = ?
+                SELECT * FROM (
+                    SELECT * FROM execution_events
+                    WHERE work_id = ?
+                    ORDER BY created_at DESC, event_id DESC
+                    LIMIT ?
+                ) recent
                 ORDER BY created_at ASC, event_id ASC
-                LIMIT ?
                 """,
-                (work_id, self._limit(limit, maximum=1000)),
+                (work_id, selected_limit),
             ).fetchall()
         return [self._event_from_row(row) for row in rows]
 
