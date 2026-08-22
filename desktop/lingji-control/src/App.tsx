@@ -30,7 +30,7 @@ export default function App() {
   };
 
   const navigate = (target: PageId) => {
-    if (target !== "activity") setWorkTargetId(null);
+    setWorkTargetId(null);
     setPage(target);
   };
 
