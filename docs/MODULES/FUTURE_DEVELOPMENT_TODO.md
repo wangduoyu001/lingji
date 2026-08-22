@@ -1,298 +1,250 @@
-# LingJi 未来开发待办事项
+# LingJi 未来开发 Backlog
 
-> 状态：规划待办，不代表已经实现  
-> 仓库：`wangduoyu001/lingji`  
-> 分支：`feature/second-brain-memory`  
-> 边界：本文只记录 LingJi / 灵机相关任务，不记录 AI 短剧导演系统内部实现。
+> Updated: 2026-08-22
+> Status: FUTURE BACKLOG ONLY
+> Formal branch: `master`
+> Current execution authority: `docs/PROJECT_STATUS.md`
+> Architecture authority: `docs/ARCHITECTURE.md`
+> Acceptance authority: `docs/ACCEPTANCE/README.md`
 
-## 0. 本文用途
+## 0. 本文职责
 
-本文用于沉淀 LingJi 后续开发任务，重点覆盖：
+本文只保存**尚未进入当前执行阶段的未来需求**，不维护当前完成率、当前分支、当前 Commit、当前 CI 或当前开发顺序。
 
-- 统一第二大脑
-- 统一记忆系统
-- Obsidian 知识入口
-- AI 聊天记录归档与检索
-- 赚钱机会雷达
-- 每日简报沉淀
-- MCP / AnySearch / 本地向量库
-- AI 工具与模型能力管理
-- 与外部项目的接口边界
+当前正在做什么，唯一看 `docs/PROJECT_STATUS.md`。
 
-本文不写入 AI 短剧导演系统的内部逻辑，例如 Story Beat、Shot Schema、镜头库、导演分镜、资产锁定、视频生成、QC 返修等。这些内容必须放到 `wangduoyu001/ai-short-drama-production-controller`。
+硬规则：
 
----
-
-# 1. P0：统一记忆系统主线
-
-## 1.1 明确唯一事实源
-
-- [ ] 保持 Obsidian Vault + Git 作为永久记忆和正式知识正文的唯一权威源。
-- [ ] 保持 `src/` 作为长期主线，不再发展第二套正式记忆核心。
-- [ ] 明确 `second_brain/` 只作为兼容、迁移、验收参考，不作为最终正式运行链路。
-- [ ] 禁止形成两套记忆核心、两条采集链、两套正式 UI、两个事实来源。
-
-## 1.2 MemoryGateway 统一出口
-
-- [ ] 所有 AI 读取记忆必须通过一个 `MemoryGateway`。
-- [ ] 扩展 `MemoryGateway`，支持搜索、读取、Core、Context Pack、候选记忆、recent changes、health、rebuild。
-- [ ] 不新增第二个 Gateway。
-- [ ] 所有外部 AI / Codex / MCP / 桌面 UI 通过同一网关读取上下文。
-
-## 1.3 HybridRetriever 检索统一
-
-- [ ] 保持一个 `HybridRetriever` 排名流程。
-- [ ] 语义检索结果必须经过同一权限过滤、隐私过滤、项目过滤、状态过滤。
-- [ ] Qdrant 只提供 semantic candidates 和诊断，不自行决定最终排名与权限。
-- [ ] 增加语义检索失败的 degraded 状态，不允许静默返回空结果。
+1. 当前 Phase 1 是“第二大脑完整闭环与验收”。
+2. Phase 1 未取得最终 PASS 前，不启动机会面板产品开发。
+3. 机会系统现有代码可以做必要回归修复，但不得扩展页面、评分体系、数据模型或自动化产品能力。
+4. 本文中的项目只有被 `PROJECT_STATUS.md` 提升为当前阶段后才允许进入正式开发。
+5. 已实现的基础能力不再以 `[ ]` 形式伪装成未开发任务。
 
 ---
 
-# 2. P0：向量库与 RAG 能力
+# 1. 当前 Phase 1 的边界说明
 
-## 2.1 Qdrant Provider 合同
+Phase 1 的详细任务不在本文重复维护。它包含完整第二大脑所需的：
 
-- [ ] 扩展 `SemanticProvider` Protocol，增加 `upsert`、`delete`、`rebuild`、`health`、`coverage`、`point_exists`。
-- [ ] 从 `second_brain/vector_store.py` 迁移 Qdrant embedded / remote / memory 模式思想。
-- [ ] 增加 collection dimension 检查。
-- [ ] 增加 rebuild_required / degraded / healthy 状态。
-- [ ] Qdrant payload 不长期复制完整永久记忆正文，只保存必要索引、引用和诊断字段。
+- 单一永久记忆权威：Obsidian Vault + Git；
+- Capture / Extraction / Source / Conversation / Message 真实来源链；
+- WorkItem / ExecutionEvent / Outcome / PendingAction 真实工作事实链；
+- Memory lifecycle、候选、主人审核、Core / supersede 等正式行为；
+- `lingji_memory.db` + Qdrant + HybridRetriever + Embedding 的真实检索链；
+- MemoryGateway / Context Pack / MCP / AI 权限统一访问；
+- Obsidian 正式集成；
+- Tauri 唯一 Desktop 中 Home / Work / Attention / Capture / Memory / Diagnostics 的一致投影；
+- Production / Acceptance 隔离、Sidecar、双平台构建和真实验收。
 
-## 2.2 Embedding Provider
+以下基础已经存在，不再作为未来 Backlog 重新开发：
 
-- [ ] 统一 Ollama embedding 主备模型调用。
-- [ ] 支持 bge-m3 等本地 embedding 模型状态读取。
-- [ ] 在 Runtime Settings 中增加 embedding 配置分组。
-- [ ] 在模型中心展示 embedding provider 可用性、维度、速度和错误状态。
+- `src/` 长期主线；
+- `desktop/lingji-control/` 唯一正式 UI；
+- Qdrant semantic provider 基础；
+- Embedding provider / model-center 基础；
+- Source / Conversation / Message read model；
+- Capture / Extraction 基础；
+- Memory Inspector 基础；
+- Memory review / lifecycle 基础；
+- MCP / Context Pack 基础；
+- Obsidian CLI 正式迁移；
+- Windows Sidecar / Tauri 发布基础。
 
-## 2.3 增量同步
-
-- [ ] `MemoryGateway.rebuild()` 必须同步 SQLite FTS 与 Qdrant。
-- [ ] `IncrementalMemorySynchronizer` 必须同步 Qdrant upsert / delete。
-- [ ] 以稳定 chunk 为单位同步。
-- [ ] 增加 index coverage 报告，展示哪些来源已进入全文索引、哪些已进入向量索引。
-
----
-
-# 3. P0：AI 聊天记录作为自动记忆入口
-
-## 3.1 聊天记录采集
-
-- [ ] 将 AI 聊天记录作为 LingJi 记忆的唯一自动入口。
-- [ ] Obsidian 继续作为手动知识入口，不让聊天记录直接污染正式知识正文。
-- [ ] 设计 Chat Import Adapter，支持从导出文本、Markdown、JSON、API 或本地归档导入。
-- [ ] 每条聊天记录保留 source、conversation_id、message_id、role、时间、主题、项目归属。
-
-## 3.2 候选记忆生成
-
-- [ ] 聊天记录默认进入候选记忆，不直接写入 Core。
-- [ ] 增加自动摘要、事实抽取、偏好抽取、项目约束抽取。
-- [ ] 提供主人确认 / 拒绝 / supersede 流程。
-- [ ] 支持把长期有效内容晋级为 Core Memory。
-
-## 3.3 来源可追溯
-
-- [ ] 每条候选记忆必须能追溯到原始聊天来源。
-- [ ] Memory Inspector 中展示原文片段、抽取原因、置信度、是否已确认。
-- [ ] 禁止无来源的“AI 自己觉得你说过”。这种东西像赛博谣言，应该直接拦住。
+这些能力是否“产品完成”仍由 Phase 1 端到端验收决定，不能因为代码存在就自动标记产品 PASS。
 
 ---
 
-# 4. P1：赚钱机会雷达
+# 2. Phase 2：机会面板 / Opportunity Center
 
-## 4.1 Opportunity Score 机会评分
+> Gate: **只有 Phase 1 第二大脑最终验收 PASS 后才能开始。**
 
-- [ ] 新增 `Opportunity Score`，按商业价值筛选 AI 新闻、项目、工具和市场信号。
-- [ ] 评分维度包括：市场需求、购买意图、痛点强度、竞品收入模式、获客渠道、验证成本、自动化程度、是否能收费、是否可复制、风险等级。
-- [ ] 普通 AI 新闻默认不进入机会池。
-- [ ] 只有出现付费信号、真实需求、开源热度、融资、价格变化、平台规则变化、API 变化时才进入候选机会。
+Phase 2 是第二大脑之后的第一产品阶段，不允许被每日简报、LLM Router、外部搜索或其他功能插队。
 
-## 4.2 机会字段扩展
+## 2.1 先复用，不重写现有机会系统
 
-- [ ] 增加需求强度字段。
-- [ ] 增加购买意图字段。
-- [ ] 增加竞品收入模式字段。
-- [ ] 增加获客渠道字段。
-- [ ] 增加验证动作字段。
-- [ ] 增加验证成本字段。
-- [ ] 增加实际转化字段。
-- [ ] 增加是否成交字段。
-- [ ] 增加实际收入字段。
-- [ ] 增加联系人 / 社区来源 / 跟进状态字段。
+现有入口包括 `src/opp_generator.py`、`src/opportunities/` 及相关旧机会能力。
 
-## 4.3 验证闭环
+进入 Phase 2 后第一步必须先审计：
 
-- [ ] 每个机会必须能生成一个最小验证动作。
-- [ ] 每个验证动作必须记录成本、耗时、结果和下一步。
-- [ ] 机会不再只记录“看起来能赚钱”，必须记录“有没有人愿意付钱”。
+- 哪些机会数据模型仍有效；
+- 哪些评分逻辑仍有效；
+- 哪些字段只是旧 PEMIS 遗留；
+- 哪些流程已经能写入 Vault / state；
+- 哪些 UI / dashboard 属于旧实现，不能直接复活成第二套产品；
+- 如何让机会发现和验证过程进入统一 Work Fact 链。
 
----
+禁止为了“做新机会面板”复制一套新 scheduler、数据库、任务系统或第二套 UI。
 
-# 5. P1：每日简报沉淀机制
+## 2.2 Opportunity Score 2.0
 
-## 5.1 简报归档
+重新定义面向真实变现的评分，而不是新闻热度分：
 
-- [ ] 每日 AI 简报保存到 `docs/DAILY_BRIEF/YYYY-MM-DD.md`。
-- [ ] 每份简报包含 AI 赚钱、AI 工具、模型、本地硬件、自媒体、跨境/TikTok、风险和可执行动作。
-- [ ] 简报不直接改核心架构文档。
+- 市场需求强度；
+- 明确购买意图；
+- 痛点强度；
+- 竞品收入模式；
+- 获客渠道清晰度；
+- 最小验证成本；
+- 可自动化程度；
+- 可收费性；
+- 可复制性；
+- 时间窗口；
+- 平台 / 法律 / 账户风险；
+- 与主人现有能力和资源匹配度。
 
-## 5.2 文档更新队列
+普通 AI 新闻默认不进入机会池。没有真实需求、付费信号或可验证动作的内容只能作为情报来源。
 
-- [ ] 新增或维护 `docs/DOC_UPDATE_QUEUE.md`。
-- [ ] 每日简报提取“值得沉淀”的文档更新建议。
-- [ ] 每条建议记录来源日期、影响模块、目标文档、建议内容、证据强度、是否立即执行。
-- [ ] 每周统一筛选高优先级建议后再合并核心文档。
+## 2.3 机会对象合同
 
-## 5.3 决策日志
+至少支持：
 
-- [ ] 新增或维护 `docs/DECISION_LOG.md`。
-- [ ] 记录为什么选择某个模型、工作流、架构、数据源或工具。
-- [ ] 防止重复推翻已经确认的方向。人类项目最擅长把同一个决定反复开会，别学。
+- opportunity_id；
+- source / evidence；
+- problem / target_customer；
+- demand_strength；
+- purchase_intent；
+- competitor_revenue_model；
+- acquisition_channel；
+- validation_action；
+- validation_cost；
+- expected_time_to_signal；
+- risk；
+- score + score_explanation；
+- status；
+- owner_feedback；
+- actual_conversion；
+- actual_revenue；
+- next_action + actor；
+- linked_work_id。
 
----
+所有关键判断必须可回到来源证据。
 
-# 6. P1：MCP / AnySearch / 外部工具入口
+## 2.4 最小验证闭环
 
-## 6.1 MCP 统一工具接口
-
-- [ ] 保持 MCP 作为 AI 工具调用的正式出口。
-- [ ] 增加 MCP 设置、状态、权限、错误诊断页面。
-- [ ] 让 Obsidian、GitHub、本地文件、浏览器、搜索工具通过统一工具层接入。
-- [ ] 每个 MCP 工具必须有权限范围、上下文上限、日志与失败降级。
-
-## 6.2 AnySearch 默认搜索层
-
-- [ ] 将 AnySearch 作为 LingJi 的默认外部搜索层候选。
-- [ ] 架构路径：`Obsidian -> LingJi -> Planner Agent -> AnySearch MCP / 本地向量库(RAG)`。
-- [ ] AnySearch 结果必须经过 LingJi 的来源记录、去重、可信度和机会评分。
-- [ ] 禁止直接把搜索结果当结论写入 Core Memory。
-
----
-
-# 7. P1：模型能力矩阵与 LLM Router
-
-## 7.1 Model Capability Matrix
-
-- [ ] 建立 `model_capability_matrix.json` 或等价配置。
-- [ ] 记录 GPT、Claude、Kimi、Qwen、Gemini、本地模型的能力表现。
-- [ ] 字段包括 coding、writing、story、reasoning、context、speed、api_cost、local_support、preferred_tasks、last_verified。
-- [ ] 模型能力必须定期复核，不要凭印象长期使用。模型圈每天变脸，比短视频标题还勤快。
-
-## 7.2 LLM Router
-
-- [ ] 建立 LLM Router，按任务自动选择模型。
-- [ ] 任务类型包括：写代码、总结、检索增强、文档整理、机会评分、自动化规划。
-- [ ] 支持云端模型与本地模型混合。
-- [ ] 支持成本上限、失败降级、备用模型。
-
----
-
-# 8. P2：桌面控制台与可视化
-
-## 8.1 Brain Status
-
-- [ ] Brain Status 必须读取同一个统计服务。
-- [ ] 修复 memory_stats 显示错误或硬编码占位。
-- [ ] 展示记忆数量、候选数量、Core 数量、向量覆盖率、最近任务、错误状态。
-
-## 8.2 Memory Inspector
-
-- [ ] 独立 Memory Inspector 页面。
-- [ ] 支持查看候选记忆、Core、拒绝、supersede、来源原文。
-- [ ] 支持一键确认、拒绝、编辑、合并。
-
-## 8.3 Vector Center
-
-- [ ] 独立 Vector Center 页面。
-- [ ] 展示 Qdrant 状态、collection、dimension、coverage、rebuild_required、degraded 原因。
-- [ ] 支持手动 rebuild、增量重建、错误诊断。
-
-## 8.4 知识中心与机会中心
-
-- [ ] 新增知识中心，展示 Obsidian 正式知识、来源、标签、引用关系。
-- [ ] 新增机会中心，展示机会评分、验证状态、付费信号、下一步动作。
-
----
-
-# 9. P2：与 AI 导演系统的边界接口
-
-## 9.1 LingJi 只提供情报、记忆和调度入口
-
-- [ ] LingJi 可以记录 AI 短剧方向的商业机会、工具更新、模型变化和项目上下文。
-- [ ] LingJi 可以向导演系统提供检索、上下文包、工具情报和机会建议。
-- [ ] LingJi 不实现导演系统内部模块。
-- [ ] LingJi 不维护 Story Beat、Shot Schema、Shot Library、Workflow Library、视频 Provider、镜头 QC、自动返修等导演系统内部数据结构。
-
-## 9.2 对外接口
-
-- [ ] 为导演系统提供 Context Pack API。
-- [ ] 为导演系统提供 AI 工具/模型情报查询。
-- [ ] 为导演系统提供项目记忆检索。
-- [ ] 为导演系统提供商业机会和平台规则风险提示。
-
----
-
-# 10. 不允许混入 LingJi 的内容
-
-以下内容不要写进 LingJi 开发待办，必须放入 AI 短剧导演系统仓库：
-
-- Story Beat 剧情节拍库
-- Shot Schema 镜头结构
-- Shot Library 镜头库
-- Workflow Library 视频工作流库
-- 角色 / 场景 / 道具资产锁定
-- 人物站位、运镜、焦段、景别
-- 视频生成 Provider Router
-- QC Agent 镜头质检
-- Auto Repair 自动返修
-- ComfyUI 视频执行层
-- 打斗动作线、攻击线、防守线、受力方向
-- 分镜卡、首帧、尾帧、生成提示词
-
-这些都属于导演系统，不属于 LingJi 主仓库。
-
----
-
-# 11. 下一步执行顺序
-
-## 第一批执行
-
-- [ ] 完成 Qdrant Provider 合同设计。
-- [ ] 完成 Embedding Provider 设计。
-- [ ] 完成 Chat Import Adapter 规划。
-- [ ] 完成 Opportunity Score 字段设计。
-- [ ] 新增 `docs/DAILY_BRIEF/` 和 `docs/DOC_UPDATE_QUEUE.md`。
-
-## 第二批执行
-
-- [ ] 接入 AnySearch MCP。
-- [ ] 建立 Model Capability Matrix。
-- [ ] 建立 LLM Router。
-- [ ] 完成 Memory Inspector 文档与接口规划。
-- [ ] 完成 Vector Center 文档与接口规划。
-
-## 第三批执行
-
-- [ ] 实现机会验证闭环。
-- [ ] 实现简报自动归档。
-- [ ] 实现文档更新队列半自动生成。
-- [ ] 与 AI 导演系统建立只读上下文接口。
-
----
-
-# 12. 当前结论
-
-LingJi 的长期定位是：
+机会不能停在“看起来能赚钱”。每条进入候选池的机会都必须能形成：
 
 ```text
-个人赚钱机会操作系统
-+ 第二大脑
-+ AI 工具记忆总线
-+ 项目执行控制台
+发现
+-> 证据
+-> 评分
+-> 最小验证动作
+-> WorkItem
+-> 执行 / 主人确认
+-> 结果
+-> 是否继续
+-> 实际转化 / 收入
 ```
 
-它负责记忆、检索、机会判断、工具情报、上下文调度。
+失败机会也要保留验证结果，避免系统重复推荐同一种已经证伪的路子。
 
-它不负责导演分镜、视频生成、资产锁定和镜头返修。
+## 2.5 Opportunity Center UI
 
-项目边界必须保持清楚，否则两个仓库都会变成“万能 AI 大杂烩”，最后万能到没人敢维护。
+只在 Tauri 主应用中开发。
+
+第一版页面必须回答：
+
+1. 今天最值得看的机会是什么？
+2. 为什么值得看？
+3. 证据是什么？
+4. 验证成本和风险是什么？
+5. 灵机已经自动做了什么？
+6. 哪一步真的需要主人？
+7. 历史验证结果和实际收入如何？
+
+页面不得展示没有后端证据的“高分”“热门”“预计收益”。
+
+## 2.6 Phase 2 验收
+
+至少证明：
+
+- 同一机会在 Source / Work / Opportunity UI 中 ID 和状态一致；
+- 评分可解释且有来源；
+- PendingAction 只在确需主人决定时出现；
+- 验证动作可产生真实 Outcome；
+- 失败和低分机会不会被伪装成成功；
+- Opportunity Center 不建立第二事实源；
+- Production / Acceptance 隔离不被破坏；
+- focused + full + release 门禁通过；
+- 主人能在真机上理解机会、证据、成本、下一步和实际结果。
+
+---
+
+# 3. Phase 3：主动情报与每日简报
+
+Phase 2 稳定后再进入。
+
+候选方向：
+
+- 每日 AI / 自媒体 / 电商 / 跨境 / 模型 / 工具变化简报；
+- 重要平台规则与 API 变化；
+- 与主人项目相关的风险、机会和行动建议；
+- 周度回顾：哪些机会被验证、哪些失败、哪些产生收入；
+- 简报只作为来源和情报，不直接写 Core Memory；
+- 值得长期沉淀的内容走正式 Memory candidate / owner review。
+
+不要创建第二套 `DAILY_BRIEF` 权威状态系统。简报本质上是来源对象和可检索产物。
+
+---
+
+# 4. Phase 4：外部搜索与工具编排
+
+候选方向：
+
+- MCP 外部工具权限与诊断增强；
+- Web / GitHub / 本地文件等搜索工具统一接入；
+- AnySearch 或同类工具只能作为可替换 Provider 候选，不能成为架构硬依赖；
+- 搜索结果进入 LingJi 后必须记录来源、时间、去重和可信度；
+- 外部搜索不得直接写入 Core Memory 或 Opportunity 结论。
+
+---
+
+# 5. Phase 5：模型能力矩阵与 LLM Router
+
+在第二大脑和机会闭环都稳定以后再做自动路由。
+
+候选能力：
+
+- model capability matrix；
+- coding / writing / vision / reasoning / context / speed / cost / local_support；
+- `last_verified` 和真实基准来源；
+- 云端 / 本地模型混合路由；
+- 成本上限；
+- 失败降级；
+- fallback；
+- 任务类型路由；
+- 主人可覆盖自动选择。
+
+模型能力不能靠长期手写印象，必须有可更新证据。
+
+---
+
+# 6. Phase 6：跨项目 Context 接口
+
+LingJi 可以向其他项目提供：
+
+- Context Pack；
+- 项目记忆检索；
+- 工具 / 模型情报；
+- 商业机会和平台风险提示；
+- 工作事实与结果摘要。
+
+LingJi 不实现其他项目的内部业务数据结构。
+
+例如 AI 导演系统内部的 Story Beat、Shot Schema、资产锁定、视频 Provider、QC、自动返修、ComfyUI 执行层等，仍属于对应项目仓库。
+
+---
+
+# 7. Backlog 晋级规则
+
+未来任何功能从本文进入正式开发前必须满足：
+
+1. 前一 Phase 的规定验收已经 PASS；
+2. `PROJECT_STATUS.md` 明确把它提升为当前阶段；
+3. 审计现有代码，禁止重复实现；
+4. 在 `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md` 定义变化级验收；
+5. 明确数据权威、Work Fact、API、UI、隐私和回滚边界；
+6. focused 测试先行；
+7. 不创建第二个当前计划文档。
+
+本文永远只是 Backlog。它不能覆盖 `PROJECT_STATUS.md`、`ARCHITECTURE.md` 或 `docs/ACCEPTANCE/`。
