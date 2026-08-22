@@ -1,5 +1,6 @@
 # LingJi 验收权威入口
 
+> Updated: 2026-08-22
 > 本目录只维护**当前验收治理**。历史实施过程、旧任务和旧失败保留在 Git 历史与 `docs/TEST_REPORTS/`，不得重新冒充当前任务。
 
 ## 1. 唯一权威文件
@@ -36,7 +37,14 @@ AGENTS.md
 
 ## 3. 当前仓库状态
 
-截至 2026-08-16，PR #88 的 Owner Workbench V4 已完成真实 M5 复验：
+当前产品阶段以 `docs/PROJECT_STATUS.md` 为准：
+
+```text
+PHASE 1 — SECOND BRAIN COMPLETION
+Opportunity Center — FROZEN UNTIL PHASE 1 FINAL PASS
+```
+
+截至最近一次 Owner Workbench V4 真实 M5 复验：
 
 ```text
 product commit: bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9
@@ -94,16 +102,34 @@ SourceObject
 新的 M5 任务只能在以下条件全部完成后激活：
 
 ```text
-搜索学习成熟 Agent / Task / Trace / Knowledge 产品
-→ 审计当前真实数据合同
-→ 实现统一 WorkItem / Event / Outcome / PendingAction / MemoryRecord 链
-→ 真实端到端场景测试
-→ 更新 CHANGE_ACCEPTANCE_LOG + 实施报告
+审计当前真实数据合同
+→ 修复统一 WorkItem / Event / Outcome / PendingAction / MemoryRecord 链
+→ Capture → Work → Memory / Failure 真实端到端场景测试
+→ Retrieval / Qdrant / Embedding / provenance / MCP 权限回归
+→ Desktop 跨页同 ID / 同状态投影
+→ 更新 CHANGE_ACCEPTANCE_LOG + 对应实施/测试证据
 → focused + full + release CI
 → 新产品 Commit
 → 同 SHA macOS / Windows Artifact
 → 哈希锁定
 → 新 task_id + status: ACTIVE
+```
+
+### 5.1 产品阶段硬门禁
+
+当前验收只能服务于 **Phase 1 第二大脑完成**。
+
+在 Phase 1 最终结果为 `PASS` 之前：
+
+- 不创建 Opportunity Center 产品候选 Artifact；
+- 不创建机会面板 M5 / 真机验收任务；
+- 不因为现有 opportunity 后端代码存在就把机会系统视为当前产品阶段；
+- 不允许未来 Backlog 覆盖当前 Phase 1。
+
+只有 Phase 1 的自动门禁、真机、主人观察、报告和清理全部闭环并最终 `PASS` 后，`PROJECT_STATUS.md` 才能切换到：
+
+```text
+PHASE 2 — OPPORTUNITY CENTER
 ```
 
 ## 6. 本机任务硬门禁
@@ -151,4 +177,4 @@ Codex 负责命令、安装、进程、端口、哈希、日志、Git、报告�
 
 产品 PR 只有在当前候选对应的精确自动门禁、同 SHA Artifact、真机、主人观察、Production 隔离、报告闭环和清理全部通过后，才允许进入最终合并判断。
 
-**PR #88 当前仍是 Draft / DO NOT MERGE。当前没有 ACTIVE 本机任务。**
+当前仍没有 ACTIVE 本机任务。旧失败 Artifact 永久 `DO NOT RETRY`。
