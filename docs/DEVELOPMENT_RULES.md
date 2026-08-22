@@ -1,13 +1,13 @@
 # DEVELOPMENT_RULES.md — LingJi Development Rules
 
-> Updated: 2026-07-29
+> Updated: 2026-08-22
 > Architecture authority: `docs/ARCHITECTURE.md`
-> Current-state authority: `docs/PROJECT_STATUS.md`
+> Current-state and development-command authority: `docs/PROJECT_STATUS.md`
 > Acceptance authority: `docs/ACCEPTANCE/README.md`
 
 ## 1. Branch and Environment Isolation
 
-1. Current development branch: `master`.
+1. Formal/default branch is `master`; the active feature branch and PR must be declared in `docs/PROJECT_STATUS.md`.
 2. Never modify or write runtime data into `C:\Users\Administrator\Documents\New project-ai`.
 3. Runtime data must never be silently written to the C: drive.
 4. Databases, vectors, logs, cache, uploads, generated assets and models must use configurable locations, preferably D: or a user-selected path.
@@ -63,8 +63,8 @@ Rules:
 
 Before code changes, read only the smallest evidence set needed for the task:
 
-1. confirm branch, upstream, recent commit and workspace status
-2. read the relevant section of `docs/PROJECT_STATUS.md`
+1. confirm formal branch plus the active branch/PR/exact product SHA declared in `docs/PROJECT_STATUS.md`
+2. read the current node and handoff snapshot in `docs/PROJECT_STATUS.md`
 3. read the relevant module in `docs/MODULES/CODE_MAP.md`
 4. read `docs/ACCEPTANCE/README.md` and the latest relevant entry in `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`
 5. inspect the directly affected workflow, build or test entry
@@ -74,6 +74,36 @@ Before code changes, read only the smallest evidence set needed for the task:
 Do not repeatedly read all of `AGENTS.md`, `docs/PROJECT_STATUS.md`, `docs/ARCHITECTURE.md` or this file. Read the governing file once, keep a short execution-constraint summary, and use targeted keyword or section lookup when a later decision depends on a specific rule.
 
 Do not perform an untargeted whole-repository scan. Do not create files based only on feature names or assumptions. Prefer current code maps and verified evidence, but re-check code when documents conflict.
+
+### 4.1 Cross-conversation development handoff
+
+Development must remain recoverable when the conversation context is replaced or truncated.
+
+`docs/PROJECT_STATUS.md` is the only current development commander. A new conversation must not reconstruct current progress from chat history when the repository can state it directly.
+
+Every engineering node must record in `PROJECT_STATUS.md`:
+
+```text
+node id / name
+status: NOT_STARTED | ACTIVE | BLOCKED | AUTOMATED_PASS | OWNER_PASS | CLOSED
+active branch / PR / exact product SHA
+completed facts
+remaining facts
+automatic validation evidence
+platform artifacts when applicable
+next-node start condition
+next code entry points
+```
+
+Mandatory update points:
+
+1. before a node begins: mark the node `ACTIVE` and identify its entry points and exit gate
+2. after a substantial tested sub-step: update completed/remaining facts and exact SHA when it materially changes the handoff state
+3. after automatic gates: record the real result; never infer PASS from code existence
+4. before changing to the next node: close or explicitly block the current node and make the next node `ACTIVE`
+5. before ending a long development session: ensure the handoff snapshot is sufficient for another conversation to continue without a broad repository re-audit
+
+Do not create a parallel `CURRENT_PLAN`, `NEXT_PLAN`, `FINAL_PLAN`, handoff summary or other duplicate Markdown file. The durable current handoff belongs in `PROJECT_STATUS.md`; backlog belongs in `FUTURE_DEVELOPMENT_TODO.md`; acceptance detail belongs in `docs/ACCEPTANCE/`.
 
 ## 5. Research Before Development
 
@@ -227,7 +257,7 @@ Never delete tests, reduce assertions, hide failures, rerun unchanged full gates
 One fact has one detailed authority:
 
 - `docs/ARCHITECTURE.md`: stable architecture, boundaries and core data flow
-- `docs/PROJECT_STATUS.md`: current stage, completion state, risks, blockers and next step
+- `docs/PROJECT_STATUS.md`: current stage, active engineering node, branch/PR/SHA, completion state, blockers, validated progress and next code entry point; this is the cross-conversation development commander
 - `docs/CHANGELOG.md`: user-facing or release-significant changes
 - `docs/ACCEPTANCE/`: current acceptance rules, executable instructions, change-specific requirements and report template
 - `docs/TEST_REPORTS/`: commands, environment, results, limitations and validated commit
