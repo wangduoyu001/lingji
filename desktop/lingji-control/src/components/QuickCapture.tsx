@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "../api";
 import type { LingJiApi } from "../api";
-import type { PageId } from "../types";
 import { CaptureCenterApi } from "../pages/captureCenterApi";
 import type { CaptureSubmissionResponse } from "../pages/captureCenterTypes";
 import "./QuickCapture.css";
@@ -9,10 +8,10 @@ import "./QuickCapture.css";
 type Props = {
   api: LingJiApi;
   active: boolean;
-  onNavigate: (page: PageId) => void;
+  onOpenWork: (workId: string) => void;
 };
 
-export default function QuickCapture({ api, active, onNavigate }: Props) {
+export default function QuickCapture({ api, active, onOpenWork }: Props) {
   const client = useMemo(() => new CaptureCenterApi(api), [api]);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -101,7 +100,7 @@ export default function QuickCapture({ api, active, onNavigate }: Props) {
             <span>Capture：{result.capture_id ?? "未知"}</span>
             <span>Work：{result.work_id ?? "未返回，不能宣称已接手"}</span>
             <span>Job：{result.job_id ?? "未知"}</span>
-            {result.work_id ? <button type="button" onClick={() => { setOpen(false); onNavigate("activity"); }}>查看工作</button> : null}
+            {result.work_id ? <button type="button" onClick={() => { setOpen(false); onOpenWork(result.work_id!); }}>查看工作</button> : null}
           </div>
         ) : null}
         <footer>
