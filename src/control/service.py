@@ -22,6 +22,7 @@ from src.obsidian.service import ObsidianService
 from src.storage import BackupManager, StateDatabase, StorageLifecycleManager
 
 from .runtime_settings import RuntimeSettingsStore
+from .work_service import WorkControlService
 
 
 class LocalControlService:
@@ -40,6 +41,7 @@ class LocalControlService:
     ):
         self.settings = settings
         self.state_db = state_db or StateDatabase(settings.state_db_path)
+        self.work_control = WorkControlService(self.state_db)
         self.runtime_settings = RuntimeSettingsStore(settings, state_db=self.state_db)
         self.obsidian = ObsidianService(
             settings, runtime_settings=self.runtime_settings, state_db=self.state_db
@@ -246,6 +248,21 @@ class LocalControlService:
 
     def vector_coverage(self) -> dict[str, Any]:
         return self.memory_statistics.vector_coverage()
+
+    def current_work(self) -> dict[str, Any]:
+        return self.work_control.current_work()
+
+    def recent_work(self, *, limit: int = 20) -> dict[str, Any]:
+        return self.work_control.recent_work(limit=limit)
+
+    def work_detail(self, work_id: str) -> dict[str, Any]:
+        return self.work_control.work_detail(work_id)
+
+    def pending_actions(self, *, limit: int = 20) -> dict[str, Any]:
+        return self.work_control.pending_actions(limit=limit)
+
+    def work_timeline(self, work_id: str, *, limit: int = 100) -> dict[str, Any]:
+        return self.work_control.work_timeline(work_id, limit=limit)
 
     def get_settings(self) -> dict[str, Any]:
         return self.runtime_settings.snapshot()
