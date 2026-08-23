@@ -27,7 +27,7 @@ class CaptureWorkBridge:
             owner_approved=approved,
             status="accepted",
         )
-        self.store.save_work(work)
+        self.store.create_work(work)
         self.store.append_event(
             ExecutionEvent(
                 work_id=work.work_id,
