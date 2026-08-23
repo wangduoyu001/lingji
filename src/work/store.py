@@ -56,39 +56,21 @@ class WorkStore:
         with self.state._connection() as connection:
             connection.execute(
                 "INSERT INTO work_items VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    item.work_id,
-                    item.title,
-                    item.source_id,
-                    item.status,
-                    int(item.owner_approved),
-                    item.created_at,
-                ),
+                (item.work_id, item.title, item.source_id, item.status, int(item.owner_approved), item.created_at),
             )
 
     def append_event(self, event: Any) -> None:
         with self.state._connection() as connection:
             connection.execute(
                 "INSERT INTO execution_events VALUES (?, ?, ?, ?, ?)",
-                (
-                    event.event_id,
-                    event.work_id,
-                    event.event_type,
-                    json.dumps(event.detail, ensure_ascii=False),
-                    event.created_at,
-                ),
+                (event.event_id, event.work_id, event.event_type, json.dumps(event.detail, ensure_ascii=False), event.created_at),
             )
 
     def save_outcome(self, outcome: Any) -> None:
-        with the state._connection() as connection:
+        with self.state._connection() as connection:
             connection.execute(
                 "INSERT OR REPLACE INTO work_outcomes VALUES (?, ?, ?, ?)",
-                (
-                    outcome.work_id,
-                    outcome.status,
-                    outcome.summary,
-                    json.dumps(outcome.evidence, ensure_ascii=False),
-                ),
+                (outcome.work_id, outcome.status, outcome.summary, json.dumps(outcome.evidence, ensure_ascii=False)),
             )
 
     def add_pending_action(self, action: Any) -> None:
