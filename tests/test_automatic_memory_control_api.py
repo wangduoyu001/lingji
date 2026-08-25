@@ -121,6 +121,18 @@ def test_automatic_memory_authorize_scan_pause_retry_and_reopen(tmp_path: Path):
         )
         assert revoked.status_code == 200
         assert revoked.json()["status"] == "revoked"
+        retry_denied = client.post(
+            "/api/automatic-memory/retry",
+            headers=headers,
+            json={"scan_id": scan_id},
+        )
+        assert retry_denied.status_code == 403
+        start_denied = client.post(
+            "/api/automatic-memory/scan",
+            headers=headers,
+            json={"source_id": source_id},
+        )
+        assert start_denied.status_code == 403
 
     reopened_control = LocalControlService.__new__(LocalControlService)
     reopened_control.state_db = StateDatabase(database_path)
@@ -132,4 +144,4 @@ def test_automatic_memory_authorize_scan_pause_retry_and_reopen(tmp_path: Path):
             f"/api/automatic-memory/scans/{scan_id}", headers=headers
         )
         assert persisted.status_code == 200
-        assert persisted.json()["status"] == "running"
+        assert persisted.json()["status"] == "cancelled"

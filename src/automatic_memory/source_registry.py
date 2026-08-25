@@ -15,7 +15,7 @@ from .models import AuthorizationScope, ScanRun, SourceRecord
 
 POLICY_VERSION = "automatic-memory-source-v1"
 METADATA_DISCOVERY_CAPABILITY = "metadata_discovery"
-_SCAN_STATUSES = {"running", "paused", "failed", "completed"}
+_SCAN_STATUSES = {"running", "paused", "failed", "completed", "cancelled"}
 
 
 def _iso(value: datetime) -> str:
@@ -70,7 +70,6 @@ class SourceRegistry:
         if granted_at > now:
             raise ValueError("authorization cannot be granted in the future")
 
-        existing_grant = self.state_db.get_automatic_memory_grant(scope.grant_id)
         grant_values = {
             "grant_id": scope.grant_id,
             "source_kinds_json": json.dumps(
@@ -84,59 +83,50 @@ class SourceRegistry:
             "owner_confirmed": scope.owner_confirmed,
             "created_at": _iso(now),
         }
-        if existing_grant is None:
-            self.state_db.create_automatic_memory_grant(grant_values)
-        elif (
-            existing_grant["source_kinds_json"] != grant_values["source_kinds_json"]
-            or existing_grant["roots_json"] != grant_values["roots_json"]
-            or not bool(existing_grant["owner_confirmed"])
-        ):
-            raise PermissionError("authorization grant does not match persisted scope")
-
-        existing_source = self.state_db.find_automatic_memory_source(
-            scope.grant_id, kind, selected_root
-        )
-        if existing_source is None:
-            existing_source = self.state_db.create_automatic_memory_source(
-                {
-                    "source_id": f"src-{uuid.uuid4().hex}",
-                    "grant_id": scope.grant_id,
-                    "kind": kind,
-                    "root": selected_root,
-                    "status": "authorized",
-                    "capability": METADATA_DISCOVERY_CAPABILITY,
-                    "policy_version": POLICY_VERSION,
-                    "created_at": _iso(now),
-                }
+        source_values = {
+            "source_id": f"src-{uuid.uuid4().hex}",
+            "grant_id": scope.grant_id,
+            "kind": kind,
+            "root": selected_root,
+            "status": "authorized",
+            "capability": METADATA_DISCOVERY_CAPABILITY,
+            "policy_version": POLICY_VERSION,
+            "created_at": _iso(now),
+        }
+        try:
+            existing_source = self.state_db.register_automatic_memory_source_atomic(
+                grant_values, source_values
             )
-        elif existing_source["status"] == "revoked":
+        except ValueError as exc:
+            raise PermissionError(str(exc)) from exc
+        if existing_source["status"] == "revoked":
             raise PermissionError("source authorization has been revoked")
         return self._source(existing_source)
 
     def revoke(self, source_id: str) -> SourceRecord:
-        source = self.state_db.get_automatic_memory_source(source_id)
-        if source is None:
-            raise LookupError(f"source not found: {source_id}")
-        if source["status"] != "revoked":
-            source = self.state_db.update_automatic_memory_source(
+        revoked_at = _iso(datetime.now(timezone.utc))
+        try:
+            source = self.state_db.revoke_automatic_memory_source_atomic(
                 source_id,
-                status="revoked",
-                revoked_at=_iso(datetime.now(timezone.utc)),
+                revoked_at=revoked_at,
+                reason="source authorization revoked",
             )
+        except KeyError as exc:
+            raise LookupError(f"source not found: {source_id}") from exc
         return self._source(source)
 
     def list_sources(self) -> list[SourceRecord]:
-        return [self._source(row) for row in self.state_db.list_automatic_memory_sources()]
+        now = _iso(datetime.now(timezone.utc))
+        return [
+            self._source(row)
+            for row in self.state_db.list_automatic_memory_sources(now=now)
+        ]
 
     def start_scan(self, source_id: str) -> ScanRun:
-        source = self.state_db.get_automatic_memory_source(source_id)
-        if source is None:
-            raise LookupError(f"source not found: {source_id}")
-        if source["status"] != "authorized":
-            raise PermissionError("source is not authorized for scanning")
         now = _iso(datetime.now(timezone.utc))
-        return self._scan(
-            self.state_db.create_automatic_memory_scan(
+        try:
+            row = self.state_db.start_automatic_memory_scan_atomic(
+                source_id,
                 {
                     "scan_id": f"scan-{uuid.uuid4().hex}",
                     "source_id": source_id,
@@ -147,41 +137,53 @@ class SourceRegistry:
                     "last_error": None,
                     "recovery_token": None,
                     "updated_at": now,
-                }
+                },
+                now=now,
             )
+        except KeyError as exc:
+            raise LookupError(f"source not found: {source_id}") from exc
+        return self._scan(row)
+
+    def _require_active_source(self, source_id: str) -> dict[str, Any]:
+        source = self.state_db.get_automatic_memory_source(
+            source_id, now=_iso(datetime.now(timezone.utc))
         )
+        if source is None:
+            raise LookupError(f"source not found: {source_id}")
+        if source["status"] == "expired":
+            raise PermissionError("source authorization has expired")
+        if source["status"] != "authorized":
+            raise PermissionError("source is not authorized for scanning")
+        return source
 
     def pause_scan(self, scan_id: str) -> ScanRun:
         scan = self._require_scan(scan_id)
-        if scan.status not in {"running", "failed"}:
-            raise ValueError(f"scan cannot be paused from {scan.status}")
         recovery_token = scan.recovery_token or f"resume-{secrets.token_urlsafe(18)}"
-        return self._scan(
-            self.state_db.update_automatic_memory_scan(
+        try:
+            row = self.state_db.pause_automatic_memory_scan_atomic(
                 scan_id,
-                status="paused",
                 recovery_token=recovery_token,
-                updated_at=_iso(datetime.now(timezone.utc)),
+                now=_iso(datetime.now(timezone.utc)),
             )
-        )
+        except KeyError as exc:
+            raise LookupError(f"scan not found: {scan_id}") from exc
+        return self._scan(row)
 
     def retry_scan(self, scan_id: str) -> ScanRun:
-        scan = self._require_scan(scan_id)
-        if scan.status not in {"paused", "failed"}:
-            if scan.status == "running":
-                return scan
-            raise ValueError(f"scan cannot be retried from {scan.status}")
-        return self._scan(
-            self.state_db.update_automatic_memory_scan(
-                scan_id,
-                status="running",
-                last_error=None,
-                updated_at=_iso(datetime.now(timezone.utc)),
+        try:
+            row = self.state_db.retry_automatic_memory_scan_atomic(
+                scan_id, now=_iso(datetime.now(timezone.utc))
             )
-        )
+        except KeyError as exc:
+            raise LookupError(f"scan not found: {scan_id}") from exc
+        return self._scan(row)
 
     def get_scan(self, scan_id: str) -> ScanRun:
-        return self._scan(self._require_scan_row(scan_id))
+        row = self._require_scan_row(scan_id)
+        self.state_db.get_automatic_memory_source(
+            row["source_id"], now=_iso(datetime.now(timezone.utc))
+        )
+        return self._scan(row)
 
     def update_scan(
         self,

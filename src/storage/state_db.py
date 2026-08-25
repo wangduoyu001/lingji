@@ -416,8 +416,25 @@ class StateDatabase:
             ).fetchone()
         return dict(row)
 
-    def get_automatic_memory_source(self, source_id: str) -> dict[str, Any] | None:
-        with self._connection() as connection:
+    def get_automatic_memory_source(
+        self, source_id: str, *, now: str | None = None
+    ) -> dict[str, Any] | None:
+        with self._lock, self._connection() as connection:
+            if now is not None:
+                connection.execute(
+                    """
+                    UPDATE automatic_memory_sources
+                    SET status = 'expired'
+                    WHERE source_id = ? AND status = 'authorized'
+                      AND EXISTS (
+                        SELECT 1 FROM automatic_memory_grants AS grants
+                        WHERE grants.grant_id = automatic_memory_sources.grant_id
+                          AND grants.expires_at IS NOT NULL
+                          AND grants.expires_at <= ?
+                      )
+                    """,
+                    (source_id, now),
+                )
             row = connection.execute(
                 "SELECT * FROM automatic_memory_sources WHERE source_id = ?",
                 (source_id,),
@@ -437,12 +454,336 @@ class StateDatabase:
             ).fetchone()
         return dict(row) if row else None
 
-    def list_automatic_memory_sources(self) -> list[dict[str, Any]]:
-        with self._connection() as connection:
+    def list_automatic_memory_sources(
+        self, *, now: str | None = None
+    ) -> list[dict[str, Any]]:
+        with self._lock, self._connection() as connection:
+            if now is not None:
+                connection.execute(
+                    """
+                    UPDATE automatic_memory_sources
+                    SET status = 'expired'
+                    WHERE status = 'authorized'
+                      AND EXISTS (
+                        SELECT 1 FROM automatic_memory_grants AS grants
+                        WHERE grants.grant_id = automatic_memory_sources.grant_id
+                          AND grants.expires_at IS NOT NULL
+                          AND grants.expires_at <= ?
+                      )
+                    """,
+                    (now,),
+                )
             rows = connection.execute(
                 "SELECT * FROM automatic_memory_sources ORDER BY created_at, source_id"
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def register_automatic_memory_source_atomic(
+        self, grant: dict[str, Any], source: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Persist grant and source together, serializing duplicate registration."""
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing_grant = connection.execute(
+                "SELECT * FROM automatic_memory_grants WHERE grant_id = ?",
+                (grant["grant_id"],),
+            ).fetchone()
+            if existing_grant is None:
+                connection.execute(
+                    """
+                    INSERT INTO automatic_memory_grants (
+                        grant_id, source_kinds_json, roots_json, granted_at, expires_at,
+                        owner_confirmed, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        grant["grant_id"],
+                        grant["source_kinds_json"],
+                        grant["roots_json"],
+                        grant["granted_at"],
+                        grant.get("expires_at"),
+                        int(bool(grant["owner_confirmed"])),
+                        grant["created_at"],
+                    ),
+                )
+            else:
+                expected = (
+                    grant["source_kinds_json"],
+                    grant["roots_json"],
+                    grant["granted_at"],
+                    grant.get("expires_at"),
+                    int(bool(grant["owner_confirmed"])),
+                )
+                actual = tuple(
+                    existing_grant[key]
+                    for key in (
+                        "source_kinds_json",
+                        "roots_json",
+                        "granted_at",
+                        "expires_at",
+                        "owner_confirmed",
+                    )
+                )
+                if actual != expected:
+                    raise ValueError("authorization grant does not match persisted scope")
+
+            existing_source = connection.execute(
+                """
+                SELECT * FROM automatic_memory_sources
+                WHERE grant_id = ? AND kind = ? AND root = ?
+                """,
+                (source["grant_id"], source["kind"], source["root"]),
+            ).fetchone()
+            if existing_source is None:
+                connection.execute(
+                    """
+                    INSERT INTO automatic_memory_sources (
+                        source_id, grant_id, kind, root, status, capability,
+                        policy_version, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        source["source_id"],
+                        source["grant_id"],
+                        source["kind"],
+                        source["root"],
+                        source["status"],
+                        source["capability"],
+                        source["policy_version"],
+                        source["created_at"],
+                    ),
+                )
+                existing_source = connection.execute(
+                    "SELECT * FROM automatic_memory_sources WHERE source_id = ?",
+                    (source["source_id"],),
+                ).fetchone()
+        return dict(existing_source)
+
+    def start_automatic_memory_scan_atomic(
+        self, source_id: str, scan: dict[str, Any], *, now: str
+    ) -> dict[str, Any]:
+        """Recheck authorization and serialize the one-active-scan invariant."""
+        expired = False
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            source = connection.execute(
+                """
+                SELECT sources.*, grants.expires_at, grants.owner_confirmed
+                FROM automatic_memory_sources AS sources
+                JOIN automatic_memory_grants AS grants ON grants.grant_id = sources.grant_id
+                WHERE sources.source_id = ?
+                """,
+                (source_id,),
+            ).fetchone()
+            if source is None:
+                raise KeyError(source_id)
+            if (
+                source["status"] == "authorized"
+                and source["owner_confirmed"]
+                and source["expires_at"] is not None
+                and source["expires_at"] <= now
+            ):
+                connection.execute(
+                    "UPDATE automatic_memory_sources SET status = 'expired' WHERE source_id = ?",
+                    (source_id,),
+                )
+                expired = True
+            if expired:
+                active = None
+            elif source["status"] != "authorized" or not source["owner_confirmed"]:
+                raise PermissionError("source is not authorized for scanning")
+            else:
+                active = connection.execute(
+                    """
+                    SELECT * FROM automatic_memory_scans
+                    WHERE source_id = ? AND status IN ('running', 'paused')
+                    ORDER BY updated_at DESC LIMIT 1
+                    """,
+                    (source_id,),
+                ).fetchone()
+            if active is not None:
+                return dict(active)
+            if expired:
+                failed = None
+            else:
+                failed = connection.execute(
+                    """
+                    SELECT 1 FROM automatic_memory_scans
+                    WHERE source_id = ? AND status = 'failed' LIMIT 1
+                    """,
+                    (source_id,),
+                ).fetchone()
+            if failed is not None:
+                raise ValueError("failed scan must be retried before starting a new scan")
+            if not expired:
+                connection.execute(
+                    """
+                    INSERT INTO automatic_memory_scans (
+                        scan_id, source_id, status, cursor, progress, total,
+                        last_error, recovery_token, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        scan["scan_id"],
+                        scan["source_id"],
+                        scan["status"],
+                        scan.get("cursor"),
+                        int(scan.get("progress", 0)),
+                        scan.get("total"),
+                        scan.get("last_error"),
+                        scan.get("recovery_token"),
+                        scan["updated_at"],
+                    ),
+                )
+                created = connection.execute(
+                    "SELECT * FROM automatic_memory_scans WHERE scan_id = ?",
+                    (scan["scan_id"],),
+                ).fetchone()
+            else:
+                created = None
+        if expired:
+            raise PermissionError("source authorization has expired")
+        return dict(created)
+
+    def pause_automatic_memory_scan_atomic(
+        self, scan_id: str, *, recovery_token: str, now: str
+    ) -> dict[str, Any]:
+        """Pause only while the source grant is active in the same transaction."""
+        expired = False
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT scans.*, sources.status AS source_status,
+                       grants.expires_at, grants.owner_confirmed
+                FROM automatic_memory_scans AS scans
+                JOIN automatic_memory_sources AS sources ON sources.source_id = scans.source_id
+                JOIN automatic_memory_grants AS grants ON grants.grant_id = sources.grant_id
+                WHERE scans.scan_id = ?
+                """,
+                (scan_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(scan_id)
+            if (
+                row["source_status"] == "authorized"
+                and row["owner_confirmed"]
+                and row["expires_at"] is not None
+                and row["expires_at"] <= now
+            ):
+                connection.execute(
+                    "UPDATE automatic_memory_sources SET status = 'expired' WHERE source_id = ?",
+                    (row["source_id"],),
+                )
+                expired = True
+            elif row["source_status"] != "authorized" or not row["owner_confirmed"]:
+                raise PermissionError("source is not authorized for scanning")
+            elif row["status"] != "running":
+                raise ValueError(f"scan cannot be paused from {row['status']}")
+            else:
+                connection.execute(
+                    """
+                    UPDATE automatic_memory_scans
+                    SET status = 'paused', recovery_token = ?, updated_at = ?
+                    WHERE scan_id = ?
+                    """,
+                    (recovery_token, now, scan_id),
+                )
+                row = connection.execute(
+                    "SELECT * FROM automatic_memory_scans WHERE scan_id = ?",
+                    (scan_id,),
+                ).fetchone()
+        if expired:
+            raise PermissionError("source authorization has expired")
+        return dict(row)
+
+    def retry_automatic_memory_scan_atomic(
+        self, scan_id: str, *, now: str
+    ) -> dict[str, Any]:
+        """Retry only while the source grant is active in the same transaction."""
+        expired = False
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT scans.*, sources.status AS source_status,
+                       grants.expires_at, grants.owner_confirmed
+                FROM automatic_memory_scans AS scans
+                JOIN automatic_memory_sources AS sources ON sources.source_id = scans.source_id
+                JOIN automatic_memory_grants AS grants ON grants.grant_id = sources.grant_id
+                WHERE scans.scan_id = ?
+                """,
+                (scan_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(scan_id)
+            if (
+                row["source_status"] == "authorized"
+                and row["owner_confirmed"]
+                and row["expires_at"] is not None
+                and row["expires_at"] <= now
+            ):
+                connection.execute(
+                    "UPDATE automatic_memory_sources SET status = 'expired' WHERE source_id = ?",
+                    (row["source_id"],),
+                )
+                expired = True
+            elif row["source_status"] != "authorized" or not row["owner_confirmed"]:
+                raise PermissionError("source is not authorized for scanning")
+            elif row["status"] == "running":
+                pass
+            elif row["status"] in {"paused", "failed"}:
+                connection.execute(
+                    """
+                    UPDATE automatic_memory_scans
+                    SET status = 'running', last_error = NULL, updated_at = ?
+                    WHERE scan_id = ?
+                    """,
+                    (now, scan_id),
+                )
+                row = connection.execute(
+                    "SELECT * FROM automatic_memory_scans WHERE scan_id = ?",
+                    (scan_id,),
+                ).fetchone()
+            else:
+                raise ValueError(f"scan cannot be retried from {row['status']}")
+        if expired:
+            raise PermissionError("source authorization has expired")
+        return dict(row)
+
+    def revoke_automatic_memory_source_atomic(
+        self, source_id: str, *, revoked_at: str, reason: str
+    ) -> dict[str, Any]:
+        """Revoke a source and cancel all resumable scans in one transaction."""
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            source = connection.execute(
+                "SELECT * FROM automatic_memory_sources WHERE source_id = ?",
+                (source_id,),
+            ).fetchone()
+            if source is None:
+                raise KeyError(source_id)
+            connection.execute(
+                """
+                UPDATE automatic_memory_sources
+                SET status = 'revoked', revoked_at = ?
+                WHERE source_id = ?
+                """,
+                (revoked_at, source_id),
+            )
+            connection.execute(
+                """
+                UPDATE automatic_memory_scans
+                SET status = 'cancelled', last_error = ?, updated_at = ?
+                WHERE source_id = ? AND status IN ('running', 'paused', 'failed')
+                """,
+                (reason, revoked_at, source_id),
+            )
+            updated = connection.execute(
+                "SELECT * FROM automatic_memory_sources WHERE source_id = ?",
+                (source_id,),
+            ).fetchone()
+        return dict(updated)
 
     def update_automatic_memory_source(
         self, source_id: str, *, status: str, revoked_at: str | None = None
