@@ -1,7 +1,10 @@
 # P2-05 Manual Capture Center — Integrated Implementation Report
 
-> Status: `READY_FOR_FORMAL_MERGE`  
-> Validated Integration Tree: `1bf95b8d16a9daea52b60518f0e920a0c0bd50db`  
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> Status: `READY_FOR_FORMAL_MERGE`
+> Validated Integration Tree: `1bf95b8d16a9daea52b60518f0e920a0c0bd50db`
 > Date: 2026-07-21
 
 ## 1. Scope

@@ -1,5 +1,8 @@
 # P2-11A Windows Release Baseline
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 ## Goal
 
 Create the first reproducible Windows delivery artifact for LingJi Desktop.

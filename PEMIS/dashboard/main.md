@@ -1,12 +1,16 @@
 ---
 type: dashboard
 updated: 2026-06-22T21:24:48.569111
-system_state: NORMAL
+role: generated_data
+snapshot_system_state: NORMAL
 ---
 
-# PEMIS Control Center
+# PEMIS Generated Dashboard Snapshot
 
-## System Status
+> 这是 2026-06 的生成业务快照，不代表灵机当前工程健康度、开发阶段或正式 Opportunity Center。
+> 当前状态只看 `docs/PROJECT_STATUS.md`；Phase 1 PASS 前机会面板保持冻结。
+
+## Snapshot System Status
 - State: **NORMAL**
 - TopK: 10
 - Healthy: True

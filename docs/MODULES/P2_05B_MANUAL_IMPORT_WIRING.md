@@ -1,8 +1,11 @@
 # P2-05B Manual Import Wiring
 
-> Branch: `work/p2-05b-manual-import-wiring`  
-> Base: `224c83881e934ffb9fd7c07b016a52ac8711ae1f`  
-> Implementation HEAD: `ac14617d391a322ae5786737ee11cd6aeb74df6b`  
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> Branch: `work/p2-05b-manual-import-wiring`
+> Base: `224c83881e934ffb9fd7c07b016a52ac8711ae1f`
+> Implementation HEAD: `ac14617d391a322ae5786737ee11cd6aeb74df6b`
 > Status: `IMPLEMENTED_NOT_TESTED`
 
 ## Input classification

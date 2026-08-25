@@ -1,5 +1,8 @@
 # P2-08 Standalone Concept to LingJi Mapping
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 ## Source limitation
 
 The standalone auto-review source archive referenced during planning was not available in this development runtime. This integration therefore follows the architecture accepted in GitHub issue #23 and does not copy an unaudited package wholesale.

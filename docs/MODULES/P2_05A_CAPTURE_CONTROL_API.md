@@ -1,11 +1,14 @@
 # P2-05A Capture Control API
 
-> Updated（更新时间）: 2026-07-21  
-> Branch（分支）: `work/p2-05a-capture-control-api`  
-> Base Commit（基础提交）: `224c83881e934ffb9fd7c07b016a52ac8711ae1f`  
-> Queue Finalization Commit（队列收口提交）: `8497b7c1dd0fd9f70e791779f060a5a5611fb726`  
-> Control API Finalization Commit（接口收口提交）: `bbb370c237e741eee7b74bce29e3bc26e9192f95`  
-> Status（状态）: `IMPLEMENTED_NOT_TESTED`  
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> Updated（更新时间）: 2026-07-21
+> Branch（分支）: `work/p2-05a-capture-control-api`
+> Base Commit（基础提交）: `224c83881e934ffb9fd7c07b016a52ac8711ae1f`
+> Queue Finalization Commit（队列收口提交）: `8497b7c1dd0fd9f70e791779f060a5a5611fb726`
+> Control API Finalization Commit（接口收口提交）: `bbb370c237e741eee7b74bce29e3bc26e9192f95`
+> Status（状态）: `IMPLEMENTED_NOT_TESTED`
 > Merge State（合并状态）: `NOT_MERGED_AWAITING_COORDINATED_REVIEW`
 
 ## 1. 目标

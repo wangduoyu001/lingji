@@ -1,5 +1,7 @@
 # LingJi 认证凭据与状态同步规范
 
+> 文档角色：认证凭据与脱敏状态同步的安全规范。第 8 节仅保留当时 M5 修复背景；当前验收结论以 `docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md` 和 `docs/PROJECT_STATUS.md` 为准。
+
 > 长期架构规则：**Secrets never sync. Secret state syncs.**
 >
 > 本文定义 LingJi 在 macOS / Windows 上保存 Token、API Key、Cookie、Refresh Token 等敏感凭据，以及把“认证做到哪一步”安全同步到仓库的统一合同。
@@ -173,8 +175,8 @@ docs/TEST_REPORTS/evidence/LOCAL_AUTH_STATUS_<TASK_ID>.json
 
 ```text
 Authorization:
-Bearer 
-Basic 
+Bearer（后接空格）
+Basic（后接空格）
 sk-
 ghp_
 gho_
@@ -219,9 +221,9 @@ secret_export_count = 0
 
 真实系统 Keychain / Credential Manager 的物理测试只在对应本机验收进行，不要求 CI 接触主人真实 Secret。
 
-## 8. 与当前 M5 修复的关系
+## 8. 历史 M5 修复背景
 
-PR #88 当前真实 M5 FAIL 的三个阻断仍然是：
+本文起草时，PR #88 的 M5 FAIL 曾包含以下三个阻断：
 
 ```text
 M5-IDENTITY-002
@@ -229,9 +231,9 @@ M5-UX-003
 M5-ISOLATION-002
 ```
 
-认证状态同步不是第四个失败原因，但作为当前修复周期的**必须完成架构增强**一起落地，因为它直接解决“本机已有 Token / 登录进度无法通过仓库可靠交接”的断层。
+这些旧编号不再代表当前阻断清单；后续结论已经写入更新的 M5 结果回执，不能再用本节判断当前进度。认证状态同步当时作为架构增强一起落地，用于解决“本机已有 Token / 登录进度无法通过仓库可靠交接”的断层。
 
-本增强不得延迟或弱化三个 M5 根因的关闭，也不得用“认证状态已同步”冒充 M5 真机 PASS。
+认证状态同步不得被用来冒充任何一轮 M5 真机 PASS；当前结果必须读取唯一结果回执。
 
 ## 9. 永久原则
 

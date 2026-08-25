@@ -1,13 +1,16 @@
 # P2-03B Structured Ingestion Wiring（结构化采集接线）
 
-> Updated（更新时间）: 2026-07-21  
-> Branch（分支）: `work/p2-03b-ingestion-wiring`  
-> Base Branch（基础分支）: `work/p2-03-structured-read-model`  
-> Base Commit（基础提交）: `9f5f444e389cd549db653471c3a34ef27a109e15`  
-> Combined Implementation Commit（联合实现提交）: `82a13334d475584869e92801b60e65bbc654937d`  
-> Verified Commit（已验证提交）: `NOT_EXECUTED`  
-> P2-03 Status（P2-03 状态）: `IMPLEMENTED_NOT_TESTED`  
-> P2-03B Status（P2-03B 状态）: `IMPLEMENTED_NOT_TESTED`  
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> Updated（更新时间）: 2026-07-21
+> Branch（分支）: `work/p2-03b-ingestion-wiring`
+> Base Branch（基础分支）: `work/p2-03-structured-read-model`
+> Base Commit（基础提交）: `9f5f444e389cd549db653471c3a34ef27a109e15`
+> Combined Implementation Commit（联合实现提交）: `82a13334d475584869e92801b60e65bbc654937d`
+> Verified Commit（已验证提交）: `NOT_EXECUTED`
+> P2-03 Status（P2-03 状态）: `IMPLEMENTED_NOT_TESTED`
+> P2-03B Status（P2-03B 状态）: `IMPLEMENTED_NOT_TESTED`
 > Combined Merge State（联合合并状态）: `NOT_MERGED_AWAITING_COORDINATED_REVIEW`
 
 ## 1. 任务目标

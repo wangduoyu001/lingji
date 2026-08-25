@@ -1,5 +1,8 @@
 # `src/` 与 `second_brain/` 能力对比审计
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 > 仓库：`wangduoyu001/lingji`
 >
 > 分支：`feature/second-brain-memory`

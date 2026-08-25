@@ -1,9 +1,12 @@
 # FINAL_P2_MERGE_REPORT.md — P2 阶段最终合并报告
 
-> Updated（更新时间）: 2026-07-20  
-> Formal Branch（正式分支）: `feature/second-brain-memory`  
-> Validated Code Commit（已验证代码提交）: `8a4860553edfbb698665c7dcb1f8bfaf3f556eba`  
-> Status（状态）: `MERGED_AND_VALIDATED`  
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> Updated（更新时间）: 2026-07-20
+> Formal Branch（正式分支）: `feature/second-brain-memory`
+> Validated Code Commit（已验证代码提交）: `8a4860553edfbb698665c7dcb1f8bfaf3f556eba`
+> Status（状态）: `MERGED_AND_VALIDATED`
 > Evidence（证据来源）: 本机 Codex 验收汇总、已合并代码、远程提交记录
 
 ## 1. 阶段结论

@@ -51,6 +51,64 @@
 
 ---
 
+## 2026-08-25 · 文档事实审计 · 对齐 SB-0 实际进度并降级历史快照
+
+- 产品分支：`codex/docs-project-truth-audit`
+- 审计基线：`ced1128e50d3b3758585573042ea6bcc6f315384`
+- 产品代码变化：无
+- 影响模块：项目状态、代码导航、文档治理、历史实施/验收文档标识、PEMIS 生成快照标识
+- 风险等级：P2
+- 用户可感知变化：开发者和主人不再把已经修复的 SB-0 子项误判为尚未开始，也不会把旧模块报告、旧 M5 研究或 2026-06 PEMIS 快照误判为当前产品状态。
+- 数据或安全边界变化：无；不修改 Runtime、API、Desktop、Vault、数据库、Qdrant、Credential、正式记忆、Artifact 或主人数据。
+
+### 新增或修改的自动验收
+
+- [x] `python3 scripts/check_acceptance_sync.py`：确认纯文档变更没有遗漏产品变化验收记录。
+- [x] `python3 scripts/check_local_execution_handoff.py`：确认当前任务仍为 `IDLE`，最近结果仍为 `COMPLETED / FAIL`。
+- [x] `git diff --check`：确认 Markdown 无空白错误。
+- [x] 全量受跟踪文档本地链接扫描：确认当前权威没有缺失的相对链接。
+- [x] 当前状态引用扫描：确认当前治理文档不再引用已删除的 `docs/AI_CONTEXT.md` 或 `UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md`。
+
+### 新增或修改的真机验收
+
+- [x] 不需要。本任务不安装、不启动 UI、不运行 Sidecar、不访问真实数据，也不改变产品行为。
+
+### 主人肉眼确认
+
+- [x] 不需要产品 UI 肉眼确认；最终向主人提供非技术化的“能做什么 / 缺什么 / 卡点”说明。
+
+### 回归项
+
+- [x] 保持 `PHASE 1 — SECOND BRAIN COMPLETION`，不得提前进入 Opportunity Center。
+- [x] 保持最近 M5 `FAIL / DO NOT MERGE`，不得把 SB-0 部分实现写成 Phase 1 PASS。
+- [x] 保持 `LOCAL_EXECUTION_TASK.md` 为 `IDLE`，不得激活或重跑旧 Artifact。
+- [x] 保留 `docs/TEST_REPORTS/**`、验收结果回执、哈希与失败证据，不改写历史结论。
+- [x] Work Fact 必须继续明确：正式 8766 路由、LocalControlService 共享接入、Desktop DTO/响应合同、Outcome/NextAction、端到端与真实验收仍未完成。
+
+### 清理与回滚
+
+- 临时数据前缀：无
+- 覆盖安装或迁移方式：不适用
+- 临时备份删除条件：不适用
+- 测试数据清理方式：不创建产品测试数据
+- 回滚：回退本次文档提交；不得恢复错误的当前进度或把历史快照提升为当前权威。
+
+### 不在范围
+
+- 不注册 `/api/work/*`。
+- 不修改 Work Fact、Capture、Memory 或 Desktop 合同。
+- 不执行 focused/full/release 产品门禁。
+- 不创建新产品 Commit、Artifact、ACTIVE 本机任务或主人验收结论。
+- 不删除 120 个 PEMIS opportunity 生成记录或任何历史测试/验收报告。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/DOCUMENTATION_TRUTH_AUDIT_20260825.md`
+- 执行计划：`docs/superpowers/plans/2026-08-25-documentation-truth-audit.md`
+- 报告分支：不适用；本次不是 Artifact 真机验收报告分支
+
+---
+
 ## 2026-08-01 · PR #60 后续 · 代码发布验证临时目录安全清理修复
 
 - 产品分支：`fix/cleanup-code-validation-workspace`

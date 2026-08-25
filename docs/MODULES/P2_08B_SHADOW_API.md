@@ -1,5 +1,8 @@
 # P2-08B Auto Review SHADOW API
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 ## Goal
 
 Expose owner-visible Auto Review SHADOW decisions through the existing loopback 8766 Control API and its existing token authentication. This API records and explains suggestions; it does not execute memory changes.

@@ -1,11 +1,14 @@
 # 灵机 Hardware Capability Service 与算力模式报告
 
-> 模块：P2 Hardware Capability Service  
-> 分支：`feature/hardware-capability-service`  
-> Draft PR：`#7`  
-> 堆叠基线：`refactor/desktop-ui-modular-foundation`  
-> 状态：`REVIEW_REQUIRED`  
-> 验证 Head：`b85c1ff4ebd46d60e17152ac0616d746b3d3c219`  
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> 模块：P2 Hardware Capability Service
+> 分支：`feature/hardware-capability-service`
+> Draft PR：`#7`
+> 堆叠基线：`refactor/desktop-ui-modular-foundation`
+> 状态：`REVIEW_REQUIRED`
+> 验证 Head：`b85c1ff4ebd46d60e17152ac0616d746b3d3c219`
 > GitHub Actions：`29698784423`
 
 ## 范围

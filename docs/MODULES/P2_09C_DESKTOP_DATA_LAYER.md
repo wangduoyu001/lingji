@@ -1,5 +1,8 @@
 # P2-09C Desktop Polling Data Layer
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 ## Goal
 
 Provide one reusable polling contract for the Tauri desktop UI and one truthful Brain Status type contract. Status pages should refresh without overlapping requests, cancel obsolete work, preserve the last successful payload after errors, and expose stale state explicitly.

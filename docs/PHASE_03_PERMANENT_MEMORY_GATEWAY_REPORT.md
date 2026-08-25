@@ -1,5 +1,8 @@
 # 灵机第三阶段：永久记忆、混合召回与多 AI 网关开发报告
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 ## 状态
 
 - 分支：`feature/single-vault-memory-foundation`

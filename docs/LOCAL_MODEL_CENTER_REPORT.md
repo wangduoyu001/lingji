@@ -1,11 +1,14 @@
 # 灵机本地模型中心报告
 
-> 模块：P3 本地模型中心，第一增量  
-> 分支：`feature/local-model-registry-inventory`  
-> Draft PR：`#8`  
-> 堆叠基线：`feature/hardware-capability-service`  
-> 状态：`REVIEW_REQUIRED`  
-> 验证 Head：`00d57747136868044cc70414420ec8f29b990f2e`  
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> 模块：P3 本地模型中心，第一增量
+> 分支：`feature/local-model-registry-inventory`
+> Draft PR：`#8`
+> 堆叠基线：`feature/hardware-capability-service`
+> 状态：`REVIEW_REQUIRED`
+> 验证 Head：`00d57747136868044cc70414420ec8f29b990f2e`
 > GitHub Actions：`29699695259`
 
 ## 当前范围
@@ -36,15 +39,15 @@
 
 ### 官方资料
 
-1. Ollama List Models：`GET /api/tags`  
+1. Ollama List Models：`GET /api/tags`
    https://docs.ollama.com/api/tags
-2. Ollama List Running Models：`GET /api/ps`  
+2. Ollama List Running Models：`GET /api/ps`
    https://docs.ollama.com/api/ps
-3. Ollama Show Model Details：`POST /api/show`  
+3. Ollama Show Model Details：`POST /api/show`
    https://docs.ollama.com/api-reference/show-model-details
-4. faster-whisper  
+4. faster-whisper
    https://github.com/SYSTRAN/faster-whisper
-5. PaddleOCR Quick Start  
+5. PaddleOCR Quick Start
    https://www.paddleocr.ai/v2.10.0/en/quick_start.html
 
 ### 类似项目

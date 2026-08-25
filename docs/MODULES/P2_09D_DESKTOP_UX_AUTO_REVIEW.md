@@ -1,5 +1,8 @@
 # P2-09D Desktop UX and Auto Review SHADOW Dashboard
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 ## Goal
 
 Make LingJi's desktop control center easier to navigate and make Auto Review observable without weakening owner authority. The UI groups related tools, collapses sensitive connection controls, presents truthful runtime states, and exposes SHADOW decisions with their explanations.

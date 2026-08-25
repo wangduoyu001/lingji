@@ -1,11 +1,14 @@
 # P2-06 Obsidian CLI Formal Migration — Implementation Report
 
-> Status: `MERGED_AND_VALIDATED`  
-> Formal Branch: `feature/second-brain-memory`  
-> Source Branch: `work/p2-06-obsidian-cli-migration`  
-> Validated Implementation Commit: `4b0ad577eb396030ee6baa5c3bb217e990385475`  
-> Final Validated Head: `6dfa31148585e2cb78c83af52b752550962820c9`  
-> Formal Merge Commit: `5ce10ed8be98784f57e8723ffc27e40e3abaffbc`  
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> Status: `MERGED_AND_VALIDATED`
+> Formal Branch: `feature/second-brain-memory`
+> Source Branch: `work/p2-06-obsidian-cli-migration`
+> Validated Implementation Commit: `4b0ad577eb396030ee6baa5c3bb217e990385475`
+> Final Validated Head: `6dfa31148585e2cb78c83af52b752550962820c9`
+> Formal Merge Commit: `5ce10ed8be98784f57e8723ffc27e40e3abaffbc`
 > Date: 2026-07-21
 
 ## 1. Objective

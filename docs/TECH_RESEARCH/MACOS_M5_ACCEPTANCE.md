@@ -1,5 +1,10 @@
 # LingJi macOS M5 / Apple Silicon Acceptance
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> 重要：下方“physical M5 GUI acceptance pending”是 2026-08-09 的研究前提，已经被后续真实 M5 `COMPLETED / FAIL / DO NOT MERGE` 回执取代。
+
 Status: **CI acceptance passed; physical M5 GUI acceptance pending owner run**
 
 Date: 2026-08-09

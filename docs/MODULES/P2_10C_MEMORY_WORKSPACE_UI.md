@@ -1,5 +1,8 @@
 # P2-10C Memory Workspace UI
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 ## Goal
 
 Turn LingJi's memory-facing pages from API-shaped administration screens into a coherent desktop memory workspace.

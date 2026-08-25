@@ -1,5 +1,8 @@
 # Memory Inspector Code Analysis — Corrected Unified View
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 > Updated: 2026-07-20
 > Branch: `feature/second-brain-memory`
 > Status: Corrected after `src/` vs `second_brain/` capability audit

@@ -1,58 +1,19 @@
-﻿# AI_MODEL_STRATEGY.md — LingJi AI Model Strategy
+# AI_MODEL_STRATEGY.md — 模型策略边界
 
-> Generated: 2026-07-20
+> Updated: 2026-08-25
+> Status: SUPPORTING STRATEGY
+> 当前配置权威：`src/config.py::Settings`、Runtime Settings、Model Center
+> 未来 Model Router：`docs/MODULES/FUTURE_DEVELOPMENT_TODO.md`
 
-## Tiered Model Architecture
+本文件不再固定 DeepSeek、Qwen、Ollama 或特定 Embedding 模型为长期“当前默认值”。模型可用性、成本、能力和安装状态会变化，必须由运行时探测、主人配置和可更新证据决定。
 
-LingJi uses a tiered approach for AI models, with automatic fallback:
+稳定原则：
 
-### PEMIS v6 (Background Scheduler)
+- 不把模型名称、端点或回退链复制到多份文档。
+- 云端模型和本地模型都通过明确 Provider/Settings 边界接入。
+- Secret 只存在本机凭据边界，仓库和状态同步只保存非敏感状态。
+- Embedding 变化必须验证维度与 Qdrant collection；不自动破坏生产索引。
+- 模型不可用时显示真实降级和原因，不伪造 healthy、0 或 completed。
+- 自动模型路由属于未来阶段；在 `PROJECT_STATUS.md` 提升前不得插队开发。
 
-| Role | Primary | Fallback | Purpose |
-|------|---------|----------|---------|
-| LLM | deepseek-chat (DeepSeek API) | qwen3:8b (Ollama) | Opportunity analysis, decisions, capture |
-| Embedding | nomic-embed-text (Ollama) | (none) | Contextual indexing (currently unused in PEMIS) |
-
-The DeepSeek API key is stored in .env. When unavailable, PEMIS falls back to local Ollama.
-
-### Second Brain (Memory & Knowledge)
-
-| Role | Primary | Fallback | Purpose |
-|------|---------|----------|---------|
-| Embedding | bge-m3 (Ollama) | nomic-embed-text (Ollama) | Memory and knowledge vectorization |
-| LLM | None | None | Second brain does not use LLM directly |
-
-BGE-M3 is preferred for its multilingual support. If not installed in Ollama,
-the fallback 
-omic-embed-text is used automatically.
-
-## Fallback Logic
-
-`python
-# Second brain embedder fallback chain (embedding.py):
-ordered = (self.active_model, self.model, self.fallback_model)
-for model in dict.fromkeys(ordered):
-    if not model or model in self._unavailable:
-        continue
-    # Try embedding, fall through on failure
-`
-
-## Configuration
-
-Change models via environment variables:
-
-`powershell
-# PEMIS v6
-LLM_MODEL=qwen3:8b
-FALLBACK_LLM=qwen3:8b
-
-# Second brain
-SECOND_BRAIN_EMBED_MODEL=bge-m3
-SECOND_BRAIN_FALLBACK_EMBED_MODEL=nomic-embed-text
-`
-
-## Notes
-
-- The second brain does not use any LLM for memory generation — it relies on structure and embedding.
-- Distillation uses content hashing and structure, not AI generation.
-- The original PEMIS v4 (upstream master) references deepseek-chat for LLM analysis.
+PEMIS 历史快照中的模型名称只描述当时生成数据，不代表当前产品策略。

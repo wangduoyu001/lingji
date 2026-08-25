@@ -1,5 +1,8 @@
 # P2-10A Owner-visible Settings Governance Core
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 ## Goal
 
 Make the backend settings catalog the only owner-visible authority for defaults, recommendations, grouping, risk, impact and availability. The Desktop consumes that contract instead of copying default values or group labels.

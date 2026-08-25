@@ -1,8 +1,9 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
-> Updated: 2026-08-22
+> Updated: 2026-08-25
 > Formal/default branch: `master`
 > Product-code baseline before documentation cleanup: `3d7225f58fb5b5a9b035cfd72f92cb2267b48559`
+> Current audited master Head: `ced1128e50d3b3758585573042ea6bcc6f315384`
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
@@ -202,17 +203,33 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 
 方向已经从“UI 根据聚合状态猜系统在干什么”转为“UI 投影真实工作事实”。
 
-### 4.2 当前 P0 工程阻塞：Work Fact 尚未真正接通
+### 4.2 当前 P0 工程阻塞：Work Fact 已部分修复，但尚未成为正式产品链
 
-截至本次审计，必须先修：
+截至 `ced1128e...`，SB-0 不能再描述为“完全未开始”，但也不能描述为“已经接通”。准确状态是：
 
-1. `CaptureWorkBridge.create_from_capture()` 与 `WorkStore` 写入接口不一致；
-2. `WorkProjector` 需要的读取方法与 `WorkStore` 当前能力不完整匹配；
-3. `/api/work/*` 必须在正式 `create_control_app()` 8766 路径真实注册；
-4. `LocalControlService` / Work service / projector 必须共享同一正式 Store；
-5. Python DTO 与 TypeScript Work Fact 合同必须统一字段名、状态和 nullable 语义；
-6. 必须新增专门覆盖 Store → Projector → Control API → Desktop contract 的测试；
-7. Capture 成功后必须能以同一 `work_id` 查询到事件、结果和下一 actor。
+| 子项 | 状态 | 当前事实 |
+|---|---|---|
+| Work persistence | `IMPLEMENTED_NOT_TESTED` | `WorkStore` 已能写入并读取 WorkItem、Event、PendingAction；Outcome 仅有写入 |
+| Capture bridge contract | `IMPLEMENTED_NOT_TESTED` | `create_from_capture()` 已改用正式 `create_work()` |
+| Projection reads | `IMPLEMENTED_NOT_TESTED` | `WorkProjector` 所需的 work/event/pending 读取方法已存在 |
+| Control adapter | `IMPLEMENTED_NOT_TESTED` | `WorkControlService` 已按 Store → Projector 接线 |
+| 合同测试文件 | `ADDED_NOT_RUN` | 已新增 store、capture bridge、control service、control contract 四个测试文件 |
+| 正式 8766 路由 | `PENDING` | `create_control_app()` 尚未注册 `src/control/work_routes.py` |
+| 正式 Service 共享接入 | `PENDING` | `LocalControlService` 尚未共享 `WorkControlService` / 同一 WorkStore |
+| Python ↔ Desktop 合同 | `PENDING` | ID、状态、事件、PendingAction 与响应外壳不一致 |
+| Outcome / NextAction / Memory 投影 | `PENDING` | 还没有完整读取、API 和跨页投影 |
+| 自动与主人验收 | `NOT_RUN` | focused、full、release、发布版 UI 和主人确认均未完成 |
+
+现有四个测试文件只证明合同测试代码已经加入仓库。其中 `tests/test_work_control_api.py` 当前验证的是 Control service 返回结构，不是正式 FastAPI 路由注册测试。
+
+当前必须先完成：
+
+1. 把 `/api/work/*` 注册到正式、认证的 `create_control_app()` 8766 路径；
+2. 让 `LocalControlService`、Work service、projector 和 Capture 共享同一正式 Store；
+3. 统一 Python DTO、API 响应与 TypeScript Work Fact 合同；
+4. 补齐 Outcome、NextAction、PendingAction 与 Memory/Failure 的读取和投影；
+5. 增加真正的 API、Projector、Desktop smoke 和端到端测试并实际执行；
+6. 证明 Capture 成功后能以同一 `work_id` 查询事件、结果和下一 actor。
 
 在以上门禁通过前，**禁止继续以视觉扩展为主的 UI 开发。**
 
@@ -228,6 +245,8 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 - `/api/work/current`、timeline、pending 等正式接口可运行；
 - 一条测试 WorkItem 可持久化、读取、投影；
 - focused tests 覆盖正常、空状态、失败状态和重启后读取。
+
+当前进度：**部分实现，未验证**。Store、Capture bridge、Projection read 与 Control adapter 已进入 `master`；正式 API 注册、Service 共享接入、Desktop 合同、Outcome/NextAction 和实际测试执行仍未完成。
 
 ### SB-1 — Capture → Work → Outcome 闭环
 

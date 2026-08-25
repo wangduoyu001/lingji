@@ -1,10 +1,13 @@
 # P0_ENGINEERING_HYGIENE_IMPLEMENTATION.md — 工程卫生实施记录
 
-> Updated（更新时间）: 2026-07-21  
-> Branch（分支）: `work/p0-engineering-hygiene`  
-> Base Commit（基础提交）: `e113c55d1e4738b20d60abe3bf79460a6f493a5f`  
-> Verified Code Commit（已验证代码提交）: `70e1a23b56f19287b3823a24c951f6c51c88aeff`  
-> Status（状态）: `IMPLEMENTED_PARTIALLY_VALIDATED_BLOCKED_FULL_REPOSITORY`  
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> Updated（更新时间）: 2026-07-21
+> Branch（分支）: `work/p0-engineering-hygiene`
+> Base Commit（基础提交）: `e113c55d1e4738b20d60abe3bf79460a6f493a5f`
+> Verified Code Commit（已验证代码提交）: `70e1a23b56f19287b3823a24c951f6c51c88aeff`
+> Status（状态）: `IMPLEMENTED_PARTIALLY_VALIDATED_BLOCKED_FULL_REPOSITORY`
 > Evidence（证据来源）: GitHub 分支代码、隔离 Linux/Python 3.13 环境、`docs/TEST_REPORTS/P0_ENGINEERING_HYGIENE_TEST_REPORT.md`
 
 ## 1. 任务目标

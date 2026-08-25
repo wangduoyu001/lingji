@@ -1,5 +1,8 @@
 # P2-09B Canonical Idempotency and MCP Queue Wiring
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 ## Goal
 
 Provide one durable identity algorithm for extraction jobs and ensure MCP capture/report tools always create or reuse a SQLite queue job before work is executed.

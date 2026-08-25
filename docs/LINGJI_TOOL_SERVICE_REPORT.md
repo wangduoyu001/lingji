@@ -1,5 +1,8 @@
 # LingJi Tool Service ? ????
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 > ????: 2026-07-19 01:30 (Asia/Singapore)
 > ??: D:\codex\lingji-second-brain
 > ??: feature/second-brain-memory

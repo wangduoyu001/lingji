@@ -2,9 +2,12 @@
 type: dashboard
 version: "1.0"
 title: "按变现类型分类"
+role: generated_data
 ---
 
 # 按变现类型分类
+
+> 2026-06 PEMIS 生成快照；不是当前开发进度或正式 Opportunity Center。
 
 ## 工具型变现 (tool)
 

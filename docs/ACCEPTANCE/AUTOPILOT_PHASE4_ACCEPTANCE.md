@@ -1,5 +1,8 @@
 # LingJi Phase 4 Autopilot Engine 验收合同
 
+> 文档角色：PR #88 的历史专项验收合同，不是当前任务单。
+> 该候选已被后续 M5 失败结论取代；只有 `LOCAL_EXECUTION_TASK.md` 的 `status: ACTIVE` 才能触发执行。
+
 > 日期：2026-08-11
 > PR：#88
 > 被测产品 Commit：`171091fe764c6653cdc7325b4a1a71e0b7800822`

@@ -1,9 +1,9 @@
 # CODE_MAP.md — LingJi 代码地图
 
-> Updated: 2026-08-22  
-> Scope: code entry points, ownership and focused validation only  
-> Architecture: `docs/ARCHITECTURE.md`  
-> Current status and development order: `docs/PROJECT_STATUS.md`  
+> Updated: 2026-08-25
+> Scope: code entry points, ownership and focused validation only
+> Architecture: `docs/ARCHITECTURE.md`
+> Current status and development order: `docs/PROJECT_STATUS.md`
 > Full test evidence: `docs/TEST_REPORTS/`
 
 本文件只回答三件事：代码在哪里、谁负责什么、修改后先跑什么。阶段状态、提交 SHA、CI 编号和历史测试结果不在此重复维护。
@@ -213,7 +213,10 @@ src/work/projector.py::WorkProjector
 
 ```text
 src/control/work_routes.py
-= 目标正式 /api/work/* route helper
+= 已定义但尚未接入 create_control_app 的 /api/work/* route helper
+
+src/control/work_api.py
+= 未装配的 /v1/work 草稿入口；不是正式认证 8766 API
 
 src/control/work_service.py::WorkControlService
 = work read-model adapter
@@ -241,41 +244,70 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 = PendingAction 投影
 ```
 
-### 6.4 当前必须先修的合同缺口
+### 6.4 当前合同状态与必须先修的缺口
 
-截至 2026-08-22，以上代码已经存在但**不能视为闭环完成**：
+截至 `ced1128e...`，已经进入 `master` 但尚未执行要求测试的部分：
 
 ```text
-CaptureWorkBridge.save_work
-!= WorkStore.create_work
-
-WorkProjector 需要 list_work/list_pending/list_events
-但 WorkStore 当前未提供
-
-LocalControlService 当前未正式暴露 current_work/pending_actions/work_timeline
-
-create_control_app 当前未完成 work_routes 注册
-
-Python work dataclass 字段/状态
-!= desktop workFact.ts 字段/状态
+CaptureWorkBridge -> WorkStore.create_work
+WorkStore -> list_work / list_events / list_pending
+WorkStore -> WorkProjector -> WorkControlService
 ```
 
-详细开发顺序与 UI 门禁见 `docs/PROJECT_STATUS.md` 的 WF-0 / UI-1 ... UI-8。
+不能因此视为闭环完成，当前阻塞仍包括：
 
-### 6.5 测试缺口
+```text
+create_control_app
+!= 尚未 register_work_routes
 
-当前 `tests/` 没有专门覆盖完整 Work Fact 链的测试。下一次实现变更必须补：
+LocalControlService
+!= 尚未共享 WorkControlService / WorkStore
+
+WorkControlService response
+= {items} / {events}
+
+Desktop pages expect
+= {work, events} / {pending_actions}
+
+Python model
+= work_id / event_type / dict detail / description / resolved
+
+TypeScript contract
+= id / event / string detail / summary / reason
+
+Outcome / NextAction
+!= 尚无完整 Store read / API / Desktop projection
+```
+
+`src/control/work_api.py` 还包含一个未装配的 `/v1/work` 草稿，并且默认构造路径与当前 `WorkProjector` 构造合同不一致。它不得被当作正式 API 已存在的证据。
+
+详细开发顺序与 UI 门禁见 `docs/PROJECT_STATUS.md` 的 SB-0 至 SB-8。
+
+### 6.5 已有合同测试与仍缺门禁
+
+已存在、但仓库报告尚未记录实际本机执行结果：
 
 ```text
 tests/test_work_store.py
-tests/test_work_projector.py
-tests/test_work_control_api.py
 tests/test_capture_work_bridge.py
-
-desktop/lingji-control/scripts/work-fact-smoke.mjs
+tests/test_work_control_service.py
+tests/test_work_control_api.py
 ```
 
-在这些门禁存在并通过前，不把 `/api/work/*` 视为正式 Desktop contract。
+其中 `test_work_control_api.py` 当前只覆盖 `WorkControlService` 的返回结构，没有创建 FastAPI app，也没有证明路由注册和鉴权。
+
+仍缺：
+
+```text
+tests/test_work_projector.py
+正式 create_control_app /api/work/* 路由与鉴权测试
+Outcome / NextAction / failure / restart 后读取测试
+Python ↔ TypeScript response contract 测试
+desktop/lingji-control/scripts/work-fact-smoke.mjs
+Capture -> Work -> Outcome -> Memory/PendingAction/Failure 端到端测试
+```
+
+在这些门禁存在并实际通过前，不把 `/api/work/*` 视为正式 Desktop contract。
 
 建议局部验收：
 

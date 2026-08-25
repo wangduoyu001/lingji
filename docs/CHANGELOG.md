@@ -2,6 +2,16 @@
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
 
+## 2026-08-25
+
+### SB-0 Work Fact 部分实现与文档事实对齐
+
+- `master` 已加入 WorkStore 的 work/event/pending 读取方法、Capture bridge 正式 `create_work()` 接线，以及 WorkControlService 的 Store → Projector 适配。
+- 已加入四个后端合同测试文件，但当前仓库记录没有证明它们已在要求环境实际运行通过。
+- 本次文档治理纠正了 `PROJECT_STATUS.md` 和 `CODE_MAP.md` 对已实现子项的过时描述，并明确剩余阻塞。
+- 正式 `create_control_app()` 路由注册、LocalControlService 共享 Store、Python/Desktop DTO 与响应合同、Outcome/NextAction/Memory 投影、端到端测试和主人验收仍未完成。
+- Phase 1 仍为 `SECOND BRAIN COMPLETION`，Opportunity Center 继续冻结；最近 M5 仍为 `FAIL / DO NOT MERGE`。
+
 ## 2026-07-26
 
 ### P2-11B Packaged Python runtime Sidecar manager

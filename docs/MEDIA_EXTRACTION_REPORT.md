@@ -1,5 +1,8 @@
 # 灵机本地音视频提取开发报告
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 ## 1. 目标
 
 为视频号录屏、抖音/小红书下载文件、会议录音、短剧素材和其他本地音视频建立统一媒体入口，复用 Extraction Queue、Raw Snapshot、隐私分流、Obsidian 路由和增量索引。

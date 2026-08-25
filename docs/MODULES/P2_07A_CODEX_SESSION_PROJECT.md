@@ -1,9 +1,12 @@
 # P2-07A Project Resolver + Codex Session Bridge
 
-> Updated: 2026-07-21  
-> Branch: `work/p2-07a-codex-session-project`  
-> Base Commit: `8b033eba1be6d4e7509a763b8333299672d2161b`  
-> Status: `IMPLEMENTED_NOT_TESTED`  
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> Updated: 2026-07-21
+> Branch: `work/p2-07a-codex-session-project`
+> Base Commit: `8b033eba1be6d4e7509a763b8333299672d2161b`
+> Status: `IMPLEMENTED_NOT_TESTED`
 > Merge State: `NOT_MERGED_AWAITING_COORDINATED_REVIEW`
 
 ## 1. 目标

@@ -1,12 +1,15 @@
 # 灵机桌面 UI 模块化报告
 
-> 模块：P1-0 桌面 UI 最小模块化  
-> 分支：`refactor/desktop-ui-modular-foundation`  
-> 堆叠基线：`test/real-environment-acceptance`  
-> Draft PR：`#6`  
-> 状态：`REVIEW_REQUIRED`  
-> 代码验证 Run：`29696562955`  
-> 目标：拆分前端结构、统一连接状态、正式接入环境验收、建立默认值可学习设置基础  
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> 模块：P1-0 桌面 UI 最小模块化
+> 分支：`refactor/desktop-ui-modular-foundation`
+> 堆叠基线：`test/real-environment-acceptance`
+> Draft PR：`#6`
+> 状态：`REVIEW_REQUIRED`
+> 代码验证 Run：`29696562955`
+> 目标：拆分前端结构、统一连接状态、正式接入环境验收、建立默认值可学习设置基础
 > 非目标：不修改后端 API、不新增业务模块、不重新设计视觉、不引入大型依赖
 
 ---
@@ -15,33 +18,33 @@
 
 ### 官方文档
 
-1. React Sharing State Between Components  
+1. React Sharing State Between Components
    https://react.dev/learn/sharing-state-between-components
    - 采用：连接状态和当前页面只保留一个权威来源。
-2. React Reusing Logic with Custom Hooks  
+2. React Reusing Logic with Custom Hooks
    https://react.dev/learn/reusing-logic-with-custom-hooks
    - 采用：把 API 连接、初始化和轮询抽到 `useLingJiConnection`。
-3. React Choosing the State Structure  
+3. React Choosing the State Structure
    https://react.dev/learn/choosing-the-state-structure
    - 采用：不复制可从已有状态计算出的 `dirty`、`overridden` 和筛选状态。
-4. Tauri State Management  
+4. Tauri State Management
    https://v2.tauri.app/develop/state-management/
    - 采用：Tauri 只负责桌面能力和安全凭据桥接，React 页面不直接操作系统状态。
-5. Visual Studio Code Settings UX  
+5. Visual Studio Code Settings UX
    https://code.visualstudio.com/api/ux-guidelines/settings
    - 采用：每项设置有默认值、明确说明、合适控件和恢复入口。
 
 ### 类似项目
 
-1. Visual Studio Code  
+1. Visual Studio Code
    https://github.com/microsoft/vscode
    - 设置按类别、搜索、修改状态和 Reset 操作组织。
    - 借鉴设置页的信息结构，不复制 Electron 或整个工作台架构。
-2. Open WebUI  
+2. Open WebUI
    https://github.com/open-webui/open-webui
    - Python 后端和独立前端通过 API 管理模型、连接和设置。
    - 借鉴功能页面与后台配置分离。
-3. AnythingLLM  
+3. AnythingLLM
    https://github.com/Mintplex-Labs/anything-llm
    - 桌面、本地优先、多个模型 Provider 和设置页面。
    - 借鉴“本地优先 + 可选 Provider”的页面分区，不复制其服务端和数据库结构。

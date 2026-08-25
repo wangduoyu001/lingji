@@ -1,8 +1,11 @@
 # P2-03C Capture Sources Foundation（信息入口基础框架）
 
-> Updated: 2026-07-21  
-> Branch: `work/p2-03c-capture-sources`  
-> Base Commit: `432ae059454cc7db8ab0ba4aaa63d24f5c9173e9`  
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
+> Updated: 2026-07-21
+> Branch: `work/p2-03c-capture-sources`
+> Base Commit: `432ae059454cc7db8ab0ba4aaa63d24f5c9173e9`
 > Status: `COORDINATED_REVIEW_FIXES_IMPLEMENTED` / `IMPLEMENTED_NOT_TESTED`
 
 ## 1. 架构边界

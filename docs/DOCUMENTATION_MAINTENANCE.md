@@ -1,198 +1,89 @@
-# DOCUMENTATION_MAINTENANCE.md — 文档实时维护合同
+# DOCUMENTATION_MAINTENANCE.md — 文档角色与防漂移规则
 
-> Updated（更新时间）: 2026-07-20  
-> Applies to（适用范围）: `feature/second-brain-memory` 及其后续开发分支  
-> Status（状态）: ACTIVE（生效中）
+> Updated: 2026-08-25
+> Status: ACTIVE ROUTING CONTRACT
+> 完整开发与验收规则：`docs/DEVELOPMENT_RULES.md`、`docs/ACCEPTANCE/README.md`
 
-## 1. 目标
+本文件只定义文档如何分类和避免误导，不复制当前进度、架构、测试数字、分支状态或验收细节。
 
-LingJi 的文档必须跟随真实代码、真实测试和真实合并状态更新。
+## 1. 唯一权威分工
 
-Documentation drift（文档漂移：文档描述落后于代码真实状态）不得作为正常现象长期存在。
+| 事实 | 详细权威 |
+|---|---|
+| 当前阶段、真实进度、阻塞、下一步 | `docs/PROJECT_STATUS.md` |
+| 稳定架构、数据权威、端口和长期边界 | `docs/ARCHITECTURE.md` |
+| 代码入口、模块所有权、局部测试 | `docs/MODULES/CODE_MAP.md` |
+| 尚未进入当前阶段的需求 | `docs/MODULES/FUTURE_DEVELOPMENT_TODO.md` |
+| 当前验收治理、任务、结果 | `docs/ACCEPTANCE/README.md` 及其列出的权威文件 |
+| 用户可感知或发布相关变化 | `docs/CHANGELOG.md` |
+| 特定提交和测试的历史证据 | `docs/TEST_REPORTS/` |
 
-任何 AI Agent（AI 智能体）、Codex 或人工开发任务，都不能只提交代码而不更新相关文档。
+同一个事实只保留一个详细权威。入口文档可以链接权威，但不复制会随开发变化的清单和结论。
 
-## 2. 文档权威顺序
+## 2. 文档角色
 
-当多个文档出现冲突时，按以下顺序判断：
-
-1. `docs/PROJECT_STATUS.md`
-   - Current State（当前状态）的唯一权威入口。
-   - 只记录已经确认的实现、测试、合并和阻塞状态。
-
-2. `docs/ARCHITECTURE.md` 与模块架构文档
-   - Architecture Contract（架构合同：长期设计边界和数据权威）。
-   - 不用于记录短期测试数字。
-
-3. `docs/MODULES/UNIFIED_MEMORY_DEVELOPMENT_ROADMAP.md`
-   - Roadmap（开发路线图：后续任务顺序和阶段目标）。
-
-4. `docs/TEST_REPORTS/`
-   - Test Evidence（测试证据：命令、环境、结果和限制）。
-   - 报告必须区分“已执行”和“计划执行”。
-
-5. `docs/CHANGELOG.md`
-   - Changelog（变更日志：按时间记录已经进入正式分支的变化）。
-
-6. Milestone Report（里程碑报告）
-   - 例如 `docs/FINAL_P2_MERGE_REPORT.md`。
-   - 用于冻结某一阶段的交付快照，不代替持续更新的项目状态。
-
-## 3. 强制更新时间点
-
-### 3.1 功能实现完成
-
-必须更新：
-
-- 对应模块计划或实现报告
-- Code Map（代码地图），仅当入口路径发生变化时
-- 对应测试报告中的“实现完成、待验证”状态
-
-### 3.2 本机或真实环境验证完成
-
-必须在同一任务中更新：
-
-- 对应测试报告
-- `docs/PROJECT_STATUS.md`
-- 验证 Commit（提交）
-- 测试命令、通过数、失败数、跳过数
-- 未执行项目和已知限制
-
-不得把未执行测试写成 PASS（通过）。
-
-### 3.3 合并正式分支完成
-
-必须在同一任务中更新：
-
-- `docs/PROJECT_STATUS.md`
-- `docs/CHANGELOG.md`
-- 对应报告中的 Branch（分支）、HEAD（最新提交）和 Merge State（合并状态）
-- 下一开发任务
-
-如果代码已经合并但文档尚未更新，该任务仍视为未完整交付。
-
-### 3.4 路线或优先级变化
-
-必须更新：
-
-- `docs/PROJECT_STATUS.md` 的 Next Development Sequence（下一开发顺序）
-- 对应 Roadmap（路线图）
-- 被推迟任务的原因和恢复条件
-
-## 4. 标准状态词
-
-所有实现和测试状态必须使用以下明确状态，禁止使用模糊的“基本完成”“应该可以”。
+每份长期保留的文档必须能归入以下一种角色：
 
 ```text
-PLANNED
-= 已规划，未实现
+CURRENT_AUTHORITY
+= 当前状态、架构、代码导航或验收的唯一权威
 
-IMPLEMENTED_NOT_TESTED
-= 已实现，尚未执行要求的测试
+SUPPORTING_GUIDE
+= 稳定使用说明；冲突时服从 CURRENT_AUTHORITY
 
-IMPLEMENTED_FOCUSED_TESTED
-= 已实现，相关重点测试已通过
+FUTURE_BACKLOG
+= 尚未进入当前阶段的需求，不得直接开工
 
-IMPLEMENTED_LOCALLY_VALIDATED
-= 已在真实本机环境验证
+HISTORICAL_EVIDENCE
+= 特定分支、提交、实现或测试快照，不代表当前状态
 
-MERGED_AND_VALIDATED
-= 已验证并合并正式分支
+GENERATED_DATA
+= 生成内容或业务快照，不代表工程健康度或产品阶段
 
-BLOCKED
-= 被明确问题阻塞
-
-DEPRECATED_COMPATIBILITY_ONLY
-= 已弃用，仅兼容用途
+MACHINE_CONFIGURATION
+= 依赖、约束和锁文件，不承担开发进度说明
 ```
 
-## 5. 文档头部标准
+历史文件可以保留旧分支、旧测试数字和旧结论，但必须有明显角色说明，不能使用未限定的“当前”“正常”“已完成”冒充今天的状态。
 
-所有 Current State（当前状态）、Test Report（测试报告）和 Implementation Plan（实施计划）应包含：
+## 3. 最小读取顺序
+
+所有开发、优化、修复、发布和验收任务严格按 `AGENTS.md` 的最小读取顺序执行。不要恢复已删除的旧 AI Context、旧 Roadmap、并行计划或阶段状态文档。
+
+历史模块记录的入口是 `docs/MODULES/README.md`；历史测试和验收记录的入口是 `docs/TEST_REPORTS/README.md`。
+
+## 4. 更新触发条件
+
+- 代码真实进度变化：更新 `PROJECT_STATUS.md`；代码入口或局部测试变化时同步 `CODE_MAP.md`。
+- 产品代码、Runtime、UI、数据链路、脚本、依赖或发布流程变化：同一变更更新 `CHANGE_ACCEPTANCE_LOG.md`。
+- 用户可感知或发布相关变化：更新 `CHANGELOG.md`。
+- 测试执行：在现有权威文档或 `TEST_REPORTS` 记录命令、提交、通过/失败/跳过和限制。
+- 路线改变：当前阶段只改 `PROJECT_STATUS.md`；未来需求只改 `FUTURE_DEVELOPMENT_TODO.md`。
+
+未执行测试只能写 `NOT_RUN` 或 `IMPLEMENTED_NOT_TESTED`，不能根据测试文件存在、旧 CI 通过或子代理报告推断 PASS。
+
+## 5. 清理规则
+
+优先更新现有权威，删除真正重复且已失去职责的当前计划。以下内容默认保留：
+
+- 历史测试/验收报告、失败证据、哈希和清理回执；
+- 已发布实现的历史设计记录；
+- 为回归和兼容承诺提供证据的旧结论；
+- PEMIS opportunity 等生成业务数据。
+
+保留不等于当前有效。历史和生成数据必须通过目录入口或文件头明确降级。
+
+## 6. 交付检查
+
+文档变更完成前至少检查：
 
 ```text
-Updated（更新时间）
-Branch（分支）
-Verified Commit（已验证提交）
-Status（状态）
-Evidence（证据来源）
+git diff --check
+当前权威是否引用已删除文件
+当前状态是否与代码和直接测试一致
+验收任务/结果是否被意外改变
+历史证据是否被删除或改写
+本地 Markdown 相对链接是否存在
 ```
 
-若报告不是基于当前正式 HEAD，必须明确写出验证基线，不得让读者自行猜测。
-
-## 6. 英文术语规则
-
-项目文档中 English Term（英文术语）首次出现时，必须带 Chinese Explanation（中文解释）。
-
-推荐格式：
-
-```text
-Read Model（读取模型：面向查询整理的可重建数据结构）
-Workspace（工作区：隔离生产和验收数据的运行环境）
-Smoke Test（冒烟测试：快速确认核心功能能否运行）
-```
-
-代码标识符、命令、路径、类名和函数名保持原始英文，不强制翻译。
-
-同一文档中术语首次解释后，后文可以直接使用英文名称。
-
-## 7. 测试数字规则
-
-每次记录测试结果必须同时写出：
-
-- 测试范围
-- 执行命令或脚本
-- passed（通过）
-- failed（失败）
-- skipped（跳过）
-- xfailed（预期失败，如存在）
-- 执行日期
-- 验证 Commit
-
-不同测试范围的数字不得直接比较。
-
-如果总测试数发生明显变化，必须解释原因；无法解释时标记为 `UNRECONCILED_TEST_COUNT_DELTA`（测试数量差异未核对），不得假装没有问题。
-
-## 8. 低积分执行规则
-
-Documentation-only Change（纯文档修改）默认通过 GitHub 直接完成，不调用本机 Codex。
-
-只有以下情况才需要 Codex：
-
-- 真实 Windows/Tauri（桌面运行框架）验证
-- Ollama/Qdrant（本地模型与向量数据库）验证
-- 本地文件系统行为
-- 完整依赖安装
-- 本机测试和构建
-
-已经通过且代码未受相关影响的测试，不重复执行。
-
-## 9. 多对话交接规则
-
-新对话开始开发前必须读取：
-
-1. `AGENTS.md`
-2. `docs/AI_CONTEXT.md`
-3. `docs/DEVELOPMENT_RULES.md`
-4. `docs/AI_COLLABORATION_RULES.md`
-5. `docs/DOCUMENTATION_MAINTENANCE.md`
-6. `docs/PROJECT_STATUS.md`
-7. 与当前任务直接相关的模块计划和测试报告
-
-新对话必须先确认 Remote HEAD（远程最新提交），但不得无意义地反复拉取和重复验证。
-
-## 10. 任务完成门槛
-
-任务只有同时满足以下条件才算完成：
-
-```text
-实现已提交
-相关测试状态已记录
-对应报告已更新
-PROJECT_STATUS 已更新
-CHANGELOG 已更新（正式分支变化时）
-下一步已记录
-远程分支状态已确认
-```
-
-少一项都属于 Delivery Incomplete（交付不完整）。
+纯文档治理不自动触发产品安装、Artifact、full/release 或主人 UI 验收；具体范围以本次 `CHANGE_ACCEPTANCE_LOG.md` 条目为准。

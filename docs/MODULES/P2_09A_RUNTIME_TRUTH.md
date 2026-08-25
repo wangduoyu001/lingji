@@ -1,5 +1,8 @@
 # P2-09A Runtime Truth and Configuration Alignment
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 ## Goal
 
 Make the local control status contract distinguish measured facts from unknown or unavailable values. The change covers GPU telemetry, embedding defaults, Qdrant rebuild diagnostics already exposed by the semantic provider, Brain Status aggregation, and startup component logging.

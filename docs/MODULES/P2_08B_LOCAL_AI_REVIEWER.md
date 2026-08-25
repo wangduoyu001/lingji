@@ -1,5 +1,8 @@
 # P2-08B Local AI Reviewer
 
+> 文档角色：历史实施/验证快照，不是当前进度或当前架构权威。
+> 当前状态看 `docs/PROJECT_STATUS.md`；当前代码入口看 `docs/MODULES/CODE_MAP.md`。
+
 ## Goal
 
 Add an optional local-only AI risk reviewer to the deterministic Auto Review SHADOW path. The AI component is advisory and may only add risk. It cannot approve, reject, merge, mutate memory, or override a deterministic hard rule.

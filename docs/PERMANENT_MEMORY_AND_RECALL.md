@@ -1,5 +1,7 @@
 # 灵机永久记忆、混合召回与多 AI 协作设计
 
+> 文档角色：支持性设计参考，不是当前进度、默认配置或实现完成证明。冲突时以 `docs/ARCHITECTURE.md`、`docs/PROJECT_STATUS.md`、`docs/MODULES/CODE_MAP.md` 和当前代码为准。
+
 ## 1. 目标
 
 灵机的永久记忆不是把全部聊天记录永久塞进模型上下文。

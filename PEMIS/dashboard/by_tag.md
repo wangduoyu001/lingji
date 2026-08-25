@@ -2,9 +2,12 @@
 type: dashboard
 version: "1.0"
 title: "按标签分类"
+role: generated_data
 ---
 
 # 按标签分类
+
+> 2026-06 PEMIS 生成快照；不是当前开发进度或正式 Opportunity Center。
 
 ## AI / 智能体 (agent, agentic, ai)
 

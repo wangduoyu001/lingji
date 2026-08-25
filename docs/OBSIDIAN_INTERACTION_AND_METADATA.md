@@ -1,5 +1,7 @@
 # 灵机 Obsidian 交互、属性、标签与关系设计
 
+> 文档角色：支持性设计参考，不是当前进度、默认配置或实现完成证明。冲突时以 `docs/ARCHITECTURE.md`、`docs/PROJECT_STATUS.md`、`docs/MODULES/CODE_MAP.md` 和当前代码为准。
+
 ## 1. 定位
 
 Obsidian 不是灵机的被动文件展示器，而是主人直接管理记忆、项目、任务、决策和关系的主界面。
