@@ -66,6 +66,22 @@ def _acquire_from_process(db_path: str, scan_id: str, lease_id: str, start, outp
     output.put((lease_id, row["lease_id"] if row else None))
 
 
+def _run_snapshot_runner_from_process(db_path: str, raw_root: str, source_root: str, scan_id: str, output) -> None:
+    state = StateDatabase(db_path)
+    queue = SQLiteExtractionQueue(db_path)
+    snapshot = ConsistentSnapshot(state, raw_root)
+    runner = SnapshotJobRunner(
+        snapshot,
+        queue,
+        state,
+        path_provider=lambda current_scan, current_source: list(Path(source_root).glob("*.txt")),
+    )
+    try:
+        output.put(runner.run(scan_id).status)
+    except Exception as exc:
+        output.put(f"error:{type(exc).__name__}:{exc}")
+
+
 def test_checkpoint_round_trip_persists_resume_fields_in_existing_state_db(tmp_path: Path):
     state, _, _, scan, _, _, _ = _scan_fixture(tmp_path, count=1)
     store = CheckpointStore(state)
@@ -197,6 +213,25 @@ def test_lease_ttl_expiry_allows_reclaim_without_unix_signal_authority(tmp_path:
     assert reclaimed["lease_id"] == "replacement"
 
 
+def test_legacy_null_lease_expiry_is_reclaimed_with_safe_expiration(tmp_path: Path):
+    state, _, _, scan, _, _, _ = _scan_fixture(tmp_path, count=1)
+    state.acquire_automatic_memory_scan_lease(scan.scan_id, "legacy-owner")
+    with state._connection() as connection:
+        connection.execute(
+            "UPDATE automatic_memory_scans SET lease_expires_at = NULL WHERE scan_id = ?",
+            (scan.scan_id,),
+        )
+
+    replacement = state.acquire_automatic_memory_scan_lease(
+        scan.scan_id,
+        "replacement",
+        ttl_seconds=5,
+    )
+
+    assert replacement is not None
+    assert replacement["lease_id"] == "replacement"
+
+
 def test_multiprocess_lease_competition_has_one_winner(tmp_path: Path):
     state, _, _, scan, _, _, _ = _scan_fixture(tmp_path, count=1)
     context = multiprocessing.get_context("spawn")
@@ -217,6 +252,36 @@ def test_multiprocess_lease_competition_has_one_winner(tmp_path: Path):
         assert process.exitcode == 0
     results = [output.get(timeout=2) for _ in processes]
     assert sum(lease == owned for lease, owned in results) == 1
+
+
+def test_two_snapshot_runners_compete_cross_process_and_converge_idempotently(tmp_path: Path):
+    state, _, source, scan, root, _, _ = _scan_fixture(tmp_path, count=5)
+    context = multiprocessing.get_context("spawn")
+    output = context.Queue()
+    processes = [
+        context.Process(
+            target=_run_snapshot_runner_from_process,
+            args=(
+                str(tmp_path / "lingji_state.db"),
+                str(tmp_path / "storage" / "raw"),
+                str(root),
+                scan.scan_id,
+                output,
+            ),
+        )
+        for _ in range(2)
+    ]
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(timeout=15)
+        assert process.exitcode == 0
+    statuses = [output.get(timeout=2) for _ in processes]
+
+    assert all(status in {"completed", "paused", "running"} for status in statuses), statuses
+    reopened_queue = SQLiteExtractionQueue(tmp_path / "lingji_state.db")
+    assert reopened_queue.count(source_type="automatic_memory_snapshot") == 5
+    assert len(list((tmp_path / "storage" / "raw").iterdir())) == 5
 
 
 def test_checkpoint_from_old_lease_cannot_overwrite_restarted_scan(tmp_path: Path):
@@ -420,3 +485,158 @@ def test_incremental_manifest_stays_per_path_and_scales_without_growing_token(tm
     assert len(items) == 2000
     assert max(len(item["sentinel"]) for item in items) < 64
     assert len(state.get_automatic_memory_scan(scan.scan_id)["source_sentinel"] or "") < 64
+
+
+def test_runner_rejects_queue_on_different_sqlite_file_before_any_snapshot_side_effect(tmp_path: Path):
+    state, _, _, scan, root, snapshot, _ = _scan_fixture(tmp_path, count=1)
+    other_queue = SQLiteExtractionQueue(tmp_path / "other.db")
+    runner = SnapshotJobRunner(
+        snapshot,
+        other_queue,
+        state,
+        path_provider=lambda current_scan, current_source: list(root.glob("*.txt")),
+    )
+
+    with pytest.raises(ValueError, match="same SQLite"):
+        runner.run(scan.scan_id)
+
+    assert list((tmp_path / "storage" / "raw").iterdir()) == []
+    assert other_queue.stats()["pending"] == 0
+    assert state.get_automatic_memory_scan(scan.scan_id)["progress"] == 0
+
+
+def test_runner_renews_short_ttl_during_slow_copy_and_stops_after_lease_release(tmp_path: Path):
+    state, _, _, scan, root, snapshot, queue = _scan_fixture(tmp_path, count=1)
+
+    class SlowSnapshot(ConsistentSnapshot):
+        def _copy_to_temp(self, source: Path, temporary: Path) -> None:
+            time.sleep(0.35)
+            super()._copy_to_temp(source, temporary)
+
+    slow = SlowSnapshot(state, tmp_path / "storage" / "raw")
+    runner = SnapshotJobRunner(
+        slow,
+        queue,
+        state,
+        path_provider=lambda current_scan, current_source: list(root.glob("*.txt")),
+        lease_ttl_seconds=0.1,
+    )
+
+    result = runner.run(scan.scan_id)
+
+    assert result.status == "completed"
+    assert queue.stats()["queued"] == 1
+    assert state.get_automatic_memory_scan(scan.scan_id)["lease_id"] is None
+
+
+def test_manifest_cleanup_removes_retired_scan_without_touching_current_recovery(tmp_path: Path):
+    state, _, _, old_scan, _, _, _ = _scan_fixture(tmp_path, count=1)
+    state.acquire_automatic_memory_scan_lease(old_scan.scan_id, "old-lease")
+    CheckpointStore(state).save(
+        ResumeToken(old_scan.scan_id, "item-00.txt", "8:1:1", "old-lease", 1)
+    )
+    state.release_automatic_memory_scan_lease(old_scan.scan_id, "old-lease")
+    state.update_automatic_memory_scan(old_scan.scan_id, status="completed")
+
+    current = state.create_automatic_memory_scan(
+        {
+            "scan_id": "scan-current",
+            "source_id": old_scan.source_id,
+            "status": "paused",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    state.acquire_automatic_memory_scan_lease(current["scan_id"], "current-lease")
+    CheckpointStore(state).save(
+        ResumeToken(current["scan_id"], "item-00.txt", "8:2:2", "current-lease", 1)
+    )
+    state.release_automatic_memory_scan_lease(current["scan_id"], "current-lease")
+
+    state.cleanup_automatic_memory_scan_manifest(old_scan.scan_id)
+
+    assert state.list_automatic_memory_scan_items(old_scan.scan_id) == []
+    assert len(state.list_automatic_memory_scan_items(current["scan_id"])) == 1
+
+
+def test_zero_inode_sentinel_is_stable_across_scan_and_resume(tmp_path: Path, monkeypatch):
+    state, _, _, scan, root, snapshot, queue = _scan_fixture(tmp_path, count=1)
+    source_file = root / "item-00.txt"
+    original_lstat = Path.lstat
+
+    class ZeroInode:
+        st_size = 6
+        st_mtime_ns = 123
+        st_ino = 0
+        st_mode = source_file.stat().st_mode
+
+    monkeypatch.setattr(Path, "lstat", lambda self: ZeroInode() if self == source_file else original_lstat(self))
+    runner = SnapshotJobRunner(
+        snapshot,
+        queue,
+        state,
+        path_provider=lambda current_scan, current_source: [source_file],
+    )
+
+    assert runner.run(scan.scan_id).status == "completed"
+    assert state.list_automatic_memory_scan_items(scan.scan_id)[0]["sentinel"].endswith(":0")
+
+
+def test_revoke_cancels_admitted_snapshot_jobs_but_preserves_other_source_jobs(tmp_path: Path):
+    state, registry, source, scan, root, snapshot, queue = _scan_fixture(tmp_path, count=2)
+    other_root = tmp_path / "other-authorized"
+    other_root.mkdir()
+    other = registry.register(
+        AuthorizationScope(
+            grant_id="grant-other",
+            source_kinds=("generic_file",),
+            roots=(str(other_root),),
+            granted_at=datetime.now(timezone.utc),
+            expires_at=None,
+            owner_confirmed=True,
+        ),
+        "generic_file",
+        str(other_root),
+    )
+    other_scan = registry.start_scan(other.source_id)
+    state.acquire_automatic_memory_scan_lease(scan.scan_id, "source-lease")
+    state.acquire_automatic_memory_scan_lease(other_scan.scan_id, "other-lease")
+    raw = snapshot.capture(
+        source.source_id,
+        root / "item-00.txt",
+        scan_id=scan.scan_id,
+        lease_id="source-lease",
+    )
+    other_file = other_root / "other.txt"
+    other_file.write_text("other", encoding="utf-8")
+    other_raw = snapshot.capture(
+        other.source_id,
+        other_file,
+        scan_id=other_scan.scan_id,
+        lease_id="other-lease",
+    )
+    queue.enqueue_authorized_snapshot(
+        scan_id=scan.scan_id,
+        lease_id="source-lease",
+        source_id=source.source_id,
+        relative_path=raw.relative_path,
+        raw_id=raw.raw_id,
+        sha256=raw.sha256,
+        input_path=snapshot.raw_root / raw.raw_id,
+    )
+    queue.enqueue_authorized_snapshot(
+        scan_id=other_scan.scan_id,
+        lease_id="other-lease",
+        source_id=other.source_id,
+        relative_path=other_raw.relative_path,
+        raw_id=other_raw.raw_id,
+        sha256=other_raw.sha256,
+        input_path=snapshot.raw_root / other_raw.raw_id,
+    )
+
+    registry.revoke(source.source_id)
+
+    source_jobs = [job for job in queue.list() if job["payload"].get("source_id") == source.source_id]
+    other_jobs = [job for job in queue.list() if job["payload"].get("source_id") == other.source_id]
+    assert source_jobs and all(job["status"] == "cancelled" for job in source_jobs)
+    assert other_jobs and other_jobs[0]["status"] == "queued"
+    assert queue.claim("worker", job_id=source_jobs[0]["job_id"]) is None

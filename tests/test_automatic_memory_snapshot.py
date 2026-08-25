@@ -265,7 +265,35 @@ def test_capture_quarantines_raw_conflict_for_diagnosis(tmp_path: Path):
 
     with pytest.raises(ValueError, match="content-addressed raw object"):
         snapshot.capture(source.source_id, source_file)
-    assert list(raw_root.glob("*.conflict"))
+    assert list(raw_root.glob("*.conflict")) == []
+
+
+def test_raw_conflict_records_hash_only_diagnostic_on_scan_without_retaining_source_copy(tmp_path: Path):
+    state, registry, source, root = _authorized_source(tmp_path)
+    scan = registry.start_scan(source.source_id)
+    state.acquire_automatic_memory_scan_lease(scan.scan_id, "conflict-lease")
+    source_file = root / "conflict.txt"
+    source_file.write_bytes(b"expected private source bytes")
+    raw_root = tmp_path / "storage" / "raw"
+    raw_root.mkdir(parents=True)
+    digest = __import__("hashlib").sha256(source_file.read_bytes()).hexdigest()
+    target = raw_root / digest
+    target.write_bytes(b"corrupt target")
+    snapshot = ConsistentSnapshot(registry, raw_root)
+
+    with pytest.raises(ValueError, match="content-addressed raw object"):
+        snapshot.capture(
+            source.source_id,
+            source_file,
+            scan_id=scan.scan_id,
+            lease_id="conflict-lease",
+        )
+
+    error = state.get_automatic_memory_scan(scan.scan_id)["last_error"]
+    assert "expected=" in error and "actual=" in error
+    assert b"expected private source bytes" not in error.encode()
+    assert not list(raw_root.glob("*.conflict"))
+    assert not list(raw_root.glob(".snapshot-*.tmp"))
 
 
 def test_revoke_during_copy_never_commits_raw_object(tmp_path: Path):

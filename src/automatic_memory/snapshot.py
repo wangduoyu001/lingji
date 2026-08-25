@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import stat as stat_module
 import tempfile
@@ -127,8 +128,22 @@ class ConsistentSnapshot:
                 temporary.unlink(missing_ok=True)
             except Exception as exc:
                 if isinstance(exc, ValueError) and "content-addressed raw object" in str(exc):
-                    diagnostic = temporary.with_suffix(temporary.suffix + ".conflict")
-                    os.replace(temporary, diagnostic)
+                    temporary.unlink(missing_ok=True)
+                    if scan_id and lease_id:
+                        actual_match = re.search(r"has SHA-256\s+([0-9a-f]{64})", str(exc))
+                        actual = actual_match.group(1) if actual_match else "unknown"
+                        diagnostic = (
+                            f"raw conflict target={self.raw_root / last_digest}; "
+                            f"expected={last_digest}; actual={actual}; detail={str(exc)[:1200]}"
+                        )
+                        try:
+                            self.state_db.update_automatic_memory_scan_owned(
+                                scan_id,
+                                lease_id,
+                                last_error=diagnostic,
+                            )
+                        except Exception:
+                            pass
                 else:
                     temporary.unlink(missing_ok=True)
                 raise

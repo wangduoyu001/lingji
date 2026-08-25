@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import shutil
 import zipfile
 from datetime import datetime
@@ -76,11 +77,7 @@ class VaultExtractionSink:
             # local filesystems supported by Python, unlike exists+replace.
             os.link(temporary_path, target)
         except FileExistsError:
-            if target.is_symlink() or not target.is_file():
-                raise ValueError(
-                    f"content-addressed raw object conflict: {target} is not a regular file"
-                )
-            existing_digest = self._sha256_file(target)
+            existing_digest = self._hash_existing_raw_target(target)
             if existing_digest != str(sha256).strip().lower():
                 raise ValueError(
                     f"content-addressed raw object conflict: {target} has SHA-256 "
@@ -102,6 +99,60 @@ class VaultExtractionSink:
             # the atomic rename remains the safety boundary there.
             pass
         return target
+
+    @staticmethod
+    def _hash_existing_raw_target(target: Path) -> str:
+        """Hash an existing object through a no-follow descriptor.
+
+        The descriptor keeps validation tied to the inode that was opened;
+        replacing the pathname during hashing cannot redirect the read.
+        Platforms without ``O_NOFOLLOW`` use conservative lstat/fstat checks
+        and reject a changed target rather than accepting a race.
+        """
+        try:
+            before = os.lstat(target)
+        except OSError as exc:
+            raise ValueError(
+                f"content-addressed raw object conflict: {target} cannot be inspected"
+            ) from exc
+        if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
+            raise ValueError(
+                f"content-addressed raw object conflict: {target} is not a regular file"
+            )
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(target, flags)
+        except OSError as exc:
+            raise ValueError(
+                f"content-addressed raw object conflict: {target} could not be opened safely"
+            ) from exc
+        try:
+            opened = os.fstat(descriptor)
+            if not stat.S_ISREG(opened.st_mode):
+                raise ValueError(
+                    f"content-addressed raw object conflict: {target} is not a regular file"
+                )
+            if hasattr(os, "O_NOFOLLOW") and (
+                opened.st_dev != before.st_dev or opened.st_ino != before.st_ino
+            ):
+                raise ValueError(
+                    f"content-addressed raw object conflict: {target} changed during validation"
+                )
+            digest = hashlib.sha256()
+            with os.fdopen(descriptor, "rb", closefd=True) as handle:
+                descriptor = -1
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            if not hasattr(os, "O_NOFOLLOW"):
+                after = os.lstat(target)
+                if after.st_dev != opened.st_dev or after.st_ino != opened.st_ino:
+                    raise ValueError(
+                        f"content-addressed raw object conflict: {target} changed during validation"
+                    )
+            return digest.hexdigest()
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
 
     def preserve_raw(self, input_path: Path | str | None, source_type: str) -> dict[str, Any]:
         if not input_path:

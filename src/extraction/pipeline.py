@@ -15,6 +15,7 @@ from .queue import SQLiteExtractionQueue
 from .registry import AdapterRegistry
 from .sink import VaultExtractionSink
 from .structured_sink import StructuredReadModelSink
+from src.storage import StateDatabase
 
 logger = logging.getLogger("lingji.extraction")
 
@@ -39,6 +40,7 @@ class ExtractionPipeline:
         default_priority_provider: DefaultPriorityProvider | None = None,
     ):
         self.queue = queue
+        self.state_db = StateDatabase(queue.path)
         self.registry = registry
         self.sink = sink
         self.structured_sink = structured_sink
@@ -123,8 +125,10 @@ class ExtractionPipeline:
             request.payload,
             preferred=adapter_name,
         )
+        self._ensure_automatic_memory_authorized(request.payload)
         raw_snapshot = self.sink.preserve_raw(request.input_path, source_type)
         batch = adapter.extract(request)
+        self._ensure_automatic_memory_authorized(request.payload)
         result = self.sink.write_batch(
             batch,
             adapter_name=adapter.name,
@@ -140,6 +144,7 @@ class ExtractionPipeline:
         }
         indexing_succeeded = self.on_documents_written is None
         if self.on_documents_written:
+            self._ensure_automatic_memory_authorized(request.payload)
             try:
                 self.on_documents_written(response)
                 response["indexed"] = True
@@ -152,6 +157,7 @@ class ExtractionPipeline:
                     message="Post-extraction index synchronization failed; see local logs",
                 )
                 indexing_succeeded = False
+        self._ensure_automatic_memory_authorized(request.payload)
         response["structured_read_model"] = self._write_structured(
             batch=batch,
             raw_snapshot=raw_snapshot,
@@ -203,6 +209,8 @@ class ExtractionPipeline:
         job = self.queue.claim(worker_id, job_id=job_id)
         if not job:
             return None
+        if not self._automatic_memory_job_authorized(job):
+            return {"job": self.queue.get(job["job_id"]), "result": {}}
         lease_token = str(job.get("lease_token") or "")
         stop_heartbeat = threading.Event()
         heartbeat_thread = threading.Thread(
@@ -265,6 +273,31 @@ class ExtractionPipeline:
             ):
                 logger.warning("Extraction lease heartbeat rejected: %s", job_id)
                 return
+
+    def _automatic_memory_job_authorized(self, job: Mapping[str, Any]) -> bool:
+        if job.get("source_type") != "automatic_memory_snapshot":
+            return True
+        source_id = str((job.get("payload") or {}).get("source_id") or "")
+        if not source_id:
+            return False
+        authorized = self.state_db.is_automatic_memory_source_authorized(source_id)
+        if authorized:
+            return True
+        try:
+            self.queue.cancel_running(
+                str(job["job_id"]),
+                worker_id=str(job.get("locked_by") or ""),
+                lease_token=str(job.get("lease_token") or ""),
+                reason="source authorization revoked",
+            )
+        except RuntimeError:
+            pass
+        return False
+
+    def _ensure_automatic_memory_authorized(self, payload: Mapping[str, Any]) -> None:
+        source_id = str(payload.get("source_id") or "")
+        if source_id and not self.state_db.is_automatic_memory_source_authorized(source_id):
+            raise PermissionError("source authorization revoked before downstream write")
 
     def process_pending(
         self,

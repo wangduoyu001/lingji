@@ -3,6 +3,8 @@ from __future__ import annotations
 import inspect
 import json
 import math
+import os
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Literal
@@ -28,10 +30,11 @@ class ResumeToken:
 class CheckpointStore:
     """Persist scan recovery in the existing StateDatabase scan row."""
 
-    def __init__(self, state_db: StateDatabase | Path | str):
+    def __init__(self, state_db: StateDatabase | Path | str, *, lease_ttl_seconds: float = 30.0):
         self.state_db = (
             state_db if isinstance(state_db, StateDatabase) else StateDatabase(state_db)
         )
+        self.lease_ttl_seconds = max(float(lease_ttl_seconds), 0.1)
 
     def save(self, token: ResumeToken) -> None:
         payload = json.dumps(
@@ -48,6 +51,7 @@ class CheckpointStore:
         self.state_db.update_automatic_memory_scan_owned(
             token.scan_id,
             token.lease_id,
+            lease_ttl_seconds=self.lease_ttl_seconds,
             cursor=token.cursor or None,
             source_sentinel=token.source_sentinel,
             attempt=int(token.attempt),
@@ -111,6 +115,7 @@ class SnapshotJobRunner:
         before_checkpoint: Callable[[int, int], None] | None = None,
         before_queue: Callable[[], None] | None = None,
         after_lease: Callable[[], None] | None = None,
+        lease_ttl_seconds: float = 30.0,
     ):
         if snapshot is None:
             snapshot = snapshotter
@@ -120,10 +125,59 @@ class SnapshotJobRunner:
         self.queue = queue
         self.state_db = state_db if isinstance(state_db, StateDatabase) else StateDatabase(state_db)
         self.path_provider = path_provider
-        self.checkpoints = checkpoint_store or CheckpointStore(state_db)
+        self.lease_ttl_seconds = max(float(lease_ttl_seconds), 0.1)
+        self.checkpoints = checkpoint_store or CheckpointStore(
+            self.state_db, lease_ttl_seconds=self.lease_ttl_seconds
+        )
         self.before_checkpoint = before_checkpoint
         self.before_queue = before_queue
         self.after_lease = after_lease
+        self._heartbeat_stop: threading.Event | None = None
+        self._heartbeat_thread: threading.Thread | None = None
+
+    def _validate_single_database(self) -> None:
+        state_path = Path(self.state_db.path).expanduser()
+        queue_path = Path(self.queue.path).expanduser()
+        try:
+            same = os.path.samefile(state_path, queue_path)
+        except (FileNotFoundError, OSError):
+            same = state_path.resolve(strict=False) == queue_path.resolve(strict=False)
+        if not same:
+            raise ValueError(
+                "SnapshotJobRunner requires state database and extraction queue to use the same SQLite file"
+            )
+
+    def _start_heartbeat(self, scan_id: str, lease_id: str) -> None:
+        stop = threading.Event()
+        self._heartbeat_stop = stop
+
+        def renew() -> None:
+            interval = max(min(self.lease_ttl_seconds / 3.0, 1.0), 0.05)
+            while not stop.wait(interval):
+                try:
+                    self.state_db.renew_automatic_memory_scan_lease(
+                        scan_id,
+                        lease_id,
+                        ttl_seconds=self.lease_ttl_seconds,
+                    )
+                except LeaseLostError:
+                    return
+
+        self._heartbeat_thread = threading.Thread(
+            target=renew,
+            name=f"lingji-automatic-memory-heartbeat-{scan_id}",
+            daemon=True,
+        )
+        self._heartbeat_thread.start()
+
+    def _stop_heartbeat(self) -> None:
+        stop, thread = self._heartbeat_stop, self._heartbeat_thread
+        self._heartbeat_stop = None
+        self._heartbeat_thread = None
+        if stop is not None:
+            stop.set()
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=max(self.lease_ttl_seconds, 0.2))
 
     def run(
         self,
@@ -132,6 +186,7 @@ class SnapshotJobRunner:
     ) -> ScanRun:
         if crash_at not in {"none", "30%", "70%", "after-lease"}:
             raise ValueError(f"unsupported crash_at: {crash_at}")
+        self._validate_single_database()
         row = self.state_db.get_automatic_memory_scan(scan_id)
         if row is None:
             raise LookupError(f"scan not found: {scan_id}")
@@ -181,13 +236,21 @@ class SnapshotJobRunner:
         source_sentinel = sentinels.get(cursor, "")
         lease_id = uuid4().hex
         attempt = int(row.get("attempt") or 0) + 1
-        acquired = self.state_db.acquire_automatic_memory_scan_lease(scan_id, lease_id)
+        acquired = self.state_db.acquire_automatic_memory_scan_lease(
+            scan_id, lease_id, ttl_seconds=self.lease_ttl_seconds
+        )
         if acquired is None:
             return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
         attempt = int(acquired.get("attempt") or attempt)
         self.state_db.update_automatic_memory_scan_owned(
-            scan_id, lease_id, total=total, last_error=None, updated_at=self._updated_at()
+            scan_id,
+            lease_id,
+            lease_ttl_seconds=self.lease_ttl_seconds,
+            total=total,
+            last_error=None,
+            updated_at=self._updated_at(),
         )
+        self._start_heartbeat(scan_id, lease_id)
         initial = ResumeToken(scan_id, cursor, source_sentinel, lease_id, attempt)
         self.checkpoints.save(initial)
         if self.after_lease is not None:
@@ -239,6 +302,7 @@ class SnapshotJobRunner:
                 self.state_db.update_automatic_memory_scan_owned(
                     scan_id,
                     lease_id,
+                    lease_ttl_seconds=self.lease_ttl_seconds,
                     progress=processed,
                     total=total,
                     updated_at=self._updated_at(),
@@ -246,18 +310,29 @@ class SnapshotJobRunner:
                 if crash_index is not None and processed >= crash_index:
                     return self._pause(scan_id, checkpoint)
         except LeaseLostError:
+            self._stop_heartbeat()
             return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
         except Exception as exc:
             checkpoint = ResumeToken(scan_id, cursor, source_sentinel, lease_id, attempt)
             try:
+                self._stop_heartbeat()
                 self.checkpoints.save(checkpoint)
+                existing_error = (self.state_db.get_automatic_memory_scan(scan_id) or {}).get(
+                    "last_error"
+                )
+                error_text = (
+                    str(existing_error)
+                    if isinstance(existing_error, str) and existing_error.startswith("raw conflict")
+                    else str(exc)[:2000]
+                )
                 self.state_db.update_automatic_memory_scan_owned(
                     scan_id,
                     lease_id,
+                    lease_ttl_seconds=self.lease_ttl_seconds,
                     status="failed",
                     total=total,
                     progress=processed,
-                    last_error=str(exc)[:2000],
+                    last_error=error_text,
                     updated_at=self._updated_at(),
                 )
                 self._release(scan_id, lease_id)
@@ -265,6 +340,7 @@ class SnapshotJobRunner:
                 return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
             return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
         try:
+            self._stop_heartbeat()
             finalized = self.state_db.finalize_automatic_memory_scan_lease(
                 scan_id,
                 lease_id,
@@ -275,13 +351,16 @@ class SnapshotJobRunner:
                 updated_at=self._updated_at(),
             )
         except LeaseLostError:
+            self._stop_heartbeat()
             return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
         return self._scan(finalized)
 
     def _pause(self, scan_id: str, token: ResumeToken) -> ScanRun:
+        self._stop_heartbeat()
         self.state_db.update_automatic_memory_scan_owned(
             scan_id,
             token.lease_id,
+            lease_ttl_seconds=self.lease_ttl_seconds,
             status="paused",
             cursor=token.cursor or None,
             recovery_token=json.dumps(token.__dict__, sort_keys=True),
@@ -291,6 +370,7 @@ class SnapshotJobRunner:
         return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
 
     def _release(self, scan_id: str, lease_id: str) -> None:
+        self._stop_heartbeat()
         self.state_db.release_automatic_memory_scan_lease(
             scan_id, lease_id, now=self._updated_at()
         )
@@ -314,14 +394,14 @@ class SnapshotJobRunner:
     @staticmethod
     def _sentinel(result: Any) -> str:
         stat = result.stat_after
-        return f"{stat.size}:{stat.mtime_ns}:{stat.inode or ''}"
+        return f"{stat.size}:{stat.mtime_ns}:{int(stat.inode or 0)}"
 
     @staticmethod
     def _path_sentinel(path: Path) -> str:
         stat = path.lstat()
         if not path.is_file() or path.is_symlink():
             return ""
-        return f"{stat.st_size}:{stat.st_mtime_ns}:{getattr(stat, 'st_ino', '')}"
+        return f"{stat.st_size}:{stat.st_mtime_ns}:{int(getattr(stat, 'st_ino', 0) or 0)}"
 
 
     @staticmethod

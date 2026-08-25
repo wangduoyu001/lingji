@@ -8,10 +8,14 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
+from uuid import uuid4
 
 
 class LeaseLostError(RuntimeError):
     """Raised when a stale worker attempts to mutate a newer scan lease."""
+
+
+_PROCESS_INSTANCE_ID = uuid4().hex
 
 
 class StateDatabase:
@@ -123,6 +127,7 @@ class StateDatabase:
                     lease_id TEXT,
                     lease_owner_pid INTEGER,
                     lease_owner_thread TEXT,
+                    lease_owner_instance TEXT,
                     lease_heartbeat_at TEXT,
                     lease_expires_at TEXT,
                     attempt INTEGER NOT NULL DEFAULT 0,
@@ -141,7 +146,9 @@ class StateDatabase:
                     sentinel TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'processed',
                     updated_at TEXT NOT NULL,
-                    PRIMARY KEY(scan_id, relative_path)
+                    PRIMARY KEY(scan_id, relative_path),
+                    FOREIGN KEY(scan_id) REFERENCES automatic_memory_scans(scan_id) ON DELETE CASCADE,
+                    FOREIGN KEY(source_id) REFERENCES automatic_memory_sources(source_id) ON DELETE CASCADE
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_automatic_memory_scan_items_source
@@ -161,6 +168,7 @@ class StateDatabase:
                 ("lease_id", "TEXT"),
                 ("lease_owner_pid", "INTEGER"),
                 ("lease_owner_thread", "TEXT"),
+                ("lease_owner_instance", "TEXT"),
                 ("lease_heartbeat_at", "TEXT"),
                 ("lease_expires_at", "TEXT"),
                 ("attempt", "INTEGER NOT NULL DEFAULT 0"),
@@ -179,8 +187,8 @@ class StateDatabase:
         value = datetime.fromisoformat(timestamp)
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
-        return (value + timedelta(seconds=max(float(ttl_seconds), 1.0))).isoformat(
-            timespec="seconds"
+        return (value + timedelta(seconds=max(float(ttl_seconds), 0.1))).isoformat(
+            timespec="microseconds"
         )
 
     @staticmethod
@@ -495,6 +503,24 @@ class StateDatabase:
                 (source_id,),
             ).fetchone()
         return dict(row) if row else None
+
+    def is_automatic_memory_source_authorized(
+        self, source_id: str, *, now: str | None = None
+    ) -> bool:
+        timestamp = now or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT sources.source_id
+                FROM automatic_memory_sources AS sources
+                JOIN automatic_memory_grants AS grants ON grants.grant_id = sources.grant_id
+                WHERE sources.source_id = ? AND sources.status = 'authorized'
+                  AND grants.owner_confirmed = 1
+                  AND (grants.expires_at IS NULL OR grants.expires_at > ?)
+                """,
+                (str(source_id), timestamp),
+            ).fetchone()
+        return row is not None
 
     def find_automatic_memory_source(
         self, grant_id: str, kind: str, root: str
@@ -831,11 +857,42 @@ class StateDatabase:
                 UPDATE automatic_memory_scans
                 SET status = 'cancelled', last_error = ?, lease_id = NULL,
                     lease_owner_pid = NULL, lease_owner_thread = NULL,
+                    lease_owner_instance = NULL,
                     lease_heartbeat_at = NULL, lease_expires_at = NULL, updated_at = ?
                 WHERE source_id = ? AND status IN ('running', 'paused', 'failed')
                 """,
                 (reason, revoked_at, source_id),
             )
+            # Snapshot jobs live in this same state database.  Cancellation is
+            # part of the revoke transaction so a runner cannot claim an
+            # admitted job after the authorization linearization point.
+            jobs_table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'extraction_jobs'"
+            ).fetchone()
+            if jobs_table is not None:
+                job_columns = {
+                    str(row[1])
+                    for row in connection.execute("PRAGMA table_info(extraction_jobs)").fetchall()
+                }
+                if "automatic_memory_source_id" in job_columns:
+                    source_filter = "automatic_memory_source_id = ? OR (automatic_memory_source_id IS NULL AND json_extract(payload_json, '$.source_id') = ?)"
+                    source_params: tuple[Any, ...] = (source_id, source_id)
+                else:
+                    source_filter = "json_extract(payload_json, '$.source_id') = ?"
+                    source_params = (source_id,)
+                connection.execute(
+                    f"""
+                    UPDATE extraction_jobs
+                    SET status = 'cancelled', completed_at = ?, next_run_at = ?,
+                        locked_at = NULL, locked_by = NULL, lease_token = NULL,
+                        heartbeat_at = NULL, progress_message = 'source authorization revoked',
+                        last_error = ?, updated_at = ?
+                    WHERE source_type = 'automatic_memory_snapshot'
+                      AND ({source_filter})
+                      AND status IN ('queued', 'retrying', 'running')
+                    """,
+                    (revoked_at, revoked_at, reason, revoked_at, *source_params),
+                )
             updated = connection.execute(
                 "SELECT * FROM automatic_memory_sources WHERE source_id = ?",
                 (source_id,),
@@ -939,7 +996,7 @@ class StateDatabase:
     ) -> dict[str, Any] | None:
         """Atomically acquire a scan lease, reclaiming only a dead owner."""
 
-        timestamp = now or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        timestamp = now or datetime.now(timezone.utc).isoformat(timespec="microseconds")
         pid = os.getpid()
         thread_id = str(threading.get_ident())
         expires = self._lease_expiry(timestamp, ttl_seconds)
@@ -953,36 +1010,41 @@ class StateDatabase:
             existing_pid = row["lease_owner_pid"]
             if row["lease_id"]:
                 expired = not row["lease_expires_at"] or row["lease_expires_at"] <= timestamp
-                owner_alive = False
-                if not expired and existing_pid:
+                if not expired:
+                    # TTL remains the safety boundary for an active owner.
+                    # A process-death probe is only an early-reclaim hint;
+                    # the instance UUID prevents a recycled PID from being
+                    # mistaken for the original owner.
                     same_process_thread_alive = (
-                        int(existing_pid) == pid
+                        int(existing_pid or 0) == pid
+                        and str(row["lease_owner_instance"] or "") == _PROCESS_INSTANCE_ID
                         and str(row["lease_owner_thread"] or "")
                         in {str(thread.ident) for thread in threading.enumerate()}
                     )
-                    try:
-                        os.kill(int(existing_pid), 0)
-                        owner_alive = True
-                    except OSError:
-                        owner_alive = False
-                    owner_alive = owner_alive and not (
-                        int(existing_pid) == pid and not same_process_thread_alive
-                    )
-                if owner_alive:
-                    return None
+                    if same_process_thread_alive:
+                        return None
+                    if int(existing_pid or 0) == pid and str(row["lease_owner_instance"] or "") != _PROCESS_INSTANCE_ID:
+                        return None
+                    if int(existing_pid or 0) != pid:
+                        try:
+                            os.kill(int(existing_pid), 0)
+                            return None
+                        except OSError:
+                            pass
             updated = connection.execute(
                 """
                 UPDATE automatic_memory_scans
                 SET status = 'running', lease_id = ?, lease_owner_pid = ?,
-                    lease_owner_thread = ?, lease_heartbeat_at = ?, lease_expires_at = ?,
+                    lease_owner_thread = ?, lease_owner_instance = ?, lease_heartbeat_at = ?, lease_expires_at = ?,
                     attempt = attempt + 1,
                     last_error = NULL, updated_at = ?
                 WHERE scan_id = ? AND status IN ('running', 'paused', 'failed')
                   AND (lease_id IS NULL OR lease_owner_pid IS NULL OR lease_owner_pid != ?
-                       OR lease_owner_thread != ? OR lease_expires_at <= ?)
+                       OR lease_owner_thread != ? OR lease_expires_at IS NULL
+                       OR lease_expires_at <= ?)
                 """,
                 (
-                    str(lease_id), pid, thread_id, timestamp, expires, timestamp,
+                    str(lease_id), pid, thread_id, _PROCESS_INSTANCE_ID, timestamp, expires, timestamp,
                     scan_id, pid, thread_id, timestamp,
                 ),
             )
@@ -1001,7 +1063,7 @@ class StateDatabase:
         now: str | None = None,
         ttl_seconds: float = 30.0,
     ) -> dict[str, Any]:
-        timestamp = now or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        timestamp = now or datetime.now(timezone.utc).isoformat(timespec="microseconds")
         expires = self._lease_expiry(timestamp, ttl_seconds)
         with self._lock, self._connection() as connection:
             updated = connection.execute(
@@ -1009,8 +1071,9 @@ class StateDatabase:
                 UPDATE automatic_memory_scans
                 SET lease_heartbeat_at = ?, lease_expires_at = ?, updated_at = ?
                 WHERE scan_id = ? AND status = 'running' AND lease_id = ?
+                  AND (lease_expires_at IS NULL OR lease_expires_at > ?)
                 """,
-                (timestamp, expires, timestamp, scan_id, str(lease_id)),
+                (timestamp, expires, timestamp, scan_id, str(lease_id), timestamp),
             )
             if updated.rowcount != 1:
                 raise LeaseLostError(f"scan lease lost: {scan_id}")
@@ -1020,7 +1083,7 @@ class StateDatabase:
         return dict(row)
 
     def update_automatic_memory_scan_owned(
-        self, scan_id: str, lease_id: str, **values: Any
+        self, scan_id: str, lease_id: str, *, lease_ttl_seconds: float = 30.0, **values: Any
     ) -> dict[str, Any]:
         """Update checkpoint/progress only while this exact lease owns the row."""
 
@@ -1037,12 +1100,14 @@ class StateDatabase:
         }
         changes = {key: value for key, value in values.items() if key in allowed}
         if not changes:
-            return self.renew_automatic_memory_scan_lease(scan_id, lease_id)
+            return self.renew_automatic_memory_scan_lease(
+                scan_id, lease_id, ttl_seconds=lease_ttl_seconds
+            )
         changes["lease_heartbeat_at"] = values.get(
             "updated_at", datetime.now(timezone.utc).isoformat(timespec="seconds")
         )
         changes["lease_expires_at"] = self._lease_expiry(
-            changes["lease_heartbeat_at"], 30.0
+            changes["lease_heartbeat_at"], lease_ttl_seconds
         )
         assignments = ", ".join(f"{key} = ?" for key in changes)
         with self._lock, self._connection() as connection:
@@ -1051,8 +1116,9 @@ class StateDatabase:
                 UPDATE automatic_memory_scans
                 SET {assignments}
                 WHERE scan_id = ? AND status = 'running' AND lease_id = ?
+                  AND (lease_expires_at IS NULL OR lease_expires_at > ?)
                 """,
-                (*changes.values(), scan_id, str(lease_id)),
+                (*changes.values(), scan_id, str(lease_id), changes["lease_heartbeat_at"]),
             )
             if updated.rowcount != 1:
                 raise LeaseLostError(f"scan lease lost: {scan_id}")
@@ -1065,19 +1131,24 @@ class StateDatabase:
         self, scan_id: str, lease_id: str, **values: Any
     ) -> dict[str, Any]:
         values["status"] = "completed"
+        timestamp = values.get(
+            "updated_at", datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        )
         allowed = {"status", "cursor", "progress", "total", "last_error", "updated_at"}
         changes = {key: value for key, value in values.items() if key in allowed}
         changes["lease_id"] = None
         changes["lease_owner_pid"] = None
         changes["lease_owner_thread"] = None
+        changes["lease_owner_instance"] = None
         changes["lease_heartbeat_at"] = None
         changes["lease_expires_at"] = None
         assignments = ", ".join(f"{key} = ?" for key in changes)
         with self._lock, self._connection() as connection:
             updated = connection.execute(
-                f"UPDATE automatic_memory_scans SET {assignments} "
-                "WHERE scan_id = ? AND status = 'running' AND lease_id = ?",
-                (*changes.values(), scan_id, str(lease_id)),
+                f"""UPDATE automatic_memory_scans SET {assignments}
+                WHERE scan_id = ? AND status = 'running' AND lease_id = ?
+                  AND (lease_expires_at IS NULL OR lease_expires_at > ?)""",
+                (*changes.values(), scan_id, str(lease_id), timestamp),
             )
             if updated.rowcount != 1:
                 raise LeaseLostError(f"scan lease lost: {scan_id}")
@@ -1095,7 +1166,8 @@ class StateDatabase:
                 """
                 UPDATE automatic_memory_scans
                 SET lease_id = NULL, lease_owner_pid = NULL,
-                    lease_owner_thread = NULL, lease_heartbeat_at = NULL,
+                    lease_owner_thread = NULL, lease_owner_instance = NULL,
+                    lease_heartbeat_at = NULL,
                     lease_expires_at = NULL, updated_at = ?
                 WHERE scan_id = ? AND lease_id = ?
                 """,
@@ -1119,6 +1191,26 @@ class StateDatabase:
                 (scan_id,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def cleanup_automatic_memory_scan_manifest(self, scan_id: str) -> int:
+        """Delete per-path recovery rows only for a retired scan.
+
+        Completed/cancelled scans no longer need path sentinels.  Running and
+        paused scans are retained so recovery cannot lose its durable cursor.
+        """
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT status FROM automatic_memory_scans WHERE scan_id = ?",
+                (scan_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(scan_id)
+            if str(row["status"]) in {"running", "paused"}:
+                raise ValueError("cannot clean an active automatic-memory scan manifest")
+            cursor = connection.execute(
+                "DELETE FROM automatic_memory_scan_items WHERE scan_id = ?", (scan_id,)
+            )
+            return int(cursor.rowcount)
 
     def upsert_automatic_memory_scan_item_owned(
         self,
@@ -1144,11 +1236,13 @@ class StateDatabase:
                   AND scans.lease_id = ? AND scans.source_id = ?
                   AND sources.status = 'authorized' AND grants.owner_confirmed = 1
                   AND (grants.expires_at IS NULL OR grants.expires_at > ?)
+                  AND (scans.lease_expires_at IS NULL OR scans.lease_expires_at > ?)
                 """,
                 (
                     scan_id,
                     str(lease_id),
                     source_id,
+                    datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 ),
             ).fetchone()
@@ -1198,11 +1292,13 @@ class StateDatabase:
                   AND scans.lease_id = ? AND scans.source_id = ?
                   AND sources.status = 'authorized' AND grants.owner_confirmed = 1
                   AND (grants.expires_at IS NULL OR grants.expires_at > ?)
+                  AND (scans.lease_expires_at IS NULL OR scans.lease_expires_at > ?)
                 """,
                 (
                     scan_id,
                     str(lease_id),
                     source_id,
+                    datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 ),
             ).fetchone()

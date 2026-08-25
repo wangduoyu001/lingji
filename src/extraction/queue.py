@@ -51,6 +51,7 @@ class _SQLiteExtractionQueueBase:
                     adapter_name TEXT,
                     adapter_version TEXT NOT NULL DEFAULT '',
                     input_path TEXT,
+                    automatic_memory_source_id TEXT,
                     payload_json TEXT NOT NULL DEFAULT '{}',
                     options_json TEXT NOT NULL DEFAULT '{}',
                     idempotency_key TEXT NOT NULL UNIQUE,
@@ -90,6 +91,7 @@ class _SQLiteExtractionQueueBase:
             for row in connection.execute("PRAGMA table_info(extraction_jobs)").fetchall()
         }
         columns = {
+            "automatic_memory_source_id": "TEXT",
             "adapter_version": "TEXT NOT NULL DEFAULT ''",
             "lease_token": "TEXT",
             "heartbeat_at": "TEXT",
@@ -163,6 +165,9 @@ class _SQLiteExtractionQueueBase:
     ) -> dict[str, Any]:
         now = now or datetime.now()
         normalized_path = str(Path(input_path).expanduser()) if input_path else None
+        automatic_memory_source_id = None
+        if source_type == "automatic_memory_snapshot" and payload:
+            automatic_memory_source_id = str(payload.get("source_id") or "") or None
         key = idempotency_key or self.build_idempotency_key(
             source_type,
             normalized_path,
@@ -190,6 +195,7 @@ class _SQLiteExtractionQueueBase:
                     """
                     UPDATE extraction_jobs
                     SET source_type = ?, adapter_name = ?, adapter_version = ?, input_path = ?,
+                        automatic_memory_source_id = ?,
                         payload_json = ?, options_json = ?, status = 'queued', priority = ?,
                         attempts = 0, max_attempts = ?, next_run_at = ?, locked_at = NULL,
                         locked_by = NULL, lease_token = NULL, heartbeat_at = NULL,
@@ -202,6 +208,7 @@ class _SQLiteExtractionQueueBase:
                         adapter_name,
                         adapter_version,
                         normalized_path,
+                        automatic_memory_source_id,
                         self._json(payload),
                         self._json(options),
                         int(priority),
@@ -216,9 +223,10 @@ class _SQLiteExtractionQueueBase:
                     """
                     INSERT INTO extraction_jobs (
                         job_id, source_type, adapter_name, adapter_version, input_path,
+                        automatic_memory_source_id,
                         payload_json, options_json, idempotency_key, status, priority,
                         max_attempts, next_run_at, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)
                     """,
                     (
                         job_id,
@@ -226,6 +234,7 @@ class _SQLiteExtractionQueueBase:
                         adapter_name,
                         adapter_version,
                         normalized_path,
+                        automatic_memory_source_id,
                         self._json(payload),
                         self._json(options),
                         key,
@@ -500,6 +509,41 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
                 raise RuntimeError("Extraction job state changed before cancellation")
         return self.get(job_id)
 
+    def cancel_running(
+        self,
+        job_id: str,
+        *,
+        worker_id: str,
+        lease_token: str,
+        reason: str,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Cancel an executing job when authorization is revoked."""
+        now = now or datetime.now()
+        with self._lock, self._connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE extraction_jobs
+                SET status = 'cancelled', completed_at = ?, next_run_at = ?,
+                    locked_at = NULL, locked_by = NULL, lease_token = NULL,
+                    heartbeat_at = NULL, progress_message = 'cancelled',
+                    last_error = ?, updated_at = ?
+                WHERE job_id = ? AND status = 'running' AND locked_by = ? AND lease_token = ?
+                """,
+                (
+                    self._iso(now),
+                    self._iso(now),
+                    str(reason)[:2000],
+                    self._iso(now),
+                    job_id,
+                    worker_id,
+                    lease_token,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise RuntimeError("Extraction job lease lost before cancellation")
+        return self.get(job_id)
+
     def retry(self, job_id: str, *, now: datetime | None = None) -> dict[str, Any]:
         now = now or datetime.now()
         with self._lock, self._connection() as connection:
@@ -590,13 +634,15 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
                 """
                 INSERT INTO extraction_jobs (
                     job_id, source_type, adapter_name, adapter_version, input_path,
+                    automatic_memory_source_id,
                     payload_json, options_json, idempotency_key, status, priority,
                     max_attempts, next_run_at, created_at, updated_at
-                ) VALUES (?, 'automatic_memory_snapshot', 'automatic_memory_snapshot', '1', ?, ?, ?, ?, 'queued', 100, 3, ?, ?, ?)
+                ) VALUES (?, 'automatic_memory_snapshot', 'automatic_memory_snapshot', '1', ?, ?, ?, ?, ?, 'queued', 100, 3, ?, ?, ?)
                 """,
                 (
                     job_id,
                     normalized_path,
+                    source_id,
                     self._json(payload),
                     self._json({"snapshot": True}),
                     key,
