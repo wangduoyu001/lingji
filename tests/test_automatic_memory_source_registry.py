@@ -293,6 +293,37 @@ def test_start_scan_is_idempotent_and_failed_scan_requires_retry(tmp_path: Path)
     assert retried.status == "running"
 
 
+def test_failed_scan_can_be_paused_to_preserve_recovery_state(tmp_path: Path):
+    """Catches the compatibility regression that removed failed -> paused recovery."""
+    root = tmp_path / "root"
+    root.mkdir()
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    registry = SourceRegistry(StateDatabase(tmp_path / "state.db"))
+    source = registry.register(
+        AuthorizationScope(
+            grant_id="grant-failed-pause",
+            source_kinds=("chatgpt_export",),
+            roots=(str(root),),
+            granted_at=now,
+            expires_at=None,
+            owner_confirmed=True,
+        ),
+        "chatgpt_export",
+        str(root),
+    )
+    scan = registry.start_scan(source.source_id)
+    registry.update_scan(
+        scan.scan_id,
+        status="failed",
+        last_error="recoverable snapshot failure",
+    )
+
+    paused = registry.pause_scan(scan.scan_id)
+    assert paused.status == "paused"
+    assert paused.last_error == "recoverable snapshot failure"
+    assert paused.recovery_token
+
+
 def test_concurrent_start_scan_creates_one_active_scan(tmp_path: Path):
     """Catches check-then-insert races that create multiple active scans."""
     root = tmp_path / "root"

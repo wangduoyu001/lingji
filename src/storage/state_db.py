@@ -678,7 +678,7 @@ class StateDatabase:
                 expired = True
             elif row["source_status"] != "authorized" or not row["owner_confirmed"]:
                 raise PermissionError("source is not authorized for scanning")
-            elif row["status"] != "running":
+            elif row["status"] not in {"running", "failed"}:
                 raise ValueError(f"scan cannot be paused from {row['status']}")
             else:
                 connection.execute(
