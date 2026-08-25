@@ -332,6 +332,8 @@ runtime_binary_available=true
 
 增量变更必须在 30 秒内进入既有 Extraction Queue；watcher 使用 5 秒防抖，但 15 分钟 reconciliation 和每日完整性检查才是正确性来源。验收须证明 watcher 静默不会阻止 reconciliation，也不得把 watcher 事件数当作完整性事实。
 
+每个扫描文件必须有 stat-before/copy/stat-after 证据；源文件变化必须重试，未变化的 source sentinel 必须保持不变。验收必须覆盖 content-addressed raw、checkpoint/resume token、lease/retry、30% 和 70% 崩溃恢复、重复扫描产生 0 个重复 raw/job，以及 scan cursor/progress/error/recovery 在 SQLite 和 8766 中可读。
+
 ### 11.2 Obsidian 自动记忆范围
 
 自动记忆验收默认不读取或索引普通 Obsidian 文档。仅 `_LingJi/Memory Inbox`、`_LingJi/Memory Library` 或 frontmatter `lingji_memory: true` 合格；`lingji_memory: false` 永远优先。必须验证 dry-run、路径边界、Production/Acceptance 隔离和 Git 安全，不得静默写入、移动、删除或把普通/正式知识蒸馏进 Core Memory。
@@ -354,6 +356,7 @@ runtime_binary_available=true
 - Current 模式默认排除 `superseded`、`invalidated`、`archived`；历史模式必须显式选择并保留 validity/replacement 证据。
 - lexical、Qdrant、hybrid、Core、ContextPack 和 MCP 必须使用同一 current predicate；ContextPack 不超过 12,000 字符且每条结论有 citation。
 - 自动 derived current memory 只有在无冲突、低风险且置信度 `>= 0.90` 时可激活；Core、身份、高风险和正式永久知识必须由主人明确确认。
+- 必须分别验证 lexical DB SQL、Qdrant payload filter、hybrid post-filter、Core list、现有 `src/retrieval/context_pack.py`、`src/gateway/memory_gateway.py` 和 MCP 的 `current`、`as_of`、`history`、`why` 模式。
 
 ## 13. Local Control API 和 MCP
 
@@ -415,7 +418,9 @@ runtime_binary_available=true
 
 Windows 重启前写 checkpoint，重启后继续，不重复前面全部步骤。
 
-Phase 1 自动记忆的真实机器顺序是 macOS M5 first：先完成 macOS focused/full/release、同 SHA macOS Artifact、主人观察、清理和远程复读，再进入 Windows。Opportunity Center 在 Phase 1 最终 PASS 前保持冻结。
+Phase 1 自动记忆的真实机器顺序是 macOS M5 first：先完成 macOS focused/full/release、同 SHA macOS Artifact、主人观察、清理和远程复读，再进入 Windows parity。Windows parity 必须验证 PowerShell 5.1、同一 8766 API/DTO/数据语义、非 C 盘运行数据和同源 Artifact；缺少 macOS PASS 时不得开始。Opportunity Center 在 Phase 1 最终 PASS 前保持冻结。
+
+重启、主人肉眼观察、UI 保持打开和真实客户端调用不能被 pytest 或 `scripts/validate.ps1` 冒充自动通过。Task 10 只能准备并执行 macOS M5 acceptance，不得激活 `LOCAL_EXECUTION_TASK.md` 的 IDLE 任务；产品代码完成后由主代理另发精确 ACTIVE 本机任务。
 
 ## 16. 安全和隐私
 

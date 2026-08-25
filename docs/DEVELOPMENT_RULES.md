@@ -104,6 +104,12 @@ Before adding any external package, copied implementation or generated adapter:
 
 Raw AI chats, snapshots, provenance and parsed records are evidence and rebuildable retrieval inputs. A low-risk, high-confidence (`>= 0.90`), conflict-free derived current-memory projection may activate automatically, but it is not formal permanent knowledge and must be reconstructible from evidence. Core Memory, identity, high-risk facts and formal permanent knowledge require explicit owner confirmation. `superseded`, `invalidated` and `archived` facts remain auditable with validity and replacement links but are excluded from current retrieval, ContextPack and MCP modes.
 
+## 5C. Automatic Memory Ingestion Contract
+
+Automatic-memory implementations must register source roots and scan runs in the existing `StateDatabase` before reading content. The registry stores authorization, status, cursor, progress, errors, lease, retry and recovery data and is exposed only through authenticated 8766 routes. A source file is accepted only after stat-before/copy/stat-after stability; changed files retry, stable files receive content-addressed raw identity, and checkpoint/resume must survive crashes without duplicate raw objects or extraction jobs. `watchfiles` events are latency hints; persistent scheduler reconciliation and daily integrity are correctness checks.
+
+The implementation must extend existing `src/retrieval/context_pack.py` and `src/gateway/memory_gateway.py` rather than create parallel modules. Temporal current/as-of/history/why filtering must be shared by lexical DB, Qdrant payload, hybrid post-filter, Core list, ContextPack, MemoryGateway and MCP. Desktop must consume the authenticated API and Work Fact DTO rather than read storage directly.
+
 ## 6. Task Routing
 
 Use the simplest capable execution method.

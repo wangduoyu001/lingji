@@ -74,6 +74,8 @@ Supported source rules are explicit:
 
 Every accepted input produces an immutable raw snapshot, stable source/conversation/message identities and append-only provenance before it enters the existing extraction queue. Raw evidence and parsed rows are rebuildable inputs to lexical/Qdrant indexes; neither replaces Obsidian Vault + Git or formal Work Fact persistence.
 
+Source authorization, scan runs, cursors, progress, errors, leases, retries and recovery tokens are persisted through the existing `StateDatabase`. A consistent snapshot records stat-before, copy and stat-after; a changed source retries, while a stable source receives a content-addressed raw identity and an idempotent extraction job. The authenticated 8766 Local Control API is the only Desktop control boundary for register, revoke, scan, pause, retry and status.
+
 ## 3B. Obsidian and Memory Promotion Boundaries
 
 Obsidian ordinary notes and formal knowledge remain excluded from automatic memory by default. Automatic memory may read only `_LingJi/Memory Inbox`, `_LingJi/Memory Library` or notes with frontmatter `lingji_memory: true`; `lingji_memory: false` has highest precedence. Automatic indexing must not silently distill ordinary Obsidian knowledge into personal memory, overwrite formal notes or bypass dry-run and Git safety rules.
@@ -138,6 +140,8 @@ Qdrant failure must not disable lexical retrieval. Unknown vector state must not
 Current retrieval is the default across lexical, semantic, hybrid, Core, ContextPack and MCP paths. A shared temporal-current predicate excludes facts outside their validity window or marked superseded, invalidated or archived; historical retrieval is an explicit mode. ContextPack output is capped at 12,000 characters and must carry raw/source/conversation/message/memory citations.
 
 File watching is a latency optimization only. Phase 1 uses `watchfiles==1.2.0` with a five-second debounce, admits incremental changes to the existing extraction queue within 30 seconds, runs mandatory 15-minute reconciliation against an authorized-root manifest, and performs a daily completeness check. Watcher silence never proves completeness.
+
+The watcher and reconciliation lifecycle is owned by the existing scheduler boundary (`src/scheduler/cron.py`) with persistent start/stop/pause/resume state; it must recover unfinished scan runs from their checkpoint rather than start a duplicate scan. The existing `src/retrieval/context_pack.py` is extended in place. `src/gateway/memory_gateway.py`, `src/mcp_server.py`, lexical `src/retrieval/memory_db.py`, Qdrant payload filters and `src/retrieval/hybrid.py` all consume one temporal query (`current`, explicit `as_of`, explicit `history` or `why`). No parallel gateway or ContextPack module is allowed.
 
 ## 6. Port Contract
 

@@ -249,23 +249,23 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 
 ## 5. Phase 1 重新规划后的开发顺序
 
-### 5.0 Automatic Memory Tasks 1–11（Task 0 封板后按序执行）
+### 5.0 Automatic Memory Tasks 1–11（Task 0 封板后按依赖顺序执行）
 
 以下是自动化第二大脑的独立审查顺序；当前全部为 `PLANNED`，不代表代码已存在：
 
 | Task | 交付边界 | 当前状态 |
 |---|---|---|
-| 1 | 一次性中文授权、allowlist 与隐私策略 | `PLANNED` |
-| 2 | 授权根发现与客户端能力矩阵 | `PLANNED` |
-| 3 | ChatGPT 官方导出适配器 | `PLANNED` |
-| 4 | `watchfiles==1.2.0`、5 秒防抖、15 分钟 reconciliation、每日完整性 | `PLANNED` |
-| 5 | Codex transcript schema-detect / fail-closed | `PLANNED` |
-| 6 | Claude Desktop unsupported / consent_required 边界 | `PLANNED` |
-| 7 | 原始证据、SHA-256 provenance、幂等队列桥 | `PLANNED` |
-| 8 | Obsidian 自动记忆范围与正式知识边界 | `PLANNED` |
-| 9 | 时态有效性与 derived current-memory 投影 | `PLANNED` |
-| 10 | 统一 RAG、12,000 字符 ContextPack、MCP 与 Desktop Work Fact | `PLANNED` |
-| 11 | 评测、macOS M5-first、Artifact 与最终验收门禁 | `PLANNED` |
+| 1 | 来源注册、一次性中文授权、扫描状态与认证 8766 API | `PLANNED` |
+| 2 | 一致快照、SHA-256 幂等、checkpoint/lease/retry/续扫 | `PLANNED` |
+| 3 | macOS ChatGPT/Codex/Claude/generic JSON/JSONL/Markdown adapters | `PLANNED` |
+| 4 | `watchfiles==1.2.0`、5 秒防抖、15 分钟 reconciliation、每日完整性、持久 scheduler | `PLANNED` |
+| 5 | Obsidian 隔离、dry-run manifest、派生索引迁移与 rollback | `PLANNED` |
+| 6 | derived current-memory promotion 与 Core/owner review 边界 | `PLANNED` |
+| 7 | lexical/Qdrant/hybrid/Core/ContextPack/MemoryGateway/MCP 全链路 temporal filter | `PLANNED` |
+| 8 | 中文 onboarding、authorize/revoke/scan/pause/retry、Work Fact、Python/TS DTO、Desktop | `PLANNED` |
+| 9 | 现有 RAG/ContextPack/MCP 扩展与独立 100 问质量评测 | `PLANNED` |
+| 10 | macOS M5 release、owner acceptance、UI 保持打开与报告 | `PLANNED` |
+| 11 | macOS PASS 后的 Windows parity、PowerShell 5.1 与 release | `PLANNED` |
 
 全局验收数值固定为：增量 30 秒内进入队列；自动记忆置信度 `>= 0.90`；`quality_score >= 90%`、`source_accuracy >= 95%`、`false_positive_rate <= 5%`、Codex MCP 真实成功率 `>= 95%`、重复正式内容 `0`、Production 污染 `0`、人工审核链 `100%`、重启恢复 `100%`。Task 4 才允许引入 watcher 依赖；Task 0 不引入依赖。
 

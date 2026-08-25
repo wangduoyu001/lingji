@@ -320,43 +320,93 @@ python -m pytest -q --tb=short -k "work or capture_work"
 
 ## Automatic Memory（Phase 1 planned ownership）
 
-本节只登记 Task 0 封板后的计划入口；这些路径在实现并通过对应测试前，不得被描述为已实现能力。
+本节只登记 Task 0 修复后的计划入口；这些路径在实现并通过对应测试前，不得被描述为已实现能力。顺序是依赖顺序，不是当前完成状态。
 
 ```text
+Task 1:
 src/automatic_memory/models.py
-src/automatic_memory/policy.py
-= Task 1 authorization scope and privacy decisions
+src/automatic_memory/source_registry.py
+src/control/automatic_memory_api.py
+src/control/api.py
+src/control/service.py
+= persistent source authorization, scan run/progress/error/recovery and authenticated 8766 routes
 
-src/automatic_memory/discovery.py
-src/automatic_memory/source_catalog.py
-= Task 2 bounded authorized-root discovery and capability status
+Task 2:
+src/automatic_memory/snapshot.py
+src/automatic_memory/checkpoint.py
+src/extraction/idempotency.py
+src/extraction/sink.py
+src/extraction/queue.py
+= stat-before/copy/stat-after, content-addressed raw, idempotency, leases, retries and resume
 
-src/automatic_memory/adapters/chatgpt_export.py
-src/automatic_memory/adapters/codex_transcript.py
-src/automatic_memory/adapters/claude_desktop.py
-= Tasks 3, 5, 6 official-export, schema-detect and unsupported boundaries
+Task 3:
+src/extraction/adapters/chatgpt.py
+src/extraction/adapters/codex.py
+src/extraction/adapters/generic_ai_history.py
+src/extraction/adapters/claude_desktop.py
+src/extraction/registry.py
+= macOS official ChatGPT, schema-detected Codex, generic JSON/JSONL/Markdown and Claude boundary
 
+Task 4:
 src/automatic_memory/watcher.py
-src/automatic_memory/reconciliation.py
-= Task 4 watchfiles debounce and manifest reconciliation
+src/automatic_memory/scheduler.py
+src/scheduler/cron.py
+src/config.py
+= watchfiles debounce, persistent scheduler lifecycle, 15-minute reconciliation and daily integrity
 
-src/automatic_memory/raw_archive.py
-src/automatic_memory/provenance.py
-src/automatic_memory/queue_bridge.py
-= Task 7 immutable raw evidence and append-only provenance bridge
-
+Task 5:
 src/obsidian/memory_scope.py
-= Task 8 explicit Obsidian memory eligibility
+src/obsidian/memory_migration.py
+src/obsidian/discovery.py
+src/obsidian/service.py
+= bounded memory scope, dry-run manifest, managed-derived migration and rollback
 
-src/automatic_memory/temporal.py
-src/automatic_memory/current_projection.py
-= Task 9 validity windows and rebuildable derived current memory
+Task 6:
+src/automatic_memory/derived_memory.py
+src/auto_review/application.py
+src/memory/lifecycle.py
+src/retrieval/memory_db.py
+= rebuildable derived promotion and owner/Core boundary
 
-src/automatic_memory/context_pack.py
-= Task 10 citations and bounded ContextPack through MemoryGateway
+Task 7:
+src/retrieval/temporal_filter.py
+src/retrieval/memory_db.py
+src/retrieval/qdrant_provider.py
+src/retrieval/hybrid.py
+src/retrieval/context_pack.py
+src/gateway/memory_gateway.py
+src/mcp_server.py
+src/project_memory/context_service.py
+= one current/as_of/history/why predicate across every retrieval path
+
+Task 8:
+src/work/models.py
+src/work/store.py
+src/work/projector.py
+desktop/lingji-control/src/contracts/workFact.ts
+desktop/lingji-control/src/pages/OverviewPage.tsx
+desktop/lingji-control/src/pages/ActivityPage.tsx
+desktop/lingji-control/src/pages/AttentionPage.tsx
+desktop/lingji-control/scripts/automatic-memory-smoke.mjs
+desktop/lingji-control/package.json
+= real Work Fact, Python/TypeScript DTO and 8766-backed Desktop onboarding
+
+Task 9:
+src/retrieval/context_pack.py
+src/gateway/memory_gateway.py
+src/mcp_server.py
+src/automatic_memory/evaluation.py
+= existing RAG/ContextPack/MCP extension and separate 100-question quality gate
+
+Tasks 10–11:
+scripts/validate.ps1
+desktop/lingji-control/scripts/macos-release-smoke.mjs
+desktop/lingji-control/scripts/windows-release-smoke.mjs
+scripts/build_windows_sidecar.ps1
+= macOS M5 owner acceptance first, then independent Windows parity
 ```
 
-Planned focused tests are `tests/test_automatic_memory_policy.py`, `tests/test_automatic_memory_discovery.py`, `tests/test_chatgpt_export_adapter.py`, `tests/test_automatic_memory_watcher.py`, `tests/test_automatic_memory_reconciliation.py`, `tests/test_codex_transcript_adapter.py`, `tests/test_claude_desktop_boundary.py`, `tests/test_automatic_memory_provenance.py`, `tests/test_automatic_memory_queue_bridge.py`, `tests/test_obsidian_memory_scope.py`, `tests/test_automatic_memory_temporal.py`, `tests/test_current_memory_projection.py`, `tests/test_automatic_memory_context_pack.py`, and `tests/test_automatic_memory_work_projection.py`; each becomes valid only after its owning Task implements the contract. Task 4 owns the future `watchfiles==1.2.0` dependency; Task 0 does not alter dependency files.
+Planned focused tests are named in the implementation plan and map to these exact paths. Task 4 owns the future `watchfiles==1.2.0` dependency; Task 0 does not alter dependency files. The existing `src/retrieval/context_pack.py` and `src/gateway/memory_gateway.py` are extended in place; no `src/automatic_memory/context_pack.py` or `src/gateway/memory.py` is planned.
 
 ## 7. 记忆审核与 Auto Review
 
