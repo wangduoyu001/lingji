@@ -4,19 +4,19 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
-## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 4 · authorized downstream linearization
+## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 5 · protected snapshot admission boundary
 
 - 产品分支：`codex/phase1-automatic-memory`
-- 产品 Commit：`3a07c3c9af19539fb8f8142148a4ca8450e093ae`
-- 影响模块：existing StateDatabase authorization transaction, extraction pipeline/queue, secure snapshot source opening, raw sink validation, Task 2 race/recovery tests
+- 产品 Commit：`b0bc0cc2b15112b0cae203dee3af445fca2b33b7`
+- 影响模块：existing extraction queue claim policy/pipeline boundary, short snapshot raw/queue authorization checks, secure snapshot source opening, raw sink validation, Task 2 race/recovery tests
 - 风险等级：P0
-- 用户可感知变化：automatic-memory downstream side effects are admitted under one existing `lingji_state.db` writer transaction; revoke-before-admission yields zero downstream writes, while revoke during an admitted batch waits until the complete batch boundary. Ordinary extraction jobs with a `source_id` payload remain unaffected.
-- 数据或安全边界变化：lease checks use microsecond TTL comparisons; heartbeat failures stop safely and record failure; source files and existing raw objects are opened with no-follow descriptor validation; failed scan manifests remain recoverable while completed/cancelled cleanup writes an audit event.
+- 用户可感知变化：通用 ExtractionPipeline 不会执行或 claim 内部 `automatic_memory_snapshot` 作业；普通 job 保持原行为。快照作业仍由 Task 2 runner 负责授权快照、content-addressed raw 和 existing queue admission。
+- 数据或安全边界变化：移除包围文件/Vault/索引 callback 的长 SQLite 事务；raw commit 与 queue admission 各自使用短授权检查。revoke 仍在现有 `lingji_state.db` 原子取消 snapshot queued/retrying/running jobs；raw 与 queue 之间的孤儿 raw evidence 通过 scan 状态错误记录保留、但不进入 current retrieval。lease/heartbeat/manifest/no-follow race 修复保持。
 
 ### 新增或修改的自动验收
 
-- [ ] `pytest -q tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_extraction_worker.py`：43 passed，覆盖撤销竞态的完整批次/零提交语义、普通 job 隔离、短 TTL、心跳生命周期、no-follow source/raw race、双 runner 最终 completed 与强杀恢复。
-- [ ] `pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_hardening.py tests/test_extraction_worker.py`：Task 1/queue/extraction 回归。
+- [ ] `pytest -q tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_extraction_queue.py tests/test_extraction_worker.py`：54 passed，覆盖内部 snapshot 不 claim/不 execute、revoke cancel、短 TTL、心跳生命周期、no-follow source/raw race、双 runner 最终 completed 与强杀恢复。
+- [ ] `pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_hardening.py tests/test_extraction_worker.py tests/test_structured_ingestion.py`：47 passed，Task 1/queue/extraction/pipeline 回归。
 - [ ] `py_compile`、`git diff --check`、`python scripts/check_acceptance_sync.py`、`python scripts/check_local_execution_handoff.py`。
 
 ### 新增或修改的真机验收
@@ -26,14 +26,14 @@
 ### 回归项
 
 - [ ] Full-suite baseline limitation 保持原样：Desktop integration assertion mismatch 与 `python` executable unavailable 的 `test_second_brain` 在 `d12c1fb` 和当前树均复现；不修改、不掩盖。
-- [ ] 不实现 Task 3 adapter、watcher、聊天解析、Obsidian 正文或 tombstone/reconcile。
+- [ ] Task 3 待办：专用 snapshot parser/consumer、可恢复 staging/outbox、下游可见性事务；通用 ExtractionPipeline 禁止绕过此边界。Task 2 不实现 adapter、watcher、聊天解析、Obsidian 正文或 tombstone/reconcile。
 
 ### 清理与回滚
 
-- 临时数据前缀：`PHASE1_AUTOMATIC_MEMORY_TASK2_FIX4_`
+- 临时数据前缀：`PHASE1_AUTOMATIC_MEMORY_TASK2_FIX5_`
 - 覆盖安装或迁移方式：不安装、不启动；pytest 临时数据库/raw/queue/marker 自动清理。
 - 冲突清理：不保留 `.conflict` 正文副本；仅在现有 scan `last_error` 保留无正文 hash/path 诊断。
-- 回滚：回滚产品 Commit `3a07c3c9af19539fb8f8142148a4ca8450e093ae` 及其父实现提交，不触碰主人数据。
+- 回滚：回滚产品 Commit `b0bc0cc2b15112b0cae203dee3af445fca2b33b7` 及其父实现提交，不触碰主人数据。
 
 ### 最终报告
 
