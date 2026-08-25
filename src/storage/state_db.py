@@ -81,6 +81,46 @@ class StateDatabase:
                     ON processing_states(status, updated_at);
                 CREATE INDEX IF NOT EXISTS idx_events_entity
                     ON events(entity_type, entity_id, created_at);
+
+                CREATE TABLE IF NOT EXISTS automatic_memory_grants (
+                    grant_id TEXT PRIMARY KEY,
+                    source_kinds_json TEXT NOT NULL,
+                    roots_json TEXT NOT NULL,
+                    granted_at TEXT NOT NULL,
+                    expires_at TEXT,
+                    owner_confirmed INTEGER NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS automatic_memory_sources (
+                    source_id TEXT PRIMARY KEY,
+                    grant_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    root TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    capability TEXT NOT NULL,
+                    policy_version TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    revoked_at TEXT,
+                    UNIQUE(grant_id, kind, root)
+                );
+
+                CREATE TABLE IF NOT EXISTS automatic_memory_scans (
+                    scan_id TEXT PRIMARY KEY,
+                    source_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    cursor TEXT,
+                    progress INTEGER NOT NULL DEFAULT 0,
+                    total INTEGER,
+                    last_error TEXT,
+                    recovery_token TEXT,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_automatic_memory_sources_status
+                    ON automatic_memory_sources(status, created_at);
+                CREATE INDEX IF NOT EXISTS idx_automatic_memory_scans_source
+                    ON automatic_memory_scans(source_id, updated_at);
                 """
             )
 
@@ -321,3 +361,170 @@ class StateDatabase:
                 "SELECT * FROM events ORDER BY event_id DESC LIMIT ?", (int(limit),)
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def create_automatic_memory_grant(self, record: dict[str, Any]) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO automatic_memory_grants (
+                    grant_id, source_kinds_json, roots_json, granted_at, expires_at,
+                    owner_confirmed, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record["grant_id"],
+                    record["source_kinds_json"],
+                    record["roots_json"],
+                    record["granted_at"],
+                    record.get("expires_at"),
+                    int(bool(record["owner_confirmed"])),
+                    record["created_at"],
+                ),
+            )
+
+    def get_automatic_memory_grant(self, grant_id: str) -> dict[str, Any] | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_grants WHERE grant_id = ?",
+                (grant_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def create_automatic_memory_source(self, record: dict[str, Any]) -> dict[str, Any]:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO automatic_memory_sources (
+                    source_id, grant_id, kind, root, status, capability,
+                    policy_version, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record["source_id"],
+                    record["grant_id"],
+                    record["kind"],
+                    record["root"],
+                    record["status"],
+                    record["capability"],
+                    record["policy_version"],
+                    record["created_at"],
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_sources WHERE source_id = ?",
+                (record["source_id"],),
+            ).fetchone()
+        return dict(row)
+
+    def get_automatic_memory_source(self, source_id: str) -> dict[str, Any] | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_sources WHERE source_id = ?",
+                (source_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def find_automatic_memory_source(
+        self, grant_id: str, kind: str, root: str
+    ) -> dict[str, Any] | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM automatic_memory_sources
+                WHERE grant_id = ? AND kind = ? AND root = ?
+                """,
+                (grant_id, kind, root),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_automatic_memory_sources(self) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM automatic_memory_sources ORDER BY created_at, source_id"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def update_automatic_memory_source(
+        self, source_id: str, *, status: str, revoked_at: str | None = None
+    ) -> dict[str, Any]:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                UPDATE automatic_memory_sources
+                SET status = ?, revoked_at = ?
+                WHERE source_id = ?
+                """,
+                (status, revoked_at, source_id),
+            )
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_sources WHERE source_id = ?",
+                (source_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(source_id)
+        return dict(row)
+
+    def create_automatic_memory_scan(self, record: dict[str, Any]) -> dict[str, Any]:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO automatic_memory_scans (
+                    scan_id, source_id, status, cursor, progress, total,
+                    last_error, recovery_token, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record["scan_id"],
+                    record["source_id"],
+                    record["status"],
+                    record.get("cursor"),
+                    int(record.get("progress", 0)),
+                    record.get("total"),
+                    record.get("last_error"),
+                    record.get("recovery_token"),
+                    record["updated_at"],
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?",
+                (record["scan_id"],),
+            ).fetchone()
+        return dict(row)
+
+    def get_automatic_memory_scan(self, scan_id: str) -> dict[str, Any] | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?",
+                (scan_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def update_automatic_memory_scan(self, scan_id: str, **values: Any) -> dict[str, Any]:
+        allowed = {
+            "status",
+            "cursor",
+            "progress",
+            "total",
+            "last_error",
+            "recovery_token",
+            "updated_at",
+        }
+        changes = {key: value for key, value in values.items() if key in allowed}
+        if not changes:
+            current = self.get_automatic_memory_scan(scan_id)
+            if current is None:
+                raise KeyError(scan_id)
+            return current
+        assignments = ", ".join(f"{key} = ?" for key in changes)
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                f"UPDATE automatic_memory_scans SET {assignments} WHERE scan_id = ?",
+                (*changes.values(), scan_id),
+            )
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?",
+                (scan_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(scan_id)
+        return dict(row)

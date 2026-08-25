@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from src.acceptance import AcceptanceChecker
 from src.acceptance_reports import AcceptanceReportStore
+from src.automatic_memory import SourceRegistry
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.extraction.queue import SQLiteExtractionQueue
 from src.gateway.memory_statistics import MemoryStatisticsService
@@ -40,6 +41,7 @@ class LocalControlService:
     ):
         self.settings = settings
         self.state_db = state_db or StateDatabase(settings.state_db_path)
+        self.automatic_memory_registry = SourceRegistry(self.state_db)
         self.runtime_settings = RuntimeSettingsStore(settings, state_db=self.state_db)
         self.obsidian = ObsidianService(
             settings, runtime_settings=self.runtime_settings, state_db=self.state_db

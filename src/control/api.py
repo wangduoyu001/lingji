@@ -22,6 +22,7 @@ from .capture_api import (
     CaptureWebRequest,
     register_capture_routes,
 )
+from .automatic_memory_api import register_automatic_memory_routes
 
 logger = logging.getLogger("lingji.control.read_model")
 READ_MODEL_ERROR_CODE = "READ_MODEL_UNAVAILABLE"
@@ -576,5 +577,6 @@ def create_control_app(
     register_obsidian_routes(
         app, control, dependencies=secured, translate_error=translate_error
     )
+    register_automatic_memory_routes(app, control, secured)
     register_capture_routes(app, settings, control, token=token)
     return app
