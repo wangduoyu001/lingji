@@ -4,6 +4,52 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 1 · lease-safe recovery
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`pending — fix round implementation`
+- 影响模块：existing StateDatabase scan leases/checkpoints, snapshot runner recovery, content-addressed raw sink, Task 2 focused tests
+- 风险等级：P0
+- 用户可感知变化：扫描在并发、进程中断和重启后只由当前 lease owner 推进，并会复核 cursor 之前文件的持久 sentinel。
+- 数据或安全边界变化：checkpoint/progress/finalize/release 均按 lease ownership 条件更新；旧 lease 不能覆盖或清理新 lease；损坏或目录 raw 冲突显式失败并保留临时诊断文件。
+
+### 新增或修改的自动验收
+
+- [ ] `pytest -q tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py`：17 项，含线程/多进程 lease 竞争、旧 lease 隔离、早期 sentinel/新增早期路径、raw 冲突、30%/70% 子进程强杀后重启收敛及 queue-before-checkpoint 中断。
+- [ ] `pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_hardening.py tests/test_extraction_worker.py tests/test_chatgpt_importer.py tests/test_structured_ingestion.py tests/test_capture_control.py`：Task 1 与 extraction 回归。
+- [ ] `py_compile`、`git diff --check`、`python scripts/check_acceptance_sync.py`、`python scripts/check_local_execution_handoff.py`。
+
+### 新增或修改的真机验收
+
+- [ ] 本轮不启动 Artifact；保持 `LOCAL_EXECUTION_TASK.md` 为 `IDLE`。
+
+### 主人肉眼确认
+
+- [ ] 不适用；Task 2 不修改 Desktop 或正式 Vault 正文。
+
+### 回归项
+
+- [ ] 既有 `StateDatabase`/source registry 状态和 extraction queue/sink/idempotency 回归保持通过。
+- [ ] Full-suite 两项既有失败（Desktop integration assertion mismatch；`python` executable unavailable in `test_second_brain`）已在基线 `d12c1fb` 与当前 HEAD 复现，记录为 baseline limitation，不修改、不掩盖。
+- [ ] 不新增数据库、队列、raw archive、watcher、聊天解析或 Task 3 适配器。
+
+### 清理与回滚
+
+- 临时数据前缀：`PHASE1_AUTOMATIC_MEMORY_TASK2_FIX1_`
+- 覆盖安装或迁移方式：不安装、不启动；pytest 临时目录和子进程自动清理。
+- 临时备份删除条件：无。
+- 测试数据清理方式：只清理 pytest 临时授权 root、SQLite、raw、queue 与 crash marker。
+- 回滚：回滚本 fix round 提交，不触碰主人数据。
+
+### 不在范围
+
+- 不解析聊天、不实现 watcher、不写 Obsidian 正文、不改变 Task 3 代码。
+
+### 最终报告
+
+- 报告路径：本地调度报告仍保留于 gitignored `.superpowers/sdd/2026-08-26-phase1-automatic-memory/task-2-report.md`；正式验收证据为本条目。
+- 报告分支：`codex/phase1-automatic-memory`
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 2 · consistent snapshot and resume
 
 - 产品分支：`codex/phase1-automatic-memory`

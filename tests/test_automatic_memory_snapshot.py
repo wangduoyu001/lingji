@@ -8,6 +8,8 @@ import pytest
 
 from src.automatic_memory.models import AuthorizationScope
 from src.automatic_memory.source_registry import SourceRegistry
+from src.extraction.sink import VaultExtractionSink
+from src.memory import VaultLayout
 from src.storage import StateDatabase
 
 try:
@@ -169,3 +171,31 @@ def test_changed_source_retries_three_times_and_cleans_unstable_temps(tmp_path: 
     assert result.stable is False
     assert result.attempt == 3
     assert list((tmp_path / "storage" / "raw").glob("*.tmp")) == []
+
+
+def test_raw_commit_rejects_corrupt_existing_object_and_preserves_diagnostic_temp(tmp_path: Path):
+    storage = tmp_path / "storage"
+    sink = VaultExtractionSink(VaultLayout(tmp_path / "vault"), storage)
+    digest = __import__("hashlib").sha256(b"expected").hexdigest()
+    target = sink.content_addressed_raw_path(digest)
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"corrupt")
+    temporary = storage / "raw" / ".snapshot-corrupt.tmp"
+    temporary.write_bytes(b"expected")
+
+    with pytest.raises(ValueError, match="content-addressed raw object"):
+        sink.commit_raw_temp(temporary, digest)
+    assert temporary.exists()
+
+
+def test_raw_commit_rejects_existing_directory_at_content_address(tmp_path: Path):
+    sink = VaultExtractionSink(VaultLayout(tmp_path / "vault"), tmp_path / "storage")
+    digest = __import__("hashlib").sha256(b"expected").hexdigest()
+    target = sink.content_addressed_raw_path(digest)
+    target.mkdir(parents=True)
+    temporary = sink.raw_root / ".snapshot-directory.tmp"
+    temporary.write_bytes(b"expected")
+
+    with pytest.raises(ValueError, match="content-addressed raw object"):
+        sink.commit_raw_temp(temporary, digest)
+    assert temporary.exists()

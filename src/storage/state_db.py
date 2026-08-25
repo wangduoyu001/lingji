@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
+
+
+class LeaseLostError(RuntimeError):
+    """Raised when a stale worker attempts to mutate a newer scan lease."""
 
 
 class StateDatabase:
@@ -116,6 +121,8 @@ class StateDatabase:
                     recovery_token TEXT,
                     source_sentinel TEXT,
                     lease_id TEXT,
+                    lease_owner_pid INTEGER,
+                    lease_heartbeat_at TEXT,
                     attempt INTEGER NOT NULL DEFAULT 0,
                     updated_at TEXT NOT NULL
                 );
@@ -137,6 +144,8 @@ class StateDatabase:
             for name, definition in (
                 ("source_sentinel", "TEXT"),
                 ("lease_id", "TEXT"),
+                ("lease_owner_pid", "INTEGER"),
+                ("lease_heartbeat_at", "TEXT"),
                 ("attempt", "INTEGER NOT NULL DEFAULT 0"),
             ):
                 if name not in columns:
@@ -869,7 +878,6 @@ class StateDatabase:
             "last_error",
             "recovery_token",
             "source_sentinel",
-            "lease_id",
             "attempt",
             "updated_at",
         }
@@ -891,4 +899,150 @@ class StateDatabase:
             ).fetchone()
         if row is None:
             raise KeyError(scan_id)
+        return dict(row)
+
+    def acquire_automatic_memory_scan_lease(
+        self, scan_id: str, lease_id: str, *, now: str | None = None
+    ) -> dict[str, Any] | None:
+        """Atomically acquire a scan lease, reclaiming only a dead owner."""
+
+        timestamp = now or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        pid = os.getpid()
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(scan_id)
+            existing_pid = row["lease_owner_pid"]
+            if row["lease_id"]:
+                owner_alive = False
+                if existing_pid:
+                    try:
+                        os.kill(int(existing_pid), 0)
+                        owner_alive = True
+                    except OSError:
+                        owner_alive = False
+                if owner_alive:
+                    return None
+            updated = connection.execute(
+                """
+                UPDATE automatic_memory_scans
+                SET status = 'running', lease_id = ?, lease_owner_pid = ?,
+                    lease_heartbeat_at = ?, attempt = attempt + 1,
+                    last_error = NULL, updated_at = ?
+                WHERE scan_id = ? AND status IN ('running', 'paused', 'failed')
+                  AND (lease_id IS NULL OR lease_owner_pid IS NULL OR lease_owner_pid != ?)
+                """,
+                (str(lease_id), pid, timestamp, timestamp, scan_id, pid),
+            )
+            if updated.rowcount != 1:
+                return None
+            current = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+        return dict(current)
+
+    def renew_automatic_memory_scan_lease(
+        self, scan_id: str, lease_id: str, *, now: str | None = None
+    ) -> dict[str, Any]:
+        timestamp = now or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._lock, self._connection() as connection:
+            updated = connection.execute(
+                """
+                UPDATE automatic_memory_scans
+                SET lease_heartbeat_at = ?, updated_at = ?
+                WHERE scan_id = ? AND status = 'running' AND lease_id = ?
+                """,
+                (timestamp, timestamp, scan_id, str(lease_id)),
+            )
+            if updated.rowcount != 1:
+                raise LeaseLostError(f"scan lease lost: {scan_id}")
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+        return dict(row)
+
+    def update_automatic_memory_scan_owned(
+        self, scan_id: str, lease_id: str, **values: Any
+    ) -> dict[str, Any]:
+        """Update checkpoint/progress only while this exact lease owns the row."""
+
+        allowed = {
+            "status",
+            "cursor",
+            "progress",
+            "total",
+            "last_error",
+            "recovery_token",
+            "source_sentinel",
+            "attempt",
+            "updated_at",
+        }
+        changes = {key: value for key, value in values.items() if key in allowed}
+        if not changes:
+            return self.renew_automatic_memory_scan_lease(scan_id, lease_id)
+        changes["lease_heartbeat_at"] = values.get(
+            "updated_at", datetime.now(timezone.utc).isoformat(timespec="seconds")
+        )
+        assignments = ", ".join(f"{key} = ?" for key in changes)
+        with self._lock, self._connection() as connection:
+            updated = connection.execute(
+                f"""
+                UPDATE automatic_memory_scans
+                SET {assignments}
+                WHERE scan_id = ? AND status = 'running' AND lease_id = ?
+                """,
+                (*changes.values(), scan_id, str(lease_id)),
+            )
+            if updated.rowcount != 1:
+                raise LeaseLostError(f"scan lease lost: {scan_id}")
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+        return dict(row)
+
+    def finalize_automatic_memory_scan_lease(
+        self, scan_id: str, lease_id: str, **values: Any
+    ) -> dict[str, Any]:
+        values["status"] = "completed"
+        allowed = {"status", "cursor", "progress", "total", "last_error", "updated_at"}
+        changes = {key: value for key, value in values.items() if key in allowed}
+        changes["lease_id"] = None
+        changes["lease_owner_pid"] = None
+        changes["lease_heartbeat_at"] = None
+        assignments = ", ".join(f"{key} = ?" for key in changes)
+        with self._lock, self._connection() as connection:
+            updated = connection.execute(
+                f"UPDATE automatic_memory_scans SET {assignments} "
+                "WHERE scan_id = ? AND status = 'running' AND lease_id = ?",
+                (*changes.values(), scan_id, str(lease_id)),
+            )
+            if updated.rowcount != 1:
+                raise LeaseLostError(f"scan lease lost: {scan_id}")
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+        return dict(row)
+
+    def release_automatic_memory_scan_lease(
+        self, scan_id: str, lease_id: str, *, now: str | None = None
+    ) -> dict[str, Any]:
+        timestamp = now or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._lock, self._connection() as connection:
+            updated = connection.execute(
+                """
+                UPDATE automatic_memory_scans
+                SET lease_id = NULL, lease_owner_pid = NULL,
+                    lease_heartbeat_at = NULL, updated_at = ?
+                WHERE scan_id = ? AND lease_id = ?
+                """,
+                (timestamp, scan_id, str(lease_id)),
+            )
+            if updated.rowcount != 1:
+                raise LeaseLostError(f"scan lease lost: {scan_id}")
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
         return dict(row)

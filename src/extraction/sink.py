@@ -72,6 +72,16 @@ class VaultExtractionSink:
         target = self.content_addressed_raw_path(sha256)
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists():
+            if not target.is_file():
+                raise ValueError(
+                    f"content-addressed raw object conflict: {target} is not a regular file"
+                )
+            existing_digest = self._sha256_file(target)
+            if existing_digest != str(sha256).strip().lower():
+                raise ValueError(
+                    f"content-addressed raw object conflict: {target} has SHA-256 "
+                    f"{existing_digest}, expected {str(sha256).strip().lower()}"
+                )
             temporary_path.unlink(missing_ok=True)
             return target
         os.replace(temporary_path, target)
