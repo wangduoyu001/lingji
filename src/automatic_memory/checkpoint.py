@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Callable, Literal
 from uuid import uuid4
 
-from src.extraction.idempotency import build_snapshot_idempotency_key
 from src.extraction.queue import SQLiteExtractionQueue
 from src.storage import StateDatabase
 from src.storage.state_db import LeaseLostError
@@ -54,6 +53,16 @@ class CheckpointStore:
             attempt=int(token.attempt),
             recovery_token=payload,
         )
+        if token.cursor and token.source_sentinel:
+            scan = self.state_db.get_automatic_memory_scan(token.scan_id)
+            if scan is not None:
+                self.state_db.upsert_automatic_memory_scan_item_owned(
+                    token.scan_id,
+                    token.lease_id,
+                    source_id=scan["source_id"],
+                    relative_path=token.cursor,
+                    sentinel=token.source_sentinel,
+                )
 
     def load(self, scan_id: str) -> ResumeToken | None:
         row = self.state_db.get_automatic_memory_scan(scan_id)
@@ -100,6 +109,8 @@ class SnapshotJobRunner:
         checkpoint_store: CheckpointStore | None = None,
         snapshotter: ConsistentSnapshot | None = None,
         before_checkpoint: Callable[[int, int], None] | None = None,
+        before_queue: Callable[[], None] | None = None,
+        after_lease: Callable[[], None] | None = None,
     ):
         if snapshot is None:
             snapshot = snapshotter
@@ -111,6 +122,8 @@ class SnapshotJobRunner:
         self.path_provider = path_provider
         self.checkpoints = checkpoint_store or CheckpointStore(state_db)
         self.before_checkpoint = before_checkpoint
+        self.before_queue = before_queue
+        self.after_lease = after_lease
 
     def run(
         self,
@@ -122,6 +135,8 @@ class SnapshotJobRunner:
         row = self.state_db.get_automatic_memory_scan(scan_id)
         if row is None:
             raise LookupError(f"scan not found: {scan_id}")
+        if row["status"] == "cancelled":
+            return self._scan(row)
         if row["status"] == "completed" and crash_at == "none":
             return self._scan(row)
         source_id = str(row["source_id"])
@@ -131,6 +146,9 @@ class SnapshotJobRunner:
         if source is None:
             raise PermissionError("source is not authorized for scanning")
         if source.get("status") != "authorized":
+            current = self.state_db.get_automatic_memory_scan(scan_id)
+            if current and current["status"] == "cancelled":
+                return self._scan(current)
             self.state_db.update_automatic_memory_scan(
                 scan_id,
                 status="failed",
@@ -143,7 +161,10 @@ class SnapshotJobRunner:
         total = len(paths)
         token = self.checkpoints.load(scan_id)
         cursor = token.cursor if token else ""
-        sentinels = self._sentinel_map(token.source_sentinel if token else "")
+        sentinels = {
+            item["relative_path"]: item["sentinel"]
+            for item in self.state_db.list_automatic_memory_scan_items(scan_id)
+        }
         pending: list[Path] = []
         completed_before = 0
         for path in paths:
@@ -157,7 +178,7 @@ class SnapshotJobRunner:
             else:
                 pending.append(path)
         paths = pending
-        source_sentinel = json.dumps(sentinels, ensure_ascii=False, sort_keys=True)
+        source_sentinel = sentinels.get(cursor, "")
         lease_id = uuid4().hex
         attempt = int(row.get("attempt") or 0) + 1
         acquired = self.state_db.acquire_automatic_memory_scan_lease(scan_id, lease_id)
@@ -169,6 +190,8 @@ class SnapshotJobRunner:
         )
         initial = ResumeToken(scan_id, cursor, source_sentinel, lease_id, attempt)
         self.checkpoints.save(initial)
+        if self.after_lease is not None:
+            self.after_lease()
         if crash_at == "after-lease":
             return self._pause(scan_id, initial)
 
@@ -182,35 +205,31 @@ class SnapshotJobRunner:
         processed = completed_before
         try:
             for path in paths:
-                result = self.snapshot.capture(source_id, path)
+                result = self.snapshot.capture(
+                    source_id, path, scan_id=scan_id, lease_id=lease_id
+                )
                 if not result.stable:
                     raise RuntimeError(
                         f"source changed during snapshot: {result.relative_path}"
                     )
                 raw_path = self.snapshot.raw_root / result.raw_id
-                key = build_snapshot_idempotency_key(
-                    source_id, result.relative_path, result.sha256
-                )
-                self.queue.enqueue(
-                    "automatic_memory_snapshot",
+                if self.before_queue is not None:
+                    self.before_queue()
+                self.queue.enqueue_authorized_snapshot(
+                    scan_id=scan_id,
+                    lease_id=lease_id,
+                    source_id=source_id,
+                    relative_path=result.relative_path,
+                    raw_id=result.raw_id,
+                    sha256=result.sha256,
                     input_path=raw_path,
-                    payload={
-                        "source_id": source_id,
-                        "relative_path": result.relative_path,
-                        "raw_id": result.raw_id,
-                        "sha256": result.sha256,
-                    },
-                    options={"snapshot": True},
-                    adapter_name="automatic_memory_snapshot",
-                    adapter_version="1",
-                    idempotency_key=key,
                 )
                 processed += 1
                 if self.before_checkpoint is not None:
                     self.before_checkpoint(processed, total)
                 sentinel = self._sentinel(result)
                 sentinels[result.relative_path] = sentinel
-                source_sentinel = json.dumps(sentinels, ensure_ascii=False, sort_keys=True)
+                source_sentinel = sentinel
                 checkpoint = ResumeToken(
                     scan_id, result.relative_path, source_sentinel, lease_id, attempt
                 )
@@ -304,21 +323,6 @@ class SnapshotJobRunner:
             return ""
         return f"{stat.st_size}:{stat.st_mtime_ns}:{getattr(stat, 'st_ino', '')}"
 
-    @staticmethod
-    def _sentinel_map(value: str) -> dict[str, str]:
-        if not value:
-            return {}
-        try:
-            decoded = json.loads(value)
-        except (TypeError, ValueError, json.JSONDecodeError):
-            return {}
-        if not isinstance(decoded, dict):
-            return {}
-        return {
-            str(path): str(sentinel)
-            for path, sentinel in decoded.items()
-            if isinstance(path, str) and isinstance(sentinel, str)
-        }
 
     @staticmethod
     def _updated_at() -> str:

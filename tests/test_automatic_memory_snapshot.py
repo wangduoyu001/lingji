@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import multiprocessing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,6 +17,15 @@ try:
     from src.automatic_memory.snapshot import ConsistentSnapshot
 except ModuleNotFoundError:
     ConsistentSnapshot = None  # type: ignore[assignment,misc]
+
+
+def _commit_from_process(storage: str, temporary_name: str, digest: str, output) -> None:
+    sink = VaultExtractionSink(VaultLayout(Path(storage).parent / "vault"), storage)
+    try:
+        result = sink.commit_raw_temp(Path(temporary_name), digest)
+        output.put(("ok", str(result)))
+    except Exception as exc:
+        output.put((type(exc).__name__, str(exc)))
 
 
 def _authorized_source(tmp_path: Path):
@@ -199,3 +209,77 @@ def test_raw_commit_rejects_existing_directory_at_content_address(tmp_path: Path
     with pytest.raises(ValueError, match="content-addressed raw object"):
         sink.commit_raw_temp(temporary, digest)
     assert temporary.exists()
+
+
+def test_raw_commit_concurrent_processes_converges_without_overwrite(tmp_path: Path):
+    storage = tmp_path / "storage"
+    sink = VaultExtractionSink(VaultLayout(tmp_path / "vault"), storage)
+    digest = __import__("hashlib").sha256(b"same").hexdigest()
+    sink.raw_root.mkdir(parents=True)
+    first = sink.raw_root / ".one.tmp"
+    second = sink.raw_root / ".two.tmp"
+    first.write_bytes(b"same")
+    second.write_bytes(b"same")
+    context = multiprocessing.get_context("spawn")
+    output = context.Queue()
+    processes = [
+        context.Process(target=_commit_from_process, args=(str(storage), str(path), digest, output))
+        for path in (first, second)
+    ]
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(timeout=10)
+        assert process.exitcode == 0
+    results = [output.get(timeout=2) for _ in processes]
+    assert all(result[0] == "ok" for result in results)
+    assert sink.content_addressed_raw_path(digest).read_bytes() == b"same"
+    assert list(sink.raw_root.glob("*.tmp")) == []
+
+
+def test_raw_commit_rejects_existing_symlink_object(tmp_path: Path):
+    sink = VaultExtractionSink(VaultLayout(tmp_path / "vault"), tmp_path / "storage")
+    digest = __import__("hashlib").sha256(b"expected").hexdigest()
+    target = sink.content_addressed_raw_path(digest)
+    target.parent.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.write_bytes(b"expected")
+    target.symlink_to(outside)
+    temporary = sink.raw_root / ".snapshot-symlink.tmp"
+    temporary.write_bytes(b"expected")
+
+    with pytest.raises(ValueError, match="content-addressed raw object"):
+        sink.commit_raw_temp(temporary, digest)
+    assert temporary.exists()
+
+
+def test_capture_quarantines_raw_conflict_for_diagnosis(tmp_path: Path):
+    _, registry, source, root = _authorized_source(tmp_path)
+    source_file = root / "conflict.txt"
+    source_file.write_bytes(b"expected")
+    raw_root = tmp_path / "storage" / "raw"
+    raw_root.mkdir(parents=True)
+    digest = __import__("hashlib").sha256(b"expected").hexdigest()
+    (raw_root / digest).write_bytes(b"corrupt")
+    snapshot = ConsistentSnapshot(registry, raw_root)
+
+    with pytest.raises(ValueError, match="content-addressed raw object"):
+        snapshot.capture(source.source_id, source_file)
+    assert list(raw_root.glob("*.conflict"))
+
+
+def test_revoke_during_copy_never_commits_raw_object(tmp_path: Path):
+    state, registry, source, root = _authorized_source(tmp_path)
+    source_file = root / "revoked.txt"
+    source_file.write_text("must not commit", encoding="utf-8")
+
+    class RevokeDuringCopy(ConsistentSnapshot):
+        def _copy_to_temp(self, source_path: Path, temporary: Path) -> None:
+            super()._copy_to_temp(source_path, temporary)
+            registry.revoke(source.source_id)
+
+    snapshot = RevokeDuringCopy(registry, tmp_path / "storage" / "raw")
+
+    with pytest.raises(PermissionError):
+        snapshot.capture(source.source_id, source_file)
+    assert list((tmp_path / "storage" / "raw").iterdir()) == []

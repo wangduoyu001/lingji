@@ -51,6 +51,7 @@ class ConsistentSnapshot:
         storage_path: Path | str | None = None,
         storage_root: Path | str | None = None,
         sink: Any | None = None,
+        before_raw_commit: Any | None = None,
     ):
         selected = registry_or_state or registry or source_registry or state_db
         if selected is None:
@@ -70,9 +71,16 @@ class ConsistentSnapshot:
             self._sink = VaultExtractionSink.__new__(VaultExtractionSink)
             self._sink.raw_root = self.raw_root
         self.raw_root.mkdir(parents=True, exist_ok=True)
+        self.before_raw_commit = before_raw_commit
 
     def capture(
-        self, source_id: str, path: Path | str, max_attempts: int = 3
+        self,
+        source_id: str,
+        path: Path | str,
+        max_attempts: int = 3,
+        *,
+        scan_id: str | None = None,
+        lease_id: str | None = None,
     ) -> SnapshotResult:
         root, relative = self._authorized_path(source_id, Path(path).expanduser())
         source = root / Path(relative)
@@ -96,7 +104,16 @@ class ConsistentSnapshot:
                 last_after = stat_after
                 stable = stat_before == stat_after
                 if stable:
-                    target = self._sink.commit_raw_temp(temporary, last_digest)
+                    self._authorized_path(source_id, source)
+                    if self.before_raw_commit is not None:
+                        self.before_raw_commit()
+                    commit = lambda: self._sink.commit_raw_temp(temporary, last_digest)
+                    if scan_id and lease_id:
+                        self.state_db.commit_authorized_snapshot(
+                            scan_id, lease_id, str(source_id), commit
+                        )
+                    else:
+                        commit()
                     return SnapshotResult(
                         source_id=str(source_id),
                         relative_path=relative,
@@ -108,8 +125,12 @@ class ConsistentSnapshot:
                         attempt=attempt,
                     )
                 temporary.unlink(missing_ok=True)
-            except Exception:
-                temporary.unlink(missing_ok=True)
+            except Exception as exc:
+                if isinstance(exc, ValueError) and "content-addressed raw object" in str(exc):
+                    diagnostic = temporary.with_suffix(temporary.suffix + ".conflict")
+                    os.replace(temporary, diagnostic)
+                else:
+                    temporary.unlink(missing_ok=True)
                 raise
         assert last_before is not None and last_after is not None
         return SnapshotResult(

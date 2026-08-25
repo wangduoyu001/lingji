@@ -71,8 +71,12 @@ class VaultExtractionSink:
         temporary_path = Path(temporary)
         target = self.content_addressed_raw_path(sha256)
         target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            if not target.is_file():
+        try:
+            # Hard-link creation is an atomic no-overwrite operation on the
+            # local filesystems supported by Python, unlike exists+replace.
+            os.link(temporary_path, target)
+        except FileExistsError:
+            if target.is_symlink() or not target.is_file():
                 raise ValueError(
                     f"content-addressed raw object conflict: {target} is not a regular file"
                 )
@@ -84,7 +88,9 @@ class VaultExtractionSink:
                 )
             temporary_path.unlink(missing_ok=True)
             return target
-        os.replace(temporary_path, target)
+        except OSError as exc:
+            raise ValueError(f"unable to atomically commit raw object {target}: {exc}") from exc
+        temporary_path.unlink(missing_ok=True)
         try:
             directory_fd = os.open(target.parent, os.O_RDONLY)
             try:

@@ -4,12 +4,13 @@ import json
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping
 from uuid import uuid4
 
 from .idempotency import extraction_key_for_request
+from src.storage.state_db import LeaseLostError
 
 TERMINAL_STATUSES = ("completed", "failed", "cancelled")
 CANCELLABLE_STATUSES = ("queued", "retrying")
@@ -530,6 +531,82 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
             row = connection.execute(
                 "SELECT * FROM extraction_jobs WHERE idempotency_key = ?",
                 (str(idempotency_key),),
+            ).fetchone()
+        return self._parse_row(row)
+
+    def enqueue_authorized_snapshot(
+        self,
+        *,
+        scan_id: str,
+        lease_id: str,
+        source_id: str,
+        relative_path: str,
+        raw_id: str,
+        sha256: str,
+        input_path: Path | str,
+    ) -> dict[str, Any]:
+        """Insert a snapshot job while serializing against source revoke."""
+
+        from .idempotency import build_snapshot_idempotency_key
+
+        now = datetime.now()
+        key = build_snapshot_idempotency_key(source_id, relative_path, sha256)
+        job_id = f"LJ-JOB-{uuid4().hex[:12].upper()}"
+        normalized_path = str(Path(input_path).expanduser())
+        payload = {
+            "source_id": source_id,
+            "relative_path": relative_path,
+            "raw_id": raw_id,
+            "sha256": sha256,
+        }
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            authorized = connection.execute(
+                """
+                SELECT scans.scan_id
+                FROM automatic_memory_scans AS scans
+                JOIN automatic_memory_sources AS sources ON sources.source_id = scans.source_id
+                JOIN automatic_memory_grants AS grants ON grants.grant_id = sources.grant_id
+                WHERE scans.scan_id = ? AND scans.status = 'running'
+                  AND scans.lease_id = ? AND scans.source_id = ?
+                  AND sources.status = 'authorized' AND grants.owner_confirmed = 1
+                  AND (grants.expires_at IS NULL OR grants.expires_at > ?)
+                """,
+                (
+                    scan_id,
+                    str(lease_id),
+                    source_id,
+                    datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                ),
+            ).fetchone()
+            if authorized is None:
+                raise LeaseLostError(f"queue admission lost or source revoked: {scan_id}")
+            existing = connection.execute(
+                "SELECT * FROM extraction_jobs WHERE idempotency_key = ?", (key,)
+            ).fetchone()
+            if existing is not None:
+                return self._parse_row(existing)
+            connection.execute(
+                """
+                INSERT INTO extraction_jobs (
+                    job_id, source_type, adapter_name, adapter_version, input_path,
+                    payload_json, options_json, idempotency_key, status, priority,
+                    max_attempts, next_run_at, created_at, updated_at
+                ) VALUES (?, 'automatic_memory_snapshot', 'automatic_memory_snapshot', '1', ?, ?, ?, ?, 'queued', 100, 3, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    normalized_path,
+                    self._json(payload),
+                    self._json({"snapshot": True}),
+                    key,
+                    self._iso(now),
+                    self._iso(now),
+                    self._iso(now),
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM extraction_jobs WHERE job_id = ?", (job_id,)
             ).fetchone()
         return self._parse_row(row)
 

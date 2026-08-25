@@ -4,6 +4,48 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 2 · revoke-safe atomic admission
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`pending — fix round 2 implementation`
+- 影响模块：StateDatabase lease TTL/revocation, incremental scan manifest, atomic raw/queue admission, Task 2 concurrency tests
+- 风险等级：P0
+- 用户可感知变化：撤销、并发和进程中断不会把未获授权文件继续推进到 raw/queue；恢复只复核增量 per-path sentinel，不重写完整 manifest。
+- 数据或安全边界变化：revoke 原子取消 scan 并清理 lease；raw commit 使用原子 no-overwrite hard-link；queue admission 与 revoke 共用现有 state DB SQLite writer lock；lease 由不可预测 UUID、owner 元数据和明确 TTL/heartbeat 共同约束。
+
+### 新增或修改的自动验收
+
+- [ ] `pytest -q tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py`：撤销 mid-copy/raw/queue 竞态、取消态不转 failed、TTL/死线程/心跳、多进程 raw 收敛、symlink/损坏 raw、per-path 2000 项 manifest、立即 lease 强杀、30%/70% queue-before-checkpoint 强杀。
+- [ ] `pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_hardening.py tests/test_extraction_worker.py tests/test_chatgpt_importer.py tests/test_structured_ingestion.py tests/test_capture_control.py`：Task 1/extraction 回归。
+- [ ] `py_compile`、`git diff --check`、`python scripts/check_acceptance_sync.py`、`python scripts/check_local_execution_handoff.py`。
+
+### 新增或修改的真机验收
+
+- [ ] 本轮不启动 Artifact；保持 `LOCAL_EXECUTION_TASK.md` 为 `IDLE`。
+
+### 主人肉眼确认
+
+- [ ] 不适用；Task 2 不修改 Desktop 或正式 Vault 正文。
+
+### 回归项
+
+- [ ] 保持现有 StateDatabase/source registry、extraction queue/sink/idempotency 行为。
+- [ ] Full-suite 两项 baseline limitation（Desktop integration assertion mismatch；`python` executable unavailable in `test_second_brain`）保持原样，不修改、不掩盖。
+- [ ] 不实现 Task 3 adapter、watcher、聊天解析、Obsidian 正文或 tombstone/reconcile。
+
+### 清理与回滚
+
+- 临时数据前缀：`PHASE1_AUTOMATIC_MEMORY_TASK2_FIX2_`
+- 覆盖安装或迁移方式：不安装、不启动；pytest 临时数据库/raw/queue/marker 自动清理。
+- 临时备份删除条件：无。
+- 测试数据清理方式：仅清理本轮 pytest 临时目录和 conflict diagnostic 文件。
+- 回滚：回滚 fix round 2 实现与文档提交，不触碰主人数据。
+
+### 最终报告
+
+- 报告路径：本地调度报告继续由 `.superpowers/` 忽略；正式证据为本条目与测试命令输出。
+- 报告分支：`codex/phase1-automatic-memory`
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 1 · lease-safe recovery
 
 - 产品分支：`codex/phase1-automatic-memory`
