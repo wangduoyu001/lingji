@@ -1209,36 +1209,3 @@ class StateDatabase:
             if authorized is None:
                 raise LeaseLostError(f"snapshot admission lost or source revoked: {scan_id}")
             return commit_callback()
-
-    def admit_snapshot_queue(
-        self,
-        scan_id: str,
-        lease_id: str,
-        source_id: str,
-        admit_callback: Any,
-    ) -> Any:
-        """Linearize queue admission against revoke using the queue's DB lock."""
-
-        with self._lock, self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            authorized = connection.execute(
-                """
-                SELECT scans.scan_id
-                FROM automatic_memory_scans AS scans
-                JOIN automatic_memory_sources AS sources ON sources.source_id = scans.source_id
-                JOIN automatic_memory_grants AS grants ON grants.grant_id = sources.grant_id
-                WHERE scans.scan_id = ? AND scans.status = 'running'
-                  AND scans.lease_id = ? AND scans.source_id = ?
-                  AND sources.status = 'authorized' AND grants.owner_confirmed = 1
-                  AND (grants.expires_at IS NULL OR grants.expires_at > ?)
-                """,
-                (
-                    scan_id,
-                    str(lease_id),
-                    source_id,
-                    datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                ),
-            ).fetchone()
-            if authorized is None:
-                raise LeaseLostError(f"queue admission lost or source revoked: {scan_id}")
-            return admit_callback()
