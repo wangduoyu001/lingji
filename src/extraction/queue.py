@@ -615,12 +615,14 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
                   AND scans.lease_id = ? AND scans.source_id = ?
                   AND sources.status = 'authorized' AND grants.owner_confirmed = 1
                   AND (grants.expires_at IS NULL OR grants.expires_at > ?)
+                  AND (scans.lease_expires_at IS NULL OR scans.lease_expires_at > ?)
                 """,
                 (
                     scan_id,
                     str(lease_id),
                     source_id,
-                    datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+                    datetime.now(timezone.utc).isoformat(timespec="microseconds"),
                 ),
             ).fetchone()
             if authorized is None:

@@ -143,12 +143,15 @@ class VaultExtractionSink:
                 descriptor = -1
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(chunk)
-            if not hasattr(os, "O_NOFOLLOW"):
-                after = os.lstat(target)
-                if after.st_dev != opened.st_dev or after.st_ino != opened.st_ino:
-                    raise ValueError(
-                        f"content-addressed raw object conflict: {target} changed during validation"
-                    )
+            after = os.lstat(target)
+            if stat.S_ISLNK(after.st_mode) or not stat.S_ISREG(after.st_mode):
+                raise ValueError(
+                    f"content-addressed raw object conflict: {target} changed during validation"
+                )
+            if after.st_dev != opened.st_dev or after.st_ino != opened.st_ino:
+                raise ValueError(
+                    f"content-addressed raw object conflict: {target} changed during validation"
+                )
             return digest.hexdigest()
         finally:
             if descriptor >= 0:

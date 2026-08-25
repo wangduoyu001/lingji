@@ -280,6 +280,14 @@ def test_two_snapshot_runners_compete_cross_process_and_converge_idempotently(tm
 
     assert all(status in {"completed", "paused", "running"} for status in statuses), statuses
     reopened_queue = SQLiteExtractionQueue(tmp_path / "lingji_state.db")
+    reopened_state = StateDatabase(tmp_path / "lingji_state.db")
+    final = SnapshotJobRunner(
+        ConsistentSnapshot(reopened_state, tmp_path / "storage" / "raw"),
+        reopened_queue,
+        reopened_state,
+        path_provider=lambda current_scan, current_source: list(root.glob("*.txt")),
+    ).run(scan.scan_id)
+    assert final.status == "completed"
     assert reopened_queue.count(source_type="automatic_memory_snapshot") == 5
     assert len(list((tmp_path / "storage" / "raw").iterdir())) == 5
 
@@ -556,6 +564,44 @@ def test_manifest_cleanup_removes_retired_scan_without_touching_current_recovery
 
     assert state.list_automatic_memory_scan_items(old_scan.scan_id) == []
     assert len(state.list_automatic_memory_scan_items(current["scan_id"])) == 1
+
+
+def test_failed_scan_manifest_cannot_be_cleaned_before_recovery(tmp_path: Path):
+    state, _, _, scan, _, _, _ = _scan_fixture(tmp_path, count=1)
+    state.update_automatic_memory_scan(scan.scan_id, status="failed")
+
+    with pytest.raises(ValueError, match="completed or cancelled"):
+        state.cleanup_automatic_memory_scan_manifest(scan.scan_id)
+
+
+def test_expired_lease_rejects_raw_commit_and_queue_admission(tmp_path: Path):
+    state, _, source, scan, root, snapshot, queue = _scan_fixture(tmp_path, count=1)
+    state.acquire_automatic_memory_scan_lease(
+        scan.scan_id,
+        "expired-lease",
+        now="2020-01-01T00:00:00+00:00",
+        ttl_seconds=0.1,
+    )
+    source_file = root / "item-00.txt"
+
+    with pytest.raises(LeaseLostError):
+        snapshot.capture(
+            source.source_id,
+            source_file,
+            scan_id=scan.scan_id,
+            lease_id="expired-lease",
+        )
+    assert list((tmp_path / "storage" / "raw").iterdir()) == []
+    with pytest.raises(LeaseLostError):
+        queue.enqueue_authorized_snapshot(
+            scan_id=scan.scan_id,
+            lease_id="expired-lease",
+            source_id=source.source_id,
+            relative_path="item-00.txt",
+            raw_id="0" * 64,
+            sha256="0" * 64,
+            input_path=tmp_path / "storage" / "raw" / ("0" * 64),
+        )
 
 
 def test_zero_inode_sentinel_is_stable_across_scan_and_resume(tmp_path: Path, monkeypatch):

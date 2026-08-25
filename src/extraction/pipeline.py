@@ -125,49 +125,63 @@ class ExtractionPipeline:
             request.payload,
             preferred=adapter_name,
         )
-        self._ensure_automatic_memory_authorized(request.payload)
-        raw_snapshot = self.sink.preserve_raw(request.input_path, source_type)
-        batch = adapter.extract(request)
-        self._ensure_automatic_memory_authorized(request.payload)
-        result = self.sink.write_batch(
-            batch,
-            adapter_name=adapter.name,
-            adapter_version=adapter.version,
-            raw_snapshot=raw_snapshot,
+        source_id = str(request.payload.get("source_id") or "")
+        automatic_memory_boundary = (
+            source_type == "automatic_memory_snapshot" and execution_id and source_id
         )
-        response = {
-            "execution_id": request.job_id,
-            "source_type": source_type,
-            "adapter": adapter.name,
-            "adapter_version": adapter.version,
-            **result,
-        }
-        indexing_succeeded = self.on_documents_written is None
-        if self.on_documents_written:
-            self._ensure_automatic_memory_authorized(request.payload)
-            try:
-                self.on_documents_written(response)
-                response["indexed"] = True
-                indexing_succeeded = True
-            except Exception as exc:
-                logger.exception("Post-extraction index synchronization failed")
-                response["indexed"] = False
-                response["index_error"] = safe_extraction_error(
-                    exc,
-                    message="Post-extraction index synchronization failed; see local logs",
+        def downstream_commit() -> dict[str, Any]:
+            if automatic_memory_boundary:
+                batch = adapter.extract(request)
+                self.state_db.assert_authorized_automatic_memory_job(
+                    request.job_id, source_id
                 )
-                indexing_succeeded = False
-        self._ensure_automatic_memory_authorized(request.payload)
-        response["structured_read_model"] = self._write_structured(
-            batch=batch,
-            raw_snapshot=raw_snapshot,
-            vault_results=result,
-            execution_id=request.job_id,
-            adapter_name=adapter.name,
-            adapter_version=adapter.version,
-            indexing_succeeded=indexing_succeeded,
-        )
-        return response
+                raw_snapshot = self.sink.preserve_raw(request.input_path, source_type)
+            else:
+                raw_snapshot = self.sink.preserve_raw(request.input_path, source_type)
+                batch = adapter.extract(request)
+            result = self.sink.write_batch(
+                batch,
+                adapter_name=adapter.name,
+                adapter_version=adapter.version,
+                raw_snapshot=raw_snapshot,
+            )
+            response = {
+                "execution_id": request.job_id,
+                "source_type": source_type,
+                "adapter": adapter.name,
+                "adapter_version": adapter.version,
+                **result,
+            }
+            indexing_succeeded = self.on_documents_written is None
+            if self.on_documents_written:
+                try:
+                    self.on_documents_written(response)
+                    response["indexed"] = True
+                    indexing_succeeded = True
+                except Exception as exc:
+                    logger.exception("Post-extraction index synchronization failed")
+                    response["indexed"] = False
+                    response["index_error"] = safe_extraction_error(
+                        exc,
+                        message="Post-extraction index synchronization failed; see local logs",
+                    )
+                    indexing_succeeded = False
+            response["structured_read_model"] = self._write_structured(
+                batch=batch,
+                raw_snapshot=raw_snapshot,
+                vault_results=result,
+                execution_id=request.job_id,
+                adapter_name=adapter.name,
+                adapter_version=adapter.version,
+                indexing_succeeded=indexing_succeeded,
+            )
+            return response
+
+        if automatic_memory_boundary:
+            return self.state_db.run_authorized_automatic_memory_job(
+                request.job_id, source_id, downstream_commit
+            )
+        return downstream_commit()
 
     def _write_structured(
         self,
@@ -294,9 +308,15 @@ class ExtractionPipeline:
             pass
         return False
 
-    def _ensure_automatic_memory_authorized(self, payload: Mapping[str, Any]) -> None:
+    def _ensure_automatic_memory_authorized(
+        self, source_type: str, payload: Mapping[str, Any]
+    ) -> None:
         source_id = str(payload.get("source_id") or "")
-        if source_id and not self.state_db.is_automatic_memory_source_authorized(source_id):
+        if (
+            source_type == "automatic_memory_snapshot"
+            and source_id
+            and not self.state_db.is_automatic_memory_source_authorized(source_id)
+        ):
             raise PermissionError("source authorization revoked before downstream write")
 
     def process_pending(

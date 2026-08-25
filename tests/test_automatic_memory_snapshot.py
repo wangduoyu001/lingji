@@ -237,6 +237,34 @@ def test_raw_commit_concurrent_processes_converges_without_overwrite(tmp_path: P
     assert list(sink.raw_root.glob("*.tmp")) == []
 
 
+def test_raw_target_swap_during_descriptor_hash_is_rejected(tmp_path: Path):
+    storage = tmp_path / "storage"
+    sink = VaultExtractionSink(VaultLayout(tmp_path / "vault"), storage)
+    digest = __import__("hashlib").sha256(b"expected").hexdigest()
+    target = sink.content_addressed_raw_path(digest)
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"corrupt target")
+    temporary = sink.raw_root / ".snapshot-swap.tmp"
+    temporary.write_bytes(b"expected")
+    swapped = tmp_path / "swapped-object"
+    swapped.write_bytes(b"different target")
+    started = __import__("threading").Event()
+
+    class SwappingSink(VaultExtractionSink):
+        def _hash_existing_raw_target(self, path: Path) -> str:
+            started.set()
+            __import__("time").sleep(0.05)
+            path.unlink()
+            swapped.replace(path)
+            return super()._hash_existing_raw_target(path)
+
+    sink = SwappingSink(VaultLayout(tmp_path / "vault"), storage)
+    with pytest.raises(ValueError, match="content-addressed raw object"):
+        sink.commit_raw_temp(temporary, digest)
+    assert started.is_set()
+    assert temporary.exists()
+
+
 def test_raw_commit_rejects_existing_symlink_object(tmp_path: Path):
     sink = VaultExtractionSink(VaultLayout(tmp_path / "vault"), tmp_path / "storage")
     digest = __import__("hashlib").sha256(b"expected").hexdigest()
@@ -310,4 +338,27 @@ def test_revoke_during_copy_never_commits_raw_object(tmp_path: Path):
 
     with pytest.raises(PermissionError):
         snapshot.capture(source.source_id, source_file)
+    assert list((tmp_path / "storage" / "raw").iterdir()) == []
+
+
+def test_path_replaced_with_symlink_during_copy_is_rejected_before_reading_target(tmp_path: Path):
+    _, registry, source, root = _authorized_source(tmp_path)
+    source_file = root / "replace.txt"
+    source_file.write_bytes(b"authorized")
+    outside = tmp_path / "outside.txt"
+    outside.write_bytes(b"outside secret")
+
+    class ReplaceDuringOpen(ConsistentSnapshot):
+        copied_data: bytes | None = None
+
+        def _copy_to_temp(self, source_path: Path, temporary: Path) -> None:
+            source_path.unlink()
+            source_path.symlink_to(outside)
+            super()._copy_to_temp(source_path, temporary)
+            self.copied_data = temporary.read_bytes()
+
+    snapshot = ReplaceDuringOpen(registry, tmp_path / "storage" / "raw")
+    with pytest.raises(PermissionError):
+        snapshot.capture(source.source_id, source_file)
+    assert snapshot.copied_data == b"authorized"
     assert list((tmp_path / "storage" / "raw").iterdir()) == []

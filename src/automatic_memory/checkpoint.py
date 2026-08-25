@@ -134,6 +134,7 @@ class SnapshotJobRunner:
         self.after_lease = after_lease
         self._heartbeat_stop: threading.Event | None = None
         self._heartbeat_thread: threading.Thread | None = None
+        self._heartbeat_error: BaseException | None = None
 
     def _validate_single_database(self) -> None:
         state_path = Path(self.state_db.path).expanduser()
@@ -150,6 +151,7 @@ class SnapshotJobRunner:
     def _start_heartbeat(self, scan_id: str, lease_id: str) -> None:
         stop = threading.Event()
         self._heartbeat_stop = stop
+        self._heartbeat_error = None
 
         def renew() -> None:
             interval = max(min(self.lease_ttl_seconds / 3.0, 1.0), 0.05)
@@ -161,6 +163,9 @@ class SnapshotJobRunner:
                         ttl_seconds=self.lease_ttl_seconds,
                     )
                 except LeaseLostError:
+                    return
+                except Exception as exc:
+                    self._heartbeat_error = exc
                     return
 
         self._heartbeat_thread = threading.Thread(
@@ -178,6 +183,31 @@ class SnapshotJobRunner:
             stop.set()
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=max(self.lease_ttl_seconds, 0.2))
+
+    def _assert_heartbeat(self) -> None:
+        if self._heartbeat_error is not None:
+            raise LeaseLostError(f"automatic-memory lease heartbeat failed: {self._heartbeat_error}")
+
+    def _handle_lease_loss(self, scan_id: str, lease_id: str) -> ScanRun:
+        heartbeat_error = self._heartbeat_error
+        self._stop_heartbeat()
+        if heartbeat_error is not None:
+            try:
+                self.state_db.update_automatic_memory_scan_owned(
+                    scan_id,
+                    lease_id,
+                    lease_ttl_seconds=self.lease_ttl_seconds,
+                    status="failed",
+                    last_error=f"lease heartbeat failed: {heartbeat_error}"[:2000],
+                    updated_at=self._updated_at(),
+                )
+            except LeaseLostError:
+                pass
+        try:
+            self._release(scan_id, lease_id)
+        except LeaseLostError:
+            pass
+        return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
 
     def run(
         self,
@@ -251,12 +281,30 @@ class SnapshotJobRunner:
             updated_at=self._updated_at(),
         )
         self._start_heartbeat(scan_id, lease_id)
-        initial = ResumeToken(scan_id, cursor, source_sentinel, lease_id, attempt)
-        self.checkpoints.save(initial)
-        if self.after_lease is not None:
-            self.after_lease()
-        if crash_at == "after-lease":
-            return self._pause(scan_id, initial)
+        try:
+            initial = ResumeToken(scan_id, cursor, source_sentinel, lease_id, attempt)
+            self.checkpoints.save(initial)
+            if self.after_lease is not None:
+                self.after_lease()
+            if crash_at == "after-lease":
+                return self._pause(scan_id, initial)
+        except LeaseLostError:
+            return self._handle_lease_loss(scan_id, lease_id)
+        except Exception as exc:
+            self._stop_heartbeat()
+            try:
+                self.state_db.update_automatic_memory_scan_owned(
+                    scan_id,
+                    lease_id,
+                    lease_ttl_seconds=self.lease_ttl_seconds,
+                    status="failed",
+                    last_error=str(exc)[:2000],
+                    updated_at=self._updated_at(),
+                )
+                self._release(scan_id, lease_id)
+            except LeaseLostError:
+                pass
+            return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
 
         crash_index = (
             math.ceil(total * 0.3)
@@ -268,8 +316,13 @@ class SnapshotJobRunner:
         processed = completed_before
         try:
             for path in paths:
+                self._assert_heartbeat()
                 result = self.snapshot.capture(
-                    source_id, path, scan_id=scan_id, lease_id=lease_id
+                    source_id,
+                    path,
+                    scan_id=scan_id,
+                    lease_id=lease_id,
+                    lease_guard=self._assert_heartbeat,
                 )
                 if not result.stable:
                     raise RuntimeError(
@@ -307,11 +360,11 @@ class SnapshotJobRunner:
                     total=total,
                     updated_at=self._updated_at(),
                 )
+                self._assert_heartbeat()
                 if crash_index is not None and processed >= crash_index:
                     return self._pause(scan_id, checkpoint)
         except LeaseLostError:
-            self._stop_heartbeat()
-            return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
+            return self._handle_lease_loss(scan_id, lease_id)
         except Exception as exc:
             checkpoint = ResumeToken(scan_id, cursor, source_sentinel, lease_id, attempt)
             try:

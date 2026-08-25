@@ -9,7 +9,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from src.extraction.sink import VaultExtractionSink
 from src.storage import StateDatabase
@@ -73,6 +73,7 @@ class ConsistentSnapshot:
             self._sink.raw_root = self.raw_root
         self.raw_root.mkdir(parents=True, exist_ok=True)
         self.before_raw_commit = before_raw_commit
+        self._copy_source_fd: int | None = None
 
     def capture(
         self,
@@ -82,6 +83,7 @@ class ConsistentSnapshot:
         *,
         scan_id: str | None = None,
         lease_id: str | None = None,
+        lease_guard: Callable[[], None] | None = None,
     ) -> SnapshotResult:
         root, relative = self._authorized_path(source_id, Path(path).expanduser())
         source = root / Path(relative)
@@ -98,7 +100,11 @@ class ConsistentSnapshot:
             last_before = stat_before
             temporary = self._temporary_path()
             try:
+                source_fd = self._secure_open_source(root, relative)
+                self._copy_source_fd = source_fd
                 self._copy_to_temp(source, temporary)
+                os.close(source_fd)
+                self._copy_source_fd = None
                 last_digest = self._sha256_file(temporary)
                 self._fsync_directory(temporary.parent)
                 stat_after = self._file_stat(source)
@@ -106,9 +112,14 @@ class ConsistentSnapshot:
                 stable = stat_before == stat_after
                 if stable:
                     self._authorized_path(source_id, source)
+                    if lease_guard is not None:
+                        lease_guard()
                     if self.before_raw_commit is not None:
                         self.before_raw_commit()
-                    commit = lambda: self._sink.commit_raw_temp(temporary, last_digest)
+                    def commit() -> None:
+                        if lease_guard is not None:
+                            lease_guard()
+                        self._sink.commit_raw_temp(temporary, last_digest)
                     if scan_id and lease_id:
                         self.state_db.commit_authorized_snapshot(
                             scan_id, lease_id, str(source_id), commit
@@ -127,6 +138,12 @@ class ConsistentSnapshot:
                     )
                 temporary.unlink(missing_ok=True)
             except Exception as exc:
+                if self._copy_source_fd is not None:
+                    try:
+                        os.close(self._copy_source_fd)
+                    except OSError:
+                        pass
+                    self._copy_source_fd = None
                 if isinstance(exc, ValueError) and "content-addressed raw object" in str(exc):
                     temporary.unlink(missing_ok=True)
                     if scan_id and lease_id:
@@ -214,8 +231,39 @@ class ConsistentSnapshot:
         os.close(fd)
         return Path(name)
 
+    @staticmethod
+    def _secure_open_source(root: Path, relative: str) -> int:
+        """Open an authorized path without following a replaceable component."""
+        nofollow = getattr(os, "O_NOFOLLOW", None)
+        directory = getattr(os, "O_DIRECTORY", 0)
+        if nofollow is None or not hasattr(os, "supports_dir_fd") or os.open not in os.supports_dir_fd:
+            raise PermissionError("platform cannot safely open authorized snapshot paths")
+        parts = tuple(part for part in Path(relative).parts if part not in {"", "."})
+        if not parts or any(part == ".." for part in parts):
+            raise PermissionError("snapshot path escapes the authorized source root")
+        root_fd = os.open(root, os.O_RDONLY | directory | nofollow)
+        current_fd = root_fd
+        try:
+            for part in parts[:-1]:
+                next_fd = os.open(
+                    part,
+                    os.O_RDONLY | directory | nofollow,
+                    dir_fd=current_fd,
+                )
+                if current_fd != root_fd:
+                    os.close(current_fd)
+                current_fd = next_fd
+            return os.open(parts[-1], os.O_RDONLY | nofollow, dir_fd=current_fd)
+        finally:
+            os.close(current_fd)
+            if current_fd != root_fd:
+                os.close(root_fd)
+
     def _copy_to_temp(self, source: Path, temporary: Path) -> None:
-        with source.open("rb") as source_handle, temporary.open("wb") as temp_handle:
+        if self._copy_source_fd is None:
+            raise PermissionError("authorized source descriptor is not available")
+        source_handle = os.fdopen(os.dup(self._copy_source_fd), "rb", closefd=True)
+        with source_handle, temporary.open("wb") as temp_handle:
             shutil.copyfileobj(source_handle, temp_handle, length=1024 * 1024)
             temp_handle.flush()
             os.fsync(temp_handle.fileno())
