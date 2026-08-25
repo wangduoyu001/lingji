@@ -4,6 +4,42 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 4 · authorized downstream linearization
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`3a07c3c9af19539fb8f8142148a4ca8450e093ae`
+- 影响模块：existing StateDatabase authorization transaction, extraction pipeline/queue, secure snapshot source opening, raw sink validation, Task 2 race/recovery tests
+- 风险等级：P0
+- 用户可感知变化：automatic-memory downstream side effects are admitted under one existing `lingji_state.db` writer transaction; revoke-before-admission yields zero downstream writes, while revoke during an admitted batch waits until the complete batch boundary. Ordinary extraction jobs with a `source_id` payload remain unaffected.
+- 数据或安全边界变化：lease checks use microsecond TTL comparisons; heartbeat failures stop safely and record failure; source files and existing raw objects are opened with no-follow descriptor validation; failed scan manifests remain recoverable while completed/cancelled cleanup writes an audit event.
+
+### 新增或修改的自动验收
+
+- [ ] `pytest -q tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_extraction_worker.py`：43 passed，覆盖撤销竞态的完整批次/零提交语义、普通 job 隔离、短 TTL、心跳生命周期、no-follow source/raw race、双 runner 最终 completed 与强杀恢复。
+- [ ] `pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_hardening.py tests/test_extraction_worker.py`：Task 1/queue/extraction 回归。
+- [ ] `py_compile`、`git diff --check`、`python scripts/check_acceptance_sync.py`、`python scripts/check_local_execution_handoff.py`。
+
+### 新增或修改的真机验收
+
+- [ ] 本轮不启动 Artifact；保持 `LOCAL_EXECUTION_TASK.md` 为 `IDLE`。
+
+### 回归项
+
+- [ ] Full-suite baseline limitation 保持原样：Desktop integration assertion mismatch 与 `python` executable unavailable 的 `test_second_brain` 在 `d12c1fb` 和当前树均复现；不修改、不掩盖。
+- [ ] 不实现 Task 3 adapter、watcher、聊天解析、Obsidian 正文或 tombstone/reconcile。
+
+### 清理与回滚
+
+- 临时数据前缀：`PHASE1_AUTOMATIC_MEMORY_TASK2_FIX4_`
+- 覆盖安装或迁移方式：不安装、不启动；pytest 临时数据库/raw/queue/marker 自动清理。
+- 冲突清理：不保留 `.conflict` 正文副本；仅在现有 scan `last_error` 保留无正文 hash/path 诊断。
+- 回滚：回滚产品 Commit `3a07c3c9af19539fb8f8142148a4ca8450e093ae` 及其父实现提交，不触碰主人数据。
+
+### 最终报告
+
+- 报告路径：本地调度报告继续由 `.superpowers/` 忽略；正式证据为本条目与测试命令输出。
+- 报告分支：`codex/phase1-automatic-memory`
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 3 · revoke-safe downstream and lease hardening
 
 - 产品分支：`codex/phase1-automatic-memory`
