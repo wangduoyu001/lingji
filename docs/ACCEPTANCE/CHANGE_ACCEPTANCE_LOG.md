@@ -7,7 +7,7 @@
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 1 · lease-safe recovery
 
 - 产品分支：`codex/phase1-automatic-memory`
-- 产品 Commit：`pending — fix round implementation`
+- 产品 Commit：`2ee5fbf7e7dac74f95e8ed7220261aee36ef51b1`
 - 影响模块：existing StateDatabase scan leases/checkpoints, snapshot runner recovery, content-addressed raw sink, Task 2 focused tests
 - 风险等级：P0
 - 用户可感知变化：扫描在并发、进程中断和重启后只由当前 lease owner 推进，并会复核 cursor 之前文件的持久 sentinel。
