@@ -7,7 +7,7 @@
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 2 · revoke-safe atomic admission
 
 - 产品分支：`codex/phase1-automatic-memory`
-- 产品 Commit：`08c4dcbde756afaa165148098a35f8296a1d3238`
+- 产品 Commit：`3c890e1d0986707b802e3b0c629c8f99cef87c34`
 - 影响模块：StateDatabase lease TTL/revocation, incremental scan manifest, atomic raw/queue admission, Task 2 concurrency tests
 - 风险等级：P0
 - 用户可感知变化：撤销、并发和进程中断不会把未获授权文件继续推进到 raw/queue；恢复只复核增量 per-path sentinel，不重写完整 manifest。
