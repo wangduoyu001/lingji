@@ -1104,7 +1104,7 @@ class StateDatabase:
                 scan_id, lease_id, ttl_seconds=lease_ttl_seconds
             )
         changes["lease_heartbeat_at"] = values.get(
-            "updated_at", datetime.now(timezone.utc).isoformat(timespec="seconds")
+            "updated_at", datetime.now(timezone.utc).isoformat(timespec="microseconds")
         )
         changes["lease_expires_at"] = self._lease_expiry(
             changes["lease_heartbeat_at"], lease_ttl_seconds

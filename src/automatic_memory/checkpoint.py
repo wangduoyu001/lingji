@@ -408,7 +408,7 @@ class SnapshotJobRunner:
     def _updated_at() -> str:
         from datetime import datetime, timezone
 
-        return datetime.now(timezone.utc).isoformat(timespec="seconds")
+        return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
     @staticmethod
     def _scan(row: dict[str, Any]) -> ScanRun:
