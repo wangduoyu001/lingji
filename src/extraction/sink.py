@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import zipfile
 from datetime import datetime
@@ -51,6 +52,40 @@ class VaultExtractionSink:
         self.raw_root = self.storage_path / "raw"
         self.version_root = self.storage_path / "versions"
         self.state_db = state_db
+
+    def content_addressed_raw_path(self, sha256: str) -> Path:
+        """Return the single durable raw object path for a content hash."""
+
+        digest = str(sha256).strip().lower()
+        if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+            raise ValueError("raw content address must be a SHA-256 digest")
+        return self.raw_root / digest
+
+    def commit_raw_temp(self, temporary: Path | str, sha256: str) -> Path:
+        """Atomically commit a fully fsynced temporary raw object.
+
+        Existing content-addressed objects are retained and the temporary copy
+        is removed, making repeated scans safe and cheap.
+        """
+
+        temporary_path = Path(temporary)
+        target = self.content_addressed_raw_path(sha256)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            temporary_path.unlink(missing_ok=True)
+            return target
+        os.replace(temporary_path, target)
+        try:
+            directory_fd = os.open(target.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            # Directory fsync is not available on every supported platform;
+            # the atomic rename remains the safety boundary there.
+            pass
+        return target
 
     def preserve_raw(self, input_path: Path | str | None, source_type: str) -> dict[str, Any]:
         if not input_path:

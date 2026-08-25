@@ -4,6 +4,51 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 2 · consistent snapshot and resume
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`pending`
+- 影响模块：automatic-memory snapshot/checkpoint、extraction raw sink/idempotency/queue
+- 风险等级：P0
+- 用户可感知变化：授权来源文件可以以一致快照进入现有 raw/queue 流程，并在受控中断后从最后确认项目恢复。
+- 数据或安全边界变化：仅允许 active owner-authorized source root 内的普通文件；拒绝 symlink、目录、root escape、revoked/expired source；raw 使用 content address；不修改源文件。
+
+### 新增或修改的自动验收
+
+- [ ] `pytest -q tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py`：stat-before/copy/stat-after、重试、路径边界、raw/queue 幂等、lease/checkpoint、30%/70% resume。
+- [ ] `pytest -q tests/test_automatic_memory_source_registry.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_hardening.py`：Task 1 与 extraction 回归。
+- [ ] `python scripts/check_acceptance_sync.py`、`python scripts/check_local_execution_handoff.py`、diff/compile/secret/absolute-path scans。
+
+### 新增或修改的真机验收
+
+- [ ] 本任务不启动 Artifact；保持 `LOCAL_EXECUTION_TASK.md` 为 `IDLE`。
+
+### 主人肉眼确认
+
+- [ ] 不适用；Task 2 不修改 Desktop 或正式 Vault 正文。
+
+### 回归项
+
+- [ ] 现有 `VaultExtractionSink`、`SQLiteExtractionQueue` 和 canonical extraction idempotency 行为保持兼容。
+- [ ] 不创建第二 state DB、queue 或 raw archive；不读取真实聊天、Vault 或第三方 AI 目录。
+
+### 清理与回滚
+
+- 临时数据前缀：`PHASE1_AUTOMATIC_MEMORY_TASK2_`
+- 覆盖安装或迁移方式：不安装、不启动；pytest 临时目录自动清理。
+- 临时备份删除条件：无。
+- 测试数据清理方式：仅 pytest 临时授权 root、SQLite、raw 与 queue。
+- 回滚：回滚本 Task 2 提交，不触碰主人数据。
+
+### 不在范围
+
+- 不解析聊天、不实现 watcher、不写 Obsidian 正文、不实现全目录发现。
+
+### 最终报告
+
+- 报告路径：`.superpowers/sdd/2026-08-26-phase1-automatic-memory/task-2-report.md`
+- 报告分支：`codex/phase1-automatic-memory`
+
 ## 填写模板
 
 ```markdown

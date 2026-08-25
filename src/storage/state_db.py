@@ -114,6 +114,9 @@ class StateDatabase:
                     total INTEGER,
                     last_error TEXT,
                     recovery_token TEXT,
+                    source_sentinel TEXT,
+                    lease_id TEXT,
+                    attempt INTEGER NOT NULL DEFAULT 0,
                     updated_at TEXT NOT NULL
                 );
 
@@ -123,6 +126,23 @@ class StateDatabase:
                     ON automatic_memory_scans(source_id, updated_at);
                 """
             )
+            # Task 1 databases may already have the scan table. Keep the
+            # migration additive so existing state and recovery tokens survive.
+            columns = {
+                str(row[1])
+                for row in connection.execute(
+                    "PRAGMA table_info(automatic_memory_scans)"
+                ).fetchall()
+            }
+            for name, definition in (
+                ("source_sentinel", "TEXT"),
+                ("lease_id", "TEXT"),
+                ("attempt", "INTEGER NOT NULL DEFAULT 0"),
+            ):
+                if name not in columns:
+                    connection.execute(
+                        f"ALTER TABLE automatic_memory_scans ADD COLUMN {name} {definition}"
+                    )
 
     @staticmethod
     def _iso(value: datetime) -> str:
@@ -848,6 +868,9 @@ class StateDatabase:
             "total",
             "last_error",
             "recovery_token",
+            "source_sentinel",
+            "lease_id",
+            "attempt",
             "updated_at",
         }
         changes = {key: value for key, value in values.items() if key in allowed}

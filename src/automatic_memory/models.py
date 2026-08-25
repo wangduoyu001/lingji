@@ -34,3 +34,6 @@ class ScanRun:
     total: int | None
     last_error: str | None
     recovery_token: str | None
+    source_sentinel: str | None = None
+    lease_id: str | None = None
+    attempt: int = 0

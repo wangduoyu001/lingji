@@ -245,4 +245,7 @@ class SourceRegistry:
             total=int(row["total"]) if row["total"] is not None else None,
             last_error=row["last_error"],
             recovery_token=row["recovery_token"],
+            source_sentinel=row.get("source_sentinel"),
+            lease_id=row.get("lease_id"),
+            attempt=int(row.get("attempt") or 0),
         )

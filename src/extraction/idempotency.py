@@ -177,10 +177,31 @@ def extraction_key_for_request(
     )
 
 
+def build_snapshot_idempotency_key(
+    source_id: str, relative_path: str, sha256: str
+) -> str:
+    """Build the durable identity for one authorized source snapshot.
+
+    Snapshot identity deliberately excludes absolute paths and timestamps so a
+    repeated scan converges on the same extraction job after a restart.
+    """
+
+    relative = str(relative_path).replace("\\", "/").lstrip("/")
+    material = {
+        "schema_version": SCHEMA_VERSION,
+        "kind": "automatic_memory_snapshot",
+        "source_id": str(source_id),
+        "relative_path": relative,
+        "sha256": str(sha256).lower(),
+    }
+    return sha256_bytes(canonical_json_bytes(material))
+
+
 __all__: Sequence[str] = (
     "SCHEMA_VERSION",
     "build_extraction_idempotency_key",
     "build_input_identity",
+    "build_snapshot_idempotency_key",
     "canonical_json_bytes",
     "directory_manifest",
     "extraction_key_for_request",
