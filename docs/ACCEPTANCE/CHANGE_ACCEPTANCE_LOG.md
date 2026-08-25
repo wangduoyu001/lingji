@@ -7,7 +7,7 @@
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 3 · revoke-safe downstream and lease hardening
 
 - 产品分支：`codex/phase1-automatic-memory`
-- 产品 Commit：`652522f0947b48adac2df714f9426b8b2cc3f679`
+- 产品 Commit：`1c55fd7822de6cc90dfea23736aced6b309b7a8d`
 - 影响模块：existing StateDatabase lease/revoke/manifest, extraction queue/pipeline, raw sink, Task 2 process/concurrency tests
 - 风险等级：P0
 - 用户可感知变化：来源撤销在同一 `lingji_state.db` 事务内取消 snapshot queued/retrying/running jobs；worker 在执行、索引和结构化写入前复核授权，撤销来源不会完成下游结果。
@@ -33,7 +33,7 @@
 - 临时数据前缀：`PHASE1_AUTOMATIC_MEMORY_TASK2_FIX3_`
 - 覆盖安装或迁移方式：不安装、不启动；pytest 临时数据库/raw/queue/marker 自动清理。
 - 冲突清理：不保留 `.conflict` 正文副本；仅在现有 scan `last_error` 保留无正文 hash/path 诊断。
-- 回滚：回滚 `652522f0947b48adac2df714f9426b8b2cc3f679` 实现提交与本条文档提交，不触碰主人数据。
+- 回滚：回滚 `1c55fd7822de6cc90dfea23736aced6b309b7a8d` 及其父实现提交与本条文档提交，不触碰主人数据。
 
 ### 最终报告
 
