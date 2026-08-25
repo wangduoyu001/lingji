@@ -48,7 +48,7 @@ Implemented in the isolated `codex/phase1-automatic-memory` worktree from baseli
 
 ## Commit
 
-- Commit: pending at report authoring time; final SHA is recorded after commit.
+- Commit: `1fd786f6079671420ac1ec512f55f0a4b7e18d5e` (`feat: make automatic memory snapshots resumable`).
 
 ## Concerns
 
