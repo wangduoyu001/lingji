@@ -318,6 +318,46 @@ python -m pytest -q --tb=short -k "work or capture_work"
 .\scripts\validate.ps1 -Mode focused -Area desktop
 ```
 
+## Automatic Memory（Phase 1 planned ownership）
+
+本节只登记 Task 0 封板后的计划入口；这些路径在实现并通过对应测试前，不得被描述为已实现能力。
+
+```text
+src/automatic_memory/models.py
+src/automatic_memory/policy.py
+= Task 1 authorization scope and privacy decisions
+
+src/automatic_memory/discovery.py
+src/automatic_memory/source_catalog.py
+= Task 2 bounded authorized-root discovery and capability status
+
+src/automatic_memory/adapters/chatgpt_export.py
+src/automatic_memory/adapters/codex_transcript.py
+src/automatic_memory/adapters/claude_desktop.py
+= Tasks 3, 5, 6 official-export, schema-detect and unsupported boundaries
+
+src/automatic_memory/watcher.py
+src/automatic_memory/reconciliation.py
+= Task 4 watchfiles debounce and manifest reconciliation
+
+src/automatic_memory/raw_archive.py
+src/automatic_memory/provenance.py
+src/automatic_memory/queue_bridge.py
+= Task 7 immutable raw evidence and append-only provenance bridge
+
+src/obsidian/memory_scope.py
+= Task 8 explicit Obsidian memory eligibility
+
+src/automatic_memory/temporal.py
+src/automatic_memory/current_projection.py
+= Task 9 validity windows and rebuildable derived current memory
+
+src/automatic_memory/context_pack.py
+= Task 10 citations and bounded ContextPack through MemoryGateway
+```
+
+Planned focused tests are `tests/test_automatic_memory_policy.py`, `tests/test_automatic_memory_discovery.py`, `tests/test_chatgpt_export_adapter.py`, `tests/test_automatic_memory_watcher.py`, `tests/test_automatic_memory_reconciliation.py`, `tests/test_codex_transcript_adapter.py`, `tests/test_claude_desktop_boundary.py`, `tests/test_automatic_memory_provenance.py`, `tests/test_automatic_memory_queue_bridge.py`, `tests/test_obsidian_memory_scope.py`, `tests/test_automatic_memory_temporal.py`, `tests/test_current_memory_projection.py`, `tests/test_automatic_memory_context_pack.py`, and `tests/test_automatic_memory_work_projection.py`; each becomes valid only after its owning Task implements the contract. Task 4 owns the future `watchfiles==1.2.0` dependency; Task 0 does not alter dependency files.
+
 ## 7. 记忆审核与 Auto Review
 
 ```text

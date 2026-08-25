@@ -1,13 +1,13 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
-> Updated: 2026-08-25
+> Updated: 2026-08-26
 > Formal/default branch: `master`
 > Product-code baseline before documentation cleanup: `3d7225f58fb5b5a9b035cfd72f92cb2267b48559`
 > Current audited master Head: `ced1128e50d3b3758585573042ea6bcc6f315384`
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
-> Current engineering gate: `WORK-FACT CONTRACT REPAIR`
+> Current engineering gate: `TASK 0 — AUTOMATIC MEMORY CONTRACT (DOCS-ONLY)`
 > Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
@@ -28,6 +28,20 @@
 - 现有 `src/opp_generator.py`、`src/opportunities/` 只允许必要的兼容和回归修复。
 
 Phase 1 PASS 后，Phase 2 第一优先级固定为 **Opportunity Center / 机会面板**。
+
+## 1A. Task 0 当前范围与真实进度
+
+当前分支 `codex/phase1-automatic-memory` 只封板自动化第二大脑的研究结论、架构边界、开发计划和验收规则。Task 0 是 **docs-only**：不修改产品代码、测试代码或依赖文件，不创建真实验收 Artifact，不激活本机任务单，不读取 Production/Vault 正文，也不宣称任何新自动记忆能力已经实现。
+
+已完成的 Task 0 证据是：隔离工作树从精确基准 `d12c1fb837257e83835a7cdb899bb29a9c675c3d` 创建；研究结论保存在 gitignored `.research/`；`.venv` focused 基线为 38 项收集、37 passed、1 skipped；当前 `LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。产品实现从 Task 1 开始，必须逐项通过 focused 测试和对应验收同步。
+
+## 1B. 自动化第二大脑的锁定方向
+
+Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明确 allowlist 内自动发现并持续接管官方支持或明确授权的 AI 记录，保存完整本地原始证据、来源链和可重建 RAG 投影，并在 Desktop 真实显示发现、处理、结果、失败、下一动作与执行者。
+
+强制边界：ChatGPT 只接受官方导出；Codex transcript 必须 schema-detect 并对未知结构 fail-closed；Claude Desktop 不抓不透明内部存储，无官方导出时显示 `unsupported` 或 `consent_required`；禁止 Cookie、Token、凭证、浏览器资料、私有 DB、进程注入、应用目录写入、全盘扫描和网络上传。Obsidian 仅允许 `_LingJi/Memory Inbox`、`_LingJi/Memory Library` 或 `lingji_memory: true`，`lingji_memory: false` 最高优先级。
+
+所有聊天先进入原始证据和可检索层。低风险、高置信、无冲突且置信度 `>= 0.90` 的 derived current memory 可以自动激活，但只是可重建投影；Core、身份、高风险和正式永久知识仍需主人明确确认。`superseded`、`invalidated`、`archived` 历史保留审计，但 current lexical/Qdrant/hybrid/Core/ContextPack/MCP 默认排除。Opportunity Center 在 Phase 1 PASS 前保持冻结。
 
 ## 2. 最近一次主人验收结论
 
@@ -234,6 +248,26 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 在以上门禁通过前，**禁止继续以视觉扩展为主的 UI 开发。**
 
 ## 5. Phase 1 重新规划后的开发顺序
+
+### 5.0 Automatic Memory Tasks 1–11（Task 0 封板后按序执行）
+
+以下是自动化第二大脑的独立审查顺序；当前全部为 `PLANNED`，不代表代码已存在：
+
+| Task | 交付边界 | 当前状态 |
+|---|---|---|
+| 1 | 一次性中文授权、allowlist 与隐私策略 | `PLANNED` |
+| 2 | 授权根发现与客户端能力矩阵 | `PLANNED` |
+| 3 | ChatGPT 官方导出适配器 | `PLANNED` |
+| 4 | `watchfiles==1.2.0`、5 秒防抖、15 分钟 reconciliation、每日完整性 | `PLANNED` |
+| 5 | Codex transcript schema-detect / fail-closed | `PLANNED` |
+| 6 | Claude Desktop unsupported / consent_required 边界 | `PLANNED` |
+| 7 | 原始证据、SHA-256 provenance、幂等队列桥 | `PLANNED` |
+| 8 | Obsidian 自动记忆范围与正式知识边界 | `PLANNED` |
+| 9 | 时态有效性与 derived current-memory 投影 | `PLANNED` |
+| 10 | 统一 RAG、12,000 字符 ContextPack、MCP 与 Desktop Work Fact | `PLANNED` |
+| 11 | 评测、macOS M5-first、Artifact 与最终验收门禁 | `PLANNED` |
+
+全局验收数值固定为：增量 30 秒内进入队列；自动记忆置信度 `>= 0.90`；`quality_score >= 90%`、`source_accuracy >= 95%`、`false_positive_rate <= 5%`、Codex MCP 真实成功率 `>= 95%`、重复正式内容 `0`、Production 污染 `0`、人工审核链 `100%`、重启恢复 `100%`。Task 4 才允许引入 watcher 依赖；Task 0 不引入依赖。
 
 ### SB-0 — Work Fact Contract Repair
 

@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — LingJi Unified Architecture
 
-> Updated: 2026-08-22
+> Updated: 2026-08-26
 > Status: Active architecture contract
 > Formal branch: `master`
 > Primary authority: this file
@@ -61,6 +61,25 @@ SQLite indexes, Qdrant and the Structured Read Model are derived, rebuildable da
 
 `second_brain.sqlite3` remains compatibility data during migration and must not become a second source of truth.
 
+## 3A. Automatic Memory Authorization and Source Boundaries
+
+Phase 1 automatic memory is an owner-authorized extension of the existing Capture and Extraction spine, not a second memory product. A single Chinese owner authorization creates an immutable allowlist of source kinds and roots. Discovery, watching, reconciliation, raw capture and parsing may operate only inside that scope; authorization does not grant permission to inspect adjacent paths, whole disks or application internals.
+
+Supported source rules are explicit:
+
+- ChatGPT accepts official export archives only.
+- Codex local transcripts require schema detection and fail closed for unknown schemas.
+- Claude Desktop opaque internal storage is never scraped; without an official export the capability is `unsupported` or `consent_required`.
+- Cookies, tokens, credentials, browser profiles, private application databases, process memory, process injection, application-directory writes and network upload are outside the product boundary.
+
+Every accepted input produces an immutable raw snapshot, stable source/conversation/message identities and append-only provenance before it enters the existing extraction queue. Raw evidence and parsed rows are rebuildable inputs to lexical/Qdrant indexes; neither replaces Obsidian Vault + Git or formal Work Fact persistence.
+
+## 3B. Obsidian and Memory Promotion Boundaries
+
+Obsidian ordinary notes and formal knowledge remain excluded from automatic memory by default. Automatic memory may read only `_LingJi/Memory Inbox`, `_LingJi/Memory Library` or notes with frontmatter `lingji_memory: true`; `lingji_memory: false` has highest precedence. Automatic indexing must not silently distill ordinary Obsidian knowledge into personal memory, overwrite formal notes or bypass dry-run and Git safety rules.
+
+All chat evidence is retained and searchable in rebuildable layers. A low-risk, high-confidence (`>= 0.90`), conflict-free derived current-memory projection may activate without owner review, but it is not Core Memory or formal permanent knowledge and can be rebuilt from evidence. Core, identity, high-risk and formal permanent knowledge changes require explicit owner confirmation. Historical `superseded`, `invalidated` and `archived` facts remain auditable with validity and replacement links.
+
 ## 4. Current Verified Runtime
 
 ```text
@@ -115,6 +134,10 @@ One retrieval pipeline
 ```
 
 Qdrant failure must not disable lexical retrieval. Unknown vector state must not be fabricated as success or zero.
+
+Current retrieval is the default across lexical, semantic, hybrid, Core, ContextPack and MCP paths. A shared temporal-current predicate excludes facts outside their validity window or marked superseded, invalidated or archived; historical retrieval is an explicit mode. ContextPack output is capped at 12,000 characters and must carry raw/source/conversation/message/memory citations.
+
+File watching is a latency optimization only. Phase 1 uses `watchfiles==1.2.0` with a five-second debounce, admits incremental changes to the existing extraction queue within 30 seconds, runs mandatory 15-minute reconciliation against an authorized-root manifest, and performs a daily completeness check. Watcher silence never proves completeness.
 
 ## 6. Port Contract
 

@@ -319,6 +319,23 @@ runtime_binary_available=true
 - 不做全盘扫描；
 - 不读取未授权正文或浏览器秘密。
 
+### 11.1 Automatic Memory 首次授权与第三方不干扰
+
+自动化第二大脑的首次验收必须从一次中文主人授权开始。记录授权的 source kind、精确 allowlist root、授权时间、有效期和 owner confirmation；发现、watch、reconciliation、raw capture 与解析均只能访问该范围。未授权路径必须显示拒绝原因，不得通过相邻目录、全盘扫描或环境猜测扩大范围。
+
+必须分别验证：
+
+- ChatGPT 只接受官方导出 ZIP；浏览器资料、Cookie、Token、凭证和私有数据库不得读取。
+- Codex transcript 先 schema-detect；未知或损坏 schema 必须 fail closed，并保留可审计失败事件。
+- Claude Desktop 不抓不透明内部存储；没有官方导出时明确显示 `unsupported` 或 `consent_required`，不得通过进程注入、应用目录读取或网络上传绕过。
+- 第三方客户端验收不得干扰客户端进程、配置、应用目录或主人会话；不得把“检测到”写成“已连接”。
+
+增量变更必须在 30 秒内进入既有 Extraction Queue；watcher 使用 5 秒防抖，但 15 分钟 reconciliation 和每日完整性检查才是正确性来源。验收须证明 watcher 静默不会阻止 reconciliation，也不得把 watcher 事件数当作完整性事实。
+
+### 11.2 Obsidian 自动记忆范围
+
+自动记忆验收默认不读取或索引普通 Obsidian 文档。仅 `_LingJi/Memory Inbox`、`_LingJi/Memory Library` 或 frontmatter `lingji_memory: true` 合格；`lingji_memory: false` 永远优先。必须验证 dry-run、路径边界、Production/Acceptance 隔离和 Git 安全，不得静默写入、移动、删除或把普通/正式知识蒸馏进 Core Memory。
+
 ## 12. 检索、Embedding 和 Qdrant
 
 受影响时必须验证：
@@ -334,6 +351,9 @@ runtime_binary_available=true
 - normal search 与 traced search 排序一致；
 - 结果带来源和匹配理由；
 - 数量来自后端事实而不是 UI 推算。
+- Current 模式默认排除 `superseded`、`invalidated`、`archived`；历史模式必须显式选择并保留 validity/replacement 证据。
+- lexical、Qdrant、hybrid、Core、ContextPack 和 MCP 必须使用同一 current predicate；ContextPack 不超过 12,000 字符且每条结论有 citation。
+- 自动 derived current memory 只有在无冲突、低风险且置信度 `>= 0.90` 时可激活；Core、身份、高风险和正式永久知识必须由主人明确确认。
 
 ## 13. Local Control API 和 MCP
 
@@ -394,6 +414,8 @@ runtime_binary_available=true
 - Windows 重启后再做一轮 Core 重启。
 
 Windows 重启前写 checkpoint，重启后继续，不重复前面全部步骤。
+
+Phase 1 自动记忆的真实机器顺序是 macOS M5 first：先完成 macOS focused/full/release、同 SHA macOS Artifact、主人观察、清理和远程复读，再进入 Windows。Opportunity Center 在 Phase 1 最终 PASS 前保持冻结。
 
 ## 16. 安全和隐私
 

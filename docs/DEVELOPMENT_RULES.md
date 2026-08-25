@@ -90,6 +90,20 @@ For design and development work:
 
 A new Markdown file is allowed only when no existing authority can carry the information and the new file has a unique, durable responsibility. Do not create duplicate optimization summaries, final summaries, supplemental notes or renamed copies of existing documents.
 
+## 5A. External Code License and Provenance Gate
+
+Before adding any external package, copied implementation or generated adapter:
+
+1. Record the exact package/repository, version or commit, license, source URL, transitive runtime impact and intended in-project boundary in the change plan.
+2. Prefer official documentation and primary source repositories; preserve provenance in the implementation or acceptance evidence so a future rebuild can identify the source.
+3. Reject code or dependencies with AGPL, GPL, SSPL, BSL, custom, unknown or incompatible licensing, and reject any component that introduces a second database, retriever, queue, API, UI, telemetry path, cloud control plane or permanent-memory authority.
+4. For Phase 1 automatic memory, `watchfiles==1.2.0` is the only planned new watcher dependency and may be added only in Task 4 after its MIT license and provenance are recorded. Task 0 is documentation-only and must not modify dependency files.
+5. Borrow patterns from Mem0/OpenMemory, Letta, Zep/Graphiti and LlamaIndex only as documented design references; do not import their product runtimes or schemas.
+
+## 5B. Automatic Derived Memory versus Core Memory
+
+Raw AI chats, snapshots, provenance and parsed records are evidence and rebuildable retrieval inputs. A low-risk, high-confidence (`>= 0.90`), conflict-free derived current-memory projection may activate automatically, but it is not formal permanent knowledge and must be reconstructible from evidence. Core Memory, identity, high-risk facts and formal permanent knowledge require explicit owner confirmation. `superseded`, `invalidated` and `archived` facts remain auditable with validity and replacement links but are excluded from current retrieval, ContextPack and MCP modes.
+
 ## 6. Task Routing
 
 Use the simplest capable execution method.
