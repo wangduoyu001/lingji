@@ -72,8 +72,17 @@ class ConsistentSnapshot:
             self._sink = VaultExtractionSink.__new__(VaultExtractionSink)
             self._sink.raw_root = self.raw_root
         self.raw_root.mkdir(parents=True, exist_ok=True)
+        self._cleanup_temporary_snapshots()
         self.before_raw_commit = before_raw_commit
         self._copy_source_fd: int | None = None
+
+    def _cleanup_temporary_snapshots(self) -> None:
+        """Remove only this component's interrupted staging files on restart."""
+        for temporary in self.raw_root.glob(".snapshot-*.tmp"):
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
 
     def capture(
         self,

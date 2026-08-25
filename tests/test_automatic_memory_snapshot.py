@@ -281,6 +281,18 @@ def test_raw_commit_rejects_existing_symlink_object(tmp_path: Path):
     assert temporary.exists()
 
 
+def test_snapshot_restart_cleans_only_interrupted_snapshot_temps(tmp_path: Path):
+    _, registry, _, _ = _authorized_source(tmp_path)
+    raw_root = tmp_path / "storage" / "raw"
+    raw_root.mkdir(parents=True)
+    stale = raw_root / ".snapshot-interrupted.tmp"
+    stale.write_bytes(b"sensitive staging content")
+
+    ConsistentSnapshot(registry, raw_root)
+
+    assert not stale.exists()
+
+
 def test_capture_quarantines_raw_conflict_for_diagnosis(tmp_path: Path):
     _, registry, source, root = _authorized_source(tmp_path)
     source_file = root / "conflict.txt"

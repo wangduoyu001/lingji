@@ -331,15 +331,21 @@ class SnapshotJobRunner:
                 raw_path = self.snapshot.raw_root / result.raw_id
                 if self.before_queue is not None:
                     self.before_queue()
-                self.queue.enqueue_authorized_snapshot(
-                    scan_id=scan_id,
-                    lease_id=lease_id,
-                    source_id=source_id,
-                    relative_path=result.relative_path,
-                    raw_id=result.raw_id,
-                    sha256=result.sha256,
-                    input_path=raw_path,
-                )
+                try:
+                    self.queue.enqueue_authorized_snapshot(
+                        scan_id=scan_id,
+                        lease_id=lease_id,
+                        source_id=source_id,
+                        relative_path=result.relative_path,
+                        raw_id=result.raw_id,
+                        sha256=result.sha256,
+                        input_path=raw_path,
+                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        "raw committed before queue admission; orphan raw evidence "
+                        f"raw_id={result.raw_id} relative_path={result.relative_path}: {exc}"
+                    ) from exc
                 processed += 1
                 if self.before_checkpoint is not None:
                     self.before_checkpoint(processed, total)

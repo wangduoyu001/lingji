@@ -6,7 +6,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Collection, Iterator, Mapping
 from uuid import uuid4
 
 from .idempotency import extraction_key_for_request
@@ -253,28 +253,42 @@ class _SQLiteExtractionQueueBase:
         *,
         job_id: str | None = None,
         now: datetime | None = None,
+        allowed_source_types: Collection[str] | None = None,
     ) -> dict[str, Any] | None:
         now = now or datetime.now()
         lease_token = uuid4().hex
+        if allowed_source_types is None:
+            source_filter = "source_type <> 'automatic_memory_snapshot'"
+            source_params: tuple[Any, ...] = ()
+        else:
+            types = tuple(sorted({str(value) for value in allowed_source_types}))
+            if not types:
+                source_filter = "1 = 0"
+                source_params = ()
+            else:
+                source_filter = "source_type IN (" + ", ".join("?" for _ in types) + ")"
+                source_params = types
         with self._lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             if job_id:
                 row = connection.execute(
-                    """
+                    f"""
                     SELECT * FROM extraction_jobs
-                    WHERE job_id = ? AND status IN ('queued', 'retrying') AND next_run_at <= ?
+                    WHERE job_id = ? AND {source_filter}
+                      AND status IN ('queued', 'retrying') AND next_run_at <= ?
                     """,
-                    (job_id, self._iso(now)),
+                    (job_id, *source_params, self._iso(now)),
                 ).fetchone()
             else:
                 row = connection.execute(
-                    """
+                    f"""
                     SELECT * FROM extraction_jobs
-                    WHERE status IN ('queued', 'retrying') AND next_run_at <= ?
+                    WHERE {source_filter}
+                      AND status IN ('queued', 'retrying') AND next_run_at <= ?
                     ORDER BY priority ASC, created_at ASC
                     LIMIT 1
                     """,
-                    (self._iso(now),),
+                    (*source_params, self._iso(now)),
                 ).fetchone()
             if not row:
                 return None

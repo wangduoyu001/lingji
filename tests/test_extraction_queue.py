@@ -35,6 +35,25 @@ class SQLiteExtractionQueueTests(unittest.TestCase):
         self.assertEqual(completed["status"], "completed")
         self.assertTrue(completed["result"]["ok"])
 
+    def test_common_worker_claim_skips_internal_snapshot_and_claims_next_ordinary_job(self):
+        snapshot = self.queue.enqueue(
+            "automatic_memory_snapshot", payload={"source_id": "source-a"}, priority=1
+        )
+        ordinary = self.queue.enqueue("chatgpt", payload={"summary": "ordinary"}, priority=2)
+
+        claimed = self.queue.claim("worker-1")
+
+        self.assertEqual(claimed["job_id"], ordinary["job_id"])
+        self.assertEqual(self.queue.get(snapshot["job_id"])["status"], "queued")
+
+    def test_common_worker_explicit_snapshot_job_id_is_not_claimable(self):
+        snapshot = self.queue.enqueue(
+            "automatic_memory_snapshot", payload={"source_id": "source-a"}
+        )
+
+        self.assertIsNone(self.queue.claim("worker-1", job_id=snapshot["job_id"]))
+        self.assertEqual(self.queue.get(snapshot["job_id"])["status"], "queued")
+
     def test_failure_retries_then_fails(self):
         job = self.queue.enqueue("chatgpt", payload={"a": 1}, max_attempts=2)
         first = self.queue.claim("worker")

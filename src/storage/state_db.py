@@ -16,10 +16,6 @@ class LeaseLostError(RuntimeError):
 
 
 _PROCESS_INSTANCE_ID = uuid4().hex
-_ACTIVE_TRANSACTIONS: dict[tuple[str, int], sqlite3.Connection] = {}
-_ACTIVE_TRANSACTIONS_LOCK = threading.RLock()
-
-
 class StateDatabase:
     """Small SQLite state store for scheduler, processing and audit events."""
 
@@ -27,7 +23,6 @@ class StateDatabase:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
-        self._transaction_local = threading.local()
         self._initialize()
 
     @contextmanager
@@ -411,16 +406,6 @@ class StateDatabase:
         now: datetime | None = None,
     ) -> int:
         now = now or datetime.now()
-        active = getattr(self._transaction_local, "connection", None)
-        if active is not None:
-            cursor = active.execute(
-                """
-                INSERT INTO events(event_type, entity_type, entity_id, payload_json, created_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (event_type, entity_type, entity_id, self._json(payload), self._iso(now)),
-            )
-            return int(cursor.lastrowid)
         with self._lock, self._connection() as connection:
             cursor = connection.execute(
                 """
@@ -534,101 +519,6 @@ class StateDatabase:
                 (str(source_id), timestamp),
             ).fetchone()
         return row is not None
-
-    def run_authorized_automatic_memory_job(
-        self,
-        job_id: str,
-        source_id: str,
-        callback: Any,
-    ) -> Any:
-        """Run all downstream effects under one SQLite authorization boundary.
-
-        ``BEGIN IMMEDIATE`` is the linearization point shared with source
-        revoke.  A revoke that wins first makes the callback unreachable; a
-        callback that wins first completes before revoke can commit.
-        """
-        with self._lock, self._connection() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            authorized = connection.execute(
-                """
-                SELECT jobs.job_id
-                FROM extraction_jobs AS jobs
-                JOIN automatic_memory_sources AS sources
-                  ON sources.source_id = ?
-                JOIN automatic_memory_grants AS grants
-                  ON grants.grant_id = sources.grant_id
-                WHERE jobs.job_id = ?
-                  AND jobs.source_type = 'automatic_memory_snapshot'
-                  AND jobs.status = 'running'
-                  AND (jobs.automatic_memory_source_id = ?
-                       OR (jobs.automatic_memory_source_id IS NULL
-                           AND json_extract(jobs.payload_json, '$.source_id') = ?))
-                  AND sources.status = 'authorized'
-                  AND grants.owner_confirmed = 1
-                  AND (grants.expires_at IS NULL OR grants.expires_at > ?)
-                """,
-                (
-                    str(source_id),
-                    str(job_id),
-                    str(source_id),
-                    str(source_id),
-                    datetime.now(timezone.utc).isoformat(timespec="microseconds"),
-                ),
-            ).fetchone()
-            if authorized is None:
-                raise LeaseLostError(
-                    f"automatic-memory authorization lost before downstream commit: {job_id}"
-                )
-            self._transaction_local.connection = connection
-            active_key = (str(self.path.resolve()), threading.get_ident())
-            with _ACTIVE_TRANSACTIONS_LOCK:
-                _ACTIVE_TRANSACTIONS[active_key] = connection
-            try:
-                return callback()
-            except LeaseLostError:
-                # A same-thread revoke is intentionally part of this
-                # transaction. Preserve its cancellation while discarding the
-                # downstream callback's aborted work.
-                connection.commit()
-                raise
-            finally:
-                self._transaction_local.connection = None
-                with _ACTIVE_TRANSACTIONS_LOCK:
-                    _ACTIVE_TRANSACTIONS.pop(active_key, None)
-
-    def assert_authorized_automatic_memory_job(
-        self, job_id: str, source_id: str
-    ) -> None:
-        """Revalidate the open authorization transaction before first side effect."""
-        connection = getattr(self._transaction_local, "connection", None)
-        if connection is None:
-            raise LeaseLostError("automatic-memory authorization transaction is not active")
-        row = connection.execute(
-            """
-            SELECT jobs.job_id
-            FROM extraction_jobs AS jobs
-            JOIN automatic_memory_sources AS sources ON sources.source_id = ?
-            JOIN automatic_memory_grants AS grants ON grants.grant_id = sources.grant_id
-            WHERE jobs.job_id = ? AND jobs.source_type = 'automatic_memory_snapshot'
-              AND jobs.status = 'running'
-              AND (jobs.automatic_memory_source_id = ?
-                   OR (jobs.automatic_memory_source_id IS NULL
-                       AND json_extract(jobs.payload_json, '$.source_id') = ?))
-              AND sources.status = 'authorized' AND grants.owner_confirmed = 1
-              AND (grants.expires_at IS NULL OR grants.expires_at > ?)
-            """,
-            (
-                str(source_id),
-                str(job_id),
-                str(source_id),
-                str(source_id),
-                datetime.now(timezone.utc).isoformat(timespec="microseconds"),
-            ),
-        ).fetchone()
-        if row is None:
-            raise LeaseLostError(
-                f"automatic-memory authorization lost before downstream side effects: {job_id}"
-            )
 
     def find_automatic_memory_source(
         self, grant_id: str, kind: str, root: str
@@ -944,15 +834,6 @@ class StateDatabase:
         self, source_id: str, *, revoked_at: str, reason: str
     ) -> dict[str, Any]:
         """Revoke a source and cancel all resumable scans in one transaction."""
-        active = getattr(self._transaction_local, "connection", None)
-        if active is None:
-            active_key = (str(self.path.resolve()), threading.get_ident())
-            with _ACTIVE_TRANSACTIONS_LOCK:
-                active = _ACTIVE_TRANSACTIONS.get(active_key)
-        if active is not None:
-            return self._revoke_automatic_memory_source_on_connection(
-                active, source_id, revoked_at=revoked_at, reason=reason
-            )
         with self._lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             return self._revoke_automatic_memory_source_on_connection(
