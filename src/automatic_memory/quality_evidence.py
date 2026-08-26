@@ -74,6 +74,9 @@ class ImportedEvidenceAudit:
     duplicate: int
     ordered_role_matches: int
     content_hash_matches: int
+    sequence_matches: int = 0
+    source_matches: int = 0
+    conversation_matches: int = 0
 
     @classmethod
     def from_read_model(cls, read_model: Any, expected_records: Sequence[Any]) -> "ImportedEvidenceAudit":
@@ -91,4 +94,17 @@ class ImportedEvidenceAudit:
         duplicate = sum(max(0, count - 1) for count in counts.values())
         expected_set = set(expected_ids)
         actual_set = set(actual_ids)
-        return cls(len(expected_records), len(rows), len(expected_set - actual_set), len(actual_set - expected_set), duplicate, 0, 0)
+        by_id: dict[str, Mapping[str, Any]] = {}
+        for row in rows:
+            by_id.setdefault(str(row.get("external_id") or row.get("message_id") or ""), row)
+        role = sequence = content = source = conversation = 0
+        for expected in expected_records:
+            row = by_id.get(str(getattr(expected, "message_id")))
+            if row is None:
+                continue
+            role += int(str(row.get("role") or "") == str(getattr(expected, "role", "")))
+            sequence += int(str(row.get("sequence") or "") == str(getattr(expected, "sequence", row.get("sequence"))))
+            content += int(str(row.get("content_hash") or "") == str(getattr(expected, "content_hash", "")))
+            source += int(str(row.get("source_id") or "") == str(getattr(expected, "source_id", "")))
+            conversation += int(str(row.get("conversation_id") or "") == str(getattr(expected, "conversation_id", "")))
+        return cls(len(expected_records), len(rows), len(expected_set - actual_set), len(actual_set - expected_set), duplicate, role, content, sequence, source, conversation)

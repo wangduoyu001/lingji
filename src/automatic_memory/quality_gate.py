@@ -259,26 +259,18 @@ def _apply_fixture_metadata(corpus: Sequence[CorpusRecord], read_model: SourceRe
         item = next((value for key, value in imported.items() if key.endswith(suffix)), None)
         if item is None:
             continue
-        updated = read_model.upsert_message(
-            {
+        updated = read_model.upsert_message({
                 **item,
-                "external_id": item.get("external_id"),
-                "content": record.content,
-                "role": record.role,
-                "occurred_at": record.occurred_at,
                 "privacy": record.privacy,
                 "projects": [record.project_id],
                 "agent_scope": list(record.agent_scope),
                 "metadata": {
                     **dict(item.get("metadata") or {}),
-                    "fixture_fact_id": record.fact_id,
-                    "fixture_citation_id": record.citation_id,
                     "fixture_lifecycle": record.lifecycle,
                     "fixture_authority": record.authority,
                     "fixture_risk": record.risk,
                 },
-            }
-        )
+            })
         by_message[record.message_id] = updated
     return by_message
 
@@ -326,7 +318,7 @@ def _promote_fixtures(
                 "valid_from": record.occurred_at,
                 "modified_at": record.occurred_at,
                 "risk_flags": ["security"] if record.risk == "high" else [],
-                "fixture_fact_id": record.fact_id,
+                    "fixture_fact_id": record.fact_id,
             },
         )
         decision = service.evaluate(candidate)
@@ -480,16 +472,13 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
         indexer.build_index()
         memory_db.rebuild_from_index(indexer.get_all(), temporary_root / "vault")
         message_map = _apply_fixture_metadata(corpus, read_model)
-        imported_messages = len(message_map)
-        ordered_role_matches = sum(
-            int(message_map[item.message_id].get("role") == item.role)
-            for item in corpus
-            if item.message_id in message_map
-        )
+        audit = ImportedEvidenceAudit.from_read_model(read_model, corpus)
+        imported_messages = audit.actual
+        ordered_role_matches = audit.ordered_role_matches
         decisions, activation_correct, activation_total = _promote_fixtures(
             corpus, message_map, memory_db, read_model, state_db
         )
-        duplicate_records = max(0, imported_messages - len({str(item.get("message_id")) for item in message_map.values()}))
+        duplicate_records = audit.duplicate
         gateway, _profiles = _build_gateway(temporary_root, memory_db, read_model, state_db)
         mcp = _register_fastmcp(gateway)
         imported_identity = {
