@@ -1,8 +1,7 @@
-"""Frozen, deterministic quality contracts for the automatic-memory phase.
+"""Frozen, deterministic quality contracts for automatic memory.
 
-This module deliberately knows nothing about retrieval, promotion, storage, or
-models.  It validates hand-authored evidence and compares that evidence with
-the literal expectations in the golden questions.
+The evaluator consumes hand-authored evidence.  It does not call retrieval,
+promotion, a model, or any production data source.
 """
 
 from __future__ import annotations
@@ -44,57 +43,52 @@ CATEGORY_COUNTS: dict[QuestionCategory, int] = {
 
 _CORPUS_KEYS = frozenset(
     {
-        "fact_id",
-        "source_id",
-        "conversation_id",
-        "message_id",
-        "role",
-        "content",
-        "occurred_at",
-        "lifecycle",
-        "authority",
-        "project_id",
-        "privacy",
-        "agent_scope",
-        "citation_id",
-        "memory_kind",
-        "risk",
+        "fact_id", "topic_key", "source_id", "conversation_id", "message_id",
+        "role", "content", "content_hash", "occurred_at", "lifecycle",
+        "supersedes_fact_id", "authority", "project_id", "privacy",
+        "agent_scope", "citation_id", "memory_kind", "risk",
     }
 )
 _QUESTION_KEYS = frozenset(
     {
-        "question_id",
-        "category",
-        "query",
-        "mode",
-        "expected_fact_ids",
-        "forbidden_fact_ids",
-        "expected_citation_ids",
+        "question_id", "category", "query", "mode", "as_of",
+        "expected_fact_ids", "forbidden_fact_ids", "expected_citation_ids",
         "requires_owner_review",
     }
 )
-_SECRET_OR_PATH = re.compile(
-    r"(?:-----BEGIN|\bBearer\s+|\b(?:api[_-]?key|secret|password|token)\s*[:=]|"
-    r"\bsk-[A-Za-z0-9_-]{10,}|\bAKIA[0-9A-Z]{12,}|"
-    r"(?:[A-Za-z]:\\|/(?:Users|home|private|var|tmp)/))",
+_SECRET_KEY = re.compile(
+    r"(?:api[_-]?key|access[_-]?key|authorization|bearer|password|passphrase|"
+    r"private[_-]?key|secret|token|pem)",
     re.IGNORECASE,
 )
+_SECRET_VALUE = re.compile(
+    r"(?:-----BEGIN(?: [^-]+)? PRIVATE KEY-----|\bBearer\s+\S+|"
+    r"\b(?:api[_-]?key|password|passphrase|secret|token)\s*[:=]\s*\S+|"
+    r"\bsk-[A-Za-z0-9_-]{10,}|\bAKIA[0-9A-Z]{12,})",
+    re.IGNORECASE,
+)
+_UNIX_ABSOLUTE = re.compile(r"(?:^|[\s\"'=:(])/(?:[A-Za-z0-9._-]+)(?:/|$)")
+_WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
+_UNC_ABSOLUTE = re.compile(r"^\\\\[^\\/]+[\\/][^\\/]+")
 
 
 class EvaluationInputError(ValueError):
-    """Raised when fixture or run evidence is malformed or incomplete."""
+    """Raised when fixture or measured evidence is malformed."""
 
 
 @dataclass(frozen=True)
 class CorpusRecord:
     fact_id: str
+    topic_key: str
     source_id: str
     conversation_id: str
     message_id: str
     role: CorpusRole
     content: str
+    content_hash: str
     occurred_at: str
     lifecycle: Lifecycle
+    supersedes_fact_id: str | None
     authority: str
     project_id: str
     privacy: str
@@ -110,6 +104,7 @@ class EvaluationQuestion:
     category: QuestionCategory
     query: str
     mode: QuestionMode
+    as_of: str | None
     expected_fact_ids: tuple[str, ...]
     forbidden_fact_ids: tuple[str, ...]
     expected_citation_ids: tuple[str, ...]
@@ -149,6 +144,8 @@ class EvaluationReport:
     protected_false_promotions: int
     stale_current_leaks: int
     duplicate_records: int
+    baseline_context_chars: int
+    rendered_context_chars: int
     context_reduction: float
     mcp_successes: int
     mcp_attempts: int
@@ -173,23 +170,36 @@ def _read_jsonl(source: str | Path | Sequence[Mapping[str, Any]]) -> list[dict[s
                 value = json.loads(line)
             except json.JSONDecodeError as exc:
                 raise EvaluationInputError(f"invalid JSONL at line {line_number}") from exc
-            if not isinstance(value, dict):
+            if not isinstance(value, Mapping):
                 raise EvaluationInputError(f"JSONL line {line_number} is not an object")
-            values.append(value)
+            values.append(dict(value))
         return values
-    return [dict(value) for value in source]
+    values = []
+    for index, value in enumerate(source):
+        if not isinstance(value, Mapping):
+            raise EvaluationInputError(f"row {index} is not an object")
+        values.append(dict(value))
+    return values
 
 
-def _scan_for_sensitive_text(value: Any, *, location: str) -> None:
+def _scan_sensitive(value: Any, *, location: str) -> None:
     if isinstance(value, str):
-        if _SECRET_OR_PATH.search(value):
+        if _SECRET_VALUE.search(value) or _WINDOWS_ABSOLUTE.search(value) or _UNC_ABSOLUTE.search(value):
             raise EvaluationInputError(f"secret-like or path-like content at {location}")
-    elif isinstance(value, Mapping):
+        if _UNIX_ABSOLUTE.search(value):
+            raise EvaluationInputError(f"absolute path-like content at {location}")
+        return
+    if isinstance(value, Mapping):
         for key, child in value.items():
-            _scan_for_sensitive_text(child, location=f"{location}.{key}")
-    elif isinstance(value, (list, tuple)):
+            if not isinstance(key, str):
+                raise EvaluationInputError(f"non-string mapping key at {location}")
+            if _SECRET_KEY.search(key):
+                raise EvaluationInputError(f"secret-like key at {location}.{key}")
+            _scan_sensitive(child, location=f"{location}.{key}")
+        return
+    if isinstance(value, (list, tuple)):
         for index, child in enumerate(value):
-            _scan_for_sensitive_text(child, location=f"{location}[{index}]")
+            _scan_sensitive(child, location=f"{location}[{index}]")
 
 
 def _required_string(value: Any, field: str) -> str:
@@ -198,9 +208,9 @@ def _required_string(value: Any, field: str) -> str:
     return value
 
 
-def _string_tuple(value: Any, field: str, *, allow_empty: bool = True) -> tuple[str, ...]:
+def _string_tuple(value: Any, field: str, *, allow_empty: bool) -> tuple[str, ...]:
     if not isinstance(value, list) or (not allow_empty and not value):
-        raise EvaluationInputError(f"{field} must be a non-empty JSON array")
+        raise EvaluationInputError(f"{field} must be a {'non-empty ' if not allow_empty else ''}JSON array")
     result = tuple(_required_string(item, f"{field}[]") for item in value)
     if len(set(result)) != len(result):
         raise EvaluationInputError(f"duplicate values in {field}")
@@ -211,27 +221,34 @@ def _validate_keys(value: Mapping[str, Any], expected: frozenset[str], kind: str
     missing = expected - value.keys()
     extra = value.keys() - expected
     if missing or extra:
-        raise EvaluationInputError(f"{kind} keys mismatch; missing={sorted(missing)}, extra={sorted(extra)}")
+        raise EvaluationInputError(
+            f"{kind} keys mismatch; missing={sorted(missing)}, extra={sorted(extra)}"
+        )
 
 
 def _parse_corpus(value: Mapping[str, Any], index: int) -> CorpusRecord:
     _validate_keys(value, _CORPUS_KEYS, "corpus")
-    _scan_for_sensitive_text(value, location=f"corpus[{index}]")
+    _scan_sensitive(value, location=f"corpus[{index}]")
     role = value["role"]
     lifecycle = value["lifecycle"]
     if role not in {"user", "assistant", "system", "tool"}:
         raise EvaluationInputError(f"invalid corpus role at {index}")
     if lifecycle not in {"active", "superseded", "invalidated", "archived"}:
         raise EvaluationInputError(f"invalid corpus lifecycle at {index}")
+    if value["supersedes_fact_id"] is not None and not isinstance(value["supersedes_fact_id"], str):
+        raise EvaluationInputError(f"supersedes_fact_id must be string or null at {index}")
     return CorpusRecord(
         fact_id=_required_string(value["fact_id"], "fact_id"),
+        topic_key=_required_string(value["topic_key"], "topic_key"),
         source_id=_required_string(value["source_id"], "source_id"),
         conversation_id=_required_string(value["conversation_id"], "conversation_id"),
         message_id=_required_string(value["message_id"], "message_id"),
         role=role,
         content=_required_string(value["content"], "content"),
+        content_hash=_required_string(value["content_hash"], "content_hash"),
         occurred_at=_required_string(value["occurred_at"], "occurred_at"),
         lifecycle=lifecycle,
+        supersedes_fact_id=value["supersedes_fact_id"],
         authority=_required_string(value["authority"], "authority"),
         project_id=_required_string(value["project_id"], "project_id"),
         privacy=_required_string(value["privacy"], "privacy"),
@@ -250,22 +267,35 @@ def load_corpus(source: str | Path | Sequence[Mapping[str, Any]]) -> tuple[Corpu
         raise EvaluationInputError("duplicate corpus message_id")
     if len({record.citation_id for record in records}) != len(records):
         raise EvaluationInputError("duplicate corpus citation_id")
+    fact_ids = {record.fact_id for record in records}
+    for record in records:
+        if record.supersedes_fact_id is not None:
+            if record.supersedes_fact_id not in fact_ids:
+                raise EvaluationInputError(f"missing superseded fact for {record.fact_id}")
+            if record.supersedes_fact_id == record.fact_id:
+                raise EvaluationInputError(f"fact cannot supersede itself: {record.fact_id}")
     return records
 
 
 def _parse_question(value: Mapping[str, Any], index: int) -> EvaluationQuestion:
     _validate_keys(value, _QUESTION_KEYS, "question")
-    _scan_for_sensitive_text(value, location=f"question[{index}]")
+    _scan_sensitive(value, location=f"question[{index}]")
     category = value["category"]
     mode = value["mode"]
     if category not in CATEGORY_COUNTS:
         raise EvaluationInputError(f"invalid question category at {index}")
     if mode not in {"current", "as_of", "history", "why"}:
         raise EvaluationInputError(f"invalid question mode at {index}")
+    as_of = value["as_of"]
+    if as_of is not None and (not isinstance(as_of, str) or not as_of.strip()):
+        raise EvaluationInputError(f"as_of must be string or null at {index}")
+    if mode != "current" and as_of is None:
+        raise EvaluationInputError(f"non-current mode requires as_of at {index}")
     if not isinstance(value["requires_owner_review"], bool):
         raise EvaluationInputError(f"requires_owner_review must be boolean at {index}")
-    expected = _string_tuple(value["expected_fact_ids"], "expected_fact_ids", allow_empty=False)
+    expected = _string_tuple(value["expected_fact_ids"], "expected_fact_ids", allow_empty=True)
     forbidden = _string_tuple(value["forbidden_fact_ids"], "forbidden_fact_ids", allow_empty=False)
+    citations = _string_tuple(value["expected_citation_ids"], "expected_citation_ids", allow_empty=True)
     if set(expected) & set(forbidden):
         raise EvaluationInputError(f"expected and forbidden IDs overlap at {index}")
     return EvaluationQuestion(
@@ -273,9 +303,10 @@ def _parse_question(value: Mapping[str, Any], index: int) -> EvaluationQuestion:
         category=category,
         query=_required_string(value["query"], "query"),
         mode=mode,
+        as_of=as_of,
         expected_fact_ids=expected,
         forbidden_fact_ids=forbidden,
-        expected_citation_ids=_string_tuple(value["expected_citation_ids"], "expected_citation_ids", allow_empty=False),
+        expected_citation_ids=citations,
         requires_owner_review=value["requires_owner_review"],
     )
 
@@ -288,67 +319,129 @@ def load_questions(
     questions = tuple(_parse_question(value, index) for index, value in enumerate(_read_jsonl(source)))
     if len({question.question_id for question in questions}) != len(questions):
         raise EvaluationInputError("duplicate question_id")
-    if corpus is not None:
-        fact_ids = {record.fact_id for record in corpus}
-        citation_ids = {record.citation_id for record in corpus}
-        for question in questions:
-            if not set(question.expected_fact_ids) <= fact_ids:
-                raise EvaluationInputError(f"missing expected evidence for {question.question_id}")
-            if not set(question.forbidden_fact_ids) <= fact_ids:
-                raise EvaluationInputError(f"missing forbidden evidence for {question.question_id}")
-            if not set(question.expected_citation_ids) <= citation_ids:
-                raise EvaluationInputError(f"missing citation evidence for {question.question_id}")
+    if len(questions) == 100:
+        actual_counts = {category: sum(q.category == category for q in questions) for category in CATEGORY_COUNTS}
+        if actual_counts != CATEGORY_COUNTS:
+            raise EvaluationInputError(f"question category counts mismatch: {actual_counts}")
+    if corpus is None:
+        return questions
+    by_fact = {record.fact_id: record for record in corpus}
+    by_citation = {record.citation_id: record for record in corpus}
+    for question in questions:
+        if not set(question.expected_fact_ids) <= by_fact.keys():
+            raise EvaluationInputError(f"missing expected fact evidence for {question.question_id}")
+        if not set(question.forbidden_fact_ids) <= by_fact.keys():
+            raise EvaluationInputError(f"missing forbidden fact evidence for {question.question_id}")
+        if not set(question.expected_citation_ids) <= by_citation.keys():
+            raise EvaluationInputError(f"missing expected citation evidence for {question.question_id}")
+        expected_facts = set(question.expected_fact_ids)
+        for citation_id in question.expected_citation_ids:
+            if by_citation[citation_id].fact_id not in expected_facts:
+                raise EvaluationInputError(
+                    f"citation {citation_id} does not belong to expected facts for {question.question_id}"
+                )
     return questions
+
+
+def _evidence_ids(value: Sequence[str], field: str) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes)):
+        raise EvaluationInputError(f"{field} must be a sequence of IDs")
+    result = tuple(_required_string(item, f"{field}[]") for item in value)
+    if len(set(result)) != len(result):
+        label = "fact" if "fact" in field else "citation" if "citation" in field else field
+        raise EvaluationInputError(f"duplicate {label}")
+    return result
 
 
 def score_question(
     question: EvaluationQuestion,
-    *,
+    corpus_by_fact: Mapping[str, CorpusRecord],
     recalled_fact_ids: Sequence[str],
     citation_ids: Sequence[str],
+    *,
     context_chars: int,
 ) -> QuestionResult:
-    recalled = tuple(recalled_fact_ids)
-    citations = tuple(citation_ids)
-    if len(set(recalled)) != len(recalled) or len(set(citations)) != len(citations):
-        raise EvaluationInputError(f"duplicate evidence in {question.question_id}")
-    if not isinstance(context_chars, int) or isinstance(context_chars, bool) or context_chars < 0:
-        raise EvaluationInputError(f"invalid context length in {question.question_id}")
+    if not isinstance(corpus_by_fact, Mapping):
+        raise EvaluationInputError("corpus identity must be a mapping")
+    if any(not isinstance(key, str) or not isinstance(value, CorpusRecord) for key, value in corpus_by_fact.items()):
+        raise EvaluationInputError("corpus identity contains invalid record")
+    by_fact = dict(corpus_by_fact)
+    by_citation = {record.citation_id: record for record in by_fact.values()}
+    recalled = _evidence_ids(recalled_fact_ids, "recalled_fact_ids")
+    citations = _evidence_ids(citation_ids, "citation_ids")
+    unknown_facts = set(recalled) - set(by_fact)
+    if unknown_facts:
+        raise EvaluationInputError(f"unknown fact evidence: {sorted(unknown_facts)}")
+    forbidden = set(question.forbidden_fact_ids)
+    if forbidden & set(recalled):
+        raise EvaluationInputError(f"forbidden fact evidence: {sorted(forbidden & set(recalled))}")
     expected = set(question.expected_fact_ids)
+    extras = set(recalled) - expected
+    if extras:
+        raise EvaluationInputError(f"extra fact evidence: {sorted(extras)}")
+    unknown_citations = set(citations) - set(by_citation)
+    if unknown_citations:
+        raise EvaluationInputError(f"unknown citation evidence: {sorted(unknown_citations)}")
     expected_citations = set(question.expected_citation_ids)
-    recalled_expected = len(expected & set(recalled))
-    correct_citations = len(expected_citations & set(citations))
+    extra_citations = set(citations) - expected_citations
+    if extra_citations:
+        raise EvaluationInputError(f"extra citation evidence: {sorted(extra_citations)}")
+    for citation_id in citations:
+        if by_citation[citation_id].fact_id not in expected:
+            raise EvaluationInputError(f"citation {citation_id} does not belong to expected facts")
+    if not isinstance(context_chars, int) or isinstance(context_chars, bool) or context_chars < 0:
+        raise EvaluationInputError("context_chars must be a non-negative integer")
+    recalled_expected_count = len(set(recalled) & expected)
+    correct_citation_count = len(set(citations) & expected_citations)
     failures: list[str] = []
-    if set(recalled) & set(question.forbidden_fact_ids):
-        failures.append("forbidden_fact_recalled")
-    if recalled_expected != len(expected):
+    if recalled_expected_count != len(expected):
         failures.append("expected_fact_missing")
-    if correct_citations != len(expected_citations):
+    if correct_citation_count != len(expected_citations):
         failures.append("citation_missing_or_incorrect")
     return QuestionResult(
         question_id=question.question_id,
         recalled_fact_ids=recalled,
         citation_ids=citations,
         expected_fact_count=len(expected),
-        recalled_expected_count=recalled_expected,
+        recalled_expected_count=recalled_expected_count,
         expected_citation_count=len(expected_citations),
-        correct_citation_count=correct_citations,
+        correct_citation_count=correct_citation_count,
         context_chars=context_chars,
         passed=not failures,
         failures=tuple(failures),
     )
 
 
-def _nonnegative_int(value: Any, field: str) -> int:
+def _raw_int(value: Any, field: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise EvaluationInputError(f"{field} must be a non-negative integer")
     return value
 
 
-def _finite_number(value: Any, field: str) -> float:
-    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(float(value)):
-        raise EvaluationInputError(f"{field} must be finite")
-    return float(value)
+def _percentage(value: Any, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise EvaluationInputError(f"{field} must be a strict numeric percentage")
+    result = float(value)
+    if not math.isfinite(result) or not 0 <= result <= 100:
+        raise EvaluationInputError(f"{field} must be finite and between 0 and 100")
+    return result
+
+
+def _validate_pair(numerator: int, denominator: int, name: str) -> None:
+    if denominator <= 0:
+        raise EvaluationInputError(f"{name} denominator must be positive")
+    if numerator > denominator:
+        raise EvaluationInputError(f"{name} numerator exceeds denominator")
+
+
+def _context_reduction(baseline: int, rendered: int) -> float:
+    _raw_int(baseline, "baseline_context_chars")
+    _raw_int(rendered, "rendered_context_chars")
+    if baseline <= 0:
+        raise EvaluationInputError("baseline_context_chars must be positive")
+    if rendered > baseline:
+        raise EvaluationInputError("rendered_context_chars exceeds baseline_context_chars")
+    return (1 - rendered / baseline) * 100
 
 
 def evaluate_run(
@@ -364,7 +457,8 @@ def evaluate_run(
     protected_false_promotions: int = 0,
     stale_current_leaks: int = 0,
     duplicate_records: int = 0,
-    context_reduction: float,
+    baseline_context_chars: int,
+    rendered_context_chars: int,
     mcp_successes: int,
     mcp_attempts: int,
     production_pollution: int = 0,
@@ -372,61 +466,76 @@ def evaluate_run(
     reboot_recovery: float | None = None,
     blocked_reasons: Sequence[str] = (),
 ) -> EvaluationReport:
-    if len(questions) != 100:
-        raise EvaluationInputError("evaluation run must contain exactly 100 questions")
+    if len(questions) != 100 or len(results) != 100:
+        raise EvaluationInputError("evaluation run must contain exactly 100 questions and results")
     question_ids = [question.question_id for question in questions]
     result_ids = [result.question_id for result in results]
-    if len(set(question_ids)) != 100 or len(results) != 100 or len(set(result_ids)) != 100:
-        raise EvaluationInputError("evaluation run has duplicate or incomplete question IDs")
-    if set(question_ids) != set(result_ids):
-        raise EvaluationInputError("evaluation results do not match the 100 questions")
-    question_by_id = {question.question_id: question for question in questions}
+    if len(set(question_ids)) != 100 or len(set(result_ids)) != 100 or set(question_ids) != set(result_ids):
+        raise EvaluationInputError("evaluation results have duplicate, missing, or unknown question IDs")
+    by_question = {question.question_id: question for question in questions}
+    ordered_results: list[QuestionResult] = []
     for result in results:
-        question = question_by_id[result.question_id]
-        _scan_for_sensitive_text(result.recalled_fact_ids, location=f"result[{result.question_id}].facts")
-        _scan_for_sensitive_text(result.citation_ids, location=f"result[{result.question_id}].citations")
-        expected_result = score_question(
-            question,
-            recalled_fact_ids=result.recalled_fact_ids,
-            citation_ids=result.citation_ids,
-            context_chars=result.context_chars,
-        )
-        if result != expected_result:
-            raise EvaluationInputError(f"result evidence is inconsistent for {result.question_id}")
-    for name, value in (
-        ("imported_messages", imported_messages),
-        ("expected_messages", expected_messages),
-        ("ordered_role_matches", ordered_role_matches),
-        ("expected_ordered_roles", expected_ordered_roles),
-        ("automatic_activation_correct", automatic_activation_correct),
-        ("automatic_activation_total", automatic_activation_total),
-        ("protected_false_promotions", protected_false_promotions),
-        ("stale_current_leaks", stale_current_leaks),
-        ("duplicate_records", duplicate_records),
-        ("mcp_successes", mcp_successes),
-        ("mcp_attempts", mcp_attempts),
-        ("production_pollution", production_pollution),
-    ):
-        _nonnegative_int(value, name)
+        question = by_question[result.question_id]
+        expected_fact_count = len(question.expected_fact_ids)
+        expected_citation_count = len(question.expected_citation_ids)
+        if result.expected_fact_count != expected_fact_count or result.expected_citation_count != expected_citation_count:
+            raise EvaluationInputError(f"result counts do not match question literals: {result.question_id}")
+        if (
+            not isinstance(result.recalled_fact_ids, tuple)
+            or not isinstance(result.citation_ids, tuple)
+            or not isinstance(result.context_chars, int)
+            or isinstance(result.context_chars, bool)
+            or result.context_chars < 0
+            or len(set(result.recalled_fact_ids)) != len(result.recalled_fact_ids)
+            or len(set(result.citation_ids)) != len(result.citation_ids)
+        ):
+            raise EvaluationInputError(f"malformed question result: {result.question_id}")
+        recalled_expected = len(set(result.recalled_fact_ids) & set(question.expected_fact_ids))
+        correct_citations = len(set(result.citation_ids) & set(question.expected_citation_ids))
+        failures = []
+        if recalled_expected != expected_fact_count:
+            failures.append("expected_fact_missing")
+        if correct_citations != expected_citation_count:
+            failures.append("citation_missing_or_incorrect")
+        if (
+            result.recalled_expected_count != recalled_expected
+            or result.correct_citation_count != correct_citations
+            or result.passed != (not failures)
+            or result.failures != tuple(failures)
+        ):
+            raise EvaluationInputError(f"result evidence counts do not match question literals: {result.question_id}")
+        ordered_results.append(result)
+    counters = {
+        "imported_messages": imported_messages,
+        "expected_messages": expected_messages,
+        "ordered_role_matches": ordered_role_matches,
+        "expected_ordered_roles": expected_ordered_roles,
+        "automatic_activation_correct": automatic_activation_correct,
+        "automatic_activation_total": automatic_activation_total,
+        "protected_false_promotions": protected_false_promotions,
+        "stale_current_leaks": stale_current_leaks,
+        "duplicate_records": duplicate_records,
+        "mcp_successes": mcp_successes,
+        "mcp_attempts": mcp_attempts,
+        "production_pollution": production_pollution,
+    }
+    for name, value in counters.items():
+        counters[name] = _raw_int(value, name)
+    _validate_pair(imported_messages, expected_messages, "messages")
+    _validate_pair(ordered_role_matches, expected_ordered_roles, "ordered roles")
+    _validate_pair(automatic_activation_correct, automatic_activation_total, "automatic activation")
+    _validate_pair(mcp_successes, mcp_attempts, "MCP")
+    reduction = _context_reduction(baseline_context_chars, rendered_context_chars)
     if owner_review_success is not None:
-        _finite_number(owner_review_success, "owner_review_success")
+        owner_review_success = _percentage(owner_review_success, "owner_review_success")
     if reboot_recovery is not None:
-        _finite_number(reboot_recovery, "reboot_recovery")
-    reduction = _finite_number(context_reduction, "context_reduction")
-    by_id = {result.question_id: result for result in results}
-    ordered_results = [by_id[question.question_id] for question in questions]
+        reboot_recovery = _percentage(reboot_recovery, "reboot_recovery")
     valid_hits = sum(result.recalled_expected_count for result in ordered_results)
     valid_total = sum(result.expected_fact_count for result in ordered_results)
     citation_hits = sum(result.correct_citation_count for result in ordered_results)
     citation_total = sum(result.expected_citation_count for result in ordered_results)
-    valid_recall = 100.0 * valid_hits / valid_total if valid_total else math.nan
-    citation_accuracy = 100.0 * citation_hits / citation_total if citation_total else math.nan
-    activation_accuracy = (
-        100.0 * automatic_activation_correct / automatic_activation_total
-        if automatic_activation_total
-        else math.nan
-    )
-    mcp_rate = 100.0 * mcp_successes / mcp_attempts if mcp_attempts else math.nan
+    _validate_pair(valid_hits, valid_total, "valid facts")
+    _validate_pair(citation_hits, citation_total, "citations")
     return EvaluationReport(
         answered_questions=100,
         imported_messages=imported_messages,
@@ -439,16 +548,18 @@ def evaluate_run(
         citation_total=citation_total,
         automatic_activation_correct=automatic_activation_correct,
         automatic_activation_total=automatic_activation_total,
-        valid_fact_recall=valid_recall,
-        citation_accuracy=citation_accuracy,
-        automatic_activation_accuracy=activation_accuracy,
+        valid_fact_recall=100 * valid_hits / valid_total,
+        citation_accuracy=100 * citation_hits / citation_total,
+        automatic_activation_accuracy=100 * automatic_activation_correct / automatic_activation_total,
         protected_false_promotions=protected_false_promotions,
         stale_current_leaks=stale_current_leaks,
         duplicate_records=duplicate_records,
+        baseline_context_chars=baseline_context_chars,
+        rendered_context_chars=rendered_context_chars,
         context_reduction=reduction,
         mcp_successes=mcp_successes,
         mcp_attempts=mcp_attempts,
-        mcp_success_rate=mcp_rate,
+        mcp_success_rate=100 * mcp_successes / mcp_attempts,
         production_pollution=production_pollution,
         owner_review_success=owner_review_success,
         reboot_recovery=reboot_recovery,
@@ -456,30 +567,50 @@ def evaluate_run(
     )
 
 
-def _ratio_matches(numerator: int, denominator: int, reported: float) -> bool:
-    return denominator > 0 and math.isfinite(reported) and math.isclose(
-        reported, 100.0 * numerator / denominator, rel_tol=1e-9, abs_tol=1e-9
+def _valid_report_counter(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _valid_report_percentage(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value)) and 0 <= float(value) <= 100
+
+
+def _ratio_matches(numerator: Any, denominator: Any, reported: Any) -> bool:
+    return (
+        _valid_report_counter(numerator)
+        and _valid_report_counter(denominator)
+        and denominator > 0
+        and numerator <= denominator
+        and _valid_report_percentage(reported)
+        and math.isclose(float(reported), 100 * numerator / denominator, rel_tol=1e-9, abs_tol=1e-9)
     )
 
 
 class AutomaticMemoryAcceptanceGate:
-    """Deterministic PASS/FAIL/BLOCKED ordering for a measured report."""
+    """Deterministic PASS/FAIL/BLOCKED quality gate."""
 
     @staticmethod
     def evaluate(report: EvaluationReport) -> Literal["PASS", "FAIL", "BLOCKED"]:
-        numeric_fields = (
-            "valid_fact_recall",
-            "citation_accuracy",
-            "automatic_activation_accuracy",
-            "context_reduction",
-            "mcp_success_rate",
+        raw_fields = (
+            "answered_questions", "imported_messages", "expected_messages",
+            "ordered_role_matches", "expected_ordered_roles", "valid_fact_hits",
+            "valid_fact_total", "citation_hits", "citation_total",
+            "automatic_activation_correct", "automatic_activation_total",
+            "protected_false_promotions", "stale_current_leaks", "duplicate_records",
+            "baseline_context_chars", "rendered_context_chars", "mcp_successes",
+            "mcp_attempts", "production_pollution",
         )
-        if any(
-            not isinstance(getattr(report, field), (int, float))
-            or isinstance(getattr(report, field), bool)
-            or not math.isfinite(float(getattr(report, field)))
-            for field in numeric_fields
-        ):
+        if any(not _valid_report_counter(getattr(report, field, None)) for field in raw_fields):
+            return "FAIL"
+        percentage_fields = (
+            "valid_fact_recall", "citation_accuracy", "automatic_activation_accuracy",
+            "context_reduction", "mcp_success_rate",
+        )
+        if any(not _valid_report_percentage(getattr(report, field, None)) for field in percentage_fields):
+            return "FAIL"
+        if report.owner_review_success is not None and not _valid_report_percentage(report.owner_review_success):
+            return "FAIL"
+        if report.reboot_recovery is not None and not _valid_report_percentage(report.reboot_recovery):
             return "FAIL"
         measured_failure = (
             report.answered_questions != 100
@@ -487,37 +618,29 @@ class AutomaticMemoryAcceptanceGate:
             or report.imported_messages != report.expected_messages
             or report.expected_ordered_roles <= 0
             or report.ordered_role_matches != report.expected_ordered_roles
-            or report.valid_fact_total <= 0
-            or report.valid_fact_hits < 0
-            or report.valid_fact_hits > report.valid_fact_total
-            or report.citation_total <= 0
-            or report.citation_hits < 0
-            or report.citation_hits > report.citation_total
-            or report.automatic_activation_total <= 0
-            or report.automatic_activation_correct < 0
-            or report.automatic_activation_correct > report.automatic_activation_total
-            or report.mcp_attempts <= 0
-            or report.mcp_successes < 0
-            or report.mcp_successes > report.mcp_attempts
             or not _ratio_matches(report.valid_fact_hits, report.valid_fact_total, report.valid_fact_recall)
             or not _ratio_matches(report.citation_hits, report.citation_total, report.citation_accuracy)
-            or not _ratio_matches(
-                report.automatic_activation_correct,
-                report.automatic_activation_total,
-                report.automatic_activation_accuracy,
-            )
+            or not _ratio_matches(report.automatic_activation_correct, report.automatic_activation_total, report.automatic_activation_accuracy)
             or not _ratio_matches(report.mcp_successes, report.mcp_attempts, report.mcp_success_rate)
-            or report.valid_fact_recall < 90.0
-            or report.citation_accuracy < 95.0
-            or report.automatic_activation_accuracy < 95.0
-            or report.mcp_success_rate < 95.0
-            or report.context_reduction < 90.0
+            or report.baseline_context_chars <= 0
+            or report.rendered_context_chars > report.baseline_context_chars
+            or not math.isclose(
+                report.context_reduction,
+                (1 - report.rendered_context_chars / report.baseline_context_chars) * 100,
+                rel_tol=1e-9,
+                abs_tol=1e-9,
+            )
+            or report.valid_fact_recall < 90
+            or report.citation_accuracy < 95
+            or report.automatic_activation_accuracy < 95
+            or report.mcp_success_rate < 95
+            or report.context_reduction < 90
             or report.protected_false_promotions != 0
             or report.stale_current_leaks != 0
             or report.duplicate_records != 0
             or report.production_pollution != 0
-            or (report.owner_review_success is not None and report.owner_review_success != 100.0)
-            or (report.reboot_recovery is not None and report.reboot_recovery != 100.0)
+            or (report.owner_review_success is not None and report.owner_review_success != 100)
+            or (report.reboot_recovery is not None and report.reboot_recovery != 100)
         )
         if measured_failure:
             return "FAIL"
