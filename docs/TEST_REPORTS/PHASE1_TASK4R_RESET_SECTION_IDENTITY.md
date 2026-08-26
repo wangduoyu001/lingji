@@ -93,3 +93,30 @@ historical deferred Task4R1 pair: 5 failed, 10 passed, 1 warning
 ```
 
 The real temporary import/promotion snapshot queries SourceReadModel messages, MemoryDatabase document relationships and StateDatabase candidate metadata; no fixture/evaluator IDs, `fixture_*` keys, expected/forbidden labels or fixture lifecycle overrides appear in those persisted metadata/relationship fields. Frozen fixture hashes remain unchanged. Product commit: `c724ec9`; docs commit: recorded by `git rev-parse HEAD` after this update.
+
+## Repair round 3 (product `b2e2bfa`)
+
+Repair Round 3 addressed independent review I8: the real import/promotion path previously persisted frozen `fact_id` values as production memory identities and bound those same labels into the registry. Before the product change, the new real-storage test produced authentic RED:
+
+```text
+focused: 1 failed, 32 passed, 1 warning
+```
+
+The test keeps the real `run_quality_gate()` import/promotion path, introspects every table and persisted column/value in the temporary SourceReadModel/MemoryDatabase/StateDatabase SQLite stores, rejects every frozen fact/citation label and evaluator-only structural marker, and positively requires non-empty derived documents, message-memory links, active promotion events, and an in-memory opaque-to-fact registry bridge. User-authored message bodies are retained as evidence; evaluator-marker assertions exclude only body fields and FTS content projections so legitimate prose discussing a marker is not misclassified as metadata.
+
+The minimal repair derives `LJ-MEM-<sha256 hex>` IDs from production source/conversation/message/content-hash inputs, passes those IDs through `ReviewCandidate`, real derived projection writes, links, and StateDatabase events, and passes the in-memory `{opaque_memory_id: fact_id}` bridge to `build_identity_registry`. The fixture-named extractor version was replaced with the neutral `automatic-memory-v1`; no generic promotion state machine or retrieval behavior changed.
+
+```text
+focused GREEN: 33 passed, 1 warning
+brief regression: 58 passed, 1 warning
+historical deferred Task4R1 pair: 5 failed, 10 passed, 1 warning
+```
+
+Frozen fixture hashes remain unchanged:
+
+```text
+bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94  tests/evaluation/fixtures/automatic_memory_corpus.jsonl
+338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612  tests/evaluation/fixtures/automatic_memory_questions.jsonl
+```
+
+`py_compile`, cumulative `git diff --check`, acceptance sync and local handoff checks pass after the docs commit. No frozen fixture/evaluator/threshold, retrieval ranking/query/filter/order, Task 4–6/4R2, MCP parity, 100k, Artifact, Production, Vault or local acceptance task was entered. The only unresolved items are the deliberately deferred historical Task4R1 incompatibilities and the existing Pydantic deprecation warning.

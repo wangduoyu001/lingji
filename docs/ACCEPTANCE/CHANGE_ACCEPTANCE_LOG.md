@@ -1,5 +1,13 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 3 · Repair round 3
+
+- 基准：`e3d96d67a179a7ef746452611c86f21dedb17659`；产品提交：`b2e2bfa`（完整 SHA 由提交记录复读）；仅修复 independent review I8 的 quality-runner 身份污染与真实临时存储快照测试缺口。
+- 风险等级：P0。真实 promotion path 使用由 source/conversation/message/content hash 生产身份输入生成的 opaque memory ID；仅在内存桥中映射回 frozen fact ID。不得进入 Task 4–6、4R2、MCP parity、100k、Artifact、Production、Vault 或 retrieval 调参。
+- 自动验收：全表全列扫描 SourceReadModel/MemoryDatabase/StateDatabase 临时 SQLite，拒绝 frozen fact/citation、fixture/evaluator keys 与 expected/forbidden labels；正向证明派生文档、message-memory links、active promotion event 和 opaque→fact registry bridge 非空。
+- 证据：RED `1 failed, 32 passed, 1 warning`；GREEN focused `33 passed, 1 warning`；brief regression `58 passed, 1 warning`；历史 rejected Task4R1 pair `5 failed, 10 passed, 1 warning`，保留并延期。
+- 清理/回滚：仅测试临时 SQLite/raw/vault；报告继续由 `.superpowers/` 忽略；不接触主人数据。产品 commit：`b2e2bfa`；正式文档 commit 随本条目提交。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 3 · Repair round 2
 
 - 基准：`7175a37c0446e04be91ab950e0f8a680ed12c9b9`；仅修复 independent review I6/I7 与 M2 存储快照测试缺口。
