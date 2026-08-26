@@ -22,14 +22,22 @@ from .evaluation import (
 from .quality_gate import (
     AutomaticMemoryFunctionalGate,
     build_expected_import_rows,
-    build_prequery_identity_map,
     EXPECTED_QUESTION_COUNT,
     generate_100k_history,
     run_100k_benchmark,
     run_quality_gate,
-    select_gateway_evidence,
-    select_retrieval_evidence,
     validate_selected_evidence,
+)
+from .evidence_identity import (
+    EvidenceIdentityError,
+    EvaluationIdentityRegistry,
+    MemorySectionIdentity,
+    MessageIdentity,
+    RawMessageSectionIdentity,
+    SectionIdentity,
+    SelectedEvidence,
+    build_identity_registry,
+    select_context_evidence,
 )
 
 __all__ = [
@@ -59,12 +67,18 @@ __all__ = [
     "score_question",
     "AutomaticMemoryFunctionalGate",
     "build_expected_import_rows",
-    "build_prequery_identity_map",
     "EXPECTED_QUESTION_COUNT",
     "generate_100k_history",
     "run_100k_benchmark",
     "run_quality_gate",
-    "select_retrieval_evidence",
-    "select_gateway_evidence",
     "validate_selected_evidence",
+    "MessageIdentity",
+    "EvaluationIdentityRegistry",
+    "SelectedEvidence",
+    "MemorySectionIdentity",
+    "RawMessageSectionIdentity",
+    "SectionIdentity",
+    "EvidenceIdentityError",
+    "build_identity_registry",
+    "select_context_evidence",
 ]

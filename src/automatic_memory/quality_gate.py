@@ -41,6 +41,7 @@ from src.retrieval.memory_db import MemoryDatabase
 from src.sources.read_model import SourceReadModel
 from src.sources.service import SourceQueryService
 from src.storage.state_db import StateDatabase
+from .evidence_identity import build_identity_registry, select_context_evidence
 
 from .evaluation import (
     AutomaticMemoryAcceptanceGate,
@@ -359,102 +360,6 @@ def _promote_fixtures(
     return decisions, activation_correct, activation_total
 
 
-def _pack_identity(pack: Mapping[str, Any]) -> tuple[tuple[str, str, str, str], ...]:
-    values: list[tuple[str, str, str, str]] = []
-    for section in pack.get("sections") or []:
-        citation = section.get("citation") or {}
-        values.append(
-            (
-                str(section.get("kind") or ""),
-                str(section.get("memory_id") or ""),
-                str(citation.get("message_id") or ""),
-                str(citation.get("content_hash") or ""),
-            )
-        )
-    return tuple(values)
-
-
-def _select_retrieval_evidence(
-    pack: Mapping[str, Any],
-    imported_identity: Mapping[str, tuple[str, str]],
-) -> tuple[tuple[str, str], ...]:
-    """Select a fixed bounded set from real linked-message evidence.
-
-    This is deliberately blind to all frozen expected/forbidden IDs.  The same
-    constant limit and ordering rule applies to every category and query mode.
-    Fixture identity is resolved from the imported message metadata created
-    before question execution; expected question answers never participate.
-    """
-    selected: list[tuple[str, str]] = []
-    seen: set[str] = set()
-    for section in pack.get("sections") or []:
-        if str(section.get("kind") or "") != "raw_message_evidence":
-            continue
-        citation = section.get("citation") or {}
-        message_id = str(section.get("message_id") or citation.get("message_id") or "")
-        identity = imported_identity.get(message_id)
-        if identity is None or identity[0] in seen:
-            continue
-        selected.append(identity)
-        seen.add(identity[0])
-        if len(selected) >= _SELECTOR_LIMIT:
-            break
-    return tuple(selected)
-
-
-def build_prequery_identity_map(
-    persisted_rows: Sequence[Mapping[str, Any]],
-    labels_by_external: Mapping[str, tuple[str, str]],
-) -> dict[tuple[str, str], tuple[str, str]]:
-    """Build one external-id/content-hash identity map before questions run."""
-    result: dict[tuple[str, str], tuple[str, str]] = {}
-    for row in persisted_rows:
-        external_id = str(row.get("external_id") or "")
-        content_hash = str(row.get("content_hash") or "")
-        labels = labels_by_external.get(external_id)
-        if external_id and content_hash and labels:
-            result[(external_id, content_hash)] = (str(labels[0]), str(labels[1]))
-            primary_id = str(row.get("message_id") or "")
-            if primary_id:
-                result[(primary_id, content_hash)] = (str(labels[0]), str(labels[1]))
-    return result
-
-
-def select_gateway_evidence(
-    gateway_rows: Sequence[Mapping[str, Any]],
-    identity_map: Mapping[tuple[str, str], tuple[str, str]],
-) -> tuple[tuple[str, str], ...]:
-    if isinstance(gateway_rows, (str, bytes)) or not isinstance(gateway_rows, Sequence):
-        raise ValueError("malformed gateway evidence response")
-    selected: list[tuple[str, str]] = []
-    seen_identities: set[tuple[str, str]] = set()
-    seen_labels: set[str] = set()
-    for row in gateway_rows:
-        if not isinstance(row, Mapping):
-            raise ValueError("malformed gateway evidence item")
-        citation = row.get("citation") or {}
-        if not isinstance(citation, Mapping):
-            raise ValueError("malformed gateway evidence citation")
-        message_id = str(row.get("message_id") or citation.get("message_id") or "")
-        content_hash = str(row.get("content_hash") or citation.get("content_hash") or "")
-        if not message_id or not content_hash:
-            raise ValueError("gateway evidence identity missing")
-        stable_identity = (message_id, content_hash)
-        if stable_identity in seen_identities:
-            raise ValueError("duplicate gateway evidence identity")
-        seen_identities.add(stable_identity)
-        labels = identity_map.get((message_id, content_hash))
-        if labels is None:
-            raise ValueError("unknown gateway evidence")
-        normalized = (str(labels[0]), str(labels[1]))
-        if normalized[0] in seen_labels:
-            raise ValueError("duplicate gateway evidence label")
-        seen_labels.add(normalized[0])
-        if len(selected) < _SELECTOR_LIMIT:
-            selected.append(normalized)
-    return tuple(selected)
-
-
 def validate_selected_evidence(
     *, recalled: Sequence[str], citations: Sequence[str], expected: Sequence[str],
     forbidden: Sequence[str], expected_citations: Sequence[str],
@@ -471,25 +376,6 @@ def validate_selected_evidence(
         raise ValueError("duplicate citation evidence")
     if citation_set - set(expected_citations):
         raise ValueError("extra or unknown citation evidence")
-
-
-def select_retrieval_evidence(records: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, str], ...]:
-    """Apply the fixed identity selector to pre-imported records.
-
-    This public, query-independent helper is intentionally small so tests can
-    prove the selector does not receive or inspect frozen question answers.
-    Production question execution uses the context-pack variant above.
-    """
-    selected: list[tuple[str, str]] = []
-    for record in records:
-        metadata = record.get("metadata") or {}
-        fact_id = str(metadata.get("fixture_fact_id") or "")
-        citation_id = str(metadata.get("fixture_citation_id") or "")
-        if fact_id and citation_id:
-            selected.append((fact_id, citation_id))
-        if len(selected) >= _SELECTOR_LIMIT:
-            break
-    return tuple(selected)
 
 
 def _run_mcp_call(mcp: Any, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -607,14 +493,31 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
         duplicate_records = audit.stable_duplicates.total
         gateway, _profiles = _build_gateway(temporary_root, memory_db, read_model, state_db)
         mcp = _register_fastmcp(gateway)
-        labels_by_external = {
-            expected.message_external_id: (
-                next(record.fact_id for record in corpus if expected.message_external_id.endswith(f":message:{record.message_id}")),
-                next(record.citation_id for record in corpus if expected.message_external_id.endswith(f":message:{record.message_id}")),
-            )
-            for expected in expected_rows
-        }
-        imported_identity = build_prequery_identity_map(_all_messages(read_model), labels_by_external)
+        persisted_identity_rows: list[dict[str, Any]] = []
+        for record in corpus:
+            row = message_map.get(record.fact_id)
+            if row is None:
+                raise ValueError(f"missing promoted persisted message for {record.fact_id}")
+            identity_row = dict(row)
+            # The composite binding is an in-memory bridge between the frozen
+            # corpus identity and the real persisted row; it never enters
+            # SourceReadModel or candidate metadata.
+            identity_row.update({
+                "corpus_source_id": record.source_id,
+                "corpus_conversation_id": record.conversation_id,
+                "corpus_message_id": record.message_id,
+            })
+            persisted_identity_rows.append(identity_row)
+        promotion_bindings = {record.fact_id: record.fact_id for record in corpus if record.fact_id in decisions}
+        message_links: list[dict[str, Any]] = []
+        for row in persisted_identity_rows:
+            message_links.extend(read_model.message_links(str(row["message_id"])))
+        identity_registry = build_identity_registry(
+            corpus=corpus,
+            persisted_messages=persisted_identity_rows,
+            promotion_bindings=promotion_bindings,
+            message_links=message_links,
+        )
         fact_by_memory = {item.fact_id: item for item in corpus}
         baseline_unit = sum(len(item.content) for item in corpus) + sum(len(item.topic_key) for item in corpus)
         baseline_context_chars = baseline_unit * len(questions)
@@ -640,17 +543,19 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             mcp_attempts += 1
             try:
                 mcp_pack = _run_mcp_call(mcp, arguments)
-                same = _pack_identity(gateway_pack) == _pack_identity(mcp_pack)
+                gateway_selection = select_context_evidence(gateway_pack, identity_registry, limit=_SELECTOR_LIMIT)
+                mcp_selection = select_context_evidence(mcp_pack, identity_registry, limit=_SELECTOR_LIMIT)
+                same = gateway_selection == mcp_selection
                 if same:
                     mcp_successes += 1
                 mcp_cases.append({"question_id": question.question_id, "success": same})
             except Exception as exc:
                 mcp_cases.append({"question_id": question.question_id, "success": False, "error": type(exc).__name__})
-            selected_evidence = select_gateway_evidence(gateway_sections, imported_identity)
+            selected_evidence = select_context_evidence(gateway_pack, identity_registry, limit=_SELECTOR_LIMIT)
             gateway_selector_calls += 1
-            gateway_selected_evidence += len(selected_evidence)
-            recalled = tuple(fact_id for fact_id, _citation_id in selected_evidence if fact_id in fact_by_memory)
-            citations = tuple(citation_id for fact_id, citation_id in selected_evidence if fact_id in fact_by_memory)
+            gateway_selected_evidence += len(selected_evidence.fact_ids)
+            recalled = tuple(fact_id for fact_id in selected_evidence.fact_ids if fact_id in fact_by_memory)
+            citations = tuple(citation_id for citation_id in selected_evidence.citation_ids if citation_id in fact_by_memory)
             for memory_id in recalled:
                 record = fact_by_memory[memory_id]
                 if record.lifecycle != "active" and question.mode == "current":
@@ -912,8 +817,5 @@ __all__ = [
     "generate_100k_history",
     "run_100k_benchmark",
     "run_quality_gate",
-    "select_retrieval_evidence",
-    "build_prequery_identity_map",
-    "select_gateway_evidence",
     "validate_selected_evidence",
 ]
