@@ -1296,7 +1296,7 @@ Windows 重启后恢复 = 100%
 
 - 产品分支：`codex/phase1-automatic-memory`
 - 基线：`d4bce2f`
-- 产品 Commit：`746aea9` (`test: define automatic memory quality gate`)
+- 产品 Commit：`6dd15db` (`test: define automatic memory quality gate`)
 - 影响模块：`src/automatic_memory/evaluation.py` 与 synthetic evaluation fixtures/tests
 - 风险等级：P0
 - 用户可感知变化：冻结独立的 100 问质量合同与确定性 PASS/FAIL/BLOCKED 门禁；不改变 retrieval、ContextPack、MemoryGateway、MCP、promotion、Desktop、adapters、数据库或队列。
@@ -1305,29 +1305,31 @@ Windows 重启后恢复 = 100%
 ### 新增或修改的自动验收
 
 - [x] RED：`./.venv/bin/python -m pytest -q tests/evaluation/test_automatic_memory_quality.py tests/test_automatic_memory_acceptance_gate.py`：收集失败，`ModuleNotFoundError: src.automatic_memory.evaluation`。
-- [x] GREEN：同一命令：`33 passed`。
-- [x] 自动记忆相关回归：指定 adapters/control/obsidian/resume/scheduler/snapshot/source_registry/watcher 加质量门禁：`184 passed, 3 warnings`。
+- [x] RED 修复轮：新 adversarial focused tests 在旧实现上 `55 failed, 13 passed`，暴露语义 fixture、identity score、raw context、strict counters 和递归隐私合同缺失。
+- [x] GREEN：同一命令：`74 passed`。
+- [x] 自动记忆相关回归：指定 adapters/control/obsidian/resume/scheduler/snapshot/source_registry/watcher 加质量门禁：`226 passed, 3 warnings`。
 - [x] `py_compile` 与 `git diff --check`：PASS。
 - [x] mutation thresholds：89.999/90、94.999/95、保护误晋级、stale 泄漏、重复记录、Production 写入、99/100 问、消息/角色不匹配、零分母、owner/reboot 缺失及 `NaN` 均按契约阻断； measured FAIL 优先于 BLOCKED。
 - [ ] 未执行 Artifact、真实 UI、主人观察、Production/Vault 数据或本机 ACTIVE 验收任务；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。
 
 ### 回归项
 
-- [x] fixture 恰好 100 条 corpus record 与 100 条 question，九类数量严格为 `20/20/15/10/10/10/5/5/5`。
+- [x] fixture 恰好 100 条 question；corpus 为关系所需的 `145` 条 record，九类问题数量严格为 `20/20/15/10/10/10/5/5/5`。
+- [x] semantic fixture：`145` corpus records；superseded/temporal old→replacement、cross-session conversation、authority levels、scope project/privacy/agent、dedup content_hash 关系均有测试审计。
+- [x] fixture SHA-256：corpus `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94`；questions `b96de2224f19a1a710694a5433686cb127eb2bc96bf65a7ba34894667acde72b`。
 - [x] question/result/corpus 重复 ID、缺少证据、结构错误、非有限分数、零分母、秘密样式和绝对路径样式均 fail-closed。
 - [x] gate 百分比使用 0–100，并保留 numerator/denominator；不从生产检索或模型计算预期答案。
 
 ### 清理与回滚
 
 - 临时数据：仅 pytest `tmp_path`（本任务无持久临时数据），未接触主人数据。
-- 回滚：分别回滚产品 Commit `746aea9` 与本条 docs/report Commit；不触碰 Vault、raw evidence、formal memory、Qdrant、主人设置或第三方软件。
+- 回滚：分别回滚产品 Commit `6dd15db` 与本条 docs/report Commit；不触碰 Vault、raw evidence、formal memory、Qdrant、主人设置或第三方软件。
 
 ### 最终报告
 
 - 完整报告：`.superpowers/sdd/2026-08-26-phase1-automatic-memory-followup/task-2-report.md`
 - 仓库报告：`docs/TEST_REPORTS/PHASE1_TASK9_GOLDEN_EVALUATION.md`
-- 产品提交：`746aea9`
-- 报告/文档提交：`81ef6da`
+- 产品提交：`6dd15db`
 
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 1 review round 1 · Work Fact ordering, pending-action persistence and Desktop smoke gate
 

@@ -1,113 +1,133 @@
-# Phase 1 Task 2 follow-up — Golden evaluation contract
+# Phase 1 Task 2 — Golden evaluation contract repair
 
 ## Result
 
 ```text
-Product implementation: PASS
+Product/test implementation: PASS
 Deterministic quality gate: PASS
-Real owner/Artifact acceptance: NOT_RUN (LOCAL_EXECUTION_TASK.md is IDLE)
+Real Artifact/owner acceptance: NOT_RUN (LOCAL_EXECUTION_TASK.md is IDLE)
 ```
 
-Product commit: `746aea9` (`test: define automatic memory quality gate`).
-Docs/report commit: `81ef6da` (`docs: record automatic memory evaluation contract`).
+Product/test commit: `6dd15db` (`test: define automatic memory quality gate`).
+This repair changes only evaluation code, synthetic fixtures, and their tests;
+retrieval, ContextPack, MemoryGateway, MCP, promotion, Desktop, adapters,
+databases, and queues are unchanged.
 
-## Scope and safety
+## TDD evidence
 
-This change freezes evaluation evidence only. It does not modify retrieval,
-ContextPack, MemoryGateway, MCP, promotion, Desktop, adapters, databases, or
-queues. The corpus and questions are hand-authored synthetic records with
-stable IDs. No network, model, Production, Vault, real conversation, secret,
-or owner data was read.
-
-## RED / GREEN evidence
+The adversarial RED command was run after the new behavior tests were written,
+before the evaluator/fixtures repair:
 
 ```text
-RED command:
 ./.venv/bin/python -m pytest -q tests/evaluation/test_automatic_memory_quality.py tests/test_automatic_memory_acceptance_gate.py
-RED result:
-2 collection errors; ModuleNotFoundError: src.automatic_memory.evaluation
-
-GREEN command:
-./.venv/bin/python -m pytest -q tests/evaluation/test_automatic_memory_quality.py tests/test_automatic_memory_acceptance_gate.py
-GREEN result:
-33 passed in 0.35s
-
-Automatic-memory regression command:
-./.venv/bin/python -m pytest -q tests/test_automatic_memory_adapters.py tests/test_automatic_memory_control_api.py tests/test_automatic_memory_obsidian.py tests/test_automatic_memory_resume.py tests/test_automatic_memory_scheduler.py tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_watcher.py tests/evaluation/test_automatic_memory_quality.py tests/test_automatic_memory_acceptance_gate.py
-Result:
-184 passed, 3 existing warnings in 9.80s
-
-Compile/diff:
-py_compile PASS; git diff --check PASS
+55 failed, 13 passed in 0.67s
 ```
 
-## Frozen fixture evidence
+Failures were the intended missing contracts: corpus relationship fields and
+semantic size, identity-aware scoring, raw context counts, strict nested row
+validation, and the expanded report shape. After the repair, the same command
+produced:
 
 ```text
-automatic_memory_corpus.jsonl: 100 records
+74 passed in 0.45s
+```
+
+The automatic-memory focused regression command produced:
+
+```text
+226 passed, 3 warnings in 9.61s
+```
+
+`py_compile` and `git diff --check` passed. The warnings are existing
+Starlette/httpx, duplicate ZIP fixture, and Pydantic deprecation warnings.
+
+## Frozen fixture and semantic audit
+
+```text
+automatic_memory_corpus.jsonl: 145 records
 automatic_memory_questions.jsonl: 100 questions
-category counts: stable_preference=20, current_project_decision=20,
-superseded_decision=15, cross_session=10, authority_conflict=10,
-protected_candidate=10, scope_negative=5, temporal_explanation=5,
-context_dedup=5
-
-corpus SHA-256: a5e2b14be25dfdde2d8fdb5eb3971262cdb2ed7f4fdf7dd47960a8a6180c7d4c
-questions SHA-256: c35347e2a1c987dd420eee059388eb380f0b7278eee247dd359550df02f82181
+corpus SHA-256: bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94
+questions SHA-256: b96de2224f19a1a710694a5433686cb127eb2bc96bf65a7ba34894667acde72b
 ```
 
-The parser requires all fields in the declared dataclasses, unique fact,
-message, citation, and question IDs, and literal expected/forbidden evidence
-IDs. It rejects blank JSONL records, duplicate evidence, missing evidence,
-secret-like values, and absolute/path-like values. The evaluator rejects
-incomplete or duplicate 100-question runs and does not trust caller-supplied
-derived result counts.
+Question category counts are exact: stable preferences 20, current project
+decisions 20, superseded decisions 15, cross-session facts 10, authority
+conflicts 10, protected/Core/high-risk candidates 10, scope negatives 5,
+temporal `as_of/history/why` questions 5, and ContextPack dedup questions 5.
 
-## Gate mutation evidence
+The corpus is deliberately larger than 100 because the relationships require
+additional evidence:
 
-The focused gate suite covers these independent mutations:
+- Every superseded and temporal question has an old and active replacement
+  joined by `topic_key` and `supersedes_fact_id`.
+- Every cross-session question expects records from two distinct
+  `conversation_id` values.
+- Every authority conflict retains both `owner-confirmed` and
+  `assistant-suggestion` records.
+- Scope negatives vary project, privacy, and agent scope; their expected set
+  is intentionally empty and their forbidden fact is literal.
+- Every dedup question has primary and duplicate evidence sharing the same
+  `content_hash`.
+
+Queries and content are distinct natural-language scenarios; no mechanical
+`Synthetic ... N` template remains. Expected fact and citation IDs are
+hand-authored in JSONL and never generated from retrieval behavior.
+
+## Validation and gate repair
+
+`score_question` now receives `Mapping[str, CorpusRecord]` identity and rejects
+unknown, duplicate, extra, or forbidden facts; unknown, duplicate, extra, or
+fact-mismatched citations; and malformed context lengths. Question loading
+checks that every expected citation belongs to an expected fact. A passing
+result contains exactly the hand-authored expected fact/citation sets.
+
+`EvaluationReport` now stores `baseline_context_chars` and
+`rendered_context_chars`. `evaluate_run` requires positive baseline and
+`0 <= rendered <= baseline`, then computes context reduction from those raw
+counts. The gate independently recomputes and verifies that percentage, so a
+forged caller-provided `90.0` cannot pass.
+
+All raw counters are strict non-boolean integers with valid numerator and
+denominator relationships. All percentages are strict finite numbers in
+`[0, 100]`. Zero denominators, booleans, floats in raw counters, NaN,
+Infinity, out-of-range percentages, incomplete runs, duplicate complete
+questions, non-mapping rows, nested secret-like keys/values, Unix absolute
+paths, Windows drive paths, UNC paths, PEM headers, Bearer values, and
+password/token assignments fail closed.
+
+Threshold mutation tests cover recall 89.999/90, citation/activation/MCP
+94.999/95, context reduction 89.999/90, one protected false promotion, one
+stale leak, one duplicate, one Production write, 99/100 questions, mismatched
+message/role counts, zero denominators, missing owner evidence, missing reboot
+evidence, and measured-FAIL precedence over BLOCKED.
+
+## Privacy and secret scan
+
+The fixture parser recursively scans every mapping key and nested value. The
+focused suite exercises `/root`, `/etc`, `/opt`, `/workspace`, Windows drive
+and UNC paths, PEM, Bearer, password, token, and nested `api_token` values.
+The repository fixture scan found no path or secret markers and no real owner
+data. No network, model, Production, Vault, real chat, credential, or owner
+path was read.
+
+## Files and self-review
+
+Product/test commit `6dd15db` contains:
 
 ```text
-89.999 recall / 90.0 recall boundary       FAIL / PASS
-94.999 citation, activation, MCP / 95      FAIL / PASS
-89.999 context reduction / 90              FAIL / PASS
-one protected false promotion              FAIL
-one stale current leak                     FAIL
-one duplicate record                       FAIL
-one Production write                       FAIL
-99 answered questions                      FAIL
-mismatched message or role/order counts    FAIL
-zero fact/citation/activation/MCP denominator FAIL
-missing owner evidence                     BLOCKED
-missing reboot evidence                    BLOCKED
-measured failure plus missing evidence     FAIL (precedence)
-NaN metric                                 FAIL
+src/automatic_memory/evaluation.py
+tests/evaluation/fixtures/automatic_memory_corpus.jsonl
+tests/evaluation/fixtures/automatic_memory_questions.jsonl
+tests/evaluation/test_automatic_memory_quality.py
+tests/test_automatic_memory_acceptance_gate.py
 ```
 
-Gate order is deterministic: measured failure first, then missing owner/reboot
-evidence or explicit blocked reasons, and only then PASS. Percentages are on a
-0–100 scale and the report retains numerator and denominator fields.
+Self-review confirms no retrieval or other production subsystem files changed,
+no acceptance threshold was weakened, and the corpus is fully synthetic.
 
-## Files and review
+## Concerns / limits
 
-Product/test commit `746aea9` contains:
-
-- `src/automatic_memory/evaluation.py`
-- `src/automatic_memory/__init__.py`
-- `tests/evaluation/fixtures/automatic_memory_corpus.jsonl`
-- `tests/evaluation/fixtures/automatic_memory_questions.jsonl`
-- `tests/evaluation/test_automatic_memory_quality.py`
-- `tests/test_automatic_memory_acceptance_gate.py`
-
-The acceptance-log update and this report are in the follow-up docs commit.
-Self-review found no production retrieval or data-source changes, no network
-calls, no real-data fixtures, and no threshold relaxation. Existing test-suite
-warnings are unchanged and are not introduced by this task.
-
-## Concerns and limits
-
-- This is an automatic contract gate only; no real Artifact, Desktop, owner,
-  reboot, Mac, or Windows evidence was run.
-- The current local execution task remains `IDLE`, so no local acceptance was
-  started.
-- The frozen corpus intentionally does not claim retrieval quality; later RAG
-  work must consume these expectations without editing them to improve scores.
+The local execution task remains `IDLE`; no Artifact, Desktop, reboot, owner,
+Mac, or Windows acceptance was run. This gate constrains later RAG tuning but
+does not itself claim real retrieval quality. Existing unrelated warnings
+remain as noted above.
