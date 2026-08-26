@@ -4,6 +4,25 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 6 repair round 1 · fail-closed promotion and replay
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`939407fc47b4f374bb52de146348180e808a395a`
+- 影响模块：promotion risk/confidence policy, existing StateDatabase evidence resolution, derived projection replay and recovery idempotency
+- 风险等级：P0
+- 用户可感知变化：所有高风险 memory type、非有限/非数值置信度、无法从既有来源/证据事件验证的引用均停留在主人审核；伪造 content hash 被拒绝。清空可重建索引后可从既有候选/决定事件恢复当前派生记忆，失败重试不会重复激活或恢复审计。
+- 数据或安全边界变化：证据验证只读取既有 StateDatabase/source read model，不创建第二事实源；重建只恢复 active derived projection，不写 Vault/Core/原始证据。
+
+### 新增或修改的自动验收
+
+- [x] `tests/test_auto_memory_promotion.py`：41 passed，覆盖高风险类型矩阵、bool/字符串/NaN/Infinity 置信度、不可验证证据、真实性哈希、失败后成功恢复幂等和事件重放重建。
+- [ ] Task 6 focused、auto-review、memory/retrieval/lifecycle 与 Task 1–5 回归、`py_compile`、`git diff --check`、acceptance sync、local handoff：根代理在双提交后复读。
+- [ ] Qdrant/真实 Production Vault/主人 UI 与 M5 真机验收：仍不在本轮范围。
+
+### 回滚
+
+- 回滚：回退 `939407fc47b4f374bb52de146348180e808a395a` 与对应文档提交；不触碰 Vault、原始聊天证据或主人配置。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 6 · safe derived-memory promotion
 
 - 产品分支：`codex/phase1-automatic-memory`
