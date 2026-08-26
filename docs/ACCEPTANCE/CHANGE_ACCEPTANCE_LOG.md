@@ -1210,6 +1210,7 @@ Windows 重启后恢复 = 100%
 - [x] 恢复语义回归：历史 Failure 保留审计，但重试成功后的 current Work Fact 不再投影旧 Failure。
 - [x] Repair round 3：重复 Capture 复用原始 queue payload.capture_id 对应的 Work；相同 dedup key 不创建孤立 Work，完成后只产生一条 outcome/terminal event；缺少 canonical capture_id 时 fail-closed。
 - [x] Repair round 4：CaptureWorkBridge、CaptureControlService 与 terminal replay 的 NextAction 使用稳定 `next:<work_id>:<phase>` ID；completed/failed/retrying 重放不改变 action_id。
+- [x] Repair round 5：duplicate job 缺少 canonical `payload.capture_id` 时严格不创建、不回退绑定 `result.capture_id` 对应 Work；保留单一 queue，普通新 Capture 行为不变。
 
 ### 真机与主人确认
 
