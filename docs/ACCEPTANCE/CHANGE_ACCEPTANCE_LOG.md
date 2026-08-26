@@ -4,6 +4,38 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 4 修复轮 4 · runner contract and terminal lease cleanup
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`b8808014062aafa0374e291ba694f276515cf5ab`
+- 影响模块：automatic-memory scheduler runner invocation、scan terminal transitions and scheduler lease cleanup
+- 风险等级：P0
+- 用户可感知变化：真实 `SnapshotJobRunner.run(scan_id, crash_at=...)` 可由 scheduler 正确调用，不会把 source id 当作 crash control；来源失效、撤销、暂停、完成、失败路径都会清理 scheduler lease，授权恢复后 retry/reconcile 可立即继续。
+- 数据或安全边界变化：继续复用既有 `automatic_memory_scans` 和 `StateDatabase`；不新增数据库、队列或事实源。通用二参 runner 仍按既有 `(scan_id, source_id)` 契约注入，SnapshotJobRunner 按参数名识别其 `crash_at` 控制参数。
+
+### 新增或修改的自动验收
+
+- [x] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_watcher.py tests/test_automatic_memory_scheduler.py tests/test_state_db_scheduler.py`：37 passed，含真实 SnapshotJobRunner scheduler 集成、paused 兼容路径、失效/撤销终态 scheduler lease 清理与恢复执行。
+- [x] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_automatic_memory_adapters.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_worker.py`：137 passed，3 warnings（Task 1–3 与 queue/worker 回归）。
+- [x] `./.venv/bin/python -m py_compile src/automatic_memory/watcher.py src/automatic_memory/scheduler.py src/scheduler/cron.py src/storage/state_db.py src/config.py`、`git diff --check`。
+- [ ] `./.venv/bin/python scripts/check_acceptance_sync.py`、`./.venv/bin/python scripts/check_local_execution_handoff.py`：由根代理在文档提交后复读执行。
+
+### 回归项与边界
+
+- [x] 保持 Task4 前序跨实例 single-flight、scheduler lease heartbeat/过期恢复、direct revoke 快速停止、listener/watcher generation 隔离、普通二参/三参/可变参 runner 注入、SnapshotJobRunner paused resume、授权/symlink 安全。
+- [x] 终态清理覆盖 `unsupported`、`degraded`、`expired` trigger、`revoke -> cancelled`、`pause -> paused`、`complete -> completed` 和 `failed` 路径；旧数据库 trigger 会在初始化时重建以应用最新清理逻辑。
+
+### 清理与回滚
+
+- 临时数据前缀：`PHASE1_AUTOMATIC_MEMORY_TASK4_FIX4_`
+- 测试仅使用 pytest 临时目录、脱敏 SourceRecord 和临时 SQLite/raw；无真实聊天、Vault、凭据或持久 Artifact。
+- 回滚：回滚产品 Commit `b8808014062aafa0374e291ba694f276515cf5ab`，不触碰主人数据。
+
+### 最终报告
+
+- 报告路径：本地调度报告继续由 `.superpowers/` 忽略；正式证据为本条目与测试输出。
+- 报告分支：`codex/phase1-automatic-memory`
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 4 修复轮 3 · cross-instance lease and lifecycle races
 
 - 产品分支：`codex/phase1-automatic-memory`
