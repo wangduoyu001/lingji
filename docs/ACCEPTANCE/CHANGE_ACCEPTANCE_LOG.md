@@ -1291,3 +1291,41 @@ Windows 重启后恢复 = 100%
 - 报告路径：`docs/TEST_REPORTS/PHASE1_TASK8_WORK_TRANSITION_CLOSEOUT.md`
 - 产品提交：`2f833aa`
 - 报告/文档提交：待提交
+
+## 2026-08-26 · Phase 1 Automatic Memory · Task 1 review round 1 · Work Fact ordering, pending-action persistence and Desktop smoke gate
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`31a14a4` (`fix: harden work fact transition persistence`)
+- 影响模块：`src/work/store.py`, `tests/test_task8_work_transition_matrix.py`, `desktop/lingji-control/package.json`
+- 风险等级：P0
+- 用户可感知变化：历史/混合时区 Work Fact 事件按真实 UTC instant 选择 current；同一 owner failure 永远只有一条真实 SQL action row，恢复后可复用并重新打开；Desktop `test:work-fact` 现在运行既有 smoke。
+- 数据或安全边界变化：继续使用既有 `lingji_state.db` 和认证 8766 Work Fact；迁移只在现有 `pending_actions` 表上去重并建立唯一 action_id 索引；测试只使用 synthetic temporary SQLite。
+
+### 新增或修改的自动验收
+
+- [x] Repair RED：`./.venv/bin/python -m pytest -q tests/test_task8_work_transition_matrix.py`：`3 failed, 12 passed`，覆盖文本时间排序、重复 owner-failure SQL 行、legacy duplicate migration。
+- [x] Repair GREEN：同一矩阵命令 `15 passed`。
+- [x] Python regression：指定 Task 1–8 focused 命令 `32 passed, 2 existing warnings`；无新 warning 类别。
+- [x] `cd desktop/lingji-control && npm run test:work-fact`：`work-fact-smoke: PASS`，精确映射现有 `scripts/work-fact-smoke.mjs`。
+- [x] `cd desktop/lingji-control && npm run build`：PASS；仅既有 Vite dynamic-import warnings。
+- [x] `py_compile`、`git diff --check`：PASS。
+- [x] `./.venv/bin/python scripts/check_acceptance_sync.py`：待本条 docs 同步提交后重跑。
+- [x] `./.venv/bin/python scripts/check_local_execution_handoff.py`：PASS；任务单仍为 IDLE。
+
+### 回归项
+
+- [x] `10:00+02:00` 与 `09:00Z` 解析为 UTC instant；naive timestamp 按 UTC 解释；malformed candidate fail-closed。
+- [x] 旧 `pending_actions` duplicate 在 migration 前压缩；唯一索引建立；重复/恢复后 owner-failure 总行数与 unresolved 数均为 1。
+- [x] 未创建第二个 Desktop smoke；不改变队列 terminal、duplicate-capture、8766 auth、DTO、Vault 或 memory promotion。
+
+### 清理与回滚
+
+- 临时数据：仅 pytest `tmp_path` synthetic fixtures，测试结束清理；未接触主人数据。
+- 回滚：回滚产品 Commit `31a14a4` 和本条 docs/report Commit；不触碰 Vault、raw evidence、formal memory、Qdrant、主人设置或第三方软件。
+
+### 最终报告
+
+- 完整报告：`.superpowers/sdd/2026-08-26-phase1-automatic-memory-followup/task-1-report.md`
+- 仓库报告：`docs/TEST_REPORTS/PHASE1_TASK8_WORK_TRANSITION_CLOSEOUT.md`
+- 产品提交：`31a14a4`
+- 报告/文档提交：待提交
