@@ -8,7 +8,7 @@ Deterministic quality gate: PASS
 Real Artifact/owner acceptance: NOT_RUN (LOCAL_EXECUTION_TASK.md is IDLE)
 ```
 
-Product/test commit: `6dd15db` (`test: define automatic memory quality gate`).
+Product/test commit: `e8b620e` (`test: define automatic memory quality gate`).
 This repair changes only evaluation code, synthetic fixtures, and their tests;
 retrieval, ContextPack, MemoryGateway, MCP, promotion, Desktop, adapters,
 databases, and queues are unchanged.
@@ -29,13 +29,13 @@ validation, and the expanded report shape. After the repair, the same command
 produced:
 
 ```text
-74 passed in 0.45s
+86 passed in 0.54s
 ```
 
 The automatic-memory focused regression command produced:
 
 ```text
-226 passed, 3 warnings in 9.61s
+238 passed, 3 warnings in 8.77s
 ```
 
 `py_compile` and `git diff --check` passed. The warnings are existing
@@ -47,7 +47,7 @@ Starlette/httpx, duplicate ZIP fixture, and Pydantic deprecation warnings.
 automatic_memory_corpus.jsonl: 145 records
 automatic_memory_questions.jsonl: 100 questions
 corpus SHA-256: bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94
-questions SHA-256: b96de2224f19a1a710694a5433686cb127eb2bc96bf65a7ba34894667acde72b
+questions SHA-256: 338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612
 ```
 
 Question category counts are exact: stable preferences 20, current project
@@ -110,9 +110,28 @@ The repository fixture scan found no path or secret markers and no real owner
 data. No network, model, Production, Vault, real chat, credential, or owner
 path was read.
 
+## Repair round 2 evidence
+
+New RED tests first failed against the prior implementation on the required
+semantic and identity behaviors: `question-041` did not retain both old and
+replacement history records; `question-091` used a July as-of date and exposed
+the replacement instead of January's old fact; `evaluate_run` lacked the
+corpus-first argument; direct forged results bypassed corpus-aware scoring; and
+None/non-sequence evidence surfaced as `TypeError` instead of
+`EvaluationInputError`.
+
+The repair-round focused RED result was `16 failed, 69 passed`; after the
+implementation it was `86 passed`.
+
+The repair makes `evaluate_run(corpus_by_fact, questions, results, ...)` replay
+every supplied result through `score_question` and compare the complete
+`QuestionResult`. It also detects Windows drive/UNC paths embedded in natural
+language such as `backup=C:\\Users\\...` and `see \\\\server\\share\\...`,
+including nested values.
+
 ## Files and self-review
 
-Product/test commit `6dd15db` contains:
+Product/test commit `e8b620e` contains:
 
 ```text
 src/automatic_memory/evaluation.py
