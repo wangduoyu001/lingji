@@ -42,6 +42,15 @@ def _perfect_results(corpus, questions):
     ]
 
 
+def _evaluate(corpus, questions, results, **kwargs):
+    return evaluate_run(
+        {record.fact_id: record for record in corpus},
+        questions,
+        results,
+        **kwargs,
+    )
+
+
 def _run_kwargs() -> dict[str, object]:
     return {
         "imported_messages": 100,
@@ -84,8 +93,13 @@ def test_fixture_relationships_are_real_shapes_not_category_labels() -> None:
     superseded = [q for q in questions if q.category == "superseded_decision"]
     assert len(superseded) == 15
     for question in superseded:
-        replacement = by_fact[question.expected_fact_ids[0]]
-        old = by_fact[question.forbidden_fact_ids[0]]
+        old_id, replacement_id = (
+            question.expected_fact_ids
+            if question.question_id == "question-041"
+            else (question.forbidden_fact_ids[0], question.expected_fact_ids[0])
+        )
+        replacement = by_fact[replacement_id]
+        old = by_fact[old_id]
         assert replacement.supersedes_fact_id == old.fact_id
         assert replacement.topic_key == old.topic_key
         assert old.lifecycle == "superseded"
@@ -136,6 +150,28 @@ def test_fixture_relationships_are_real_shapes_not_category_labels() -> None:
         == by_fact[q.forbidden_fact_ids[0]].content_hash
         for q in dedup
     )
+
+
+def test_question_041_old_and_new_query_expects_both_records() -> None:
+    _corpus, questions = _fixtures()
+    question = next(q for q in questions if q.question_id == "question-041")
+    assert question.mode == "history"
+    assert question.expected_fact_ids == ("fact-old-041", "fact-replacement-041")
+    assert question.forbidden_fact_ids == ("fact-preference-001",)
+    assert question.expected_citation_ids == (
+        "citation-old-041",
+        "citation-replacement-041",
+    )
+
+
+def test_question_091_as_of_january_expects_old_and_forbids_june_replacement() -> None:
+    _corpus, questions = _fixtures()
+    question = next(q for q in questions if q.question_id == "question-091")
+    assert question.mode == "as_of"
+    assert question.as_of == "2026-01-15T00:00:00Z"
+    assert question.expected_fact_ids == ("fact-temporal-091-old",)
+    assert question.forbidden_fact_ids == ("fact-temporal-091-new",)
+    assert question.expected_citation_ids == ("citation-temporal-old-091",)
 
 
 def test_question_loader_requires_citations_to_belong_to_expected_facts() -> None:
@@ -202,7 +238,7 @@ def test_score_question_passing_result_contains_exact_hand_authored_sets() -> No
 
 def test_perfect_run_derives_context_reduction_from_raw_counts() -> None:
     corpus, questions = _fixtures()
-    report = evaluate_run(questions, _perfect_results(corpus, questions), **_run_kwargs())
+    report = _evaluate(corpus, questions, _perfect_results(corpus, questions), **_run_kwargs())
     assert report.baseline_context_chars == 1000
     assert report.rendered_context_chars == 100
     assert report.context_reduction == 90
@@ -226,20 +262,20 @@ def test_evaluate_run_rejects_forged_or_invalid_context_bounds(field: str, value
     kwargs = _run_kwargs()
     kwargs[field] = value
     with pytest.raises(EvaluationInputError):
-        evaluate_run(questions, _perfect_results(corpus, questions), **kwargs)
+        _evaluate(corpus, questions, _perfect_results(corpus, questions), **kwargs)
 
 
 def test_evaluate_run_rejects_incomplete_duplicate_or_inconsistent_results() -> None:
     corpus, questions = _fixtures()
     results = _perfect_results(corpus, questions)
     with pytest.raises(EvaluationInputError):
-        evaluate_run(questions, results[:-1], **_run_kwargs())
+        _evaluate(corpus, questions, results[:-1], **_run_kwargs())
     with pytest.raises(EvaluationInputError):
-        evaluate_run(questions, [results[0]] * 100, **_run_kwargs())
+        _evaluate(corpus, questions, [results[0]] * 100, **_run_kwargs())
     first = results[0]
     results[0] = replace(first, expected_fact_count=first.expected_fact_count + 1)
     with pytest.raises(EvaluationInputError):
-        evaluate_run(questions, results, **_run_kwargs())
+        _evaluate(corpus, questions, results, **_run_kwargs())
 
 
 @pytest.mark.parametrize(
@@ -257,7 +293,7 @@ def test_evaluate_run_rejects_non_boolean_integer_or_illegal_raw_counters(field:
     kwargs = _run_kwargs()
     kwargs[field] = value
     with pytest.raises(EvaluationInputError):
-        evaluate_run(questions, _perfect_results(corpus, questions), **kwargs)
+        _evaluate(corpus, questions, _perfect_results(corpus, questions), **kwargs)
 
 
 @pytest.mark.parametrize(
@@ -271,6 +307,46 @@ def test_evaluate_run_rejects_non_boolean_integer_or_illegal_raw_counters(field:
 def test_jsonl_loader_rejects_non_mapping_or_incomplete_rows(payload: object) -> None:
     with pytest.raises(EvaluationInputError):
         load_questions([payload])  # type: ignore[list-item]
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("recalled_fact_ids", ("fact-does-not-exist",)),
+        ("recalled_fact_ids", ("fact-preference-001", "fact-current-022")),
+        ("recalled_fact_ids", ("fact-current-021",)),
+        ("citation_ids", ("citation-current-021",)),
+        ("recalled_fact_ids", None),
+        ("citation_ids", None),
+    ],
+)
+def test_evaluate_run_replays_and_rejects_forged_or_malformed_result_evidence(
+    field: str, value: object
+) -> None:
+    corpus, questions = _fixtures()
+    results = _perfect_results(corpus, questions)
+    first = results[0]
+    results[0] = replace(first, **{field: value})
+    with pytest.raises(EvaluationInputError):
+        _evaluate(corpus, questions, results, **_run_kwargs())
+
+
+def test_evaluate_run_rejects_malformed_result_with_non_sequence_evidence() -> None:
+    corpus, questions = _fixtures()
+    results = _perfect_results(corpus, questions)
+    results[0] = replace(results[0], recalled_fact_ids=123)  # type: ignore[arg-type]
+    with pytest.raises(EvaluationInputError):
+        _evaluate(corpus, questions, results, **_run_kwargs())
+
+
+def test_evaluate_run_rejects_non_question_result_and_misaligned_corpus_identity() -> None:
+    corpus, questions = _fixtures()
+    results = _perfect_results(corpus, questions)
+    with pytest.raises(EvaluationInputError):
+        _evaluate(corpus, questions, [None] + results[1:], **_run_kwargs())  # type: ignore[list-item]
+    misaligned = {"alias": corpus[0]}
+    with pytest.raises(EvaluationInputError):
+        evaluate_run(misaligned, questions, results, **_run_kwargs())
 
 
 def test_corpus_parser_rejects_duplicate_ids_and_nested_sensitive_values() -> None:
@@ -337,6 +413,38 @@ def test_corpus_parser_rejects_common_path_and_secret_shapes(value: str) -> None
         "privacy": "synthetic",
         "agent_scope": ["agent-custom"],
         "citation_id": "citation-custom-002",
+        "memory_kind": "stable_preference",
+        "risk": "low",
+    }
+    with pytest.raises(EvaluationInputError):
+        load_corpus([record])
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        r"backup=C:\Users\owner\notes.json",
+        r"see \\server\share\notes.json",
+    ],
+)
+def test_corpus_parser_rejects_paths_embedded_in_natural_language(value: str) -> None:
+    record = {
+        "fact_id": "fact-custom-003",
+        "topic_key": "topic-custom-003",
+        "source_id": "source-custom-003",
+        "conversation_id": "conversation-custom-003",
+        "message_id": "message-custom-003",
+        "role": "user",
+        "content": {"note": value},
+        "content_hash": "c" * 64,
+        "occurred_at": "2026-01-01T00:00:00Z",
+        "lifecycle": "active",
+        "supersedes_fact_id": None,
+        "authority": "owner",
+        "project_id": "project-custom",
+        "privacy": "synthetic",
+        "agent_scope": ["agent-custom"],
+        "citation_id": "citation-custom-003",
         "memory_kind": "stable_preference",
         "risk": "low",
     }

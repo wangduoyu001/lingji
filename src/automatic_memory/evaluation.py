@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence
@@ -70,6 +71,8 @@ _SECRET_VALUE = re.compile(
 _UNIX_ABSOLUTE = re.compile(r"(?:^|[\s\"'=:(])/(?:[A-Za-z0-9._-]+)(?:/|$)")
 _WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
 _UNC_ABSOLUTE = re.compile(r"^\\\\[^\\/]+[\\/][^\\/]+")
+_WINDOWS_EMBEDDED = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]")
+_UNC_EMBEDDED = re.compile(r"(?:^|[\s\"'=:(])\\\\[^\\/\s]+[\\/][^\\/\s]+")
 
 
 class EvaluationInputError(ValueError):
@@ -184,7 +187,13 @@ def _read_jsonl(source: str | Path | Sequence[Mapping[str, Any]]) -> list[dict[s
 
 def _scan_sensitive(value: Any, *, location: str) -> None:
     if isinstance(value, str):
-        if _SECRET_VALUE.search(value) or _WINDOWS_ABSOLUTE.search(value) or _UNC_ABSOLUTE.search(value):
+        if (
+            _SECRET_VALUE.search(value)
+            or _WINDOWS_ABSOLUTE.search(value)
+            or _UNC_ABSOLUTE.search(value)
+            or _WINDOWS_EMBEDDED.search(value)
+            or _UNC_EMBEDDED.search(value)
+        ):
             raise EvaluationInputError(f"secret-like or path-like content at {location}")
         if _UNIX_ABSOLUTE.search(value):
             raise EvaluationInputError(f"absolute path-like content at {location}")
@@ -344,7 +353,7 @@ def load_questions(
 
 
 def _evidence_ids(value: Sequence[str], field: str) -> tuple[str, ...]:
-    if isinstance(value, (str, bytes)):
+    if isinstance(value, (str, bytes)) or not isinstance(value, SequenceABC):
         raise EvaluationInputError(f"{field} must be a sequence of IDs")
     result = tuple(_required_string(item, f"{field}[]") for item in value)
     if len(set(result)) != len(result):
@@ -363,7 +372,12 @@ def score_question(
 ) -> QuestionResult:
     if not isinstance(corpus_by_fact, Mapping):
         raise EvaluationInputError("corpus identity must be a mapping")
-    if any(not isinstance(key, str) or not isinstance(value, CorpusRecord) for key, value in corpus_by_fact.items()):
+    if any(
+        not isinstance(key, str)
+        or not isinstance(value, CorpusRecord)
+        or key != value.fact_id
+        for key, value in corpus_by_fact.items()
+    ):
         raise EvaluationInputError("corpus identity contains invalid record")
     by_fact = dict(corpus_by_fact)
     by_citation = {record.citation_id: record for record in by_fact.values()}
@@ -445,6 +459,7 @@ def _context_reduction(baseline: int, rendered: int) -> float:
 
 
 def evaluate_run(
+    corpus_by_fact: Mapping[str, CorpusRecord],
     questions: Sequence[EvaluationQuestion],
     results: Sequence[QuestionResult],
     *,
@@ -468,6 +483,8 @@ def evaluate_run(
 ) -> EvaluationReport:
     if len(questions) != 100 or len(results) != 100:
         raise EvaluationInputError("evaluation run must contain exactly 100 questions and results")
+    if any(not isinstance(result, QuestionResult) for result in results):
+        raise EvaluationInputError("evaluation result is not a QuestionResult")
     question_ids = [question.question_id for question in questions]
     result_ids = [result.question_id for result in results]
     if len(set(question_ids)) != 100 or len(set(result_ids)) != 100 or set(question_ids) != set(result_ids):
@@ -475,35 +492,18 @@ def evaluate_run(
     by_question = {question.question_id: question for question in questions}
     ordered_results: list[QuestionResult] = []
     for result in results:
+        if not isinstance(result, QuestionResult):
+            raise EvaluationInputError("evaluation result is not a QuestionResult")
         question = by_question[result.question_id]
-        expected_fact_count = len(question.expected_fact_ids)
-        expected_citation_count = len(question.expected_citation_ids)
-        if result.expected_fact_count != expected_fact_count or result.expected_citation_count != expected_citation_count:
-            raise EvaluationInputError(f"result counts do not match question literals: {result.question_id}")
-        if (
-            not isinstance(result.recalled_fact_ids, tuple)
-            or not isinstance(result.citation_ids, tuple)
-            or not isinstance(result.context_chars, int)
-            or isinstance(result.context_chars, bool)
-            or result.context_chars < 0
-            or len(set(result.recalled_fact_ids)) != len(result.recalled_fact_ids)
-            or len(set(result.citation_ids)) != len(result.citation_ids)
-        ):
-            raise EvaluationInputError(f"malformed question result: {result.question_id}")
-        recalled_expected = len(set(result.recalled_fact_ids) & set(question.expected_fact_ids))
-        correct_citations = len(set(result.citation_ids) & set(question.expected_citation_ids))
-        failures = []
-        if recalled_expected != expected_fact_count:
-            failures.append("expected_fact_missing")
-        if correct_citations != expected_citation_count:
-            failures.append("citation_missing_or_incorrect")
-        if (
-            result.recalled_expected_count != recalled_expected
-            or result.correct_citation_count != correct_citations
-            or result.passed != (not failures)
-            or result.failures != tuple(failures)
-        ):
-            raise EvaluationInputError(f"result evidence counts do not match question literals: {result.question_id}")
+        recomputed = score_question(
+            question,
+            corpus_by_fact,
+            result.recalled_fact_ids,
+            result.citation_ids,
+            context_chars=result.context_chars,
+        )
+        if result != recomputed:
+            raise EvaluationInputError(f"result does not match recomputed evidence: {result.question_id}")
         ordered_results.append(result)
     counters = {
         "imported_messages": imported_messages,
