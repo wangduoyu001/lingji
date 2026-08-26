@@ -4,6 +4,28 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 5 final closeout · Qdrant retry truth and raw TOCTOU
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`2fb0d7a4b2a81b1248bf1d81b783e2b26ee30e10`
+- 影响模块：Obsidian managed-derived migration, Qdrant deletion retry state, raw ownership/hash/symlink validation
+- 风险等级：P0
+- 用户可感知变化：Qdrant 删除失败会持续显示 `planned/pending_rebuild`，重复执行会重试并在成功前不假报完成；raw copy 在 backup/unlink 前重新验证路径、regular-file、symlink、ownership 和内容哈希。
+- 数据或安全边界变化：TOCTOU mismatch、symlink substitution、ownership change 或 hash change 均保留 raw source；审计保存 pending vector IDs 与真实错误，不删除 Vault 或非授权 raw。
+
+### 新增或修改的自动验收
+
+- [x] Qdrant flaky provider：首次/重复失败保持 `planned + pending_rebuild=true`，成功重试后才 `applied + pending_rebuild=false`，审计 pending IDs 清空。
+- [x] Raw symlink substitution 与 changed-hash：两者均返回 planned/error 且源文件或 symlink 保留，外部目标不变。
+- [x] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_obsidian.py tests/test_obsidian_memory_scope.py tests/test_obsidian_memory_migration.py tests/test_obsidian_service.py tests/test_vault_layout.py tests/test_memory_retrieval.py tests/test_incremental_index_sync.py`：31 passed。
+- [x] Task 1–4 回归：`./.venv/bin/python -m pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_automatic_memory_watcher.py tests/test_automatic_memory_scheduler.py tests/test_state_db_scheduler.py`：重跑 108 passed（首次有 1 个既有 scheduler timing flake，重跑通过）。
+- [x] Direct import、涉及文件 `py_compile`、`git diff --check`：全部 PASS。
+- [x] `scripts/check_acceptance_sync.py`、`scripts/check_local_execution_handoff.py`：全部 PASS。
+
+### 回滚
+
+- 回滚：回退 `2fb0d7a4b2a81b1248bf1d81b783e2b26ee30e10`；不触碰 Vault、Production 数据或主人配置。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 5 repair round 9 · import/symlink/move-out hardening
 
 - 产品分支：`codex/phase1-automatic-memory`
