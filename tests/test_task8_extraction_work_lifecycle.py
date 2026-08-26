@@ -212,3 +212,21 @@ def test_duplicate_capture_reuses_original_work_fact(tmp_path: Path):
     store = WorkStore(state)
     assert store.get_outcome(first["work_id"]).status == "completed"
     assert len([event for event in store.list_events(first["work_id"]) if event.event_type == "extraction.completed"]) == 1
+
+
+def test_duplicate_without_canonical_capture_id_fails_closed(tmp_path: Path):
+    state, queue, _pipeline, service = _service(tmp_path)
+    first = service.submit_text({"capture_id": "capture-original", "title": "same", "text": "same"})
+    with queue._connection() as connection:
+        connection.execute("UPDATE extraction_jobs SET payload_json = ? WHERE job_id = ?", ('{"title":"same","text":"same"}', first["job_id"]))
+    unrelated = service.work_bridge.store.create_work(
+        __import__("src.work.models", fromlist=["WorkItem"]).WorkItem(title="unrelated", source_id="capture-duplicate")
+    )
+
+    duplicate = service.submit_text({"capture_id": "capture-duplicate", "title": "same", "text": "same"})
+    store = WorkStore(state)
+    assert duplicate["duplicate"] is True
+    assert "work_id" not in duplicate
+    assert len(queue.list()) == 1
+    assert len(store.list_work()) == 2
+    assert not [event for event in store.list_events(unrelated.work_id) if event.event_type == "capture.submitted"]

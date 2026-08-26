@@ -386,10 +386,6 @@ class CaptureControlService:
                         job_payload = None
                     if isinstance(job_payload, Mapping):
                         canonical_capture_id = str(job_payload.get("capture_id") or "").strip()
-                if not canonical_capture_id:
-                    existing = self.work_bridge.store.get_work_by_source_id(result.capture_id)
-                    if existing is not None:
-                        canonical_capture_id = result.capture_id
             work = None
             if canonical_capture_id:
                 work = self.work_bridge.store.get_work_by_source_id(canonical_capture_id)
