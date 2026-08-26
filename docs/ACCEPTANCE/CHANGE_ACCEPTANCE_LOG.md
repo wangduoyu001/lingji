@@ -4,6 +4,27 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 7 final why scope repair · project/type isolation
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`4bb5d1ae89806345ff6090bb2103e5e9439d3bf6`
+- 影响模块：per-result why exclusion matching
+- 风险等级：P0
+- 用户可感知变化：相同 conflict key 在不同项目、memory type 或 privacy 下不会交叉出现在彼此的 why 排除列表；省略项目过滤时仍保持每条结果的项目边界。
+- 数据或安全边界变化：只收窄解释候选；既有 current/history 数据和权限边界不变。
+
+### 新增或修改的自动验收
+
+- [x] `tests/test_task7_timeline_retrieval.py`：15 passed，新增跨项目共享 conflict key 的 per-result 隔离回归。
+- [x] Task 7 相关检索/Gateway/MCP/Project Context 回归：89 passed，2 warnings（既有依赖弃用警告）。
+- [x] 涉及文件 `py_compile`、`git diff --check`：PASS。
+- [ ] Task 1–6 回归、`scripts/check_acceptance_sync.py`、`scripts/check_local_execution_handoff.py`：根代理在双提交后复读。
+- [ ] Qdrant unavailable、真实 Production Vault、主人 UI/M5 真机验收：仍不在本轮范围。
+
+### 回滚
+
+- 回滚：回退产品 Commit `4bb5d1ae89806345ff6090bb2103e5e9439d3bf6` 与本条文档提交；不触碰 Vault、原始聊天证据、Qdrant 正式数据或主人配置。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 7 final narrow repair · semantic post-filter closure
 
 - 产品分支：`codex/phase1-automatic-memory`
