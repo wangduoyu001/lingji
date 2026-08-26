@@ -31,7 +31,7 @@ class FakeReadModel:
         self.fail = fail
         self.bundles = []
 
-    def upsert_bundle(self, bundle):
+    def upsert_bundle(self, bundle, *, ingestion_batch_id=None, ingestion_ordinal_start=0):
         if self.fail:
             raise RuntimeError(r"D:\Users\Secret\lingji_memory.db is locked")
         self.bundles.append(bundle)
@@ -43,6 +43,7 @@ class FakeReadModel:
             "conversations": len(conversations),
             "messages": len(messages),
             "links": len(links),
+            "next_ingestion_ordinal": ingestion_ordinal_start + len(messages),
         }
 
 

@@ -103,7 +103,7 @@ class SourceReadModelTests(unittest.TestCase):
                 message_columns
             )
         )
-        self.assertEqual(self.read_model.schema_version(), "1")
+        self.assertEqual(self.read_model.schema_version(), "2")
 
     def test_unknown_schema_version_is_rejected_without_downgrade(self):
         path = Path(self.temp_dir.name) / "future-schema.db"
@@ -118,7 +118,7 @@ class SourceReadModelTests(unittest.TestCase):
                 """
             )
             connection.execute(
-                "INSERT INTO source_read_model_meta(key, value) VALUES ('schema_version', '2')"
+                "INSERT INTO source_read_model_meta(key, value) VALUES ('schema_version', '3')"
             )
         with self.assertRaises(SourceReadModelError):
             SourceReadModel(database)
@@ -126,7 +126,7 @@ class SourceReadModelTests(unittest.TestCase):
             version = connection.execute(
                 "SELECT value FROM source_read_model_meta WHERE key = 'schema_version'"
             ).fetchone()["value"]
-        self.assertEqual(version, "2")
+        self.assertEqual(version, "3")
 
     def test_stable_ids_and_repeated_upsert_do_not_duplicate(self):
         first = self.read_model.upsert_bundle(self._bundle())

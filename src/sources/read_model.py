@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 
-SOURCE_READ_MODEL_SCHEMA_VERSION = "1"
+SOURCE_READ_MODEL_SCHEMA_VERSION = "2"
+_SOURCE_READ_MODEL_MIGRATION_VERSION = "1"
 _ID_PREFIXES = {"source": "LJ-SRC", "conversation": "LJ-CONV", "message": "LJ-MSG"}
 _INHERITED_COLUMNS = (
     ("privacy_inherited", "INTEGER NOT NULL DEFAULT 1"),
@@ -64,15 +65,16 @@ class SourceReadModel:
             version_row = connection.execute(
                 "SELECT value FROM source_read_model_meta WHERE key = 'schema_version'"
             ).fetchone()
-            if version_row is None:
+            version = str(version_row["value"]) if version_row is not None else None
+            if version not in (None, _SOURCE_READ_MODEL_MIGRATION_VERSION, SOURCE_READ_MODEL_SCHEMA_VERSION):
+                raise SourceReadModelError(
+                    "Unsupported structured read model schema version: "
+                    f"{version}; expected 1 or {SOURCE_READ_MODEL_SCHEMA_VERSION}"
+                )
+            if version is None:
                 connection.execute(
                     "INSERT INTO source_read_model_meta(key, value) VALUES ('schema_version', ?)",
                     (SOURCE_READ_MODEL_SCHEMA_VERSION,),
-                )
-            elif str(version_row["value"]) != SOURCE_READ_MODEL_SCHEMA_VERSION:
-                raise SourceReadModelError(
-                    "Unsupported structured read model schema version: "
-                    f"{version_row['value']}; expected {SOURCE_READ_MODEL_SCHEMA_VERSION}"
                 )
 
             connection.executescript(
@@ -137,6 +139,8 @@ class SourceReadModel:
                     created_at TEXT,
                     updated_at TEXT,
                     metadata_json TEXT NOT NULL DEFAULT '{}',
+                    ingestion_batch_id TEXT NULL,
+                    ingestion_ordinal INTEGER NULL,
                     FOREIGN KEY(conversation_id) REFERENCES conversation_records(conversation_id) ON DELETE CASCADE,
                     FOREIGN KEY(source_id) REFERENCES source_records(source_id) ON DELETE CASCADE,
                     UNIQUE(conversation_id, sequence, role, content_hash)
@@ -179,11 +183,32 @@ class SourceReadModel:
             conversation_added = self._ensure_inheritance_columns(
                 connection, "conversation_records"
             )
+            self._ensure_ingestion_columns(connection)
             message_added = self._ensure_inheritance_columns(connection, "message_records")
             if conversation_added:
                 self._backfill_conversation_inheritance(connection)
             if message_added:
                 self._backfill_message_inheritance(connection)
+            if version == _SOURCE_READ_MODEL_MIGRATION_VERSION:
+                connection.execute(
+                    "UPDATE source_read_model_meta SET value = ? WHERE key = 'schema_version'",
+                    (SOURCE_READ_MODEL_SCHEMA_VERSION,),
+                )
+
+    @staticmethod
+    def _ensure_ingestion_columns(connection: sqlite3.Connection) -> None:
+        existing = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(message_records)").fetchall()
+        }
+        if "ingestion_batch_id" not in existing:
+            connection.execute("ALTER TABLE message_records ADD COLUMN ingestion_batch_id TEXT NULL")
+        if "ingestion_ordinal" not in existing:
+            connection.execute("ALTER TABLE message_records ADD COLUMN ingestion_ordinal INTEGER NULL")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_message_ingestion_order "
+            "ON message_records(ingestion_batch_id, ingestion_ordinal, message_id)"
+        )
 
     def _ensure_inheritance_columns(
         self, connection: sqlite3.Connection, table: str
@@ -296,7 +321,21 @@ class SourceReadModel:
                 created_at=created_at,
             )
 
-    def upsert_bundle(self, bundle: Mapping[str, Any]) -> dict[str, int | str]:
+    def upsert_bundle(
+        self,
+        bundle: Mapping[str, Any],
+        *,
+        ingestion_batch_id: str | None = None,
+        ingestion_ordinal_start: int = 0,
+    ) -> dict[str, int | str]:
+        if ingestion_batch_id is not None:
+            ingestion_batch_id = self._required(ingestion_batch_id, "ingestion_batch_id")
+        try:
+            next_ordinal = int(ingestion_ordinal_start)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("ingestion_ordinal_start must be an integer") from exc
+        if next_ordinal < 0:
+            raise ValueError("ingestion_ordinal_start must be greater than or equal to zero")
         source = dict(bundle.get("source") or {})
         conversations = list(bundle.get("conversations") or [])
         with self._lock, self._connection() as connection:
@@ -311,8 +350,15 @@ class SourceReadModel:
                     message = dict(message_value or {})
                     message.setdefault("source_id", source_id)
                     message.setdefault("conversation_id", conversation_id)
-                    message_id = self._upsert_message(connection, message)
+                    message_id = self._upsert_message(
+                        connection,
+                        message,
+                        ingestion_batch_id=ingestion_batch_id,
+                        ingestion_ordinal=next_ordinal if ingestion_batch_id is not None else None,
+                    )
                     counts["messages"] += 1
+                    if ingestion_batch_id is not None:
+                        next_ordinal += 1
                     for link_value in message.get("memory_links") or []:
                         link = dict(link_value or {})
                         self._link_message_memory(
@@ -324,7 +370,7 @@ class SourceReadModel:
                             created_at=link.get("created_at"),
                         )
                         counts["links"] += 1
-        return {"source_id": source_id, "sources": 1, **counts}
+        return {"source_id": source_id, "sources": 1, **counts, "next_ingestion_ordinal": next_ordinal}
 
     def rebuild(self, bundles: Iterable[Mapping[str, Any]]) -> dict[str, int]:
         selected = list(bundles)
@@ -524,6 +570,74 @@ class SourceReadModel:
             selected_limit,
             selected_offset,
         )
+
+    def list_ingestion_messages(
+        self,
+        ingestion_batch_id: str,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        selected_limit, selected_offset = self._page_values(limit, offset)
+        batch_id = self._required(ingestion_batch_id, "ingestion_batch_id")
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    m.source_id,
+                    s.external_id AS source_external_id,
+                    m.conversation_id,
+                    c.external_id AS conversation_external_id,
+                    m.message_id,
+                    m.external_id AS message_external_id,
+                    m.ingestion_batch_id,
+                    m.ingestion_ordinal,
+                    m.sequence,
+                    m.role,
+                    m.occurred_at,
+                    m.content_hash
+                FROM message_records m
+                JOIN source_records s ON s.source_id = m.source_id
+                JOIN conversation_records c ON c.conversation_id = m.conversation_id
+                WHERE m.ingestion_batch_id = ?
+                ORDER BY m.ingestion_ordinal ASC, m.message_id ASC
+                """,
+                (batch_id,),
+            ).fetchall()
+            if not rows:
+                return self._page_result([], 0, selected_limit, selected_offset)
+            ordinals = [row["ingestion_ordinal"] for row in rows]
+            if any(ordinal is None for ordinal in ordinals):
+                raise SourceReadModelError(
+                    f"ingestion batch contains NULL ordinal: {batch_id}"
+                )
+            numeric_ordinals = [int(ordinal) for ordinal in ordinals]
+            if numeric_ordinals != list(
+                range(numeric_ordinals[0], numeric_ordinals[0] + len(numeric_ordinals))
+            ):
+                raise SourceReadModelError(
+                    f"ingestion batch ordinals are duplicate or non-contiguous: {batch_id}"
+                )
+            total = len(rows)
+            page_rows = rows[selected_offset : selected_offset + selected_limit]
+        items = [
+            {
+                "source_id": row["source_id"],
+                "source_external_id": row["source_external_id"],
+                "conversation_id": row["conversation_id"],
+                "conversation_external_id": row["conversation_external_id"],
+                "message_id": row["message_id"],
+                "message_external_id": row["message_external_id"],
+                "ingestion_batch_id": row["ingestion_batch_id"],
+                "ingestion_ordinal": row["ingestion_ordinal"],
+                "sequence": row["sequence"],
+                "role": row["role"],
+                "occurred_at": row["occurred_at"],
+                "content_hash": row["content_hash"],
+            }
+            for row in page_rows
+        ]
+        return self._page_result(items, total, selected_limit, selected_offset)
 
     def message_links(self, message_id: str) -> list[dict[str, Any]]:
         with self._connection() as connection:
@@ -839,7 +953,14 @@ class SourceReadModel:
         self._sync_conversation_messages(connection, conversation_id)
         return conversation_id
 
-    def _upsert_message(self, connection: sqlite3.Connection, record: Mapping[str, Any]) -> str:
+    def _upsert_message(
+        self,
+        connection: sqlite3.Connection,
+        record: Mapping[str, Any],
+        *,
+        ingestion_batch_id: str | None = None,
+        ingestion_ordinal: int | None = None,
+    ) -> str:
         conversation_id = self._required(record.get("conversation_id"), "conversation_id")
         source_id = self._required(record.get("source_id"), "source_id")
         conversation_row = connection.execute(
@@ -897,6 +1018,16 @@ class SourceReadModel:
                 external_id or f"{sequence}:{role}:{content_hash}",
             )
         )
+        stored_ingestion_batch_id = (
+            ingestion_batch_id
+            if ingestion_batch_id is not None
+            else existing["ingestion_batch_id"] if existing is not None else None
+        )
+        stored_ingestion_ordinal = (
+            ingestion_ordinal
+            if ingestion_batch_id is not None
+            else existing["ingestion_ordinal"] if existing is not None else None
+        )
         now = self._now()
         connection.execute(
             """
@@ -905,7 +1036,8 @@ class SourceReadModel:
                 occurred_at, sequence, content, content_hash, raw_reference, privacy,
                 projects_json, agent_scope_json, privacy_inherited, projects_inherited,
                 agent_scope_inherited, created_at, updated_at, metadata_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                , ingestion_batch_id, ingestion_ordinal
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(message_id) DO UPDATE SET
                 conversation_id = excluded.conversation_id,
                 source_id = excluded.source_id,
@@ -925,7 +1057,9 @@ class SourceReadModel:
                 agent_scope_inherited = excluded.agent_scope_inherited,
                 created_at = COALESCE(message_records.created_at, excluded.created_at),
                 updated_at = excluded.updated_at,
-                metadata_json = excluded.metadata_json
+                metadata_json = excluded.metadata_json,
+                ingestion_batch_id = excluded.ingestion_batch_id,
+                ingestion_ordinal = excluded.ingestion_ordinal
             """,
             (
                 message_id,
@@ -964,6 +1098,8 @@ class SourceReadModel:
                     if existing
                     else {}
                 ),
+                stored_ingestion_batch_id,
+                stored_ingestion_ordinal,
             ),
         )
         connection.execute(
@@ -1317,6 +1453,8 @@ class SourceReadModel:
     @classmethod
     def _message_dict(cls, row: sqlite3.Row, *, include_content: bool) -> dict[str, Any]:
         item = dict(row)
+        item.pop("ingestion_batch_id", None)
+        item.pop("ingestion_ordinal", None)
         content = str(item.pop("content", "") or "")
         item["content_length"] = len(content)
         item["content_preview"] = " ".join(content.split())[:200]

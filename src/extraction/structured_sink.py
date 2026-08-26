@@ -46,6 +46,7 @@ class StructuredReadModelSink:
         warnings: list[str] = []
         vault_map = self._vault_map(vault_results)
         raw_reference, raw_metadata = self._raw_provenance(raw_snapshot)
+        next_ingestion_ordinal = 0
         try:
             for source in batch.structured_sources:
                 bundle, bundle_warnings = self._bundle(
@@ -59,7 +60,14 @@ class StructuredReadModelSink:
                     indexing_succeeded=indexing_succeeded,
                 )
                 warnings.extend(bundle_warnings)
-                counts = self.read_model.upsert_bundle(bundle)
+                counts = self.read_model.upsert_bundle(
+                    bundle,
+                    ingestion_batch_id=execution_id,
+                    ingestion_ordinal_start=next_ingestion_ordinal,
+                )
+                next_ingestion_ordinal = int(
+                    counts.get("next_ingestion_ordinal", next_ingestion_ordinal)
+                )
                 for key in totals:
                     totals[key] += int(counts.get(key) or 0)
             state = "written"
