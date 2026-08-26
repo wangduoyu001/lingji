@@ -1,5 +1,14 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 2 · Stable import audit and intentional dedup groups
+
+- 基准：`597df6711f5e0584fccd6991065177f111bc3746`; 本轮只处理批次范围内的稳定导入审计、内容哈希意图组和 quality harness 的只读匹配/fixture 元数据移除。
+- 风险等级：P0。不得修改冻结 evaluator、fixtures、questions、thresholds、retrieval/selector、readiness、promotion policy、runner reset、4R2、100k、Artifact、Production、Vault 或本机任务单。
+- 自动验收：新增 `tests/evaluation/test_task4_reset_import_audit.py`，更新 `tests/evaluation/test_automatic_memory_gate_integrity.py`；覆盖缺失/额外/复合外部键重复、来源/会话主键重复、顺序与字段逐项匹配、批次泄漏、确定性内容组、空批次和只读快照。
+- 必须先保留真实 RED，再执行 focused GREEN；随后回归 Task 1 ingestion-order/source-model/structured-ingestion/capture 测试、fixture SHA、`git diff --check`、acceptance sync 与 local handoff。
+- 真机/规模/Artifact/Production/Vault/主人验收仍为 `NOT_MEASURED`；临时 SQLite/raw/vault 仅由测试创建并清理。回滚仅回退本轮代码/测试与文档提交，不触碰主人数据。
+- 本轮证据：focused `20 passed`；Task 1 regression `64 passed`；Generic History `145/145`、七项匹配各 `145`、stable duplicates `0`、intentional groups `5`；历史 rejected caller incompatibilities 保留并转 Task 6。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 1 · Repair round 1
 
 - 基准：`75b691b9b2f9ce2d65023db87b25fab7018d9f2b`; repair 仅处理 independent review I1/I2/I3 与 root R4。
