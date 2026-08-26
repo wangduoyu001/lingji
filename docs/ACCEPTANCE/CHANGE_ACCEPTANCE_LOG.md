@@ -1,20 +1,33 @@
 # 验收要求变更记录
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 4R1 final repair round 5
+
+- 产品 Commit：`5be8d92997a3945dd7d83732a0350cac340c5320`；本条记录与报告随独立 docs commit 写入。
+- 影响模块：`quality_gate.py` Gateway identity/readiness and sentinel envelope；`quality_evidence.py` persisted-order/hash audit；`promotion.py` per-call PromotionEvidence and post-link attachment；round-5 integrity/e2e tests.
+- 风险等级：P0。不得修改冻结 fixtures、Task 2 evaluator/scorer/thresholds、Task 3 retrieval、4R2、Artifact、Production/Vault 或主人验收。
+- 真实 RED：`./.venv/bin/python -m pytest -q tests/evaluation/test_task4r1_round5_final_red.py` — `6 failed, 1 warning` on base `338641a`.
+- 新增 GREEN：`./.venv/bin/python -m pytest -q tests/evaluation/test_task4r1_round5_final_red.py tests/evaluation/test_task4r1_takeover_red.py tests/evaluation/test_automatic_memory_gate_integrity.py tests/evaluation/test_automatic_memory_end_to_end.py tests/test_auto_memory_promotion.py` — `63 passed, 1 warning`。
+- Gateway-vs-selector 观测：`gateway_calls=200`（100 direct + 100 MCP）、`gateway_empty=200`、`gateway_items=0`；selector `100` 次、`0` 条选出，根因是 Gateway 真空结果而非 selector 丢失。
+- Sentinel unavailable：配置的 `vault` 根缺失时记录 `missing protected root: vault`，`production_pollution=null`、`available=false`、`unchanged=null`；不得把不可用证据写成数值零，且不调用任何 acceptance gate。
+- 4R2 的 MCP parity、degradation/Qdrant、corruption isolation、context baseline、scale 与主人/Mac/reboot 证据全部 `NOT_MEASURED`；`functional_status=NOT_EVALUATED`、`phase_status=NOT_EVALUATED`。
+- 固定 fixture SHA 保持：corpus `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94`；questions `338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612`。
+- 必须回归：round-5 RED/GREEN、takeover RED/GREEN、integrity/e2e/promotion、fixture hashes、`git diff --check`、`scripts/check_acceptance_sync.py`、`scripts/check_local_execution_handoff.py`。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 4R1 takeover round 4
 
-- 产品 Commit：`8743356`；本条报告 Commit：待提交。
+- 产品 Commit：`8743356`；本条报告 Commit：`cf4f220`。
 - 影响模块：`quality_evidence.py` import/sentinel/readiness value objects；`quality_gate.py` pre-query identity selection and fail-closed evidence validation；`promotion.py` source provenance resolution and compensating unlink; `read_model.py` message provenance resolution and link removal.
 - 风险等级：P0。不得修改冻结 fixtures、Task 2 evaluator/scorer/thresholds 或 Task 3 retrieval；不得执行 4R2、Artifact、Production/Vault 或主人验收。
 - 真实 RED：`./.venv/bin/python -m pytest -q tests/evaluation/test_task4r1_takeover_red.py` — baseline `7 targeted defects failed, 2 baseline safety checks passed`; failures cover adapter projection audit, pre-query identity map, generic provenance, multi-link rollback, unreadable sentinel, readiness isolation and runner sentinel/readiness integration. The rejected initial draft remains `TDD_ORDER_NOT_MET`.
 - 新增 GREEN：同一 RED 文件 `9 passed, 1 warning`；focused integrity/e2e/promotion suite `57 passed, 1 warning`.
-- 运行质量门结果：导入 `145/145`、顺序/角色 `145/145`、Production pollution `0`；因配置的 `vault` 根缺失，sentinel 明确记录 `missing protected root: vault`；4R1 未测 MCP/degradation/context baseline/scale，envelope 为 `functional_status=NOT_EVALUATED`、`phase_status=NOT_EVALUATED`，不运行 acceptance gate。
+- 历史运行质量门结果已由 round-5 更正：配置的 `vault` 根缺失时 sentinel 证据不可用，Production pollution 应记录为 `null` 而非数值 `0`；4R1 未测 MCP/degradation/context baseline/scale，envelope 为 `functional_status=NOT_EVALUATED`、`phase_status=NOT_EVALUATED`，不运行 acceptance gate。
 - 固定 fixture SHA：corpus `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94`；questions `338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612`。
 - 必须回归：takeover RED/GREEN、`tests/evaluation/test_automatic_memory_gate_integrity.py`、`tests/evaluation/test_automatic_memory_end_to_end.py`、`tests/test_auto_memory_promotion.py`、fixture hashes、`git diff --check`、`scripts/check_acceptance_sync.py`、`scripts/check_local_execution_handoff.py`。
 
 
 ## 2026-08-26 · Phase 1 Task 4 · Automatic memory quality and scale gate
 
-- 产品 Commit：待提交；本条报告 Commit：待提交。
+- 产品 Commit：`fe13550485f044562a8be919c8df33bd916be461`；本条报告 Commit：`27fc74e`。
 - 新增真实 100-question quality gate、FastMCP 调用、opt-in 100k scale command；默认 focused 不执行 100k，release 必须设置 `LINGJI_RUN_100K=1`。
 - 实测功能状态：`FAIL`（事实召回 18.87%、引用准确率 18.87%；其余主要完整性/安全指标通过）。完整阶段状态仍为 `BLOCKED`。
 - 不得修改冻结 corpus/questions、阈值或检索排序来消除失败；Task 3 检索修复需另行立项。
