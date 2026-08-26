@@ -108,3 +108,16 @@ def test_direct_execute_lifecycle_callback_writes_work_fact(tmp_path: Path):
     outcome = WorkStore(state).get_outcome(work.work_id)
     assert outcome is not None
     assert outcome.status == "completed"
+
+
+def test_lifecycle_callback_failure_does_not_change_queue_status(tmp_path: Path):
+    state, queue, pipeline, service = _service(tmp_path)
+
+    def broken_callback(*_args):
+        raise RuntimeError("callback fixture failure")
+
+    pipeline.add_lifecycle_callback(broken_callback)
+    submitted = service.submit_text({"capture_id": "capture-callback", "text": "hello"})
+    result = pipeline.process_job(submitted["job_id"], worker_id="task8")
+    assert result["job"]["status"] == "completed"
+    assert WorkStore(state).get_outcome(submitted["work_id"]).status == "completed"
