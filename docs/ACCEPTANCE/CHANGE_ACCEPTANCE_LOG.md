@@ -4,6 +4,29 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 5 repair round 9 · import/symlink/move-out hardening
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`d39372b4e791d514ff5a8c1b2858de4e2cf47278`
+- 影响模块：Obsidian package exports, fail-closed scope path handling, scoped incremental lexical synchronization
+- 风险等级：P0
+- 用户可感知变化：直接导入 `MemoryDatabase` 不再触发 Obsidian migration import cycle；通过 `..` 或外部路径的 symlink 在 canonicalize 前即被拒绝；授权 Obsidian 文件删除或移出 scope 后退出 current lexical retrieval，同时保留非 Vault/chat 投影。
+- 数据或安全边界变化：migration exports are lazy-only; scoped sync records an internal rebuildable scope reason and never uses it to retire non-Vault sources.
+
+### 新增或修改的自动验收
+
+- [x] Direct smoke: `./.venv/bin/python -c "from src.retrieval.memory_db import MemoryDatabase; print(MemoryDatabase.__name__)"`：`MemoryDatabase`。
+- [x] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_obsidian.py tests/test_obsidian_memory_scope.py tests/test_incremental_index_sync.py`：10 passed，含 import cycle、dotdot symlink、move-out/stale lexical 与 non-Vault 保留。
+- [x] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_obsidian.py tests/test_obsidian_memory_scope.py tests/test_obsidian_memory_migration.py tests/test_obsidian_service.py tests/test_vault_layout.py tests/test_memory_retrieval.py tests/test_incremental_index_sync.py`：29 passed。
+- [x] Task 1–4 全回归：`./.venv/bin/python -m pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_automatic_memory_watcher.py tests/test_automatic_memory_scheduler.py tests/test_state_db_scheduler.py`：108 passed。
+- [x] 完整涉及文件 `py_compile`、`git diff --check`、`scripts/check_acceptance_sync.py`、`scripts/check_local_execution_handoff.py`：全部 PASS。
+
+### 回归与回滚
+
+- [x] `src.obsidian` migration classes remain publicly importable through lazy `__getattr__`; retrieval imports do not load migration eagerly.
+- [x] Vault canonicalization handles macOS `/var` → `/private/var` aliases without weakening lexical symlink checks.
+- 回滚：回退 `d39372b4e791d514ff5a8c1b2858de4e2cf47278`；不触碰 Vault、Production 数据或主人配置。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 5 · Obsidian scope isolation and derived migration
 
 - 产品分支：`codex/phase1-automatic-memory`
