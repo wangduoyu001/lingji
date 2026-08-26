@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3.12; existing SQLite state/extraction queue/FTS5/Qdrant/MemoryGateway; FastAPI authenticated `127.0.0.1:8766`; MCP stdio; React/Tauri Desktop; `watchfiles==1.2.0` in Task 4; pytest and existing Desktop smoke scripts. macOS M5 is validated before Windows parity.
 
+> **Remaining-work authority (2026-08-26):** Tasks 0–7 in this file are the completed historical baseline. The executable specification and acceptance gates for the Task 8 closeout and remaining Phase 1 work are now maintained only in `docs/superpowers/plans/2026-08-26-phase1-automatic-memory-followup.md`; if the old Task 8–11 text below differs, the follow-up plan governs.
+
 ## Global Constraints
 
 - One Chinese owner-authorization onboarding creates an immutable allowlist of source kinds and roots. `authorize`, `revoke`, `scan`, `pause` and `retry` are explicit operations with persistent status and real Work Fact evidence.

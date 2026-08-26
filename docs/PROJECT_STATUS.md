@@ -2,12 +2,13 @@
 
 > Updated: 2026-08-26
 > Formal/default branch: `master`
-> Product-code baseline before documentation cleanup: `3d7225f58fb5b5a9b035cfd72f92cb2267b48559`
-> Current audited master Head: `ced1128e50d3b3758585573042ea6bcc6f315384`
+> Phase 1 implementation base: `d12c1fb837257e83835a7cdb899bb29a9c675c3d`
+> Current Phase 1 worktree Head: `8f2267d8d2994658186acfe4b13add9758db257b`
+> Current implementation branch: `codex/phase1-automatic-memory`
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
-> Current engineering gate: `TASK 0 — AUTOMATIC MEMORY CONTRACT (DOCS-ONLY)`
+> Current engineering gate: `TASK 8 CLOSEOUT — WORK FACT LIFECYCLE CONSISTENCY`
 > Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
@@ -29,11 +30,13 @@
 
 Phase 1 PASS 后，Phase 2 第一优先级固定为 **Opportunity Center / 机会面板**。
 
-## 1A. Task 0 当前范围与真实进度
+## 1A. 当前实现范围与真实进度
 
-当前分支 `codex/phase1-automatic-memory` 只封板自动化第二大脑的研究结论、架构边界、开发计划和验收规则。Task 0 是 **docs-only**：不修改产品代码、测试代码或依赖文件，不创建真实验收 Artifact，不激活本机任务单，不读取 Production/Vault 正文，也不宣称任何新自动记忆能力已经实现。
+当前分支 `codex/phase1-automatic-memory` 已完成并冻结 Tasks 0–7：来源授权与扫描状态、一致快照/续扫、受支持来源适配、监听与调度、Obsidian 隔离、派生记忆晋级，以及全检索路径的 current/as_of/history/why 时态隔离。Task 8 的 Work Fact、8766 读取接口和 Desktop 真实投影也已进入分支，但尚未通过最终收口门禁。
 
-已完成的 Task 0 证据是：隔离工作树从精确基准 `d12c1fb837257e83835a7cdb899bb29a9c675c3d` 创建；研究结论保存在 gitignored `.research/`；`.venv` focused 基线为 38 项收集、37 passed、1 skipped；当前 `LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。产品实现从 Task 1 开始，必须逐项通过 focused 测试和对应验收同步。
+当前唯一已复现的 P0 缺口是：一次终态失败已经产生主人待办后，实时生命周期 callback 随即成功时，成功 Outcome 会立即写入，但旧 PendingAction 要等后续 `WorkStore` 重放/读取才被解决。因此界面短时间可能同时显示“已完成”和“仍需主人处理”。这不是来源扫描或永久记忆数据损坏，但会破坏主人看到的事实一致性。剩余执行权威为 `docs/superpowers/plans/2026-08-26-phase1-automatic-memory-followup.md`。
+
+当前 `LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。在 Work Fact 收口、固定 100 问评测、统一 RAG、质量/规模门禁和同 SHA Artifact 锁定之前，不执行新的真实安装或 M5 主人验收。
 
 ## 1B. 自动化第二大脑的锁定方向
 
@@ -217,55 +220,40 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 
 方向已经从“UI 根据聚合状态猜系统在干什么”转为“UI 投影真实工作事实”。
 
-### 4.2 当前 P0 工程阻塞：Work Fact 已部分修复，但尚未成为正式产品链
+### 4.2 当前 P0 工程阻塞：Work Fact 已接通，剩余一个即时一致性缺口
 
-截至 `ced1128e...`，SB-0 不能再描述为“完全未开始”，但也不能描述为“已经接通”。准确状态是：
+截至 `8f2267d...`，准确状态是：
 
 | 子项 | 状态 | 当前事实 |
 |---|---|---|
-| Work persistence | `IMPLEMENTED_NOT_TESTED` | `WorkStore` 已能写入并读取 WorkItem、Event、PendingAction；Outcome 仅有写入 |
-| Capture bridge contract | `IMPLEMENTED_NOT_TESTED` | `create_from_capture()` 已改用正式 `create_work()` |
-| Projection reads | `IMPLEMENTED_NOT_TESTED` | `WorkProjector` 所需的 work/event/pending 读取方法已存在 |
-| Control adapter | `IMPLEMENTED_NOT_TESTED` | `WorkControlService` 已按 Store → Projector 接线 |
-| 合同测试文件 | `ADDED_NOT_RUN` | 已新增 store、capture bridge、control service、control contract 四个测试文件 |
-| 正式 8766 路由 | `PENDING` | `create_control_app()` 尚未注册 `src/control/work_routes.py` |
-| 正式 Service 共享接入 | `PENDING` | `LocalControlService` 尚未共享 `WorkControlService` / 同一 WorkStore |
-| Python ↔ Desktop 合同 | `PENDING` | ID、状态、事件、PendingAction 与响应外壳不一致 |
-| Outcome / NextAction / Memory 投影 | `PENDING` | 还没有完整读取、API 和跨页投影 |
-| 自动与主人验收 | `NOT_RUN` | focused、full、release、发布版 UI 和主人确认均未完成 |
+| Work persistence / projector | `IMPLEMENTED_FOCUSED_PASS` | WorkItem、Event、Outcome、Failure、NextAction、PendingAction 可重启读取；稳定 ID 重放幂等 |
+| Capture / extraction bridge | `IMPLEMENTED_ONE_GAP` | 成功、失败、重试、direct execute、callback 崩溃恢复和 duplicate canonical identity 已接入；即时失败→成功仍未同步解决旧待办 |
+| 正式 8766 路由 | `IMPLEMENTED_FOCUSED_PASS` | `/api/work/current`、pending-actions、timeline 已注册在既有认证 8766 服务 |
+| Python ↔ Desktop 合同 | `IMPLEMENTED_FOCUSED_PASS` | Overview、Activity、Attention 使用同一 Work Fact DTO/API；静态假数据已移除 |
+| Task 8 独立审查 | `BLOCKED_ONE_MAJOR` | 五轮收口后仅剩实时 callback 与 replay 语义不一致；follow-up Task 1 用单一事务状态转换解决 |
+| 发布版与主人验收 | `NOT_RUN` | 当前任务单 IDLE；未创建或重跑任何 Artifact |
 
-现有四个测试文件只证明合同测试代码已经加入仓库。其中 `tests/test_work_control_api.py` 当前验证的是 Control service 返回结构，不是正式 FastAPI 路由注册测试。
-
-当前必须先完成：
-
-1. 把 `/api/work/*` 注册到正式、认证的 `create_control_app()` 8766 路径；
-2. 让 `LocalControlService`、Work service、projector 和 Capture 共享同一正式 Store；
-3. 统一 Python DTO、API 响应与 TypeScript Work Fact 合同；
-4. 补齐 Outcome、NextAction、PendingAction 与 Memory/Failure 的读取和投影；
-5. 增加真正的 API、Projector、Desktop smoke 和端到端测试并实际执行；
-6. 证明 Capture 成功后能以同一 `work_id` 查询事件、结果和下一 actor。
-
-在以上门禁通过前，**禁止继续以视觉扩展为主的 UI 开发。**
+当前必须先完成一个明确门禁：把 callback 与 crash replay 的 retrying/completed/failed 写入合并为同一事务状态转换，并通过失败→重试→成功、重复、重放、重启和乱序矩阵。该门禁通过前不调度 RAG，也不继续视觉扩展。
 
 ## 5. Phase 1 重新规划后的开发顺序
 
 ### 5.0 Automatic Memory Tasks 1–11（Task 0 封板后按依赖顺序执行）
 
-以下是自动化第二大脑的独立审查顺序；当前全部为 `PLANNED`，不代表代码已存在：
+以下是自动化第二大脑的独立审查顺序；详细剩余执行拆分见 follow-up 计划：
 
 | Task | 交付边界 | 当前状态 |
 |---|---|---|
-| 1 | 来源注册、一次性中文授权、扫描状态与认证 8766 API | `PLANNED` |
-| 2 | 一致快照、SHA-256 幂等、checkpoint/lease/retry/续扫 | `PLANNED` |
-| 3 | macOS ChatGPT/Codex/Claude/generic JSON/JSONL/Markdown adapters | `PLANNED` |
-| 4 | `watchfiles==1.2.0`、5 秒防抖、15 分钟 reconciliation、每日完整性、持久 scheduler | `PLANNED` |
-| 5 | Obsidian 隔离、dry-run manifest、派生索引迁移与 rollback | `IMPLEMENTED — focused pass; pending root gate` |
-| 6 | derived current-memory promotion 与 Core/owner review 边界 | `IMPLEMENTED — focused pass; pending independent review/root gate` |
-| 7 | lexical/Qdrant/hybrid/Core/ContextPack/MemoryGateway/MCP 全链路 temporal filter | `PLANNED` |
-| 8 | 中文 onboarding、authorize/revoke/scan/pause/retry、Work Fact、Python/TS DTO、Desktop | `PLANNED` |
-| 9 | 现有 RAG/ContextPack/MCP 扩展与独立 100 问质量评测 | `PLANNED` |
-| 10 | macOS M5 release、owner acceptance、UI 保持打开与报告 | `PLANNED` |
-| 11 | macOS PASS 后的 Windows parity、PowerShell 5.1 与 release | `PLANNED` |
+| 1 | 来源注册、一次性中文授权、扫描状态与认证 8766 API | `FROZEN / REVIEW PASS` |
+| 2 | 一致快照、SHA-256 幂等、checkpoint/lease/retry/续扫 | `FROZEN / FINAL REVIEW PASS` |
+| 3 | macOS ChatGPT/Codex/Claude/generic JSON/JSONL/Markdown adapters | `FROZEN / REVIEW PASS` |
+| 4 | `watchfiles==1.2.0`、5 秒防抖、15 分钟 reconciliation、每日完整性、持久 scheduler | `FROZEN / REVIEW PASS` |
+| 5 | Obsidian 隔离、dry-run manifest、派生索引迁移与 rollback | `FROZEN / REVIEW PASS` |
+| 6 | derived current-memory promotion 与 Core/owner review 边界 | `FROZEN / REVIEW PASS` |
+| 7 | lexical/Qdrant/hybrid/Core/ContextPack/MemoryGateway/MCP 全链路 temporal filter | `FROZEN / REVIEW PASS` |
+| 8 | Work Fact、Python/TS DTO、8766、Desktop 与提取生命周期 | `BLOCKED / ONE CONSISTENCY CLOSEOUT` |
+| 9 | 固定 100 问评测、统一 RAG/ContextPack/MCP、质量与规模门禁 | `PLANNED AFTER TASK 8` |
+| 10 | macOS M5 release、owner acceptance、UI 保持打开与报告 | `PLANNED AFTER QUALITY PASS` |
+| 11 | macOS PASS 后的 Windows parity、PowerShell 5.1 与 release | `BLOCKED BY MAC PASS` |
 
 全局验收数值固定为：增量 30 秒内进入队列；自动记忆置信度 `>= 0.90`；`quality_score >= 90%`、`source_accuracy >= 95%`、`false_positive_rate <= 5%`、Codex MCP 真实成功率 `>= 95%`、重复正式内容 `0`、Production 污染 `0`、人工审核链 `100%`、重启恢复 `100%`。Task 4 才允许引入 watcher 依赖；Task 0 不引入依赖。
 
@@ -280,7 +268,7 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 - 一条测试 WorkItem 可持久化、读取、投影；
 - focused tests 覆盖正常、空状态、失败状态和重启后读取。
 
-当前进度：**部分实现，未验证**。Store、Capture bridge、Projection read 与 Control adapter 已进入 `master`；正式 API 注册、Service 共享接入、Desktop 合同、Outcome/NextAction 和实际测试执行仍未完成。
+当前进度：**产品链已实现并通过 focused/独立审查的大部分门禁，剩余一个 load-bearing 一致性问题**。callback 与 replay 的终态写入仍是两套代码；失败后立即成功时旧主人待办不能在同一调用内清除。follow-up Task 1 必须先统一状态转换并通过完整矩阵，才能把 SB-0 标为完成。
 
 ### SB-1 — Capture → Work → Outcome 闭环
 

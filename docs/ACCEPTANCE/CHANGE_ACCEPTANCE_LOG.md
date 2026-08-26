@@ -1220,3 +1220,32 @@ Windows 重启后恢复 = 100%
 ### 回滚
 
 - 回滚产品 Commit 与本条文档提交；不触碰 Vault、原始聊天证据、正式记忆、Qdrant 或主人配置。
+
+## 2026-08-26 · Phase 1 Automatic Memory · Remaining Work Replan
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 执行计划：`docs/superpowers/plans/2026-08-26-phase1-automatic-memory-followup.md`
+- 风险等级：P0
+- 用户可感知变化：先消除“工作已完成但仍要求主人处理”的事实冲突，再用固定 100 问评测约束 RAG，最后进入真实 Mac M5 发布版验收；Windows 只能在 Mac PASS 后开始。
+- 数据与安全边界：继续复用既有 State DB、Memory DB、Qdrant、Extraction Queue、MemoryGateway、8766 和 Desktop；不读取第三方凭证/内部数据库，不触碰普通 Obsidian 文档，不新增云端上传。
+
+### 增量自动验收
+
+- [ ] Work Fact 状态转换矩阵覆盖 callback/replay/restart/重复/乱序；失败后立即成功在任何 read/replay 前未解决主人待办数为 0。
+- [ ] 100 问 synthetic golden corpus 数量和分类固定，未执行、重复 ID、非有限评分、缺证据和阈值边界均 fail closed。
+- [ ] current/as_of/history/why、project/privacy/agent scope、citation、dedup 与 12,000 字符在 ContextPack、MemoryGateway、MCP 语义一致。
+- [ ] 质量门禁：有效事实召回 `>= 90%`、引用准确 `>= 95%`、自动激活准确 `>= 95%`、Core/高风险错误晋级 `0`、current 旧决定泄漏 `0`、重复记录 `0`、ContextPack 缩减 `>= 90%`。
+- [ ] Mac M5 10 万消息热态检索 P95 `<= 3s`、空闲五分钟 CPU `<= 3%`、Work Fact 心跳 `<= 10s`、Production pollution `0`、第三方可归因修改 `0`。
+- [ ] 同一代码树只运行一次 `release`（其包含 full）；acceptance sync、local handoff、真实 UI 全控件、远程两次复读均通过。
+
+### 顺序与阻断
+
+- [ ] Task 1 Work Fact 收口独立审查通过前，不调度 RAG。
+- [ ] 固定 100 问评测集审查通过前，不允许为通过指标调整问题或预期答案。
+- [ ] `LOCAL_EXECUTION_TASK.md` 为 IDLE 时不得安装、启动或重跑 Artifact；产品 HEAD、同 SHA Artifact 和哈希锁定后才创建新 ACTIVE 任务。
+- [ ] 主人明确确认 Mac PASS 前，不关闭验收 UI、不宣布 Phase 1 PASS、不开始 Windows。
+- [ ] Windows 主机不可用时结论为 BLOCKED，不以 Mac/CI 结果冒充 Windows PASS。
+
+### 回滚
+
+- 每个任务仅回滚自身产品/测试/文档提交；不触碰 Vault、原始聊天证据、正式记忆、Qdrant、主人设置或第三方软件。
