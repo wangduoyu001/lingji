@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 3 · Typed ContextPack section identity
+
+- 基准：`24a0920414508e29cabda262bd68e120c9c880fe`；本轮仅新增内存态 typed evidence identity registry/selector，并接入真实 quality Gateway pack。
+- 风险等级：P0。不得修改冻结 evaluator/fixtures/questions/thresholds、Task 3 retrieval ranking/query/filter、Task 4 readiness、Task 5 promotion、Task 6 runner reset、4R2、100k、Artifact、Production、Vault 或真实本机任务单。
+- 自动验收：先保留 typed registry/selector 的真实 RED；GREEN 覆盖四类 section 的 canonical identity、raw hash/provenance、duplicate/contradiction fail-closed、distinct-fact limit/enrichment、mutation isolation、registry map freezing；随后运行 brief 指定 focused 与 Gateway/ContextPack/MCP 回归、fixture hash、diff/acceptance/local-handoff 检查。
+- 清理/回滚：仅使用 pytest 临时目录与内存映射；不得写入主人 Vault/Production 数据。回滚本轮两个提交，不 amend/rebase 既有任务。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 2 · Repair round 1
 
 - 基准：`5839fc329a7790da0256809723509c8c5a59407c`; 仅修复 Task 2 composite external identity binding、空内部主键防误就绪、分页完整性和 145-row replay stability。
