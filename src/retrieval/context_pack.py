@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -60,6 +61,8 @@ class ContextPackBuilder:
                 mode=request.mode,
                 as_of=request.as_of,
             ):
+                if not self._matches_memory_filters(memory, request):
+                    continue
                 full = self.database.fetch_memory(str(memory["memory_id"]), include_chunks=True)
                 section = self._memory_section(full, "core_memory") if full else None
                 if section:
@@ -178,16 +181,7 @@ class ContextPackBuilder:
             memory_id = str(selected.get("memory_id") or "")
             if not memory_id:
                 continue
-            read_model = self.source_read_model
-            if read_model is None and self.source_query_service is not None:
-                read_model = getattr(self.source_query_service, "read_model", None)
-            try:
-                links = list(read_model.memory_links(memory_id)) if read_model is not None else []
-            except (AttributeError, LookupError):
-                links = []
-            if links:
-                selected["provenance_status"] = "structured"
-                selected["provenance_reason"] = "message_memory_link"
+            visible_evidence = False
             try:
                 response = self.source_query_service.memory_evidence(memory_id, viewer=viewer, project=request.project)
             except (LookupError, PermissionError):
@@ -228,6 +222,10 @@ class ContextPackBuilder:
                     "role": item.get("role"),
                     "provenance_status": "structured",
                 })
+                visible_evidence = True
+            if visible_evidence:
+                selected["provenance_status"] = "structured"
+                selected["provenance_reason"] = "visible_message_memory_link"
         output.sort(key=lambda item: tuple(str(item.get(key) or "") for key in ("source_id", "conversation_id", "message_id", "memory_id", "content_hash")))
         return output
 
@@ -246,6 +244,17 @@ class ContextPackBuilder:
     @staticmethod
     def _authority(memory: dict[str, Any]) -> str:
         return str(temporal_fields(memory).get("authority") or "")
+
+    @staticmethod
+    def _matches_memory_filters(memory: dict[str, Any], request: ContextPackRequest) -> bool:
+        memory_type = str(memory.get("memory_type") or "")
+        if request.memory_types and memory_type not in request.memory_types:
+            return False
+        if request.tags:
+            tags = {str(value).casefold() for value in (memory.get("tags") or [])}
+            if not {str(value).casefold() for value in request.tags}.issubset(tags):
+                return False
+        return True
 
     @staticmethod
     def _ordered_sections(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -297,10 +306,46 @@ class ContextPackBuilder:
             f"authority={section.get('authority') or ''}",
             f"observed_at={section.get('observed_at') or ''}",
         ])
-        return "\n".join([
+        why = ContextPackBuilder._render_why(section.get("why"))
+        lines = [
             f"## {index}. {labels.get(str(section.get('kind') or ''), '记忆')}：{section.get('title') or section.get('memory_id')}", "",
-            "> " + metadata, "", body, "", ContextPackBuilder._citation_line(section.get("citation") or {}), "",
-        ])
+            "> " + metadata, "",
+        ]
+        if why:
+            lines.extend([why, ""])
+        lines.extend([body, "", ContextPackBuilder._citation_line(section.get("citation") or {}), ""])
+        return "\n".join(lines)
+
+    @staticmethod
+    def _render_why(why: Any) -> str:
+        if not isinstance(why, dict):
+            return ""
+        fields = [
+            f"selection={ContextPackBuilder._safe_token(why.get('selection_rule'))}",
+            f"conflict={str(bool(why.get('conflict'))).lower()}",
+            f"reason={ContextPackBuilder._safe_token(why.get('exclusion_reason'))}",
+        ]
+        excluded = []
+        for candidate in why.get("excluded_candidates") or []:
+            if not isinstance(candidate, dict):
+                continue
+            memory_id = ContextPackBuilder._safe_token(candidate.get("memory_id"))
+            reason = ContextPackBuilder._safe_token(candidate.get("reason"))
+            covered_by = ContextPackBuilder._safe_token(candidate.get("superseded_by"))
+            if not memory_id:
+                continue
+            detail = f"{memory_id}:{reason or 'excluded'}"
+            if covered_by:
+                detail += f":covered_by={covered_by}"
+            excluded.append(detail)
+        if excluded:
+            fields.append("excluded=" + ",".join(excluded[:12]))
+        return "> 解释：" + " · ".join(item for item in fields if not item.endswith("="))
+
+    @staticmethod
+    def _safe_token(value: Any) -> str:
+        text = str(value or "").strip()
+        return re.sub(r"[^A-Za-z0-9_.:-]", "_", text)[:160]
 
     @staticmethod
     def _citation_line(citation: dict[str, Any]) -> str:

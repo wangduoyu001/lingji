@@ -125,8 +125,12 @@ class HybridRetriever:
             return [], channel_state
         limit = max(int(limit), 1)
         revision = self.database.revision
-        cache_key = self._cache_key(clean_query, limit, normalized, revision)
-        if not diagnostics:
+        # An implicit current/why query is evaluated against the wall clock.
+        # Caching it under a timeless key can replay a memory after its
+        # valid_to boundary. Explicit as_of/history queries remain cacheable.
+        cacheable = not (normalized.mode in {"current", "why"} and normalized.as_of is None)
+        cache_key = self._cache_key(clean_query, limit, normalized, revision) if cacheable else ""
+        if not diagnostics and cacheable:
             cached = self._cache_get(cache_key)
             if cached is not None:
                 return cached, channel_state
@@ -155,7 +159,7 @@ class HybridRetriever:
         output = fused[:limit]
         if normalized.mode == "why":
             self._attach_why(clean_query, output, evaluation_filters)
-        if not diagnostics:
+        if not diagnostics and cacheable:
             self._cache_put(cache_key, output)
         return output, channel_state
 

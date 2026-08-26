@@ -234,6 +234,103 @@ def test_context_pack_reports_missing_provenance_when_memory_has_no_structured_l
     assert core["provenance_reason"] == "no_structured_message_link"
 
 
+def test_context_pack_core_memory_obeys_memory_type_and_tag_filters(tmp_path: Path) -> None:
+    database, source_model, service = _indexed(tmp_path)
+    builder = ContextPackBuilder(
+        database,
+        HybridRetriever(database),
+        source_read_model=source_model,
+        source_query_service=service,
+    )
+
+    pack = builder.build(
+        ContextPackRequest(
+            agent_id="chatgpt",
+            memory_types=("decision",),
+            tags=("not-present",),
+        )
+    )
+
+    assert "memory-core" not in {item["memory_id"] for item in pack["sections"]}
+
+
+def test_context_pack_hidden_link_does_not_upgrade_provenance_or_leak_existence(tmp_path: Path) -> None:
+    database, source_model, service = _indexed(tmp_path)
+    source_model.upsert_bundle(
+        {
+            "source": {
+                "source_id": "source-hidden",
+                "source_type": "chatgpt",
+                "external_id": "export-hidden",
+                "display_name": "Hidden export",
+                "privacy": "restricted",
+                "projects": ["LingJi"],
+                "agent_scope": ["claude"],
+            },
+            "conversations": [
+                {
+                    "conversation_id": "conversation-hidden",
+                    "external_id": "conversation-hidden",
+                    "title": "Hidden evidence",
+                    "messages": [
+                        {
+                            "message_id": "message-hidden",
+                            "external_id": "message-hidden",
+                            "role": "user",
+                            "sequence": 1,
+                            "occurred_at": "2026-01-15T10:00:00Z",
+                            "content": "隐藏旧决定证据。",
+                            "memory_links": [{"memory_id": "memory-old"}],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    builder = ContextPackBuilder(
+        database,
+        HybridRetriever(database),
+        source_read_model=source_model,
+        source_query_service=service,
+    )
+
+    pack = builder.build(
+        ContextPackRequest(
+            agent_id="chatgpt",
+            query="旧决定",
+            project="LingJi",
+            mode="history",
+        )
+    )
+
+    old = next(item for item in pack["sections"] if item["memory_id"] == "memory-old")
+    assert old["provenance_status"] == "missing"
+    assert old["provenance_reason"] == "no_structured_message_link"
+    assert "message-hidden" not in pack["markdown"]
+
+
+def test_context_pack_why_renders_selection_and_exclusion_details(tmp_path: Path) -> None:
+    database, source_model, service = _indexed(tmp_path)
+    builder = ContextPackBuilder(
+        database,
+        HybridRetriever(database),
+        source_read_model=source_model,
+        source_query_service=service,
+    )
+
+    pack = builder.build(
+        ContextPackRequest(
+            agent_id="chatgpt",
+            query="ContextPack",
+            project="LingJi",
+            mode="why",
+        )
+    )
+
+    assert "memory-old" in pack["markdown"]
+    assert "excluded" in pack["markdown"]
+
+
 def test_context_pack_linked_evidence_enforces_agent_and_privacy_scope(tmp_path: Path) -> None:
     database, source_model, service = _indexed(tmp_path)
     source_model.upsert_bundle(

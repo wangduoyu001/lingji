@@ -8,6 +8,7 @@ from src.indexer.index import PEMISIndex
 from src.memory import VaultLayout
 from src.obsidian.frontmatter import render_frontmatter
 from src.retrieval import HybridRetriever, MarkdownChunker, MemoryDatabase
+from src.retrieval.hybrid import HybridRetriever as BaseHybridRetriever
 from src.retrieval.context_pack import ContextPackBuilder, ContextPackRequest
 from src.retrieval.hybrid import SearchFilters
 from src.retrieval.temporal import TemporalQuery, parse_instant
@@ -89,6 +90,41 @@ class TimelineRetrievalTests(unittest.TestCase):
         self.assertEqual(results, [])
         self.assertEqual(provider.filters["mode"], "current")
         self.assertTrue(provider.filters["as_of"])
+
+    def test_implicit_current_cache_rechecks_expiry_as_time_moves_forward(self):
+        self.note(
+            "03-Knowledge/expiring.md",
+            "expiring",
+            "expiring decision",
+            "expiring decision is briefly valid.",
+            valid_from="2026-01-01T00:00:00Z",
+            valid_to="2026-01-01T00:00:01Z",
+        )
+        self.rebuild()
+        import src.retrieval.hybrid as hybrid_module
+
+        class Clock:
+            value = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+            @classmethod
+            def now(cls, tz=None):
+                return cls.value
+
+        retriever = BaseHybridRetriever(self.db, cache_ttl_seconds=120)
+        original_datetime = hybrid_module.datetime
+        hybrid_module.datetime = Clock
+        try:
+            self.assertEqual(
+                {item["memory_id"] for item in retriever.search("expiring", filters=SearchFilters(mode="current"))},
+                {"expiring"},
+            )
+            Clock.value = datetime(2026, 1, 1, 0, 0, 2, tzinfo=timezone.utc)
+            self.assertEqual(
+                retriever.search("expiring", filters=SearchFilters(mode="current")),
+                [],
+            )
+        finally:
+            hybrid_module.datetime = original_datetime
 
     def test_why_exposes_authority_citation_and_exclusion_reason(self):
         self.note("03-Knowledge/high.md", "high", "权威决定", "高权威决定。", authority="user_explicit", sources=["msg-high"], valid_from="2026-01-01T00:00:00Z")
