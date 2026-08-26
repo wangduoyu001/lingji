@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import zipfile
 from dataclasses import dataclass
@@ -41,6 +42,7 @@ class _NormalizedConversation:
 class ChatGPTExportAdapter(ExtractionAdapter):
     name = "chatgpt_export"
     version = "1.2.0"
+    approved = True
     source_types = ("chatgpt", "chatgpt_export")
 
     DEFAULT_MAX_ZIP_TOTAL = 2 * 1024 * 1024 * 1024
@@ -356,20 +358,22 @@ class ChatGPTExportAdapter(ExtractionAdapter):
                     member_path = Path(member.filename)
                     if member.filename.startswith(("/", "\\")) or ".." in member_path.parts:
                         raise ValueError("ChatGPT ZIP contains an unsafe member path")
+                    if member_path.name.lower() == "conversations.json" and member.filename != "conversations.json":
+                        raise ValueError("Official ChatGPT ZIP rejects nested conversations.json")
                 infos = sorted(
                     (
                         info
                         for info in archive.infolist()
                         if not info.is_dir()
-                        and Path(info.filename).name.lower() == "conversations.json"
+                        and info.filename == "conversations.json"
                         and Path(info.filename).suffix.lower() == ".json"
                     ),
                     key=lambda item: item.filename,
                 )
                 if not infos:
-                    raise ValueError("No conversations.json or numbered conversation JSON files found")
-                if len(infos) > max_json_files:
-                    raise ValueError(f"Too many ChatGPT JSON files: {len(infos)} > {max_json_files}")
+                    raise ValueError("Official ChatGPT ZIP requires root conversations.json")
+                if len(infos) != 1:
+                    raise ValueError("Official ChatGPT ZIP must contain exactly one root conversations.json")
                 total = 0
                 for info in infos:
                     total += int(info.file_size)
@@ -390,15 +394,22 @@ class ChatGPTExportAdapter(ExtractionAdapter):
                 raise ValueError("ChatGPT JSON exceeds configured size limit")
             loaded.extend(self._decode_conversation_payload(path.read_text(encoding="utf-8-sig")))
             source_files.append(path.name)
-        by_id: dict[str, dict[str, Any]] = {}
-        for index, conversation in enumerate(loaded):
-            if not isinstance(conversation, dict):
-                continue
-            conversation_id = str(conversation.get("id") or conversation.get("conversation_id") or f"unknown-{index}")
-            existing = by_id.get(conversation_id)
-            if existing is None or self._timestamp(conversation.get("update_time")) >= self._timestamp(existing.get("update_time")):
-                by_id[conversation_id] = conversation
-        return list(by_id.values()), source_files
+        conversation_ids: set[str] = set()
+        message_ids: set[str] = set()
+        for conversation in loaded:
+            conversation_id = str(conversation["id"])
+            if conversation_id in conversation_ids:
+                raise ValueError(f"Duplicate ChatGPT conversation ID: {conversation_id}")
+            conversation_ids.add(conversation_id)
+            for node in conversation["mapping"].values():
+                message = node.get("message")
+                if message is None:
+                    continue
+                message_id = str(message["id"])
+                if message_id in message_ids:
+                    raise ValueError(f"Duplicate ChatGPT message ID: {message_id}")
+                message_ids.add(message_id)
+        return loaded, source_files
 
     @staticmethod
     def _read_zip_member(archive: zipfile.ZipFile, info: zipfile.ZipInfo, max_bytes: int) -> bytes:
@@ -425,13 +436,86 @@ class ChatGPTExportAdapter(ExtractionAdapter):
             raise ValueError("Official ChatGPT conversation id is missing")
         if not isinstance(value.get("mapping"), dict):
             raise ValueError("Official ChatGPT conversation mapping is missing")
+        for timestamp_field in ("create_time", "update_time"):
+            if timestamp_field in value and value[timestamp_field] is not None:
+                ChatGPTExportAdapter._validate_timestamp(value[timestamp_field], f"conversation {timestamp_field}")
+        message_ids: set[str] = set()
+        message_count = 0
         for node_id, node in value["mapping"].items():
             if not isinstance(node_id, str) or not isinstance(node, dict):
                 raise ValueError("Official ChatGPT mapping is malformed")
+            if "message" not in node:
+                raise ValueError("Official ChatGPT mapping node message is missing")
             message = node.get("message")
-            if message is not None and not isinstance(message, dict):
+            if message is None:
+                continue
+            message_count += 1
+            if not isinstance(message, dict):
                 raise ValueError("Official ChatGPT message is malformed")
+            message_id = message.get("id")
+            if not isinstance(message_id, str) or not message_id.strip():
+                raise ValueError("Official ChatGPT message id is missing")
+            if message_id in message_ids:
+                raise ValueError(f"Duplicate ChatGPT message ID: {message_id}")
+            message_ids.add(message_id)
+            author = message.get("author")
+            role = author.get("role") if isinstance(author, dict) else None
+            if role not in {"user", "assistant", "system", "tool"}:
+                raise ValueError("Official ChatGPT message role is invalid")
+            content = message.get("content")
+            if not isinstance(content, dict):
+                raise ValueError("Official ChatGPT message content is missing")
+            ChatGPTExportAdapter._validate_content(content)
+            if not ChatGPTExportAdapter._message_text(content).strip():
+                raise ValueError("Official ChatGPT message content is empty")
+            ChatGPTExportAdapter._validate_timestamp(message.get("create_time"), "message timestamp")
+        if message_count == 0:
+            raise ValueError("Official ChatGPT conversation contains no messages")
         return value
+
+    @staticmethod
+    def _validate_timestamp(value: Any, label: str) -> None:
+        if isinstance(value, bool):
+            raise ValueError(f"{label} is invalid")
+        if isinstance(value, (int, float)):
+            if not math.isfinite(float(value)):
+                raise ValueError(f"{label} is invalid")
+            try:
+                datetime.fromtimestamp(float(value), tz=timezone.utc)
+            except (ValueError, OSError, OverflowError) as exc:
+                raise ValueError(f"{label} is invalid") from exc
+            return
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{label} is invalid")
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(f"{label} is invalid") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError(f"{label} must be timezone-aware")
+
+    @staticmethod
+    def _validate_content(content: Mapping[str, Any]) -> None:
+        parts = content.get("parts")
+        if parts is not None:
+            if not isinstance(parts, list) or not parts:
+                raise ValueError("Official ChatGPT message content parts are invalid")
+            for part in parts:
+                if isinstance(part, str):
+                    if not part.strip():
+                        raise ValueError("Official ChatGPT message content part is empty")
+                    continue
+                if not isinstance(part, dict):
+                    raise ValueError("Official ChatGPT message content part is invalid")
+                if any(isinstance(part.get(key), str) and part[key].strip() for key in ("text", "content", "result", "caption")):
+                    continue
+                if part.get("content_type") == "image_asset_pointer" and (part.get("asset_pointer") or part.get("pointer")):
+                    continue
+                raise ValueError("Official ChatGPT message content part is unsupported")
+            return
+        if any(isinstance(content.get(key), str) and content[key].strip() for key in ("text", "result", "content")):
+            return
+        raise ValueError("Official ChatGPT message content shape is unsupported")
 
     def _render_conversation(
         self,

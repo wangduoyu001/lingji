@@ -21,6 +21,7 @@ class _StructuredOutputAdapter(ExtractionAdapter):
         self.name = adapter.name
         self.version = adapter.version
         self.source_types = adapter.source_types
+        self.approved = bool(getattr(adapter, "approved", False))
 
     def can_handle(self, source_type, input_path, payload):
         return self._adapter.can_handle(source_type, input_path, payload)
@@ -143,6 +144,22 @@ class _StructuredOutputAdapter(ExtractionAdapter):
 
 
 class AdapterRegistry:
+    _TASK3_SOURCE_TYPES = frozenset(
+        {
+            "chatgpt",
+            "chatgpt_export",
+            "codex",
+            "codex_history",
+            "codex_transcript",
+            "generic_ai_history",
+            "history_inbox",
+            "claude_desktop",
+        }
+    )
+    _APPROVED_TASK3_ADAPTERS = frozenset(
+        {"chatgpt_export", "codex_transcript", "generic_ai_history", "claude_desktop"}
+    )
+
     def __init__(self):
         self._adapters: dict[str, ExtractionAdapter] = {}
 
@@ -171,16 +188,43 @@ class AdapterRegistry:
         payload = payload or {}
         if preferred:
             adapter = self.get(preferred)
+            if not self._approved_for_source(adapter, source_type):
+                raise LookupError(
+                    f"Adapter {adapter.name} is not approved for source type {source_type}"
+                )
             if not adapter.can_handle(source_type, input_path, payload):
-                raise ValueError(f"Adapter {adapter.name} cannot handle source type {source_type}")
+                raise ValueError(
+                    f"Adapter {adapter.name} cannot handle source type {source_type}: "
+                    "input schema is unsupported, unauthorized, or malformed"
+                )
             return adapter
         for adapter in self._adapters.values():
+            if not self._approved_for_source(adapter, source_type):
+                continue
             if adapter.can_handle(source_type, input_path, payload):
                 return adapter
-        raise LookupError(f"No extraction adapter for source type: {source_type}")
+        raise LookupError(
+            f"No approved extraction adapter for source type: {source_type}; "
+            "input schema is unsupported, unauthorized, or malformed"
+        )
+
+    def _approved_for_source(self, adapter: ExtractionAdapter, source_type: str) -> bool:
+        if source_type == "codex" and adapter.name == "codex_work_report":
+            return bool(getattr(adapter, "approved", False))
+        if source_type not in self._TASK3_SOURCE_TYPES:
+            return True
+        return (
+            adapter.name in self._APPROVED_TASK3_ADAPTERS
+            and bool(getattr(adapter, "approved", False))
+        )
 
     def list(self) -> list[dict[str, Any]]:
         return [
-            {"name": adapter.name, "version": adapter.version, "source_types": list(adapter.source_types)}
+            {
+                "name": adapter.name,
+                "version": adapter.version,
+                "source_types": list(adapter.source_types),
+                "approved": bool(getattr(adapter, "approved", False)),
+            }
             for adapter in self._adapters.values()
         ]

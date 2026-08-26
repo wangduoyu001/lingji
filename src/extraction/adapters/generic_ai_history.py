@@ -10,8 +10,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import stat
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Mapping
 
@@ -60,6 +61,7 @@ class CapabilityStatus:
 class GenericAIHistoryAdapter(ExtractionAdapter):
     name = "generic_ai_history"
     version = "1.0.0"
+    approved = True
     source_types = ("generic_ai_history", "history_inbox")
     MAX_INPUT_BYTES = 32 * 1024 * 1024
 
@@ -75,6 +77,11 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
     def detect(self, path: Path) -> DetectionResult:
         if not path or path.is_dir() or path.is_symlink():
             return DetectionResult("generic_ai_history", None, False, "History Inbox requires one regular selected file")
+        try:
+            if not stat.S_ISREG(path.stat().st_mode):
+                return DetectionResult("generic_ai_history", None, False, "History Inbox requires one regular selected file")
+        except OSError as exc:
+            return DetectionResult("generic_ai_history", None, False, f"History Inbox file is unavailable: {exc}")
         if path.suffix.lower() not in {".json", ".jsonl", ".md", ".markdown"}:
             return DetectionResult("generic_ai_history", None, False, "History Inbox supports JSON, JSONL, or Markdown only")
         try:
@@ -94,20 +101,22 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
         detection = self.detect(path)
         if not detection.supported:
             raise ValueError(f"unsupported History Inbox: {detection.reason}")
+        raw_input = path.read_bytes()
+        source_scope = self._digest(raw_input.hex())
         conversations = self._load(path)
         documents: list[ExtractedDocument] = []
         structured: list[StructuredConversation] = []
         for conversation in conversations:
             conversation_id = conversation["conversation_id"]
-            stable = "LJ-GENERIC-HISTORY-" + self._digest(conversation_id)
+            stable = f"LJ-GENERIC-HISTORY-{source_scope}-{self._digest(conversation_id)}"
             messages = tuple(
                 StructuredMessage(
-                    external_id=item["message_id"],
+                    external_id=f"generic-history:{source_scope}:message:{item['message_id']}",
                     role=item["role"],
                     content=item["content"],
                     sequence=index,
                     occurred_at=item["timestamp"],
-                    metadata={"conversation_id": conversation_id, "message_id": item["message_id"]},
+                    metadata={"conversation_id": conversation_id, "message_id": item["message_id"], "source_scope": source_scope},
                 )
                 for index, item in enumerate(conversation["messages"])
             )
@@ -133,11 +142,12 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
                     body="\n".join(body_lines),
                     source_type="generic_ai_history",
                     destination="source_archive",
-                    external_id=conversation_id,
+                    external_id=f"generic-history:{source_scope}:conversation:{conversation_id}",
                     created_at=conversation["messages"][0]["timestamp"],
                     updated_at=conversation["messages"][-1]["timestamp"],
                     metadata={
                         "conversation_id": conversation_id,
+                        "source_scope": source_scope,
                         "message_ids": [item["message_id"] for item in conversation["messages"]],
                         "schema": HISTORY_SCHEMA,
                         "schema_version": HISTORY_VERSION,
@@ -147,13 +157,13 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
             )
             structured.append(
                 StructuredConversation(
-                    external_id=conversation_id,
+                    external_id=f"generic-history:{source_scope}:conversation:{conversation_id}",
                     title=conversation["title"],
                     messages=messages,
                     started_at=messages[0].occurred_at,
                     ended_at=messages[-1].occurred_at,
                     participants=tuple(dict.fromkeys(item.role for item in messages)),
-                    metadata={"schema": HISTORY_SCHEMA, "schema_version": HISTORY_VERSION},
+                    metadata={"schema": HISTORY_SCHEMA, "schema_version": HISTORY_VERSION, "source_scope": source_scope},
                 )
             )
         return ExtractionBatch(
@@ -161,10 +171,10 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
             structured_sources=(
                 StructuredSource(
                     source_type="generic_ai_history",
-                    external_id="generic-history-source-" + self._digest(path.read_bytes().hex()),
+                    external_id="generic-history-source-" + source_scope,
                     display_name="Generic AI History Inbox",
                     conversations=tuple(structured),
-                    metadata={"schema": HISTORY_SCHEMA, "schema_version": HISTORY_VERSION},
+                    metadata={"schema": HISTORY_SCHEMA, "schema_version": HISTORY_VERSION, "source_scope": source_scope},
                 ),
             ),
             summary={"conversations_found": len(documents), "documents_created": len(documents)},
@@ -184,7 +194,9 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
         raw = payload.get("conversations")
         if not isinstance(raw, list):
             raise ValueError("History Inbox JSON requires conversations")
-        return [self._conversation(item) for item in raw]
+        conversations = [self._conversation(item) for item in raw]
+        self._validate_unique(conversations)
+        return conversations
 
     def _jsonl_conversations(self, text: str) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
@@ -217,7 +229,9 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
                 current[conversation_id]["messages"].append(self._message(row))
             else:
                 raise ValueError("unknown History Inbox JSONL record type")
-        return [self._conversation(current[key]) for key in order]
+        conversations = [self._conversation(current[key]) for key in order]
+        self._validate_unique(conversations)
+        return conversations
 
     def _markdown_conversations(self, text: str) -> list[dict[str, Any]]:
         lines = text.splitlines()
@@ -252,13 +266,17 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
                     "_lines": [],
                 }
             elif current is not None:
+                if line.strip().startswith("#"):
+                    raise ValueError("History Inbox Markdown contains an unknown message boundary")
                 current["_lines"].append(line)
             elif line.strip():
                 raise ValueError("History Inbox Markdown content precedes first message")
         if current is not None:
             current["content"] = "\n".join(current.pop("_lines")).strip()
             messages.append(self._message(current))
-        return [self._conversation({"conversation_id": conversation_id, "title": title, "messages": messages})]
+        conversations = [self._conversation({"conversation_id": conversation_id, "title": title, "messages": messages})]
+        self._validate_unique(conversations)
+        return conversations
 
     @staticmethod
     def _header(value: Mapping[str, Any]) -> bool:
@@ -275,7 +293,7 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
         if not isinstance(messages, list) or not messages:
             raise ValueError("History Inbox conversation requires messages")
         normalized = [self._message(item) for item in messages]
-        timestamps = [item["timestamp"] for item in normalized if item["timestamp"]]
+        timestamps = [datetime.fromisoformat(item["timestamp"]) for item in normalized]
         if timestamps != sorted(timestamps):
             raise ValueError("History Inbox message order is not chronological")
         return {"conversation_id": conversation_id, "title": title, "messages": normalized}
@@ -291,10 +309,28 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
         content = GenericAIHistoryAdapter._text(value.get("content"), "content")
         timestamp = GenericAIHistoryAdapter._text(value.get("timestamp"), "timestamp")
         try:
-            datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         except ValueError as exc:
             raise ValueError("History Inbox message timestamp is invalid") from exc
-        return {"message_id": message_id, "role": role, "content": content, "timestamp": timestamp}
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError("History Inbox message timestamp must be timezone-aware")
+        normalized_timestamp = parsed.astimezone(timezone.utc).isoformat(timespec="seconds")
+        return {"message_id": message_id, "role": role, "content": content, "timestamp": normalized_timestamp}
+
+    @staticmethod
+    def _validate_unique(conversations: list[dict[str, Any]]) -> None:
+        conversation_ids: set[str] = set()
+        message_ids: set[str] = set()
+        for conversation in conversations:
+            conversation_id = conversation["conversation_id"]
+            if conversation_id in conversation_ids:
+                raise ValueError(f"Duplicate History Inbox conversation ID: {conversation_id}")
+            conversation_ids.add(conversation_id)
+            for message in conversation["messages"]:
+                message_id = message["message_id"]
+                if message_id in message_ids:
+                    raise ValueError(f"Duplicate History Inbox message ID: {message_id}")
+                message_ids.add(message_id)
 
     @staticmethod
     def _text(value: Any, field: str) -> str:

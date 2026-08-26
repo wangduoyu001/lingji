@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import stat
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -15,6 +17,7 @@ from .generic_ai_history import SchemaDetection
 class CodexWorkReportAdapter(ExtractionAdapter):
     name = "codex_work_report"
     version = "1.1.0"
+    approved = True
     source_types = ("codex", "codex_report")
 
     def can_handle(
@@ -369,12 +372,13 @@ class CodexTranscriptAdapter(ExtractionAdapter):
 
     name = "codex_transcript"
     version = "1.0.0"
+    approved = True
     source_types = ("codex_transcript", "codex_history", "codex")
     SCHEMA = "codex_transcript"
     SCHEMA_VERSION = "1"
     MAX_INPUT_BYTES = 32 * 1024 * 1024
     _ROLES = frozenset({"user", "assistant", "system", "tool"})
-    _FORBIDDEN_NAMES = frozenset({"auth", "token", "config", "cookie", "cookies", "private", "credentials"})
+    _FORBIDDEN_NAMES = frozenset({"auth", "token", "config", "cookie", "cookies", "private", "credentials", "database", "db"})
 
     def can_handle(
         self,
@@ -390,6 +394,10 @@ class CodexTranscriptAdapter(ExtractionAdapter):
         )
 
     def detect_schema(self, path: Path) -> SchemaDetection:
+        try:
+            self._canonical_input_path(path)
+        except (OSError, ValueError) as exc:
+            return SchemaDetection(None, None, False, str(exc))
         if not path or path.is_dir() or path.is_symlink():
             return SchemaDetection(None, None, False, "Codex transcript requires one regular JSONL file")
         if path.suffix.lower() != ".jsonl":
@@ -410,13 +418,7 @@ class CodexTranscriptAdapter(ExtractionAdapter):
                 return SchemaDetection(schema or None, version or None, False, "unknown Codex transcript schema; no guessing")
             if header.get("type") not in (None, "header", "session"):
                 return SchemaDetection(schema, version, False, "Codex transcript header record is invalid")
-            messages = [json.loads(line) for line in lines if line.strip()][1:]
-            if not messages:
-                raise ValueError("Codex transcript contains no messages")
-            if any(not isinstance(item, dict) or item.get("type") != "message" for item in messages):
-                raise ValueError("Codex transcript contains an unknown record type")
-            for item in messages:
-                self._message(item)
+            self._validated_rows(lines)
         except (OSError, UnicodeError, StopIteration, json.JSONDecodeError, ValueError) as exc:
             return SchemaDetection(None, None, False, str(exc))
         return SchemaDetection(self.SCHEMA, self.SCHEMA_VERSION, True, "supported Codex transcript schema v1")
@@ -427,11 +429,9 @@ class CodexTranscriptAdapter(ExtractionAdapter):
         detection = self.detect_schema(request.input_path)
         if not detection.supported:
             raise ValueError(f"unsupported Codex transcript: {detection.reason}")
-        rows = [
-            json.loads(line)
-            for line in request.input_path.read_text(encoding="utf-8-sig").splitlines()
-            if line.strip()
-        ][1:]
+        canonical = self._validate_authorized_input(request.input_path, request.options)
+        source_scope = self._hash(canonical.read_bytes().hex())[:24].upper()
+        rows = self._validated_rows(canonical.read_text(encoding="utf-8-sig").splitlines())[1:]
         grouped: dict[str, list[dict[str, str]]] = {}
         order: list[str] = []
         for row in rows:
@@ -445,15 +445,15 @@ class CodexTranscriptAdapter(ExtractionAdapter):
         conversations: list[StructuredConversation] = []
         for conversation_id in order:
             rows_for_conversation = grouped[conversation_id]
-            stable = "LJ-CODEX-TRANSCRIPT-" + self._hash(conversation_id)[:24].upper()
+            stable = f"LJ-CODEX-TRANSCRIPT-{source_scope}-{self._hash(conversation_id)[:16].upper()}"
             messages = tuple(
                 StructuredMessage(
-                    external_id=row["message_id"],
+                    external_id=f"codex-transcript:{source_scope}:message:{row['message_id']}",
                     role=row["role"],
                     content=row["content"],
                     sequence=index,
                     occurred_at=row["timestamp"],
-                    metadata={"conversation_id": conversation_id, "message_id": row["message_id"]},
+                    metadata={"conversation_id": conversation_id, "message_id": row["message_id"], "source_scope": source_scope},
                 )
                 for index, row in enumerate(rows_for_conversation)
             )
@@ -468,21 +468,21 @@ class CodexTranscriptAdapter(ExtractionAdapter):
                     body=f"# Codex transcript {conversation_id}\n\n{body}\n",
                     source_type="codex_transcript",
                     destination="source_archive",
-                    external_id=conversation_id,
+                    external_id=f"codex-transcript:{source_scope}:conversation:{conversation_id}",
                     created_at=rows_for_conversation[0]["timestamp"],
                     updated_at=rows_for_conversation[-1]["timestamp"],
-                    metadata={"conversation_id": conversation_id, "schema": self.SCHEMA, "schema_version": self.SCHEMA_VERSION},
+                    metadata={"conversation_id": conversation_id, "schema": self.SCHEMA, "schema_version": self.SCHEMA_VERSION, "source_scope": source_scope},
                 )
             )
             conversations.append(
                 StructuredConversation(
-                    external_id=conversation_id,
+                    external_id=f"codex-transcript:{source_scope}:conversation:{conversation_id}",
                     title=f"Codex transcript {conversation_id}",
                     messages=messages,
                     started_at=messages[0].occurred_at,
                     ended_at=messages[-1].occurred_at,
                     participants=tuple(dict.fromkeys(message.role for message in messages)),
-                    metadata={"schema": self.SCHEMA, "schema_version": self.SCHEMA_VERSION},
+                    metadata={"schema": self.SCHEMA, "schema_version": self.SCHEMA_VERSION, "source_scope": source_scope},
                 )
             )
         return ExtractionBatch(
@@ -490,10 +490,10 @@ class CodexTranscriptAdapter(ExtractionAdapter):
             structured_sources=(
                 StructuredSource(
                     source_type="codex_transcript",
-                    external_id="codex-transcript-source-" + self._hash(request.input_path.read_bytes().hex())[:24].upper(),
+                    external_id="codex-transcript-source-" + source_scope,
                     display_name="Codex transcript",
                     conversations=tuple(conversations),
-                    metadata={"schema": self.SCHEMA, "schema_version": self.SCHEMA_VERSION},
+                    metadata={"schema": self.SCHEMA, "schema_version": self.SCHEMA_VERSION, "source_scope": source_scope},
                 ),
             ),
             summary={"conversations_found": len(documents), "documents_created": len(documents)},
@@ -512,10 +512,87 @@ class CodexTranscriptAdapter(ExtractionAdapter):
         if values["role"] not in cls._ROLES:
             raise ValueError("Codex transcript role is unsupported")
         try:
-            datetime.fromisoformat(values["timestamp"].replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(values["timestamp"].replace("Z", "+00:00"))
         except ValueError as exc:
             raise ValueError("Codex transcript timestamp is invalid") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError("Codex transcript timestamp must be timezone-aware")
+        values["timestamp"] = parsed.astimezone(timezone.utc).isoformat(timespec="seconds")
         return values
+
+    @classmethod
+    def _validated_rows(cls, lines: list[str]) -> list[dict[str, Any]]:
+        rows = [json.loads(line) for line in lines if line.strip()]
+        if len(rows) < 2:
+            raise ValueError("Codex transcript contains no messages")
+        header = rows[0]
+        if not isinstance(header, dict):
+            raise ValueError("Codex transcript header is not an object")
+        messages = rows[1:]
+        if any(not isinstance(item, dict) or item.get("type") != "message" for item in messages):
+            raise ValueError("Codex transcript contains an unknown record type")
+        message_ids: set[str] = set()
+        last_by_conversation: dict[str, datetime] = {}
+        for item in messages:
+            normalized = cls._message(item)
+            if normalized["message_id"] in message_ids:
+                raise ValueError(f"Duplicate Codex transcript message ID: {normalized['message_id']}")
+            message_ids.add(normalized["message_id"])
+            timestamp = datetime.fromisoformat(normalized["timestamp"])
+            previous = last_by_conversation.get(normalized["conversation_id"])
+            if previous is not None and timestamp < previous:
+                raise ValueError("Codex transcript messages are out of chronological order")
+            last_by_conversation[normalized["conversation_id"]] = timestamp
+        return rows
+
+    @classmethod
+    def _canonical_input_path(cls, path: Path) -> Path:
+        if not path:
+            raise ValueError("Codex transcript path is required")
+        candidate = Path(path)
+        if candidate.is_symlink():
+            raise ValueError("Codex transcript refuses a symlink input")
+        for parent in (candidate, *candidate.parents):
+            if parent.is_symlink():
+                raise ValueError("Codex transcript refuses a symlink ancestor")
+        resolved = candidate.resolve(strict=True)
+        if not stat.S_ISREG(resolved.stat().st_mode):
+            raise ValueError("Codex transcript requires a regular file")
+        if cls._sensitive_path(resolved):
+            raise ValueError("Codex transcript refuses sensitive private/authentication paths")
+        if resolved.suffix.lower() in {".db", ".sqlite", ".sqlite3"}:
+            raise ValueError("Codex transcript refuses database paths")
+        return resolved
+
+    @classmethod
+    def _validate_authorized_input(cls, path: Path, options: Mapping[str, Any]) -> Path:
+        canonical = cls._canonical_input_path(path)
+        raw_roots = options.get("authorized_roots") or options.get("authorization_roots") or options.get("allowed_roots") or options.get("roots")
+        if not raw_roots:
+            raise ValueError("Codex transcript authorized roots are required")
+        if isinstance(raw_roots, (str, Path)):
+            raw_roots = [raw_roots]
+        canonical_roots: list[Path] = []
+        for raw_root in raw_roots:
+            try:
+                root = Path(raw_root).resolve(strict=True)
+            except OSError as exc:
+                raise ValueError("Codex transcript authorized root is invalid") from exc
+            if not root.is_dir() or cls._sensitive_path(root):
+                raise ValueError("Codex transcript authorized root is invalid")
+            canonical_roots.append(root)
+        if not any(os.path.commonpath((str(canonical), str(root))) == str(root) for root in canonical_roots):
+            raise ValueError("Codex transcript input is outside authorized roots")
+        return canonical
+
+    @classmethod
+    def _sensitive_path(cls, path: Path) -> bool:
+        sensitive = cls._FORBIDDEN_NAMES
+        parts = tuple(part.lower() for part in path.parts)
+        # macOS exposes /private as the canonical alias for /var and /tmp;
+        # only descendants named private/auth/etc. are sensitive.
+        scan_parts = parts[2:] if len(parts) > 1 and parts[0] == "/" and parts[1] == "private" else parts[1:]
+        return any(part in sensitive for part in scan_parts)
 
     @classmethod
     def _forbidden_path(cls, path: Path) -> bool:

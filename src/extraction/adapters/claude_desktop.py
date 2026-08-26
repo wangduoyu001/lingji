@@ -20,6 +20,7 @@ from .generic_ai_history import CapabilityStatus
 class ClaudeDesktopAdapter(ExtractionAdapter):
     name = "claude_desktop"
     version = "1.0.0"
+    approved = True
     source_types = ("claude_desktop",)
 
     def can_handle(

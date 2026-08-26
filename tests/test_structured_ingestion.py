@@ -164,6 +164,7 @@ def _chatgpt_fixture(path: Path) -> Path:
                 "node-2": {
                     "parent": "node-1",
                     "message": {
+                        "id": "node-2-message",
                         "author": {"role": "assistant", "name": "ChatGPT"},
                         "create_time": 102,
                         "content": {"parts": ["answer"]},
@@ -173,6 +174,7 @@ def _chatgpt_fixture(path: Path) -> Path:
                 "node-1": {
                     "parent": "",
                     "message": {
+                        "id": "node-1-message",
                         "author": {"role": "user", "name": "owner"},
                         "create_time": 101,
                         "content": {"parts": ["question"]},
@@ -182,6 +184,7 @@ def _chatgpt_fixture(path: Path) -> Path:
                 "branch": {
                     "parent": "node-1",
                     "message": {
+                        "id": "branch-message",
                         "author": {"role": "assistant"},
                         "create_time": 103,
                         "content": {"parts": ["branch answer"]},
@@ -255,9 +258,9 @@ def test_chatgpt_emits_document_and_structured_conversation_in_one_pass(tmp_path
     assert conversation.external_id == "conv-1"
     assert conversation.metadata["document_stable_id"] == batch.documents[0].stable_id
     assert [message.external_id for message in conversation.messages] == [
-        "node-1",
-        "node-2",
-        "branch",
+        "node-1-message",
+        "node-2-message",
+        "branch-message",
     ]
     assert [message.sequence for message in conversation.messages] == [0, 1, 2]
     assert conversation.messages[1].metadata["model"] == "gpt-test"
