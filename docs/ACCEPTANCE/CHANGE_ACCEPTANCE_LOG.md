@@ -1203,6 +1203,7 @@ Windows 重启后恢复 = 100%
 - [ ] Desktop TypeScript contract、真实 API polling、loading/empty/stale/401/503/error 状态和跨页同一 work_id。
 - [ ] Task8 focused/regression、Node real smoke、py_compile/compileall/diff-check、acceptance sync、local handoff。
 - [x] 兼容回归：无 `state_db` 的历史 Control Stub 不会因 Work routes 初始化而崩溃；正式 `LocalControlService` 仍只复用既有 `lingji_state.db` 注册 Work routes。
+- [x] UI 真实性回归：首页待办提示不再由健康/队列聚合猜测，只有真实 `PendingAction` 才进入 Attention；当前工作卡对 loading/stale/401/503 公开真实状态。
 
 ### 真机与主人确认
 
