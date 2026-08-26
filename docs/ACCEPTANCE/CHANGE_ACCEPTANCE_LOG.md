@@ -7,7 +7,7 @@
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 3 · fail-closed source adapters
 
 - 产品分支：`codex/phase1-automatic-memory`
-- 产品 Commit：`87a0443bcf3a890ffea1c28d1975186bd1b8a2f5`
+- 产品 Commit：`2b987e4ac13401e92104ad70ca54d1c185ad6a71`
 - 影响模块：官方 ChatGPT 导出、版本化 Codex transcript、Generic AI History Inbox、Claude Desktop capability boundary、Extraction Adapter Registry
 - 风险等级：P0
 - 用户可感知变化：只接受官方 ChatGPT ZIP/JSON、明确版本的 Codex JSONL 与主人选定并带 History Inbox 标记的 JSON/JSONL/Markdown；Claude Desktop 在无官方导出时准确显示 `unsupported` 或 `consent_required`。
@@ -25,6 +25,7 @@
 - [ ] 未知输入只进入明确失败/审计原因，不猜测、不生成消息；不修改 Production/Vault，不创建 ACTIVE 本机任务或 Artifact。
 - [ ] 修复轮验证：不得通过 conversation 静默去重、跳过损坏消息、放宽路径敏感组件、移除授权 root、降低时间/ID校验或绕过旧 adapter 回归。
 - [ ] 修复轮 2：ChatGPT 预解析校验 metadata object 与 ZIP 全成员安全后才读取 root；单会话 normalize 失败时整批拒绝且错误不泄漏本地路径；Codex 未知 schema 通过正式 enqueue/process 记录具体 reason；Claude 只暴露 capability、不读取 opaque storage。
+- [ ] 修复轮 3：ChatGPT 对 ZIP 全成员（含目录）执行兼容的成员数上限，并预验证 title/current_node/parent、metadata model 与附件字段类型；`source_type=codex` 的显式 schema JSON 不再回退到旧工作报告 adapter，未知 schema 通过正式队列失败审计，旧无 schema JSON 工作报告保持兼容。
 
 ### 清理与回滚
 
