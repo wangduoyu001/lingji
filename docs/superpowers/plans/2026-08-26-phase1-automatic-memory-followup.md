@@ -140,6 +140,9 @@
 
 **Files:**
 - Modify: `src/automatic_memory/evaluation.py`
+- Create: `src/automatic_memory/quality_gate.py`
+- Modify: `src/automatic_memory/__init__.py`
+- Modify only if the real promotion-to-evidence path proves absent: `src/auto_review/promotion.py`
 - Create: `tests/evaluation/test_automatic_memory_end_to_end.py`
 - Create: `tests/performance/test_automatic_memory_100k.py`
 - Create: `scripts/automatic_memory_quality_gate.py`
@@ -149,16 +152,22 @@
 
 **Interfaces:**
 - `run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Path) -> EvaluationReport` imports the synthetic corpus through supported adapters, indexes through existing storage, queries through `MemoryGateway`, and writes a machine-readable JSON report under `output/validation/`.
+- `AutomaticMemoryFunctionalGate.evaluate(report: EvaluationReport) -> Literal["PASS", "FAIL"]` evaluates only the measured Task 4 counters. The existing full `AutomaticMemoryAcceptanceGate` must still return `BLOCKED` while owner/reboot/Mac evidence is absent; a functional PASS must never be reported as Phase 1 PASS.
+- The runner converts the frozen corpus to a versioned Generic AI History Inbox file inside a temporary Acceptance root, executes the real adapter/pipeline/sink/structured read model/index path, and builds a real custom `agent-synthetic` profile. Fixture lifecycle/authority/scope fields may be applied as explicit evaluation ground truth after import, but expected question IDs/citations may not be used to manufacture retrieval results.
+- Every low-risk promotion candidate goes through the existing `AutoMemoryPromotionService`; protected/Core/high-risk and assistant-only inference must remain pending. When an active derived memory cites an imported message, the normal promotion integration must create/reuse the existing `message_memory_links` relationship so ContextPack can return real source/conversation/message citations. The test runner must not add links only after seeing expected answers.
+- Question execution calls the real `MemoryGateway.build_context_pack` and an installed FastMCP server's registered `build_context_pack` tool. `_FakeMCP`, mocked gateway results, direct expected-ID injection, expected-driven top-K selection, and network models are forbidden in the quality gate.
+- Retrieval-to-fixture identity mapping may use stable imported external IDs/content hashes created before querying. Selection from returned context must use one fixed, question-independent deterministic rule; it may not inspect `expected_fact_ids`, `forbidden_fact_ids`, or `expected_citation_ids` before producing a `QuestionResult`.
 - The 100k generator creates deterministic synthetic messages outside Production/Vault and records seed, counts, hashes, runtime, P50/P95, ContextPack sizes, and cleanup result.
+- The machine-readable envelope records fixture hashes, code commit, temporary root, import/role/order counts, per-question fact/citation IDs, raw `EvaluationReport`, `functional_status`, full `phase_status`, MCP attempts, semantic degradation cases, corruption isolation, production/Vault sentinels, cleanup inventory, and any blocked physical evidence. It writes atomically and rejects a path inside Production/Vault.
 - `scripts/validate.ps1 -Mode focused -Area automatic-memory-quality` runs deterministic functional evaluation. Scale and idle-CPU evidence remain a separately named local acceptance command and are never silently substituted by unit tests.
 
-- [ ] **Step 1: Write the end-to-end test that initially fails against the real Task 3 path; prohibit stubbed retrieval results and assert all EvaluationReport numerators/denominators.**
-- [ ] **Step 2: Add a deterministic 100k-message generator and bounded benchmark. The test must skip with an explicit environment reason only when the opt-in scale flag is absent; release validation must enable it.**
-- [ ] **Step 3: Implement the gate runner and focused validation registration. Keep all generated data in an explicit temporary Acceptance root and verify Production/Vault hashes are unchanged.**
-- [ ] **Step 4: Require 100/100 executed, message import completeness 100%, role/order match 100%, recall at least 90%, citation at least 95%, automatic activation at least 95%, real MCP success at least 95%, protected false promotion 0, stale leakage 0, duplicates 0, ContextPack reduction at least 90%, hot retrieval P95 at most 3 seconds on Mac M5, and single-source corruption/Qdrant outage not blocking other sources or lexical retrieval.**
+- [ ] **Step 1: Write the end-to-end test that initially fails against the real Task 3 path; prohibit stubbed retrieval/results and assert all EvaluationReport numerators/denominators, promotion outcomes, imported-message identity, real registered FastMCP calls, output provenance and Production sentinels. Preserve the RED command/output.**
+- [ ] **Step 2: Add a deterministic 100k-message generator and bounded benchmark. Default unit runs must report an explicit opt-in skip; `LINGJI_RUN_100K=1` must generate/import exactly 100,000 unique messages, verify a stable seed/hash, exercise hot retrieval, write a scale report, and clean its temporary Acceptance root. Release validation must enable it.**
+- [ ] **Step 3: Implement the gate runner and focused validation registration. Keep generated data in an explicit temporary Acceptance root, reject Production/Vault paths, verify before/after sentinels, and atomically publish only the machine-readable result under `output/validation/`.**
+- [ ] **Step 4: Require 100/100 executed, message import completeness 100%, role/order match 100%, recall at least 90%, citation at least 95%, automatic activation at least 95%, installed-FastMCP success at least 95%, protected false promotion 0, stale leakage 0, duplicates 0, ContextPack reduction at least 90%, and single-source corruption/Qdrant outage not blocking other sources or lexical retrieval. The Task 4 functional gate may PASS, while the full phase gate remains BLOCKED for owner/reboot/M5 evidence. The Mac M5 P95 at most 3 seconds and idle CPU at most 3% are recorded only in Task 6.**
 - [ ] **Step 5: Run focused gate, Task 1–3 regressions, acceptance sync, and local handoff. Commit product/tests as `test: gate automatic memory quality and scale`, then evidence/docs as `docs: record automatic memory quality results`.**
 
-**Acceptance:** Deterministic functional gate PASS on a clean tree; scale report contains exactly 100,000 messages; no Production pollution; all temporary fixtures are accounted for; Mac-only P95 and idle CPU remain `BLOCKED` until measured on Task 6's physical run, never guessed from CI.
+**Acceptance:** Deterministic functional gate PASS on a clean tree; full phase gate truthfully BLOCKED only by named physical evidence; opt-in scale report contains exactly 100,000 messages and stable seed/hash; no Production pollution; all temporary fixtures are accounted for; Mac-only release P95 and idle CPU remain `BLOCKED` until Task 6, never guessed from CI.
 
 ### Task 5: macOS Release Candidate and Acceptance Task Preparation
 
