@@ -185,12 +185,26 @@ class ProtectedTreeSentinel:
             root_id = _root_identifier(root)
             fd = _open_anchored_directory(root)
             try:
+                root_identity = os.fstat(fd)
                 _capture_directory_fd(fd, root_id, "", entries, is_root=True)
+                try:
+                    final_fd = _open_anchored_directory(root)
+                    try:
+                        final_identity = os.fstat(final_fd)
+                    finally:
+                        try:
+                            os.close(final_fd)
+                        except OSError as exc:
+                            raise ProtectedTreeInvalidError("FD_CLOSE_FAILED") from exc
+                except ProtectedTreeSentinelError as exc:
+                    raise ProtectedTreeInvalidError("ROOT_RACE") from exc
+                if not _metadata_matches(root_identity, final_identity, include_size=False):
+                    raise ProtectedTreeInvalidError("ROOT_RACE")
             finally:
                 try:
                     os.close(fd)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    raise ProtectedTreeInvalidError("FD_CLOSE_FAILED") from exc
         return cls(identifiers, entries)
 
     def diff(self, after: "ProtectedTreeSentinel") -> tuple[SentinelChange, ...]:
@@ -206,6 +220,16 @@ class ProtectedTreeSentinel:
 
 def _root_identifier(root: Path) -> str:
     return hashlib.sha256(str(root).encode("utf-8")).hexdigest()
+
+
+def _metadata_matches(first: os.stat_result, second: os.stat_result, *, include_size: bool = True) -> bool:
+    fields = ("st_dev", "st_ino", "st_mode")
+    if include_size:
+        fields += ("st_size",)
+    return all(
+        not hasattr(first, field) or getattr(first, field) == getattr(second, field)
+        for field in fields + ("st_mtime_ns", "st_ctime_ns")
+    )
 
 
 def _safe_traversal_available() -> bool:
@@ -236,16 +260,30 @@ def _open_anchored_directory(path: Path) -> int:
         fd = os.open(path.anchor, flags)
         for component in path.parts[1:]:
             child_fd = os.open(component, flags, dir_fd=fd)
-            os.close(fd)
+            previous_fd = fd
+            try:
+                os.close(previous_fd)
+            except OSError as exc:
+                try:
+                    os.close(child_fd)
+                except OSError:
+                    pass
+                raise ProtectedTreeInvalidError("FD_CLOSE_FAILED") from exc
             fd = child_fd
         return fd
     except ProtectedTreeSentinelError:
         if fd >= 0:
-            os.close(fd)
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         raise
     except OSError as exc:
         if fd >= 0:
-            os.close(fd)
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         raise ProtectedTreeUnavailableError("ROOT_OPEN_FAILED") from exc
 
 
@@ -271,13 +309,7 @@ def _capture_file_fd(
     try:
         fd = os.open(name, flags, dir_fd=parent_fd)
         opened = os.fstat(fd)
-        if (
-            not stat_module.S_ISREG(opened.st_mode)
-            or opened.st_size != before.st_size
-            or stat_module.S_IMODE(opened.st_mode) != stat_module.S_IMODE(before.st_mode)
-            or opened.st_ino != before.st_ino
-            or opened.st_dev != before.st_dev
-        ):
+        if not stat_module.S_ISREG(opened.st_mode) or not _metadata_matches(before, opened):
             raise ProtectedTreeInvalidError("FILE_REPLACED")
         first_digest = _hash_fd(fd)
         first_after = os.fstat(fd)
@@ -286,13 +318,7 @@ def _capture_file_fd(
         if first_digest != second_digest:
             raise ProtectedTreeInvalidError("FILE_CONTENT_RACE")
         for observed in (first_after, second_after):
-            if (
-                not stat_module.S_ISREG(observed.st_mode)
-                or observed.st_size != before.st_size
-                or stat_module.S_IMODE(observed.st_mode) != stat_module.S_IMODE(before.st_mode)
-                or observed.st_ino != before.st_ino
-                or observed.st_dev != before.st_dev
-            ):
+            if not stat_module.S_ISREG(observed.st_mode) or not _metadata_matches(before, observed):
                 raise ProtectedTreeInvalidError("FILE_RACE")
         entries[key] = SentinelEntry(key, "file", stat_module.S_IMODE(before.st_mode), before.st_size, first_digest)
     except ProtectedTreeSentinelError:
@@ -303,8 +329,8 @@ def _capture_file_fd(
         if fd >= 0:
             try:
                 os.close(fd)
-            except OSError:
-                pass
+            except OSError as exc:
+                raise ProtectedTreeInvalidError("FD_CLOSE_FAILED") from exc
 
 
 def _capture_directory_fd(
@@ -341,6 +367,9 @@ def _capture_directory_fd(
             child_fd = -1
             try:
                 child_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                opened_child = os.fstat(child_fd)
+                if not stat_module.S_ISDIR(opened_child.st_mode) or not _metadata_matches(child_stat, opened_child):
+                    raise ProtectedTreeInvalidError("TREE_TRAVERSAL_RACE")
                 _capture_directory_fd(child_fd, root_id, child_relative, entries)
             except ProtectedTreeSentinelError:
                 raise
@@ -350,8 +379,8 @@ def _capture_directory_fd(
                 if child_fd >= 0:
                     try:
                         os.close(child_fd)
-                    except OSError:
-                        pass
+                    except OSError as exc:
+                        raise ProtectedTreeInvalidError("FD_CLOSE_FAILED") from exc
         elif stat_module.S_ISREG(child_stat.st_mode):
             _capture_file_fd(fd, name, child_key, child_stat, entries)
         elif stat_module.S_ISLNK(child_stat.st_mode):
@@ -499,7 +528,8 @@ def write_quality_json_atomic(
             try:
                 os.close(parent_fd)
             except OSError:
-                pass
+                if cleanup_error is None:
+                    cleanup_error = QualityPublicationError("FD_CLOSE_FAILED")
         if cleanup_error is not None:
             raise cleanup_error
 
@@ -514,12 +544,30 @@ def _open_publication_parent(path: Path) -> int:
         fd = os.open(absolute.anchor, flags)
         for component in absolute.parts[1:]:
             child = os.open(component, flags, dir_fd=fd)
-            os.close(fd)
+            previous_fd = fd
+            try:
+                os.close(previous_fd)
+            except OSError as exc:
+                try:
+                    os.close(child)
+                except OSError:
+                    pass
+                raise QualityPublicationError("FD_CLOSE_FAILED") from exc
             fd = child
         return fd
+    except QualityPublicationError:
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        raise
     except OSError as exc:
         if fd >= 0:
-            os.close(fd)
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         raise QualityPublicationError("PARENT_UNAVAILABLE") from exc
 
 
@@ -773,18 +821,37 @@ def _reason_codes(values: Sequence[str]) -> tuple[str, ...]:
         for state in EvidenceState:
             allowed.add(f"{field.upper()}_{state.value.upper()}")
     result: list[str] = []
-    for value in values:
-        text = str(value)
-        code = "".join(char if char.isalnum() else "_" for char in text.upper()).strip("_")
-        if code not in allowed:
-            code = "UNTRUSTED_BLOCKED_REASON"
-        if code not in result:
-            result.append(code)
+    try:
+        iterator = iter(values)
+        while True:
+            try:
+                value = next(iterator)
+            except StopIteration:
+                break
+            except Exception:
+                return ("UNTRUSTED_BLOCKED_REASON",)
+            if type(value) is not str:
+                code = "UNTRUSTED_BLOCKED_REASON"
+            else:
+                code = value.upper()
+                if code not in allowed:
+                    code = "UNTRUSTED_BLOCKED_REASON"
+            if code not in result:
+                result.append(code)
+    except Exception:
+        return ("UNTRUSTED_BLOCKED_REASON",)
     return tuple(result)
 
 
 def _closed_envelope(readiness: QualityEvidenceReadiness, pollution: int | None, reasons: Sequence[str]) -> QualityRunEnvelope:
     return QualityRunEnvelope(readiness, pollution, None, "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED", _reason_codes(reasons))
+
+
+def _safe_reason_values(values: Sequence[str]) -> tuple[Any, ...]:
+    try:
+        return tuple(values)
+    except Exception:
+        return ("UNTRUSTED_BLOCKED_REASON",)
 
 
 def _valid_counter(value: Any) -> bool:
@@ -874,6 +941,7 @@ def finalize_quality_envelope(
         return _closed_envelope(readiness, production_pollution, ("MALFORMED_EVALUATION_REPORT",))
     if not _valid_evaluation_report(evaluation_report, production_pollution):
         return _closed_envelope(readiness, None, ("MALFORMED_EVALUATION_REPORT",))
+    safe_reasons = _safe_reason_values(blocked_reasons)
     try:
         functional_report = replace(evaluation_report, owner_review_success=100.0, reboot_recovery=100.0, blocked_reasons=())
         functional_verdict = acceptance_gate.evaluate(functional_report)
@@ -886,12 +954,12 @@ def finalize_quality_envelope(
         if functional_verdict == "PASS":
             return _closed_envelope(readiness, production_pollution, ("CONTRADICTORY_FUNCTIONAL_EVIDENCE",))
     if functional_verdict == "FAIL":
-        return QualityRunEnvelope(readiness, production_pollution, evaluation_report, "FAIL", "FAIL", "BLOCKED", _reason_codes(tuple(blocked_reasons) + ("WINDOWS_AFTER_MAC",)))
+        return QualityRunEnvelope(readiness, production_pollution, evaluation_report, "FAIL", "FAIL", "BLOCKED", _reason_codes(safe_reasons + ("WINDOWS_AFTER_MAC",)))
     if any(getattr(readiness, field) in (EvidenceState.FAILED,) for field in QualityEvidenceReadiness._MAC_FIELDS):
         phase = "FAIL"
-        reasons = blocked_reasons
+        reasons = safe_reasons
     elif not readiness.mac_release_ready:
-        reasons_list = list(blocked_reasons)
+        reasons_list = list(safe_reasons)
         for field in QualityEvidenceReadiness._MAC_FIELDS:
             state = getattr(readiness, field)
             if state is not EvidenceState.READY:
@@ -900,10 +968,10 @@ def finalize_quality_envelope(
         reasons = tuple(reasons_list)
     elif frozen_verdict == "PASS":
         phase = "PASS"
-        reasons = blocked_reasons
+        reasons = safe_reasons
     elif frozen_verdict == "FAIL":
         phase = "FAIL"
-        reasons = blocked_reasons
+        reasons = safe_reasons
     else:
         return _closed_envelope(readiness, production_pollution, ("CONTRADICTORY_GATE_RESULT",))
     if phase != "PASS":

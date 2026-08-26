@@ -362,3 +362,131 @@ def test_atomic_writer_rejects_target_and_parent_symlink(tmp_path: Path) -> None
     with pytest.raises(QualityPublicationError) as parent_error:
         write_quality_json_atomic(link_parent / "report.json", {}, protected_roots=())
     assert parent_error.value.code in {"PARENT_UNAVAILABLE", "PARENT_SYMLINK"}
+
+
+@pytest.mark.parametrize("replacement", ["symlink", "directory"])
+def test_child_directory_replacement_is_rejected_before_reading_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, replacement: str,
+) -> None:
+    root, outside = tmp_path / "root", tmp_path / "outside"
+    (root / "nested").mkdir(parents=True); outside.mkdir()
+    (outside / "secret").write_text("SECRET_OUTSIDE", encoding="utf-8")
+    (root / "nested" / "safe").write_text("safe", encoding="utf-8")
+    real_open = evidence_module.os.open
+    swapped = False
+    reads: list[bytes] = []
+
+    def swap_before_child_open(path: object, flags: int, *args: object, **kwargs: object) -> int:
+        nonlocal swapped
+        if not swapped and path == "nested" and kwargs.get("dir_fd") is not None:
+            swapped = True
+            old = root / "nested-old"
+            os.rename(root / "nested", old)
+            if replacement == "symlink":
+                (root / "nested").symlink_to(outside, target_is_directory=True)
+            else:
+                (root / "nested").mkdir()
+                (root / "nested" / "secret").write_text("SECRET_OUTSIDE", encoding="utf-8")
+        return real_open(path, flags, *args, **kwargs)
+
+    real_read = evidence_module.os.read
+    def recording_read(fd: int, size: int) -> bytes:
+        chunk = real_read(fd, size)
+        reads.append(chunk)
+        return chunk
+
+    monkeypatch.setattr(evidence_module.os, "open", swap_before_child_open)
+    monkeypatch.setattr(evidence_module.os, "read", recording_read)
+    with pytest.raises(evidence_module.ProtectedTreeInvalidError):
+        ProtectedTreeSentinel.capture((root,))
+    assert b"SECRET_OUTSIDE" not in b"".join(reads)
+
+
+def test_root_path_replacement_is_detected_at_completion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root, outside = tmp_path / "root", tmp_path / "outside"
+    root.mkdir(); outside.mkdir(); (outside / "secret").write_text("outside", encoding="utf-8")
+    real_scandir = evidence_module.os.scandir
+    replaced = False
+
+    def replacing_scandir(path: object):
+        nonlocal replaced
+        if not replaced and isinstance(path, int):
+            replaced = True
+            old = tmp_path / "root-old"
+            os.rename(root, old)
+            root.symlink_to(outside, target_is_directory=True)
+        return real_scandir(path)
+
+    monkeypatch.setattr(evidence_module.os, "scandir", replacing_scandir)
+    with pytest.raises(evidence_module.ProtectedTreeInvalidError) as error:
+        ProtectedTreeSentinel.capture((root,))
+    assert error.value.code == "ROOT_RACE"
+
+
+class EvilReason:
+    def __str__(self) -> str:
+        raise RuntimeError("/Users/private")
+
+
+class EvilReasons:
+    def __iter__(self):
+        raise RuntimeError("token=/Users/private")
+
+
+def test_hostile_reason_item_and_iterator_are_redacted_without_stringification() -> None:
+    for reasons in ((EvilReason(),), EvilReasons()):
+        result = finalize_quality_envelope(
+            readiness=readiness(mcp_parity=EvidenceState.NOT_MEASURED), production_pollution=0,
+            evaluation_report=None, acceptance_gate=SpyGate(), blocked_reasons=reasons,
+        )
+        assert result.blocked_reasons == ("UNTRUSTED_BLOCKED_REASON",)
+
+
+def test_anchored_directory_close_failure_is_typed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "root"; root.mkdir()
+    real_close = evidence_module.os.close
+    failed = False
+
+    def close_once(fd: int) -> None:
+        nonlocal failed
+        if not failed:
+            failed = True
+            raise OSError("injected close")
+        real_close(fd)
+
+    monkeypatch.setattr(evidence_module.os, "close", close_once)
+    with pytest.raises(evidence_module.ProtectedTreeInvalidError) as error:
+        ProtectedTreeSentinel.capture((root,))
+    assert error.value.code == "FD_CLOSE_FAILED"
+
+
+def test_atomic_writer_failure_at_file_fsync_leaves_no_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    output_dir = tmp_path / "output"; output_dir.mkdir()
+    destination = output_dir / "report.json"; destination.write_text("old", encoding="utf-8")
+    monkeypatch.setattr(evidence_module.os, "fsync", lambda _fd: (_ for _ in ()).throw(OSError("fsync")))
+    with pytest.raises(QualityPublicationError) as error:
+        write_quality_json_atomic(destination, {"new": True}, protected_roots=())
+    assert error.value.code == "WRITE_FAILED"
+    assert destination.read_text(encoding="utf-8") == "old"
+    assert not list(output_dir.glob("*.tmp"))
+
+
+def test_atomic_writer_parent_replacement_cannot_publish_outside(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    parent, outside = tmp_path / "parent", tmp_path / "outside"
+    parent.mkdir(); outside.mkdir()
+    real_open = evidence_module.os.open
+    swapped = False
+
+    def replace_parent(path: object, flags: int, *args: object, **kwargs: object) -> int:
+        nonlocal swapped
+        if not swapped and path == "parent" and kwargs.get("dir_fd") is not None:
+            swapped = True
+            old = tmp_path / "parent-old"
+            os.rename(parent, old)
+            parent.symlink_to(outside, target_is_directory=True)
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(evidence_module.os, "open", replace_parent)
+    with pytest.raises(QualityPublicationError):
+        write_quality_json_atomic(parent / "report.json", {"new": True}, protected_roots=())
+    assert not (outside / "report.json").exists()
