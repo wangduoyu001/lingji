@@ -34,12 +34,15 @@ class SearchFilters:
     as_of: str | None = None
     include_archived: bool = False
     mode: str = "current"
+    valid: bool = True
 
     def normalized(self) -> "SearchFilters":
         statuses = self.statuses
         if self.include_archived and "archived" not in statuses:
             statuses = (*statuses, "archived")
         temporal = TemporalQuery.from_values(self.mode, self.as_of)
+        selected_mode = str(self.mode or "current").strip().lower()
+        contract_valid = temporal.valid and selected_mode in {"current", "as_of", "history", "why"}
         # Keep implicit current time out of cache identity.  The caller adds a
         # per-search evaluation instant after cache lookup.
         as_of = temporal.as_of if self.as_of is not None else None
@@ -54,7 +57,8 @@ class SearchFilters:
             tags=tuple(sorted(set(self.tags))),
             as_of=as_of,
             include_archived=self.include_archived,
-            mode=temporal.mode,
+            mode=selected_mode,
+            valid=contract_valid,
         )
 
 
@@ -87,6 +91,8 @@ class HybridRetriever:
         if not clean_query:
             return []
         normalized = (filters or SearchFilters()).normalized()
+        if not normalized.valid:
+            return []
         limit = max(int(limit), 1)
         revision = self.database.revision
         cache_key = self._cache_key(clean_query, limit, normalized, revision)
@@ -120,14 +126,21 @@ class HybridRetriever:
 
     def _attach_why(self, query: str, output: list[dict[str, Any]], filters: SearchFilters) -> None:
         current_ids = {str(item.get("memory_id") or "") for item in output}
-        historical = self.database.search_fts(
-            query,
-            limit=max(len(output) * 12, 60),
-            memory_types=filters.memory_types,
-            statuses=ALL_LIFECYCLE_STATUSES,
-            privacy=filters.privacy,
-            mode="history",
-        )
+        historical: list[dict[str, Any]] = []
+        seen_historical: set[str] = set()
+        for historical_query in [query, *sorted(self._terms(query))]:
+            for candidate in self.database.search_fts(
+                historical_query,
+                limit=max(len(output) * 12, 60),
+                memory_types=filters.memory_types,
+                statuses=ALL_LIFECYCLE_STATUSES,
+                privacy=filters.privacy,
+                mode="history",
+            ):
+                candidate_id = str(candidate.get("memory_id") or "")
+                if candidate_id and candidate_id not in seen_historical:
+                    seen_historical.add(candidate_id)
+                    historical.append(candidate)
         if self.semantic_provider is not None:
             history_filters = replace(filters, mode="history", as_of=None, statuses=ALL_LIFECYCLE_STATUSES)
             for semantic in self._semantic_search(query, max(len(output) * 12, 60), history_filters):
@@ -153,9 +166,22 @@ class HybridRetriever:
             if memory_id in conflict_ids:
                 reason = "lower_authority_conflict"
             fields = temporal_fields(candidate)
+            candidate_relationships = candidate.get("relationships") or {}
+            if not isinstance(candidate_relationships, dict):
+                candidate_relationships = {}
+            candidate_conflict_key = str(
+                candidate.get("conflict_key")
+                or candidate.get("topic_key")
+                or candidate.get("decision_key")
+                or candidate_relationships.get("conflict_key")
+                or candidate_relationships.get("topic_key")
+                or candidate_relationships.get("decision_key")
+                or ""
+            )
             excluded.append({
                 "memory_id": memory_id,
                 "reason": reason,
+                "conflict_key": candidate_conflict_key,
                 "authority": fields["authority"],
                 "citation": {**self._citation(candidate), "source_refs": fields["source_refs"]},
                 "valid_from": fields["valid_from"],
@@ -164,16 +190,33 @@ class HybridRetriever:
             })
             if len(excluded) >= 50:
                 break
-        conflict = bool(conflict_ids)
         for item in output:
             fields = temporal_fields(item)
+            relationships = item.get("relationships") or {}
+            if not isinstance(relationships, dict):
+                relationships = {}
+            item_conflict_key = str(
+                item.get("conflict_key")
+                or item.get("topic_key")
+                or item.get("decision_key")
+                or relationships.get("conflict_key")
+                or relationships.get("topic_key")
+                or relationships.get("decision_key")
+                or ""
+            )
+            relevant_excluded = [
+                candidate for candidate in excluded
+                if candidate.get("conflict_key") == item_conflict_key
+            ] if item_conflict_key else [
+                candidate for candidate in excluded if not candidate.get("conflict_key")
+            ]
             item["why"] = {
                 **fields,
                 "citation": {**self._citation(item), "source_refs": fields["source_refs"]},
                 "selection_rule": "current_valid_and_authority_ordered",
                 "exclusion_reason": item.get("temporal_reason") or "selected",
-                "conflict": conflict,
-                "excluded_candidates": excluded,
+                "conflict": bool(item.get("authority_conflicts")),
+                "excluded_candidates": relevant_excluded,
             }
 
     def _semantic_search(

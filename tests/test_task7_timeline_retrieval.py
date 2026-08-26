@@ -158,6 +158,29 @@ class TimelineRetrievalTests(unittest.TestCase):
         self.assertIsNone(second.as_of)
         self.assertNotEqual(SearchFilters(mode="as_of", as_of="2026-01-01T00:00:00Z").normalized().as_of, SearchFilters(mode="as_of", as_of="2026-01-02T00:00:00Z").normalized().as_of)
 
+    def test_why_exclusions_are_scoped_per_result(self):
+        self.note("03-Knowledge/a-new.md", "a-new", "主题A当前", "决定 A 现在方案。", authority="user_explicit", conflict_key="topic-a", valid_from="2026-01-01T00:00:00Z")
+        self.note("03-Knowledge/a-old.md", "a-old", "主题A旧版", "决定 A 旧方案。", authority="old_chat_inference", conflict_key="topic-a", valid_from="2025-01-01T00:00:00Z")
+        self.note("03-Knowledge/b-new.md", "b-new", "主题B当前", "决定 B 现在方案。", authority="user_explicit", conflict_key="topic-b", valid_from="2026-01-01T00:00:00Z")
+        self.note("03-Knowledge/b-old.md", "b-old", "主题B旧版", "决定 B 旧方案。", authority="old_chat_inference", conflict_key="topic-b", valid_from="2025-01-01T00:00:00Z")
+        self.note("03-Knowledge/c-current.md", "c-current", "无冲突主题", "决定 C 独立方案。", authority="verified_source", valid_from="2026-01-01T00:00:00Z")
+        self.rebuild()
+        results = HybridRetriever(self.db).search("决定 方案", limit=10, filters=SearchFilters(mode="why"))
+        by_id = {item["memory_id"]: item["why"] for item in results}
+        self.assertTrue(by_id["a-new"]["conflict"])
+        self.assertEqual({item["memory_id"] for item in by_id["a-new"]["excluded_candidates"]}, {"a-old"})
+        self.assertTrue(by_id["b-new"]["conflict"])
+        self.assertEqual({item["memory_id"] for item in by_id["b-new"]["excluded_candidates"]}, {"b-old"})
+        self.assertFalse(by_id["c-current"]["conflict"])
+        self.assertNotIn("b-old", {item["memory_id"] for item in by_id["c-current"]["excluded_candidates"]})
+
+    def test_invalid_temporal_mode_fails_closed(self):
+        self.note("03-Knowledge/valid.md", "valid", "有效内容", "有效检索内容。", valid_from="2026-01-01T00:00:00Z")
+        self.rebuild()
+        invalid = SearchFilters(mode="not-a-mode")
+        self.assertFalse(invalid.normalized().valid)
+        self.assertEqual(HybridRetriever(self.db).search("有效", filters=invalid), [])
+
 
 if __name__ == "__main__":
     unittest.main()
