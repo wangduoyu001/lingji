@@ -176,6 +176,46 @@ def test_malformed_owned_stale_temp_is_fail_closed_and_db_errors_preserve(tmp_pa
     assert owned.exists()
 
 
+def test_valid_owned_stale_temp_for_unknown_scan_is_preserved(tmp_path: Path):
+    state, _, _, _, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
+    scan_id = "scan-missing-but-valid"
+    lease_id = "lease-missing-but-valid"
+    temporary = snapshot.raw_root / (
+        f".snapshot-owned-{snapshot._encode_owner(scan_id)}."
+        f"{snapshot._encode_owner(lease_id)}.token123.tmp"
+    )
+    temporary.write_bytes(b"unknown scan staging")
+    old = time.time() - 3 * 24 * 60 * 60
+    os.utime(temporary, (old, old))
+
+    ConsistentSnapshot(state, snapshot.raw_root)
+
+    assert temporary.exists()
+
+
+def test_overlong_owned_token_is_preserved_as_unknown_stale_temp(tmp_path: Path):
+    state, _, _, scan, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
+    lease_id = "lease-overlong-token"
+    state.acquire_automatic_memory_scan_lease(scan.scan_id, lease_id, ttl_seconds=60)
+    with state._connection() as connection:
+        connection.execute(
+            "UPDATE automatic_memory_scans SET lease_expires_at = ? WHERE scan_id = ?",
+            ("2000-01-01T00:00:00+00:00", scan.scan_id),
+        )
+    token = "x" * 129
+    temporary = snapshot.raw_root / (
+        f".snapshot-owned-{snapshot._encode_owner(scan.scan_id)}."
+        f"{snapshot._encode_owner(lease_id)}.{token}.tmp"
+    )
+    temporary.write_bytes(b"overlong token staging")
+    old = time.time() - 3 * 24 * 60 * 60
+    os.utime(temporary, (old, old))
+
+    ConsistentSnapshot(state, snapshot.raw_root)
+
+    assert temporary.exists()
+
+
 def test_unknown_fresh_temp_is_preserved_but_legacy_stale_temp_is_reclaimed(tmp_path: Path):
     _, registry, _, _, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
     raw_root = snapshot.raw_root

@@ -41,8 +41,16 @@ def _now_iso() -> str:
 
 
 _TEMP_RETENTION_SECONDS = 24 * 60 * 60
+_OWNER_ID_MAX_LENGTH = 128
+_OWNER_SEGMENT_MAX_LENGTH = ((_OWNER_ID_MAX_LENGTH + 2) // 3) * 4 - 1
+_TEMP_TOKEN_MAX_LENGTH = 64
+_OWNER_ID_PATTERN = re.compile(
+    rf"^[A-Za-z0-9][A-Za-z0-9._:-]{{0,{_OWNER_ID_MAX_LENGTH - 1}}}$"
+)
 _OWNED_TEMP_PATTERN = re.compile(
-    r"^\.snapshot-owned-([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+\.tmp$"
+    rf"^\.snapshot-owned-([A-Za-z0-9_-]{{1,{_OWNER_SEGMENT_MAX_LENGTH}}})\."
+    rf"([A-Za-z0-9_-]{{1,{_OWNER_SEGMENT_MAX_LENGTH}}})\."
+    rf"([A-Za-z0-9_-]{{1,{_TEMP_TOKEN_MAX_LENGTH}}})\.tmp$"
 )
 
 
@@ -99,8 +107,24 @@ class ConsistentSnapshot:
 
     @staticmethod
     def _decode_owner(value: str) -> str:
+        if not isinstance(value, str) or not (1 <= len(value) <= _OWNER_SEGMENT_MAX_LENGTH):
+            raise ValueError("snapshot owner segment exceeds the supported length")
+        if re.fullmatch(r"[A-Za-z0-9_-]+", value) is None:
+            raise ValueError("snapshot owner segment has an invalid format")
         padding = "=" * (-len(value) % 4)
-        return base64.urlsafe_b64decode(value + padding).decode("utf-8")
+        try:
+            decoded = base64.b64decode(
+                value + padding,
+                altchars=b"-_",
+                validate=True,
+            ).decode("utf-8")
+        except (ValueError, UnicodeError) as exc:
+            raise ValueError("snapshot owner segment is not valid base64") from exc
+        if _OWNER_ID_PATTERN.fullmatch(decoded) is None:
+            raise ValueError("snapshot owner has an invalid format")
+        if ConsistentSnapshot._encode_owner(decoded) != value:
+            raise ValueError("snapshot owner segment is not canonical base64")
+        return decoded
 
     @staticmethod
     def _parse_lease_expiry(value: Any) -> datetime | None:
@@ -129,7 +153,7 @@ class ConsistentSnapshot:
             except Exception:
                 return False
             if scan is None:
-                return time.time() - temporary.stat().st_mtime >= _TEMP_RETENTION_SECONDS
+                return False
             try:
                 current_lease = scan.get("lease_id")
                 status = scan.get("status")
