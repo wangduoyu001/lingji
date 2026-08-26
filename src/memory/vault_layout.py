@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Iterable
 
 LAYOUT_VERSION = "1"
+MEMORY_INBOX_PATH = "_LingJi/Memory Inbox"
+MEMORY_LIBRARY_PATH = "_LingJi/Memory Library"
 
 TOP_LEVEL_FOLDERS: tuple[str, ...] = (
     "00-System",
@@ -189,6 +191,27 @@ class VaultLayout:
     @property
     def memory_candidates_dir(self) -> Path:
         return self.root / "01-Inbox" / "AI-Memory"
+
+    @property
+    def memory_inbox_dir(self) -> Path:
+        return self.root / MEMORY_INBOX_PATH
+
+    @property
+    def memory_library_dir(self) -> Path:
+        return self.root / MEMORY_LIBRARY_PATH
+
+    def ensure_memory_directories(self) -> list[Path]:
+        """Explicitly establish automatic-memory entry points.
+
+        This is intentionally separate from ``ensure`` so opening an existing
+        Vault never creates or migrates the dedicated directories implicitly.
+        """
+        created: list[Path] = []
+        for path in (self.memory_inbox_dir, self.memory_library_dir):
+            if not path.exists():
+                path.mkdir(parents=True, exist_ok=True)
+                created.append(path)
+        return created
 
     def ensure(self) -> list[Path]:
         self.root.mkdir(parents=True, exist_ok=True)

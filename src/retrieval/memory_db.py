@@ -221,6 +221,7 @@ class MemoryDatabase:
         entries: Iterable[dict[str, Any]],
         vault_root: Path | str,
         chunker: MarkdownChunker | None = None,
+        memory_scope: Any | None = None,
     ) -> dict[str, int]:
         root = Path(vault_root)
         chunker = chunker or MarkdownChunker()
@@ -237,6 +238,14 @@ class MemoryDatabase:
                     skipped += 1
                     continue
                 path = root / relative_path
+                if memory_scope is not None:
+                    try:
+                        if not memory_scope.classify(path).eligible:
+                            skipped += 1
+                            continue
+                    except Exception:
+                        skipped += 1
+                        continue
                 if not path.exists() or path.suffix.lower() != ".md":
                     skipped += 1
                     continue
@@ -435,6 +444,45 @@ class MemoryDatabase:
                 "SELECT memory_id FROM memory_documents WHERE relative_path = ?", (relative_path,)
             ).fetchone()
         return self.fetch_memory(str(row["memory_id"]), include_chunks) if row else None
+
+    def list_documents(self, *, include_chunks: bool = False) -> list[dict[str, Any]]:
+        """Return rebuildable document records for migration and diagnostics."""
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM memory_documents ORDER BY relative_path, memory_id"
+            ).fetchall()
+        output = []
+        for row in rows:
+            item = self._document_dict(row)
+            if include_chunks:
+                with self._connection() as connection:
+                    chunks = connection.execute(
+                        "SELECT * FROM memory_chunks WHERE memory_id = ? ORDER BY ordinal",
+                        (item["memory_id"],),
+                    ).fetchall()
+                item["chunks"] = [dict(chunk) for chunk in chunks]
+            output.append(item)
+        return output
+
+    def record_migration_audit(self, key: str, payload: dict[str, Any]) -> None:
+        """Store a body-free migration audit marker in the derived index."""
+        with self._lock, self._connection() as connection:
+            self._set_meta(connection, f"obsidian_migration:{key}", json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+    def migration_audits(self) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT key, value FROM memory_meta WHERE key LIKE 'obsidian_migration:%' ORDER BY key"
+            ).fetchall()
+        output = []
+        for row in rows:
+            try:
+                value = json.loads(str(row["value"]))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            if isinstance(value, dict):
+                output.append(value)
+        return output
 
     def list_core_memories(
         self,

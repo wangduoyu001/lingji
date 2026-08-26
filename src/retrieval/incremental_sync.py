@@ -18,13 +18,19 @@ class IncrementalMemorySynchronizer:
         entries: Iterable[dict[str, Any]],
         vault_root: Path | str,
         chunker: MarkdownChunker | None = None,
+        memory_scope: Any | None = None,
     ) -> dict[str, int | bool]:
         root = Path(vault_root)
         chunker = chunker or MarkdownChunker()
         target = {
             str(entry.get("relative_path")): entry
             for entry in entries
-            if entry.get("relative_path") and not entry.get("is_private")
+            if entry.get("relative_path")
+            and not entry.get("is_private")
+            and (
+                memory_scope is None
+                or memory_scope.classify(root / str(entry.get("relative_path"))).eligible
+            )
         }
         current = self._current_documents()
         added = 0
@@ -34,6 +40,22 @@ class IncrementalMemorySynchronizer:
         chunks = 0
 
         for relative_path in sorted(set(current) - set(target)):
+            if memory_scope is not None:
+                # A scoped Vault sync must not retire chat/file/media records
+                # owned by another source.  Only paths that canonicalize into
+                # this Vault and are currently outside the memory scope are
+                # candidates for removal.
+                try:
+                    decision = memory_scope.classify(root / relative_path)
+                except Exception:
+                    continue
+                candidate = root / relative_path
+                if (
+                    decision.reason == "outside_vault"
+                    or not candidate.is_file()
+                    or candidate.suffix.casefold() != ".md"
+                ):
+                    continue
             if self.database.remove_by_path(relative_path):
                 removed += 1
 

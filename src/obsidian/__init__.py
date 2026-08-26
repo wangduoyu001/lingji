@@ -39,6 +39,19 @@ from .models import (
 )
 from .service import OBSIDIAN_SETTING_KEYS, ObsidianService
 from .system_ui import LingJiSystemUI
+from .memory_scope import (
+    MEMORY_DIRECTORIES,
+    MEMORY_INBOX,
+    MEMORY_LIBRARY,
+    ObsidianMemoryDecision,
+    ObsidianMemoryScope,
+)
+from .memory_migration import (
+    ManifestEntry,
+    MigrationManifest,
+    MigrationResult,
+    ObsidianMemoryMigration,
+)
 
 __all__ = [
     "DISCOVERY_ENVIRONMENT",
@@ -77,6 +90,15 @@ __all__ = [
     "ObsidianNote",
     "ObsidianService",
     "ObsidianVaultInfo",
+    "MEMORY_DIRECTORIES",
+    "MEMORY_INBOX",
+    "MEMORY_LIBRARY",
+    "ManifestEntry",
+    "MigrationManifest",
+    "MigrationResult",
+    "ObsidianMemoryDecision",
+    "ObsidianMemoryMigration",
+    "ObsidianMemoryScope",
     "_platform_cli_candidates",
     "discover_cli",
     "display_path",

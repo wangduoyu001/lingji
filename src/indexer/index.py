@@ -9,6 +9,7 @@ from typing import Any
 
 from src.memory.vault_layout import VaultLayout
 from src.obsidian.frontmatter import FrontmatterError, split_frontmatter
+from src.obsidian.memory_scope import ObsidianMemoryScope
 
 logger = logging.getLogger("pemis.indexer")
 
@@ -277,6 +278,28 @@ class PEMISIndex:
             if not self._is_dashboard_file(path)
             and self.layout.should_index(path, include_private=self.include_private)
         ]
+
+    def memory_entries(self) -> list[dict[str, Any]]:
+        """Return only files authorized for automatic-memory projection.
+
+        This is deliberately separate from ``build_index``: callers that need
+        the compatibility PEMIS index retain the historical broad behavior,
+        while automatic-memory consumers get the fail-closed scope contract.
+        """
+        scope = ObsidianMemoryScope(self.vault_dir)
+        entries: list[dict[str, Any]] = []
+        for decision in scope.iter_markdown():
+            entry = self._parse_md_file(decision.path)
+            if entry:
+                entry["memory_scope_reason"] = decision.reason
+                entry["memory_scope_explicit_flag"] = decision.explicit_flag
+                entries.append(entry)
+        return entries
+
+    def build_memory_index(self) -> dict[str, Any]:
+        """Build an in-memory automatic-memory view without changing legacy index."""
+        entries = {str(entry["id"]): entry for entry in self.memory_entries()}
+        return self._new_index(entries, full_rebuild=True)
 
     def _add_external_opportunities(self, entries):
         if not self.opp_dir.exists():

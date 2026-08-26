@@ -7,6 +7,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Mapping
 
 from .models import ObsidianCliDiscovery
+from .memory_scope import ObsidianMemoryScope, ObsidianMemoryDecision
 
 DISCOVERY_RUNTIME_SETTINGS = "runtime_settings"
 DISCOVERY_WORKSPACE = "workspace"
@@ -152,6 +153,11 @@ def display_path(value: str | Path | None) -> str:
         return ""
     tail = useful[-2:]
     return ("…/" if len(useful) > len(tail) else "") + "/".join(tail)
+
+
+def discover_memory_paths(vault_path: str | Path) -> tuple[ObsidianMemoryDecision, ...]:
+    """Discover only automatic-memory-authorized Markdown files."""
+    return ObsidianMemoryScope(vault_path).iter_markdown()
 
 
 # Compatibility alias used by the old module and its tests.
