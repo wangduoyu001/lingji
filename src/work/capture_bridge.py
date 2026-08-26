@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import ExecutionEvent, Outcome, WorkItem
+from .models import ExecutionEvent, Failure, NextAction, Outcome, PendingAction, WorkItem
 from .store import WorkStore
 
 
@@ -21,20 +21,27 @@ class CaptureWorkBridge:
         approved: bool = True,
         metadata: dict[str, Any] | None = None,
     ) -> WorkItem:
+        existing = self.store.get_work_by_source_id(source_id or capture_id)
+        if existing:
+            return existing
         work = WorkItem(
             title=title or f"Capture {capture_id}",
             source_id=source_id or capture_id,
             owner_approved=approved,
-            status="accepted",
+            status="accepted" if approved else "pending",
         )
-        self.store.create_work(work)
+        work = self.store.create_work(work)
         self.store.append_event(
             ExecutionEvent(
                 work_id=work.work_id,
+                event_id=f"capture:{capture_id}:accepted",
                 event_type="capture.accepted",
                 detail={"capture_id": capture_id, "metadata": metadata or {}},
             )
         )
+        if not approved:
+            self.store.add_pending_action(PendingAction(action_id=f"owner-confirm:{capture_id}", work_id=work.work_id, description="确认是否将这条输入加入长期记忆", actor="owner"))
+            self.store.save_next_action(NextAction(work_id=work.work_id, action_id=f"owner-confirm:{capture_id}", description="等待主人确认", actor="owner"))
         return work
 
     def complete_extraction(
@@ -54,8 +61,22 @@ class CaptureWorkBridge:
         self.store.append_event(
             ExecutionEvent(
                 work_id=work_id,
+                event_id=f"work:{work_id}:extraction.completed",
                 event_type="extraction.completed",
                 detail={"summary": summary},
             )
         )
+        self.store.save_next_action(NextAction(work_id=work_id, description="系统继续维护可检索记忆", actor="system"))
         return outcome
+
+    def record_failure(self, work_id: str, *, stage: str, reason: str, retryable: bool = False) -> Failure:
+        failure = Failure(work_id=work_id, failure_id=f"failure:{work_id}:{stage}", stage=stage, reason=reason, retryable=retryable)
+        self.store.save_failure(failure)
+        self.store.save_outcome(Outcome(work_id=work_id, status="failed", summary=reason, evidence={"stage": stage}, created_at=failure.created_at))
+        self.store.append_event(ExecutionEvent(work_id=work_id, event_id=f"work:{work_id}:failed:{stage}", event_type="work.failed", detail={"stage": stage, "reason": reason, "retryable": retryable}, created_at=failure.created_at))
+        self.store.save_next_action(NextAction(work_id=work_id, description="重试处理" if retryable else "等待主人查看失败原因", actor="system" if retryable else "owner"))
+        return failure
+
+    def retry(self, work_id: str) -> None:
+        self.store.append_event(ExecutionEvent(work_id=work_id, event_id=f"work:{work_id}:retrying", event_type="work.retrying", detail={"actor": "system"}))
+        self.store.save_next_action(NextAction(work_id=work_id, description="重新执行失败阶段", actor="system"))

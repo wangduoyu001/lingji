@@ -23,6 +23,8 @@ from .capture_api import (
     register_capture_routes,
 )
 from .automatic_memory_api import register_automatic_memory_routes
+from .work_routes import register_work_routes
+from .work_service import WorkControlService
 
 logger = logging.getLogger("lingji.control.read_model")
 READ_MODEL_ERROR_CODE = "READ_MODEL_UNAVAILABLE"
@@ -118,6 +120,7 @@ def create_control_app(
         raise RuntimeError("Install requirements-ui.txt to run the local control API") from exc
 
     control = service or LocalControlService(settings)
+    work_control = WorkControlService(control.state_db)
     inspector = None
     app = FastAPI(title="LingJi Local Control API", version="0.7.0")
     app.add_middleware(
@@ -579,4 +582,5 @@ def create_control_app(
     )
     register_automatic_memory_routes(app, control, secured)
     register_capture_routes(app, settings, control, token=token)
+    register_work_routes(app, work_control, secured)
     return app

@@ -12,6 +12,10 @@ from src.capture.models import CaptureEnvelope, CaptureStatus
 from src.capture.policy import CaptureMode, CapturePolicy
 from src.capture.service import CaptureService
 from src.extraction.queue import SQLiteExtractionQueue
+from src.storage.state_db import StateDatabase
+from src.work.capture_bridge import CaptureWorkBridge
+from src.work.models import ExecutionEvent, NextAction
+from src.work.store import WorkStore
 
 from .runtime_settings import RuntimeSettingsStore
 
@@ -93,6 +97,7 @@ class CaptureControlService:
         if self.queue is None:
             raise ValueError("Capture control requires the existing extraction queue")
         self.state_db = state_db
+        self.work_bridge = CaptureWorkBridge(WorkStore(state_db)) if isinstance(state_db, StateDatabase) else None
         self.runtime_settings = runtime_settings or CaptureRuntimeSettingsStore(
             settings, state_db=state_db
         )
@@ -368,6 +373,26 @@ class CaptureControlService:
             "duplicate": duplicate,
             "reason": result.reason or ("Existing capture job reused" if duplicate else ""),
         }
+        if self.work_bridge is not None:
+            work = self.work_bridge.create_from_capture(
+                result.capture_id,
+                str(envelope.title or envelope.source_type),
+                source_id=result.capture_id,
+                approved=True,
+                metadata={"source_type": envelope.source_type, "job_id": job_id or None},
+            )
+            self.work_bridge.store.append_event(
+                ExecutionEvent(
+                    work_id=work.work_id,
+                    event_id=f"capture:{result.capture_id}:submitted",
+                    event_type="capture.submitted",
+                    detail={"status": response["status"], "job_id": job_id or None},
+                )
+            )
+            self.work_bridge.store.save_next_action(
+                NextAction(work_id=work.work_id, description="等待提取与索引完成", actor="system")
+            )
+            response["work_id"] = work.work_id
         self._audit(
             "capture_duplicate" if duplicate else "capture_submitted",
             result.capture_id,

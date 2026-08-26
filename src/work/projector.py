@@ -11,11 +11,33 @@ class WorkProjector:
     def __init__(self, store: WorkStore):
         self.store = store
 
-    def current_work(self, limit: int = 20) -> list[dict[str, Any]]:
-        return [item.__dict__ for item in self.store.list_work(limit=limit)]
+    @staticmethod
+    def _dump(value: Any) -> dict[str, Any] | None:
+        return dict(value.__dict__) if value is not None else None
 
-    def pending_actions(self, limit: int = 20) -> list[dict[str, Any]]:
-        return [item.__dict__ for item in self.store.list_pending(limit=limit)]
+    def fact(self, work_id: str) -> dict[str, Any]:
+        if self.store.get_work(work_id) is None:
+            raise LookupError(f"work not found: {work_id}")
+        return {
+            "work": self._dump(self.store.get_work(work_id)),
+            "events": [dict(item.__dict__) for item in self.store.list_events(work_id)],
+            "outcome": self._dump(self.store.get_outcome(work_id)),
+            "next_action": self._dump(self.store.get_next_action(work_id)),
+            "pending_actions": [dict(item.__dict__) for item in self.store.list_pending(work_id=work_id)],
+            "failure": self._dump(self.store.get_failure(work_id)),
+        }
 
-    def timeline(self, work_id: str, limit: int = 100) -> list[dict[str, Any]]:
-        return [item.__dict__ for item in self.store.list_events(work_id, limit=limit)]
+    def current_fact(self) -> dict[str, Any]:
+        work = self.store.list_work(limit=1)
+        return self.fact(work[0].work_id) if work else {"work": None, "events": [], "outcome": None, "next_action": None, "pending_actions": [], "failure": None}
+
+    def current_work(self) -> dict[str, Any]:
+        return self.current_fact()
+
+    def pending_actions(self, limit: int = 20) -> dict[str, Any]:
+        return {"pending_actions": [dict(item.__dict__) for item in self.store.list_pending(limit=limit)]}
+
+    def timeline(self, work_id: str, limit: int = 100) -> dict[str, Any]:
+        fact = self.fact(work_id)
+        fact["events"] = [dict(item.__dict__) for item in self.store.list_events(work_id, limit=limit)]
+        return fact

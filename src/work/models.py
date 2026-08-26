@@ -16,6 +16,7 @@ class WorkItem:
     owner_approved: bool = False
     work_id: str = field(default_factory=lambda: str(uuid4()))
     created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
+    updated_at: str | None = None
 
 
 @dataclass
@@ -37,6 +38,7 @@ class Outcome:
     status: str
     summary: str
     evidence: dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
 
 @dataclass
@@ -44,6 +46,8 @@ class NextAction:
     work_id: str
     description: str
     actor: str = "system"
+    action_id: str = field(default_factory=lambda: str(uuid4()))
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
 
 @dataclass
@@ -52,4 +56,17 @@ class PendingAction:
 
     work_id: str
     description: str
+    action_id: str = field(default_factory=lambda: str(uuid4()))
+    actor: str = "owner"
     resolved: bool = False
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
+
+
+@dataclass
+class Failure:
+    work_id: str
+    stage: str
+    reason: str
+    retryable: bool = False
+    failure_id: str = field(default_factory=lambda: str(uuid4()))
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))

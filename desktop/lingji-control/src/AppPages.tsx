@@ -40,7 +40,7 @@ export default function AppPages(props: AppPagesProps) {
   return <section className="page-content">
     {page === "overview" && <OverviewPage data={overview} api={api} active={connected} onNavigate={onNavigate} />}
     {page === "activity" && <ActivityPage api={api} active={connected} />}
-    {page === "attention" && <AttentionPage api={api} active={connected} overview={overview} onNavigate={onNavigate} />}
+    {page === "attention" && <AttentionPage api={api} active={connected} />}
     {page === "diagnostics" && <DiagnosticsPage onNavigate={onNavigate} />}
     {page === "brain_status" && <BrainStatusPage api={api} active={connected} />}
     {page === "memory_inspector" && <MemoryInspectorLoopPage api={api} active={connected} target={inspectorTarget} />}

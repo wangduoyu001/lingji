@@ -17,5 +17,6 @@ def test_work_api_contract_source_is_work_control_service(tmp_path: Path):
     current = service.current_work()
     timeline = service.work_timeline(item.work_id)
 
-    assert current["items"][0]["work_id"] == item.work_id
+    assert current["work"]["work_id"] == item.work_id
+    assert timeline["work"]["work_id"] == item.work_id
     assert timeline["events"][0]["event_type"] == "created"

@@ -1,32 +1,62 @@
 export type WorkActor = "system" | "owner" | "external";
 
 export type WorkItem = {
-  id: string;
+  work_id: string;
   title: string;
-  status: "queued" | "running" | "completed" | "failed";
-  updated_at?: string;
+  source_id?: string | null;
+  status: string;
+  owner_approved?: boolean;
+  created_at?: string;
+  updated_at?: string | null;
 };
 
 export type ExecutionEvent = {
-  id: string;
+  event_id: string;
   work_id: string;
-  event: string;
-  detail?: string;
+  event_type: string;
+  detail?: Record<string, unknown>;
   created_at?: string;
 };
 
 export type Outcome = {
-  status: "success" | "failure" | "skipped";
+  work_id: string;
+  status: string;
   summary: string;
+  evidence?: Record<string, unknown>;
+  created_at?: string;
 };
 
 export type NextAction = {
+  action_id: string;
+  work_id: string;
+  description: string;
   actor: WorkActor;
-  summary: string;
+  created_at?: string;
 };
 
 export type PendingAction = {
-  id: string;
-  summary: string;
+  action_id: string;
+  work_id: string;
+  description: string;
+  actor: WorkActor;
+  resolved: boolean;
+  created_at?: string;
+};
+
+export type Failure = {
+  failure_id: string;
+  work_id: string;
+  stage: string;
   reason: string;
+  retryable: boolean;
+  created_at?: string;
+};
+
+export type WorkFact = {
+  work: WorkItem | null;
+  events: ExecutionEvent[];
+  outcome: Outcome | null;
+  next_action: NextAction | null;
+  pending_actions: PendingAction[];
+  failure: Failure | null;
 };

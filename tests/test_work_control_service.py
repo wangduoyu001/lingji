@@ -13,5 +13,5 @@ def test_work_control_service_reads_projected_facts(tmp_path: Path):
 
     result = service.current_work()
 
-    assert "items" in result
-    assert result["items"]
+    assert set(result) == {"work", "events", "outcome", "next_action", "pending_actions", "failure"}
+    assert result["work"]["title"] == "control test"

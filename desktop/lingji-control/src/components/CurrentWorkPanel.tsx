@@ -1,14 +1,9 @@
 import { useCallback } from "react";
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { LingJiApi } from "../api";
-import type { WorkItem, ExecutionEvent, Outcome, NextAction } from "../contracts/workFact";
+import type { WorkFact } from "../contracts/workFact";
 
-export type CurrentWorkFact = {
-  work?: WorkItem;
-  events?: ExecutionEvent[];
-  outcome?: Outcome;
-  next_action?: NextAction;
-};
+export type CurrentWorkFact = WorkFact;
 
 const text = (value: unknown, fallback = "未知") =>
   value === null || value === undefined || value === "" ? fallback : String(value);
@@ -39,17 +34,17 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
       </div>
 
       <div className="current-work-summary">
-        <div><span>任务</span><strong>{text(work?.id)}</strong></div>
+        <div><span>任务</span><strong>{text(work?.work_id)}</strong></div>
         <div><span>事件</span><strong>{String(fact?.events?.length ?? 0)}</strong></div>
         <div><span>结果</span><strong>{text(fact?.outcome?.summary, "等待结果")}</strong></div>
-        <div><span>下一步</span><strong>{text(fact?.next_action?.summary, "无")}</strong></div>
+        <div><span>下一步</span><strong>{text(fact?.next_action?.description, "无")}</strong></div>
       </div>
 
       <div className="current-work-timeline">
         {(fact?.events ?? []).slice(0, 5).map((event) => (
-          <div key={event.id}>
-            <strong>{text(event.event)}</strong>
-            <span>{text(event.detail)}</span>
+          <div key={event.event_id}>
+            <strong>{text(event.event_type)}</strong>
+            <span>{text(event.detail ? JSON.stringify(event.detail) : "")}</span>
           </div>
         ))}
       </div>

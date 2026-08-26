@@ -14,10 +14,10 @@ class WorkControlService:
         self.projector = WorkProjector(self.store)
 
     def current_work(self) -> dict[str, Any]:
-        return {"items": self.projector.current_work()}
+        return self.projector.current_fact()
 
     def pending_actions(self) -> dict[str, Any]:
-        return {"items": self.projector.pending_actions()}
+        return self.projector.pending_actions()
 
     def work_timeline(self, work_id: str) -> dict[str, Any]:
-        return {"events": self.projector.timeline(work_id)}
+        return self.projector.timeline(work_id)
