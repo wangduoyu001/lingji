@@ -142,6 +142,7 @@ class ProtectedTreeSentinel:
             raise ProtectedTreeUnavailableError("ROOTS_EMPTY")
 
         canonical: list[Path] = []
+        admitted: dict[Path, os.stat_result] = {}
         for configured in roots:
             path = Path(configured).expanduser()
             if not path.is_absolute():
@@ -174,6 +175,7 @@ class ProtectedTreeSentinel:
             if not stat_module.S_ISDIR(root_stat.st_mode):
                 raise ProtectedTreeUnavailableError("ROOT_NOT_DIRECTORY")
             canonical.append(resolved)
+            admitted[resolved] = root_stat
 
         canonical_sorted = sorted(canonical, key=lambda p: str(p))
         if len(set(canonical_sorted)) != len(canonical_sorted):
@@ -196,6 +198,8 @@ class ProtectedTreeSentinel:
                     root_identity = os.fstat(fd)
                 except Exception as exc:
                     raise ProtectedTreeInvalidError("ROOT_FSTAT_FAILED") from exc
+                if not _metadata_matches(admitted[root], root_identity):
+                    raise ProtectedTreeInvalidError("ROOT_RACE")
                 _capture_directory_fd(fd, root_id, "", entries, is_root=True)
                 try:
                     final_fd = _open_anchored_directory(root)
@@ -531,8 +535,8 @@ def write_quality_json_atomic(
             raise QualityPublicationError("PARENT_RACE_AFTER_REPLACE") from exc
         try:
             os.fsync(parent_fd)
-        except OSError as exc:
-            unsupported = getattr(exc, "errno", None) in {errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP}
+        except Exception as exc:
+            unsupported = isinstance(exc, OSError) and exc.errno in {errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP}
             if not unsupported:
                 raise QualityPublicationError("DIRECTORY_FSYNC_FAILED_AFTER_REPLACE") from exc
     except QualityPublicationError:
@@ -554,7 +558,7 @@ def write_quality_json_atomic(
                     os.unlink(temporary.name, dir_fd=parent_fd)
             except FileNotFoundError:
                 pass
-            except OSError as exc:
+            except Exception as exc:
                 cleanup_error = QualityPublicationError("TEMP_CLEANUP_FAILED")
         if parent_fd >= 0:
             owned_parent_fd = parent_fd
@@ -968,7 +972,13 @@ def finalize_quality_envelope(
     """Finalize immutable evidence around the unchanged frozen evaluator."""
     from dataclasses import replace
     fields = QualityEvidenceReadiness._FUNCTIONAL_FIELDS + QualityEvidenceReadiness._MAC_FIELDS + ("windows_release",)
-    if not isinstance(readiness, QualityEvidenceReadiness) or any(type(getattr(readiness, field, None)) is not EvidenceState for field in fields):
+    if type(readiness) is not QualityEvidenceReadiness:
+        return _closed_envelope(readiness, None, ("INVALID_EVIDENCE",))
+    try:
+        readiness_valid = all(type(getattr(readiness, field)) is EvidenceState for field in fields)
+    except Exception:
+        return _closed_envelope(readiness, None, ("INVALID_EVIDENCE",))
+    if not readiness_valid:
         return _closed_envelope(readiness, None, ("INVALID_EVIDENCE",))
     sentinel = readiness.production_sentinel
     pollution_valid = (
@@ -992,10 +1002,15 @@ def finalize_quality_envelope(
     try:
         functional_report = replace(evaluation_report, owner_review_success=100.0, reboot_recovery=100.0, blocked_reasons=())
         functional_verdict = acceptance_gate.evaluate(functional_report)
+    except Exception:
+        return _closed_envelope(readiness, production_pollution, ("GATE_EXCEPTION",))
+    if type(functional_verdict) is not str or functional_verdict not in ("PASS", "FAIL"):
+        return _closed_envelope(readiness, production_pollution, ("MALFORMED_GATE_RESULT",))
+    try:
         frozen_verdict = acceptance_gate.evaluate(evaluation_report)
     except Exception:
         return _closed_envelope(readiness, production_pollution, ("GATE_EXCEPTION",))
-    if functional_verdict not in ("PASS", "FAIL") or frozen_verdict not in ("PASS", "FAIL", "BLOCKED"):
+    if type(frozen_verdict) is not str or frozen_verdict not in ("PASS", "FAIL", "BLOCKED"):
         return _closed_envelope(readiness, production_pollution, ("MALFORMED_GATE_RESULT",))
     if any(getattr(readiness, field) is EvidenceState.FAILED for field in QualityEvidenceReadiness._FUNCTIONAL_FIELDS):
         if functional_verdict == "PASS":

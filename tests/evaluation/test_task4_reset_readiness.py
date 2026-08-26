@@ -804,3 +804,155 @@ def test_successful_sentinel_and_writer_return_to_descriptor_baseline(tmp_path: 
     ProtectedTreeSentinel.capture((root,))
     write_quality_json_atomic(output / "report.json", {"ok": True}, protected_roots=())
     assert len(os.listdir("/dev/fd")) <= baseline
+
+
+def test_admission_identity_rejects_real_root_replacement_before_first_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root, replacement = tmp_path / "root", tmp_path / "replacement"
+    root.mkdir(); replacement.mkdir()
+    (replacement / "secret").write_text("REPLACEMENT_SECRET", encoding="utf-8")
+    real_open = evidence_module._open_anchored_directory
+    reads: list[bytes] = []
+    swapped = False
+
+    def replace_before_first_open(path: Path) -> int:
+        nonlocal swapped
+        if not swapped:
+            swapped = True
+            old = tmp_path / "root-old"
+            os.rename(root, old)
+            os.rename(replacement, root)
+        return real_open(path)
+
+    real_read = evidence_module.os.read
+    monkeypatch.setattr(evidence_module, "_open_anchored_directory", replace_before_first_open)
+    monkeypatch.setattr(evidence_module.os, "read", lambda fd, size: (lambda chunk: (reads.append(chunk), chunk)[1])(real_read(fd, size)))
+    with pytest.raises(evidence_module.ProtectedTreeInvalidError) as error:
+        ProtectedTreeSentinel.capture((root,))
+    assert error.value.code == "ROOT_RACE"
+    assert b"REPLACEMENT_SECRET" not in b"".join(reads)
+
+
+def test_admission_identity_is_bound_to_each_sorted_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    first, second, replacement = tmp_path / "first", tmp_path / "second", tmp_path / "replacement"
+    first.mkdir(); second.mkdir(); replacement.mkdir()
+    (replacement / "secret").write_text("REPLACEMENT_SECRET", encoding="utf-8")
+    real_open = evidence_module._open_anchored_directory
+    swapped = False
+
+    def replace_second_before_open(path: Path) -> int:
+        nonlocal swapped
+        if path == second and not swapped:
+            swapped = True
+            old = tmp_path / "second-old"
+            os.rename(second, old)
+            os.rename(replacement, second)
+        return real_open(path)
+
+    monkeypatch.setattr(evidence_module, "_open_anchored_directory", replace_second_before_open)
+    with pytest.raises(evidence_module.ProtectedTreeInvalidError) as error:
+        ProtectedTreeSentinel.capture((second, first))
+    assert error.value.code == "ROOT_RACE"
+
+
+class _HostileReadiness(QualityEvidenceReadiness):
+    def __getattribute__(self, name: str):
+        if name == "import_audit":
+            raise RuntimeError("/private/readiness")
+        return super().__getattribute__(name)
+
+
+def test_hostile_readiness_subclass_is_rejected_before_field_access() -> None:
+    hostile = _HostileReadiness(**{field: EvidenceState.READY for field in (
+        "import_audit", "promotion_provenance", "gateway_selection", "production_sentinel",
+        "mcp_parity", "qdrant_degradation", "corruption_isolation", "context_baseline",
+        "scale", "owner_review", "reboot_recovery", "mac_release", "windows_release",
+    )})
+    gate = SpyGate()
+    result = finalize_quality_envelope(
+        readiness=hostile, production_pollution=0,
+        evaluation_report=report(), acceptance_gate=gate,
+    )
+    assert not gate.calls
+    assert result.evaluation_report is None
+    assert (result.functional_status, result.phase_status, result.windows_status) == (
+        "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED",
+    )
+    assert result.blocked_reasons == ("INVALID_EVIDENCE",)
+
+
+class _HostileVerdict:
+    def __eq__(self, _other):
+        raise RuntimeError("/private/verdict")
+
+
+@pytest.mark.parametrize("verdicts,expected_calls", [
+    (("PASS", _HostileVerdict()), 2),
+    ((_HostileVerdict(), "PASS"), 1),
+])
+def test_hostile_gate_verdict_is_rejected_at_the_individual_call(
+    verdicts: tuple[object, object], expected_calls: int,
+) -> None:
+    class Gate:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def evaluate(self, _report: EvaluationReport):
+            value = verdicts[self.calls]
+            self.calls += 1
+            return value
+
+    gate = Gate()
+    result = finalize_quality_envelope(
+        readiness=readiness(), production_pollution=0,
+        evaluation_report=report(), acceptance_gate=gate,
+    )
+    assert gate.calls == expected_calls
+    assert result.evaluation_report is None
+    assert (result.functional_status, result.phase_status, result.windows_status) == (
+        "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED",
+    )
+    assert result.blocked_reasons == ("MALFORMED_GATE_RESULT",)
+
+
+def test_parent_directory_fsync_runtime_error_is_stable_after_replace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "output"; output_dir.mkdir()
+    destination = output_dir / "report.json"; destination.write_text("old", encoding="utf-8")
+    calls = 0
+
+    def fail_parent_fsync(_fd: int) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("/private/fsync")
+
+    monkeypatch.setattr(evidence_module.os, "fsync", fail_parent_fsync)
+    with pytest.raises(QualityPublicationError) as error:
+        write_quality_json_atomic(destination, {"new": True}, protected_roots=())
+    assert error.value.code == "DIRECTORY_FSYNC_FAILED_AFTER_REPLACE"
+    assert str(error.value) == "DIRECTORY_FSYNC_FAILED_AFTER_REPLACE"
+    assert json.loads(destination.read_text(encoding="utf-8")) == {"new": True}
+
+
+def test_cleanup_runtime_error_is_stable_and_reports_actual_residue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "output"; output_dir.mkdir()
+    destination = output_dir / "report.json"; destination.write_text("old", encoding="utf-8")
+    real_unlink = evidence_module.os.unlink
+    monkeypatch.setattr(evidence_module.os, "replace", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("replace")))
+
+    def unlink_then_runtime(path: object, *args: object, **kwargs: object) -> None:
+        real_unlink(path, *args, **kwargs)
+        raise RuntimeError("/private/cleanup")
+
+    monkeypatch.setattr(evidence_module.os, "unlink", unlink_then_runtime)
+    with pytest.raises(QualityPublicationError) as error:
+        write_quality_json_atomic(destination, {"new": True}, protected_roots=())
+    assert error.value.code == "TEMP_CLEANUP_FAILED"
+    assert str(error.value) == "TEMP_CLEANUP_FAILED"
+    assert destination.read_text(encoding="utf-8") == "old"
+    assert not list(output_dir.glob("*.tmp"))
