@@ -1202,6 +1202,7 @@ Windows 重启后恢复 = 100%
 - [ ] 8766 `/api/work/current`、`/api/work/pending-actions`、`/api/work/timeline/{id}` 认证、404/503、统一 DTO。
 - [ ] Desktop TypeScript contract、真实 API polling、loading/empty/stale/401/503/error 状态和跨页同一 work_id。
 - [ ] Task8 focused/regression、Node real smoke、py_compile/compileall/diff-check、acceptance sync、local handoff。
+- [x] 兼容回归：无 `state_db` 的历史 Control Stub 不会因 Work routes 初始化而崩溃；正式 `LocalControlService` 仍只复用既有 `lingji_state.db` 注册 Work routes。
 
 ### 真机与主人确认
 
