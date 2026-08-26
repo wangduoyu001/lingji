@@ -387,6 +387,13 @@ class AutomaticMemoryScheduler:
         if len(positional) >= 3:
             return self.scan_runner(scan_id, source_id, reason)
         if len(positional) == 2:
+            # SnapshotJobRunner.run(scan_id, crash_at="none") is a real
+            # two-parameter runner, but its second argument is a control
+            # option rather than the source-id injection used by Task 4
+            # callbacks.  Keep the established two-argument callback
+            # contract for every other callable.
+            if positional[1].name == "crash_at":
+                return self.scan_runner(scan_id)
             return self.scan_runner(scan_id, source_id)
         return self.scan_runner(scan_id)
 

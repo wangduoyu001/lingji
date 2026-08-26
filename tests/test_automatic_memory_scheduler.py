@@ -6,7 +6,12 @@ from pathlib import Path
 import time
 import threading
 
+import pytest
+
 from src.automatic_memory.models import AuthorizationScope, SourceRecord
+from src.automatic_memory.checkpoint import SnapshotJobRunner
+from src.automatic_memory.snapshot import ConsistentSnapshot
+from src.extraction.queue import SQLiteExtractionQueue
 from src.automatic_memory.source_registry import SourceRegistry
 from src.automatic_memory.scheduler import AutomaticMemoryScheduler, ReconciliationReport
 from src.storage.state_db import StateDatabase
@@ -335,6 +340,108 @@ def test_late_listener_from_previous_lifecycle_cannot_disable_restarted_schedule
     jobs = {job["name"]: job for job in db.list_scheduler_jobs()}
     assert all(job["enabled"] for job in jobs.values())
     scheduler.stop()
+
+
+def test_scheduler_invokes_real_snapshot_runner_without_binding_source_to_crash_at(
+    tmp_path: Path,
+):
+    db, registry, source_id = registered(tmp_path)
+    captured = tmp_path / "captured.txt"
+    captured.write_text("snapshot evidence", encoding="utf-8")
+    snapshot = ConsistentSnapshot(registry, tmp_path / "raw")
+    queue = SQLiteExtractionQueue(tmp_path / "state.db")
+    runner = SnapshotJobRunner(
+        snapshot,
+        queue,
+        db,
+        path_provider=lambda scan, source: [captured],
+    )
+    scheduler = AutomaticMemoryScheduler(db, registry, scan_runner=runner.run)
+
+    report = scheduler.reconcile(source_id)
+
+    assert report.complete
+    assert scheduler.status()[0].status == "completed"
+    assert queue.count(source_type="automatic_memory_snapshot") == 1
+
+
+def test_scheduler_snapshot_runner_reacquires_paused_scan(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+    captured = tmp_path / "paused-captured.txt"
+    captured.write_text("paused evidence", encoding="utf-8")
+    scan = registry.start_scan(source_id)
+    assert registry.pause_scan(scan.scan_id).status == "paused"
+    snapshot = ConsistentSnapshot(registry, tmp_path / "raw")
+    queue = SQLiteExtractionQueue(tmp_path / "state.db")
+    runner = SnapshotJobRunner(
+        snapshot,
+        queue,
+        db,
+        path_provider=lambda scan, source: [captured],
+    )
+    scheduler = AutomaticMemoryScheduler(db, registry, scan_runner=runner.run)
+
+    report = scheduler.reconcile(source_id)
+
+    assert report.complete
+    assert db.get_automatic_memory_scan(scan.scan_id)["status"] == "completed"
+    assert queue.count(source_type="automatic_memory_snapshot") == 1
+
+
+def test_generic_report_runner_cannot_complete_paused_scan(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+    scan = registry.start_scan(source_id)
+    assert registry.pause_scan(scan.scan_id).status == "paused"
+    scheduler = AutomaticMemoryScheduler(
+        db,
+        registry,
+        scan_runner=lambda *args: ReconciliationReport(1, 1, 0, (), True),
+    )
+
+    report = scheduler.reconcile(source_id)
+
+    assert not report.complete
+    assert db.get_automatic_memory_scan(scan.scan_id)["status"] == "paused"
+
+
+@pytest.mark.parametrize("transition", ["unsupported", "degraded", "expired", "revoke"])
+def test_source_terminalization_clears_scheduler_lease_and_recovery_is_not_blocked(
+    tmp_path: Path, transition: str
+):
+    db, registry, source_id = registered(tmp_path)
+    scan = registry.start_scan(source_id)
+    claimed = db.claim_automatic_memory_scheduler_scan(
+        scan.scan_id, "scheduler-lease", "test-owner", ttl_seconds=300
+    )
+    assert claimed is not None
+
+    if transition == "revoke":
+        registry.revoke(source_id)
+        expected_status = "cancelled"
+    else:
+        registry.set_status(source_id, transition, reason="test lifecycle transition")
+        expected_status = "failed"
+
+    row = db.get_automatic_memory_scan(scan.scan_id)
+    assert row is not None
+    assert row["status"] == expected_status
+    assert row["scheduler_lease_id"] is None
+    assert row["scheduler_lease_owner"] is None
+    assert row["scheduler_lease_heartbeat_at"] is None
+    assert row["scheduler_lease_expires_at"] is None
+
+    if transition != "revoke":
+        registry.set_status(source_id, "authorized")
+        calls: list[str] = []
+        scheduler = AutomaticMemoryScheduler(
+            db,
+            registry,
+            scan_runner=lambda scan_id: calls.append(scan_id)
+            or ReconciliationReport(0, 0, 0, (), True),
+        )
+        report = scheduler.reconcile(source_id)
+        assert report.complete
+        assert calls == [scan.scan_id]
 
 
 def test_one_source_failure_isolated_and_recorded(tmp_path: Path):

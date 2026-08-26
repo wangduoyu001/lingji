@@ -156,7 +156,9 @@ class StateDatabase:
                 CREATE INDEX IF NOT EXISTS idx_automatic_memory_scan_items_source
                     ON automatic_memory_scan_items(source_id, scan_id, relative_path);
 
-                CREATE TRIGGER IF NOT EXISTS automatic_memory_source_status_fails_scans
+                DROP TRIGGER IF EXISTS automatic_memory_source_status_fails_scans;
+
+                CREATE TRIGGER automatic_memory_source_status_fails_scans
                 AFTER UPDATE OF status ON automatic_memory_sources
                 WHEN NEW.status IN ('unsupported', 'degraded', 'expired')
                 BEGIN
@@ -166,6 +168,9 @@ class StateDatabase:
                         lease_id = NULL, lease_owner_pid = NULL,
                         lease_owner_thread = NULL, lease_owner_instance = NULL,
                         lease_heartbeat_at = NULL, lease_expires_at = NULL,
+                        scheduler_lease_id = NULL, scheduler_lease_owner = NULL,
+                        scheduler_lease_heartbeat_at = NULL,
+                        scheduler_lease_expires_at = NULL,
                         updated_at = strftime('%Y-%m-%dT%H:%M:%S','now')
                     WHERE source_id = NEW.source_id AND status = 'running';
                 END;
@@ -946,7 +951,10 @@ class StateDatabase:
                 connection.execute(
                     """
                     UPDATE automatic_memory_scans
-                    SET status = 'paused', recovery_token = ?, updated_at = ?
+                    SET status = 'paused', recovery_token = ?,
+                        scheduler_lease_id = NULL, scheduler_lease_owner = NULL,
+                        scheduler_lease_heartbeat_at = NULL,
+                        scheduler_lease_expires_at = NULL, updated_at = ?
                     WHERE scan_id = ?
                     """,
                     (recovery_token, now, scan_id),
@@ -1051,7 +1059,10 @@ class StateDatabase:
             SET status = 'cancelled', last_error = ?, lease_id = NULL,
                 lease_owner_pid = NULL, lease_owner_thread = NULL,
                 lease_owner_instance = NULL,
-                lease_heartbeat_at = NULL, lease_expires_at = NULL, updated_at = ?
+                lease_heartbeat_at = NULL, lease_expires_at = NULL,
+                scheduler_lease_id = NULL, scheduler_lease_owner = NULL,
+                scheduler_lease_heartbeat_at = NULL,
+                scheduler_lease_expires_at = NULL, updated_at = ?
             WHERE source_id = ? AND status IN ('running', 'paused', 'failed')
             """,
             (reason, revoked_at, source_id),
@@ -1244,7 +1255,9 @@ class StateDatabase:
                 SET status = 'completed', progress = ?, total = ?, last_error = NULL,
                     lease_id = NULL, lease_owner_pid = NULL, lease_owner_thread = NULL,
                     lease_owner_instance = NULL, lease_heartbeat_at = NULL,
-                    lease_expires_at = NULL, updated_at = ?
+                    lease_expires_at = NULL, scheduler_lease_id = NULL,
+                    scheduler_lease_owner = NULL, scheduler_lease_heartbeat_at = NULL,
+                    scheduler_lease_expires_at = NULL, updated_at = ?
                 WHERE scan_id = ? AND status = 'running'
                   AND EXISTS (
                     SELECT 1
@@ -1274,7 +1287,15 @@ class StateDatabase:
         total: int | None = None,
     ) -> dict[str, Any] | None:
         now = self._iso(datetime.now(timezone.utc))
-        assignments = ["status = 'failed'", "last_error = ?", "updated_at = ?"]
+        assignments = [
+            "status = 'failed'", "last_error = ?",
+            "lease_id = NULL", "lease_owner_pid = NULL",
+            "lease_owner_thread = NULL", "lease_owner_instance = NULL",
+            "lease_heartbeat_at = NULL", "lease_expires_at = NULL",
+            "scheduler_lease_id = NULL", "scheduler_lease_owner = NULL",
+            "scheduler_lease_heartbeat_at = NULL",
+            "scheduler_lease_expires_at = NULL", "updated_at = ?",
+        ]
         values: list[Any] = [str(last_error)[:2000], now]
         if progress is not None:
             assignments.append("progress = ?")
@@ -1345,6 +1366,15 @@ class StateDatabase:
             "updated_at",
         }
         changes = {key: value for key, value in values.items() if key in allowed}
+        if values.get("status") in {"paused", "failed", "cancelled", "completed"}:
+            changes.update(
+                {
+                    "scheduler_lease_id": None,
+                    "scheduler_lease_owner": None,
+                    "scheduler_lease_heartbeat_at": None,
+                    "scheduler_lease_expires_at": None,
+                }
+            )
         if not changes:
             current = self.get_automatic_memory_scan(scan_id)
             if current is None:
@@ -1477,6 +1507,15 @@ class StateDatabase:
             "updated_at",
         }
         changes = {key: value for key, value in values.items() if key in allowed}
+        if values.get("status") in {"paused", "failed", "cancelled", "completed"}:
+            changes.update(
+                {
+                    "scheduler_lease_id": None,
+                    "scheduler_lease_owner": None,
+                    "scheduler_lease_heartbeat_at": None,
+                    "scheduler_lease_expires_at": None,
+                }
+            )
         if not changes:
             return self.renew_automatic_memory_scan_lease(
                 scan_id, lease_id, ttl_seconds=lease_ttl_seconds
@@ -1520,6 +1559,10 @@ class StateDatabase:
         changes["lease_owner_instance"] = None
         changes["lease_heartbeat_at"] = None
         changes["lease_expires_at"] = None
+        changes["scheduler_lease_id"] = None
+        changes["scheduler_lease_owner"] = None
+        changes["scheduler_lease_heartbeat_at"] = None
+        changes["scheduler_lease_expires_at"] = None
         assignments = ", ".join(f"{key} = ?" for key in changes)
         with self._lock, self._connection() as connection:
             updated = connection.execute(
