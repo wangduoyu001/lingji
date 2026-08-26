@@ -106,7 +106,7 @@ class HybridRetriever:
         fused = self._fuse(clean_query, lexical, semantic, normalized)
         output = fused[:limit]
         if normalized.mode == "why":
-            conflict = len({temporal_fields(item)["authority_rank"] for item in output}) > 1
+            conflict = any(item.get("authority_conflicts") for item in output) or len({temporal_fields(item)["authority_rank"] for item in output}) > 1
             for item in output:
                 fields = temporal_fields(item)
                 item["why"] = {
@@ -197,7 +197,50 @@ class HybridRetriever:
             ),
             reverse=True,
         )
-        return self._dedupe(ordered)
+        deduped = self._dedupe(ordered)
+        if filters.mode in {"current", "why"}:
+            # A lower-authority active statement must not silently compete with
+            # a higher-authority statement for the same project/type.  Keep the
+            # conflict attached to the winner so why/history can explain it.
+            groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+            for item in deduped:
+                projects = item.get("project") or []
+                if isinstance(projects, str):
+                    projects = [projects]
+                relationships = item.get("relationships") or {}
+                if not isinstance(relationships, dict):
+                    relationships = {}
+                conflict_key = (
+                    item.get("conflict_key")
+                    or item.get("topic_key")
+                    or item.get("decision_key")
+                    or relationships.get("conflict_key")
+                    or relationships.get("topic_key")
+                    or relationships.get("decision_key")
+                    or ""
+                )
+                if not str(conflict_key).strip():
+                    continue
+                key = ("|".join(sorted(str(value) for value in projects)), str(item.get("memory_type") or ""), str(conflict_key))
+                groups.setdefault(key, []).append(item)
+            hidden: set[str] = set()
+            for items in groups.values():
+                ranks = [temporal_fields(item)["authority_rank"] for item in items]
+                if len(items) < 2 or len(set(ranks)) < 2:
+                    continue
+                winner = max(items, key=lambda item: temporal_fields(item)["authority_rank"])
+                conflicts = []
+                winner_id = str(winner.get("memory_id") or "")
+                for item in items:
+                    item_id = str(item.get("memory_id") or "")
+                    if item is winner or temporal_fields(item)["authority_rank"] >= temporal_fields(winner)["authority_rank"]:
+                        continue
+                    hidden.add(item_id)
+                    conflicts.append(item_id)
+                if conflicts:
+                    winner["authority_conflicts"] = conflicts
+            deduped = [item for item in deduped if str(item.get("memory_id") or "") not in hidden]
+        return deduped
 
     @staticmethod
     def _candidate_key(item: dict[str, Any]) -> str:

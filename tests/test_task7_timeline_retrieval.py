@@ -93,8 +93,24 @@ class TimelineRetrievalTests(unittest.TestCase):
         self.assertIn("citation", results[0])
         self.assertIn("source_refs", results[0]["why"])
 
+    def test_lower_authority_conflict_cannot_displace_current_winner(self):
+        self.note("03-Knowledge/high.md", "high", "当前决定", "同一项目决定内容。", authority="user_explicit", conflict_key="architecture", valid_from="2026-01-01T00:00:00Z")
+        self.note("03-Knowledge/low.md", "low", "较新决定", "同一项目决定内容。", authority="old_chat_inference", conflict_key="architecture", valid_from="2026-02-01T00:00:00Z")
+        self.rebuild()
+        current = HybridRetriever(self.db).search("决定内容", filters=SearchFilters(mode="current"))
+        self.assertEqual({item["memory_id"] for item in current}, {"high"})
+        history = HybridRetriever(self.db).search("决定内容", filters=SearchFilters(mode="history"))
+        self.assertEqual({item["memory_id"] for item in history}, {"high", "low"})
+
+    def test_unrelated_same_project_memories_are_not_hidden_by_authority(self):
+        self.note("03-Knowledge/one.md", "one", "偏好一", "同一项目的偏好一。", authority="user_explicit", valid_from="2026-01-01T00:00:00Z")
+        self.note("03-Knowledge/two.md", "two", "偏好二", "同一项目的偏好二。", authority="old_chat_inference", valid_from="2026-02-01T00:00:00Z")
+        self.rebuild()
+        current = HybridRetriever(self.db).search("偏好", filters=SearchFilters(mode="current"))
+        self.assertEqual({item["memory_id"] for item in current}, {"one", "two"})
+
     def test_project_refresh_is_idempotent_and_keeps_old_evidence(self):
-        self.note("03-Knowledge/old.md", "old", "旧项目决定", "旧方案。", authority="user_explicit", valid_from="2026-01-01T00:00:00Z")
+        self.note("03-Knowledge/old.md", "old", "旧项目决定", "旧方案。", authority="current_project_authority", valid_from="2026-01-01T00:00:00Z")
         self.note("03-Knowledge/new.md", "new", "新项目决定", "新方案。", authority="current_project_authority", valid_from="2026-02-01T00:00:00Z")
         self.rebuild()
         first = self.db.refresh_project_decision("old", "new", reason="项目已切换")

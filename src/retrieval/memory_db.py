@@ -396,9 +396,13 @@ class MemoryDatabase:
         for key in (
             "authority", "evidence_refs", "supersession_reason", "invalidating_reason",
             "created_by", "confirmed_by", "policy_version", "extractor_version",
+            "conflict_key", "topic_key", "decision_key",
         ):
-            if entry.get(key) not in (None, ""):
-                relationships[key] = entry.get(key)
+            value = entry.get(key)
+            if value in (None, ""):
+                value = properties.get(key)
+            if value not in (None, ""):
+                relationships[key] = value
         memory_scope_reason = str(
             entry.get("memory_scope_reason")
             or properties.get("memory_scope_reason")

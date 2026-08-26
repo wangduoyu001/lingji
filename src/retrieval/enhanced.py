@@ -35,6 +35,9 @@ class HybridRetriever(BaseHybridRetriever):
                 continue
             seen.add(key)
             combined.append(item)
+        # The substring fallback is another lexical channel; run it through
+        # the same authority conflict visibility as the primary fusion path.
+        combined = self._fuse(query, combined, [], normalized)
         combined.sort(
             key=lambda item: (
                 float(item.get("retrieval_score") or 0.0),
@@ -45,7 +48,7 @@ class HybridRetriever(BaseHybridRetriever):
         )
         output = self._dedupe(combined)[:limit]
         if normalized.mode == "why":
-            conflict = len({temporal_fields(item)["authority_rank"] for item in output}) > 1
+            conflict = any(item.get("authority_conflicts") for item in output) or len({temporal_fields(item)["authority_rank"] for item in output}) > 1
             for item in output:
                 item["why"] = {**temporal_fields(item), "selection_rule": "current_valid_and_authority_ordered", "exclusion_reason": item.get("temporal_reason") or "selected", "conflict": conflict}
         return output
