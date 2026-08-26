@@ -21,11 +21,14 @@ from .evaluation import (
 )
 from .quality_gate import (
     AutomaticMemoryFunctionalGate,
+    build_prequery_identity_map,
     EXPECTED_QUESTION_COUNT,
     generate_100k_history,
     run_100k_benchmark,
     run_quality_gate,
+    select_gateway_evidence,
     select_retrieval_evidence,
+    validate_selected_evidence,
 )
 
 __all__ = [
@@ -54,9 +57,12 @@ __all__ = [
     "load_questions",
     "score_question",
     "AutomaticMemoryFunctionalGate",
+    "build_prequery_identity_map",
     "EXPECTED_QUESTION_COUNT",
     "generate_100k_history",
     "run_100k_benchmark",
     "run_quality_gate",
     "select_retrieval_evidence",
+    "select_gateway_evidence",
+    "validate_selected_evidence",
 ]

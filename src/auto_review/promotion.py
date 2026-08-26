@@ -49,6 +49,7 @@ class AutoMemoryPromotionService:
         self.projection_writer = projection_writer
         self.evidence_store = evidence_store
         self.policy_version = str(policy_version or POLICY_VERSION)
+        self._last_promotion_evidence: dict[str, Any] = {}
 
     def evaluate(self, candidate: ReviewCandidate | Mapping[str, Any]) -> dict[str, Any]:
         selected = self._normalize(candidate)
@@ -286,6 +287,12 @@ class AutoMemoryPromotionService:
     def _message_primary_refs(self, candidate: ReviewCandidate) -> tuple[str, ...]:
         """Only exact SourceReadModel message primary IDs may receive links."""
         store = self.evidence_store
+        resolver = getattr(store, "resolve_message_refs", None) if store is not None else None
+        if callable(resolver):
+            try:
+                return tuple(str(item) for item in resolver(self._evidence_refs(candidate)))
+            except Exception:
+                return ()
         getter = getattr(store, "get_message", None) if store is not None else None
         if not callable(getter):
             return ()
@@ -329,6 +336,13 @@ class AutoMemoryPromotionService:
                 return True
         store = self.evidence_store
         if store is not None:
+            resolver = getattr(store, "resolve_message_refs", None)
+            if callable(resolver):
+                try:
+                    resolver((wanted,))
+                    return True
+                except Exception:
+                    return False
             for method_name in ("get_source", "get_conversation", "get_message"):
                 method = getattr(store, method_name, None)
                 if callable(method):
@@ -473,7 +487,18 @@ class AutoMemoryPromotionService:
         if writer is None:
             raise RuntimeError("derived projection writer is unavailable")
         refs = list(self._evidence_refs(candidate))
-        message_refs = self._message_primary_refs(candidate)
+        resolver = getattr(self.evidence_store, "resolve_message_refs", None) if self.evidence_store is not None else None
+        if refs and callable(resolver):
+            try:
+                message_refs = tuple(str(item) for item in resolver(refs))
+            except Exception as exc:
+                raise RuntimeError(f"message provenance resolution failed: {exc}") from exc
+            if not message_refs:
+                raise RuntimeError("message provenance resolution returned no messages")
+        else:
+            message_refs = self._message_primary_refs(candidate)
+            if refs and self.evidence_store is not None and not message_refs:
+                raise RuntimeError("message provenance is unresolved")
         kwargs = {
             "memory_id": candidate.memory_id,
             "title": candidate.title,
@@ -495,6 +520,9 @@ class AutoMemoryPromotionService:
             state = str(result.get("status") or "").strip().lower()
             if state in {"error", "failed", "degraded", "pending", "rebuild_required"}:
                 raise RuntimeError(str(result.get("error") or result.get("message") or state))
+        created_links: list[str] = []
+        reused_links: list[str] = []
+        attempted_new_links: list[str] = []
         # Provenance links are part of the normal promotion transaction.  The
         # source read model is optional for legacy callers, but when supplied
         # every active derived projection must be linked to its imported
@@ -504,21 +532,53 @@ class AutoMemoryPromotionService:
         linker = getattr(self.evidence_store, "link_message_memory", None)
         if callable(linker):
             try:
+                existing_links = getattr(self.evidence_store, "message_links", None)
                 for reference in message_refs:
-                    linker(
-                        reference,
-                        candidate.memory_id,
-                        relation_type="derived_from",
-                        confidence=candidate.confidence,
-                    )
+                    already = False
+                    if callable(existing_links):
+                        already = any(str(item.get("memory_id") or "") == candidate.memory_id for item in existing_links(reference))
+                    if not already:
+                        attempted_new_links.append(reference)
+                    linker(reference, candidate.memory_id, relation_type="derived_from", confidence=candidate.confidence)
+                    (reused_links if already else created_links).append(reference)
             except Exception:
+                unlinker = getattr(self.evidence_store, "unlink_message_memory", None)
+                if callable(unlinker):
+                    for reference in reversed(attempted_new_links):
+                        try:
+                            try:
+                                unlinker(reference, candidate.memory_id, relation_type="derived_from")
+                            except TypeError:
+                                unlinker(reference, candidate.memory_id)
+                        except Exception:
+                            pass
                 remover = getattr(self.memory_db, "remove_memory", None)
                 if callable(remover):
                     try:
                         remover(candidate.memory_id)
                     except Exception:
                         pass
+                self._last_promotion_evidence = {
+                    "candidate_id": candidate.memory_id,
+                    "decision": "error",
+                    "resulting_lifecycle": PromotionStatus.ERROR.value,
+                    "memory_id": candidate.memory_id,
+                    "resolved_message_primary_ids": list(message_refs),
+                    "created_link_ids": list(created_links),
+                    "reused_link_ids": list(reused_links),
+                    "rollback": "compensated",
+                }
                 raise
+        self._last_promotion_evidence = {
+            "candidate_id": candidate.memory_id,
+            "decision": "active",
+            "resulting_lifecycle": PromotionStatus.ACTIVE.value,
+            "memory_id": candidate.memory_id,
+            "resolved_message_primary_ids": list(message_refs),
+            "created_link_ids": list(created_links),
+            "reused_link_ids": list(reused_links),
+            "rollback": "not_needed",
+        }
         return result
 
     def _result(
@@ -541,6 +601,8 @@ class AutoMemoryPromotionService:
             "evidence_refs": list(self._evidence_refs(candidate)),
             "error": error,
         }
+        if self._last_promotion_evidence:
+            result["promotion_evidence"] = dict(self._last_promotion_evidence)
         return result
 
     @staticmethod

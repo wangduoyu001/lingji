@@ -506,7 +506,12 @@ class SourceReadModel:
             )
             rows = connection.execute(
                 f"""
-                SELECT m.* FROM message_records m {where_sql}
+                SELECT m.*, s.external_id AS source_external_id,
+                       c.external_id AS conversation_external_id
+                FROM message_records m
+                JOIN source_records s ON s.source_id = m.source_id
+                JOIN conversation_records c ON c.conversation_id = m.conversation_id
+                {where_sql}
                 ORDER BY COALESCE(m.occurred_at, m.updated_at, m.created_at, '') DESC,
                          m.sequence DESC, m.message_id DESC
                 LIMIT ? OFFSET ?
@@ -550,6 +555,41 @@ class SourceReadModel:
                 (memory_id,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def resolve_message_refs(self, refs: Iterable[str]) -> tuple[str, ...]:
+        """Resolve explicit message/source/conversation/evidence refs fail-closed."""
+        values = tuple(dict.fromkeys(str(item).strip() for item in refs if str(item).strip()))
+        resolved: list[str] = []
+        with self._connection() as connection:
+            for reference in values:
+                rows = connection.execute(
+                    """
+                    SELECT DISTINCT m.message_id
+                    FROM message_records m
+                    JOIN conversation_records c ON c.conversation_id = m.conversation_id
+                    JOIN source_records s ON s.source_id = m.source_id
+                    WHERE m.message_id = ? OR m.external_id = ?
+                       OR c.conversation_id = ? OR c.external_id = ?
+                       OR s.source_id = ? OR s.external_id = ?
+                       OR m.raw_reference = ? OR m.metadata_json LIKE ?
+                    ORDER BY m.message_id
+                    """,
+                    (reference, reference, reference, reference, reference, reference,
+                     reference, f'%"{reference}"%'),
+                ).fetchall()
+                if len(rows) != 1:
+                    if not rows:
+                        raise SourceReadModelError(f"unresolved message provenance reference: {reference}")
+                    raise SourceReadModelError(f"ambiguous message provenance reference: {reference}")
+                resolved.append(str(rows[0]["message_id"]))
+        return tuple(dict.fromkeys(resolved))
+
+    def unlink_message_memory(self, message_id: str, memory_id: str, *, relation_type: str = "derived_from") -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                "DELETE FROM message_memory_links WHERE message_id = ? AND memory_id = ? AND relation_type = ?",
+                (self._required(message_id, "message_id"), self._required(memory_id, "memory_id"), self._required(relation_type, "relation_type")),
+            )
 
     def stats(self) -> dict[str, Any]:
         with self._connection() as connection:

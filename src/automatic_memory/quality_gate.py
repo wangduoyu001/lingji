@@ -53,7 +53,7 @@ from .evaluation import (
     load_questions,
     score_question,
 )
-from .quality_evidence import ImportedEvidenceAudit, ProtectedTreeSentinel
+from .quality_evidence import ExpectedImportedRow, ImportedEvidenceAudit, ProtectedTreeSentinel, QualityEvidenceReadiness
 
 
 FUNCTIONAL_BLOCKED_REASONS = (
@@ -160,6 +160,34 @@ def _history_fixture(corpus: Sequence[CorpusRecord], path: Path) -> None:
     ]
     payload = {"schema": HISTORY_SCHEMA, "schema_version": HISTORY_VERSION, "conversations": conversations}
     path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _expected_import_rows(batch: Any) -> tuple[ExpectedImportedRow, ...]:
+    rows: list[ExpectedImportedRow] = []
+    for source in batch.structured_sources:
+        for conversation in source.conversations:
+            for message in conversation.messages:
+                rows.append(ExpectedImportedRow(
+                    source_external_id=str(source.external_id),
+                    conversation_external_id=str(conversation.external_id),
+                    message_external_id=str(message.external_id),
+                    sequence=int(message.sequence),
+                    role=str(message.role),
+                    content_hash=SourceReadModel.content_hash(message.content),
+                    occurred_at=str(message.occurred_at),
+                ))
+    return tuple(rows)
+
+
+def _all_messages(read_model: SourceReadModel) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        page = read_model.list_messages(owner=True, limit=200, offset=offset)
+        rows.extend(page.get("items") or [])
+        if not page.get("next_offset"):
+            return rows
+        offset = int(page["next_offset"])
 
 
 def _build_pipeline(root: Path, memory_db: MemoryDatabase, read_model: SourceReadModel, state_db: StateDatabase) -> ExtractionPipeline:
@@ -380,6 +408,64 @@ def _select_retrieval_evidence(
     return tuple(selected)
 
 
+def build_prequery_identity_map(
+    persisted_rows: Sequence[Mapping[str, Any]],
+    labels_by_external: Mapping[str, tuple[str, str]],
+) -> dict[tuple[str, str], tuple[str, str]]:
+    """Build one external-id/content-hash identity map before questions run."""
+    result: dict[tuple[str, str], tuple[str, str]] = {}
+    for row in persisted_rows:
+        external_id = str(row.get("external_id") or "")
+        content_hash = str(row.get("content_hash") or "")
+        labels = labels_by_external.get(external_id)
+        if external_id and content_hash and labels:
+            result[(external_id, content_hash)] = (str(labels[0]), str(labels[1]))
+            primary_id = str(row.get("message_id") or "")
+            if primary_id:
+                result[(primary_id, content_hash)] = (str(labels[0]), str(labels[1]))
+    return result
+
+
+def select_gateway_evidence(
+    gateway_rows: Sequence[Mapping[str, Any]],
+    identity_map: Mapping[tuple[str, str], tuple[str, str]],
+) -> tuple[tuple[str, str], ...]:
+    selected: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for row in gateway_rows:
+        citation = row.get("citation") or {}
+        message_id = str(row.get("message_id") or citation.get("message_id") or "")
+        content_hash = str(row.get("content_hash") or citation.get("content_hash") or "")
+        labels = identity_map.get((message_id, content_hash))
+        if message_id and content_hash and labels is None:
+            raise ValueError("unknown gateway evidence")
+        if labels is None or labels[0] in seen:
+            continue
+        selected.append(labels)
+        seen.add(labels[0])
+        if len(selected) >= _SELECTOR_LIMIT:
+            break
+    return tuple(selected)
+
+
+def validate_selected_evidence(
+    *, recalled: Sequence[str], citations: Sequence[str], expected: Sequence[str],
+    forbidden: Sequence[str], expected_citations: Sequence[str],
+) -> None:
+    recalled_set = set(recalled)
+    if len(recalled_set) != len(tuple(recalled)):
+        raise ValueError("duplicate fact evidence")
+    if set(recalled) & set(forbidden):
+        raise ValueError("forbidden fact evidence")
+    if set(recalled) - set(expected):
+        raise ValueError("extra fact evidence")
+    citation_set = set(citations)
+    if len(citation_set) != len(tuple(citations)):
+        raise ValueError("duplicate citation evidence")
+    if citation_set - set(expected_citations):
+        raise ValueError("extra or unknown citation evidence")
+
+
 def select_retrieval_evidence(records: Sequence[Mapping[str, Any]]) -> tuple[tuple[str, str], ...]:
     """Apply the fixed identity selector to pre-imported records.
 
@@ -439,8 +525,16 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_root = Path(tempfile.mkdtemp(prefix="lingji-acceptance-quality-", dir=str(output_path.parent)))
     from src.config import settings
-    protected_roots = tuple(path for path in (Path(settings.vault_path), Path(settings.storage_path)) if path.exists())
-    protected_before = ProtectedTreeSentinel.capture(protected_roots)
+    protected_roots = (Path(settings.vault_path), Path(settings.storage_path))
+    protected_before: ProtectedTreeSentinel | None = None
+    protected_tree_capture_error = ""
+    try:
+        protected_before = ProtectedTreeSentinel.capture(protected_roots)
+    except ValueError as exc:
+        # The sentinel was deliberately given every configured root.  A
+        # missing/unreadable root is evidence unavailable, not a reason to
+        # silently filter that root out of the measurement.
+        protected_tree_capture_error = str(exc)
     production_sentinels_before = _production_sentinels()
     production_sentinels_after: dict[str, str] = {}
     message_map: dict[str, dict[str, Any]] = {}
@@ -461,6 +555,12 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
     try:
         fixture_input = temporary_root / "generic-history-inbox.json"
         _history_fixture(corpus, fixture_input)
+        adapter_batch = GenericAIHistoryAdapter().extract(ExtractionRequest(
+            job_id="quality-expected-projection",
+            source_type="generic_ai_history",
+            input_path=fixture_input,
+        ))
+        expected_rows = _expected_import_rows(adapter_batch)
         memory_db = MemoryDatabase(temporary_root / "storage" / "index" / "lingji_memory.db")
         state_db = StateDatabase(temporary_root / "storage" / "state" / "lingji_state.db")
         read_model = SourceReadModel(memory_db)
@@ -472,7 +572,7 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
         indexer.build_index()
         memory_db.rebuild_from_index(indexer.get_all(), temporary_root / "vault")
         message_map = _apply_fixture_metadata(corpus, read_model)
-        audit = ImportedEvidenceAudit.from_read_model(read_model, corpus)
+        audit = ImportedEvidenceAudit.from_read_model(read_model, expected_rows)
         imported_messages = audit.actual
         ordered_role_matches = audit.ordered_role_matches
         decisions, activation_correct, activation_total = _promote_fixtures(
@@ -481,15 +581,14 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
         duplicate_records = audit.duplicate
         gateway, _profiles = _build_gateway(temporary_root, memory_db, read_model, state_db)
         mcp = _register_fastmcp(gateway)
-        imported_identity = {
-            str(item["message_id"]): (
-                str((item.get("metadata") or {}).get("fixture_fact_id") or ""),
-                str((item.get("metadata") or {}).get("fixture_citation_id") or ""),
+        labels_by_external = {
+            expected.message_external_id: (
+                next(record.fact_id for record in corpus if expected.message_external_id.endswith(f":message:{record.message_id}")),
+                next(record.citation_id for record in corpus if expected.message_external_id.endswith(f":message:{record.message_id}")),
             )
-            for item in message_map.values()
-            if (item.get("metadata") or {}).get("fixture_fact_id")
-            and (item.get("metadata") or {}).get("fixture_citation_id")
+            for expected in expected_rows
         }
+        imported_identity = build_prequery_identity_map(_all_messages(read_model), labels_by_external)
         fact_by_memory = {item.fact_id: item for item in corpus}
         baseline_unit = sum(len(item.content) for item in corpus) + sum(len(item.topic_key) for item in corpus)
         baseline_context_chars = baseline_unit * len(questions)
@@ -514,13 +613,20 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
                 mcp_cases.append({"question_id": question.question_id, "success": same})
             except Exception as exc:
                 mcp_cases.append({"question_id": question.question_id, "success": False, "error": type(exc).__name__})
-            selected_evidence = _select_retrieval_evidence(gateway_pack, imported_identity)
+            selected_evidence = select_gateway_evidence(gateway_pack.get("sections") or [], imported_identity)
             recalled = tuple(fact_id for fact_id, _citation_id in selected_evidence if fact_id in fact_by_memory)
             citations = tuple(citation_id for fact_id, citation_id in selected_evidence if fact_id in fact_by_memory)
             for memory_id in recalled:
                 record = fact_by_memory[memory_id]
                 if record.lifecycle != "active" and question.mode == "current":
                     stale_leaks += 1
+            validate_selected_evidence(
+                recalled=recalled,
+                citations=citations,
+                expected=question.expected_fact_ids,
+                forbidden=question.forbidden_fact_ids,
+                expected_citations=question.expected_citation_ids,
+            )
             try:
                 question_results.append(
                     score_question(
@@ -533,8 +639,10 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
                 )
             except Exception:
                 raise
-        protected_after = ProtectedTreeSentinel.capture(protected_roots)
-        production_changes = protected_before.diff(protected_after)
+        protected_after = None
+        if protected_before is not None:
+            protected_after = ProtectedTreeSentinel.capture(protected_roots)
+        production_changes = protected_before.diff(protected_after) if protected_before is not None and protected_after is not None else ()
         report = evaluate_run(
             fact_by_memory,
             questions,
@@ -560,9 +668,22 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             reboot_recovery=None,
             blocked_reasons=FUNCTIONAL_BLOCKED_REASONS,
         )
-        functional_status = AutomaticMemoryFunctionalGate.evaluate(report)
-        measured_status = AutomaticMemoryFunctionalGate.evaluate(report)
-        phase_status = "FAIL" if measured_status == "FAIL" else AutomaticMemoryAcceptanceGate.evaluate(report)
+        readiness = QualityEvidenceReadiness(
+            import_audit=(audit.actual == audit.expected and audit.missing == 0 and audit.extra == 0 and audit.duplicate == 0),
+            promotion_provenance=all(
+                decision.get("status") != "active" or bool(read_model.memory_links(decision.get("candidate_id", "")))
+                for decision in decisions.values()
+            ),
+            gateway_selection=bool(imported_identity),
+            mcp_parity=False,
+            degradation=False,
+            context_baseline=False,
+            scale=False,
+        )
+        # 4R1 deliberately cannot publish a functional/full gate result: 4R2
+        # owns MCP, degradation, corruption and measured baseline evidence.
+        functional_status = readiness.functional_status
+        phase_status = "NOT_EVALUATED"
         production_sentinels_after = _production_sentinels()
         envelope = {
             "fixture_hashes": fixture_hashes,
@@ -577,10 +698,16 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             "mcp_attempts": mcp_attempts,
             "mcp_successes": mcp_successes,
             "mcp_cases": mcp_cases,
-            "semantic_degradation": {"qdrant_outage_isolated": True, "lexical_retrieval_available": True},
-            "corruption_isolation": {"single_source_corruption_isolated": True, "other_sources_continue": True},
+            "semantic_degradation": {"status": "NOT_MEASURED", "task": "4R2"},
+            "corruption_isolation": {"status": "NOT_MEASURED", "task": "4R2"},
+            "quality_evidence_readiness": {
+                **asdict(readiness),
+                "functional_status": readiness.functional_status,
+                "should_run_acceptance_gate": readiness.should_run_acceptance_gate,
+            },
             "production_pollution": len(production_changes),
             "protected_tree_changes": [asdict(change) for change in production_changes],
+            "protected_tree_capture_error": protected_tree_capture_error,
             "production_vault_sentinels": {
                 "before": production_sentinels_before,
                 "after": production_sentinels_after,
@@ -710,9 +837,13 @@ def run_100k_benchmark(*, output_path: Path) -> dict[str, Any]:
 
 __all__ = [
     "AutomaticMemoryFunctionalGate",
+    "ExpectedImportedRow",
     "EXPECTED_QUESTION_COUNT",
     "generate_100k_history",
     "run_100k_benchmark",
     "run_quality_gate",
     "select_retrieval_evidence",
+    "build_prequery_identity_map",
+    "select_gateway_evidence",
+    "validate_selected_evidence",
 ]
