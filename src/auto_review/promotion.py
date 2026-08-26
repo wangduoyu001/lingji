@@ -317,7 +317,14 @@ class AutoMemoryPromotionService:
                 method = getattr(store, method_name, None)
                 if callable(method):
                     try:
-                        if method(wanted) is not None:
+                        try:
+                            found = method(wanted)
+                        except TypeError:
+                            # SourceReadModel.get_message requires an explicit
+                            # content flag; provenance verification only needs
+                            # identity and must not read message bodies.
+                            found = method(wanted, include_content=False)
+                        if found is not None:
                             return True
                     except Exception:
                         continue
@@ -471,6 +478,30 @@ class AutoMemoryPromotionService:
             state = str(result.get("status") or "").strip().lower()
             if state in {"error", "failed", "degraded", "pending", "rebuild_required"}:
                 raise RuntimeError(str(result.get("error") or result.get("message") or state))
+        # Provenance links are part of the normal promotion transaction.  The
+        # source read model is optional for legacy callers, but when supplied
+        # every active derived projection must be linked to its imported
+        # message before the promotion event claims activation.  A failed link
+        # removes the just-written rebuildable projection when possible so an
+        # error cannot masquerade as a successful promotion.
+        linker = getattr(self.evidence_store, "link_message_memory", None)
+        if callable(linker):
+            try:
+                for reference in refs:
+                    linker(
+                        reference,
+                        candidate.memory_id,
+                        relation_type="derived_from",
+                        confidence=candidate.confidence,
+                    )
+            except Exception:
+                remover = getattr(self.memory_db, "remove_memory", None)
+                if callable(remover):
+                    try:
+                        remover(candidate.memory_id)
+                    except Exception:
+                        pass
+                raise
         return result
 
     def _result(

@@ -3,7 +3,7 @@ param(
     [ValidateSet("focused", "full", "release")]
     [string]$Mode = "focused",
 
-    [ValidateSet("retrieval", "capture", "control", "obsidian", "desktop", "sidecar", "docs", "validation")]
+    [ValidateSet("retrieval", "capture", "control", "obsidian", "desktop", "sidecar", "docs", "validation", "automatic-memory-quality")]
     [string]$Area = "docs",
 
     [string]$PythonCommand = "python",
@@ -261,6 +261,13 @@ function Invoke-FocusedValidation {
                     "[Console]::Error.WriteLine('expected validation warning'); exit 0"
                 )
         }
+        "automatic-memory-quality" {
+            Invoke-ValidationStep `
+                -Name "automatic-memory-quality-gate" `
+                -WorkingDirectory $repoRoot `
+                -Command $PythonCommand `
+                -Arguments @("scripts/automatic_memory_quality_gate.py")
+        }
     }
 }
 
@@ -337,6 +344,13 @@ function Invoke-FullValidation {
 }
 
 function Invoke-ReleaseValidation {
+    Invoke-ValidationStep `
+        -Name "automatic-memory-100k-scale" `
+        -WorkingDirectory $repoRoot `
+        -Command $PythonCommand `
+        -Arguments @("scripts/automatic_memory_quality_gate.py", "--scale") `
+        -Environment @{ LINGJI_RUN_100K = "1" }
+
     Invoke-DesktopScript "windows-release-build" "release:windows"
 
     $buildTimeUtc = (Get-Date).ToUniversalTime().ToString("o")

@@ -19,6 +19,14 @@ from .evaluation import (
     load_questions,
     score_question,
 )
+from .quality_gate import (
+    AutomaticMemoryFunctionalGate,
+    EXPECTED_QUESTION_COUNT,
+    generate_100k_history,
+    run_100k_benchmark,
+    run_quality_gate,
+    select_retrieval_evidence,
+)
 
 __all__ = [
     "AuthorizationScope",
@@ -45,4 +53,10 @@ __all__ = [
     "load_corpus",
     "load_questions",
     "score_question",
+    "AutomaticMemoryFunctionalGate",
+    "EXPECTED_QUESTION_COUNT",
+    "generate_100k_history",
+    "run_100k_benchmark",
+    "run_quality_gate",
+    "select_retrieval_evidence",
 ]
