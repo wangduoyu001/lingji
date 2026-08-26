@@ -320,24 +320,39 @@ def _promote_fixtures(
     read_model: SourceReadModel,
     state_db: StateDatabase,
 ) -> tuple[dict[str, dict[str, Any]], int, int, dict[str, str]]:
+    promotion_plan: list[tuple[CorpusRecord, str]] = []
+    promotion_bindings: dict[str, str] = {}
+    bound_facts: set[str] = set()
+    for record in corpus:
+        memory_id = _opaque_memory_id(record)
+        fact_id = str(record.fact_id or "").strip()
+        if not fact_id:
+            raise ValueError("promotion fact binding requires a fact ID")
+        if memory_id in promotion_bindings:
+            raise ValueError(f"opaque memory ID collision: {memory_id}")
+        if fact_id in bound_facts:
+            raise ValueError(f"promotion fact binding collision: {fact_id}")
+        promotion_bindings[memory_id] = fact_id
+        bound_facts.add(fact_id)
+        promotion_plan.append((record, memory_id))
+    if len(promotion_bindings) != len(corpus):
+        raise ValueError("promotion identity bindings are not one-to-one")
+
     service = AutoMemoryPromotionService(
         state_db=state_db,
         memory_db=memory_db,
         evidence_store=read_model,
     )
     decisions: dict[str, dict[str, Any]] = {}
-    promotion_bindings: dict[str, str] = {}
     activation_total = 0
     activation_correct = 0
-    for record in corpus:
+    for record, memory_id in promotion_plan:
         message = message_map.get(record.fact_id)
         if message is None:
             continue
         is_eligible = record.risk != "high" and record.authority == "owner-confirmed"
         if is_eligible:
             activation_total += 1
-        memory_id = _opaque_memory_id(record)
-        promotion_bindings[memory_id] = record.fact_id
         candidate = ReviewCandidate(
             memory_id=memory_id,
             title=record.topic_key,

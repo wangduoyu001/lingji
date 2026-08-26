@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from src.automatic_memory.quality_gate import (
     AutomaticMemoryFunctionalGate,
     CORPUS_SHA256,
     QUESTIONS_SHA256,
+    _promote_fixtures,
     run_quality_gate,
 )
 import src.automatic_memory.quality_gate as quality_gate_module
@@ -183,24 +185,187 @@ def _sqlite_snapshot(path: Path) -> dict[str, list[dict[str, Any]]]:
         connection.close()
 
 
-def _without_body_fields(value: Any) -> Any:
-    """Keep structural metadata while excluding user-authored body values."""
+_EVALUATOR_MARKERS = (
+    "fixture_",
+    "expected_fact_ids",
+    "forbidden_fact_ids",
+    "expected_citation_ids",
+)
+_PHYSICAL_BODY_LOCATIONS = frozenset(
+    {
+        ("source_read_model", "message_records", "content"),
+        ("memory_database", "message_records", "content"),
+        ("source_read_model", "memory_chunks", "text"),
+        ("source_read_model", "memory_fts", "text"),
+        ("memory_database", "memory_chunks", "text"),
+        ("memory_database", "memory_fts", "text"),
+        ("source_read_model", "memory_fts_content", "c4"),
+        ("memory_database", "memory_fts_content", "c4"),
+    }
+)
+_STRUCTURED_EVENT_BODY_LOCATION = ("state_database", "events", "payload_json")
+
+
+def _walk_raw_and_decoded(value: Any):
+    """Yield raw values and recursively decoded JSON values without key deletion."""
+    yield value
     if isinstance(value, dict):
-        return {
-            key: _without_body_fields(child)
-            for key, child in value.items()
-            if key not in {"content", "text"}
-        }
-    if isinstance(value, list):
-        return [_without_body_fields(child) for child in value]
-    if isinstance(value, str):
+        for key, child in value.items():
+            yield from _walk_raw_and_decoded(key)
+            yield from _walk_raw_and_decoded(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_raw_and_decoded(child)
+    elif isinstance(value, str):
         try:
             parsed = json.loads(value)
         except (TypeError, ValueError, json.JSONDecodeError):
-            return value
-        if isinstance(parsed, (dict, list)):
-            return _without_body_fields(parsed)
-    return value
+            return
+        if parsed != value:
+            yield from _walk_raw_and_decoded(parsed)
+
+
+def _has_marker(value: Any, marker: str) -> bool:
+    return any(marker in item for item in _walk_raw_and_decoded(value) if isinstance(item, str))
+
+
+def _walk_marker_values(value: Any, location: tuple[str, str, str], path: tuple[str, ...] = ()):
+    """Yield marker-bearing structural values while retaining body fields."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key)
+            yield key_text
+            # A promotion event's top-level candidate ``content`` is a known
+            # body value inside an otherwise structured JSON column.  Only
+            # that scalar is exempt; nested content/text objects remain fully
+            # inspected below.
+            if (
+                location == _STRUCTURED_EVENT_BODY_LOCATION
+                and path == ()
+                and key_text == "content"
+                and isinstance(child, str)
+                and not _contains_structured_json(child)
+            ):
+                continue
+            yield from _walk_marker_values(child, location, path + (key_text,))
+        return
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from _walk_marker_values(child, location, path + (str(index),))
+        return
+    if isinstance(value, str):
+        if location in _PHYSICAL_BODY_LOCATIONS and not path and not _contains_structured_json(value):
+            return
+        try:
+            parsed = json.loads(value)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            yield value
+            return
+        if parsed != value:
+            yield from _walk_marker_values(parsed, location, path)
+        return
+    yield value
+
+
+def _has_structural_marker(value: Any, location: tuple[str, str, str], marker: str) -> bool:
+    return any(marker in item for item in _walk_marker_values(value, location) if isinstance(item, str))
+
+
+def _contains_structured_json(value: Any) -> bool:
+    if isinstance(value, (dict, list)):
+        return True
+    if not isinstance(value, str):
+        return False
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+    return isinstance(parsed, (dict, list))
+
+
+def _assert_clean_storage_value(
+    store: str, table: str, column: str, value: Any, labels: set[str]
+) -> None:
+    for label in labels:
+        if _has_marker(value, label):
+            raise AssertionError((store, table, column, "frozen label", label, value))
+    location = (store, table, column)
+    if location in _PHYSICAL_BODY_LOCATIONS and not _contains_structured_json(value):
+        return
+    location = (store, table, column)
+    for marker in _EVALUATOR_MARKERS:
+        if _has_structural_marker(value, location, marker):
+            raise AssertionError((store, table, column, "evaluator marker", marker, value))
+
+
+def test_opaque_batch_identity_collision_fails_before_any_persistence(
+    tmp_path: Path,
+):
+    first, second = load_corpus(CORPUS)[:2]
+    duplicate = replace(
+        second,
+        fact_id="fact-collision-distinct",
+        citation_id="citation-collision-distinct",
+        source_id=first.source_id,
+        conversation_id=first.conversation_id,
+        message_id=first.message_id,
+        content_hash=first.content_hash,
+    )
+    corpus = (first, duplicate)
+    memory_db = MemoryDatabase(tmp_path / "storage" / "index" / "memory.db")
+    read_model = SourceReadModel(memory_db)
+    state_db = StateDatabase(tmp_path / "storage" / "state" / "state.db")
+    message_map = {
+        first.fact_id: {"message_id": "message-primary-1"},
+        duplicate.fact_id: {"message_id": "message-primary-2"},
+    }
+    with pytest.raises(ValueError, match="opaque memory ID collision"):
+        _promote_fixtures(corpus, message_map, memory_db, read_model, state_db)
+    assert memory_db.list_documents() == []
+    assert state_db.recent_events(limit=100) == []
+
+
+@pytest.mark.parametrize("field", ["content", "text"])
+def test_scanner_rejects_nested_evaluator_metadata_under_body_named_keys(field: str):
+    value = {"structured_content": {field: {"expected_fact_ids": ["hidden"]}}}
+    with pytest.raises(AssertionError):
+        _assert_clean_storage_value(
+            "state_database", "events", "payload_json", value, {"fact-preference-001"}
+        )
+
+
+@pytest.mark.parametrize(
+    ("escaped_label", "label"),
+    [
+        (r"\u0066act\u002dpreference\u002d001", "fact-preference-001"),
+        (r"\u0063itation\u002dpreference\u002d001", "citation-preference-001"),
+    ],
+)
+def test_scanner_rejects_unicode_escaped_frozen_labels(escaped_label: str, label: str):
+    value = '{"nested":"' + escaped_label + '"}'
+    with pytest.raises(AssertionError):
+        _assert_clean_storage_value("state_database", "events", "payload_json", value, {label})
+
+
+@pytest.mark.parametrize(
+    "location",
+    sorted(_PHYSICAL_BODY_LOCATIONS),
+)
+def test_scanner_allows_marker_words_only_in_known_plain_body_columns(location):
+    _assert_clean_storage_value(*location, "用户正文提到 forbidden_fact_ids 这个字段名。", {"fact-preference-001"})
+
+
+def test_scanner_rejects_marker_in_metadata_json_and_labels_in_body():
+    with pytest.raises(AssertionError):
+        _assert_clean_storage_value(
+            "state_database", "events", "payload_json",
+            json.dumps({"metadata": {"content": {"expected_fact_ids": []}}}),
+            {"fact-preference-001"},
+        )
+    with pytest.raises(AssertionError):
+        _assert_clean_storage_value(
+            "source_read_model", "message_records", "content", "用户正文 fact-preference-001", {"fact-preference-001"}
+        )
 
 
 def test_real_promotion_uses_opaque_memory_ids_and_scans_all_temporary_sqlite_values(
@@ -231,13 +396,6 @@ def test_real_promotion_uses_opaque_memory_ids_and_scans_all_temporary_sqlite_va
         root = held_roots[0]
         corpus = load_corpus(CORPUS)
         labels = {item.fact_id for item in corpus} | {item.citation_id for item in corpus}
-        evaluator_markers = (
-            "fixture_",
-            "expected_fact_ids",
-            "forbidden_fact_ids",
-            "expected_citation_ids",
-        )
-
         # SourceReadModel and MemoryDatabase are two real readers over the same
         # temporary SQLite file; StateDatabase is the third real store.
         stores = {
@@ -249,18 +407,8 @@ def test_real_promotion_uses_opaque_memory_ids_and_scans_all_temporary_sqlite_va
         for store_name, snapshot in snapshots.items():
             for table, rows in snapshot.items():
                 for row in rows:
-                    serialized = json.dumps(row, ensure_ascii=False, sort_keys=True, default=str)
-                    assert not any(label in serialized for label in labels), (store_name, table, row)
-                    # A user-authored message may legitimately discuss an
-                    # evaluator field name.  Evaluator markers are forbidden
-                    # in persisted structure/metadata, not in message body
-                    # columns that are the evidence being imported.
-                    if not table.startswith("memory_fts"):
-                        structural = _without_body_fields(row)
-                        structural_serialized = json.dumps(
-                            structural, ensure_ascii=False, sort_keys=True, default=str
-                        )
-                        assert not any(marker in structural_serialized for marker in evaluator_markers), (store_name, table, row)
+                    for column, value in row.items():
+                        _assert_clean_storage_value(store_name, table, column, value, labels)
 
         memory_snapshot = snapshots["memory_database"]
         documents = memory_snapshot.get("memory_documents", [])
