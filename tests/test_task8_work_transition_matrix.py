@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from src.storage.state_db import StateDatabase
-from src.work.models import WorkItem
+from src.work.models import ExecutionEvent, WorkItem
 from src.work.projector import WorkProjector
 from src.work.store import WorkStore
 
@@ -252,3 +252,123 @@ def test_equal_timestamp_terminal_precedence_is_completed_then_failed_then_retry
         "pending_owner": 0,
         "terminal_events": 2,
     }
+
+
+def test_current_event_selection_uses_utc_instant_and_ignores_malformed_candidates(tmp_path: Path) -> None:
+    store, work = _store_and_work(tmp_path)
+    store.append_event(
+        ExecutionEvent(
+            work_id=work.work_id,
+            event_id="legacy-retrying-offset",
+            event_type="work.retrying",
+            created_at="2026-08-26T10:00:00+02:00",
+        )
+    )
+    store.append_event(
+        ExecutionEvent(
+            work_id=work.work_id,
+            event_id="legacy-retrying-utc",
+            event_type="work.retrying",
+            created_at="2026-08-26T09:00:00Z",
+        )
+    )
+    store.append_event(
+        ExecutionEvent(
+            work_id=work.work_id,
+            event_id="legacy-retrying-naive",
+            event_type="work.retrying",
+            created_at="2026-08-26T09:30:00",
+        )
+    )
+    store.append_event(
+        ExecutionEvent(
+            work_id=work.work_id,
+            event_id="legacy-retrying-malformed",
+            event_type="work.retrying",
+            created_at="not-an-iso-instant",
+        )
+    )
+    store.apply_extraction_transition(
+        work.work_id,
+        "failed",
+        summary="older than the current retrying event",
+        evidence={"source": "synthetic"},
+        occurred_at="2026-08-26T09:15:00Z",
+    )
+    assert store.get_outcome(work.work_id) is None
+    assert store.get_next_action(work.work_id) is None
+
+
+def test_pending_owner_failure_uses_one_sql_row_and_reopens_resolved_row(tmp_path: Path) -> None:
+    store, work = _store_and_work(tmp_path)
+    action_id = f"owner-failure:{work.work_id}"
+    store.apply_extraction_transition(
+        work.work_id,
+        "failed",
+        summary="first failure",
+        evidence={"source": "synthetic"},
+        occurred_at="2026-08-26T10:00:00Z",
+    )
+    store.apply_extraction_transition(
+        work.work_id,
+        "failed",
+        summary="repeated failure",
+        evidence={"source": "synthetic"},
+        occurred_at="2026-08-26T10:01:00Z",
+    )
+    with store.state._connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM pending_actions WHERE action_id = ?", (action_id,)
+        ).fetchone()[0] == 1
+    assert len(store.list_pending(work_id=work.work_id)) == 1
+
+    store.apply_extraction_transition(
+        work.work_id,
+        "completed",
+        summary="recovered",
+        evidence={"source": "synthetic"},
+        occurred_at="2026-08-26T10:02:00Z",
+    )
+    assert store.list_pending(work_id=work.work_id) == []
+    store.apply_extraction_transition(
+        work.work_id,
+        "failed",
+        summary="failure after recovery",
+        evidence={"source": "synthetic"},
+        occurred_at="2026-08-26T10:03:00Z",
+    )
+    with store.state._connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM pending_actions WHERE action_id = ?", (action_id,)
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) FROM pending_actions WHERE action_id = ? AND resolved = 0", (action_id,)
+        ).fetchone()[0] == 1
+
+
+def test_pending_action_legacy_duplicates_are_compacted_before_unique_index(tmp_path: Path) -> None:
+    state = StateDatabase(tmp_path / "legacy.db")
+    with state._lock, state._connection() as connection:
+        connection.execute(
+            """
+            CREATE TABLE pending_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, work_id TEXT NOT NULL,
+                description TEXT NOT NULL, resolved INTEGER NOT NULL DEFAULT 0,
+                action_id TEXT, actor TEXT NOT NULL DEFAULT 'owner', created_at TEXT
+            )
+            """
+        )
+        connection.executemany(
+            "INSERT INTO pending_actions(work_id, description, resolved, action_id, actor, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                ("work-legacy", "old unresolved", 0, "owner-failure:work-legacy", "owner", "2026-08-26T10:00:00Z"),
+                ("work-legacy", "old resolved", 1, "owner-failure:work-legacy", "owner", "2026-08-26T10:01:00Z"),
+            ],
+        )
+    store = WorkStore(state)
+    with state._connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM pending_actions WHERE action_id = ?", ("owner-failure:work-legacy",)
+        ).fetchone()[0] == 1
+        index_names = {row[1] for row in connection.execute("PRAGMA index_list(pending_actions)").fetchall()}
+        assert "idx_pending_actions_action_id_unique" in index_names

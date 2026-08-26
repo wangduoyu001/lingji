@@ -61,6 +61,19 @@ class WorkStore:
             connection.execute("UPDATE pending_actions SET action_id = 'legacy-' || id WHERE action_id IS NULL")
             connection.execute("UPDATE pending_actions SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
             connection.execute("UPDATE work_outcomes SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
+            duplicate_action_ids = connection.execute(
+                "SELECT action_id FROM pending_actions GROUP BY action_id HAVING COUNT(*) > 1"
+            ).fetchall()
+            for duplicate in duplicate_action_ids:
+                rows = connection.execute(
+                    "SELECT id, resolved FROM pending_actions WHERE action_id = ? ORDER BY resolved ASC, id ASC",
+                    (duplicate[0],),
+                ).fetchall()
+                for row in rows[1:]:
+                    connection.execute("DELETE FROM pending_actions WHERE id = ?", (row[0],))
+            connection.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_actions_action_id_unique ON pending_actions(action_id)"
+            )
         self.reconcile_extraction_jobs()
 
     @staticmethod
@@ -123,8 +136,12 @@ class WorkStore:
         with self.state._lock, self.state._connection() as connection:
             existing = connection.execute("SELECT id FROM pending_actions WHERE action_id = ? LIMIT 1", (action.action_id,)).fetchone()
             if existing:
+                connection.execute(
+                    "UPDATE pending_actions SET work_id = ?, description = ?, resolved = ?, actor = ?, created_at = ? WHERE id = ?",
+                    (action.work_id, action.description, int(action.resolved), action.actor, action.created_at, existing[0]),
+                )
                 return
-            connection.execute("INSERT OR IGNORE INTO pending_actions(work_id, description, resolved, action_id, actor, created_at) VALUES (?, ?, ?, ?, ?, ?)", (action.work_id, action.description, int(action.resolved), action.action_id, action.actor, action.created_at))
+            connection.execute("INSERT INTO pending_actions(work_id, description, resolved, action_id, actor, created_at) VALUES (?, ?, ?, ?, ?, ?)", (action.work_id, action.description, int(action.resolved), action.action_id, action.actor, action.created_at))
 
     def resolve_pending(self, work_id: str) -> None:
         with self.state._lock, self.state._connection() as connection:
@@ -175,23 +192,25 @@ class WorkStore:
             if current_phase not in {"failed", "completed"}:
                 current_phase = None
             if current_phase is None:
-                latest = connection.execute(
+                candidates: list[tuple[datetime, int, str, str, str]] = []
+                for event in connection.execute(
                     """
-                    SELECT event_type, created_at
+                    SELECT event_id, event_type, created_at
                     FROM execution_events
                     WHERE work_id = ? AND event_type IN ('work.retrying', 'work.failed', 'extraction.completed')
-                    ORDER BY created_at DESC, event_id DESC
-                    LIMIT 1
                     """,
                     (work_id,),
-                ).fetchone()
-                if latest:
-                    current_phase = {
+                ).fetchall():
+                    event_phase = {
                         "work.retrying": "retrying",
                         "work.failed": "failed",
                         "extraction.completed": "completed",
-                    }[str(latest[0])]
-                    current_timestamp = str(latest[1] or "")
+                    }[str(event[1])]
+                    event_time = self._parse_transition_time(str(event[2] or ""))
+                    if event_time is not None:
+                        candidates.append((event_time, self._transition_rank(event_phase), str(event[0]), event_phase, str(event[2] or "")))
+                if candidates:
+                    _event_time, _rank, _event_id, current_phase, current_timestamp = max(candidates)
 
             current_time = self._parse_transition_time(current_timestamp)
             if current_time is not None and incoming_time is None:
@@ -278,13 +297,23 @@ class WorkStore:
                     actor = "system"
                 else:
                     connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
-                    connection.execute(
+                    owner_action_id = f"owner-failure:{work_id}"
+                    updated = connection.execute(
                         """
-                        INSERT OR IGNORE INTO pending_actions(work_id, description, resolved, action_id, actor, created_at)
-                        VALUES (?, ?, 0, ?, 'owner', ?)
+                        UPDATE pending_actions
+                        SET work_id = ?, description = ?, resolved = 0, actor = 'owner', created_at = ?
+                        WHERE action_id = ?
                         """,
-                        (work_id, "查看提取失败原因并决定下一步", f"owner-failure:{work_id}", timestamp),
+                        (work_id, "查看提取失败原因并决定下一步", timestamp, owner_action_id),
                     )
+                    if updated.rowcount == 0:
+                        connection.execute(
+                            """
+                            INSERT INTO pending_actions(work_id, description, resolved, action_id, actor, created_at)
+                            VALUES (?, ?, 0, ?, 'owner', ?)
+                            """,
+                            (work_id, "查看提取失败原因并决定下一步", owner_action_id, timestamp),
+                        )
                     action_id = f"next:{work_id}:failed"
                     description = "等待主人查看失败原因"
                     actor = "owner"
