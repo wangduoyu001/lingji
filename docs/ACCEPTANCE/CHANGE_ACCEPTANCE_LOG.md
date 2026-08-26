@@ -1,5 +1,14 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 1 · Repair round 1
+
+- 基准：`75b691b9b2f9ce2d65023db87b25fab7018d9f2b`; repair 仅处理 independent review I1/I2/I3 与 root R4。
+- 真实 RED：`./.venv/bin/python -m pytest -q tests/test_task4_reset_ingestion_order.py tests/test_source_read_model.py tests/test_structured_ingestion.py tests/test_capture_service.py` — `11 failed, 53 passed`。失败覆盖 v1 migration DDL 残留、fresh v2 marker、CaptureService 直接 sink double kwargs、非法 ordinal start、text/float/bool-like 存储 ordinal 与缺失 leading ordinal。
+- 产品 repair commit：`f105bbf7fb1a96a078ccbbf71f440d3d6b1e5e68` (`fix: harden ingestion migration and validation`)。
+- GREEN：同一 focused 命令 `64 passed in 0.59s`；此前 Task 1 focused assertions 全部保留。
+- 回归：`tests/test_source_service.py tests/test_automatic_memory_adapters.py tests/test_automatic_memory_resume.py tests/test_extraction_idempotency.py` — `111 passed, 2 warnings in 7.20s`；仅既有 ZIP duplicate-member 与 Pydantic deprecation warnings。
+- repair 限制：未执行 Tasks 2–6、Task 4R2、100k、Artifact、Desktop、Production、Vault 或物理验收；本机任务仍 `IDLE`。须由独立复审与 root 复核后再判断 Task 1。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 1 · SourceReadModel ingestion-order contract
 
 - 基准：`ec268045004647ae1187abe747e70f2e37bdce9f`; 产品范围仅为 SourceReadModel v1→v2 additive migration, typed identities, batch-scoped ingestion ordinals, StructuredReadModelSink propagation and dedicated ingestion read API.

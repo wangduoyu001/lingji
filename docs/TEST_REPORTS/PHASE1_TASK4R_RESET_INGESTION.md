@@ -47,6 +47,30 @@ The failure was caused by the missing Task 1 API; no product implementation exis
 
 Warnings are pre-existing: a duplicate synthetic ZIP member warning and a Pydantic class-based-config deprecation warning. No Artifact, UI, Production/Vault, 4R2, 100k or physical acceptance was run.
 
+## Repair round 1 evidence
+
+Repair base: `75b691b9b2f9ce2d65023db87b25fab7018d9f2b`.
+
+The required adversarial probes were added before repair implementation. Authentic RED:
+
+```text
+./.venv/bin/python -m pytest -q tests/test_task4_reset_ingestion_order.py tests/test_source_read_model.py tests/test_structured_ingestion.py tests/test_capture_service.py
+11 failed, 53 passed
+```
+
+The failures demonstrated the four review/root defects: migration DDL/index state survived an injected failure, fresh v2 marker survived incomplete initialization, the direct CaptureService sink double rejected the new kwargs (`links == 0`), malformed/invalid ordinal inputs escaped the read-model error contract, and a batch beginning at ordinal 1 was accepted.
+
+Repair product commit: `f105bbf7fb1a96a078ccbbf71f440d3d6b1e5e68` (`fix: harden ingestion migration and validation`).
+
+Repair GREEN:
+
+```text
+./.venv/bin/python -m pytest -q tests/test_task4_reset_ingestion_order.py tests/test_source_read_model.py tests/test_structured_ingestion.py tests/test_capture_service.py
+64 passed in 0.59s
+```
+
+Prior regressions after repair: `111 passed, 2 warnings in 7.20s`. Repair added an explicit outer transaction plus nested migration savepoint, removed implicit `executescript()` transaction behavior, rejects non-negative ordinal starts unless exact integers, validates SQLite ordinal types as `SourceReadModelError`, requires complete batches to equal `0..N-1`, and updates the direct sink test double. Independent re-review and root verification remain required; Task 1 is not declared accepted.
+
 ## Cleanup and rollback
 
 All tests used temporary SQLite/pytest paths only. No owner data, Production, Vault, Artifact or frozen fixture was modified. Rollback is the two Task 1 commits; no destructive cleanup was performed.
