@@ -4,6 +4,38 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 4 修复轮 3 · cross-instance lease and lifecycle races
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`a9d5c680b6b5c0424aa83e98d6b5b39d3fe68049`
+- 影响模块：automatic-memory scan scheduler lease、source lifecycle terminalization、watcher generation and non-blocking revoke
+- 风险等级：P0
+- 用户可感知变化：共享 `StateDatabase` 的多个 scheduler 只允许一个 scan runner；scheduler lease 支持 heartbeat 与过期恢复；来源在运行中进入 `unsupported`、`degraded` 或 `expired` 时不会遗留 `running` scan；旧 watcher/listener 的迟到清理或回调不会影响新生命周期，撤销通知不再等待阻塞 watcher。
+- 数据或安全边界变化：复用既有 `automatic_memory_scans` 与 `StateDatabase`，不新增数据库、队列或事实源；SnapshotJobRunner 的既有 scan lease/终态保持兼容。
+
+### 新增或修改的自动验收
+
+- [x] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_watcher.py tests/test_automatic_memory_scheduler.py tests/test_state_db_scheduler.py`：30 passed，覆盖跨实例 single-flight、scheduler lease、来源中途终态化、watcher generation、非阻塞 revoke、listener generation 与既有 Cron 回归。
+- [x] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_automatic_memory_adapters.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_worker.py`：137 passed，3 warnings（Task 1–3 与 queue/worker 回归）。
+- [x] `./.venv/bin/python -m py_compile src/automatic_memory/watcher.py src/automatic_memory/scheduler.py src/scheduler/cron.py src/storage/state_db.py src/config.py`、`git diff --check`。
+- [ ] `./.venv/bin/python scripts/check_acceptance_sync.py`、`./.venv/bin/python scripts/check_local_execution_handoff.py`：由根代理在文档提交后复读执行。
+
+### 回归项与边界
+
+- [x] 保持 backend 异常审计、single-flight、direct revoke 立即停止、failed retry、`None` fail-closed、scheduler_jobs lease/DB claim、普通 Cron、5/900/86400、授权/symlink 安全。
+- [x] 修复轮 3 不把 focused 与 Task 1–3 回归合计为一条；两条命令分别记录为 30 passed 与 137 passed。
+
+### 清理与回滚
+
+- 临时数据前缀：`PHASE1_AUTOMATIC_MEMORY_TASK4_FIX3_`
+- 测试仅使用 pytest 临时目录和脱敏 SourceRecord；无真实聊天、Vault、凭据或持久 Artifact。
+- 回滚：回滚产品 Commit `a9d5c680b6b5c0424aa83e98d6b5b39d3fe68049`，不触碰主人数据。
+
+### 最终报告
+
+- 报告路径：本地调度报告继续由 `.superpowers/` 忽略；正式证据为本条目与测试输出。
+- 报告分支：`codex/phase1-automatic-memory`
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 4 · watcher and persistent reconciliation
 
 - 产品分支：`codex/phase1-automatic-memory`
@@ -15,8 +47,8 @@
 
 ### 新增或修改的自动验收
 
-- [x] 修复轮 1 RED 后运行 `./.venv/bin/python -m pytest -q tests/test_automatic_memory_watcher.py tests/test_automatic_memory_scheduler.py tests/test_state_db_scheduler.py`：19 passed，覆盖 backend 创建/迭代异常、5 秒防抖、重复事件抑制、路径越界、单源 watcher 停止、暂停/撤销隔离、同源 single-flight、非完整报告落库、持久 start/stop/pause/resume、事件静默后的 reconciliation、每日 integrity、running scan 重启复用。
-- [x] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_automatic_memory_adapters.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_worker.py`：162 passed，Task 1–3 与 queue/worker 回归；另含 3 个既有 warning（FastAPI/httpx、测试 ZIP duplicate、Pydantic Config）。
+- [x] 修复轮 1 RED 后运行 `./.venv/bin/python -m pytest -q tests/test_automatic_memory_watcher.py tests/test_automatic_memory_scheduler.py tests/test_state_db_scheduler.py`：25 passed，覆盖 backend 创建/迭代异常、5 秒防抖、重复事件抑制、路径越界、单源 watcher 停止、暂停/撤销隔离、同源 single-flight、非完整报告落库、持久 start/stop/pause/resume、事件静默后的 reconciliation、每日 integrity、running scan 重启复用。
+- [x] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_automatic_memory_adapters.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_worker.py`：137 passed，Task 1–3 与 queue/worker 回归；另含 3 个既有 warning（FastAPI/httpx、测试 ZIP duplicate、Pydantic Config）。
 - [x] `./.venv/bin/python -m py_compile src/automatic_memory/watcher.py src/automatic_memory/scheduler.py src/scheduler/cron.py src/storage/state_db.py src/config.py`、`git diff --check`。
 - [ ] `./.venv/bin/python scripts/check_acceptance_sync.py`、`./.venv/bin/python scripts/check_local_execution_handoff.py`：由根代理在文档提交后复读执行。
 
