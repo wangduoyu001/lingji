@@ -71,6 +71,29 @@ bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94  tests/evaluati
 
 No current quality PASS or frozen acceptance verdict is claimed; Task 4 evidence is incomplete and later reset tasks own the remaining gate.
 
+## Repair round 1
+
+Repair base: `5839fc329a7790da0256809723509c8c5a59407c`
+Repair product commit: `81b1c8d` (`fix: harden composite import audit identity`)
+
+Authentic repair RED, before repair product edits:
+
+```text
+./.venv/bin/python -m pytest -q tests/evaluation/test_task4_reset_import_audit.py tests/evaluation/test_automatic_memory_gate_integrity.py
+8 failed, 22 passed
+```
+
+The eight failures covered composite matcher API/ambiguity, empty message primary ID readiness, malformed pagination totals/offset/limit/progress, and the non-progressing empty page. Repair GREEN:
+
+```text
+./.venv/bin/python -m pytest -q tests/evaluation/test_task4_reset_import_audit.py tests/evaluation/test_automatic_memory_gate_integrity.py
+30 passed in 0.81s
+```
+
+The matcher now binds corpus records to expected rows by evaluation-only fact ID and resolves exact `(source_external_id, conversation_external_id, message_external_id)` keys; duplicate expected or persisted composite bindings fail closed. Empty internal source/conversation/message IDs cannot satisfy readiness. Shared ingestion pagination validation rejects total drift, echoed offset/limit mismatch, overrun, final count mismatch and non-progress.
+
+The frozen 145-row test replays the same execution ID and proves the second audit remains `145/145`, all seven counters `145`, stable duplicates `0`, groups `5`, primary message IDs unchanged, and source/conversation/message counts unchanged.
+
 ## Verification and cleanup
 
 ```text

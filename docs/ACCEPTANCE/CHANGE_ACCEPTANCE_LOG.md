@@ -1,5 +1,13 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 2 · Repair round 1
+
+- 基准：`5839fc329a7790da0256809723509c8c5a59407c`; 仅修复 Task 2 composite external identity binding、空内部主键防误就绪、分页完整性和 145-row replay stability。
+- 风险等级：P0。不得修改 Task 3 selector/registry、Task 4 readiness、Task 5 promotion、Task 6 runner reset、4R2、retrieval、100k、Artifact、Production、Vault 或本机任务单。
+- 自动验收：补充同 raw message ID 跨 source/conversation、composite binding ambiguity、空 source/conversation/message primary ID、pagination total/offset/limit/drift/non-progress 和同批次 replay/no-row-growth 测试；先保留真实 RED，再运行 focused/Task 1 regression。
+- 清理/回滚：仅使用测试临时 SQLite/storage/vault；不接触主人数据。repair 追加两个提交，不 amend/rebase 既有 `9a942d3`/`5839fc3`。
+- Repair 证据：RED `8 failed, 22 passed`；GREEN focused `30 passed`；Task 1 regression `64 passed`；145-row replay 保持七项 `145`、stable `0`、groups `5`，source/conversation/message counts 与 primary IDs 不增长/不变化。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 2 · Stable import audit and intentional dedup groups
 
 - 基准：`597df6711f5e0584fccd6991065177f111bc3746`; 本轮只处理批次范围内的稳定导入审计、内容哈希意图组和 quality harness 的只读匹配/fixture 元数据移除。
