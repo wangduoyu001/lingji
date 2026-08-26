@@ -170,6 +170,20 @@ def _history_fixture(corpus: Sequence[CorpusRecord], path: Path) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _opaque_memory_id(record: CorpusRecord) -> str:
+    """Derive a private persisted identity from production evidence inputs."""
+    material = {
+        "source_id": record.source_id,
+        "conversation_id": record.conversation_id,
+        "message_id": record.message_id,
+        "content_hash": record.content_hash,
+    }
+    digest = hashlib.sha256(
+        json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest().upper()
+    return f"LJ-MEM-{digest[:32]}"
+
+
 def _all_messages(read_model: SourceReadModel) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     offset = 0
@@ -305,13 +319,14 @@ def _promote_fixtures(
     memory_db: MemoryDatabase,
     read_model: SourceReadModel,
     state_db: StateDatabase,
-) -> tuple[dict[str, dict[str, Any]], int, int]:
+) -> tuple[dict[str, dict[str, Any]], int, int, dict[str, str]]:
     service = AutoMemoryPromotionService(
         state_db=state_db,
         memory_db=memory_db,
         evidence_store=read_model,
     )
     decisions: dict[str, dict[str, Any]] = {}
+    promotion_bindings: dict[str, str] = {}
     activation_total = 0
     activation_correct = 0
     for record in corpus:
@@ -321,8 +336,10 @@ def _promote_fixtures(
         is_eligible = record.risk != "high" and record.authority == "owner-confirmed"
         if is_eligible:
             activation_total += 1
+        memory_id = _opaque_memory_id(record)
+        promotion_bindings[memory_id] = record.fact_id
         candidate = ReviewCandidate(
-            memory_id=record.fact_id,
+            memory_id=memory_id,
             title=record.topic_key,
             content=record.content,
             memory_type=record.memory_kind,
@@ -332,7 +349,7 @@ def _promote_fixtures(
             confidence=0.99 if is_eligible else 0.80,
             authority="user_explicit" if record.authority == "owner-confirmed" else "assistant_suggestion",
             source_kind="current_project_document" if record.authority == "owner-confirmed" else "assistant_inference",
-            extractor_version="task4-frozen-fixture-1",
+            extractor_version="automatic-memory-v1",
             metadata={
                 "direct_user_evidence": record.authority == "owner-confirmed",
                 "memory_type": record.memory_kind,
@@ -352,7 +369,7 @@ def _promote_fixtures(
     # Lifecycle replacement links are owned by the real application workflow.
     # The evaluation fixture remains process-local and must not write
     # fixture-driven supersession or other lifecycle overrides to storage.
-    return decisions, activation_correct, activation_total
+    return decisions, activation_correct, activation_total, promotion_bindings
 
 
 def validate_selected_evidence(
@@ -482,7 +499,7 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
         )
         imported_messages = audit.actual_rows
         ordered_role_matches = audit.role_matches
-        decisions, activation_correct, activation_total = _promote_fixtures(
+        decisions, activation_correct, activation_total, promotion_bindings = _promote_fixtures(
             corpus, message_map, memory_db, read_model, state_db
         )
         duplicate_records = audit.stable_duplicates.total
@@ -503,7 +520,6 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
                 "corpus_message_id": record.message_id,
             })
             persisted_identity_rows.append(identity_row)
-        promotion_bindings = {record.fact_id: record.fact_id for record in corpus if record.fact_id in decisions}
         message_links: list[dict[str, Any]] = []
         for row in persisted_identity_rows:
             message_links.extend(read_model.message_links(str(row["message_id"])))
