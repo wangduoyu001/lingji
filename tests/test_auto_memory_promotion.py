@@ -180,6 +180,14 @@ def test_unverifiable_evidence_reference_stays_pending(harness):
     assert "evidence_reference_unverifiable" in result["reason_codes"]
 
 
+def test_candidate_owned_evidence_reference_cannot_self_validate(harness):
+    service, state, _memory = harness
+    state.append_event("evidence_recorded", "message", "candidate-1", {"content": "candidate-owned"})
+    result = service.evaluate(make_candidate(source_refs=("candidate-1",)))
+    assert result["status"] == PromotionStatus.PENDING_OWNER_REVIEW.value
+    assert "evidence_reference_unverifiable" in result["reason_codes"]
+
+
 def test_supplied_mismatched_content_hash_is_rejected(harness):
     service, _state, _memory = harness
     with pytest.raises(ValueError, match="content hash"):

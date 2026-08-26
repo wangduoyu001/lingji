@@ -241,7 +241,7 @@ class AutoMemoryPromotionService:
         refs = self._evidence_refs(candidate)
         if not refs:
             reasons.append("evidence_required")
-        elif not any(self._evidence_verifiable(ref) for ref in refs):
+        elif not any(self._evidence_verifiable(ref, candidate) for ref in refs):
             reasons.append("evidence_reference_unverifiable")
         metadata = dict(candidate.metadata)
         if self._truthy(metadata.get("has_conflict")) or self._truthy(metadata.get("conflict")):
@@ -283,10 +283,21 @@ class AutoMemoryPromotionService:
     def _evidence_refs(candidate: ReviewCandidate) -> tuple[str, ...]:
         return tuple(str(item).strip() for item in candidate.source_refs if str(item).strip())
 
-    def _evidence_verifiable(self, reference: str) -> bool:
+    def _evidence_verifiable(self, reference: str, candidate: ReviewCandidate) -> bool:
         """Resolve evidence through existing state/source read models only."""
         wanted = str(reference).strip()
         if not wanted:
+            return False
+        metadata = dict(candidate.metadata)
+        candidate_owned = {
+            str(candidate.memory_id).strip(),
+            str(candidate.content_hash).strip(),
+            str(metadata.get("candidate_id") or "").strip(),
+            str(metadata.get("decision_id") or "").strip(),
+            str(metadata.get("promotion_id") or "").strip(),
+        }
+        candidate_owned.discard("")
+        if wanted in candidate_owned:
             return False
         allowed_event_types = {
             "evidence_recorded", "source_ingested", "raw_snapshot_created",
