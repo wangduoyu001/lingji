@@ -4,6 +4,23 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 6 final repair · candidate-owned evidence self-reference
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`2663a4cf40c267767036c1e18a90df0f8bd10036`
+- 影响模块：derived-memory evidence resolver and candidate promotion policy
+- 风险等级：P0
+- 用户可感知变化：候选自身 ID、内容哈希、决定/晋级 ID 即使被伪装成既有 evidence event，也不会被当作可验证来源；该候选保持主人审核状态。
+
+### 新增或修改的自动验收
+
+- [x] 预置 `evidence_recorded(entity_id=candidate_id)` 的自引用回归：保持 `pending_owner_review` 并返回 `evidence_reference_unverifiable`。
+- [ ] Task 6 focused、Task 1–5 回归、`py_compile`、`git diff --check`、acceptance sync、local handoff：根代理在双提交后复读。
+
+### 回滚
+
+- 回滚：回退 `2663a4cf40c267767036c1e18a90df0f8bd10036` 与对应文档提交；不触碰 Vault、原始证据或主人配置。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 6 repair round 1 · fail-closed promotion and replay
 
 - 产品分支：`codex/phase1-automatic-memory`
