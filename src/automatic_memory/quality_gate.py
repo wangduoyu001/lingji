@@ -55,10 +55,14 @@ from .evaluation import (
     score_question,
 )
 from .quality_evidence import (
+    EvidenceState,
     ExpectedImportedRow,
+    QualityRunEnvelope,
     ImportedEvidenceAudit,
     ProtectedTreeSentinel,
     QualityEvidenceReadiness,
+    finalize_quality_envelope,
+    write_quality_json_atomic,
     _read_ingestion_rows,
     build_expected_import_rows,
 )
@@ -81,26 +85,9 @@ class AutomaticMemoryFunctionalGate:
 
     @staticmethod
     def evaluate(report: EvaluationReport) -> Literal["PASS", "FAIL"]:
-        return "PASS" if _measured_gate_passes(report) else "FAIL"
-
-
-def _measured_gate_passes(report: EvaluationReport) -> bool:
-    return (
-        report.answered_questions == 100
-        and report.expected_messages > 0
-        and report.imported_messages == report.expected_messages
-        and report.expected_ordered_roles > 0
-        and report.ordered_role_matches == report.expected_ordered_roles
-        and report.valid_fact_recall >= 90
-        and report.citation_accuracy >= 95
-        and report.automatic_activation_accuracy >= 95
-        and report.mcp_success_rate >= 95
-        and report.context_reduction >= 90
-        and report.protected_false_promotions == 0
-        and report.stale_current_leaks == 0
-        and report.duplicate_records == 0
-        and report.production_pollution == 0
-    )
+        functional_report = replace(report, owner_review_success=100.0, reboot_recovery=100.0, blocked_reasons=())
+        verdict = AutomaticMemoryAcceptanceGate.evaluate(functional_report)
+        return "PASS" if verdict == "PASS" else "FAIL"
 
 
 def _sha256(path: Path) -> str:
@@ -145,9 +132,7 @@ def _production_sentinels() -> dict[str, str]:
 
 def _atomic_json(path: Path, value: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    write_quality_json_atomic(path, value, protected_roots=())
 
 
 def _history_fixture(corpus: Sequence[CorpusRecord], path: Path) -> None:
@@ -654,21 +639,28 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
         if production_pollution is None:
             report = replace(report, production_pollution=None)
         readiness = QualityEvidenceReadiness(
-            import_audit=(
-                audit.ready
-            ),
-            promotion_provenance=all(
+            import_audit=EvidenceState.READY if audit.ready else EvidenceState.FAILED,
+            promotion_provenance=EvidenceState.READY if all(
                 decision.get("status") != "active" or bool(read_model.memory_links(decision.get("candidate_id", "")))
                 for decision in decisions.values()
-            ),
-            gateway_selection=(
+            ) else EvidenceState.FAILED,
+            gateway_selection=EvidenceState.READY if (
                 gateway_calls_completed == EXPECTED_QUESTION_COUNT
                 and gateway_selector_calls == EXPECTED_QUESTION_COUNT
+            ) else EvidenceState.FAILED,
+            production_sentinel=(
+                EvidenceState.NOT_MEASURED if production_pollution is None else
+                (EvidenceState.READY if production_pollution == 0 else EvidenceState.FAILED)
             ),
-            mcp_parity=False,
-            degradation=False,
-            context_baseline=False,
-            scale=False,
+            mcp_parity=EvidenceState.NOT_MEASURED,
+            qdrant_degradation=EvidenceState.NOT_MEASURED,
+            corruption_isolation=EvidenceState.NOT_MEASURED,
+            context_baseline=EvidenceState.NOT_MEASURED,
+            scale=EvidenceState.NOT_MEASURED,
+            owner_review=EvidenceState.NOT_MEASURED,
+            reboot_recovery=EvidenceState.NOT_MEASURED,
+            mac_release=EvidenceState.NOT_MEASURED,
+            windows_release=EvidenceState.NOT_MEASURED,
         )
         # 4R1 deliberately cannot publish a functional/full gate result: 4R2
         # owns MCP, degradation, corruption and measured baseline evidence.
@@ -843,7 +835,13 @@ def run_100k_benchmark(*, output_path: Path) -> dict[str, Any]:
 
 __all__ = [
     "AutomaticMemoryFunctionalGate",
+    "EvidenceState",
     "ExpectedImportedRow",
+    "QualityEvidenceReadiness",
+    "QualityRunEnvelope",
+    "ProtectedTreeSentinel",
+    "finalize_quality_envelope",
+    "write_quality_json_atomic",
     "build_expected_import_rows",
     "EXPECTED_QUESTION_COUNT",
     "generate_100k_history",

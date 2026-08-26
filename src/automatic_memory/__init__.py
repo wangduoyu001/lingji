@@ -39,6 +39,18 @@ from .evidence_identity import (
     build_identity_registry,
     select_context_evidence,
 )
+from .quality_evidence import (
+    EvidenceState,
+    ProtectedTreeInvalidError,
+    ProtectedTreeSentinel,
+    ProtectedTreeSentinelError,
+    ProtectedTreeUnavailableError,
+    QualityEvidenceReadiness,
+    QualityPublicationError,
+    QualityRunEnvelope,
+    finalize_quality_envelope,
+    write_quality_json_atomic,
+)
 
 __all__ = [
     "AuthorizationScope",
@@ -81,4 +93,14 @@ __all__ = [
     "EvidenceIdentityError",
     "build_identity_registry",
     "select_context_evidence",
+    "EvidenceState",
+    "QualityEvidenceReadiness",
+    "QualityRunEnvelope",
+    "ProtectedTreeSentinel",
+    "ProtectedTreeSentinelError",
+    "ProtectedTreeUnavailableError",
+    "ProtectedTreeInvalidError",
+    "QualityPublicationError",
+    "finalize_quality_envelope",
+    "write_quality_json_atomic",
 ]
