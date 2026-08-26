@@ -54,6 +54,7 @@ class SourceReadModel:
 
     def _initialize(self) -> None:
         with self._lock, self._connection() as connection:
+            connection.execute("BEGIN")
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS source_read_model_meta (
@@ -77,8 +78,7 @@ class SourceReadModel:
                     (SOURCE_READ_MODEL_SCHEMA_VERSION,),
                 )
 
-            connection.executescript(
-                """
+            schema_script = """
                 CREATE TABLE IF NOT EXISTS source_records (
                     source_id TEXT PRIMARY KEY,
                     source_type TEXT NOT NULL,
@@ -179,7 +179,9 @@ class SourceReadModel:
                 CREATE INDEX IF NOT EXISTS idx_message_memory_memory
                     ON message_memory_links(memory_id, message_id);
                 """
-            )
+            for statement in schema_script.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
             conversation_added = self._ensure_inheritance_columns(
                 connection, "conversation_records"
             )
@@ -197,18 +199,27 @@ class SourceReadModel:
 
     @staticmethod
     def _ensure_ingestion_columns(connection: sqlite3.Connection) -> None:
-        existing = {
-            str(row["name"])
-            for row in connection.execute("PRAGMA table_info(message_records)").fetchall()
-        }
-        if "ingestion_batch_id" not in existing:
-            connection.execute("ALTER TABLE message_records ADD COLUMN ingestion_batch_id TEXT NULL")
-        if "ingestion_ordinal" not in existing:
-            connection.execute("ALTER TABLE message_records ADD COLUMN ingestion_ordinal INTEGER NULL")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_message_ingestion_order "
-            "ON message_records(ingestion_batch_id, ingestion_ordinal, message_id)"
-        )
+        savepoint = "source_read_model_ingestion_migration"
+        connection.execute(f"SAVEPOINT {savepoint}")
+        try:
+            existing = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(message_records)").fetchall()
+            }
+            if "ingestion_batch_id" not in existing:
+                connection.execute("ALTER TABLE message_records ADD COLUMN ingestion_batch_id TEXT NULL")
+            if "ingestion_ordinal" not in existing:
+                connection.execute("ALTER TABLE message_records ADD COLUMN ingestion_ordinal INTEGER NULL")
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_message_ingestion_order "
+                "ON message_records(ingestion_batch_id, ingestion_ordinal, message_id)"
+            )
+        except BaseException:
+            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            raise
+        else:
+            connection.execute(f"RELEASE SAVEPOINT {savepoint}")
 
     def _ensure_inheritance_columns(
         self, connection: sqlite3.Connection, table: str
@@ -330,12 +341,11 @@ class SourceReadModel:
     ) -> dict[str, int | str]:
         if ingestion_batch_id is not None:
             ingestion_batch_id = self._required(ingestion_batch_id, "ingestion_batch_id")
-        try:
-            next_ordinal = int(ingestion_ordinal_start)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("ingestion_ordinal_start must be an integer") from exc
-        if next_ordinal < 0:
-            raise ValueError("ingestion_ordinal_start must be greater than or equal to zero")
+        if type(ingestion_ordinal_start) is not int or ingestion_ordinal_start < 0:
+            raise SourceReadModelError(
+                "ingestion_ordinal_start must be a non-negative integer"
+            )
+        next_ordinal = ingestion_ordinal_start
         source = dict(bundle.get("source") or {})
         conversations = list(bundle.get("conversations") or [])
         with self._lock, self._connection() as connection:
@@ -592,6 +602,7 @@ class SourceReadModel:
                     m.external_id AS message_external_id,
                     m.ingestion_batch_id,
                     m.ingestion_ordinal,
+                    typeof(m.ingestion_ordinal) AS ingestion_ordinal_type,
                     m.sequence,
                     m.role,
                     m.occurred_at,
@@ -611,9 +622,17 @@ class SourceReadModel:
                 raise SourceReadModelError(
                     f"ingestion batch contains NULL ordinal: {batch_id}"
                 )
-            numeric_ordinals = [int(ordinal) for ordinal in ordinals]
+            if any(
+                row["ingestion_ordinal_type"] != "integer"
+                or type(row["ingestion_ordinal"]) is not int
+                for row in rows
+            ):
+                raise SourceReadModelError(
+                    f"ingestion batch contains malformed ordinal: {batch_id}"
+                )
+            numeric_ordinals = [row["ingestion_ordinal"] for row in rows]
             if numeric_ordinals != list(
-                range(numeric_ordinals[0], numeric_ordinals[0] + len(numeric_ordinals))
+                range(0, len(numeric_ordinals))
             ):
                 raise SourceReadModelError(
                     f"ingestion batch ordinals are duplicate or non-contiguous: {batch_id}"

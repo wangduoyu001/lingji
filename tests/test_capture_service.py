@@ -35,11 +35,17 @@ class FakeStructuredReadModel:
     def __init__(self):
         self.bundles = []
 
-    def upsert_bundle(self, bundle):
+    def upsert_bundle(self, bundle, *, ingestion_batch_id=None, ingestion_ordinal_start=0):
         self.bundles.append(bundle)
         messages = bundle["conversations"][0]["messages"]
         links = [link for message in messages for link in message.get("memory_links", [])]
-        return {"sources": 1, "conversations": 1, "messages": len(messages), "links": len(links)}
+        return {
+            "sources": 1,
+            "conversations": 1,
+            "messages": len(messages),
+            "links": len(links),
+            "next_ingestion_ordinal": ingestion_ordinal_start + len(messages),
+        }
 
 
 class FakeMemoryDatabase:

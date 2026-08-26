@@ -166,6 +166,65 @@ def test_v1_migrates_additively_without_backfilling_existing_rows(tmp_path: Path
     assert row["ingestion_ordinal"] is None
 
 
+def _raw_v1_database(path: Path) -> MemoryDatabase:
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        CREATE TABLE source_read_model_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        INSERT INTO source_read_model_meta VALUES ('schema_version', '1');
+        CREATE TABLE source_records (source_id TEXT PRIMARY KEY, source_type TEXT NOT NULL, display_name TEXT NOT NULL, external_id TEXT, raw_reference TEXT, vault_reference TEXT, privacy TEXT NOT NULL, projects_json TEXT NOT NULL, agent_scope_json TEXT NOT NULL, status TEXT NOT NULL, content_hash TEXT NOT NULL, created_at TEXT, updated_at TEXT, metadata_json TEXT NOT NULL);
+        CREATE TABLE conversation_records (conversation_id TEXT PRIMARY KEY, source_id TEXT NOT NULL, external_id TEXT, title TEXT NOT NULL, participants_json TEXT NOT NULL, started_at TEXT, ended_at TEXT, message_count INTEGER NOT NULL, privacy TEXT NOT NULL, projects_json TEXT NOT NULL, agent_scope_json TEXT NOT NULL, content_hash TEXT NOT NULL, created_at TEXT, updated_at TEXT, metadata_json TEXT NOT NULL);
+        CREATE TABLE message_records (message_id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, source_id TEXT NOT NULL, external_id TEXT, role TEXT NOT NULL, author TEXT, occurred_at TEXT, sequence INTEGER NOT NULL, content TEXT NOT NULL, content_hash TEXT NOT NULL, raw_reference TEXT, privacy TEXT NOT NULL, projects_json TEXT NOT NULL, agent_scope_json TEXT NOT NULL, created_at TEXT, updated_at TEXT, metadata_json TEXT NOT NULL);
+        """
+    )
+    connection.commit()
+    connection.close()
+    return MemoryDatabase(path)
+
+
+def test_v1_migration_failure_rolls_back_columns_index_and_version(tmp_path: Path, monkeypatch):
+    database = _raw_v1_database(tmp_path / "rollback.db")
+    original = SourceReadModel._ensure_ingestion_columns
+
+    def fail_after_first_schema_mutation(connection):
+        original(connection)
+        raise RuntimeError("injected migration failure")
+
+    monkeypatch.setattr(SourceReadModel, "_ensure_ingestion_columns", staticmethod(fail_after_first_schema_mutation))
+    with pytest.raises(RuntimeError, match="injected migration failure"):
+        SourceReadModel(database)
+    with sqlite3.connect(database.path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(message_records)")}
+        indexes = {row[1] for row in connection.execute("PRAGMA index_list(message_records)")}
+        version = connection.execute("SELECT value FROM source_read_model_meta WHERE key='schema_version'").fetchone()[0]
+    assert "ingestion_batch_id" not in columns
+    assert "ingestion_ordinal" not in columns
+    assert "idx_message_ingestion_order" not in indexes
+    assert version == "1"
+
+
+def test_fresh_v2_failure_does_not_leave_durable_v2_marker(tmp_path: Path, monkeypatch):
+    path = tmp_path / "fresh-failure.db"
+
+    def fail_initialization(connection):
+        raise RuntimeError("injected fresh schema failure")
+
+    monkeypatch.setattr(SourceReadModel, "_ensure_ingestion_columns", staticmethod(fail_initialization))
+    with pytest.raises(RuntimeError, match="injected fresh schema failure"):
+        SourceReadModel(MemoryDatabase(path))
+    with sqlite3.connect(path) as connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        marker = (
+            connection.execute(
+                "SELECT value FROM source_read_model_meta WHERE key='schema_version'"
+            ).fetchone()
+            if "source_read_model_meta" in tables
+            else None
+        )
+    assert marker is None
+    assert "message_records" not in tables
+
+
 @pytest.mark.parametrize("version", ["0", "3", "future"])
 def test_unknown_schema_versions_fail_closed(tmp_path: Path, version: str):
     path = tmp_path / f"schema-{version}.db"
@@ -214,7 +273,23 @@ def test_legacy_no_batch_upsert_preserves_ingestion_owner(tmp_path: Path):
     bundle = _bundle("source", "conversation", [("message", 0, "2026-01-01T00:00:00Z")])
     model.upsert_bundle(bundle, ingestion_batch_id="exec", ingestion_ordinal_start=7)
     model.upsert_bundle(bundle)
-    assert model.list_ingestion_messages("exec")["items"][0]["ingestion_ordinal"] == 7
+    with model.database._connection() as connection:
+        row = connection.execute(
+            "SELECT ingestion_batch_id, ingestion_ordinal FROM message_records"
+        ).fetchone()
+    assert row["ingestion_batch_id"] == "exec"
+    assert row["ingestion_ordinal"] == 7
+
+
+@pytest.mark.parametrize("invalid", [True, 1.5, "1", -1])
+def test_invalid_ingestion_ordinal_start_fails_with_read_model_error(tmp_path: Path, invalid):
+    model = SourceReadModel(MemoryDatabase(tmp_path / "invalid-start.db"))
+    with pytest.raises(SourceReadModelError):
+        model.upsert_bundle(
+            _bundle("source", "conversation", [("message", 0, "2026-01-01T00:00:00Z")]),
+            ingestion_batch_id="exec",
+            ingestion_ordinal_start=invalid,
+        )
 
 
 def test_later_execution_becomes_current_owner_without_duplicate_rows(tmp_path: Path):
@@ -264,3 +339,33 @@ def test_ingestion_batch_is_fully_validated_before_pagination(tmp_path: Path, mu
         mutator(connection, ids)
     with pytest.raises(SourceReadModelError):
         model.list_ingestion_messages("exec", limit=1, offset=1)
+
+
+@pytest.mark.parametrize("stored", ["not-an-ordinal", 1.5, "True"])
+def test_malformed_stored_ordinals_raise_source_read_model_error(tmp_path: Path, stored):
+    database = MemoryDatabase(tmp_path / "malformed.db")
+    model = SourceReadModel(database)
+    model.upsert_bundle(
+        _bundle("source", "conversation", [("first", 0, "2026-01-01T00:00:00Z"), ("second", 1, "2026-01-01T00:01:00Z")]),
+        ingestion_batch_id="exec",
+    )
+    with database._connection() as connection:
+        connection.execute(
+            "UPDATE message_records SET ingestion_ordinal = ? WHERE ingestion_ordinal = 1",
+            (stored,),
+        )
+    with pytest.raises(SourceReadModelError):
+        model.list_ingestion_messages("exec")
+
+
+def test_missing_leading_ordinal_fails_before_pagination(tmp_path: Path):
+    database = MemoryDatabase(tmp_path / "missing-leading.db")
+    model = SourceReadModel(database)
+    model.upsert_bundle(
+        _bundle("source", "conversation", [("first", 0, "2026-01-01T00:00:00Z"), ("second", 1, "2026-01-01T00:01:00Z")]),
+        ingestion_batch_id="exec",
+    )
+    with database._connection() as connection:
+        connection.execute("UPDATE message_records SET ingestion_ordinal = ingestion_ordinal + 1")
+    with pytest.raises(SourceReadModelError):
+        model.list_ingestion_messages("exec", limit=1)
