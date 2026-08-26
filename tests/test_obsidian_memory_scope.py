@@ -61,3 +61,14 @@ def test_scope_rejects_symlink_escape_and_non_markdown(tmp_path):
     assert scope.classify(link).reason == "symlink"
     assert scope.classify(internal_link).reason == "symlink"
     assert scope.classify(text).reason == "non_markdown"
+
+
+def test_scope_rejects_symlink_before_resolving_dotdot_path(tmp_path):
+    scope = ObsidianMemoryScope(tmp_path)
+    target = _write(tmp_path, "03-Knowledge/inside.md", {"lingji_memory": True})
+    link = tmp_path / "outside-link.md"
+    link.symlink_to(target)
+
+    decision = scope.classify(tmp_path / "nested" / ".." / "outside-link.md")
+    assert decision.eligible is False
+    assert decision.reason == "symlink"

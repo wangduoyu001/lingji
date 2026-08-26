@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -52,10 +53,16 @@ class IncrementalMemorySynchronizer:
                 candidate = root / relative_path
                 if (
                     decision.reason == "outside_vault"
-                    or not candidate.is_file()
                     or candidate.suffix.casefold() != ".md"
                 ):
                     continue
+                if not candidate.is_file():
+                    scope_reason = str(current[relative_path].get("scope_reason") or "")
+                    dedicated = relative_path.startswith(
+                        ("_LingJi/Memory Inbox/", "_LingJi/Memory Library/")
+                    )
+                    if scope_reason not in {"authorized", "explicitly_enabled"} and not dedicated:
+                        continue
             if self.database.remove_by_path(relative_path):
                 removed += 1
 
@@ -101,7 +108,7 @@ class IncrementalMemorySynchronizer:
         with self.database._connection() as connection:  # Reuse the database's lock/PRAGMA contract.
             rows = connection.execute(
                 """
-                SELECT d.memory_id, d.relative_path, d.content_hash,
+                SELECT d.memory_id, d.relative_path, d.content_hash, d.relationships_json,
                        COUNT(c.chunk_id) AS chunk_count
                 FROM memory_documents d
                 LEFT JOIN memory_chunks c ON c.memory_id = d.memory_id
@@ -113,6 +120,17 @@ class IncrementalMemorySynchronizer:
                 "memory_id": str(row["memory_id"]),
                 "content_hash": str(row["content_hash"] or ""),
                 "chunk_count": int(row["chunk_count"] or 0),
+                "scope_reason": self._scope_reason(row["relationships_json"]),
             }
             for row in rows
         }
+
+    @staticmethod
+    def _scope_reason(value: Any) -> str:
+        try:
+            payload = json.loads(str(value or "{}"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return ""
+        if not isinstance(payload, dict):
+            return ""
+        return str(payload.get("__memory_scope_reason") or "")

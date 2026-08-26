@@ -303,6 +303,13 @@ class MemoryDatabase:
                 "related_ids",
             )
         }
+        memory_scope_reason = str(
+            entry.get("memory_scope_reason")
+            or properties.get("memory_scope_reason")
+            or ""
+        ).strip()
+        if memory_scope_reason:
+            relationships["__memory_scope_reason"] = memory_scope_reason
         memory_tier = str(properties.get("memory_tier") or entry.get("memory_tier") or "archival")
         agent_scope = self._as_list(properties.get("agent_scope") or entry.get("agent_scope"))
         project = self._as_list(entry.get("project"))

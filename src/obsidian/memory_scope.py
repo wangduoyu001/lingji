@@ -7,6 +7,7 @@ index can never silently promote an ordinary note.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -47,7 +48,8 @@ class ObsidianMemoryScope:
     """
 
     def __init__(self, root: Path | str):
-        self.root = Path(root).expanduser().resolve(strict=False)
+        self._root_lexical = Path(os.path.abspath(str(Path(root).expanduser())))
+        self.root = self._root_lexical.resolve(strict=False)
 
     def decide(
         self,
@@ -58,22 +60,22 @@ class ObsidianMemoryScope:
         if not raw_candidate.is_absolute():
             raw_candidate = self.root / raw_candidate
 
-        # Check the lexical path before resolving it.  Otherwise a symlink
-        # pointing to another file inside the Vault would disappear into its
-        # target and accidentally become authorized.
+        # Check the lexical path before resolving it.  ``abspath`` normalizes
+        # ``..`` without following symlinks; ``resolve`` would erase the link
+        # and could turn an outside-vault link into an authorized target.
+        lexical_candidate = Path(os.path.abspath(str(raw_candidate)))
         try:
-            raw_relative = raw_candidate.absolute().relative_to(self.root)
+            raw_relative = lexical_candidate.relative_to(self._root_lexical)
         except ValueError:
-            raw_relative = None
-        if raw_relative is not None:
-            current_raw = self.root
-            for part in raw_relative.parts:
-                current_raw = current_raw / part
-                try:
-                    if current_raw.is_symlink():
-                        return ObsidianMemoryDecision(raw_candidate, False, "symlink")
-                except OSError:
-                    return ObsidianMemoryDecision(raw_candidate, False, "invalid_path")
+            return ObsidianMemoryDecision(lexical_candidate, False, "outside_vault")
+        current_raw = self.root
+        for part in raw_relative.parts:
+            current_raw = current_raw / part
+            try:
+                if current_raw.is_symlink():
+                    return ObsidianMemoryDecision(raw_candidate, False, "symlink")
+            except OSError:
+                return ObsidianMemoryDecision(raw_candidate, False, "invalid_path")
 
         candidate = raw_candidate.resolve(strict=False)
 
@@ -139,11 +141,11 @@ class ObsidianMemoryScope:
         a second, fail-closed check.
         """
 
-        if not self.root.is_dir():
+        if not self._root_lexical.is_dir():
             return ()
         decisions: list[ObsidianMemoryDecision] = []
         for path in sorted(
-            path for path in self.root.rglob("*")
+            path for path in self._root_lexical.rglob("*")
             if path.is_file() and path.suffix.casefold() == ".md"
         ):
             decision = self.classify(path)

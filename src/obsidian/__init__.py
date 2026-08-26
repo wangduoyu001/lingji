@@ -46,12 +46,6 @@ from .memory_scope import (
     ObsidianMemoryDecision,
     ObsidianMemoryScope,
 )
-from .memory_migration import (
-    ManifestEntry,
-    MigrationManifest,
-    MigrationResult,
-    ObsidianMemoryMigration,
-)
 
 __all__ = [
     "DISCOVERY_ENVIRONMENT",
@@ -106,3 +100,17 @@ __all__ = [
     "resolve_vault_name",
     "resolve_vault_path",
 ]
+
+
+def __getattr__(name):
+    """Load migration contracts lazily to keep retrieval imports acyclic."""
+    if name in {
+        "ManifestEntry",
+        "MigrationManifest",
+        "MigrationResult",
+        "ObsidianMemoryMigration",
+    }:
+        from . import memory_migration
+
+        return getattr(memory_migration, name)
+    raise AttributeError(name)

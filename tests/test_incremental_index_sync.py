@@ -9,6 +9,7 @@ from src.indexer.index import PEMISIndex
 from src.memory import VaultLayout
 from src.retrieval import MarkdownChunker, MemoryDatabase
 from src.retrieval.incremental_sync import IncrementalMemorySynchronizer
+from src.obsidian.memory_scope import ObsidianMemoryScope
 
 
 class IncrementalIndexSyncTests(unittest.TestCase):
@@ -69,6 +70,34 @@ class IncrementalIndexSyncTests(unittest.TestCase):
         removed = syncer.sync(removed_index["entries"].values(), self.vault, MarkdownChunker())
         self.assertEqual(removed["removed"], 1)
         self.assertIsNone(database.fetch_by_path("04-Projects/second.md"))
+
+    def test_scoped_sync_removes_memory_moved_out_of_authorized_directory(self):
+        authorized = self.vault / "_LingJi" / "Memory Inbox" / "moved.md"
+        authorized.parent.mkdir(parents=True, exist_ok=True)
+        authorized.write_text(
+            "---\nid: MEM-MOVED\nlingji_memory: true\n---\n# moved\n\nbody", encoding="utf-8"
+        )
+        database = MemoryDatabase(self.storage / "scoped.db")
+        scope = ObsidianMemoryScope(self.vault)
+        index = PEMISIndex(self.vault, self.storage)
+        syncer = IncrementalMemorySynchronizer(database)
+        syncer.sync(index.memory_entries(), self.vault, memory_scope=scope)
+        assert database.fetch_by_path("_LingJi/Memory Inbox/moved.md") is not None
+
+        authorized.rename(self.vault / "03-Knowledge" / "moved.md")
+        (self.vault / "03-Knowledge" / "moved.md").write_text(
+            "# moved out\n\nordinary note", encoding="utf-8"
+        )
+        external = self.storage / "chat.md"
+        external.write_text("# chat\n\nchat evidence", encoding="utf-8")
+        syncer.sync(index.memory_entries(), self.vault, memory_scope=scope)
+        assert database.fetch_by_path("_LingJi/Memory Inbox/moved.md") is None
+        database.upsert_from_entry(
+            {"id": "CHAT-1", "relative_path": "source://chat/1", "title": "chat", "memory_type": "chat"},
+            external,
+        )
+        syncer.sync(index.memory_entries(), self.vault, memory_scope=scope)
+        assert database.fetch_by_path("source://chat/1") is not None
 
 
 if __name__ == "__main__":
