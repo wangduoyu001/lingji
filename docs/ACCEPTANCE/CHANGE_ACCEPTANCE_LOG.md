@@ -1329,6 +1329,19 @@ Windows 重启后恢复 = 100%
 - 产品提交：`163fa5d`
 - 报告/文档提交：以本次文档提交的 Git 身份为准；报告不自引用自身 SHA。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 3 repair round 1
+
+- 审查结论：Needs fixes；本轮仅修复 Task 3，不进入 Task 4。
+- 产品 Commit：`1a36296` (`fix: harden unified rag evidence`)
+- 修复内容：隐式 current/why 不复用跨时间缓存；core 应用 memory type/tag；仅可见 scope-filtered evidence 晋级 provenance；why 以安全、限长的 selection/exclusion/conflict/reason/covered ID 进入 Markdown/MCP。
+- RED：新增回归首次运行 `22 passed, 4 failed`；四个失败分别对应上述重要问题。缓存测试初始 CJK 词不命中 FTS，改为命中的 synthetic 词后仍保持 RED，之后才实现修复。上一轮初始 RED 的完整输出已不可从历史提交可靠恢复，本条不伪造补写。
+- GREEN：Task 3 focused `28 passed`；scoped regression `40 passed, 1 existing Pydantic warning`。
+- MCP：新增真实 `MemoryGateway` 注册工具路径回归，证明 current 排除旧决定、why 解释进入 Markdown。
+- 夹具：Task 2 corpus/questions SHA 保持 `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94` / `338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612`。
+- `git diff --check` 与 `git diff 90832a1..HEAD --check`：PASS；修复了报告中的 Markdown trailing whitespace。
+- 真实 Artifact、UI、Production/Vault、Mac M5、Windows 仍未执行；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。
+- 报告路径：`docs/TEST_REPORTS/PHASE1_TASK9_UNIFIED_RAG.md`；文档/报告提交不在文件内自引用自身 SHA。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 2 follow-up · Frozen 100-question quality gate
 
 - 产品分支：`codex/phase1-automatic-memory`
