@@ -58,6 +58,7 @@ from .quality_evidence import (
     ImportedEvidenceAudit,
     ProtectedTreeSentinel,
     QualityEvidenceReadiness,
+    _read_ingestion_rows,
     build_expected_import_rows,
 )
 
@@ -259,27 +260,42 @@ def _match_persisted_messages(
     read_model: SourceReadModel,
     *,
     ingestion_batch_id: str,
+    expected_rows: Sequence[ExpectedImportedRow],
 ) -> dict[str, dict[str, Any]]:
-    """Resolve promotion fixture messages from one persisted import batch, read-only."""
-    output: dict[str, dict[str, Any]] = {}
-    offset = 0
-    while True:
-        page = read_model.list_ingestion_messages(ingestion_batch_id, limit=200, offset=offset)
-        for item in page.get("items") or []:
-            external_id = str(item.get("message_external_id") or "")
-            if external_id:
-                output[external_id] = dict(item)
-        pagination = page.get("pagination") or {}
-        if not pagination.get("has_more"):
-            break
-        offset += int(pagination.get("limit") or len(page.get("items") or []))
-    by_message: dict[str, dict[str, Any]] = {}
-    for record in corpus:
-        suffix = f":message:{record.message_id}"
-        item = next((value for key, value in output.items() if key.endswith(suffix)), None)
-        if item is not None:
-            by_message[record.message_id] = item
-    return by_message
+    """Resolve one persisted row per corpus fact using its full external key."""
+    if len(corpus) != len(expected_rows):
+        raise ValueError("corpus and expected import rows have different lengths")
+    by_key: dict[Any, dict[str, Any]] = {}
+    for item in _read_ingestion_rows(read_model, ingestion_batch_id):
+        if not all(str(item.get(field) or "") for field in ("source_id", "conversation_id", "message_id")):
+            raise ValueError("persisted composite message row has empty primary identity")
+        key = (
+            str(item.get("source_external_id") or ""),
+            str(item.get("conversation_external_id") or ""),
+            str(item.get("message_external_id") or ""),
+        )
+        if key in by_key:
+            raise ValueError("ambiguous duplicate persisted composite message key")
+        by_key[key] = dict(item)
+    matched: dict[str, dict[str, Any]] = {}
+    bound_keys: set[tuple[str, str, str]] = set()
+    for record, expected in zip(corpus, expected_rows):
+        fact_id = str(record.fact_id or "")
+        if not fact_id or fact_id in matched:
+            raise ValueError("ambiguous evaluation fact binding")
+        key = (
+            expected.source_external_id,
+            expected.conversation_external_id,
+            expected.message_external_id,
+        )
+        if key in bound_keys:
+            raise ValueError("ambiguous duplicate expected composite message key")
+        bound_keys.add(key)
+        item = by_key.get(key)
+        if item is None:
+            raise ValueError(f"missing persisted composite message key: {key}")
+        matched[fact_id] = item
+    return matched
 
 
 def _promote_fixtures(
@@ -298,7 +314,7 @@ def _promote_fixtures(
     activation_total = 0
     activation_correct = 0
     for record in corpus:
-        message = message_map.get(record.message_id)
+        message = message_map.get(record.fact_id)
         if message is None:
             continue
         is_eligible = record.risk != "high" and record.authority == "owner-confirmed"
@@ -573,7 +589,10 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
         indexer.build_index()
         memory_db.rebuild_from_index(indexer.get_all(), temporary_root / "vault")
         message_map = _match_persisted_messages(
-            corpus, read_model, ingestion_batch_id=ingestion_batch_id
+            corpus,
+            read_model,
+            ingestion_batch_id=ingestion_batch_id,
+            expected_rows=expected_rows,
         )
         audit = ImportedEvidenceAudit.from_read_model(
             read_model,

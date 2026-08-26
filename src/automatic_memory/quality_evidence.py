@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from src.extraction.models import ExtractionBatch
-from src.sources import ExternalMessageKey, SourceReadModel
+from src.sources import ExternalMessageKey, SourceReadModel, SourceReadModelError
 
 
 @dataclass(frozen=True)
@@ -153,6 +153,56 @@ class ProtectedTreeSentinel:
         return tuple(changes)
 
 
+def _read_ingestion_rows(read_model: SourceReadModel, ingestion_batch_id: str) -> list[Mapping[str, Any]]:
+    rows: list[Mapping[str, Any]] = []
+    offset = 0
+    expected_total: int | None = None
+    while True:
+        page = read_model.list_ingestion_messages(ingestion_batch_id, limit=200, offset=offset)
+        pagination = page.get("pagination")
+        if not isinstance(pagination, Mapping):
+            raise SourceReadModelError("ingestion audit pagination is missing")
+        total = pagination.get("total")
+        page_offset = pagination.get("offset")
+        page_limit = pagination.get("limit")
+        has_more = pagination.get("has_more")
+        if (
+            isinstance(total, bool)
+            or not isinstance(total, int)
+            or total < 0
+            or isinstance(page_offset, bool)
+            or not isinstance(page_offset, int)
+            or page_offset != offset
+            or isinstance(page_limit, bool)
+            or not isinstance(page_limit, int)
+            or page_limit != 200
+            or not isinstance(has_more, bool)
+        ):
+            raise SourceReadModelError("malformed ingestion audit pagination")
+        if expected_total is None:
+            expected_total = total
+        elif total != expected_total:
+            raise SourceReadModelError("ingestion audit pagination total drift")
+        items = page.get("items")
+        if isinstance(items, (str, bytes)) or not isinstance(items, Sequence):
+            raise SourceReadModelError("malformed ingestion audit page items")
+        if len(items) > page_limit or offset + len(items) > total:
+            raise SourceReadModelError("ingestion audit pagination overrun")
+        rows.extend(items)
+        if has_more and not items:
+            raise SourceReadModelError("ingestion audit pagination made no progress")
+        if has_more and offset + len(items) >= total:
+            raise SourceReadModelError("ingestion audit pagination has_more is inconsistent")
+        if not has_more:
+            if len(rows) != total:
+                raise SourceReadModelError("ingestion audit pagination final count mismatch")
+            return rows
+        next_offset = offset + len(items)
+        if next_offset <= offset:
+            raise SourceReadModelError("ingestion audit pagination made no progress")
+        offset = next_offset
+
+
 @dataclass(frozen=True)
 class ImportedEvidenceAudit:
     expected_rows: int
@@ -200,15 +250,7 @@ class ImportedEvidenceAudit:
         ingestion_batch_id: str,
         expected_rows: Sequence[ExpectedImportedRow],
     ) -> "ImportedEvidenceAudit":
-        rows: list[Mapping[str, Any]] = []
-        offset = 0
-        while True:
-            page = read_model.list_ingestion_messages(ingestion_batch_id, limit=200, offset=offset)
-            rows.extend(page.get("items") or [])
-            pagination = page.get("pagination") or {}
-            if not pagination.get("has_more"):
-                break
-            offset += int(pagination.get("limit") or len(page.get("items") or []))
+        rows = _read_ingestion_rows(read_model, ingestion_batch_id)
 
         expected_keys = [item.stable_external_key for item in expected_rows]
         actual_keys = [
@@ -225,8 +267,12 @@ class ImportedEvidenceAudit:
         conversation_identity: dict[tuple[str, str], set[str]] = {}
         message_counts: dict[ExternalMessageKey, int] = {}
         for row, key in zip(rows, actual_keys):
-            source_identity.setdefault(key.source_external_id, set()).add(str(row.get("source_id") or ""))
-            conversation_identity.setdefault((key.source_external_id, key.conversation_external_id), set()).add(str(row.get("conversation_id") or ""))
+            source_id = str(row.get("source_id") or "")
+            conversation_id = str(row.get("conversation_id") or "")
+            if source_id:
+                source_identity.setdefault(key.source_external_id, set()).add(source_id)
+            if conversation_id:
+                conversation_identity.setdefault((key.source_external_id, key.conversation_external_id), set()).add(conversation_id)
             message_counts[key] = message_counts.get(key, 0) + 1
         duplicates = StableDuplicateSummary(
             source_records=sum(max(0, len(ids) - 1) for ids in source_identity.values()),
@@ -242,13 +288,17 @@ class ImportedEvidenceAudit:
                 str(row.get("conversation_external_id") or ""),
                 str(row.get("message_external_id") or ""),
             )
-            ordered_external += int(actual_key == expected.stable_external_key)
+            source_id = str(row.get("source_id") or "")
+            conversation_id = str(row.get("conversation_id") or "")
+            message_id = str(row.get("message_id") or "")
+            internal_ids_valid = bool(source_id and conversation_id and message_id)
+            ordered_external += int(internal_ids_valid and actual_key == expected.stable_external_key)
             role += int(row.get("role") == expected.role)
             sequence += int(row.get("sequence") == expected.sequence)
             timestamp += int(row.get("occurred_at") == expected.occurred_at)
             content += int(row.get("content_hash") == expected.content_hash)
-            source += int(actual_key.source_external_id == expected.source_external_id)
-            conversation += int(actual_key.conversation_external_id == expected.conversation_external_id)
+            source += int(bool(source_id) and actual_key.source_external_id == expected.source_external_id)
+            conversation += int(bool(conversation_id) and actual_key.conversation_external_id == expected.conversation_external_id)
         grouped: dict[str, set[ExternalMessageKey]] = {}
         for item in expected_rows:
             grouped.setdefault(item.content_hash, set()).add(item.stable_external_key)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -189,6 +190,111 @@ def test_repeated_messages_in_one_source_and_conversation_are_not_scope_duplicat
     assert audit.stable_duplicates.conversation_records == 0
 
 
+def test_persisted_message_matching_uses_full_composite_key_for_repeated_raw_ids() -> None:
+    from src.automatic_memory.quality_gate import _match_persisted_messages
+
+    records = [
+        SimpleNamespace(fact_id="fact-a", message_id="same"),
+        SimpleNamespace(fact_id="fact-b", message_id="same"),
+    ]
+    expected = (
+        ExpectedImportedRow("source", "conversation-a", "message-a", 0, 0, "user", "h-a", "t-a"),
+        ExpectedImportedRow("source", "conversation-b", "message-b", 1, 0, "user", "h-b", "t-b"),
+    )
+    rows = [
+        {**persisted_row(expected[0]), "message_id": "primary-a"},
+        {**persisted_row(expected[1]), "message_id": "primary-b"},
+    ]
+    matched = _match_persisted_messages(
+        records,
+        FakeReadModel(rows),
+        ingestion_batch_id="batch-a",
+        expected_rows=expected,
+    )
+    assert matched["fact-a"]["message_id"] == "primary-a"
+    assert matched["fact-b"]["message_id"] == "primary-b"
+
+
+def test_persisted_message_matching_fails_on_ambiguous_or_duplicate_composite_binding() -> None:
+    from src.automatic_memory.quality_gate import _match_persisted_messages
+
+    record = SimpleNamespace(fact_id="fact-a", message_id="same")
+    expected = (ExpectedImportedRow("source", "conversation", "message", 0, 0, "user", "h", "t"),)
+    duplicate = persisted_row(expected[0])
+    duplicate["message_id"] = "primary-b"
+    with pytest.raises(ValueError, match="duplicate|ambiguous"):
+        _match_persisted_messages(
+            [record],
+            FakeReadModel([persisted_row(expected[0]), duplicate]),
+            ingestion_batch_id="batch-a",
+            expected_rows=expected,
+        )
+
+    duplicate_expected = (expected[0], expected[0])
+    with pytest.raises(ValueError, match="duplicate|ambiguous"):
+        _match_persisted_messages(
+            [record, SimpleNamespace(fact_id="fact-b", message_id="same")],
+            FakeReadModel([persisted_row(expected[0])]),
+            ingestion_batch_id="batch-a",
+            expected_rows=duplicate_expected,
+        )
+
+
+@pytest.mark.parametrize("empty_field", ["source_id", "conversation_id", "message_id"])
+def test_empty_internal_primary_ids_never_make_audit_ready(empty_field: str) -> None:
+    rows = rows_for_expected()
+    rows[0][empty_field] = ""
+    audit = ImportedEvidenceAudit.from_read_model(
+        FakeReadModel(rows), ingestion_batch_id="batch-a", expected_rows=expected_rows()
+    )
+    assert not audit.ready
+
+
+@pytest.mark.parametrize(
+    "pagination",
+    [
+        {"total": 99, "offset": 0, "limit": 200, "has_more": False},
+        {"total": 3, "offset": 1, "limit": 200, "has_more": False},
+        {"total": 3, "offset": 0, "limit": 199, "has_more": False},
+        {"total": 3, "offset": 0, "limit": 200, "has_more": True},
+    ],
+)
+def test_malformed_pagination_fails_closed(pagination: dict[str, object]) -> None:
+    class MalformedReadModel:
+        calls = 0
+
+        def list_ingestion_messages(self, ingestion_batch_id: str, *, limit: int, offset: int):
+            del ingestion_batch_id, limit, offset
+            self.calls += 1
+            if pagination["has_more"] and self.calls > 1:
+                return {"items": [], "pagination": {**pagination, "offset": 200, "has_more": False}}
+            return {"items": rows_for_expected(), "pagination": pagination}
+
+    with pytest.raises(Exception, match="pagination|total|offset|limit|progress"):
+        ImportedEvidenceAudit.from_read_model(
+            MalformedReadModel(), ingestion_batch_id="batch-a", expected_rows=expected_rows()
+        )
+
+
+def test_has_more_empty_page_fails_without_looping() -> None:
+    class EmptyProgressReadModel:
+        calls = 0
+
+        def list_ingestion_messages(self, ingestion_batch_id: str, *, limit: int, offset: int):
+            del ingestion_batch_id, limit, offset
+            self.calls += 1
+            if self.calls == 1:
+                return {"items": [], "pagination": {"total": 1, "offset": 0, "limit": 200, "has_more": True}}
+            return {"items": [], "pagination": {"total": 1, "offset": 200, "limit": 200, "has_more": False}}
+
+    read_model = EmptyProgressReadModel()
+    with pytest.raises(Exception, match="pagination|progress|total"):
+        ImportedEvidenceAudit.from_read_model(
+            read_model, ingestion_batch_id="batch-a", expected_rows=expected_rows()
+        )
+    assert read_model.calls <= 2
+
+
 def test_equal_content_is_one_deterministic_intentional_group_not_duplicate() -> None:
     rows = rows_for_expected()
     rows.reverse()
@@ -268,6 +374,19 @@ def test_generic_history_frozen_corpus_has_145_rows_and_five_groups(tmp_path: Pa
     audit = ImportedEvidenceAudit.from_read_model(
         read_model, ingestion_batch_id="task2-frozen", expected_rows=expected
     )
+    before_stats = read_model.stats()
+    before_items = read_model.list_ingestion_messages("task2-frozen")["items"]
+    pipeline.execute(
+        "generic_ai_history",
+        input_path=fixture,
+        adapter_name="generic_ai_history",
+        execution_id="task2-frozen",
+    )
+    after_stats = read_model.stats()
+    after_items = read_model.list_ingestion_messages("task2-frozen")["items"]
+    replay_audit = ImportedEvidenceAudit.from_read_model(
+        read_model, ingestion_batch_id="task2-frozen", expected_rows=expected
+    )
     assert (audit.expected_rows, audit.actual_rows) == (145, 145)
     assert {
         audit.ordered_external_key_matches,
@@ -291,3 +410,8 @@ def test_generic_history_frozen_corpus_has_145_rows_and_five_groups(tmp_path: Pa
         assert len({record.fact_id for record in records}) == 2
         assert len({record.citation_id for record in records}) == 2
     assert audit.ready
+    assert {key: before_stats[key] for key in ("sources", "conversations", "messages")} == {
+        key: after_stats[key] for key in ("sources", "conversations", "messages")
+    }
+    assert [item["message_id"] for item in before_items] == [item["message_id"] for item in after_items]
+    assert replay_audit == audit
