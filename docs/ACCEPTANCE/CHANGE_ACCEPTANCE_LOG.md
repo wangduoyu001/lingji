@@ -4,6 +4,27 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 7 repair round 3 · why scope isolation
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`2b8ca4eb9724f3f75b23d797a109847b3c42f4c8`
+- 影响模块：why lexical/semantic candidate scope, project/tag/agent filtering, short-Chinese history fallback memory-type filtering
+- 风险等级：P0
+- 用户可感知变化：`why` 的排除候选现在复用完整检索范围；跨项目、未授权 Agent、标签或 memory type 不匹配的证据不会出现在解释中，也不会泄露来源引用。
+- 数据或安全边界变化：只收窄解释候选，不改变历史证据保存或 current 检索语义；不新增事实源。
+
+### 新增或修改的自动验收
+
+- [x] `tests/test_task7_timeline_retrieval.py`：13 passed，新增 Project/Memory Type scope 与短中文 history fallback 隔离回归。
+- [x] Task 7 相关检索/Gateway/MCP/Project Context 回归：87 passed，2 warnings（既有依赖弃用警告）。
+- [x] 涉及文件 `py_compile`、`git diff --check`：PASS。
+- [ ] Task 1–6 回归、`scripts/check_acceptance_sync.py`、`scripts/check_local_execution_handoff.py`：根代理在双提交后复读。
+- [ ] Qdrant unavailable、真实 Production Vault、主人 UI/M5 真机验收：仍不在本轮范围。
+
+### 回滚
+
+- 回滚：回退产品 Commit `2b8ca4eb9724f3f75b23d797a109847b3c42f4c8` 与本条文档提交；不触碰 Vault、原始聊天证据、Qdrant 正式数据或主人配置。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 7 repair round 1 · temporal and why hardening
 
 - 产品分支：`codex/phase1-automatic-memory`
