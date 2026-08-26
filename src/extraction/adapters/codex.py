@@ -28,9 +28,21 @@ class CodexWorkReportAdapter(ExtractionAdapter):
     ) -> bool:
         if source_type not in self.source_types:
             return False
+        if source_type == "codex" and self._has_explicit_transcript_schema(input_path, payload):
+            return False
         if payload:
             return True
         return bool(input_path and input_path.suffix.lower() == ".json")
+
+    @staticmethod
+    def _has_explicit_transcript_schema(path: Path | None, payload: Mapping[str, Any]) -> bool:
+        value: Any = payload if payload else None
+        if value is None and path and path.suffix.lower() == ".json":
+            try:
+                value = json.loads(path.read_text(encoding="utf-8-sig"))
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                return False
+        return isinstance(value, dict) and ("schema" in value or "schema_version" in value)
 
     def extract(self, request: ExtractionRequest) -> ExtractionBatch:
         report = self._load_report(request)
@@ -401,6 +413,18 @@ class CodexTranscriptAdapter(ExtractionAdapter):
         if not path or path.is_dir() or path.is_symlink():
             return SchemaDetection(None, None, False, "Codex transcript requires one regular JSONL file")
         if path.suffix.lower() != ".jsonl":
+            if path.suffix.lower() == ".json":
+                try:
+                    value = json.loads(path.read_text(encoding="utf-8-sig"))
+                except (OSError, UnicodeError, json.JSONDecodeError):
+                    value = None
+                if isinstance(value, dict) and ("schema" in value or "schema_version" in value):
+                    return SchemaDetection(
+                        str(value.get("schema") or "") or None,
+                        str(value.get("schema_version") or "") or None,
+                        False,
+                        "unknown Codex transcript schema; no guessing",
+                    )
             return SchemaDetection(None, None, False, "Codex transcript schema requires JSONL")
         if self._forbidden_path(path):
             return SchemaDetection(None, None, False, "Codex transcript refuses credential or private storage paths")

@@ -343,13 +343,23 @@ class ChatGPTExportAdapter(ExtractionAdapter):
         source_files: list[str] = []
         max_member = int(options.get("max_zip_member_bytes", self.DEFAULT_MAX_MEMBER))
         max_total = int(options.get("max_zip_uncompressed_bytes", self.DEFAULT_MAX_ZIP_TOTAL))
-        max_json_files = int(options.get("max_zip_json_files", self.DEFAULT_MAX_JSON_FILES))
+        max_members = int(
+            options.get(
+                "max_zip_members",
+                options.get("max_zip_json_files", self.DEFAULT_MAX_JSON_FILES),
+            )
+        )
         max_conversations = int(options.get("max_conversations", self.DEFAULT_MAX_CONVERSATIONS))
         max_ratio = float(options.get("max_zip_compression_ratio", self.DEFAULT_MAX_COMPRESSION_RATIO))
         if path.suffix.lower() == ".zip":
             with zipfile.ZipFile(path) as archive:
+                members = archive.infolist()
+                if len(members) > max_members:
+                    raise ValueError(
+                        f"ChatGPT ZIP members exceed safety limit: {len(members)} > {max_members}"
+                    )
                 total_size = 0
-                for member in archive.infolist():
+                for member in members:
                     normalized_name = member.filename.replace("\\", "/")
                     member_path = Path(normalized_name)
                     if normalized_name.startswith("/") or normalized_name.split("/")[0].endswith(":") or ".." in normalized_name.split("/"):
@@ -371,7 +381,7 @@ class ChatGPTExportAdapter(ExtractionAdapter):
                 infos = sorted(
                     (
                         info
-                        for info in archive.infolist()
+                        for info in members
                         if not info.is_dir()
                         and info.filename == "conversations.json"
                         and Path(info.filename).suffix.lower() == ".json"
@@ -433,6 +443,9 @@ class ChatGPTExportAdapter(ExtractionAdapter):
     def _validate_official_conversation(value: Any) -> dict[str, Any]:
         if not isinstance(value, dict) or not isinstance(value.get("id"), str) or not value["id"].strip():
             raise ValueError("Official ChatGPT conversation id is missing")
+        for field in ("title", "current_node"):
+            if field in value and value[field] is not None and not isinstance(value[field], str):
+                raise ValueError(f"Official ChatGPT conversation field {field} is invalid")
         if not isinstance(value.get("mapping"), dict):
             raise ValueError("Official ChatGPT conversation mapping is missing")
         for timestamp_field in ("create_time", "update_time"):
@@ -443,6 +456,8 @@ class ChatGPTExportAdapter(ExtractionAdapter):
         for node_id, node in value["mapping"].items():
             if not isinstance(node_id, str) or not isinstance(node, dict):
                 raise ValueError("Official ChatGPT mapping is malformed")
+            if "parent" in node and node["parent"] is not None and not isinstance(node["parent"], str):
+                raise ValueError("Official ChatGPT mapping parent is invalid")
             if "message" not in node:
                 raise ValueError("Official ChatGPT mapping node message is missing")
             message = node.get("message")
@@ -461,8 +476,10 @@ class ChatGPTExportAdapter(ExtractionAdapter):
             role = author.get("role") if isinstance(author, dict) else None
             if role not in {"user", "assistant", "system", "tool"}:
                 raise ValueError("Official ChatGPT message role is invalid")
-            if "metadata" in message and not isinstance(message.get("metadata"), dict):
+            if "metadata" in message and message.get("metadata") is not None and not isinstance(message.get("metadata"), dict):
                 raise ValueError("Official ChatGPT message metadata is invalid")
+            if isinstance(message.get("metadata"), dict):
+                ChatGPTExportAdapter._validate_metadata(message["metadata"])
             content = message.get("content")
             if not isinstance(content, dict):
                 raise ValueError("Official ChatGPT message content is missing")
@@ -517,6 +534,35 @@ class ChatGPTExportAdapter(ExtractionAdapter):
         if any(isinstance(content.get(key), str) and content[key].strip() for key in ("text", "result", "content")):
             return
         raise ValueError("Official ChatGPT message content shape is unsupported")
+
+    @staticmethod
+    def _validate_metadata(metadata: Mapping[str, Any]) -> None:
+        for key in ("model_slug", "default_model_slug", "model"):
+            value = metadata.get(key)
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f"Official ChatGPT metadata field {key} is invalid")
+        for key in ("attachments", "files"):
+            raw = metadata.get(key)
+            if raw is None:
+                continue
+            items = [raw] if isinstance(raw, dict) else raw if isinstance(raw, list) else None
+            if items is None:
+                raise ValueError(f"Official ChatGPT metadata field {key} is invalid")
+            for item in items:
+                if isinstance(item, str):
+                    continue
+                if not isinstance(item, dict):
+                    raise ValueError(f"Official ChatGPT metadata field {key} contains an invalid item")
+                for item_key in (
+                    "id", "file_id", "asset_pointer", "pointer", "name", "file_name",
+                    "filename", "mime_type",
+                ):
+                    value = item.get(item_key)
+                    if value is not None and not isinstance(value, str):
+                        raise ValueError(f"Official ChatGPT metadata attachment field {item_key} is invalid")
+                size = item.get("size")
+                if size is not None and not isinstance(size, (str, int, float)):
+                    raise ValueError("Official ChatGPT metadata attachment size is invalid")
 
     def _render_conversation(
         self,

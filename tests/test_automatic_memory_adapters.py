@@ -11,7 +11,7 @@ import pytest
 from src.automatic_memory.models import AuthorizationScope
 from src.extraction.adapters.chatgpt import ChatGPTExportAdapter
 from src.extraction.adapters.claude_desktop import ClaudeDesktopAdapter
-from src.extraction.adapters.codex import CodexTranscriptAdapter
+from src.extraction.adapters.codex import CodexTranscriptAdapter, CodexWorkReportAdapter
 from src.extraction.adapters.generic_ai_history import GenericAIHistoryAdapter
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.extraction.base import ExtractionAdapter
@@ -195,6 +195,45 @@ def test_chatgpt_zip_validates_all_members_before_selecting_root(tmp_path: Path)
         )
 
 
+def test_chatgpt_zip_rejects_member_count_over_limit(tmp_path: Path):
+    path = tmp_path / "too-many-members.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("conversations.json", json.dumps([_chatgpt_conversation()]))
+        for index in range(501):
+            archive.writestr(f"extra-{index}.bin", b"x")
+    adapter = ChatGPTExportAdapter()
+    assert adapter.detect(path).supported is False
+    with pytest.raises(ValueError, match="members|files"):
+        adapter.extract(ExtractionRequest("job", "chatgpt_export", input_path=path))
+
+
+@pytest.mark.parametrize("mutation", [
+    "attachments_scalar",
+    "model_slug_object",
+    "title_list",
+    "current_node_list",
+    "parent_list",
+])
+def test_chatgpt_rejects_malformed_normalized_field_types(tmp_path: Path, mutation: str):
+    payload = _chatgpt_conversation()
+    if mutation == "attachments_scalar":
+        payload["mapping"]["node-a"]["message"]["metadata"]["attachments"] = 1
+    elif mutation == "model_slug_object":
+        payload["mapping"]["node-a"]["message"]["metadata"]["model_slug"] = {"guess": "bad"}
+    elif mutation == "title_list":
+        payload["title"] = []
+    elif mutation == "current_node_list":
+        payload["current_node"] = []
+    else:
+        payload["mapping"]["node-a"]["parent"] = []
+    path = tmp_path / "malformed-fields.json"
+    path.write_text(json.dumps([payload]), encoding="utf-8")
+    adapter = ChatGPTExportAdapter()
+    assert adapter.detect(path).supported is False
+    with pytest.raises(ValueError, match="ChatGPT"):
+        adapter.extract(ExtractionRequest("job", "chatgpt_export", input_path=path))
+
+
 def test_chatgpt_zip_rejects_backslash_traversal_and_symlink_members(tmp_path: Path):
     traversal = tmp_path / "traversal.zip"
     with zipfile.ZipFile(traversal, "w") as archive:
@@ -303,6 +342,30 @@ def test_unknown_codex_schema_for_legacy_source_type_is_audited(tmp_path: Path):
         adapter_name="codex_transcript",
         max_attempts=1,
     )
+    assert job["status"] == "failed"
+    assert "unknown Codex transcript schema" in job["last_error"]
+
+
+def test_unknown_codex_json_schema_cannot_fall_back_to_work_report(tmp_path: Path):
+    path = tmp_path / "future-report.json"
+    path.write_text(json.dumps({"schema": "future_codex", "schema_version": "99"}), encoding="utf-8")
+
+    class Sink:
+        def preserve_raw(self, input_path, source_type):
+            del input_path, source_type
+            return {}
+
+        def write_batch(self, batch, *, adapter_name, adapter_version, raw_snapshot):
+            del batch, adapter_name, adapter_version, raw_snapshot
+            return {}
+
+    queue = SQLiteExtractionQueue(tmp_path / "queue.db")
+    registry = AdapterRegistry()
+    registry.register(CodexTranscriptAdapter())
+    registry.register(CodexWorkReportAdapter())
+    pipeline = ExtractionPipeline(queue, registry, Sink())
+
+    job = pipeline.enqueue("codex", input_path=path, max_attempts=1)
     assert job["status"] == "failed"
     assert "unknown Codex transcript schema" in job["last_error"]
 
