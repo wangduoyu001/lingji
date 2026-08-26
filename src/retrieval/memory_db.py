@@ -729,8 +729,7 @@ class MemoryDatabase:
             terms = [term.casefold() for term in re.findall(r"[A-Za-z0-9_.+-]+|[\u4e00-\u9fff]+", str(query or "")) if term]
             if terms:
                 with self._connection() as connection:
-                    fallback_rows = connection.execute(
-                        """
+                    fallback_sql = """
                         SELECT c.chunk_id, c.memory_id, d.relative_path, d.title,
                                d.memory_type, d.memory_tier, d.status, d.review_status,
                                d.privacy, d.importance, d.confidence, d.project_json,
@@ -739,7 +738,12 @@ class MemoryDatabase:
                                d.updated_at, c.heading, c.text, c.start_line, c.end_line
                         FROM memory_chunks c JOIN memory_documents d ON d.memory_id = c.memory_id
                         WHERE d.privacy IN (""" + ",".join("?" for _ in privacy) + ")"
-                    , tuple(privacy)).fetchall()
+                    fallback_params: list[Any] = list(privacy)
+                    if memory_types:
+                        fallback_sql += " AND d.memory_type IN (" + ",".join("?" for _ in memory_types) + ")"
+                        fallback_params.extend(memory_types)
+                    with self._connection() as connection:
+                        fallback_rows = connection.execute(fallback_sql, fallback_params).fetchall()
                 seen_ids = {str(item.get("memory_id") or "") for item in output}
                 for row in fallback_rows:
                     raw = dict(row)

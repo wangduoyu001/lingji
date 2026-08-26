@@ -146,7 +146,7 @@ class HybridRetriever:
             for semantic in self._semantic_search(query, max(len(output) * 12, 60), history_filters):
                 memory = self.database.fetch_memory(str(semantic.get("memory_id") or ""), include_chunks=True)
                 resolved = self._resolve_semantic_result(semantic, memory)
-                if resolved and not any(str(item.get("memory_id") or "") == str(resolved.get("memory_id") or "") for item in historical):
+                if resolved and self._passes_post_filters(resolved, history_filters) and not any(str(item.get("memory_id") or "") == str(resolved.get("memory_id") or "") for item in historical):
                     historical.append(resolved)
         excluded: list[dict[str, Any]] = []
         winners = {str(item.get("memory_id") or ""): item for item in output}
@@ -159,6 +159,9 @@ class HybridRetriever:
         for candidate in historical:
             memory_id = str(candidate.get("memory_id") or "")
             if not memory_id or memory_id in current_ids:
+                continue
+            history_scope = replace(filters, mode="history", as_of=None)
+            if not self._passes_post_filters(candidate, history_scope):
                 continue
             allowed, reason = temporal.allows(candidate)
             if allowed and memory_id not in conflict_ids:

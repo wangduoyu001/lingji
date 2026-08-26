@@ -181,6 +181,23 @@ class TimelineRetrievalTests(unittest.TestCase):
         self.assertFalse(invalid.normalized().valid)
         self.assertEqual(HybridRetriever(self.db).search("有效", filters=invalid), [])
 
+    def test_why_excluded_candidates_keep_project_and_memory_type_scope(self):
+        self.note("03-Knowledge/a-current.md", "a-current", "项目A当前", "同一范围决定方案。", project=["Project A"], memory_type="knowledge", valid_from="2026-01-01T00:00:00Z")
+        self.note("03-Knowledge/b-old.md", "b-old", "项目B历史", "同一范围决定方案。", project=["Project B"], memory_type="knowledge", sources=["project-b-source"], status="superseded", valid_from="2025-01-01T00:00:00Z", valid_to="2026-01-01T00:00:00Z")
+        self.note("03-Knowledge/decision-old.md", "decision-old", "决策历史", "同一范围决定方案。", project=["Project A"], memory_type="decision", sources=["decision-source"], status="superseded", valid_from="2025-01-01T00:00:00Z", valid_to="2026-01-01T00:00:00Z")
+        self.rebuild()
+        results = HybridRetriever(self.db).search(
+            "决定 方案",
+            limit=10,
+            filters=SearchFilters(mode="why", project="Project A", memory_types=("knowledge",)),
+        )
+        self.assertTrue(results)
+        excluded = results[0]["why"]["excluded_candidates"]
+        excluded_ids = {item["memory_id"] for item in excluded}
+        self.assertNotIn("b-old", excluded_ids)
+        self.assertNotIn("decision-old", excluded_ids)
+        self.assertNotIn("project-b-source", {source for item in excluded for source in item["citation"]["source_refs"]})
+
 
 if __name__ == "__main__":
     unittest.main()
