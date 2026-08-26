@@ -173,6 +173,8 @@
 
 **Breaker status (2026-08-26):** `BLOCKED` after five reviewed repair rounds. Tasks 4R2–7 must not start. Resume requires a new architecture-reset task, not a sixth repair round. The reset must first add an ingestion-order read contract, separate stable-record duplicates from intentional content-hash dedup groups, model memory-section and raw-message-section identities separately, add sentinel readiness to the gate contract without weakening `EvaluationReport`, and define promotion compensation failure truthfully. The rejected commits remain audit history and may be refactored, but their self-reported `DONE` status is not accepted.
 
+**Authorized reset (2026-08-26):** The owner authorized a new `Task 4R-Reset`. Its sole implementation authority is `docs/superpowers/plans/2026-08-26-task4r-reset.md`. It replaces further Task 4R1 repair rounds with six independently reviewed architecture tasks. Task 4R2 and Tasks 5–7 remain frozen until the Reset resume gate passes; this authorization does not permit 4R2, 100k, Artifact, Production/Vault or physical Mac acceptance work.
+
 ### Task 4R2: Real MCP, Degradation and 100k Scale Evidence
 
 **Purpose:** Prove real tool parity, failure isolation and scale without allowing unit-test skips or constant fields to masquerade as acceptance evidence.
