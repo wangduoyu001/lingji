@@ -567,13 +567,21 @@ class CodexTranscriptAdapter(ExtractionAdapter):
     @classmethod
     def _validate_authorized_input(cls, path: Path, options: Mapping[str, Any]) -> Path:
         canonical = cls._canonical_input_path(path)
-        raw_roots = options.get("authorized_roots") or options.get("authorization_roots") or options.get("allowed_roots") or options.get("roots")
+        scope = options.get("authorization_scope") or options.get("scope")
+        raw_roots = (
+            options.get("authorized_roots")
+            or options.get("authorization_roots")
+            or options.get("allowed_roots")
+            or options.get("roots")
+            or (getattr(scope, "roots", None) if scope is not None else None)
+        )
         if not raw_roots:
             raise ValueError("Codex transcript authorized roots are required")
         if isinstance(raw_roots, (str, Path)):
             raw_roots = [raw_roots]
         canonical_roots: list[Path] = []
         for raw_root in raw_roots:
+            cls._reject_symlink_chain(Path(raw_root))
             try:
                 root = Path(raw_root).resolve(strict=True)
             except OSError as exc:
@@ -584,6 +592,12 @@ class CodexTranscriptAdapter(ExtractionAdapter):
         if not any(os.path.commonpath((str(canonical), str(root))) == str(root) for root in canonical_roots):
             raise ValueError("Codex transcript input is outside authorized roots")
         return canonical
+
+    @staticmethod
+    def _reject_symlink_chain(path: Path) -> None:
+        for parent in (path, *path.parents):
+            if parent.is_symlink():
+                raise ValueError("Codex transcript refuses a symlink authorized root")
 
     @classmethod
     def _sensitive_path(cls, path: Path) -> bool:

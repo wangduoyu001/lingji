@@ -4,6 +4,7 @@ import json
 import logging
 import math
 import re
+import stat
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -89,8 +90,8 @@ class ChatGPTExportAdapter(ExtractionAdapter):
         warnings: list[str] = []
         restricted = 0
 
-        for conversation in conversations:
-            try:
+        try:
+            for conversation in conversations:
                 normalized = self._normalize_conversation(conversation)
                 document = self._document_from_normalized(
                     normalized, source_files, projects
@@ -128,23 +129,14 @@ class ChatGPTExportAdapter(ExtractionAdapter):
                         agent_scope=agent_scope,
                     )
                 )
-            except Exception as exc:
-                conversation_id = str(
-                    conversation.get("id")
-                    or conversation.get("conversation_id")
-                    or "unknown"
+        except Exception as exc:
+            logger.exception("ChatGPT export extraction failed; batch rejected")
+            raise ValueError(
+                safe_extraction_error(
+                    exc,
+                    message="ChatGPT conversation extraction failed; see local logs",
                 )
-                logger.exception(
-                    "ChatGPT conversation extraction failed: %s",
-                    conversation_id,
-                )
-                warnings.append(
-                    f"{conversation_id}: "
-                    + safe_extraction_error(
-                        exc,
-                        message="conversation extraction failed; see local logs",
-                    )
-                )
+            ) from exc
 
         source_external_id = str(
             request.options.get("source_external_id")
@@ -209,6 +201,8 @@ class ChatGPTExportAdapter(ExtractionAdapter):
             role = str(author.get("role") or "unknown")
             name = str(author.get("name") or "")
             metadata = message.get("metadata") or {}
+            if not isinstance(metadata, dict):
+                raise ValueError("Official ChatGPT message metadata is invalid")
             model = str(
                 metadata.get("model_slug")
                 or metadata.get("default_model_slug")
@@ -354,12 +348,26 @@ class ChatGPTExportAdapter(ExtractionAdapter):
         max_ratio = float(options.get("max_zip_compression_ratio", self.DEFAULT_MAX_COMPRESSION_RATIO))
         if path.suffix.lower() == ".zip":
             with zipfile.ZipFile(path) as archive:
+                total_size = 0
                 for member in archive.infolist():
-                    member_path = Path(member.filename)
-                    if member.filename.startswith(("/", "\\")) or ".." in member_path.parts:
+                    normalized_name = member.filename.replace("\\", "/")
+                    member_path = Path(normalized_name)
+                    if normalized_name.startswith("/") or normalized_name.split("/")[0].endswith(":") or ".." in normalized_name.split("/"):
                         raise ValueError("ChatGPT ZIP contains an unsafe member path")
-                    if member_path.name.lower() == "conversations.json" and member.filename != "conversations.json":
+                    mode = (member.external_attr >> 16) & 0o170000
+                    if mode == stat.S_IFLNK:
+                        raise ValueError("ChatGPT ZIP contains a symlink member")
+                    if member_path.name.lower() == "conversations.json" and normalized_name != "conversations.json":
                         raise ValueError("Official ChatGPT ZIP rejects nested conversations.json")
+                    if not member.is_dir():
+                        if member.file_size > max_member:
+                            raise ValueError(f"ZIP member too large: {member.filename}")
+                        total_size += int(member.file_size)
+                        if total_size > max_total:
+                            raise ValueError("ChatGPT ZIP uncompressed size exceeds safety limit")
+                        ratio = member.file_size / max(member.compress_size, 1)
+                        if ratio > max_ratio:
+                            raise ValueError(f"Suspicious ZIP compression ratio: {member.filename}")
                 infos = sorted(
                     (
                         info
@@ -374,16 +382,7 @@ class ChatGPTExportAdapter(ExtractionAdapter):
                     raise ValueError("Official ChatGPT ZIP requires root conversations.json")
                 if len(infos) != 1:
                     raise ValueError("Official ChatGPT ZIP must contain exactly one root conversations.json")
-                total = 0
                 for info in infos:
-                    total += int(info.file_size)
-                    ratio = info.file_size / max(info.compress_size, 1)
-                    if info.file_size > max_member:
-                        raise ValueError(f"ZIP member too large: {info.filename}")
-                    if total > max_total:
-                        raise ValueError("ChatGPT ZIP uncompressed size exceeds safety limit")
-                    if ratio > max_ratio:
-                        raise ValueError(f"Suspicious ZIP compression ratio: {info.filename}")
                     raw = self._read_zip_member(archive, info, max_member).decode("utf-8-sig")
                     loaded.extend(self._decode_conversation_payload(raw))
                     source_files.append(info.filename)
@@ -462,6 +461,8 @@ class ChatGPTExportAdapter(ExtractionAdapter):
             role = author.get("role") if isinstance(author, dict) else None
             if role not in {"user", "assistant", "system", "tool"}:
                 raise ValueError("Official ChatGPT message role is invalid")
+            if "metadata" in message and not isinstance(message.get("metadata"), dict):
+                raise ValueError("Official ChatGPT message metadata is invalid")
             content = message.get("content")
             if not isinstance(content, dict):
                 raise ValueError("Official ChatGPT message content is missing")

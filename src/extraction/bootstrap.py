@@ -7,6 +7,7 @@ from src.sources import SourceReadModel
 from src.storage import StateDatabase
 
 from .adapters.chatgpt import ChatGPTExportAdapter
+from .adapters.claude_desktop import ClaudeDesktopAdapter
 from .adapters.codex import CodexTranscriptAdapter, CodexWorkReportAdapter
 from .adapters.codex_session import CodexSessionAdapter
 from .adapters.generic_ai_history import GenericAIHistoryAdapter
@@ -40,6 +41,7 @@ def build_extraction_pipeline(
     queue = SQLiteExtractionQueue(settings.state_db_path)
     registry = AdapterRegistry()
     registry.register(ChatGPTExportAdapter())
+    registry.register(ClaudeDesktopAdapter())
     registry.register(CodexTranscriptAdapter())
     registry.register(CodexWorkReportAdapter(), structured_fallback=True)
     registry.register(CodexSessionAdapter())

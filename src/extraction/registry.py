@@ -195,18 +195,32 @@ class AdapterRegistry:
             if not adapter.can_handle(source_type, input_path, payload):
                 raise ValueError(
                     f"Adapter {adapter.name} cannot handle source type {source_type}: "
-                    "input schema is unsupported, unauthorized, or malformed"
+                    f"{self._detection_reason(adapter, input_path)}"
                 )
             return adapter
+        reasons: list[str] = []
         for adapter in self._adapters.values():
             if not self._approved_for_source(adapter, source_type):
                 continue
             if adapter.can_handle(source_type, input_path, payload):
                 return adapter
+            reason = self._detection_reason(adapter, input_path)
+            if reason:
+                reasons.append(f"{adapter.name}: {reason}")
         raise LookupError(
             f"No approved extraction adapter for source type: {source_type}; "
-            "input schema is unsupported, unauthorized, or malformed"
+            + ("; ".join(reasons) if reasons else "input schema is unsupported, unauthorized, or malformed")
         )
+
+    @staticmethod
+    def _detection_reason(adapter: ExtractionAdapter, input_path: Path | None) -> str:
+        if not input_path:
+            return "input schema is unsupported, unauthorized, or malformed"
+        if adapter.name == "codex_transcript" and hasattr(adapter, "detect_schema"):
+            return str(adapter.detect_schema(input_path).reason)
+        if hasattr(adapter, "detect"):
+            return str(adapter.detect(input_path).reason)
+        return "input schema is unsupported, unauthorized, or malformed"
 
     def _approved_for_source(self, adapter: ExtractionAdapter, source_type: str) -> bool:
         if source_type == "codex" and adapter.name == "codex_work_report":

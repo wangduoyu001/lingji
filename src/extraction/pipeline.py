@@ -73,12 +73,28 @@ class ExtractionPipeline:
             if not input_path.exists():
                 raise FileNotFoundError(input_path)
             self._validate_input_limits(input_path, normalized_options)
-        adapter = self.registry.resolve(
-            source_type,
-            input_path,
-            normalized_payload,
-            preferred=adapter_name,
-        )
+        try:
+            adapter = self.registry.resolve(
+                source_type,
+                input_path,
+                normalized_payload,
+                preferred=adapter_name,
+            )
+        except Exception as exc:
+            if source_type in {"codex", "codex_transcript", "codex_history"}:
+                return self._record_preflight_failure(
+                    source_type,
+                    input_path=input_path,
+                    payload=normalized_payload,
+                    options=normalized_options,
+                    adapter_name=adapter_name or source_type,
+                    idempotency_key=idempotency_key,
+                    priority=priority,
+                    max_attempts=max_attempts,
+                    force=force,
+                    error=str(exc),
+                )
+            raise
         key = idempotency_key or self._idempotency_key(
             source_type,
             input_path=input_path,
@@ -99,6 +115,47 @@ class ExtractionPipeline:
             priority=effective_priority,
             max_attempts=max_attempts or self.default_max_attempts,
             force=force,
+        )
+
+    def _record_preflight_failure(
+        self,
+        source_type: str,
+        *,
+        input_path: Path | None,
+        payload: Mapping[str, Any],
+        options: Mapping[str, Any],
+        adapter_name: str,
+        idempotency_key: str | None,
+        priority: int | None,
+        max_attempts: int | None,
+        force: bool,
+        error: str,
+    ) -> dict[str, Any]:
+        """Persist schema preflight failures through the existing queue facts."""
+
+        job = self.queue.enqueue(
+            source_type,
+            input_path=input_path,
+            payload=payload,
+            options=options,
+            adapter_name=adapter_name,
+            idempotency_key=idempotency_key,
+            priority=int(priority) if priority is not None else self._default_priority(source_type),
+            max_attempts=1 if max_attempts is None else max(min(int(max_attempts), 1), 1),
+            force=force,
+        )
+        if job.get("status") in {"failed", "completed", "cancelled"}:
+            return job
+        worker_id = f"preflight:{self._worker_id()}"
+        claimed = self.queue.claim(worker_id, job_id=job["job_id"])
+        if claimed is None:
+            return self.queue.get(job["job_id"])
+        return self.queue.fail(
+            job["job_id"],
+            error,
+            worker_id=worker_id,
+            lease_token=str(claimed.get("lease_token") or ""),
+            retry_delay_seconds=0,
         )
 
     def execute(

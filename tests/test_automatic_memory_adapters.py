@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import stat
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,7 @@ from src.extraction.adapters.chatgpt import ChatGPTExportAdapter
 from src.extraction.adapters.claude_desktop import ClaudeDesktopAdapter
 from src.extraction.adapters.codex import CodexTranscriptAdapter
 from src.extraction.adapters.generic_ai_history import GenericAIHistoryAdapter
+from src.extraction.bootstrap import build_extraction_pipeline
 from src.extraction.base import ExtractionAdapter
 from src.extraction.models import ExtractionBatch, ExtractionRequest
 from src.extraction.pipeline import ExtractionPipeline
@@ -135,6 +137,35 @@ def test_chatgpt_rejects_duplicate_or_damaged_records(tmp_path: Path, mutation: 
         adapter.extract(ExtractionRequest("job", "chatgpt_export", input_path=path))
 
 
+def test_chatgpt_does_not_partially_import_when_normalizing_one_conversation_fails(tmp_path: Path, monkeypatch):
+    first = _chatgpt_conversation()
+    second = json.loads(json.dumps(first))
+    second["id"] = "official-conv-2"
+    second["mapping"]["node-u"]["message"]["id"] = "official-msg-3"
+    second["mapping"]["node-a"]["message"]["id"] = "official-msg-4"
+    path = tmp_path / "conversations.json"
+    path.write_text(json.dumps([first, second]), encoding="utf-8")
+    adapter = ChatGPTExportAdapter()
+    original = adapter._normalize_conversation
+
+    def fail_second(conversation):
+        if conversation["id"] == "official-conv-2":
+            raise ValueError("malformed normalize field")
+        return original(conversation)
+
+    monkeypatch.setattr(adapter, "_normalize_conversation", fail_second)
+    with pytest.raises(ValueError, match="ChatGPT conversation extraction failed"):
+        adapter.extract(ExtractionRequest("job", "chatgpt_export", input_path=path))
+
+
+def test_chatgpt_rejects_non_object_message_metadata(tmp_path: Path):
+    payload = _chatgpt_conversation()
+    payload["mapping"]["node-a"]["message"]["metadata"] = ["not", "an", "object"]
+    path = tmp_path / "conversations.json"
+    path.write_text(json.dumps([payload]), encoding="utf-8")
+    assert ChatGPTExportAdapter().detect(path).supported is False
+
+
 @pytest.mark.parametrize("members", [["nested/conversations.json"], ["conversations.json", "conversations.json"]])
 def test_chatgpt_zip_requires_one_official_root_member(tmp_path: Path, members: list[str]):
     path = tmp_path / "export.zip"
@@ -142,6 +173,43 @@ def test_chatgpt_zip_requires_one_official_root_member(tmp_path: Path, members: 
         for member in members:
             archive.writestr(member, json.dumps([_chatgpt_conversation()]))
     assert ChatGPTExportAdapter().detect(path).supported is False
+
+
+def test_chatgpt_zip_validates_all_members_before_selecting_root(tmp_path: Path):
+    path = tmp_path / "export.zip"
+    root_payload = json.dumps([_chatgpt_conversation()])
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("conversations.json", root_payload)
+        archive.writestr("unrelated.bin", b"x" * 64)
+    adapter = ChatGPTExportAdapter()
+    with pytest.raises(ValueError, match="uncompressed|member"):
+        adapter.extract(
+            ExtractionRequest(
+                "job",
+                "chatgpt_export",
+                input_path=path,
+                options={
+                    "max_zip_uncompressed_bytes": len(root_payload.encode("utf-8")) + 63,
+                },
+            )
+        )
+
+
+def test_chatgpt_zip_rejects_backslash_traversal_and_symlink_members(tmp_path: Path):
+    traversal = tmp_path / "traversal.zip"
+    with zipfile.ZipFile(traversal, "w") as archive:
+        archive.writestr("conversations.json", json.dumps([_chatgpt_conversation()]))
+        archive.writestr(r"..\evil.txt", b"bad")
+    assert ChatGPTExportAdapter().detect(traversal).supported is False
+
+    symlink = tmp_path / "symlink.zip"
+    link_info = zipfile.ZipInfo("link")
+    link_info.create_system = 3
+    link_info.external_attr = (stat.S_IFLNK | 0o777) << 16
+    with zipfile.ZipFile(symlink, "w") as archive:
+        archive.writestr("conversations.json", json.dumps([_chatgpt_conversation()]))
+        archive.writestr(link_info, "conversations.json")
+    assert ChatGPTExportAdapter().detect(symlink).supported is False
 
 
 def test_chatgpt_rejects_invalid_zip_encoding(tmp_path: Path):
@@ -200,10 +268,43 @@ def test_unknown_codex_schema_is_recorded_by_existing_extraction_queue(tmp_path:
     registry = AdapterRegistry()
     registry.register(CodexTranscriptAdapter())
     pipeline = ExtractionPipeline(queue, registry, Sink())
-    job = queue.enqueue("codex_transcript", input_path=path, adapter_name="codex_transcript", max_attempts=1)
+    job = pipeline.enqueue(
+        "codex_transcript",
+        input_path=path,
+        adapter_name="codex_transcript",
+        max_attempts=1,
+    )
     outcome = pipeline.process_job(job["job_id"])
     assert outcome["job"]["status"] == "failed"
-    assert "unsupported" in outcome["job"]["last_error"].lower() or "approved" in outcome["job"]["last_error"].lower()
+    assert "unknown Codex transcript schema" in outcome["job"]["last_error"]
+
+
+def test_unknown_codex_schema_for_legacy_source_type_is_audited(tmp_path: Path):
+    path = tmp_path / "unknown.jsonl"
+    path.write_text(json.dumps({"schema": "future", "schema_version": "99"}) + "\n", encoding="utf-8")
+
+    class Sink:
+        def preserve_raw(self, input_path, source_type):
+            del input_path, source_type
+            return {}
+
+        def write_batch(self, batch, *, adapter_name, adapter_version, raw_snapshot):
+            del batch, adapter_name, adapter_version, raw_snapshot
+            return {}
+
+    queue = SQLiteExtractionQueue(tmp_path / "queue.db")
+    registry = AdapterRegistry()
+    registry.register(CodexTranscriptAdapter())
+    pipeline = ExtractionPipeline(queue, registry, Sink())
+
+    job = pipeline.enqueue(
+        "codex",
+        input_path=path,
+        adapter_name="codex_transcript",
+        max_attempts=1,
+    )
+    assert job["status"] == "failed"
+    assert "unknown Codex transcript schema" in job["last_error"]
 
 
 def test_codex_rejects_sensitive_ancestor_and_symlink_ancestor(tmp_path: Path):
@@ -235,6 +336,31 @@ def test_codex_requires_canonical_authorized_root(tmp_path: Path):
     request = ExtractionRequest("job", "codex_transcript", input_path=path, options={"authorized_roots": [str(tmp_path / "elsewhere")]})
     with pytest.raises(ValueError, match="authorized|root"):
         CodexTranscriptAdapter().extract(request)
+
+
+def test_codex_rejects_symlinked_authorized_root_before_canonicalization(tmp_path: Path):
+    real_root = tmp_path / "real-root"
+    real_root.mkdir()
+    path = real_root / "session.jsonl"
+    path.write_text(
+        '{"schema":"codex_transcript","schema_version":"1","type":"header"}\n'
+        '{"type":"message","conversation_id":"c","message_id":"m","role":"user","content":"x","timestamp":"2026-08-26T04:00:00Z"}\n',
+        encoding="utf-8",
+    )
+    linked_root = tmp_path / "linked-root"
+    try:
+        linked_root.symlink_to(real_root, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlink creation unavailable")
+    with pytest.raises(ValueError, match="symlink|authorized"):
+        CodexTranscriptAdapter().extract(
+            ExtractionRequest(
+                "job",
+                "codex_transcript",
+                input_path=path,
+                options={"authorized_roots": [str(linked_root)]},
+            )
+        )
 
 
 def test_codex_rejects_duplicate_message_and_bad_time_order(tmp_path: Path):
@@ -326,6 +452,22 @@ def test_claude_desktop_reports_consent_or_unsupported_without_opening_storage()
     confirmed = AuthorizationScope("g2", ("claude_desktop",), ("/opaque",), datetime.now(), None, True)
     assert adapter.capability(unconfirmed).status == "consent_required"
     assert adapter.capability(confirmed).status == "unsupported"
+
+
+def test_bootstrap_registers_claude_capability_adapter(tmp_path: Path):
+    from src.config import Settings
+
+    settings = Settings(
+        _env_file=None,
+        vault_dir=str(tmp_path / "vault"),
+        storage_dir=str(tmp_path / "storage"),
+        log_dir=str(tmp_path / "logs"),
+        backup_dir="",
+    )
+    pipeline = build_extraction_pipeline(settings)
+    adapter = pipeline.registry.get("claude_desktop")
+    assert adapter.name == "claude_desktop"
+    assert adapter.approved is True
 
 
 def test_registry_resolves_only_supported_approved_adapter(tmp_path: Path):

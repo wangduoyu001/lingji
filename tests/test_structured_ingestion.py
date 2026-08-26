@@ -279,23 +279,21 @@ def test_chatgpt_conversation_warning_is_stable_and_does_not_leak_path(
         )
 
     monkeypatch.setattr(adapter, "_normalize_conversation", fail_conversation)
-    batch = adapter.extract(
-        ExtractionRequest(
-            job_id="job-warning",
-            source_type="chatgpt",
-            input_path=export,
-            options={"privacy_scan": False},
+    with pytest.raises(ValueError, match="ChatGPT conversation extraction failed") as error:
+        adapter.extract(
+            ExtractionRequest(
+                job_id="job-warning",
+                source_type="chatgpt",
+                input_path=export,
+                options={"privacy_scan": False},
+            )
         )
-    )
 
-    assert batch.warnings == (
-        "conv-1: conversation extraction failed; see local logs",
-    )
-    warning = batch.warnings[0]
-    assert "D:\\" not in warning
-    assert "Users" not in warning
-    assert "conversations.json" not in warning
-    assert "private details" not in warning
+    message = str(error.value)
+    assert "D:\\" not in message
+    assert "Users" not in message
+    assert "conversations.json" not in message
+    assert "private details" not in message
 
 
 def test_structured_sink_writes_safe_references_and_is_idempotency_ready(tmp_path):
