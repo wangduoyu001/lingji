@@ -184,3 +184,6 @@ def test_replayed_failure_pending_is_resolved_after_retry_success(tmp_path: Path
     recovered = WorkStore(StateDatabase(tmp_path / "lingji_state.db"))
     assert recovered.get_outcome(submitted["work_id"]).status == "completed"
     assert recovered.list_pending(work_id=submitted["work_id"]) == []
+    from src.work.projector import WorkProjector
+
+    assert WorkProjector(recovered).fact(submitted["work_id"])["failure"] is None

@@ -19,13 +19,14 @@ class WorkProjector:
         self.store.reconcile_extraction_jobs()
         if self.store.get_work(work_id) is None:
             raise LookupError(f"work not found: {work_id}")
+        outcome = self.store.get_outcome(work_id)
         return {
             "work": self._dump(self.store.get_work(work_id)),
             "events": [dict(item.__dict__) for item in self.store.list_events(work_id)],
-            "outcome": self._dump(self.store.get_outcome(work_id)),
+            "outcome": self._dump(outcome),
             "next_action": self._dump(self.store.get_next_action(work_id)),
             "pending_actions": [dict(item.__dict__) for item in self.store.list_pending(work_id=work_id)],
-            "failure": self._dump(self.store.get_failure(work_id)),
+            "failure": self._dump(self.store.get_failure(work_id)) if outcome and outcome.status == "failed" else None,
         }
 
     def current_fact(self) -> dict[str, Any]:
