@@ -116,6 +116,8 @@ class ConsistentSnapshot:
                 status = str(scan.get("status") or "")
                 if status == "running" and current_lease == lease_id:
                     expires_at = scan.get("lease_expires_at")
+                    if not expires_at:
+                        return False
                     if expires_at and str(expires_at) > datetime.now(
                         timezone.utc
                     ).isoformat(timespec="microseconds"):

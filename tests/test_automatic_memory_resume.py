@@ -88,6 +88,23 @@ def test_expired_owned_snapshot_temp_is_reclaimed_on_restart(tmp_path: Path):
     assert not temporary.exists()
 
 
+def test_active_owned_temp_with_legacy_null_expiry_is_preserved(tmp_path: Path):
+    state, _, _, scan, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
+    lease_id = "legacy-null-expiry"
+    state.acquire_automatic_memory_scan_lease(scan.scan_id, lease_id, ttl_seconds=60)
+    temporary = snapshot._temporary_path(scan.scan_id, lease_id)
+    temporary.write_bytes(b"legacy active staging")
+    with state._connection() as connection:
+        connection.execute(
+            "UPDATE automatic_memory_scans SET lease_expires_at = NULL WHERE scan_id = ?",
+            (scan.scan_id,),
+        )
+
+    ConsistentSnapshot(state, tmp_path / "storage" / "raw")
+
+    assert temporary.exists()
+
+
 def test_unknown_fresh_temp_is_preserved_but_legacy_stale_temp_is_reclaimed(tmp_path: Path):
     _, registry, _, _, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
     raw_root = snapshot.raw_root
