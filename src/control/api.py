@@ -120,7 +120,7 @@ def create_control_app(
         raise RuntimeError("Install requirements-ui.txt to run the local control API") from exc
 
     control = service or LocalControlService(settings)
-    work_control = WorkControlService(control.state_db)
+    work_control = WorkControlService(control.state_db) if getattr(control, "state_db", None) is not None else None
     inspector = None
     app = FastAPI(title="LingJi Local Control API", version="0.7.0")
     app.add_middleware(
@@ -582,5 +582,6 @@ def create_control_app(
     )
     register_automatic_memory_routes(app, control, secured)
     register_capture_routes(app, settings, control, token=token)
-    register_work_routes(app, work_control, secured)
+    if work_control is not None:
+        register_work_routes(app, work_control, secured)
     return app
