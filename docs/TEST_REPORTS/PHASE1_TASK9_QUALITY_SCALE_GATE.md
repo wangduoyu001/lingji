@@ -14,3 +14,7 @@
 冻结输入：corpus `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94`；questions `338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612`。
 
 当前阻塞是实际检索对冻结问题语义召回不足，而非测试造假或数据不完整。后续应单独审查 Task 3 检索链路，不得修改冻结评测以提高分数。
+
+## 4R1 修复记录
+
+初始 draft 明确标记为 `TDD_ORDER_NOT_MET`。本轮先运行真实 RED（`ModuleNotFoundError: quality_evidence`），再实现并达到 `46 passed, 1 warning`。新增证据审计与 protected-tree sentinel；删除原问题改写，评分异常 fail-closed，实测失败优先于物理证据 BLOCKED。MCP/degradation/100k 仍属于 4R2，未在本轮宣称通过。
