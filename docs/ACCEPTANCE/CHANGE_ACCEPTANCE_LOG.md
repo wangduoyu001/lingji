@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-26 · Phase 1 Task 4 · Automatic memory quality and scale gate
+
+- 产品 Commit：待提交；本条报告 Commit：待提交。
+- 新增真实 100-question quality gate、FastMCP 调用、opt-in 100k scale command；默认 focused 不执行 100k，release 必须设置 `LINGJI_RUN_100K=1`。
+- 实测功能状态：`FAIL`（事实召回 18.87%、引用准确率 18.87%；其余主要完整性/安全指标通过）。完整阶段状态仍为 `BLOCKED`。
+- 不得修改冻结 corpus/questions、阈值或检索排序来消除失败；Task 3 检索修复需另行立项。
+
 > 每个包含产品代码、运行时、UI、连接器、数据链路、脚本、依赖或发布流程变化的 PR，都必须在本文件顶部追加一条记录。
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
