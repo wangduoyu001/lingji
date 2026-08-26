@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 from dataclasses import replace
 from pathlib import Path
 
@@ -15,6 +17,7 @@ from src.automatic_memory.quality_evidence import (
     finalize_quality_envelope,
     write_quality_json_atomic,
 )
+import src.automatic_memory.quality_evidence as evidence_module
 
 
 def readiness(**changes: EvidenceState) -> QualityEvidenceReadiness:
@@ -133,3 +136,229 @@ def test_atomic_writer_requires_existing_parent_and_protects_roots(tmp_path: Pat
     protected.mkdir()
     with pytest.raises(QualityPublicationError):
         write_quality_json_atomic(protected / "report.json", {}, protected_roots=(protected,))
+
+
+def test_sentinel_uses_anchored_child_directory_descriptors_and_never_reads_escape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root, outside = tmp_path / "root", tmp_path / "outside"
+    (root / "nested").mkdir(parents=True); outside.mkdir()
+    (outside / "secret").write_text("secret", encoding="utf-8")
+    (root / "nested" / "secret").write_text("safe", encoding="utf-8")
+    calls: list[tuple[object, object]] = []
+    real_open = evidence_module.os.open
+
+    def recording_open(path: object, flags: int, *args: object, **kwargs: object) -> int:
+        calls.append((path, kwargs.get("dir_fd")))
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(evidence_module.os, "open", recording_open)
+    ProtectedTreeSentinel.capture((root,))
+    assert any(dir_fd is not None for _path, dir_fd in calls)
+    assert not any(str(outside) in str(path) for path, _dir_fd in calls)
+
+
+def test_sentinel_rejects_same_size_content_race_after_first_hash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "root"; root.mkdir()
+    target = root / "entry"; target.write_text("before", encoding="utf-8")
+    real_fstat = evidence_module.os.fstat
+    calls = 0
+
+    def racing_fstat(fd: int):
+        nonlocal calls
+        calls += 1
+        value = real_fstat(fd)
+        if calls == 3:
+            target.write_text("change", encoding="utf-8")
+        return value
+
+    monkeypatch.setattr(evidence_module.os, "fstat", racing_fstat)
+    with pytest.raises(evidence_module.ProtectedTreeInvalidError):
+        ProtectedTreeSentinel.capture((root,))
+
+
+def test_finalizer_validates_report_before_gate_calls() -> None:
+    gate = SpyGate()
+    malformed = replace(report(), valid_fact_recall="bad")
+    result = finalize_quality_envelope(
+        readiness=readiness(), production_pollution=0,
+        evaluation_report=malformed, acceptance_gate=gate,
+    )
+    assert not gate.calls
+    assert result.evaluation_report is None
+    assert "MALFORMED_EVALUATION_REPORT" in result.blocked_reasons
+
+
+def test_atomic_writer_surfaces_directory_fsync_failure_after_replace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    output_dir = tmp_path / "output"; output_dir.mkdir()
+    destination = output_dir / "report.json"; destination.write_text("old", encoding="utf-8")
+    real_fsync = evidence_module.os.fsync
+    calls = 0
+
+    def failing_fsync(fd: int) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("injected directory fsync failure")
+        real_fsync(fd)
+
+    monkeypatch.setattr(evidence_module.os, "fsync", failing_fsync)
+    with pytest.raises(QualityPublicationError) as error:
+        write_quality_json_atomic(destination, {"new": True}, protected_roots=())
+    assert error.value.code == "DIRECTORY_FSYNC_FAILED_AFTER_REPLACE"
+    assert json.loads(destination.read_text(encoding="utf-8")) == {"new": True}
+
+
+def test_atomic_writer_wraps_arbitrary_serialization_exception(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    output_dir = tmp_path / "output"; output_dir.mkdir()
+    monkeypatch.setattr(evidence_module.json, "dumps", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("/Users/secret")))
+    with pytest.raises(QualityPublicationError) as error:
+        write_quality_json_atomic(output_dir / "report.json", {"answer": 1}, protected_roots=())
+    assert error.value.code == "SERIALIZATION_FAILED"
+    assert str(error.value) == "SERIALIZATION_FAILED"
+
+
+def test_reason_allowlist_redacts_unknown_path_components() -> None:
+    result = finalize_quality_envelope(
+        readiness=readiness(mcp_parity=EvidenceState.NOT_MEASURED), production_pollution=0,
+        evaluation_report=None, acceptance_gate=SpyGate(),
+        blocked_reasons=("/Users/alice/secret", "x y", "WINDOWS_AFTER_MAC"),
+    )
+    assert result.blocked_reasons == ("UNTRUSTED_BLOCKED_REASON", "WINDOWS_AFTER_MAC")
+
+
+@pytest.mark.parametrize("field", [
+    "import_audit", "promotion_provenance", "gateway_selection", "production_sentinel",
+    "mcp_parity", "qdrant_degradation", "corruption_isolation", "context_baseline",
+])
+@pytest.mark.parametrize("state", [EvidenceState.NOT_MEASURED, EvidenceState.INVALID])
+def test_every_functional_unavailable_state_is_not_evaluated(field: str, state: EvidenceState) -> None:
+    gate = SpyGate()
+    pollution = None if field == "production_sentinel" else 0
+    result = finalize_quality_envelope(
+        readiness=readiness(**{field: state}), production_pollution=pollution,
+        evaluation_report=report(), acceptance_gate=gate,
+    )
+    assert not gate.calls
+    assert result.evaluation_report is None
+    assert (result.functional_status, result.phase_status, result.windows_status) == (
+        "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED"
+    )
+
+
+@pytest.mark.parametrize("field", [
+    "import_audit", "promotion_provenance", "gateway_selection", "production_sentinel",
+    "mcp_parity", "qdrant_degradation", "corruption_isolation", "context_baseline",
+])
+def test_measured_failed_functional_state_uses_frozen_fail(field: str) -> None:
+    gate = SpyGate("FAIL")
+    pollution = 1 if field == "production_sentinel" else 0
+    result = finalize_quality_envelope(
+        readiness=readiness(**{field: EvidenceState.FAILED}), production_pollution=pollution,
+        evaluation_report=replace(report(), production_pollution=pollution), acceptance_gate=gate,
+    )
+    assert len(gate.calls) == 2
+    assert result.functional_status == result.phase_status == "FAIL"
+
+
+@pytest.mark.parametrize("field", ["scale", "owner_review", "reboot_recovery", "mac_release"])
+@pytest.mark.parametrize("state,phase", [
+    (EvidenceState.NOT_MEASURED, "BLOCKED"), (EvidenceState.INVALID, "BLOCKED"),
+    (EvidenceState.FAILED, "FAIL"), (EvidenceState.READY, "PASS"),
+])
+def test_mac_release_state_controls_phase_after_functional_pass(field: str, state: EvidenceState, phase: str) -> None:
+    values = {"windows_release": EvidenceState.NOT_MEASURED, field: state}
+    result = finalize_quality_envelope(
+        readiness=readiness(**values), production_pollution=0,
+        evaluation_report=report(), acceptance_gate=SpyGate(),
+    )
+    assert result.functional_status == "PASS"
+    assert result.phase_status == phase
+
+
+@pytest.mark.parametrize("state,expected", [
+    (EvidenceState.NOT_MEASURED, "BLOCKED"), (EvidenceState.INVALID, "BLOCKED"),
+    (EvidenceState.FAILED, "FAIL"), (EvidenceState.READY, "PASS"),
+])
+def test_windows_state_is_evaluated_only_after_mac_pass(state: EvidenceState, expected: str) -> None:
+    result = finalize_quality_envelope(
+        readiness=readiness(windows_release=state), production_pollution=0,
+        evaluation_report=report(), acceptance_gate=SpyGate(),
+    )
+    assert result.phase_status == "PASS"
+    assert result.windows_status == expected
+
+
+def test_windows_is_blocked_before_mac_pass() -> None:
+    result = finalize_quality_envelope(
+        readiness=readiness(scale=EvidenceState.NOT_MEASURED, windows_release=EvidenceState.READY),
+        production_pollution=0, evaluation_report=report(), acceptance_gate=SpyGate(),
+    )
+    assert result.phase_status == "BLOCKED"
+    assert result.windows_status == "BLOCKED"
+    assert "WINDOWS_AFTER_MAC" in result.blocked_reasons
+
+
+class SequenceGate:
+    def __init__(self, *verdicts: str) -> None:
+        self.verdicts = list(verdicts)
+        self.calls = 0
+
+    def evaluate(self, _report: EvaluationReport) -> str:
+        self.calls += 1
+        return self.verdicts.pop(0)
+
+
+@pytest.mark.parametrize("verdicts", [("MALFORMED", "PASS"), ("PASS", "MALFORMED"), ("BLOCKED", "PASS")])
+def test_malformed_or_blocked_gate_verdict_fails_closed(verdicts: tuple[str, str]) -> None:
+    gate = SequenceGate(*verdicts)
+    result = finalize_quality_envelope(
+        readiness=readiness(), production_pollution=0,
+        evaluation_report=report(), acceptance_gate=gate,
+    )
+    assert result.evaluation_report is None
+    assert result.functional_status == "NOT_EVALUATED"
+
+
+def test_gate_exception_fails_closed_without_partial_report() -> None:
+    class RaisingGate:
+        def evaluate(self, _report: EvaluationReport) -> str:
+            raise RuntimeError("private path")
+    result = finalize_quality_envelope(
+        readiness=readiness(), production_pollution=0,
+        evaluation_report=report(), acceptance_gate=RaisingGate(),
+    )
+    assert result.evaluation_report is None
+    assert result.blocked_reasons == ("GATE_EXCEPTION",)
+
+
+def test_sentinel_rejects_empty_duplicate_and_overlapping_roots(tmp_path: Path) -> None:
+    root = tmp_path / "root"; root.mkdir()
+    with pytest.raises(evidence_module.ProtectedTreeUnavailableError):
+        ProtectedTreeSentinel.capture(())
+    with pytest.raises(evidence_module.ProtectedTreeUnavailableError):
+        ProtectedTreeSentinel.capture((root, root))
+    with pytest.raises(evidence_module.ProtectedTreeUnavailableError):
+        ProtectedTreeSentinel.capture((root, root / "nested"))
+
+
+def test_sentinel_root_contract_is_order_independent_and_mismatch_invalid(tmp_path: Path) -> None:
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir(); second.mkdir()
+    left = ProtectedTreeSentinel.capture((first, second))
+    right = ProtectedTreeSentinel.capture((second, first))
+    assert left.root_contract == right.root_contract
+    other = ProtectedTreeSentinel.capture((first,))
+    with pytest.raises(evidence_module.ProtectedTreeInvalidError):
+        left.diff(other)
+
+
+def test_atomic_writer_rejects_target_and_parent_symlink(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"; outside.mkdir()
+    real_parent = tmp_path / "real"; real_parent.mkdir()
+    (real_parent / "existing").symlink_to(outside / "missing")
+    with pytest.raises(QualityPublicationError) as target_error:
+        write_quality_json_atomic(real_parent / "existing", {}, protected_roots=())
+    assert target_error.value.code == "OUTPUT_SYMLINK"
+    link_parent = tmp_path / "link"; link_parent.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(QualityPublicationError) as parent_error:
+        write_quality_json_atomic(link_parent / "report.json", {}, protected_roots=())
+    assert parent_error.value.code in {"PARENT_UNAVAILABLE", "PARENT_SYMLINK"}

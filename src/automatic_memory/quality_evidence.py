@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import errno
 import json
 import os
 import secrets
@@ -182,7 +183,14 @@ class ProtectedTreeSentinel:
         entries: dict[str, SentinelEntry] = {}
         for root in canonical_sorted:
             root_id = _root_identifier(root)
-            _capture_entry(root, root_id, "", entries, is_root=True)
+            fd = _open_anchored_directory(root)
+            try:
+                _capture_directory_fd(fd, root_id, "", entries, is_root=True)
+            finally:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
         return cls(identifiers, entries)
 
     def diff(self, after: "ProtectedTreeSentinel") -> tuple[SentinelChange, ...]:
@@ -200,8 +208,107 @@ def _root_identifier(root: Path) -> str:
     return hashlib.sha256(str(root).encode("utf-8")).hexdigest()
 
 
-def _capture_entry(
-    path: Path,
+def _safe_traversal_available() -> bool:
+    return bool(
+        os.name == "posix"
+        and hasattr(os, "O_DIRECTORY")
+        and hasattr(os, "O_NOFOLLOW")
+        and hasattr(os, "supports_dir_fd")
+        and any(getattr(fn, "__name__", "") == "open" for fn in os.supports_dir_fd)
+        and any(getattr(fn, "__name__", "") == "stat" for fn in os.supports_dir_fd)
+    )
+
+
+def _safe_publication_available() -> bool:
+    return bool(
+        _safe_traversal_available()
+        and any(getattr(fn, "__name__", "") == "rename" for fn in os.supports_dir_fd)
+        and any(getattr(fn, "__name__", "") == "unlink" for fn in os.supports_dir_fd)
+    )
+
+
+def _open_anchored_directory(path: Path) -> int:
+    if not _safe_traversal_available():
+        raise ProtectedTreeUnavailableError("SAFE_TRAVERSAL_UNAVAILABLE")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = -1
+    try:
+        fd = os.open(path.anchor, flags)
+        for component in path.parts[1:]:
+            child_fd = os.open(component, flags, dir_fd=fd)
+            os.close(fd)
+            fd = child_fd
+        return fd
+    except ProtectedTreeSentinelError:
+        if fd >= 0:
+            os.close(fd)
+        raise
+    except OSError as exc:
+        if fd >= 0:
+            os.close(fd)
+        raise ProtectedTreeUnavailableError("ROOT_OPEN_FAILED") from exc
+
+
+def _hash_fd(fd: int) -> str:
+    digest = hashlib.sha256()
+    os.lseek(fd, 0, os.SEEK_SET)
+    while True:
+        chunk = os.read(fd, 1024 * 1024)
+        if not chunk:
+            return digest.hexdigest()
+        digest.update(chunk)
+
+
+def _capture_file_fd(
+    parent_fd: int,
+    name: str,
+    key: str,
+    before: os.stat_result,
+    entries: dict[str, SentinelEntry],
+) -> None:
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    fd = -1
+    try:
+        fd = os.open(name, flags, dir_fd=parent_fd)
+        opened = os.fstat(fd)
+        if (
+            not stat_module.S_ISREG(opened.st_mode)
+            or opened.st_size != before.st_size
+            or stat_module.S_IMODE(opened.st_mode) != stat_module.S_IMODE(before.st_mode)
+            or opened.st_ino != before.st_ino
+            or opened.st_dev != before.st_dev
+        ):
+            raise ProtectedTreeInvalidError("FILE_REPLACED")
+        first_digest = _hash_fd(fd)
+        first_after = os.fstat(fd)
+        second_digest = _hash_fd(fd)
+        second_after = os.fstat(fd)
+        if first_digest != second_digest:
+            raise ProtectedTreeInvalidError("FILE_CONTENT_RACE")
+        for observed in (first_after, second_after):
+            if (
+                not stat_module.S_ISREG(observed.st_mode)
+                or observed.st_size != before.st_size
+                or stat_module.S_IMODE(observed.st_mode) != stat_module.S_IMODE(before.st_mode)
+                or observed.st_ino != before.st_ino
+                or observed.st_dev != before.st_dev
+            ):
+                raise ProtectedTreeInvalidError("FILE_RACE")
+        entries[key] = SentinelEntry(key, "file", stat_module.S_IMODE(before.st_mode), before.st_size, first_digest)
+    except ProtectedTreeSentinelError:
+        raise
+    except OSError as exc:
+        raise ProtectedTreeUnavailableError("FILE_UNREADABLE") from exc
+    finally:
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
+def _capture_directory_fd(
+    fd: int,
     root_id: str,
     relative: str,
     entries: dict[str, SentinelEntry],
@@ -209,77 +316,61 @@ def _capture_entry(
     is_root: bool = False,
 ) -> None:
     try:
-        before = os.lstat(path)
-    except FileNotFoundError as exc:
-        raise ProtectedTreeUnavailableError("TREE_MISSING") from exc
+        before = os.fstat(fd)
     except OSError as exc:
-        raise ProtectedTreeUnavailableError("TREE_UNAVAILABLE") from exc
-    if stat_module.S_ISLNK(before.st_mode):
-        raise ProtectedTreeUnavailableError("TREE_SYMLINK")
-    if is_root and not stat_module.S_ISDIR(before.st_mode):
-        raise ProtectedTreeInvalidError("ROOT_REPLACED")
+        raise ProtectedTreeInvalidError("TREE_UNAVAILABLE") from exc
+    if not stat_module.S_ISDIR(before.st_mode):
+        raise ProtectedTreeInvalidError("ROOT_REPLACED" if is_root else "TREE_REPLACED")
     key = f"{root_id}:{relative}" if relative else f"{root_id}:"
-    if stat_module.S_ISDIR(before.st_mode):
-        entries[key] = SentinelEntry(key, "dir", stat_module.S_IMODE(before.st_mode), before.st_size, None)
+    entries[key] = SentinelEntry(key, "dir", stat_module.S_IMODE(before.st_mode), before.st_size, None)
+    try:
+        with os.scandir(fd) as iterator:
+            names = sorted((item.name for item in iterator))
+    except OSError as exc:
+        raise ProtectedTreeUnavailableError("TREE_UNREADABLE") from exc
+    for name in names:
         try:
-            with os.scandir(path) as iterator:
-                names = sorted((item.name for item in iterator))
+            child_stat = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        except FileNotFoundError as exc:
+            raise ProtectedTreeInvalidError("TREE_TRAVERSAL_RACE") from exc
         except OSError as exc:
             raise ProtectedTreeUnavailableError("TREE_UNREADABLE") from exc
-        for name in names:
-            child = path / name
-            child_relative = f"{relative}/{name}" if relative else name
+        child_relative = f"{relative}/{name}" if relative else name
+        child_key = f"{root_id}:{child_relative}"
+        if stat_module.S_ISDIR(child_stat.st_mode):
+            child_fd = -1
             try:
-                _capture_entry(child, root_id, child_relative, entries)
-            except ProtectedTreeUnavailableError as exc:
-                if exc.code == "TREE_MISSING":
-                    raise ProtectedTreeInvalidError("TREE_TRAVERSAL_RACE") from exc
+                child_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                _capture_directory_fd(child_fd, root_id, child_relative, entries)
+            except ProtectedTreeSentinelError:
                 raise
-        try:
-            with os.scandir(path) as iterator:
-                after_names = sorted((item.name for item in iterator))
-        except OSError as exc:
-            raise ProtectedTreeInvalidError("TREE_TRAVERSAL_RACE") from exc
-        if names != after_names:
-            raise ProtectedTreeInvalidError("TREE_TRAVERSAL_RACE")
-        try:
-            final_directory = os.lstat(path)
-        except OSError as exc:
-            raise ProtectedTreeInvalidError("ROOT_RACE" if is_root else "TREE_TRAVERSAL_RACE") from exc
-        if (not stat_module.S_ISDIR(final_directory.st_mode)
-                or stat_module.S_IMODE(final_directory.st_mode) != stat_module.S_IMODE(before.st_mode)
-                or getattr(final_directory, "st_ino", None) != getattr(before, "st_ino", None)
-                or getattr(final_directory, "st_dev", None) != getattr(before, "st_dev", None)):
-            raise ProtectedTreeInvalidError("ROOT_RACE" if is_root else "TREE_TRAVERSAL_RACE")
-    elif stat_module.S_ISREG(before.st_mode):
-        digest = hashlib.sha256()
-        try:
-            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-            fd = os.open(path, flags)
-            try:
-                opened = os.fstat(fd)
-                if not stat_module.S_ISREG(opened.st_mode) or opened.st_size != before.st_size or stat_module.S_IMODE(opened.st_mode) != stat_module.S_IMODE(before.st_mode):
-                    raise ProtectedTreeInvalidError("FILE_REPLACED")
-                with os.fdopen(fd, "rb", closefd=True) as stream:
-                    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                        digest.update(chunk)
-                    fd = -1
+            except OSError as exc:
+                raise ProtectedTreeInvalidError("TREE_TRAVERSAL_RACE") from exc
             finally:
-                if fd >= 0:
-                    os.close(fd)
-            final = os.lstat(path)
-        except ProtectedTreeSentinelError:
-            raise
-        except (OSError, ValueError) as exc:
-            raise ProtectedTreeUnavailableError("FILE_UNREADABLE") from exc
-        if (not stat_module.S_ISREG(final.st_mode) or final.st_size != before.st_size
-                or stat_module.S_IMODE(final.st_mode) != stat_module.S_IMODE(before.st_mode)
-                or getattr(final, "st_ino", None) != getattr(before, "st_ino", None)
-                or getattr(final, "st_dev", None) != getattr(before, "st_dev", None)):
-            raise ProtectedTreeInvalidError("FILE_RACE")
-        entries[key] = SentinelEntry(key, "file", stat_module.S_IMODE(before.st_mode), before.st_size, digest.hexdigest())
-    else:
-        raise ProtectedTreeUnavailableError("SPECIAL_FILE")
+                if child_fd >= 0:
+                    try:
+                        os.close(child_fd)
+                    except OSError:
+                        pass
+        elif stat_module.S_ISREG(child_stat.st_mode):
+            _capture_file_fd(fd, name, child_key, child_stat, entries)
+        elif stat_module.S_ISLNK(child_stat.st_mode):
+            raise ProtectedTreeUnavailableError("TREE_SYMLINK")
+        else:
+            raise ProtectedTreeUnavailableError("SPECIAL_FILE")
+    try:
+        with os.scandir(fd) as iterator:
+            after_names = sorted((item.name for item in iterator))
+        final_directory = os.fstat(fd)
+    except OSError as exc:
+        raise ProtectedTreeInvalidError("ROOT_RACE" if is_root else "TREE_TRAVERSAL_RACE") from exc
+    if names != after_names or (
+        not stat_module.S_ISDIR(final_directory.st_mode)
+        or stat_module.S_IMODE(final_directory.st_mode) != stat_module.S_IMODE(before.st_mode)
+        or final_directory.st_ino != before.st_ino
+        or final_directory.st_dev != before.st_dev
+    ):
+        raise ProtectedTreeInvalidError("ROOT_RACE" if is_root else "TREE_TRAVERSAL_RACE")
 
 
 class QualityPublicationError(ValueError):
@@ -299,28 +390,24 @@ def write_quality_json_atomic(
     if not output.is_absolute():
         output = Path(os.path.abspath(output))
     parent = output.parent
-    try:
-        parent_stat = os.lstat(parent)
-    except OSError as exc:
-        raise QualityPublicationError("PARENT_UNAVAILABLE") from exc
-    if not stat_module.S_ISDIR(parent_stat.st_mode):
-        raise QualityPublicationError("PARENT_NOT_DIRECTORY")
+    if not _safe_publication_available():
+        raise QualityPublicationError("UNSAFE_PUBLICATION_PLATFORM")
     try:
         current = Path(parent.anchor)
-        for component in parent.parts[1:]:
+        for component in Path(os.path.abspath(parent)).parts[1:]:
             current /= component
             item = os.lstat(current)
             if stat_module.S_ISLNK(item.st_mode):
                 raise QualityPublicationError("PARENT_SYMLINK")
-        if output.exists() or output.is_symlink():
-            item = os.lstat(output)
-            if stat_module.S_ISLNK(item.st_mode):
-                raise QualityPublicationError("OUTPUT_SYMLINK")
     except QualityPublicationError:
         raise
+    except FileNotFoundError as exc:
+        raise QualityPublicationError("PARENT_UNAVAILABLE") from exc
     except OSError as exc:
-        raise QualityPublicationError("OUTPUT_UNAVAILABLE") from exc
+        raise QualityPublicationError("PARENT_UNAVAILABLE") from exc
 
+    # Admission is checked lexically/canonically before opening the parent;
+    # the descriptor below is the authority for all subsequent operations.
     candidate = Path(os.path.realpath(output))
     for configured in protected_roots:
         protected = Path(os.path.realpath(Path(configured).expanduser()))
@@ -330,18 +417,33 @@ def write_quality_json_atomic(
             continue
         raise QualityPublicationError("PROTECTED_OUTPUT")
     try:
-        payload = (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
-    except (TypeError, ValueError, OverflowError) as exc:
+        payload = (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
+    except Exception as exc:
         raise QualityPublicationError("SERIALIZATION_FAILED") from exc
 
     temporary: Path | None = None
     fd = -1
+    parent_fd = -1
+    parent_identity: tuple[int, int] | None = None
     try:
+        parent_fd = _open_publication_parent(parent)
+        parent_stat = os.fstat(parent_fd)
+        parent_identity = (parent_stat.st_dev, parent_stat.st_ino)
+        try:
+            target = os.stat(output.name, dir_fd=parent_fd, follow_symlinks=False)
+            if stat_module.S_ISLNK(target.st_mode):
+                raise QualityPublicationError("OUTPUT_SYMLINK")
+        except FileNotFoundError:
+            pass
+        except QualityPublicationError:
+            raise
+        except OSError as exc:
+            raise QualityPublicationError("OUTPUT_UNAVAILABLE") from exc
         for _ in range(32):
-            candidate_temp = parent / f".{output.name}.{secrets.token_hex(12)}.tmp"
+            candidate_name = f".{output.name}.{secrets.token_hex(12)}.tmp"
             try:
-                fd = os.open(candidate_temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-                temporary = candidate_temp
+                fd = os.open(candidate_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=parent_fd)
+                temporary = Path(candidate_name)
                 break
             except FileExistsError:
                 continue
@@ -356,25 +458,30 @@ def write_quality_json_atomic(
         except OSError as exc:
             raise QualityPublicationError("WRITE_FAILED") from exc
         try:
-            os.replace(temporary, output)
+            os.replace(temporary.name, output.name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
             temporary = None
         except OSError as exc:
             raise QualityPublicationError("REPLACE_FAILED") from exc
         try:
-            directory_fd = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-        except (OSError, ValueError):
-            # Directory fsync is unsupported on some platforms; replacement is
-            # already atomic and durable at the file descriptor boundary.
-            pass
+            current_parent = os.stat(parent, follow_symlinks=False)
+            if parent_identity != (current_parent.st_dev, current_parent.st_ino):
+                raise QualityPublicationError("PARENT_RACE_AFTER_REPLACE")
+        except QualityPublicationError:
+            raise
+        except OSError as exc:
+            raise QualityPublicationError("PARENT_RACE_AFTER_REPLACE") from exc
+        try:
+            os.fsync(parent_fd)
+        except OSError as exc:
+            unsupported = getattr(exc, "errno", None) in {errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP}
+            if not unsupported:
+                raise QualityPublicationError("DIRECTORY_FSYNC_FAILED_AFTER_REPLACE") from exc
     except QualityPublicationError:
         raise
     except OSError as exc:
         raise QualityPublicationError("PUBLICATION_FAILED") from exc
     finally:
+        cleanup_error: QualityPublicationError | None = None
         if fd >= 0:
             try:
                 os.close(fd)
@@ -382,11 +489,38 @@ def write_quality_json_atomic(
                 pass
         if temporary is not None:
             try:
-                temporary.unlink()
+                if parent_fd >= 0:
+                    os.unlink(temporary.name, dir_fd=parent_fd)
             except FileNotFoundError:
                 pass
             except OSError as exc:
-                raise QualityPublicationError("TEMP_CLEANUP_FAILED") from exc
+                cleanup_error = QualityPublicationError("TEMP_CLEANUP_FAILED")
+        if parent_fd >= 0:
+            try:
+                os.close(parent_fd)
+            except OSError:
+                pass
+        if cleanup_error is not None:
+            raise cleanup_error
+
+
+def _open_publication_parent(path: Path) -> int:
+    if not _safe_publication_available():
+        raise QualityPublicationError("UNSAFE_PUBLICATION_PLATFORM")
+    absolute = Path(os.path.abspath(path))
+    fd = -1
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        fd = os.open(absolute.anchor, flags)
+        for component in absolute.parts[1:]:
+            child = os.open(component, flags, dir_fd=fd)
+            os.close(fd)
+            fd = child
+        return fd
+    except OSError as exc:
+        if fd >= 0:
+            os.close(fd)
+        raise QualityPublicationError("PARENT_UNAVAILABLE") from exc
 
 
 def _read_ingestion_rows(read_model: SourceReadModel, ingestion_batch_id: str) -> list[Mapping[str, Any]]:
@@ -628,17 +762,89 @@ class QualityRunEnvelope:
 
 
 def _reason_codes(values: Sequence[str]) -> tuple[str, ...]:
+    allowed = {
+        "WINDOWS_AFTER_MAC", "INVALID_EVIDENCE", "PRODUCTION_SENTINEL_MISMATCH",
+        "MALFORMED_EVALUATION_REPORT", "GATE_EXCEPTION", "MALFORMED_GATE_RESULT",
+        "CONTRADICTORY_FUNCTIONAL_EVIDENCE", "CONTRADICTORY_GATE_RESULT",
+        "OWNER_REVIEW_NOT_RUN_IN_AUTOMATED_GATE", "REBOOT_RECOVERY_NOT_RUN_IN_AUTOMATED_GATE",
+        "MAC_M5_P95_RESERVED_FOR_TASK_6", "MAC_IDLE_CPU_RESERVED_FOR_TASK_6",
+    }
+    for field in QualityEvidenceReadiness._MAC_FIELDS + ("windows_release",):
+        for state in EvidenceState:
+            allowed.add(f"{field.upper()}_{state.value.upper()}")
     result: list[str] = []
     for value in values:
         text = str(value)
         code = "".join(char if char.isalnum() else "_" for char in text.upper()).strip("_")
-        if code and code not in result:
+        if code not in allowed:
+            code = "UNTRUSTED_BLOCKED_REASON"
+        if code not in result:
             result.append(code)
     return tuple(result)
 
 
 def _closed_envelope(readiness: QualityEvidenceReadiness, pollution: int | None, reasons: Sequence[str]) -> QualityRunEnvelope:
     return QualityRunEnvelope(readiness, pollution, None, "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED", _reason_codes(reasons))
+
+
+def _valid_counter(value: Any) -> bool:
+    return type(value) is int and value >= 0
+
+
+def _valid_percentage(value: Any) -> bool:
+    import math
+    return (
+        isinstance(value, (int, float)) and not isinstance(value, bool)
+        and math.isfinite(float(value)) and 0 <= float(value) <= 100
+    )
+
+
+def _valid_ratio(numerator: Any, denominator: Any, percentage: Any) -> bool:
+    import math
+    return (_valid_counter(numerator) and _valid_counter(denominator) and denominator > 0
+            and numerator <= denominator and _valid_percentage(percentage)
+            and math.isclose(float(percentage), 100 * numerator / denominator, rel_tol=1e-9, abs_tol=1e-9))
+
+
+def _valid_evaluation_report(report: EvaluationReport, pollution: int) -> bool:
+    counters = (
+        "answered_questions", "imported_messages", "expected_messages", "ordered_role_matches",
+        "expected_ordered_roles", "valid_fact_hits", "valid_fact_total", "citation_hits", "citation_total",
+        "automatic_activation_correct", "automatic_activation_total", "protected_false_promotions",
+        "stale_current_leaks", "duplicate_records", "baseline_context_chars", "rendered_context_chars",
+        "mcp_successes", "mcp_attempts", "production_pollution",
+    )
+    if any(not _valid_counter(getattr(report, field, None)) for field in counters):
+        return False
+    if report.production_pollution != pollution:
+        return False
+    if not all(_valid_ratio(*values) for values in (
+        (report.valid_fact_hits, report.valid_fact_total, report.valid_fact_recall),
+        (report.citation_hits, report.citation_total, report.citation_accuracy),
+        (report.automatic_activation_correct, report.automatic_activation_total, report.automatic_activation_accuracy),
+        (report.mcp_successes, report.mcp_attempts, report.mcp_success_rate),
+    )):
+        return False
+    if not _valid_counter(report.baseline_context_chars) or report.baseline_context_chars <= 0:
+        return False
+    if report.rendered_context_chars > report.baseline_context_chars or not _valid_percentage(report.context_reduction):
+        return False
+    import math
+    if not math.isclose(
+        float(report.context_reduction),
+        (1 - report.rendered_context_chars / report.baseline_context_chars) * 100,
+        rel_tol=1e-9, abs_tol=1e-9,
+    ):
+        return False
+    for field in ("owner_review_success", "reboot_recovery"):
+        value = getattr(report, field)
+        if value is not None and not _valid_percentage(value):
+            return False
+    if type(report.blocked_reasons) is not tuple or any(
+        not isinstance(reason, str) or not reason.strip() for reason in report.blocked_reasons
+    ):
+        return False
+    return True
 
 
 def finalize_quality_envelope(
@@ -666,7 +872,7 @@ def finalize_quality_envelope(
         return _closed_envelope(readiness, production_pollution, blocked_reasons)
     if not isinstance(evaluation_report, EvaluationReport):
         return _closed_envelope(readiness, production_pollution, ("MALFORMED_EVALUATION_REPORT",))
-    if type(getattr(evaluation_report, "production_pollution", None)) is not int or evaluation_report.production_pollution != production_pollution:
+    if not _valid_evaluation_report(evaluation_report, production_pollution):
         return _closed_envelope(readiness, None, ("MALFORMED_EVALUATION_REPORT",))
     try:
         functional_report = replace(evaluation_report, owner_review_success=100.0, reboot_recovery=100.0, blocked_reasons=())
