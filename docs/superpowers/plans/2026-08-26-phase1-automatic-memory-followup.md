@@ -104,24 +104,32 @@
 - Modify: `src/retrieval/context_pack.py`
 - Modify: `src/gateway/memory_gateway.py`
 - Modify: `src/mcp_server.py`
-- Modify only if required by the existing interface: `src/retrieval/hybrid.py`
+- Modify: `src/gateway/bootstrap.py`
+- Modify only when required to expose the already-persisted structured evidence safely: `src/sources/read_model.py`
+- Modify only when required to reuse its existing viewer/privacy/agent filter: `src/sources/service.py`
+- Modify only when required to expose per-call lexical/semantic diagnostics without changing `search(...)` callers: `src/retrieval/hybrid.py`
 - Test: `tests/test_automatic_memory_context_pack.py`
 - Test: `tests/test_automatic_memory_mcp.py`
-- Test: `tests/test_temporal_retrieval_paths.py`
+- Test: `tests/test_task7_timeline_retrieval.py`
+- Test only if the public source-query contract changes: `tests/test_source_service.py`
 - Update: `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`
 - Report: `docs/TEST_REPORTS/PHASE1_TASK9_UNIFIED_RAG.md`
 
 **Interfaces:**
 - Extend the existing `ContextPackRequest`; retain `max_chars: int = 12000` and the existing `TemporalQuery` rather than creating a parallel request.
-- `ContextPackBuilder.build(...)` returns ordered sections for current effective memory, project authority, and directly relevant raw evidence. Every item contains stable source/conversation/message or memory IDs, observed/effective time, lifecycle state, and an exclusion/why reason when the mode requires it.
+- `ContextPackBuilder` receives the existing `SourceReadModel`/`SourceQueryService` as an optional dependency over the same `lingji_memory.db`; production bootstrap wires it once. It must not create a second database, source table, retriever, or permission implementation.
+- `ContextPackBuilder.build(...)` returns ordered sections for current effective memory, current project-authority memory, and directly linked raw message evidence. Every item contains the stable IDs that actually exist for that layer: `memory_id` always, and `source_id`/`conversation_id`/`message_id` for structured raw evidence; it also contains observed/effective time, lifecycle state, authority and an exclusion/why reason when the mode requires it.
+- Raw evidence is eligible only when it is linked through the existing `message_memory_links` contract to a selected memory, passes the same agent/privacy/project scope as the request, and remains directly relevant to the selected result. A memory without a structured message link remains usable with its memory citation; missing provenance must be stated, never invented.
 - Dedup identity is the normalized tuple `(source_id, conversation_id, message_id, memory_id, content_hash)`; the same evidence may appear once only.
 - `MemoryGateway.build_context_pack(...)` and MCP `build_context_pack` pass the same authorization, project, privacy, agent, temporal, and character-limit contract.
-- When Qdrant is unavailable, the existing lexical path remains available and the result states semantic degradation; it must not fabricate semantic success.
+- `HybridRetriever.search(...) -> list[dict]` remains backward compatible. If diagnostics require a new entry point, add `search_with_diagnostics(...)` that performs one retrieval and returns the same results plus explicit per-call channel state; do not use mutable last-call state that races concurrent requests.
+- When Qdrant is absent, initialization fails, or a semantic query raises, the existing lexical path remains available and the pack reports `semantic: unavailable|degraded` with a safe reason code. It must not fabricate semantic success or expose credentials/paths from exception text.
+- The frozen Task 2 corpus/questions and evaluator thresholds are read-only inputs. Task 3 may read them in tests but must not edit `tests/evaluation/fixtures/*`, weaken scoring, or special-case fixture IDs/phrases.
 
-- [ ] **Step 1: Write failing behavior tests for current/as_of/history/why, project/privacy/agent isolation, authority conflict, source/conversation/message/memory citations, deterministic ordering, duplicate removal, final rendered length 12,000, and Qdrant-unavailable lexical degradation.**
-- [ ] **Step 2: Run `./.venv/bin/python -m pytest -q tests/test_automatic_memory_context_pack.py tests/test_automatic_memory_mcp.py tests/test_temporal_retrieval_paths.py`; expect RED on missing unified provenance/length behavior.**
-- [ ] **Step 3: Extend only the existing builder, gateway, MCP tool, and—if the failing test proves necessary—hybrid post-filter. Do not add a second ContextPack builder, retriever, API, database, or UI projection.**
-- [ ] **Step 4: Run focused tests to GREEN, then `./.venv/bin/python -m pytest -q tests/test_memory_retrieval.py tests/test_permanent_memory_gateway.py tests/test_temporal_current_filter.py tests/test_temporal_retrieval_paths.py`.**
+- [ ] **Step 1: Write failing behavior tests for current/as_of/history/why, project/privacy/agent isolation at both memory and linked-message layers, authority conflict, source/conversation/message/memory citations, deterministic layer ordering, tuple-based duplicate removal, final rendered length 12,000 including headers/citations, and absent/throwing semantic providers with usable lexical degradation.**
+- [ ] **Step 2: Run `./.venv/bin/python -m pytest -q tests/test_automatic_memory_context_pack.py tests/test_automatic_memory_mcp.py tests/test_task7_timeline_retrieval.py`; expect RED on missing unified provenance/length/diagnostic behavior. Record the RED failure before implementation.**
+- [ ] **Step 3: Extend only the existing builder, source-query read path, gateway bootstrap, gateway, MCP tool, and—only where the RED test proves necessary—hybrid diagnostics. Do not add a second ContextPack builder, retriever, API, database, source schema, UI projection, or independent permission filter.**
+- [ ] **Step 4: Run focused tests to GREEN, then `./.venv/bin/python -m pytest -q tests/test_memory_retrieval.py tests/test_permanent_memory_gateway.py tests/test_task7_timeline_retrieval.py tests/test_source_service.py tests/test_memory_capability_contract.py`. Verify Task 2 fixture SHA-256 values are unchanged.**
 - [ ] **Step 5: Commit product/tests as `feat: unify cited automatic memory context`, then report/docs as `docs: record unified rag evidence`.**
 
 **Acceptance:** Current mode stale leakage 0 across direct builder, gateway, and MCP; identical scope inputs return identical fact/citation IDs; rendered ContextPack is at most 12,000 characters; every returned fact is traceable; lexical degradation is explicit and usable.
