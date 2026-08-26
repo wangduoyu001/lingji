@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { Notice } from "../components/ui";
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { LingJiApi } from "../api";
 import type { WorkFact } from "../contracts/workFact";
@@ -19,6 +20,7 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
   });
 
   if (!active) return <section className="panel current-work-panel"><h2>当前工作</h2><p>连接灵机后显示。</p></section>;
+  if (resource.error && !resource.data) return <section className="panel current-work-panel"><h2>当前工作</h2><Notice kind="error">工作事实读取失败：{resource.error.message}</Notice></section>;
 
   const fact = resource.data;
   const work = fact?.work;
@@ -32,6 +34,7 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
         </div>
         <span className="pill">{text(work?.status, "idle")}</span>
       </div>
+      {resource.stale && <Notice kind="warning">工作事实暂时过期，正在自动重试。</Notice>}
 
       <div className="current-work-summary">
         <div><span>任务</span><strong>{text(work?.work_id)}</strong></div>

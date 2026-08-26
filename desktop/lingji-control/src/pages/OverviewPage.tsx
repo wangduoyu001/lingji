@@ -58,13 +58,6 @@ export default function OverviewPage({
   const runtimeState = memoryRuntime.state ?? health.status;
   const stale = Boolean(memoryRuntime.stale);
 
-  const attentionCount = [
-    Number(health.error_count ?? 0) > 0,
-    Number(queue.failed ?? 0) > 0,
-    vector.rebuild_required === true,
-    storageAlerts.below_minimum_free === true,
-  ].filter(Boolean).length;
-
   return (
     <div className="stack overview-page observation-page">
       <section className={`overview-hero overview-hero-${stateTone(runtimeState) ?? "neutral"}`}>
@@ -94,11 +87,11 @@ export default function OverviewPage({
 
       <CurrentWorkPanel api={api} active={active} />
 
-      <section className={attentionCount ? "attention-summary attention-summary-warning" : "attention-summary"}>
+      <section className="attention-summary">
         <div>
           <span className="desktop-eyebrow">OWNER ATTENTION</span>
-          <h3>{attentionCount ? `${attentionCount} 类异常需要查看` : "暂时不需要你处理"}</h3>
-          <p>{attentionCount ? "系统不能安全自行决定的事项已集中到待办页。" : "普通任务、重试和状态恢复由后台自动完成。"}</p>
+          <h3>需要你决定的事项以真实待办为准</h3>
+          <p>只有持久化 Work Fact 中存在 PendingAction 时，灵机才会把事情交给你。</p>
         </div>
         <button className="button secondary" onClick={() => onNavigate("attention")}>查看待办</button>
       </section>
