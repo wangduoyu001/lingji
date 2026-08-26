@@ -144,6 +144,7 @@ class MemoryGateway:
         memory_types: list[str] | None = None,
         tags: list[str] | None = None,
         include_core: bool = True,
+        include_archived: bool = False,
         mode: str = "current",
         as_of: str | None = None,
     ) -> dict[str, Any]:
@@ -160,6 +161,7 @@ class MemoryGateway:
                 memory_types=tuple(memory_types or ()),
                 tags=tuple(tags or ()),
                 include_core=include_core,
+                include_archived=include_archived,
                 mode=mode,
                 as_of=as_of,
             )

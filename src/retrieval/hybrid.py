@@ -87,18 +87,49 @@ class HybridRetriever:
         limit: int = 10,
         filters: SearchFilters | None = None,
     ) -> list[dict[str, Any]]:
+        return self._search_internal(query, limit, filters, diagnostics=False)[0]
+
+    def search_with_diagnostics(
+        self,
+        query: str,
+        limit: int = 10,
+        filters: SearchFilters | None = None,
+    ) -> dict[str, Any]:
+        """Run one retrieval and return results with call-local channel state.
+
+        Diagnostics intentionally travel with this invocation instead of being
+        stored on the retriever, so concurrent callers cannot observe another
+        request's semantic failure.
+        """
+        results, diagnostics = self._search_internal(query, limit, filters, diagnostics=True)
+        return {"results": results, "diagnostics": diagnostics}
+
+    def _search_internal(
+        self,
+        query: str,
+        limit: int,
+        filters: SearchFilters | None,
+        *,
+        diagnostics: bool,
+    ) -> tuple[list[dict[str, Any]], dict[str, str]]:
         clean_query = " ".join(str(query or "").split())
+        channel_state = {
+            "lexical": "available",
+            "semantic": "available" if self.semantic_provider is not None else "unavailable",
+            "reason_code": "none" if self.semantic_provider is not None else "semantic_provider_absent",
+        }
         if not clean_query:
-            return []
+            return [], channel_state
         normalized = (filters or SearchFilters()).normalized()
         if not normalized.valid:
-            return []
+            return [], channel_state
         limit = max(int(limit), 1)
         revision = self.database.revision
         cache_key = self._cache_key(clean_query, limit, normalized, revision)
-        cached = self._cache_get(cache_key)
-        if cached is not None:
-            return cached
+        if not diagnostics:
+            cached = self._cache_get(cache_key)
+            if cached is not None:
+                return cached, channel_state
 
         evaluation_filters = normalized
         if normalized.mode in {"current", "why"} and normalized.as_of is None:
@@ -116,13 +147,17 @@ class HybridRetriever:
             as_of=evaluation_filters.as_of,
             mode=evaluation_filters.mode,
         )
-        semantic = self._semantic_search(clean_query, candidate_limit, evaluation_filters)
+        semantic, semantic_state = self._semantic_search_with_status(
+            clean_query, candidate_limit, evaluation_filters
+        )
+        channel_state.update(semantic_state)
         fused = self._fuse(clean_query, lexical, semantic, evaluation_filters)
         output = fused[:limit]
         if normalized.mode == "why":
             self._attach_why(clean_query, output, evaluation_filters)
-        self._cache_put(cache_key, output)
-        return output
+        if not diagnostics:
+            self._cache_put(cache_key, output)
+        return output, channel_state
 
     def _attach_why(self, query: str, output: list[dict[str, Any]], filters: SearchFilters) -> None:
         current_ids = {str(item.get("memory_id") or "") for item in output}
@@ -250,12 +285,20 @@ class HybridRetriever:
         limit: int,
         filters: SearchFilters,
     ) -> list[dict[str, Any]]:
+        return self._semantic_search_with_status(query, limit, filters)[0]
+
+    def _semantic_search_with_status(
+        self,
+        query: str,
+        limit: int,
+        filters: SearchFilters,
+    ) -> tuple[list[dict[str, Any]], dict[str, str]]:
         if not self.semantic_provider:
-            return []
+            return [], {"semantic": "unavailable", "reason_code": "semantic_provider_absent"}
         try:
             results = self.semantic_provider.search(query, limit, asdict(filters))
         except Exception:
-            return []
+            return [], {"semantic": "degraded", "reason_code": "semantic_query_failed"}
         normalized = []
         for item in results or []:
             if not isinstance(item, dict):
@@ -272,7 +315,9 @@ class HybridRetriever:
                     "semantic_score": self._clamp_score(item.get("score", item.get("semantic_score", 0.0))),
                 }
             )
-        return normalized
+        if not normalized and results:
+            return [], {"semantic": "degraded", "reason_code": "semantic_results_invalid"}
+        return normalized, {"semantic": "available", "reason_code": "none"}
 
     def _fuse(
         self,

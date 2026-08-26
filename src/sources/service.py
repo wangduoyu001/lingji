@@ -217,6 +217,58 @@ class SourceQueryService:
             links.append({**link, "content_preview": str(link.get("content_preview") or "")})
         return self._envelope({"memory_id": memory_id, "links": links}, selected)
 
+    def memory_evidence(
+        self,
+        memory_id: str,
+        *,
+        viewer: ViewerContext | None = None,
+        project: str | None = None,
+    ) -> dict[str, Any]:
+        """Return visible linked messages with content for ContextPack only.
+
+        The read model remains the sole source of structured evidence.  This
+        method deliberately reuses the same viewer privacy/agent checks as the
+        ordinary source APIs and applies the requested project scope to the
+        message's inherited project list before exposing its body.
+        """
+        selected = viewer or self.owner_viewer()
+        items: list[dict[str, Any]] = []
+        for link in self.read_model.memory_links(memory_id):
+            message_id = str(link.get("message_id") or "")
+            message = self.read_model.get_message(message_id, include_content=True)
+            if not self._is_visible(message, selected) or not self._matches_project(message, project):
+                continue
+            if not message:
+                continue
+            source = self.read_model.get_source(str(message.get("source_id") or "")) or {}
+            conversation = self.read_model.get_conversation(str(message.get("conversation_id") or "")) or {}
+            items.append(
+                {
+                    **link,
+                    "source_id": message.get("source_id"),
+                    "conversation_id": message.get("conversation_id"),
+                    "message_id": message.get("message_id"),
+                    "role": message.get("role"),
+                    "occurred_at": message.get("occurred_at"),
+                    "content": message.get("content") or "",
+                    "content_hash": message.get("content_hash") or "",
+                    "privacy": message.get("privacy"),
+                    "project": message.get("projects") or [],
+                    "agent_scope": message.get("agent_scope") or [],
+                    "source_display_name": source.get("display_name"),
+                    "conversation_title": conversation.get("title"),
+                }
+            )
+        items.sort(
+            key=lambda item: (
+                str(item.get("occurred_at") or ""),
+                str(item.get("source_id") or ""),
+                str(item.get("conversation_id") or ""),
+                str(item.get("message_id") or ""),
+            )
+        )
+        return self._envelope({"memory_id": memory_id, "items": items}, selected)
+
     @staticmethod
     def _privacy_filter(viewer: ViewerContext, requested: str | None) -> tuple[str, ...]:
         if not requested:
@@ -241,6 +293,17 @@ class SourceQueryService:
             return True
         scopes = list(item.get("agent_scope") or [])
         return not scopes or "all" in scopes or viewer.agent_id in scopes
+
+    @staticmethod
+    def _matches_project(item: dict[str, Any] | None, project: str | None) -> bool:
+        if not project:
+            return True
+        projects = item.get("projects") if item else []
+        if isinstance(projects, str):
+            projects = [projects]
+        return str(project).casefold() in {
+            str(value).casefold() for value in (projects or [])
+        }
 
     def _safe_source(self, item: dict[str, Any]) -> dict[str, Any]:
         result = dict(item)

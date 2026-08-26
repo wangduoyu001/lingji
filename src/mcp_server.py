@@ -218,12 +218,14 @@ def create_mcp_server(
         query: str = "", agent_id: str | None = None, project: str | None = None,
         max_chars: int | None = None, memory_types: list[str] | None = None,
         tags: list[str] | None = None, include_core: bool = True,
+        include_archived: bool = False,
         mode: str = "current", as_of: str | None = None,
     ) -> dict[str, Any]:
         """Build a bounded context pack containing core and retrieved memories with citations."""
         return memory_gateway.build_context_pack(
             agent(agent_id), query=query, project=project, max_chars=max_chars,
             memory_types=memory_types, tags=tags, include_core=include_core,
+            include_archived=include_archived,
             mode=mode, as_of=as_of,
         )
 

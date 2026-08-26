@@ -25,6 +25,7 @@ from src.runtime.workspace import (
     WorkspaceResolver,
 )
 from src.storage import StateDatabase
+from src.sources import SourceQueryService, SourceReadModel
 
 
 def build_memory_gateway(
@@ -131,12 +132,26 @@ def build_memory_gateway(
         semantic_batch_size=semantic_batch_size,
     )
     lifecycle = MemoryLifecycleService(layout, state_db)
+    profiles = AIProfileRegistry()
+    source_read_model = SourceReadModel(memory_db)
+    source_query_service = SourceQueryService(
+        source_read_model,
+        workspace=(runtime_workspace.name.value if runtime_workspace is not None else "production"),
+        vault_path=vault_path,
+        raw_path=storage_path / "raw",
+        profiles=profiles,
+    )
     gateway = MemoryGateway(
         memory_db,
         retriever,
-        ContextPackBuilder(memory_db, retriever),
+        ContextPackBuilder(
+            memory_db,
+            retriever,
+            source_read_model=source_read_model,
+            source_query_service=source_query_service,
+        ),
         lifecycle,
-        profiles=AIProfileRegistry(),
+        profiles=profiles,
         state_db=state_db,
         index_coordinator=coordinator,
         workspace=runtime_workspace,
