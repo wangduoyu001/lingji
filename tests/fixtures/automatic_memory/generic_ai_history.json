@@ -1,0 +1,14 @@
+{
+  "schema": "lingji.history.inbox",
+  "schema_version": "1",
+  "conversations": [
+    {
+      "conversation_id": "inbox-conv-1",
+      "title": "Adapter design",
+      "messages": [
+        {"message_id": "inbox-msg-1", "role": "user", "content": "Design a safe adapter", "timestamp": "2026-08-26T01:00:00Z"},
+        {"message_id": "inbox-msg-2", "role": "assistant", "content": "Use a fail-closed parser.", "timestamp": "2026-08-26T01:00:01Z"}
+      ]
+    }
+  ]
+}

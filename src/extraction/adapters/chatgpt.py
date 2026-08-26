@@ -20,6 +20,7 @@ from ..models import (
     StructuredSource,
 )
 from ..privacy import PrivacyClassifier
+from .generic_ai_history import DetectionResult
 
 logger = logging.getLogger("lingji.extraction.chatgpt")
 
@@ -54,15 +55,25 @@ class ChatGPTExportAdapter(ExtractionAdapter):
         input_path: Path | None,
         payload: Mapping[str, Any],
     ) -> bool:
-        if source_type not in self.source_types or not input_path:
-            return False
-        if input_path.is_dir():
-            return any(input_path.glob("conversations*.json"))
-        return input_path.suffix.lower() in {".zip", ".json"}
+        return source_type in self.source_types and input_path is not None and self.detect(input_path).supported
+
+    def detect(self, path: Path) -> DetectionResult:
+        if not path or path.is_dir() or path.is_symlink():
+            return DetectionResult("chatgpt_export", None, False, "ChatGPT requires one official export ZIP or JSON file")
+        if path.suffix.lower() not in {".zip", ".json"}:
+            return DetectionResult("chatgpt_export", None, False, "ChatGPT official export must be ZIP or JSON")
+        try:
+            self._load_export(path, {})
+        except (OSError, UnicodeError, ValueError, zipfile.BadZipFile, json.JSONDecodeError) as exc:
+            return DetectionResult("chatgpt_export", None, False, f"unsupported official ChatGPT export: {exc}")
+        return DetectionResult("chatgpt_export", "chatgpt.export", True, "supported official ChatGPT export")
 
     def extract(self, request: ExtractionRequest) -> ExtractionBatch:
         if not request.input_path:
             raise ValueError("ChatGPT export path is required")
+        detection = self.detect(request.input_path)
+        if not detection.supported:
+            raise ValueError(detection.reason)
         conversations, source_files = self._load_export(request.input_path, request.options)
         projects = self._as_tuple(
             request.options.get("project_id") or request.options.get("project") or ()
@@ -209,6 +220,7 @@ class ChatGPTExportAdapter(ExtractionAdapter):
             messages.append(
                 {
                     "node_id": str(node_id),
+                    "message_id": str(message.get("id") or node_id),
                     "parent": str(node.get("parent") or ""),
                     "role": role,
                     "name": name,
@@ -258,6 +270,7 @@ class ChatGPTExportAdapter(ExtractionAdapter):
                 "conversation_id": normalized.conversation_id,
                 "current_node": normalized.current_node,
                 "message_count": len(normalized.messages),
+                "message_ids": [message["message_id"] for message in normalized.messages],
                 "branch_message_count": normalized.branch_count,
                 "models": list(normalized.models),
                 "attachments": list(normalized.attachments),
@@ -280,7 +293,7 @@ class ChatGPTExportAdapter(ExtractionAdapter):
     ) -> StructuredConversation:
         messages = tuple(
             StructuredMessage(
-                external_id=message["node_id"],
+                external_id=message["message_id"],
                 role=message["role"],
                 author=message["name"],
                 occurred_at=message["created_at"],
@@ -290,6 +303,8 @@ class ChatGPTExportAdapter(ExtractionAdapter):
                 projects=(),
                 agent_scope=(),
                 metadata={
+                    "node_id": message["node_id"],
+                    "message_id": message["message_id"],
                     "parent": message["parent"],
                     "model": message["model"],
                     "is_branch": message["is_branch"],
@@ -317,6 +332,7 @@ class ChatGPTExportAdapter(ExtractionAdapter):
             metadata={
                 "current_node": normalized.current_node,
                 "message_count": len(messages),
+                "message_ids": tuple(message["message_id"] for message in normalized.messages),
                 "branch_message_count": normalized.branch_count,
                 "models": normalized.models,
                 "source_export_files": tuple(source_files),
@@ -334,34 +350,18 @@ class ChatGPTExportAdapter(ExtractionAdapter):
         max_json_files = int(options.get("max_zip_json_files", self.DEFAULT_MAX_JSON_FILES))
         max_conversations = int(options.get("max_conversations", self.DEFAULT_MAX_CONVERSATIONS))
         max_ratio = float(options.get("max_zip_compression_ratio", self.DEFAULT_MAX_COMPRESSION_RATIO))
-        if path.is_dir():
-            files = self._dedupe_paths(
-                sorted(
-                    file_path
-                    for pattern in ("conversations*.json", "conversation*.json")
-                    for file_path in path.glob(pattern)
-                )
-            )
-            if len(files) > max_json_files:
-                raise ValueError(f"Too many ChatGPT JSON files: {len(files)} > {max_json_files}")
-            total = 0
-            for file_path in files:
-                size = file_path.stat().st_size
-                total += size
-                if size > max_member or total > max_total:
-                    raise ValueError("ChatGPT export exceeds configured safety limits")
-                loaded.extend(self._decode_conversation_payload(file_path.read_text(encoding="utf-8-sig")))
-                source_files.append(file_path.name)
-                if len(loaded) > max_conversations:
-                    raise ValueError(f"Too many conversations: {len(loaded)} > {max_conversations}")
-        elif path.suffix.lower() == ".zip":
+        if path.suffix.lower() == ".zip":
             with zipfile.ZipFile(path) as archive:
+                for member in archive.infolist():
+                    member_path = Path(member.filename)
+                    if member.filename.startswith(("/", "\\")) or ".." in member_path.parts:
+                        raise ValueError("ChatGPT ZIP contains an unsafe member path")
                 infos = sorted(
                     (
                         info
                         for info in archive.infolist()
                         if not info.is_dir()
-                        and Path(info.filename).name.lower().startswith("conversation")
+                        and Path(info.filename).name.lower() == "conversations.json"
                         and Path(info.filename).suffix.lower() == ".json"
                     ),
                     key=lambda item: item.filename,
@@ -412,15 +412,26 @@ class ChatGPTExportAdapter(ExtractionAdapter):
     def _decode_conversation_payload(raw: str) -> list[dict[str, Any]]:
         data = json.loads(raw)
         if isinstance(data, list):
-            return [item for item in data if isinstance(item, dict)]
+            if any(not isinstance(item, dict) for item in data):
+                raise ValueError("ChatGPT conversations list contains a non-object")
+            return [ChatGPTExportAdapter._validate_official_conversation(item) for item in data]
         if isinstance(data, dict):
-            for key in ("conversations", "items", "data"):
-                value = data.get(key)
-                if isinstance(value, list):
-                    return [item for item in value if isinstance(item, dict)]
-            if "mapping" in data or "conversation_id" in data or "id" in data:
-                return [data]
+            return [ChatGPTExportAdapter._validate_official_conversation(data)]
         raise ValueError("Unsupported ChatGPT export JSON structure")
+
+    @staticmethod
+    def _validate_official_conversation(value: Any) -> dict[str, Any]:
+        if not isinstance(value, dict) or not isinstance(value.get("id"), str) or not value["id"].strip():
+            raise ValueError("Official ChatGPT conversation id is missing")
+        if not isinstance(value.get("mapping"), dict):
+            raise ValueError("Official ChatGPT conversation mapping is missing")
+        for node_id, node in value["mapping"].items():
+            if not isinstance(node_id, str) or not isinstance(node, dict):
+                raise ValueError("Official ChatGPT mapping is malformed")
+            message = node.get("message")
+            if message is not None and not isinstance(message, dict):
+                raise ValueError("Official ChatGPT message is malformed")
+        return value
 
     def _render_conversation(
         self,
@@ -435,7 +446,8 @@ class ChatGPTExportAdapter(ExtractionAdapter):
             suffix = " · 分支消息" if message["is_branch"] else ""
             model = f" · {message['model']}" if message["model"] else ""
             timestamp = f" · {message['created_at']}" if message["created_at"] else ""
-            lines.extend([f"## {index}. {role_label}{timestamp}{model}{suffix}", "", message["text"].rstrip(), ""])
+            message_id = f" · message_id={message['message_id']}" if message["message_id"] else ""
+            lines.extend([f"## {index}. {role_label}{timestamp}{model}{message_id}{suffix}", "", message["text"].rstrip(), ""])
             if message["attachments"]:
                 lines.append("附件：")
                 for item in message["attachments"]:

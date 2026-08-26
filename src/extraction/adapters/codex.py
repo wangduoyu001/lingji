@@ -8,6 +8,8 @@ from typing import Any, Mapping
 
 from ..base import ExtractionAdapter
 from ..models import ExtractedDocument, ExtractionBatch, ExtractionRequest
+from ..models import StructuredConversation, StructuredMessage, StructuredSource
+from .generic_ai_history import SchemaDetection
 
 
 class CodexWorkReportAdapter(ExtractionAdapter):
@@ -360,3 +362,168 @@ class CodexWorkReportAdapter(ExtractionAdapter):
     def _hash(value: Any) -> str:
         encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
+
+
+class CodexTranscriptAdapter(ExtractionAdapter):
+    """Parser for the explicitly versioned, exported Codex transcript JSONL schema."""
+
+    name = "codex_transcript"
+    version = "1.0.0"
+    source_types = ("codex_transcript", "codex_history", "codex")
+    SCHEMA = "codex_transcript"
+    SCHEMA_VERSION = "1"
+    MAX_INPUT_BYTES = 32 * 1024 * 1024
+    _ROLES = frozenset({"user", "assistant", "system", "tool"})
+    _FORBIDDEN_NAMES = frozenset({"auth", "token", "config", "cookie", "cookies", "private", "credentials"})
+
+    def can_handle(
+        self,
+        source_type: str,
+        input_path: Path | None,
+        payload: Mapping[str, Any],
+    ) -> bool:
+        del payload
+        return (
+            source_type in self.source_types
+            and input_path is not None
+            and self.detect_schema(input_path).supported
+        )
+
+    def detect_schema(self, path: Path) -> SchemaDetection:
+        if not path or path.is_dir() or path.is_symlink():
+            return SchemaDetection(None, None, False, "Codex transcript requires one regular JSONL file")
+        if path.suffix.lower() != ".jsonl":
+            return SchemaDetection(None, None, False, "Codex transcript schema requires JSONL")
+        if self._forbidden_path(path):
+            return SchemaDetection(None, None, False, "Codex transcript refuses credential or private storage paths")
+        try:
+            if path.stat().st_size > self.MAX_INPUT_BYTES:
+                raise ValueError("Codex transcript exceeds size limit")
+            lines = path.read_text(encoding="utf-8-sig").splitlines()
+            first = next((line for line in lines if line.strip()), "")
+            header = json.loads(first)
+            if not isinstance(header, dict):
+                raise ValueError("Codex transcript header is not an object")
+            schema = str(header.get("schema") or header.get("schema_name") or "")
+            version = str(header.get("schema_version") or header.get("version") or "")
+            if schema != self.SCHEMA or version != self.SCHEMA_VERSION:
+                return SchemaDetection(schema or None, version or None, False, "unknown Codex transcript schema; no guessing")
+            if header.get("type") not in (None, "header", "session"):
+                return SchemaDetection(schema, version, False, "Codex transcript header record is invalid")
+            messages = [json.loads(line) for line in lines if line.strip()][1:]
+            if not messages:
+                raise ValueError("Codex transcript contains no messages")
+            if any(not isinstance(item, dict) or item.get("type") != "message" for item in messages):
+                raise ValueError("Codex transcript contains an unknown record type")
+            for item in messages:
+                self._message(item)
+        except (OSError, UnicodeError, StopIteration, json.JSONDecodeError, ValueError) as exc:
+            return SchemaDetection(None, None, False, str(exc))
+        return SchemaDetection(self.SCHEMA, self.SCHEMA_VERSION, True, "supported Codex transcript schema v1")
+
+    def extract(self, request: ExtractionRequest) -> ExtractionBatch:
+        if not request.input_path:
+            raise ValueError("Codex transcript path is required")
+        detection = self.detect_schema(request.input_path)
+        if not detection.supported:
+            raise ValueError(f"unsupported Codex transcript: {detection.reason}")
+        rows = [
+            json.loads(line)
+            for line in request.input_path.read_text(encoding="utf-8-sig").splitlines()
+            if line.strip()
+        ][1:]
+        grouped: dict[str, list[dict[str, str]]] = {}
+        order: list[str] = []
+        for row in rows:
+            message = self._message(row)
+            conversation_id = message["conversation_id"]
+            if conversation_id not in grouped:
+                grouped[conversation_id] = []
+                order.append(conversation_id)
+            grouped[conversation_id].append(message)
+        documents: list[ExtractedDocument] = []
+        conversations: list[StructuredConversation] = []
+        for conversation_id in order:
+            rows_for_conversation = grouped[conversation_id]
+            stable = "LJ-CODEX-TRANSCRIPT-" + self._hash(conversation_id)[:24].upper()
+            messages = tuple(
+                StructuredMessage(
+                    external_id=row["message_id"],
+                    role=row["role"],
+                    content=row["content"],
+                    sequence=index,
+                    occurred_at=row["timestamp"],
+                    metadata={"conversation_id": conversation_id, "message_id": row["message_id"]},
+                )
+                for index, row in enumerate(rows_for_conversation)
+            )
+            body = "\n\n".join(
+                f"## {index}. {row['role']} · {row['timestamp']}\n\n{row['content']}"
+                for index, row in enumerate(rows_for_conversation, 1)
+            )
+            documents.append(
+                ExtractedDocument(
+                    stable_id=stable,
+                    title=f"Codex transcript {conversation_id}",
+                    body=f"# Codex transcript {conversation_id}\n\n{body}\n",
+                    source_type="codex_transcript",
+                    destination="source_archive",
+                    external_id=conversation_id,
+                    created_at=rows_for_conversation[0]["timestamp"],
+                    updated_at=rows_for_conversation[-1]["timestamp"],
+                    metadata={"conversation_id": conversation_id, "schema": self.SCHEMA, "schema_version": self.SCHEMA_VERSION},
+                )
+            )
+            conversations.append(
+                StructuredConversation(
+                    external_id=conversation_id,
+                    title=f"Codex transcript {conversation_id}",
+                    messages=messages,
+                    started_at=messages[0].occurred_at,
+                    ended_at=messages[-1].occurred_at,
+                    participants=tuple(dict.fromkeys(message.role for message in messages)),
+                    metadata={"schema": self.SCHEMA, "schema_version": self.SCHEMA_VERSION},
+                )
+            )
+        return ExtractionBatch(
+            documents=tuple(documents),
+            structured_sources=(
+                StructuredSource(
+                    source_type="codex_transcript",
+                    external_id="codex-transcript-source-" + self._hash(request.input_path.read_bytes().hex())[:24].upper(),
+                    display_name="Codex transcript",
+                    conversations=tuple(conversations),
+                    metadata={"schema": self.SCHEMA, "schema_version": self.SCHEMA_VERSION},
+                ),
+            ),
+            summary={"conversations_found": len(documents), "documents_created": len(documents)},
+        )
+
+    @classmethod
+    def _message(cls, value: Any) -> dict[str, str]:
+        if not isinstance(value, dict):
+            raise ValueError("Codex transcript message is not an object")
+        values: dict[str, str] = {}
+        for field in ("conversation_id", "message_id", "role", "content", "timestamp"):
+            raw = value.get(field)
+            if not isinstance(raw, str) or not raw.strip():
+                raise ValueError(f"Codex transcript {field} is required")
+            values[field] = raw.strip()
+        if values["role"] not in cls._ROLES:
+            raise ValueError("Codex transcript role is unsupported")
+        try:
+            datetime.fromisoformat(values["timestamp"].replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("Codex transcript timestamp is invalid") from exc
+        return values
+
+    @classmethod
+    def _forbidden_path(cls, path: Path) -> bool:
+        name = path.name.lower()
+        return path.suffix.lower() in {".db", ".sqlite", ".sqlite3"} or name in cls._FORBIDDEN_NAMES or any(
+            name.startswith(prefix + ".") for prefix in cls._FORBIDDEN_NAMES
+        )
+
+    @staticmethod
+    def _hash(value: str) -> str:
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()

@@ -4,6 +4,37 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 3 · fail-closed source adapters
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`pending — Task 3 implementation`
+- 影响模块：官方 ChatGPT 导出、版本化 Codex transcript、Generic AI History Inbox、Claude Desktop capability boundary、Extraction Adapter Registry
+- 风险等级：P0
+- 用户可感知变化：只接受官方 ChatGPT ZIP/JSON、明确版本的 Codex JSONL 与主人选定并带 History Inbox 标记的 JSON/JSONL/Markdown；Claude Desktop 在无官方导出时准确显示 `unsupported` 或 `consent_required`。
+- 数据或安全边界变化：未知、损坏、恶意或未标记格式 fail-closed 并留下安全审计原因；不读取浏览器 profile、Cookie、Token、认证配置、私有数据库、Claude opaque storage，不扫描任意目录，不联网，不新增队列/数据库/原始事实源。
+
+### 新增或修改的自动验收
+
+- [ ] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_adapters.py`：覆盖 ChatGPT 官方结构和 ZIP 路径边界、conversation/message ID、Codex schema v1 与未知 schema、Generic History Inbox JSON/JSONL/Markdown、Claude capability、Registry 未知格式拒绝。
+- [ ] `./.venv/bin/python -m pytest -q tests/test_chatgpt_importer.py tests/test_structured_ingestion.py tests/test_capture_adapters.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_hardening.py tests/test_extraction_worker.py tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py`：Task 1/2 与既有 Extraction 回归。
+- [ ] `./.venv/bin/python -m py_compile src/extraction/adapters/chatgpt.py src/extraction/adapters/codex.py src/extraction/adapters/generic_ai_history.py src/extraction/adapters/claude_desktop.py src/extraction/registry.py`、`git diff --check`、`./.venv/bin/python scripts/check_acceptance_sync.py`、`./.venv/bin/python scripts/check_local_execution_handoff.py`。
+
+### 回归项与边界
+
+- [ ] 所有 adapter 继续复用 `ExtractionAdapter`、`ExtractionRequest`、`ExtractionBatch`、现有 raw snapshot/Extraction Queue；通用 pipeline 不 claim/execute `automatic_memory_snapshot`。
+- [ ] 未知输入只进入明确失败/审计原因，不猜测、不生成消息；不修改 Production/Vault，不创建 ACTIVE 本机任务或 Artifact。
+
+### 清理与回滚
+
+- 临时数据前缀：`PHASE1_AUTOMATIC_MEMORY_TASK3_`
+- fixture 仅为脱敏结构样例，无真实聊天、密钥或个人数据；pytest 临时路径结束后自动清理。
+- 回滚：回滚 Task 3 产品 Commit，不触碰主人数据、Production Vault 或历史验收 Artifact。
+
+### 最终报告
+
+- 报告路径：本地调度报告继续由 `.superpowers/` 忽略；正式证据为本条目与测试输出。
+- 报告分支：`codex/phase1-automatic-memory`
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 9 · terminal snapshot cleanup precedence
 
 - 产品分支：`codex/phase1-automatic-memory`

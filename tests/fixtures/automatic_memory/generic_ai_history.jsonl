@@ -1,0 +1,4 @@
+{"schema":"lingji.history.inbox","schema_version":"1","type":"header"}
+{"type":"conversation","conversation_id":"jsonl-conv-1","title":"JSONL history"}
+{"type":"message","conversation_id":"jsonl-conv-1","message_id":"jsonl-msg-1","role":"user","content":"Hello","timestamp":"2026-08-26T02:00:00Z"}
+{"type":"message","conversation_id":"jsonl-conv-1","message_id":"jsonl-msg-2","role":"assistant","content":"Hi","timestamp":"2026-08-26T02:00:01Z"}
