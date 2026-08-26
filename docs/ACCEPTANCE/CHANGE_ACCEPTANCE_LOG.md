@@ -7,7 +7,7 @@
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 7 repair round 1 · temporal and why hardening
 
 - 产品分支：`codex/phase1-automatic-memory`
-- 产品 Commit：`8943dd693fb4e9030e62ea6f88f57bca1fb754c0`
+- 产品 Commit：`bd4362d7aaa4a2661397a32563732ecd078f28b3`
 - 影响模块：timezone-aware temporal parsing, stable current cache identity, bounded why exclusions, explicit authority-conflict handling, project refresh interval closure
 - 风险等级：P0
 - 用户可感知变化：无时区查询和记忆有效期不再被猜测为 UTC；默认 current cache 不因每次读取时间变化而产生伪造新键；`why` 现在展示同一查询候选集中被状态/时间/权威规则排除的记忆及引用；项目替代会在新决定生效时刻关闭旧决定区间。
@@ -15,15 +15,15 @@
 
 ### 新增或修改的自动验收
 
-- [x] `tests/test_task7_timeline_retrieval.py`：10 passed，新增 naive timestamp fail-closed、why 排除解释/引用、无关权威差异不误报冲突、默认 current cache 稳定键、新决定 valid_from 边界。
-- [x] Task 7 相关检索/Gateway/MCP/Project Context 回归：84 passed，2 warnings（既有依赖弃用警告）。
+- [x] `tests/test_task7_timeline_retrieval.py`：12 passed，新增 per-result why 排除隔离、显式冲突主题与无关结果回归、非法 temporal mode fail-closed。
+- [x] Task 7 相关检索/Gateway/MCP/Project Context 回归：86 passed，2 warnings（既有依赖弃用警告）。
 - [x] 涉及文件 `py_compile`、`git diff --check`：PASS。
 - [ ] Task 1–6 回归、`scripts/check_acceptance_sync.py`、`scripts/check_local_execution_handoff.py`：根代理在双提交后复读。
 - [ ] Qdrant unavailable、真实 Production Vault、主人 UI/M5 真机验收：仍不在本轮范围。
 
 ### 回滚
 
-- 回滚：回退产品 Commit `8943dd693fb4e9030e62ea6f88f57bca1fb754c0` 及其前置 Task 7 修复提交与本条文档提交；不触碰 Vault、原始聊天证据、Qdrant 正式数据或主人配置。
+- 回滚：回退产品 Commit `bd4362d7aaa4a2661397a32563732ecd078f28b3` 及其前置 Task 7 修复提交与本条文档提交；不触碰 Vault、原始聊天证据、Qdrant 正式数据或主人配置。
 
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 7 · unified timeline retrieval
 
