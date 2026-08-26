@@ -1,5 +1,14 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 1 · SourceReadModel ingestion-order contract
+
+- 基准：`ec268045004647ae1187abe747e70f2e37bdce9f`; 产品范围仅为 SourceReadModel v1→v2 additive migration, typed identities, batch-scoped ingestion ordinals, StructuredReadModelSink propagation and dedicated ingestion read API.
+- 风险等级：P0。不得修改冻结 evaluator/fixtures/thresholds、retrieval ranking/query/filters、Task 4R2、100k、Artifact、Desktop、Production、Vault 或主人验收。
+- 自动验收：新增 `tests/test_task4_reset_ingestion_order.py`，并修改 SourceReadModel/structured sink tests for migration, exact order, replay/no-duplicate, pagination validation, safe item shape and typed identity case sensitivity.
+- RED captured before product implementation：`./.venv/bin/python -m pytest -q tests/test_task4_reset_ingestion_order.py tests/test_source_read_model.py tests/test_structured_ingestion.py` — collection failed with missing `ExternalMessageKey` export from `src.sources`, caused by absent Task 1 API; existing source test also expects v2 and cannot pass on v1.
+- Required GREEN/regressions after implementation：focused command above; `tests/test_source_service.py`, `tests/test_automatic_memory_adapters.py`, `tests/test_automatic_memory_resume.py`, `tests/test_extraction_idempotency.py`; fixture hashes; `git diff --check`; acceptance sync and local handoff checks.
+- Cleanup/rollback：tests use temporary SQLite only; no Production/Vault/raw fixture writes. Roll back the two Task 1 commits without touching owner data. Physical acceptance remains `NOT_MEASURED`; `LOCAL_EXECUTION_TASK.md` remains `IDLE`.
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 4R1 final repair round 5
 
 - 产品 Commit：`5be8d92997a3945dd7d83732a0350cac340c5320`；本条记录与报告随独立 docs commit 写入。
