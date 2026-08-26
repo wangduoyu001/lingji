@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import asdict
 from enum import Enum
 from typing import Any, Callable, Mapping
@@ -40,17 +41,22 @@ class AutoMemoryPromotionService:
         state_db: Any,
         memory_db: Any | None = None,
         projection_writer: Callable[..., Any] | None = None,
+        evidence_store: Any | None = None,
         policy_version: str = POLICY_VERSION,
     ):
         self.state_db = state_db
         self.memory_db = memory_db
         self.projection_writer = projection_writer
+        self.evidence_store = evidence_store
         self.policy_version = str(policy_version or POLICY_VERSION)
 
     def evaluate(self, candidate: ReviewCandidate | Mapping[str, Any]) -> dict[str, Any]:
         selected = self._normalize(candidate)
         existing = self._existing_decision(selected)
         if existing:
+            recovered_prior = self._existing_recovery(selected.memory_id, str(existing.get("decision_id") or ""))
+            if recovered_prior is not None:
+                return recovered_prior
             if existing.get("status") != PromotionStatus.ERROR.value:
                 return existing
             # A failed derived-index write may be retried after the provider
@@ -208,12 +214,9 @@ class AutoMemoryPromotionService:
 
     def _normalize(self, value: ReviewCandidate | Mapping[str, Any]) -> ReviewCandidate:
         selected = value if isinstance(value, ReviewCandidate) else ReviewCandidate.from_mapping(value)
-        content_hash = selected.content_hash or hashlib.sha256(
-            json.dumps(
-                {"title": selected.title, "content": selected.content, "structured": dict(selected.structured_content)},
-                ensure_ascii=False, sort_keys=True, separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
+        content_hash = self._authentic_content_hash(selected)
+        if selected.content_hash and selected.content_hash != content_hash:
+            raise ValueError("content hash does not match normalized candidate content")
         candidate_id = selected.memory_id or f"LJ-CAND-{content_hash[:20].upper()}"
         metadata = dict(selected.metadata)
         if selected.memory_id != candidate_id or selected.content_hash != content_hash:
@@ -226,16 +229,20 @@ class AutoMemoryPromotionService:
         if not candidate.memory_id or not candidate.title or not candidate.content:
             reasons.append("schema_invalid")
         confidence = candidate.confidence
-        try:
-            numeric_confidence = float(confidence) if confidence is not None and not isinstance(confidence, bool) else None
-        except (TypeError, ValueError):
-            numeric_confidence = None
-        if numeric_confidence is None or numeric_confidence < _AUTO_THRESHOLD:
+        numeric_confidence = (
+            float(confidence)
+            if isinstance(confidence, (int, float)) and not isinstance(confidence, bool)
+            else None
+        )
+        if numeric_confidence is None or not math.isfinite(numeric_confidence) or numeric_confidence < _AUTO_THRESHOLD:
             reasons.append("confidence_below_threshold")
         if not self._has_authoritative_evidence(candidate):
             reasons.append("direct_user_or_authoritative_source_required")
-        if not self._evidence_refs(candidate):
+        refs = self._evidence_refs(candidate)
+        if not refs:
             reasons.append("evidence_required")
+        elif not any(self._evidence_verifiable(ref) for ref in refs):
+            reasons.append("evidence_reference_unverifiable")
         metadata = dict(candidate.metadata)
         if self._truthy(metadata.get("has_conflict")) or self._truthy(metadata.get("conflict")):
             reasons.append("unresolved_conflict")
@@ -252,6 +259,9 @@ class AutoMemoryPromotionService:
             reasons.append("restricted_requires_owner")
         for flag in sorted(flags & _HIGH_RISK):
             reasons.append(f"{flag}_requires_owner")
+        memory_type = candidate.memory_type.lower()
+        if memory_type in _HIGH_RISK and memory_type not in {"core", "core_memory"}:
+            reasons.append(f"{memory_type}_requires_owner")
         return list(dict.fromkeys(reasons))
 
     @staticmethod
@@ -272,6 +282,54 @@ class AutoMemoryPromotionService:
     @staticmethod
     def _evidence_refs(candidate: ReviewCandidate) -> tuple[str, ...]:
         return tuple(str(item).strip() for item in candidate.source_refs if str(item).strip())
+
+    def _evidence_verifiable(self, reference: str) -> bool:
+        """Resolve evidence through existing state/source read models only."""
+        wanted = str(reference).strip()
+        if not wanted:
+            return False
+        allowed_event_types = {
+            "evidence_recorded", "source_ingested", "raw_snapshot_created",
+            "extraction_completed", "source_snapshot_committed", "message_recorded",
+        }
+        for row in self.state_db.recent_events(limit=100000):
+            if str(row.get("event_type") or "") not in allowed_event_types:
+                continue
+            if str(row.get("entity_id") or "") == wanted:
+                return True
+            payload = self._payload(row)
+            if self._contains_reference(payload, wanted):
+                return True
+        store = self.evidence_store
+        if store is not None:
+            for method_name in ("get_source", "get_conversation", "get_message"):
+                method = getattr(store, method_name, None)
+                if callable(method):
+                    try:
+                        if method(wanted) is not None:
+                            return True
+                    except Exception:
+                        continue
+        return False
+
+    @classmethod
+    def _contains_reference(cls, value: Any, wanted: str) -> bool:
+        if isinstance(value, Mapping):
+            return any(cls._contains_reference(item, wanted) for item in value.values())
+        if isinstance(value, (list, tuple, set)):
+            return any(cls._contains_reference(item, wanted) for item in value)
+        return str(value).strip() == wanted
+
+    @staticmethod
+    def _authentic_content_hash(candidate: ReviewCandidate) -> str:
+        material = {
+            "title": str(candidate.title or "").strip(),
+            "content": str(candidate.content or "").strip(),
+            "structured": dict(candidate.structured_content),
+        }
+        return hashlib.sha256(
+            json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
 
     def _record_candidate(self, candidate: ReviewCandidate) -> None:
         payload = self._candidate_payload(candidate)
@@ -309,6 +367,70 @@ class AutoMemoryPromotionService:
             if str(item.get("candidate_id") or "") == str(candidate_id) and item.get("decision_id") == decision_id:
                 return item
         return None
+
+    def _existing_recovery(self, candidate_id: str, decision_id: str) -> dict[str, Any] | None:
+        return self._existing_owner_result("memory_promotion_recovered", candidate_id, decision_id)
+
+    def rebuild_derived_projections(self) -> dict[str, int]:
+        """Replay active promotion events into the rebuildable memory index."""
+        latest: dict[str, dict[str, Any]] = {}
+        rejected: set[str] = set()
+        active_events = {
+            "memory_promotion_decision", "memory_promotion_owner_approved",
+            "memory_promotion_recovered", "memory_projection_activated",
+        }
+        # StateDatabase returns newest first; replay oldest to newest so a
+        # newer extractor/policy decision or explicit rejection wins.
+        for row in reversed(self.state_db.recent_events(limit=100000)):
+            event_type = str(row.get("event_type") or "")
+            payload = self._payload(row)
+            candidate_id = str(payload.get("candidate_id") or row.get("entity_id") or "")
+            if not candidate_id:
+                continue
+            if event_type == "memory_promotion_owner_rejected":
+                rejected.add(candidate_id)
+                latest.pop(candidate_id, None)
+            elif event_type in active_events and payload.get("status") == PromotionStatus.ACTIVE.value:
+                rejected.discard(candidate_id)
+                latest[candidate_id] = payload
+        outcomes = latest
+        rebuilt = 0
+        failed = 0
+        for candidate_id, payload in outcomes.items():
+            if candidate_id in rejected:
+                continue
+            decision_id = str(payload.get("decision_id") or "")
+            if not decision_id:
+                continue
+            if self._projection_exists(candidate_id, decision_id, str(payload.get("content_hash") or "")):
+                continue
+            try:
+                self._write_projection(self._normalize(payload), decision_id)
+            except Exception:
+                failed += 1
+                continue
+            rebuilt += 1
+        return {"rebuilt": rebuilt, "failed": failed, "skipped": len(outcomes) - rebuilt - failed}
+
+    def _projection_exists(self, candidate_id: str, decision_id: str, content_hash: str) -> bool:
+        database = self.memory_db
+        fetch = getattr(database, "fetch_memory", None) if database is not None else None
+        if not callable(fetch):
+            return False
+        try:
+            item = fetch(candidate_id, include_chunks=False)
+        except TypeError:
+            item = fetch(candidate_id)
+        except Exception:
+            return False
+        if not isinstance(item, Mapping):
+            return False
+        relationships = item.get("relationships") or {}
+        return (
+            item.get("memory_tier") == "derived"
+            and str(item.get("content_hash") or "") == content_hash
+            and str(relationships.get("decision_id") or "") == decision_id
+        )
 
     def _write_projection(self, candidate: ReviewCandidate, decision_id: str) -> Any:
         writer = self.projection_writer
@@ -401,7 +523,5 @@ class AutoMemoryPromotionService:
     @staticmethod
     def _truthy(value: Any) -> bool:
         return value is True or str(value or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
 # Shorter names are useful for callers that treat this as a policy boundary.
 AutomaticMemoryPromotionService = AutoMemoryPromotionService

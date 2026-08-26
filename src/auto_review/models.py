@@ -64,10 +64,15 @@ class ReviewCandidate:
         raw_flags = value.get("risk_flags") or (value.get("metadata") or {}).get("risk_flags") or ()
         if isinstance(raw_flags, str):
             raw_flags = (raw_flags,)
-        try:
-            confidence = float(value["confidence"]) if value.get("confidence") is not None else None
-        except (TypeError, ValueError):
-            confidence = None
+        raw_confidence = value.get("confidence")
+        # JSON numbers are the only accepted confidence representation.  In
+        # particular, bools and numeric-looking strings fail closed instead of
+        # being silently coerced into an activation score.
+        confidence = (
+            raw_confidence
+            if isinstance(raw_confidence, (int, float)) and not isinstance(raw_confidence, bool)
+            else None
+        )
         structured = value.get("structured_content") or value.get("structured") or {}
         if not isinstance(structured, Mapping):
             structured = {}
