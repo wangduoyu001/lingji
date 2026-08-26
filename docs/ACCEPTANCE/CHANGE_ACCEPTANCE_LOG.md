@@ -4,6 +4,43 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 4 · watcher and persistent reconciliation
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`c6d9ebecd6007c5b61f5d09aa5c1a9c85aa25194`
+- 影响模块：`watchfiles==1.2.0` observation、existing `CronScheduler` lifecycle、automatic-memory source scan status and reconciliation events
+- 风险等级：P0
+- 用户可感知变化：已授权来源在启动时增量处理；文件事件经 5 秒防抖后进入现有授权快照/Extraction Queue 入口；事件丢失由 15 分钟 reconciliation 和每日 integrity 任务补偿；Desktop 后续可读取真实扫描报告、错误和下一步。
+- 数据或安全边界变化：监听器仅观察授权 root，不读取第三方凭据、Cookie、Token、私有数据库或进程；不写入第三方目录，不新增队列、数据库或并行调度器。暂停、撤销、unsupported 和单来源故障均阻止新工作并保留审计事实。
+
+### 新增或修改的自动验收
+
+- [x] 修复轮 1 RED 后运行 `./.venv/bin/python -m pytest -q tests/test_automatic_memory_watcher.py tests/test_automatic_memory_scheduler.py tests/test_state_db_scheduler.py`：19 passed，覆盖 backend 创建/迭代异常、5 秒防抖、重复事件抑制、路径越界、单源 watcher 停止、暂停/撤销隔离、同源 single-flight、非完整报告落库、持久 start/stop/pause/resume、事件静默后的 reconciliation、每日 integrity、running scan 重启复用。
+- [x] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_automatic_memory_adapters.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_worker.py`：162 passed，Task 1–3 与 queue/worker 回归；另含 3 个既有 warning（FastAPI/httpx、测试 ZIP duplicate、Pydantic Config）。
+- [x] `./.venv/bin/python -m py_compile src/automatic_memory/watcher.py src/automatic_memory/scheduler.py src/scheduler/cron.py src/storage/state_db.py src/config.py`、`git diff --check`。
+- [ ] `./.venv/bin/python scripts/check_acceptance_sync.py`、`./.venv/bin/python scripts/check_local_execution_handoff.py`：由根代理在文档提交后复读执行。
+
+### 回归项与边界
+
+- [x] `watchfiles==1.2.0` 的 MIT provenance 已记录在 `.research/local-ai-memory-architecture/FINDINGS.md`；监听事件只是低延迟提示，持久 scheduler reconciliation 才是完整性来源。
+- [x] Cron job 的 `run_on_start` 在重启时重新置为 due；已有 running/paused scan 通过现有 `SourceRegistry.start_scan` 复用，不创建重复 scan；单来源失败不会阻塞其他来源。
+- [x] 所有扫描回调继续由调用方注入现有 Task 2 `SnapshotJobRunner`/queue；Task 4 不 claim/execute `automatic_memory_snapshot`，不触碰 Obsidian 正文、Vault 或真实本机任务单。
+- [x] 修复轮 1：watch backend 的创建/迭代异常调用持久错误回调；同源 reconciliation 以 Future single-flight 合并并发触发；撤销/过期/unsupported 停止该源 watcher、禁用该源 Cron，global resume 不会重新启用；不完整报告将 scan 标为 `failed` 并保存错误。
+- [x] 修复轮 1：现有 `scheduler_jobs` 增加兼容性 lease/heartbeat 字段；SQLite 原子 claim 回收 stale `running` job，两个 Cron 实例不能同时执行同一 due job；普通 Cron job 继续使用原有表和模式门禁。
+- [x] 修复轮 2：revoke 与 reconcile 完成提交使用 SQLite 授权条件原子化，撤销先提交时 scan 保持 `cancelled`；SourceRegistry 生命周期 listener 让 direct revoke/unsupported 立即停止 watcher 和 source jobs，scheduler stop 会解绑旧 listener。
+- [x] 修复轮 2：failed scan 下次触发自动调用既有 `retry_scan`；runner 返回 `None` 或不支持结果会失败落库；若 runner 自身已通过现有 lease 完成 scan，scheduler 会复用其已持久化的 `completed` 状态。
+
+### 清理与回滚
+
+- 临时数据前缀：`PHASE1_AUTOMATIC_MEMORY_TASK4_`
+- 测试仅使用 pytest 临时目录和脱敏 SourceRecord；无真实聊天、Vault、凭据或持久 Artifact。
+- 回滚：回滚产品 Commit `c6d9ebecd6007c5b61f5d09aa5c1a9c85aa25194`，不触碰主人数据。
+
+### 最终报告
+
+- 报告路径：本地调度报告继续由 `.superpowers/` 忽略；正式证据为本条目与测试输出。
+- 报告分支：`codex/phase1-automatic-memory`
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 3 · fail-closed source adapters
 
 - 产品分支：`codex/phase1-automatic-memory`
