@@ -7,7 +7,7 @@
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 7 repair round 1 · temporal and why hardening
 
 - 产品分支：`codex/phase1-automatic-memory`
-- 产品 Commit：`bd4362d7aaa4a2661397a32563732ecd078f28b3`
+- 产品 Commit：`f045cdfe3a124de7ea4ed3fa61b41c24ffa00a55`
 - 影响模块：timezone-aware temporal parsing, stable current cache identity, bounded why exclusions, explicit authority-conflict handling, project refresh interval closure
 - 风险等级：P0
 - 用户可感知变化：无时区查询和记忆有效期不再被猜测为 UTC；默认 current cache 不因每次读取时间变化而产生伪造新键；`why` 现在展示同一查询候选集中被状态/时间/权威规则排除的记忆及引用；项目替代会在新决定生效时刻关闭旧决定区间。
@@ -23,7 +23,7 @@
 
 ### 回滚
 
-- 回滚：回退产品 Commit `bd4362d7aaa4a2661397a32563732ecd078f28b3` 及其前置 Task 7 修复提交与本条文档提交；不触碰 Vault、原始聊天证据、Qdrant 正式数据或主人配置。
+- 回滚：回退产品 Commit `f045cdfe3a124de7ea4ed3fa61b41c24ffa00a55` 及其前置 Task 7 修复提交与本条文档提交；不触碰 Vault、原始聊天证据、Qdrant 正式数据或主人配置。
 
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 7 · unified timeline retrieval
 
