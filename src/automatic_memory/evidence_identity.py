@@ -88,15 +88,22 @@ def _corpus_binding_key(record: Any) -> tuple[str, str, str]:
 def _row_keys(row: Mapping[str, Any]) -> tuple[tuple[str, str, str], ...]:
     """Return explicit composite keys; never infer an identity from a suffix."""
     keys: list[tuple[str, str, str]] = []
-    internal = tuple(row.get(field) for field in ("source_id", "conversation_id", "message_id"))
-    if all(isinstance(value, str) and value.strip() for value in internal):
-        keys.append(tuple(str(value).strip() for value in internal))  # type: ignore[arg-type]
-    external = tuple(row.get(field) for field in ("source_external_id", "conversation_external_id", "message_external_id"))
-    if all(isinstance(value, str) and value.strip() for value in external):
-        keys.append(tuple(str(value).strip() for value in external))  # type: ignore[arg-type]
-    corpus_key = tuple(row.get(field) for field in ("corpus_source_id", "corpus_conversation_id", "corpus_message_id"))
-    if all(isinstance(value, str) and value.strip() for value in corpus_key):
-        keys.append(tuple(str(value).strip() for value in corpus_key))  # type: ignore[arg-type]
+    def strict(fields: tuple[str, str, str], label: str) -> tuple[str, str, str] | None:
+        values = tuple(row.get(field) for field in fields)
+        if not any(value is not None for value in values):
+            return None
+        if not all(isinstance(value, str) and value and value == value.strip() for value in values):
+            raise EvidenceIdentityError(f"{label} composite identity must contain three exact strings")
+        return values  # type: ignore[return-value]
+
+    for fields, label in (
+        (("source_id", "conversation_id", "message_id"), "internal"),
+        (("source_external_id", "conversation_external_id", "message_external_id"), "external"),
+        (("corpus_source_id", "corpus_conversation_id", "corpus_message_id"), "corpus"),
+    ):
+        value = strict(fields, label)
+        if value is not None:
+            keys.append(value)
     return tuple(dict.fromkeys(keys))
 
 

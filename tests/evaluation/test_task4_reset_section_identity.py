@@ -236,6 +236,32 @@ def test_registry_rejects_conflicting_composite_representations_and_links():
         )
 
 
+@pytest.mark.parametrize(
+    "representation",
+    [
+        {"source_external_id": " source-1 ", "conversation_external_id": "conversation-1", "message_external_id": "msg-1"},
+        {"source_external_id": "source-1", "conversation_external_id": "conversation-1"},
+        {"source_external_id": "source-1", "conversation_external_id": 7, "message_external_id": "msg-1"},
+        {"corpus_source_id": " source-1 ", "corpus_conversation_id": "conversation-1", "corpus_message_id": "msg-1"},
+    ],
+)
+def test_every_populated_composite_representation_is_exact_and_complete(representation):
+    record = _record()
+    row = {
+        "source_id": record.source_id,
+        "conversation_id": record.conversation_id,
+        "message_id": record.message_id,
+        "content_hash": record.content_hash,
+        **representation,
+    }
+    with pytest.raises(EvidenceIdentityError):
+        build_identity_registry(
+            corpus=(record,), persisted_messages=[row],
+            promotion_bindings={"memory-1": record.fact_id},
+            message_links=[{"message_id": record.message_id, "memory_id": "memory-1"}],
+        )
+
+
 def test_registry_accepts_more_than_200_persisted_rows_with_exact_binding():
     record = _record()
     persisted = [{"source_id": record.source_id, "conversation_id": record.conversation_id, "message_id": record.message_id, "content_hash": record.content_hash}]

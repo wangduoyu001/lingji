@@ -41,7 +41,7 @@ from src.retrieval.memory_db import MemoryDatabase
 from src.sources.read_model import SourceReadModel
 from src.sources.service import SourceQueryService
 from src.storage.state_db import StateDatabase
-from .evidence_identity import build_identity_registry, select_context_evidence
+from .evidence_identity import EvidenceIdentityError, build_identity_registry, select_context_evidence
 
 from .evaluation import (
     AutomaticMemoryAcceptanceGate,
@@ -349,14 +349,9 @@ def _promote_fixtures(
         if is_eligible and decision.get("status") == "active":
             activation_correct += 1
 
-    # Existing project-decision lifecycle is the source of truth for current
-    # versus history.  Apply links only after every candidate has gone through
-    # the normal promotion service.
-    for record in corpus:
-        if record.supersedes_fact_id and record.fact_id in decisions and decisions[record.fact_id].get("status") == "active":
-            old = record.supersedes_fact_id
-            if decisions.get(old, {}).get("status") == "active":
-                memory_db.refresh_project_decision(old, record.fact_id, reason="frozen fixture replacement")
+    # Lifecycle replacement links are owned by the real application workflow.
+    # The evaluation fixture remains process-local and must not write
+    # fixture-driven supersession or other lifecycle overrides to storage.
     return decisions, activation_correct, activation_total
 
 
@@ -552,6 +547,13 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
                 mcp_cases.append({"question_id": question.question_id, "status": "NOT_MEASURED", "error": type(exc).__name__})
             selected_evidence = select_context_evidence(gateway_pack, identity_registry, limit=_SELECTOR_LIMIT)
             gateway_selector_calls += 1
+            unknown_facts = tuple(fact_id for fact_id in selected_evidence.fact_ids if fact_id not in fact_by_memory)
+            unknown_citations = tuple(citation_id for citation_id in selected_evidence.citation_ids if citation_id not in citation_ids)
+            if unknown_facts or unknown_citations:
+                raise EvidenceIdentityError(
+                    "selector returned unknown evidence identities: "
+                    f"facts={unknown_facts!r}, citations={unknown_citations!r}"
+                )
             gateway_selected_evidence += len(selected_evidence.fact_ids)
             recalled = tuple(fact_id for fact_id in selected_evidence.fact_ids if fact_id in fact_by_memory)
             citations = tuple(citation_id for citation_id in selected_evidence.citation_ids if citation_id in citation_ids)
