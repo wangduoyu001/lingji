@@ -120,3 +120,31 @@ bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94  tests/evaluati
 ```
 
 `py_compile`, cumulative `git diff --check`, acceptance sync and local handoff checks pass after the docs commit. No frozen fixture/evaluator/threshold, retrieval ranking/query/filter/order, Task 4–6/4R2, MCP parity, 100k, Artifact, Production, Vault or local acceptance task was entered. The only unresolved items are the deliberately deferred historical Task4R1 incompatibilities and the existing Pydantic deprecation warning.
+
+## Repair round 4 (product `bea44958440a5a556d9ae2a6229db54bd80a4c7f`)
+
+Repair Round 4 addressed independent review I9/I10 only. Before product changes, the new tests produced authentic RED:
+
+```text
+./.venv/bin/python -m pytest -q tests/evaluation/test_task4_reset_section_identity.py tests/evaluation/test_automatic_memory_end_to_end.py
+2 failed, 41 passed, 1 warning
+```
+
+The I9 failure demonstrated that identical production identity inputs across distinct facts could overwrite `promotion_bindings` without an error. The I10 failure demonstrated scanner false negatives from recursively dropping `content`/`text` keys and from checking only raw JSON text. The minimal repair now precomputes the full promotion batch as a one-to-one `(opaque_memory_id, fact_id)` plan before constructing the promotion service or candidates; duplicate opaque IDs and duplicate fact bindings fail closed before any real persistence.
+
+The scanner now retains raw values, decodes JSON strings and Unicode escapes, recursively inspects parsed objects without deleting keys, always checks frozen fact/citation labels even in body columns, and applies evaluator-marker exceptions only to explicit physical body locations. Known scalar candidate body text in the promotion event envelope is recognized as body data only at its fixed schema location; nested `content`/`text` objects and metadata/event keys remain fully checked. Direct tests cover nested structured markers, Unicode-escaped fact/citation labels, legitimate body prose, metadata/event marker failures and body-column label failures. The real runner continues to inspect every table/column/value in the temporary SourceReadModel/MemoryDatabase/StateDatabase stores and proves non-empty documents, links, active event and bridge.
+
+```text
+focused GREEN: 47 passed, 1 warning
+brief regression: 58 passed, 1 warning
+historical deferred Task4R1 pair: 5 failed, 10 passed, 1 warning
+```
+
+Frozen fixture hashes remain unchanged:
+
+```text
+bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94  tests/evaluation/fixtures/automatic_memory_corpus.jsonl
+338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612  tests/evaluation/fixtures/automatic_memory_questions.jsonl
+```
+
+`py_compile`, cumulative `git diff --check`, acceptance sync and local handoff checks pass after the docs commit. Generic promotion, frozen fixtures/evaluator/thresholds, retrieval ranking/query/filter/order, Task 4–6/4R2, MCP parity, 100k, Artifact, Production, Vault and local acceptance task remain untouched. Remaining limitations are the historical deferred incompatibilities and the existing Pydantic deprecation warning.
