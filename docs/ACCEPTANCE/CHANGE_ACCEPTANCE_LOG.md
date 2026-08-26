@@ -4,6 +4,29 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 5 · Obsidian scope isolation and derived migration
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`e98b724266b3f1d89ffeaa283ef8656a00c70f1c`
+- 影响模块：`src/obsidian/memory_scope.py`, `src/obsidian/memory_migration.py`, Obsidian discovery/service, Vault memory entry points, incremental lexical sync
+- 风险等级：P0
+- 用户可感知变化：普通旧 Obsidian Markdown 不再进入自动记忆投影；仅 `_LingJi/Memory Inbox`, `_LingJi/Memory Library` 或 `lingji_memory: true` 参与，`false` 最高优先级。修改/移入/移出使用同一 fail-closed scope 并刷新可重建 lexical/Qdrant 投影。
+- 数据或安全边界变化：迁移仅清理 LingJi 自己的可重建 Memory DB/Qdrant/raw 投影，写入无正文审计标记；dry-run manifest 可校验和回滚。绝不写入、移动或删除 Vault；非 Vault/非 Obsidian raw 与 owner-confirmed/Core 记录保留。
+
+### 新增或修改的自动验收
+
+- [x] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_obsidian.py tests/test_obsidian_service.py tests/test_vault_layout.py tests/test_memory_retrieval.py tests/test_incremental_index_sync.py`：18 passed，Task 5 focused 与 Obsidian/retrieval 回归。
+- [x] `./.venv/bin/python -m pytest -q tests/test_obsidian_memory_scope.py tests/test_obsidian_memory_migration.py`：scope、frontmatter/symlink fail-closed、manifest checksum、Vault hash/mtime/权限不变、managed raw ownership、idempotent apply/rollback、Core 保留。
+- [x] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_automatic_memory_watcher.py tests/test_automatic_memory_scheduler.py tests/test_state_db_scheduler.py`：108 passed，Task 1–4 回归。
+- [x] `./.venv/bin/python -m py_compile src/obsidian/memory_scope.py src/obsidian/memory_migration.py src/obsidian/discovery.py src/obsidian/service.py src/indexer/index.py src/retrieval/incremental_sync.py src/retrieval/memory_db.py src/memory/vault_layout.py`、`git diff --check`。
+- [ ] Qdrant unavailable、真实 Production Vault、主人 UI/真机验收：需根代理在最终工作树执行；代码真实返回 `pending_rebuild`/错误，不假报成功。
+
+### 回归与回滚
+
+- [x] `VaultLayout.should_index()` 兼容语义保持不变；普通 PEMIS 索引仍可用，自动记忆入口改用独立 scope。
+- [x] scoped incremental sync 不删除 chat/file/media 等非 Vault 投影；raw 仅接受 dedicated Obsidian root、显式 manifest 或 per-file Obsidian marker。
+- 回滚：回退 Task 5 代码提交；不触碰 Production Vault 或主人配置。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 4 修复轮 4 · runner contract and terminal lease cleanup
 
 - 产品分支：`codex/phase1-automatic-memory`

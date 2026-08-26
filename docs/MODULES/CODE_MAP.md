@@ -359,7 +359,7 @@ src/obsidian/memory_scope.py
 src/obsidian/memory_migration.py
 src/obsidian/discovery.py
 src/obsidian/service.py
-= bounded memory scope, dry-run manifest, managed-derived migration and rollback
+= bounded memory scope, dry-run manifest, managed-derived migration and rollback (implemented; focused-tested)
 
 Task 6:
 src/automatic_memory/derived_memory.py

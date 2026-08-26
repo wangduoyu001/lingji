@@ -259,7 +259,7 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 | 2 | 一致快照、SHA-256 幂等、checkpoint/lease/retry/续扫 | `PLANNED` |
 | 3 | macOS ChatGPT/Codex/Claude/generic JSON/JSONL/Markdown adapters | `PLANNED` |
 | 4 | `watchfiles==1.2.0`、5 秒防抖、15 分钟 reconciliation、每日完整性、持久 scheduler | `PLANNED` |
-| 5 | Obsidian 隔离、dry-run manifest、派生索引迁移与 rollback | `PLANNED` |
+| 5 | Obsidian 隔离、dry-run manifest、派生索引迁移与 rollback | `IMPLEMENTED — focused pass; pending root gate` |
 | 6 | derived current-memory promotion 与 Core/owner review 边界 | `PLANNED` |
 | 7 | lexical/Qdrant/hybrid/Core/ContextPack/MemoryGateway/MCP 全链路 temporal filter | `PLANNED` |
 | 8 | 中文 onboarding、authorize/revoke/scan/pause/retry、Work Fact、Python/TS DTO、Desktop | `PLANNED` |
