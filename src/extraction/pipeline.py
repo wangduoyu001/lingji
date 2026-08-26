@@ -19,6 +19,7 @@ from .structured_sink import StructuredReadModelSink
 logger = logging.getLogger("lingji.extraction")
 
 DocumentsWrittenCallback = Callable[[dict[str, Any]], None]
+LifecycleCallback = Callable[[str, Mapping[str, Any], Mapping[str, Any] | None, str | None], None]
 DefaultOptionsProvider = Callable[[str], Mapping[str, Any]]
 DefaultPriorityProvider = Callable[[str], int]
 
@@ -35,6 +36,7 @@ class ExtractionPipeline:
         lease_heartbeat_seconds: float = 30.0,
         stale_after_seconds: int = 1800,
         on_documents_written: DocumentsWrittenCallback | None = None,
+        on_lifecycle_event: LifecycleCallback | None = None,
         default_options_provider: DefaultOptionsProvider | None = None,
         default_priority_provider: DefaultPriorityProvider | None = None,
     ):
@@ -46,6 +48,9 @@ class ExtractionPipeline:
         self.lease_heartbeat_seconds = max(float(lease_heartbeat_seconds), 2.0)
         self.stale_after_seconds = max(int(stale_after_seconds), 30)
         self.on_documents_written = on_documents_written
+        self._lifecycle_callbacks: list[LifecycleCallback] = []
+        if on_lifecycle_event is not None:
+            self._lifecycle_callbacks.append(on_lifecycle_event)
         self.default_options_provider = default_options_provider
         self.default_priority_provider = default_priority_provider
 
@@ -167,6 +172,7 @@ class ExtractionPipeline:
         options: Mapping[str, Any] | None = None,
         adapter_name: str | None = None,
         execution_id: str | None = None,
+        notify_lifecycle: bool = True,
     ) -> dict[str, Any]:
         if source_type == "automatic_memory_snapshot":
             raise PermissionError(
@@ -229,7 +235,32 @@ class ExtractionPipeline:
             )
             return response
 
-        return downstream_commit()
+        result = downstream_commit()
+        if notify_lifecycle:
+            self._notify_lifecycle(
+                "completed",
+                {"job_id": request.job_id, "payload": dict(request.payload), "status": "completed"},
+                result,
+                None,
+            )
+        return result
+
+    def add_lifecycle_callback(self, callback: LifecycleCallback) -> None:
+        if callback not in self._lifecycle_callbacks:
+            self._lifecycle_callbacks.append(callback)
+
+    def _notify_lifecycle(
+        self,
+        phase: str,
+        job: Mapping[str, Any],
+        result: Mapping[str, Any] | None,
+        error: str | None,
+    ) -> None:
+        for callback in tuple(self._lifecycle_callbacks):
+            try:
+                callback(phase, job, result, error)
+            except Exception:
+                logger.exception("Extraction lifecycle callback failed")
 
     def _write_structured(
         self,
@@ -288,12 +319,19 @@ class ExtractionPipeline:
                 options=job.get("options") or {},
                 adapter_name=job.get("adapter_name"),
                 execution_id=job["job_id"],
+                notify_lifecycle=False,
             )
             completed = self.queue.complete(
                 job["job_id"],
                 result,
                 worker_id=worker_id,
                 lease_token=lease_token,
+            )
+            self._notify_lifecycle(
+                "completed",
+                {**job, "status": "completed"},
+                result,
+                None,
             )
             return {"job": completed, "result": result}
         except Exception as exc:
@@ -312,6 +350,7 @@ class ExtractionPipeline:
                     "error": str(exc),
                     "lease_error": str(lease_error),
                 }
+            self._notify_lifecycle("failed", {**job, **failed}, None, str(exc))
             return {"job": failed, "error": str(exc)}
         finally:
             stop_heartbeat.set()

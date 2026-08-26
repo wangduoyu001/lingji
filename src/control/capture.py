@@ -14,7 +14,7 @@ from src.capture.service import CaptureService
 from src.extraction.queue import SQLiteExtractionQueue
 from src.storage.state_db import StateDatabase
 from src.work.capture_bridge import CaptureWorkBridge
-from src.work.models import ExecutionEvent, NextAction
+from src.work.models import ExecutionEvent, NextAction, PendingAction
 from src.work.store import WorkStore
 
 from .runtime_settings import RuntimeSettingsStore
@@ -98,6 +98,8 @@ class CaptureControlService:
             raise ValueError("Capture control requires the existing extraction queue")
         self.state_db = state_db
         self.work_bridge = CaptureWorkBridge(WorkStore(state_db)) if isinstance(state_db, StateDatabase) else None
+        if self.work_bridge is not None and hasattr(self.pipeline, "add_lifecycle_callback"):
+            self.pipeline.add_lifecycle_callback(self._on_pipeline_lifecycle)
         self.runtime_settings = runtime_settings or CaptureRuntimeSettingsStore(
             settings, state_db=state_db
         )
@@ -435,6 +437,69 @@ class CaptureControlService:
             self.state_db.append_event(event_type, "capture", entity_id, dict(payload))
         except Exception:
             logger.exception("Capture audit event failed: %s", event_type)
+
+    def _on_pipeline_lifecycle(
+        self,
+        phase: str,
+        job: Mapping[str, Any],
+        result: Mapping[str, Any] | None,
+        error: str | None,
+    ) -> None:
+        """Project queue terminal facts into the existing Work Fact chain."""
+        if self.work_bridge is None:
+            return
+        payload = job.get("payload") if isinstance(job.get("payload"), Mapping) else {}
+        capture_id = str(payload.get("capture_id") or "").strip()
+        if not capture_id:
+            return
+        work = self.work_bridge.store.get_work_by_source_id(capture_id)
+        if work is None:
+            return
+        if phase == "completed":
+            summary = self._result_summary(result or {}) or "Extraction completed"
+            self.work_bridge.complete_extraction(
+                work.work_id,
+                summary,
+                evidence={
+                    "job_id": str(job.get("job_id") or ""),
+                    "source_type": str(job.get("source_type") or ""),
+                },
+            )
+            return
+        if phase != "failed":
+            return
+        status = str(job.get("status") or "")
+        if status == "retrying":
+            attempt = str(job.get("attempts") or "0")
+            self.work_bridge.store.append_event(
+                ExecutionEvent(
+                    work_id=work.work_id,
+                    event_id=f"work:{work.work_id}:retrying:{attempt}",
+                    event_type="work.retrying",
+                    detail={"actor": "system", "attempt": attempt},
+                )
+            )
+            self.work_bridge.store.save_next_action(
+                NextAction(work_id=work.work_id, description="系统自动重试提取", actor="system")
+            )
+            return
+        self.work_bridge.record_failure(
+            work.work_id,
+            stage="extraction",
+            reason="提取失败，灵机无法安全完成这条输入",
+            retryable=False,
+        )
+        self.work_bridge.store.add_pending_action(
+            PendingAction(
+                action_id=f"owner-failure:{work.work_id}",
+                work_id=work.work_id,
+                description="查看提取失败原因并决定下一步",
+                actor="owner",
+            )
+        )
+        self.work_bridge.store.save_next_action(
+            NextAction(work_id=work.work_id, description="等待主人查看失败原因", actor="owner")
+        )
 
     @staticmethod
     def _invalid(message: str) -> None:
