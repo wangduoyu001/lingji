@@ -1249,3 +1249,45 @@ Windows 重启后恢复 = 100%
 ### 回滚
 
 - 每个任务仅回滚自身产品/测试/文档提交；不触碰 Vault、原始聊天证据、正式记忆、Qdrant、主人设置或第三方软件。
+
+## 2026-08-26 · Phase 1 Automatic Memory · Task 1 follow-up · Work Fact terminal transition closeout
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`2f833aa` (`fix: unify work fact terminal transitions`)
+- 影响模块：`src/work/store.py`, `src/work/capture_bridge.py`, `src/control/capture.py`, Extraction Work Fact lifecycle tests
+- 风险等级：P0
+- 用户可感知变化：失败→重试→成功、实时 callback 与 crash replay 现在经过同一个原子 Work Fact 状态转换；成功写入时立即解决旧 `owner-failure:<work_id>`，不会在 projector/restart/reconciliation 前短暂显示“已完成”与“仍需主人处理”。
+- 数据或安全边界变化：继续只使用既有 `lingji_state.db`、Extraction Queue 和认证 8766 Work Fact；仅使用 synthetic `tmp_path` 测试，不读取或修改 Production/Vault/第三方 AI 数据。
+
+### 新增或修改的自动验收
+
+- [x] `./.venv/bin/python -m pytest -q tests/test_task8_work_transition_matrix.py`：RED 首轮 `12 failed`（`AttributeError: WorkStore.apply_extraction_transition` 缺失），GREEN `12 passed`。
+- [x] `./.venv/bin/python -m pytest -q tests/test_capture_work_bridge.py tests/test_task8_extraction_work_lifecycle.py tests/test_task8_work_fact.py tests/test_work_control_api.py tests/test_work_control_service.py tests/test_task8_work_transition_matrix.py`：`29 passed, 2 existing warnings`。
+- [x] `./.venv/bin/python -m py_compile src/work/store.py src/work/capture_bridge.py src/control/capture.py tests/test_task8_work_transition_matrix.py tests/test_task8_extraction_work_lifecycle.py`：PASS。
+- [x] `git diff --check`：PASS。
+- [ ] `cd desktop/lingji-control && npm run test:work-fact`：BLOCKED，当前 `package.json` 未注册该脚本（`npm error Missing script: "test:work-fact"`）；该文件不在 Task 1 允许修改范围。
+- [x] `cd desktop/lingji-control && npm run build`：PASS；Vite 仅报告既有 dynamic-import chunk warning。
+- [x] `./.venv/bin/python scripts/check_local_execution_handoff.py`：PASS（任务单仍为 IDLE，未触发真实安装/Artifact）。
+- [ ] `./.venv/bin/python scripts/check_acceptance_sync.py`：待本条 docs 同步提交后重跑。
+
+### 真机与主人确认
+
+- [ ] 未执行发布版、8766 实机或 Desktop 逐页点击；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`，按规则不得启动 Artifact 或主人验收。
+- [ ] 主人确认前不得声明 Task 8 真机验收或 Phase 1 PASS。
+
+### 回归项
+
+- [x] callback→replay、replay→callback、restart→replay、重复终态和 older-failure-after-completed 矩阵覆盖。
+- [x] 失败后立即成功的同一服务实例在任何 projector/replay 前 `pending_actions == []`。
+- [x] 旧 duplicate capture canonical identity、8766 route DTO、队列 terminal status 和现有 Work Fact tests 均通过指定回归。
+
+### 清理与回滚
+
+- 临时数据：仅 pytest `tmp_path` synthetic fixtures，测试结束由 pytest 清理；未接触主人数据。
+- 回滚：分别回滚产品 Commit `2f833aa` 与本条 docs/report Commit；不触碰 Vault、原始聊天证据、正式记忆、Qdrant、主人设置或第三方软件。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/PHASE1_TASK8_WORK_TRANSITION_CLOSEOUT.md`
+- 产品提交：`2f833aa`
+- 报告/文档提交：待提交

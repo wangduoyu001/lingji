@@ -32,9 +32,9 @@ Phase 1 PASS 后，Phase 2 第一优先级固定为 **Opportunity Center / 机�
 
 ## 1A. 当前实现范围与真实进度
 
-当前分支 `codex/phase1-automatic-memory` 已完成并冻结 Tasks 0–7：来源授权与扫描状态、一致快照/续扫、受支持来源适配、监听与调度、Obsidian 隔离、派生记忆晋级，以及全检索路径的 current/as_of/history/why 时态隔离。Task 8 的 Work Fact、8766 读取接口和 Desktop 真实投影也已进入分支，但尚未通过最终收口门禁。
+当前分支 `codex/phase1-automatic-memory` 已完成并冻结 Tasks 0–7：来源授权与扫描状态、一致快照/续扫、受支持来源适配、监听与调度、Obsidian 隔离、派生记忆晋级，以及全检索路径的 current/as_of/history/why 时态隔离。Task 8 的 Work Fact、8766 读取接口和 Desktop 真实投影已进入分支；Task 1 follow-up 已在产品 Commit `2f833aa` 收口 callback/replay 事务一致性，但仍未进行发布版与主人验收。
 
-当前唯一已复现的 P0 缺口是：一次终态失败已经产生主人待办后，实时生命周期 callback 随即成功时，成功 Outcome 会立即写入，但旧 PendingAction 要等后续 `WorkStore` 重放/读取才被解决。因此界面短时间可能同时显示“已完成”和“仍需主人处理”。这不是来源扫描或永久记忆数据损坏，但会破坏主人看到的事实一致性。剩余执行权威为 `docs/superpowers/plans/2026-08-26-phase1-automatic-memory-followup.md`。
+此前唯一已复现的 P0 缺口是：一次终态失败已经产生主人待办后，实时生命周期 callback 随即成功时，成功 Outcome 会立即写入，但旧 PendingAction 要等后续 `WorkStore` 重放/读取才被解决。Task 1 已通过单一事务转换和 callback/replay/restart/乱序矩阵修复并回归验证；剩余执行权威为 `docs/superpowers/plans/2026-08-26-phase1-automatic-memory-followup.md`。
 
 当前 `LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。在 Work Fact 收口、固定 100 问评测、统一 RAG、质量/规模门禁和同 SHA Artifact 锁定之前，不执行新的真实安装或 M5 主人验收。
 
@@ -220,20 +220,20 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 
 方向已经从“UI 根据聚合状态猜系统在干什么”转为“UI 投影真实工作事实”。
 
-### 4.2 当前 P0 工程阻塞：Work Fact 已接通，剩余一个即时一致性缺口
+### 4.2 当前 P0 工程阻塞：Work Fact 收口已实现，等待独立审查与后续门禁
 
 截至 `8f2267d...`，准确状态是：
 
 | 子项 | 状态 | 当前事实 |
 |---|---|---|
 | Work persistence / projector | `IMPLEMENTED_FOCUSED_PASS` | WorkItem、Event、Outcome、Failure、NextAction、PendingAction 可重启读取；稳定 ID 重放幂等 |
-| Capture / extraction bridge | `IMPLEMENTED_ONE_GAP` | 成功、失败、重试、direct execute、callback 崩溃恢复和 duplicate canonical identity 已接入；即时失败→成功仍未同步解决旧待办 |
+| Capture / extraction bridge | `IMPLEMENTED_FOCUSED_PASS` | 单一 `apply_extraction_transition` 事务统一成功、失败、重试、direct execute、callback/replay/restart；即时失败→成功在任何 projector/replay 前解决旧待办 |
 | 正式 8766 路由 | `IMPLEMENTED_FOCUSED_PASS` | `/api/work/current`、pending-actions、timeline 已注册在既有认证 8766 服务 |
 | Python ↔ Desktop 合同 | `IMPLEMENTED_FOCUSED_PASS` | Overview、Activity、Attention 使用同一 Work Fact DTO/API；静态假数据已移除 |
-| Task 8 独立审查 | `BLOCKED_ONE_MAJOR` | 五轮收口后仅剩实时 callback 与 replay 语义不一致；follow-up Task 1 用单一事务状态转换解决 |
+| Task 8 独立审查 | `PENDING_INDEPENDENT_REVIEW` | follow-up Task 1 产品 Commit `2f833aa` 已完成；需独立 Luna 审查确认无 Critical/Important 问题 |
 | 发布版与主人验收 | `NOT_RUN` | 当前任务单 IDLE；未创建或重跑任何 Artifact |
 
-当前必须先完成一个明确门禁：把 callback 与 crash replay 的 retrying/completed/failed 写入合并为同一事务状态转换，并通过失败→重试→成功、重复、重放、重启和乱序矩阵。该门禁通过前不调度 RAG，也不继续视觉扩展。
+当前必须先完成一个明确门禁：独立审查确认 `2f833aa` 的 callback/replay/restart/重复/乱序矩阵及指定回归，再调度固定 100 问评测；在此之前不调度 RAG，也不继续视觉扩展。
 
 ## 5. Phase 1 重新规划后的开发顺序
 
@@ -250,7 +250,7 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 | 5 | Obsidian 隔离、dry-run manifest、派生索引迁移与 rollback | `FROZEN / REVIEW PASS` |
 | 6 | derived current-memory promotion 与 Core/owner review 边界 | `FROZEN / REVIEW PASS` |
 | 7 | lexical/Qdrant/hybrid/Core/ContextPack/MemoryGateway/MCP 全链路 temporal filter | `FROZEN / REVIEW PASS` |
-| 8 | Work Fact、Python/TS DTO、8766、Desktop 与提取生命周期 | `BLOCKED / ONE CONSISTENCY CLOSEOUT` |
+| 8 | Work Fact、Python/TS DTO、8766、Desktop 与提取生命周期 | `IMPLEMENTED / TASK 1 REVIEW PENDING` |
 | 9 | 固定 100 问评测、统一 RAG/ContextPack/MCP、质量与规模门禁 | `PLANNED AFTER TASK 8` |
 | 10 | macOS M5 release、owner acceptance、UI 保持打开与报告 | `PLANNED AFTER QUALITY PASS` |
 | 11 | macOS PASS 后的 Windows parity、PowerShell 5.1 与 release | `BLOCKED BY MAC PASS` |
