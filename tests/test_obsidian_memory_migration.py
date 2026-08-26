@@ -126,3 +126,64 @@ def test_manifest_checksum_and_raw_ownership_are_fail_closed(tmp_path):
     payload["vault_hash"] = "tampered"
     payload["manifest_hash"] = manifest.manifest_hash
     assert not type(manifest).from_dict(payload).validate()
+
+
+class _FlakyQdrant:
+    def __init__(self, failures: int):
+        self.failures = failures
+        self.calls = 0
+
+    def delete_memory(self, memory_id: str) -> None:
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise RuntimeError("qdrant unavailable")
+
+
+def test_qdrant_pending_rebuild_stays_truthful_until_retry_succeeds(tmp_path):
+    vault = tmp_path / "vault"
+    storage = tmp_path / "storage"
+    _note(vault, "03-Knowledge/old.md", "OLD")
+    db = MemoryDatabase(storage / "lingji_memory.db")
+    index = PEMISIndex(vault, storage)
+    IncrementalMemorySynchronizer(db).sync(index.rebuild_index()["entries"].values(), vault)
+    provider = _FlakyQdrant(failures=2)
+    service = ObsidianMemoryMigration(db, semantic_provider=provider)
+    manifest = service.plan(vault)
+
+    first = service.apply(manifest, owner_confirmed=True)
+    second = service.apply(manifest, owner_confirmed=True)
+    third = service.apply(manifest, owner_confirmed=True)
+    assert first.pending_rebuild is True and first.state == "planned"
+    assert second.pending_rebuild is True and second.state == "planned"
+    assert third.pending_rebuild is False and third.state == "applied"
+    assert provider.calls == 3
+    assert db.migration_audits()[-1]["pending_memory_ids"] == {}
+
+
+def test_raw_apply_revalidates_symlink_and_hash_before_unlink(tmp_path):
+    vault = tmp_path / "vault"
+    raw = tmp_path / "obsidian"
+    raw.mkdir()
+    source = raw / "copy.md"
+    source.write_text("original", encoding="utf-8")
+    service = ObsidianMemoryMigration(raw_root=raw)
+    manifest = service.plan(vault)
+    external = tmp_path / "external.md"
+    external.write_text("must survive", encoding="utf-8")
+    source.unlink()
+    source.symlink_to(external)
+
+    result = service.apply(manifest, owner_confirmed=True)
+    assert result.state == "planned"
+    assert result.errors
+    assert source.is_symlink()
+    assert external.read_text(encoding="utf-8") == "must survive"
+
+    source.unlink()
+    source.write_text("original", encoding="utf-8")
+    manifest = service.plan(vault)
+    source.write_text("changed after plan", encoding="utf-8")
+    result = service.apply(manifest, owner_confirmed=True)
+    assert result.state == "planned"
+    assert any("hash changed" in error for error in result.errors)
+    assert source.read_text(encoding="utf-8") == "changed after plan"

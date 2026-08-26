@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -156,6 +157,7 @@ class ObsidianMemoryMigration:
         self._scopes: dict[str, ObsidianMemoryScope] = {}
         self._snapshots: dict[str, dict[str, _Snapshot]] = {}
         self._results: dict[str, MigrationResult] = {}
+        self._pending_qdrant: dict[str, dict[str, str]] = {}
 
     def plan(self, vault_root: Path | str, dry_run: bool = True) -> MigrationManifest:
         # ``dry_run`` is retained in the public contract.  Planning is always
@@ -241,9 +243,34 @@ class ObsidianMemoryMigration:
         if existing and existing.state == "applied" and not existing.errors:
             return existing
 
-        removed: list[str] = []
+        removed: list[str] = list(existing.removed_derived) if existing else []
         errors: list[str] = []
         pending_qdrant = False
+        pending_vectors = dict(self._pending_qdrant.get(manifest.manifest_hash, {}))
+        if not pending_vectors and self.database:
+            for audit in self.database.migration_audits():
+                if audit.get("manifest_hash") != manifest.manifest_hash:
+                    continue
+                pending_vectors = {
+                    str(memory_id): str(path)
+                    for memory_id, path in (audit.get("pending_memory_ids") or {}).items()
+                }
+                break
+        # Retry semantic deletion left unresolved by an earlier attempt,
+        # without pretending the lexical deletion restored vector coverage.
+        for memory_id, path in list(pending_vectors.items()):
+            if not self.semantic_provider:
+                pending_qdrant = True
+                errors.append(f"qdrant:{path}:provider_unavailable")
+                continue
+            try:
+                self.semantic_provider.delete_memory(memory_id)
+                pending_vectors.pop(memory_id, None)
+            except Exception as exc:
+                pending_qdrant = True
+                errors.append(f"qdrant:{path}:{type(exc).__name__}")
+        self._pending_qdrant[manifest.manifest_hash] = pending_vectors
+
         for entry in manifest.entries:
             if entry.action != "remove-derived" or not entry.managed:
                 continue
@@ -261,19 +288,23 @@ class ObsidianMemoryMigration:
                 if self.semantic_provider and memory_id:
                     try:
                         self.semantic_provider.delete_memory(memory_id)
+                        pending_vectors.pop(memory_id, None)
                     except Exception as exc:
                         pending_qdrant = True
+                        pending_vectors[memory_id] = entry.path
                         errors.append(f"qdrant:{entry.path}:{type(exc).__name__}")
             elif entry.source == "raw" and self.raw_root:
                 source = self.raw_root / entry.path.removeprefix("raw:")
-                if not source.exists():
-                    continue
                 try:
+                    self._validate_raw_before_apply(entry, source)
                     self._backup_raw(manifest, source)
                     source.unlink()
                     removed.append(entry.path)
-                except OSError as exc:
-                    errors.append(f"raw:{entry.path}:{type(exc).__name__}")
+                except (OSError, ValueError) as exc:
+                    errors.append(f"raw:{entry.path}:{exc}")
+
+        self._pending_qdrant[manifest.manifest_hash] = pending_vectors
+        pending_qdrant = pending_qdrant or bool(pending_vectors)
 
         result = MigrationResult(
             manifest_hash=manifest.manifest_hash,
@@ -293,6 +324,7 @@ class ObsidianMemoryMigration:
                     "removed_paths": list(result.removed_derived),
                     "reasons": {entry.path: entry.reason for entry in manifest.entries if entry.action == "remove-derived"},
                     "pending_rebuild": result.pending_rebuild,
+                    "pending_memory_ids": dict(pending_vectors),
                     "errors": list(result.errors),
                 },
             )
@@ -428,21 +460,67 @@ class ObsidianMemoryMigration:
             return []
         for path in candidates:
             relative = path.relative_to(self.raw_root).as_posix()
-            owned = dedicated_root
-            if declared is not None:
-                owned = relative in declared
-            if not owned:
-                marker = path.with_name(path.name + ".meta.json")
-                try:
-                    metadata = json.loads(marker.read_text(encoding="utf-8")) if marker.is_file() else {}
-                    owned = isinstance(metadata, dict) and str(
-                        metadata.get("source_type") or metadata.get("source") or ""
-                    ).casefold() == "obsidian"
-                except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
-                    owned = False
-            if owned:
+            if self._is_owned_raw_path(path, relative, dedicated_root=dedicated_root, declared=declared):
                 output.append(path)
         return output
+
+    def _is_owned_raw_path(
+        self,
+        path: Path,
+        relative: str | None = None,
+        *,
+        dedicated_root: bool | None = None,
+        declared: set[str] | None = None,
+    ) -> bool:
+        if not self.raw_root:
+            return False
+        relative = relative or path.relative_to(self.raw_root).as_posix()
+        if dedicated_root is None:
+            dedicated_root = self.raw_root.name.casefold() in {
+                "obsidian", "obsidian_raw", "obsidian-vault"
+            }
+        if declared is None:
+            manifest_path = self.raw_root / "manifest.json"
+            declared = set()
+            if manifest_path.is_file():
+                try:
+                    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    values = payload.get("obsidian_paths") if isinstance(payload, dict) else None
+                    if isinstance(values, list):
+                        declared = {str(value).replace("\\", "/") for value in values}
+                except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
+                    declared = set()
+        if dedicated_root or relative in declared:
+            return True
+        marker = path.with_name(path.name + ".meta.json")
+        try:
+            metadata = json.loads(marker.read_text(encoding="utf-8")) if marker.is_file() else {}
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
+            return False
+        return isinstance(metadata, dict) and str(
+            metadata.get("source_type") or metadata.get("source") or ""
+        ).casefold() == "obsidian"
+
+    def _validate_raw_before_apply(self, entry: ManifestEntry, source: Path) -> None:
+        if not self.raw_root:
+            raise ValueError("raw root is unavailable")
+        root_lexical = Path(os.path.abspath(str(self.raw_root)))
+        source_lexical = Path(os.path.abspath(str(source)))
+        try:
+            relative = source_lexical.relative_to(root_lexical).as_posix()
+        except ValueError as exc:
+            raise ValueError("raw path is outside managed root") from exc
+        current = root_lexical
+        for part in Path(relative).parts:
+            current = current / part
+            if current.is_symlink():
+                raise ValueError("raw source became a symlink")
+        if not source.is_file() or source.is_symlink():
+            raise ValueError("raw source is not a regular file")
+        if not self._is_owned_raw_path(source, relative):
+            raise ValueError("raw ownership declaration changed")
+        if _sha256_file(source) != entry.before_hash:
+            raise ValueError("raw source hash changed")
 
     def _backup_raw(self, manifest: MigrationManifest, source: Path) -> None:
         if not self.manifest_dir or not self.raw_root:
