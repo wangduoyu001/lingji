@@ -120,3 +120,82 @@ def test_stop_source_stops_backend_without_stopping_other_sources(tmp_path: Path
     assert "src-1" not in watcher.running_sources()
     assert "src-2" in watcher.running_sources()
     watcher.stop()
+
+
+def test_stop_and_restart_generation_does_not_let_old_thread_pop_new_state(tmp_path: Path):
+    old_started = threading.Event()
+    old_release = threading.Event()
+    new_started = threading.Event()
+    calls = 0
+
+    def backend(root, **kwargs):
+        nonlocal calls
+        calls += 1
+        stop_event = kwargs["stop_event"]
+        if calls == 1:
+            old_started.set()
+            old_release.wait(1)
+            yield set()
+            return
+        new_started.set()
+        while not stop_event.wait(0.01):
+            yield set()
+
+    watcher = AutomaticMemoryWatcher(
+        source_provider=lambda source_id: source(tmp_path),
+        on_change=lambda source_id: None,
+        watch_backend=backend,
+    )
+    watcher.start("src-1")
+    assert old_started.wait(1)
+    watcher.stop_source("src-1")
+    watcher.start("src-1")
+    assert new_started.wait(1)
+    old_release.set()
+    time.sleep(0.05)
+    assert watcher.running_sources() == ("src-1",)
+    watcher.stop()
+
+
+def test_source_revoke_does_not_wait_for_blocked_watcher(tmp_path: Path):
+    started = threading.Event()
+    release = threading.Event()
+
+    def backend(root, **kwargs):
+        started.set()
+        release.wait(2)
+        yield set()
+
+    db = None
+    from src.automatic_memory.scheduler import AutomaticMemoryScheduler, ReconciliationReport
+    from src.automatic_memory.source_registry import SourceRegistry
+    from src.storage.state_db import StateDatabase
+    from datetime import datetime, timezone
+    from src.automatic_memory.models import AuthorizationScope
+
+    state = StateDatabase(tmp_path / "state.db")
+    registry = SourceRegistry(state)
+    scope = AuthorizationScope(
+        "grant-revoke", ("codex",), (str(tmp_path),), datetime.now(timezone.utc), None, True
+    )
+    source_id = registry.register(scope, "codex", str(tmp_path)).source_id
+    watcher = AutomaticMemoryWatcher(
+        source_provider=lambda current: next(item for item in registry.list_sources() if item.source_id == current),
+        on_change=lambda current: None,
+        watch_backend=backend,
+    )
+    scheduler = AutomaticMemoryScheduler(
+        state,
+        registry,
+        scan_runner=lambda *args: ReconciliationReport(0, 0, 0, (), True),
+        watcher=watcher,
+        poll_seconds=0.01,
+    )
+    scheduler.start()
+    assert started.wait(1)
+    begin = time.monotonic()
+    registry.revoke(source_id)
+    elapsed = time.monotonic() - begin
+    assert elapsed < 0.5
+    release.set()
+    scheduler.stop()

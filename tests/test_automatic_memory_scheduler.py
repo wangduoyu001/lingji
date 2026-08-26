@@ -6,7 +6,7 @@ from pathlib import Path
 import time
 import threading
 
-from src.automatic_memory.models import AuthorizationScope
+from src.automatic_memory.models import AuthorizationScope, SourceRecord
 from src.automatic_memory.source_registry import SourceRegistry
 from src.automatic_memory.scheduler import AutomaticMemoryScheduler, ReconciliationReport
 from src.storage.state_db import StateDatabase
@@ -256,6 +256,84 @@ def test_direct_unsupported_stops_source_and_disables_jobs(tmp_path: Path):
     registry.set_status(source_id, "unsupported", reason="no official export")
     assert source_id not in scheduler.watcher.running_sources()
     assert all(not job["enabled"] for job in db.list_scheduler_jobs())
+    scheduler.stop()
+
+
+def test_two_scheduler_instances_single_flight_one_active_scan(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+    entered = threading.Event()
+    release = threading.Event()
+    calls: list[str] = []
+
+    def scan(scan_id: str, current_id: str, reason: str):
+        calls.append(scan_id)
+        entered.set()
+        assert release.wait(1)
+        return ReconciliationReport(1, 1, 0, (), True)
+
+    first_scheduler = AutomaticMemoryScheduler(db, registry, scan_runner=scan)
+    second_scheduler = AutomaticMemoryScheduler(db, registry, scan_runner=scan)
+    first_result: list[ReconciliationReport] = []
+    second_result: list[ReconciliationReport] = []
+    first = threading.Thread(target=lambda: first_result.append(first_scheduler.reconcile(source_id)))
+    second = threading.Thread(target=lambda: second_result.append(second_scheduler.reconcile(source_id)))
+    first.start()
+    assert entered.wait(1)
+    second.start()
+    time.sleep(0.05)
+    assert len(calls) == 1
+    release.set()
+    first.join()
+    second.join()
+    assert first_result[0].complete
+    assert not second_result[0].complete
+
+
+def test_degraded_source_mid_run_finishes_as_failed_not_running(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+    entered = threading.Event()
+    release = threading.Event()
+
+    def scan(*args):
+        entered.set()
+        assert release.wait(1)
+        return ReconciliationReport(1, 1, 0, (), True)
+
+    scheduler = AutomaticMemoryScheduler(db, registry, scan_runner=scan)
+    result: list[ReconciliationReport] = []
+    worker = threading.Thread(target=lambda: result.append(scheduler.reconcile(source_id)))
+    worker.start()
+    assert entered.wait(1)
+    registry.set_status(source_id, "degraded", reason="source temporarily unavailable")
+    release.set()
+    worker.join()
+    assert result and not result[0].complete
+    assert scheduler.status()[0].status == "failed"
+    assert scheduler.status()[0].last_error
+
+
+def test_late_listener_from_previous_lifecycle_cannot_disable_restarted_scheduler(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+    scheduler = AutomaticMemoryScheduler(
+        db,
+        registry,
+        scan_runner=lambda *args: ReconciliationReport(0, 0, 0, (), True),
+        poll_seconds=0.01,
+    )
+    scheduler.start()
+    old_listener = registry._lifecycle_listeners[0]
+    scheduler.stop()
+    scheduler.start()
+    old_listener(SourceRecord(
+        source_id,
+        "codex",
+        str(tmp_path),
+        "revoked",
+        "metadata_discovery",
+        "v1",
+    ))
+    jobs = {job["name"]: job for job in db.list_scheduler_jobs()}
+    assert all(job["enabled"] for job in jobs.values())
     scheduler.stop()
 
 

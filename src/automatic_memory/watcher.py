@@ -36,6 +36,7 @@ class AutomaticMemoryWatcher:
         self._sources: dict[str, dict[str, object]] = {}
         self._threads: dict[str, threading.Thread] = {}
         self._stops: dict[str, threading.Event] = {}
+        self._generations: dict[str, int] = {}
         self._paused = False
 
     def start(self, source_id: str, debounce_seconds: int = 5) -> None:
@@ -46,12 +47,15 @@ class AutomaticMemoryWatcher:
             if source_id in self._threads:
                 return
             stop = threading.Event()
+            generation = self._generations.get(source_id, 0) + 1
+            self._generations[source_id] = generation
             self._stops[source_id] = stop
             self._sources[source_id] = {
                 "root": str(Path(self._value(source, "root")).expanduser().resolve(strict=False)),
                 "debounce": debounce,
                 "pending_at": None,
                 "pending": False,
+                "generation": generation,
             }
             thread = threading.Thread(
                 target=self._watch,
@@ -60,6 +64,7 @@ class AutomaticMemoryWatcher:
                     stop,
                     str(self._sources[source_id]["root"]),
                     float(self._sources[source_id]["debounce"]),
+                    generation,
                 ),
                 daemon=True,
                 name=f"lingji-memory-watch-{source_id}",
@@ -85,13 +90,14 @@ class AutomaticMemoryWatcher:
         with self._lock:
             stop = self._stops.pop(source_id, None)
             thread = self._threads.get(source_id)
+            # Remove the visible state immediately.  Lifecycle callbacks must
+            # not block on an uncooperative watch backend; the old thread's
+            # finally block is generation/identity guarded below.
             self._sources.pop(source_id, None)
+            if thread is not None:
+                self._threads.pop(source_id, None)
         if stop is not None:
             stop.set()
-        if thread is not None and thread is not threading.current_thread():
-            thread.join(timeout=2.0)
-        with self._lock:
-            self._threads.pop(source_id, None)
 
     def running_sources(self) -> tuple[str, ...]:
         with self._lock:
@@ -158,7 +164,12 @@ class AutomaticMemoryWatcher:
         return True
 
     def _watch(
-        self, source_id: str, stop: threading.Event, root: str, debounce_seconds: float
+        self,
+        source_id: str,
+        stop: threading.Event,
+        root: str,
+        debounce_seconds: float,
+        generation: int,
     ) -> None:
         debounce_ms = int(debounce_seconds * 1000)
         try:
@@ -198,8 +209,16 @@ class AutomaticMemoryWatcher:
             self._on_error(source_id, str(exc)[:2000])
         finally:
             with self._lock:
-                self._threads.pop(source_id, None)
-                self._stops.pop(source_id, None)
+                current_thread = self._threads.get(source_id)
+                current_state = self._sources.get(source_id)
+                if (
+                    current_thread is threading.current_thread()
+                    and current_state is not None
+                    and current_state.get("generation") == generation
+                ):
+                    self._threads.pop(source_id, None)
+                    self._stops.pop(source_id, None)
+                    self._sources.pop(source_id, None)
 
     def _source(self, source_id: str) -> SourceRecord | dict:
         source = self._source_provider(source_id)

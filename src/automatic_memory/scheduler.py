@@ -5,6 +5,7 @@ import threading
 from concurrent.futures import Future
 from dataclasses import dataclass
 from typing import Any, Callable
+from uuid import uuid4
 
 from src.scheduler.cron import CronScheduler
 from src.storage.state_db import StateDatabase
@@ -60,14 +61,23 @@ class AutomaticMemoryScheduler:
         self._paused = False
         self._inflight: dict[str, Future[ReconciliationReport]] = {}
         self._listener_registered = False
+        self._listener_callback: Callable[[Any], None] | None = None
+        self._lifecycle_generation = 0
+        self._scheduler_owner = f"automatic-memory-scheduler-{uuid4().hex}"
+        self._scheduler_lease_seconds = 30.0
 
     def start(self) -> None:
         with self._lock:
             if self._running:
                 return
-            self.registry.add_lifecycle_listener(self._on_source_lifecycle)
+            self._lifecycle_generation += 1
+            generation = self._lifecycle_generation
+            listener = lambda source, token=generation: self._on_source_lifecycle(source, token)
+            self._listener_callback = listener
+            self.registry.add_lifecycle_listener(listener)
             self._listener_registered = True
             self._paused = False
+            self._running = True
             sources = self.registry.list_sources()
             for source in sources:
                 if source.status != "authorized":
@@ -89,21 +99,26 @@ class AutomaticMemoryScheduler:
                     )
                 except Exception as exc:
                     self._watch_error(source.source_id, str(exc)[:2000])
-            self._running = True
             self.cron.start(self._run_cron_job)
 
     def stop(self) -> None:
         with self._lock:
             if not self._running:
                 self.watcher.stop()
-                if self._listener_registered:
-                    self.registry.remove_lifecycle_listener(self._on_source_lifecycle)
-                    self._listener_registered = False
+                self._lifecycle_generation += 1
+                callback = self._listener_callback
+                if callback is not None:
+                    self.registry.remove_lifecycle_listener(callback)
+                self._listener_callback = None
+                self._listener_registered = False
                 return
             self._running = False
-            if self._listener_registered:
-                self.registry.remove_lifecycle_listener(self._on_source_lifecycle)
-                self._listener_registered = False
+            self._lifecycle_generation += 1
+            callback = self._listener_callback
+            if callback is not None:
+                self.registry.remove_lifecycle_listener(callback)
+            self._listener_callback = None
+            self._listener_registered = False
         self.watcher.stop()
         self.cron.stop()
 
@@ -172,12 +187,38 @@ class AutomaticMemoryScheduler:
                 self._disable_source(source_id)
                 return ReconciliationReport(0, 0, 0, (f"source status is {source.status}",), False)
             scan = self._start_or_retry_scan(source_id)
-            result = self._invoke_runner(scan.scan_id, source_id, reason)
+            scheduler_lease_id = f"scheduler-lease-{uuid4().hex}"
+            claimed = self.state_db.claim_automatic_memory_scheduler_scan(
+                scan.scan_id,
+                scheduler_lease_id,
+                self._scheduler_owner,
+                ttl_seconds=self._scheduler_lease_seconds,
+            )
+            if claimed is None:
+                return ReconciliationReport(
+                    0, 0, 0, ("scan is already being processed",), False
+                )
+            heartbeat_stop = threading.Event()
+            heartbeat = threading.Thread(
+                target=self._scheduler_lease_heartbeat,
+                args=(scan.scan_id, scheduler_lease_id, heartbeat_stop),
+                daemon=True,
+                name=f"lingji-memory-scan-heartbeat-{source_id}",
+            )
+            heartbeat.start()
+            try:
+                result = self._invoke_runner(scan.scan_id, source_id, reason)
+            finally:
+                heartbeat_stop.set()
+                if heartbeat is not threading.current_thread():
+                    heartbeat.join(timeout=1.0)
             report = self._report(result)
             if report.complete:
-                if isinstance(result, ScanRun) and result.status == "completed":
-                    current = self.registry.get_scan(scan.scan_id)
-                    finalized = current if current.status == "completed" else None
+                current = self.registry.get_scan(scan.scan_id)
+                if current.status == "completed":
+                    finalized = current
+                elif current.status == "cancelled":
+                    finalized = None
                 else:
                     finalized = self.registry.complete_scan_if_authorized(
                         scan.scan_id,
@@ -186,6 +227,13 @@ class AutomaticMemoryScheduler:
                     )
                 if finalized is None:
                     current = self.registry.get_scan(scan.scan_id)
+                    if current.status == "running":
+                        self.registry.fail_scan_if_running(
+                            scan.scan_id,
+                            last_error="source authorization changed during reconciliation",
+                            progress=report.queued,
+                            total=report.discovered,
+                        )
                     error = (
                         "source authorization revoked during reconciliation"
                         if current.status == "cancelled"
@@ -244,6 +292,14 @@ class AutomaticMemoryScheduler:
                 },
             )
             return ReconciliationReport(0, 0, 0, (error,), False)
+        finally:
+            if scan is not None and "scheduler_lease_id" in locals():
+                try:
+                    self.state_db.release_automatic_memory_scheduler_scan_lease(
+                        scan.scan_id, scheduler_lease_id
+                    )
+                except Exception:
+                    pass
 
     def _run_cron_job(self, name: str) -> None:
         parts = name.split(":")
@@ -275,12 +331,30 @@ class AutomaticMemoryScheduler:
         self.watcher.stop_source(source_id)
         self.cron.set_jobs_enabled(self._source_prefix(source_id), False)
 
-    def _on_source_lifecycle(self, source) -> None:
+    def _on_source_lifecycle(self, source, generation: int | None = None) -> None:
         with self._lock:
-            if not self._running or not self._listener_registered:
+            if (
+                not self._running
+                or not self._listener_registered
+                or generation is not None
+                and generation != self._lifecycle_generation
+            ):
                 return
-        if source.status != "authorized":
-            self._disable_source(source.source_id)
+            # Keep the generation token valid through the side effect.  This
+            # prevents stop/start from interleaving between validation and
+            # disabling a newly-started scheduler's jobs.
+            if source.status != "authorized":
+                self._disable_source(source.source_id)
+
+    def _scheduler_lease_heartbeat(
+        self, scan_id: str, lease_id: str, stop: threading.Event
+    ) -> None:
+        interval = max(min(self._scheduler_lease_seconds / 3.0, 1.0), 0.05)
+        while not stop.wait(interval):
+            if not self.state_db.renew_automatic_memory_scheduler_scan_lease(
+                scan_id, lease_id, ttl_seconds=self._scheduler_lease_seconds
+            ):
+                return
 
     def _start_or_retry_scan(self, source_id: str) -> ScanRun:
         try:

@@ -155,6 +155,20 @@ class StateDatabase:
 
                 CREATE INDEX IF NOT EXISTS idx_automatic_memory_scan_items_source
                     ON automatic_memory_scan_items(source_id, scan_id, relative_path);
+
+                CREATE TRIGGER IF NOT EXISTS automatic_memory_source_status_fails_scans
+                AFTER UPDATE OF status ON automatic_memory_sources
+                WHEN NEW.status IN ('unsupported', 'degraded', 'expired')
+                BEGIN
+                    UPDATE automatic_memory_scans
+                    SET status = 'failed',
+                        last_error = 'source status changed to ' || NEW.status,
+                        lease_id = NULL, lease_owner_pid = NULL,
+                        lease_owner_thread = NULL, lease_owner_instance = NULL,
+                        lease_heartbeat_at = NULL, lease_expires_at = NULL,
+                        updated_at = strftime('%Y-%m-%dT%H:%M:%S','now')
+                    WHERE source_id = NEW.source_id AND status = 'running';
+                END;
                 """
             )
             # Task 1 databases may already have the scan table. Keep the
@@ -174,6 +188,10 @@ class StateDatabase:
                 ("lease_heartbeat_at", "TEXT"),
                 ("lease_expires_at", "TEXT"),
                 ("attempt", "INTEGER NOT NULL DEFAULT 0"),
+                ("scheduler_lease_id", "TEXT"),
+                ("scheduler_lease_owner", "TEXT"),
+                ("scheduler_lease_heartbeat_at", "TEXT"),
+                ("scheduler_lease_expires_at", "TEXT"),
             ):
                 if name not in columns:
                     connection.execute(
@@ -1075,9 +1093,11 @@ class StateDatabase:
         return dict(updated)
 
     def update_automatic_memory_source(
-        self, source_id: str, *, status: str, revoked_at: str | None = None
+        self, source_id: str, *, status: str, revoked_at: str | None = None,
+        reason: str | None = None,
     ) -> dict[str, Any]:
         with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 """
                 UPDATE automatic_memory_sources
@@ -1086,6 +1106,15 @@ class StateDatabase:
                 """,
                 (status, revoked_at, source_id),
             )
+            if status in {"unsupported", "degraded", "expired"} and reason:
+                connection.execute(
+                    """
+                    UPDATE automatic_memory_scans
+                    SET last_error = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%S','now')
+                    WHERE source_id = ? AND status = 'failed'
+                    """,
+                    (str(reason)[:2000], source_id),
+                )
             row = connection.execute(
                 "SELECT * FROM automatic_memory_sources WHERE source_id = ?",
                 (source_id,),
@@ -1093,6 +1122,110 @@ class StateDatabase:
         if row is None:
             raise KeyError(source_id)
         return dict(row)
+
+    def claim_automatic_memory_scheduler_scan(
+        self,
+        scan_id: str,
+        lease_id: str,
+        lease_owner: str,
+        *,
+        now: str | None = None,
+        ttl_seconds: float = 30.0,
+    ) -> dict[str, Any] | None:
+        """Claim the scheduler runner role for a scan in the shared state DB.
+
+        SnapshotJobRunner has a separate scan lease.  A live snapshot lease is
+        respected so a scheduler cannot invoke a second runner; an expired
+        scheduler lease is reclaimable after an owner crash.
+        """
+        timestamp = now or datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        expires = self._lease_expiry(timestamp, ttl_seconds)
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(scan_id)
+            if row["status"] not in {"running", "paused", "failed"}:
+                return None
+            scheduler_expiry = row["scheduler_lease_expires_at"]
+            if (
+                row["scheduler_lease_id"]
+                and scheduler_expiry
+                and scheduler_expiry > timestamp
+            ):
+                return None
+            snapshot_expiry = row["lease_expires_at"]
+            if row["lease_id"] and snapshot_expiry and snapshot_expiry > timestamp:
+                return None
+            updated = connection.execute(
+                """
+                UPDATE automatic_memory_scans
+                SET scheduler_lease_id = ?, scheduler_lease_owner = ?,
+                    scheduler_lease_heartbeat_at = ?, scheduler_lease_expires_at = ?,
+                    updated_at = ?
+                WHERE scan_id = ? AND status IN ('running', 'paused', 'failed')
+                  AND (scheduler_lease_id IS NULL OR scheduler_lease_expires_at IS NULL
+                       OR scheduler_lease_expires_at <= ?)
+                  AND (lease_id IS NULL OR lease_expires_at IS NULL
+                       OR lease_expires_at <= ?)
+                """,
+                (
+                    str(lease_id), str(lease_owner), timestamp, expires, timestamp,
+                    scan_id, timestamp, timestamp,
+                ),
+            )
+            if updated.rowcount != 1:
+                return None
+            current = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+        return dict(current) if current is not None else None
+
+    def renew_automatic_memory_scheduler_scan_lease(
+        self,
+        scan_id: str,
+        lease_id: str,
+        *,
+        now: str | None = None,
+        ttl_seconds: float = 30.0,
+    ) -> bool:
+        timestamp = now or datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        expires = self._lease_expiry(timestamp, ttl_seconds)
+        with self._lock, self._connection() as connection:
+            updated = connection.execute(
+                """
+                UPDATE automatic_memory_scans
+                SET scheduler_lease_heartbeat_at = ?, scheduler_lease_expires_at = ?,
+                    updated_at = ?
+                WHERE scan_id = ? AND scheduler_lease_id = ?
+                  AND status = 'running'
+                  AND scheduler_lease_expires_at > ?
+                """,
+                (timestamp, expires, timestamp, scan_id, str(lease_id), timestamp),
+            )
+        return updated.rowcount == 1
+
+    def release_automatic_memory_scheduler_scan_lease(
+        self, scan_id: str, lease_id: str
+    ) -> dict[str, Any] | None:
+        timestamp = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                UPDATE automatic_memory_scans
+                SET scheduler_lease_id = NULL, scheduler_lease_owner = NULL,
+                    scheduler_lease_heartbeat_at = NULL,
+                    scheduler_lease_expires_at = NULL, updated_at = ?
+                WHERE scan_id = ? AND scheduler_lease_id = ?
+                """,
+                (timestamp, scan_id, str(lease_id)),
+            )
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+        return dict(row) if row is not None else None
 
     def complete_automatic_memory_scan_if_authorized(
         self, scan_id: str, *, progress: int, total: int

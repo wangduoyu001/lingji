@@ -148,6 +148,7 @@ class SourceRegistry:
                 source_id,
                 status=status,
                 revoked_at=None,
+                reason=reason or f"source status changed to {status}",
             )
         except KeyError as exc:
             raise LookupError(f"source not found: {source_id}") from exc
