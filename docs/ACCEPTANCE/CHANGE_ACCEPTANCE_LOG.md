@@ -1187,3 +1187,27 @@ Windows 重启后恢复 = 100%
 
 - 报告路径：`docs/TEST_REPORTS/ACCEPTANCE_GOVERNANCE_IMPLEMENTATION.md`
 - 治理 PR：`#62`
+## 2026-08-26 · Phase 1 Automatic Memory · Task 8 · Work Fact 与真实 Desktop
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 影响模块：`src/work/`, authenticated `127.0.0.1:8766` work read routes, Python↔TypeScript Work Fact contract, formal Desktop observation pages
+- 风险等级：P0
+- 用户可感知变化：Home、Activity、Attention、Capture 与 Memory 必须读取同一可重启 Work Fact 链，展示真实事件、结果、失败、下一动作和真实主人待办；不能通过静态聚合状态猜测成功或待确认。
+- 数据或安全边界变化：继续只使用 `lingji_state.db` 和认证 8766 Local Control API；不新增数据库、队列、事实源，不读取 SQLite 的 UI，不触碰 Vault 或第三方 AI 软件。
+
+### 新增或修改的自动验收
+
+- [ ] WorkStore 重启持久化、不可变事件、稳定 ID 幂等、时间排序与 limit。
+- [ ] Capture → Work → Event → Outcome/Failure → Memory candidate 或 PendingAction 成功、失败、重试、主人确认路径。
+- [ ] 8766 `/api/work/current`、`/api/work/pending-actions`、`/api/work/timeline/{id}` 认证、404/503、统一 DTO。
+- [ ] Desktop TypeScript contract、真实 API polling、loading/empty/stale/401/503/error 状态和跨页同一 work_id。
+- [ ] Task8 focused/regression、Node real smoke、py_compile/compileall/diff-check、acceptance sync、local handoff。
+
+### 真机与主人确认
+
+- [ ] 真实发布版逐页点击 Overview / Activity / Attention / Capture / Memory，确认可读事实与同一 ID。
+- [ ] 主人确认前不得声明 Phase 1 或 Task8 真机验收完成。
+
+### 回滚
+
+- 回滚产品 Commit 与本条文档提交；不触碰 Vault、原始聊天证据、正式记忆、Qdrant 或主人配置。
