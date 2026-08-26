@@ -1292,6 +1292,43 @@ Windows 重启后恢复 = 100%
 - 产品提交：`2f833aa`
 - 报告/文档提交：待提交
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 3 · Unified cited RAG context
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 基线：`90832a1`
+- 产品 Commit：`163fa5d` (`feat: unify cited automatic memory context`)
+- 影响模块：`src/retrieval/context_pack.py`, `src/retrieval/hybrid.py`, `src/gateway/`, `src/mcp_server.py`, `src/sources/service.py`
+- 风险等级：P0
+- 用户可感知变化：ContextPack、MemoryGateway 和 MCP 现在共享当前/历史时态、项目/隐私/Agent 范围、稳定来源引用、结构化消息证据和明确 semantic 降级状态；无消息链接的记忆明确标记为缺失 provenance。
+- 数据与安全边界：继续复用既有 `lingji_memory.db`、SourceReadModel、SourceQueryService、HybridRetriever 和认证 MCP；仅使用 pytest synthetic `tmp_path`，不读取或修改 Production、Vault、第三方 AI 数据，也不修改 Task 2 冻结评测夹具。
+
+### 新增或修改的自动验收
+
+- [x] RED：focused ContextPack/MCP/Task7 命令为 `20 passed, 1 failed`；失败为无结构化消息链接错误标记 `linked_pending`，而非明确 `missing`。
+- [x] GREEN：同一 focused 命令为 `23 passed`。
+- [x] 回归：ContextPack、MCP、Task7、memory retrieval、permanent gateway、source service、capability contract 共 `47 passed, 1 existing Pydantic warning`。
+- [x] 覆盖：current/as_of/history/why、authority ordering、agent/privacy/project linked-message isolation、gateway/direct builder identity parity、source/conversation/message/memory citations、tuple dedup、12,000 字符边界、semantic absent/throwing lexical degradation。
+- [x] Task 2 fixture SHA-256 未变化：corpus `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94`；questions `338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612`。
+- [x] `git diff --check`：PASS。
+- [ ] 未执行 Artifact、真实 UI、主人观察、Production/Vault 数据或本机 ACTIVE 验收任务；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。
+
+### 回归与限制
+
+- [x] 不新增数据库、检索器、ContextPack builder、权限实现或 MCP 后端；bootstrap 只 wiring 同一 SourceReadModel/SourceQueryService。
+- [x] semantic 异常不暴露异常文本、路径、token 或凭证；诊断为调用级状态，不使用共享 last-call 状态。
+- [ ] 100 问 golden quality gate、10 万消息性能、Mac M5 发布版和 Windows parity 属于后续任务，不在本 Task 3 声称通过。
+
+### 清理与回滚
+
+- 临时数据：仅 pytest `tmp_path`，测试结束清理；未接触主人数据。
+- 回滚：回滚产品 Commit `163fa5d` 与本条文档/报告 Commit；不触碰 Vault、原始聊天证据、正式记忆、Qdrant、主人设置或第三方软件。
+
+### 最终报告
+
+- 仓库报告：`docs/TEST_REPORTS/PHASE1_TASK9_UNIFIED_RAG.md`
+- 产品提交：`163fa5d`
+- 报告/文档提交：以本次文档提交的 Git 身份为准；报告不自引用自身 SHA。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 2 follow-up · Frozen 100-question quality gate
 
 - 产品分支：`codex/phase1-automatic-memory`
