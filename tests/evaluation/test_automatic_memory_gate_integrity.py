@@ -24,3 +24,8 @@ def test_protected_sentinel_rejects_symlink_escape(tmp_path: Path):
     (root / "escape").symlink_to(outside, target_is_directory=True)
     with pytest.raises(ValueError, match="symlink"):
         ProtectedTreeSentinel.capture((root,))
+
+
+def test_protected_sentinel_rejects_missing_root(tmp_path: Path):
+    with pytest.raises(ValueError, match="missing"):
+        ProtectedTreeSentinel.capture((tmp_path / "missing",))

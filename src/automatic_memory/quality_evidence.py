@@ -34,7 +34,9 @@ class ProtectedTreeSentinel:
         for configured in roots:
             root = Path(configured).expanduser().resolve(strict=False)
             if not root.exists():
-                continue
+                raise ValueError(f"missing protected root: {configured}")
+            if Path(configured).expanduser().is_symlink():
+                raise ValueError(f"symlink protected root: {configured}")
             for current, dirs, files in os.walk(root, followlinks=False):
                 current_path = Path(current)
                 for name in dirs + files:

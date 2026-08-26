@@ -447,7 +447,8 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_root = Path(tempfile.mkdtemp(prefix="lingji-acceptance-quality-", dir=str(output_path.parent)))
     from src.config import settings
-    protected_before = ProtectedTreeSentinel.capture((Path(settings.vault_path), Path(settings.storage_path)))
+    protected_roots = tuple(path for path in (Path(settings.vault_path), Path(settings.storage_path)) if path.exists())
+    protected_before = ProtectedTreeSentinel.capture(protected_roots)
     production_sentinels_before = _production_sentinels()
     production_sentinels_after: dict[str, str] = {}
     message_map: dict[str, dict[str, Any]] = {}
@@ -543,7 +544,7 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
                 )
             except Exception:
                 raise
-        protected_after = ProtectedTreeSentinel.capture((Path(settings.vault_path), Path(settings.storage_path)))
+        protected_after = ProtectedTreeSentinel.capture(protected_roots)
         production_changes = protected_before.diff(protected_after)
         report = evaluate_run(
             fact_by_memory,

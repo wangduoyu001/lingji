@@ -283,6 +283,22 @@ class AutoMemoryPromotionService:
     def _evidence_refs(candidate: ReviewCandidate) -> tuple[str, ...]:
         return tuple(str(item).strip() for item in candidate.source_refs if str(item).strip())
 
+    def _message_primary_refs(self, candidate: ReviewCandidate) -> tuple[str, ...]:
+        """Only exact SourceReadModel message primary IDs may receive links."""
+        store = self.evidence_store
+        getter = getattr(store, "get_message", None) if store is not None else None
+        if not callable(getter):
+            return ()
+        resolved: list[str] = []
+        for reference in self._evidence_refs(candidate):
+            try:
+                row = getter(reference, include_content=False)
+            except Exception:
+                row = None
+            if row is not None and str(row.get("message_id") or "") == reference:
+                resolved.append(reference)
+        return tuple(dict.fromkeys(resolved))
+
     def _evidence_verifiable(self, reference: str, candidate: ReviewCandidate) -> bool:
         """Resolve evidence through existing state/source read models only."""
         wanted = str(reference).strip()
@@ -457,6 +473,7 @@ class AutoMemoryPromotionService:
         if writer is None:
             raise RuntimeError("derived projection writer is unavailable")
         refs = list(self._evidence_refs(candidate))
+        message_refs = self._message_primary_refs(candidate)
         kwargs = {
             "memory_id": candidate.memory_id,
             "title": candidate.title,
@@ -487,7 +504,7 @@ class AutoMemoryPromotionService:
         linker = getattr(self.evidence_store, "link_message_memory", None)
         if callable(linker):
             try:
-                for reference in refs:
+                for reference in message_refs:
                     linker(
                         reference,
                         candidate.memory_id,
