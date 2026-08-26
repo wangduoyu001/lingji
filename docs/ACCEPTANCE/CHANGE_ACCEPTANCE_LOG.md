@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 4 · Repair round 2
+
+- 基准：`00191f13641753ecac511240fe8fc715140a44c0`；本轮仅修复 Task 4 Repair 1 review 的 child/root snapshot races、same-size second-pass mutation、reason hostile-input 与 FD ownership 缺口。
+- 风险等级：P0。保持 primitives-only；不得修改 runner/CLI/e2e/history、AcceptanceRoots、cleanup inventory、Task 5/6、Task4R2、release/100k、Production/Vault、冻结 evaluator/fixtures/retrieval。
+- 自动验收：先复现 Repair 1 C1/I1/I2/I3/M2 RED；focused adversarial count 必须超过 70，随后执行 frozen gate、Task 1–3 regressions、当前 e2e/historical visibility、fixture hashes、diff/acceptance/local-handoff。
+- 清理/回滚：仅测试自有临时 roots；ignored 报告写 `.superpowers/sdd/2026-08-26-task4r-reset/task-4-repair-2-report.md`，不得 force-add。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 4 · Repair round 1
 
 - 基准：`6c475b99ffe112ce5845f01a036a5e00ef583020`；本轮仅修复 Task 4 independent review 的 C1/C2/I1–I5：POSIX anchored dir-fd sentinel/writer、无安全平台 fail-closed、双哈希内容竞态、EvaluationReport 结构校验、directory fsync 错误传播、序列化稳定错误与 reason allowlist。
