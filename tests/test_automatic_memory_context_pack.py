@@ -149,6 +149,64 @@ def _indexed(tmp_path: Path) -> tuple[MemoryDatabase, SourceReadModel, SourceQue
     return memory_db, source_model, service
 
 
+def _short_chinese_indexed(tmp_path: Path) -> tuple[MemoryDatabase, SourceReadModel, SourceQueryService]:
+    vault = tmp_path / "vault"
+    memory_db = MemoryDatabase(tmp_path / "lingji_memory.db")
+    _note(
+        vault,
+        "03-Knowledge/lingji.md",
+        "memory-lingji",
+        "灵机",
+        "灵机是长期记忆证据。",
+        valid_from="2026-01-01T00:00:00Z",
+    )
+    from src.indexer.index import PEMISIndex
+
+    index = PEMISIndex(vault, tmp_path / "storage")
+    index.build_index()
+    memory_db.rebuild_from_index(index.get_all(), vault, MarkdownChunker())
+    source_model = SourceReadModel(memory_db)
+    source_model.upsert_bundle(
+        {
+            "source": {
+                "source_id": "source-lingji",
+                "source_type": "chatgpt",
+                "external_id": "export-lingji",
+                "display_name": "LingJi export",
+                "privacy": "private",
+                "projects": ["LingJi"],
+                "agent_scope": ["chatgpt"],
+            },
+            "conversations": [
+                {
+                    "conversation_id": "conversation-lingji",
+                    "external_id": "conversation-lingji",
+                    "title": "灵机证据",
+                    "messages": [
+                        {
+                            "message_id": "message-lingji",
+                            "external_id": "message-lingji",
+                            "role": "user",
+                            "sequence": 1,
+                            "occurred_at": "2026-01-02T10:00:00Z",
+                            "content": "灵机是长期记忆证据。",
+                            "memory_links": [{"memory_id": "memory-lingji"}],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+    service = SourceQueryService(
+        source_model,
+        workspace="acceptance",
+        vault_path=vault,
+        raw_path=tmp_path / "raw",
+        profiles=AIProfileRegistry(),
+    )
+    return memory_db, source_model, service
+
+
 def test_context_pack_orders_memory_authority_and_linked_evidence_with_scope_ids(tmp_path: Path) -> None:
     database, source_model, service = _indexed(tmp_path)
     builder = ContextPackBuilder(
@@ -329,6 +387,58 @@ def test_context_pack_why_renders_selection_and_exclusion_details(tmp_path: Path
 
     assert "memory-old" in pack["markdown"]
     assert "excluded" in pack["markdown"]
+
+
+def test_enhanced_short_chinese_retrieval_matches_diagnostics_across_temporal_modes(tmp_path: Path) -> None:
+    database, source_model, source_query_service = _short_chinese_indexed(tmp_path)
+    from src.retrieval import HybridRetriever as EnhancedHybridRetriever
+
+    retriever = EnhancedHybridRetriever(database)
+    requests = [
+        SearchFilters(mode="current"),
+        SearchFilters(mode="as_of", as_of="2026-01-03T00:00:00Z"),
+        SearchFilters(mode="history"),
+        SearchFilters(mode="why"),
+    ]
+    for filters in requests:
+        expected = retriever.search("灵机", filters=filters)
+        diagnosed = retriever.search_with_diagnostics("灵机", filters=filters)
+        expected_ids = [(item.get("memory_id"), item.get("chunk_id")) for item in expected]
+        diagnosed_ids = [(item.get("memory_id"), item.get("chunk_id")) for item in diagnosed["results"]]
+        assert expected_ids == diagnosed_ids == [("memory-lingji", expected[0]["chunk_id"])]
+        assert diagnosed["diagnostics"]["semantic"] == "unavailable"
+
+    builder = ContextPackBuilder(
+        database,
+        retriever,
+        source_read_model=source_model,
+        source_query_service=source_query_service,
+    )
+    pack = builder.build(ContextPackRequest(agent_id="chatgpt", query="灵机", project="LingJi"))
+    assert "memory-lingji" in {item["memory_id"] for item in pack["sections"]}
+    assert "message-lingji" in pack["markdown"]
+
+    gateway = MemoryGateway(database, retriever, builder, object(), profiles=AIProfileRegistry())
+    gateway_pack = gateway.build_context_pack("chatgpt", query="灵机", project="LingJi")
+    assert "message-lingji" in gateway_pack["markdown"]
+
+
+def test_enhanced_short_chinese_diagnostics_safe_on_semantic_failure(tmp_path: Path) -> None:
+    database, _, _ = _short_chinese_indexed(tmp_path)
+
+    class ThrowingProvider:
+        def search(self, query: str, limit: int, filters: dict[str, object] | None = None):
+            raise RuntimeError("token=/secret/qdrant")
+
+    from src.retrieval import HybridRetriever as EnhancedHybridRetriever
+
+    diagnosed = EnhancedHybridRetriever(database, semantic_provider=ThrowingProvider()).search_with_diagnostics(
+        "灵机", filters=SearchFilters(mode="current")
+    )
+    assert diagnosed["results"]
+    assert diagnosed["diagnostics"]["semantic"] == "degraded"
+    assert diagnosed["diagnostics"]["reason_code"] == "semantic_query_failed"
+    assert "/secret/qdrant" not in str(diagnosed)
 
 
 def test_context_pack_linked_evidence_enforces_agent_and_privacy_scope(tmp_path: Path) -> None:

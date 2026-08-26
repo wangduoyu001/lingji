@@ -87,7 +87,7 @@ class HybridRetriever:
         limit: int = 10,
         filters: SearchFilters | None = None,
     ) -> list[dict[str, Any]]:
-        return self._search_internal(query, limit, filters, diagnostics=False)[0]
+        return self._search_internal(query, limit, filters, diagnostics=False, attach_why=True)[0]
 
     def search_with_diagnostics(
         self,
@@ -101,7 +101,7 @@ class HybridRetriever:
         stored on the retriever, so concurrent callers cannot observe another
         request's semantic failure.
         """
-        results, diagnostics = self._search_internal(query, limit, filters, diagnostics=True)
+        results, diagnostics = self._search_internal(query, limit, filters, diagnostics=True, attach_why=True)
         return {"results": results, "diagnostics": diagnostics}
 
     def _search_internal(
@@ -111,6 +111,7 @@ class HybridRetriever:
         filters: SearchFilters | None,
         *,
         diagnostics: bool,
+        attach_why: bool = True,
     ) -> tuple[list[dict[str, Any]], dict[str, str]]:
         clean_query = " ".join(str(query or "").split())
         channel_state = {
@@ -157,7 +158,7 @@ class HybridRetriever:
         channel_state.update(semantic_state)
         fused = self._fuse(clean_query, lexical, semantic, evaluation_filters)
         output = fused[:limit]
-        if normalized.mode == "why":
+        if normalized.mode == "why" and attach_why:
             self._attach_why(clean_query, output, evaluation_filters)
         if not diagnostics and cacheable:
             self._cache_put(cache_key, output)

@@ -17,35 +17,63 @@ class HybridRetriever(BaseHybridRetriever):
         limit: int = 10,
         filters: SearchFilters | None = None,
     ) -> list[dict[str, Any]]:
+        results, _ = self._search_enhanced(query, limit, filters, diagnostics=False)
+        return results
+
+    def search_with_diagnostics(
+        self,
+        query: str,
+        limit: int = 10,
+        filters: SearchFilters | None = None,
+    ) -> dict[str, Any]:
+        results, diagnostics = self._search_enhanced(query, limit, filters, diagnostics=True)
+        return {"results": results, "diagnostics": diagnostics}
+
+    def _search_enhanced(
+        self,
+        query: str,
+        limit: int,
+        filters: SearchFilters | None,
+        *,
+        diagnostics: bool,
+    ) -> tuple[list[dict[str, Any]], dict[str, str]]:
         limit = max(int(limit), 1)
-        primary = super().search(query, limit=limit, filters=filters)
-        if len(primary) >= limit:
-            return primary
-        normalized = (filters or SearchFilters()).normalized()
-        fallback = self._substring_search(query, max(limit * 3, 20), normalized)
-        seen = {str(item.get("chunk_id") or item.get("memory_id") or "") for item in primary}
-        combined = list(primary)
-        for item in fallback:
-            key = str(item.get("chunk_id") or item.get("memory_id") or "")
-            if not key or key in seen:
-                continue
-            seen.add(key)
-            combined.append(item)
-        # The substring fallback is another lexical channel; run it through
-        # the same authority conflict visibility as the primary fusion path.
-        combined = self._fuse(query, combined, [], normalized)
-        combined.sort(
-            key=lambda item: (
-                float(item.get("retrieval_score") or 0.0),
-                self._importance_value(item.get("importance")),
-                str(item.get("updated_at") or ""),
-            ),
-            reverse=True,
+        primary, diagnostics_state = super()._search_internal(
+            query,
+            limit,
+            filters,
+            diagnostics=diagnostics,
+            attach_why=False,
         )
-        output = self._dedupe(combined)[:limit]
+        if len(primary) >= limit:
+            output = primary
+        else:
+            normalized = (filters or SearchFilters()).normalized()
+            fallback = self._substring_search(query, max(limit * 3, 20), normalized)
+            seen = {str(item.get("chunk_id") or item.get("memory_id") or "") for item in primary}
+            combined = list(primary)
+            for item in fallback:
+                key = str(item.get("chunk_id") or item.get("memory_id") or "")
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                combined.append(item)
+            # This is the existing lexical fallback channel fused with the
+            # same base authority/filter/dedup path; it is not a second retriever.
+            combined = self._fuse(query, combined, [], normalized)
+            combined.sort(
+                key=lambda item: (
+                    float(item.get("retrieval_score") or 0.0),
+                    self._importance_value(item.get("importance")),
+                    str(item.get("updated_at") or ""),
+                ),
+                reverse=True,
+            )
+            output = self._dedupe(combined)[:limit]
+        normalized = (filters or SearchFilters()).normalized()
         if normalized.mode == "why":
             self._attach_why(query, output, normalized)
-        return output
+        return output, diagnostics_state
 
     def _substring_search(
         self,
