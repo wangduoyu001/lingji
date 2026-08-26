@@ -52,6 +52,10 @@ class AutoMemoryPromotionService:
         self._last_promotion_evidence: dict[str, Any] = {}
 
     def evaluate(self, candidate: ReviewCandidate | Mapping[str, Any]) -> dict[str, Any]:
+        # Evidence belongs to one promote/evaluate invocation only.  Never let
+        # a later pending/rejected/error result inherit a prior candidate's
+        # projection/link provenance.
+        self._last_promotion_evidence = {}
         selected = self._normalize(candidate)
         existing = self._existing_decision(selected)
         if existing:
@@ -73,6 +77,7 @@ class AutoMemoryPromotionService:
                 "reason_codes": ["projection_recovered"],
                 "error": "",
             })
+            recovered["promotion_evidence"] = dict(self._last_promotion_evidence)
             self._append("memory_projection_activated", selected.memory_id, recovered)
             self._append("memory_promotion_recovered", selected.memory_id, recovered)
             return recovered
@@ -92,6 +97,18 @@ class AutoMemoryPromotionService:
             try:
                 self._write_projection(selected, decision_id)
             except Exception as exc:
+                if not self._last_promotion_evidence:
+                    self._last_promotion_evidence = {
+                        "candidate_id": selected.memory_id,
+                        "decision_id": decision_id,
+                        "decision": "error",
+                        "resulting_lifecycle": PromotionStatus.ERROR.value,
+                        "memory_id": selected.memory_id,
+                        "resolved_message_primary_ids": [],
+                        "created_link_ids": [],
+                        "reused_link_ids": [],
+                        "rollback": "not_needed",
+                    }
                 result = self._result(
                     selected,
                     decision_id,
@@ -103,6 +120,7 @@ class AutoMemoryPromotionService:
                 self._append("memory_promotion_projection_error", selected.memory_id, result)
                 self._append("memory_promotion_decision", selected.memory_id, result)
                 return result
+            result["promotion_evidence"] = dict(self._last_promotion_evidence)
             self._append("memory_projection_activated", selected.memory_id, result)
         self._append("memory_promotion_decision", selected.memory_id, result)
         return result
@@ -119,6 +137,7 @@ class AutoMemoryPromotionService:
         expected_content_hash: str,
         owner_confirmed: bool,
     ) -> dict[str, Any]:
+        self._last_promotion_evidence = {}
         if not owner_confirmed:
             raise PermissionError("owner confirmation is required")
         candidate = self.candidate(candidate_id)
@@ -144,12 +163,25 @@ class AutoMemoryPromotionService:
         try:
             self._write_projection(selected, decision_id)
         except Exception as exc:
+            if not self._last_promotion_evidence:
+                self._last_promotion_evidence = {
+                    "candidate_id": selected.memory_id,
+                    "decision_id": decision_id,
+                    "decision": "error",
+                    "resulting_lifecycle": PromotionStatus.ERROR.value,
+                    "memory_id": selected.memory_id,
+                    "resolved_message_primary_ids": [],
+                    "created_link_ids": [],
+                    "reused_link_ids": [],
+                    "rollback": "not_needed",
+                }
             result = self._result(
                 selected, decision_id, PromotionStatus.ERROR, ["projection_persist_failed"],
                 mutation=False, error=f"{type(exc).__name__}: {exc}"[:500],
             )
             self._append("memory_promotion_projection_error", selected.memory_id, result)
             return result
+        result["promotion_evidence"] = dict(self._last_promotion_evidence)
         self._append("memory_promotion_owner_approved", selected.memory_id, result)
         self._append("memory_projection_activated", selected.memory_id, result)
         return result
@@ -162,6 +194,7 @@ class AutoMemoryPromotionService:
         owner_confirmed: bool,
         reason: str,
     ) -> dict[str, Any]:
+        self._last_promotion_evidence = {}
         if not owner_confirmed:
             raise PermissionError("owner confirmation is required")
         candidate = self.candidate(candidate_id)
@@ -560,6 +593,7 @@ class AutoMemoryPromotionService:
                         pass
                 self._last_promotion_evidence = {
                     "candidate_id": candidate.memory_id,
+                    "decision_id": decision_id,
                     "decision": "error",
                     "resulting_lifecycle": PromotionStatus.ERROR.value,
                     "memory_id": candidate.memory_id,
@@ -571,6 +605,7 @@ class AutoMemoryPromotionService:
                 raise
         self._last_promotion_evidence = {
             "candidate_id": candidate.memory_id,
+            "decision_id": decision_id,
             "decision": "active",
             "resulting_lifecycle": PromotionStatus.ACTIVE.value,
             "memory_id": candidate.memory_id,

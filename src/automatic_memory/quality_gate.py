@@ -16,7 +16,7 @@ import shutil
 import statistics
 import tempfile
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence
@@ -430,21 +430,34 @@ def select_gateway_evidence(
     gateway_rows: Sequence[Mapping[str, Any]],
     identity_map: Mapping[tuple[str, str], tuple[str, str]],
 ) -> tuple[tuple[str, str], ...]:
+    if isinstance(gateway_rows, (str, bytes)) or not isinstance(gateway_rows, Sequence):
+        raise ValueError("malformed gateway evidence response")
     selected: list[tuple[str, str]] = []
-    seen: set[str] = set()
+    seen_identities: set[tuple[str, str]] = set()
+    seen_labels: set[str] = set()
     for row in gateway_rows:
+        if not isinstance(row, Mapping):
+            raise ValueError("malformed gateway evidence item")
         citation = row.get("citation") or {}
+        if not isinstance(citation, Mapping):
+            raise ValueError("malformed gateway evidence citation")
         message_id = str(row.get("message_id") or citation.get("message_id") or "")
         content_hash = str(row.get("content_hash") or citation.get("content_hash") or "")
+        if not message_id or not content_hash:
+            raise ValueError("gateway evidence identity missing")
+        stable_identity = (message_id, content_hash)
+        if stable_identity in seen_identities:
+            raise ValueError("duplicate gateway evidence identity")
+        seen_identities.add(stable_identity)
         labels = identity_map.get((message_id, content_hash))
-        if message_id and content_hash and labels is None:
+        if labels is None:
             raise ValueError("unknown gateway evidence")
-        if labels is None or labels[0] in seen:
-            continue
-        selected.append(labels)
-        seen.add(labels[0])
-        if len(selected) >= _SELECTOR_LIMIT:
-            break
+        normalized = (str(labels[0]), str(labels[1]))
+        if normalized[0] in seen_labels:
+            raise ValueError("duplicate gateway evidence label")
+        seen_labels.add(normalized[0])
+        if len(selected) < _SELECTOR_LIMIT:
+            selected.append(normalized)
     return tuple(selected)
 
 
@@ -552,6 +565,10 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
     activation_total = 0
     rendered_context_chars = 0
     baseline_context_chars = 0
+    gateway_calls_completed = 0
+    gateway_selector_calls = 0
+    gateway_empty_responses = 0
+    gateway_selected_evidence = 0
     try:
         fixture_input = temporary_root / "generic-history-inbox.json"
         _history_fixture(corpus, fixture_input)
@@ -603,6 +620,13 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
                 "as_of": question.as_of,
             }
             gateway_pack = gateway.build_context_pack(**arguments)
+            gateway_calls_completed += 1
+            if not isinstance(gateway_pack, Mapping):
+                raise ValueError("malformed Gateway response")
+            gateway_sections = gateway_pack.get("sections")
+            if isinstance(gateway_sections, (str, bytes)) or not isinstance(gateway_sections, Sequence):
+                raise ValueError("malformed Gateway sections")
+            gateway_empty_responses += int(not gateway_sections)
             rendered_context_chars += len(str(gateway_pack.get("markdown") or ""))
             mcp_attempts += 1
             try:
@@ -613,7 +637,9 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
                 mcp_cases.append({"question_id": question.question_id, "success": same})
             except Exception as exc:
                 mcp_cases.append({"question_id": question.question_id, "success": False, "error": type(exc).__name__})
-            selected_evidence = select_gateway_evidence(gateway_pack.get("sections") or [], imported_identity)
+            selected_evidence = select_gateway_evidence(gateway_sections, imported_identity)
+            gateway_selector_calls += 1
+            gateway_selected_evidence += len(selected_evidence)
             recalled = tuple(fact_id for fact_id, _citation_id in selected_evidence if fact_id in fact_by_memory)
             citations = tuple(citation_id for fact_id, citation_id in selected_evidence if fact_id in fact_by_memory)
             for memory_id in recalled:
@@ -641,8 +667,16 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
                 raise
         protected_after = None
         if protected_before is not None:
-            protected_after = ProtectedTreeSentinel.capture(protected_roots)
-        production_changes = protected_before.diff(protected_after) if protected_before is not None and protected_after is not None else ()
+            try:
+                protected_after = ProtectedTreeSentinel.capture(protected_roots)
+            except ValueError as exc:
+                protected_tree_capture_error = str(exc)
+        production_changes = (
+            protected_before.diff(protected_after)
+            if protected_before is not None and protected_after is not None and not protected_tree_capture_error
+            else ()
+        )
+        production_pollution = len(production_changes) if protected_before is not None and protected_after is not None and not protected_tree_capture_error else None
         report = evaluate_run(
             fact_by_memory,
             questions,
@@ -663,18 +697,38 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             rendered_context_chars=rendered_context_chars,
             mcp_successes=mcp_successes,
             mcp_attempts=mcp_attempts,
-            production_pollution=len(production_changes),
+            # The evaluator's historical report schema accepts an integer.
+            # Keep its arithmetic valid, then replace the returned/envelope
+            # value with ``None`` when sentinel evidence is unavailable.
+            production_pollution=production_pollution if production_pollution is not None else 0,
             owner_review_success=None,
             reboot_recovery=None,
             blocked_reasons=FUNCTIONAL_BLOCKED_REASONS,
         )
+        if production_pollution is None:
+            report = replace(report, production_pollution=None)
         readiness = QualityEvidenceReadiness(
-            import_audit=(audit.actual == audit.expected and audit.missing == 0 and audit.extra == 0 and audit.duplicate == 0),
+            import_audit=(
+                audit.expected > 0
+                and audit.actual == audit.expected
+                and audit.missing == 0
+                and audit.extra == 0
+                and audit.duplicate == 0
+                and audit.ordered_external_id_matches == audit.expected
+                and audit.ordered_role_matches == audit.expected
+                and audit.sequence_matches == audit.expected
+                and audit.content_hash_matches == audit.expected
+                and audit.source_matches == audit.expected
+                and audit.conversation_matches == audit.expected
+            ),
             promotion_provenance=all(
                 decision.get("status") != "active" or bool(read_model.memory_links(decision.get("candidate_id", "")))
                 for decision in decisions.values()
             ),
-            gateway_selection=bool(imported_identity),
+            gateway_selection=(
+                gateway_calls_completed == EXPECTED_QUESTION_COUNT
+                and gateway_selector_calls == EXPECTED_QUESTION_COUNT
+            ),
             mcp_parity=False,
             degradation=False,
             context_baseline=False,
@@ -691,6 +745,7 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             "temporary_root": str(temporary_root),
             "import_counts": {"expected_messages": len(corpus), "imported_messages": imported_messages},
             "role_order_counts": {"expected": expected_ordered_roles, "matched": ordered_role_matches},
+            "import_audit": asdict(audit),
             "per_question": [asdict(item) for item in question_results],
             "raw_evaluation_report": asdict(report),
             "functional_status": functional_status,
@@ -698,6 +753,16 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             "mcp_attempts": mcp_attempts,
             "mcp_successes": mcp_successes,
             "mcp_cases": mcp_cases,
+            "gateway_selection": {
+                "status": "READY" if readiness.gateway_selection else "INCOMPLETE",
+                "calls_completed": gateway_calls_completed,
+                "selector_calls": gateway_selector_calls,
+                "empty_responses": gateway_empty_responses,
+                "selected_evidence": gateway_selected_evidence,
+                "empty_response_is_retrieval_miss": gateway_empty_responses > 0,
+            },
+            "mcp_parity": {"status": "NOT_MEASURED", "task": "4R2"},
+            "context_baseline": {"status": "NOT_MEASURED", "task": "4R2"},
             "semantic_degradation": {"status": "NOT_MEASURED", "task": "4R2"},
             "corruption_isolation": {"status": "NOT_MEASURED", "task": "4R2"},
             "quality_evidence_readiness": {
@@ -705,13 +770,18 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
                 "functional_status": readiness.functional_status,
                 "should_run_acceptance_gate": readiness.should_run_acceptance_gate,
             },
-            "production_pollution": len(production_changes),
+            "production_pollution": production_pollution,
             "protected_tree_changes": [asdict(change) for change in production_changes],
             "protected_tree_capture_error": protected_tree_capture_error,
             "production_vault_sentinels": {
                 "before": production_sentinels_before,
                 "after": production_sentinels_after,
-                "unchanged": production_sentinels_before == production_sentinels_after,
+                "available": protected_before is not None and protected_after is not None and not protected_tree_capture_error,
+                "unchanged": (
+                    production_sentinels_before == production_sentinels_after
+                    if protected_before is not None and protected_after is not None and not protected_tree_capture_error
+                    else None
+                ),
             },
             "cleanup_inventory": {"temporary_root": str(temporary_root), "cleaned": False},
             "blocked_physical_evidence": list(FUNCTIONAL_BLOCKED_REASONS),

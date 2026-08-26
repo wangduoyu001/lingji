@@ -32,10 +32,15 @@ def test_frozen_inputs_and_selector_are_expectation_blind():
 
 
 def test_real_quality_gate_reports_measured_result(tmp_path: Path):
-    report = run_quality_gate(CORPUS, QUESTIONS, output_path=tmp_path / "quality.json")
+    output = tmp_path / "quality.json"
+    report = run_quality_gate(CORPUS, QUESTIONS, output_path=output)
     assert report.answered_questions == 100
     assert report.imported_messages == report.expected_messages == len(load_corpus(CORPUS))
     assert len(load_questions(QUESTIONS, corpus=load_corpus(CORPUS))) == 100
     assert report.mcp_attempts == 100
-    assert report.production_pollution == 0
+    # The default test environment has no configured Production Vault root;
+    # unavailable sentinel evidence is explicitly nullable, never numeric 0.
+    assert report.production_pollution is None
+    envelope = json.loads(output.read_text(encoding="utf-8"))
+    assert envelope["production_pollution"] is None
     assert AutomaticMemoryFunctionalGate.evaluate(report) in {"PASS", "FAIL"}
