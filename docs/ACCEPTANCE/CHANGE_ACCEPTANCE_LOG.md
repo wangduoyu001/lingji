@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 4 · Repair round 1
+
+- 基准：`6c475b99ffe112ce5845f01a036a5e00ef583020`；本轮仅修复 Task 4 independent review 的 C1/C2/I1–I5：POSIX anchored dir-fd sentinel/writer、无安全平台 fail-closed、双哈希内容竞态、EvaluationReport 结构校验、directory fsync 错误传播、序列化稳定错误与 reason allowlist。
+- 风险等级：P0。不得修改 `run_quality_gate` return/lifecycle、CLI、e2e/historical callers、AcceptanceRoots、cleanup inventory、Task 5/6、Task4R2、release/100k、Production/Vault、冻结 evaluator/fixtures/retrieval。
+- 自动验收：先复现所有 C1/C2/I1–I5 真实 RED；扩展 focused adversarial matrix，随后运行 frozen gate、Task 1–3 primitive regression、当前 e2e/historical visibility、fixture hashes、cumulative diff/acceptance/local-handoff。
+- 清理/回滚：仅测试自有临时 roots；ignored 报告写 `.superpowers/sdd/2026-08-26-task4r-reset/task-4-repair-1-report.md`；不 force-add，不接触主人数据。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 4 · Readiness envelope and protected-tree gate eligibility
 
 - 基准：`55fdd044809b262c59b68d7d37b02d7239978db8`；本轮仅实现四态质量证据 readiness、冻结 evaluator 的 fail-closed envelope finalizer、测试根限定的 ProtectedTreeSentinel 与低层原子 JSON writer。
