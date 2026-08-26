@@ -7,16 +7,69 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from src.extraction.models import ExtractionBatch
+from src.sources import ExternalMessageKey, SourceReadModel
+
 
 @dataclass(frozen=True)
 class ExpectedImportedRow:
     source_external_id: str
     conversation_external_id: str
     message_external_id: str
+    ingestion_ordinal: int
     sequence: int
     role: str
     content_hash: str
     occurred_at: str
+
+    @property
+    def stable_external_key(self) -> ExternalMessageKey:
+        return ExternalMessageKey(
+            self.source_external_id,
+            self.conversation_external_id,
+            self.message_external_id,
+        )
+
+
+@dataclass(frozen=True)
+class ContentHashGroup:
+    content_hash: str
+    member_external_keys: tuple[ExternalMessageKey, ...]
+
+
+@dataclass(frozen=True)
+class StableDuplicateSummary:
+    source_records: int
+    conversation_records: int
+    message_records: int
+    memory_records: int
+
+    @property
+    def total(self) -> int:
+        return self.source_records + self.conversation_records + self.message_records + self.memory_records
+
+
+def build_expected_import_rows(batch: ExtractionBatch) -> tuple[ExpectedImportedRow, ...]:
+    """Flatten adapter output using the one global ingestion order contract."""
+    rows: list[ExpectedImportedRow] = []
+    ordinal = 0
+    for source in batch.structured_sources:
+        for conversation in source.conversations:
+            for message in conversation.messages:
+                rows.append(
+                    ExpectedImportedRow(
+                        source_external_id=source.external_id,
+                        conversation_external_id=conversation.external_id,
+                        message_external_id=message.external_id,
+                        ingestion_ordinal=ordinal,
+                        sequence=int(message.sequence),
+                        role=message.role,
+                        content_hash=SourceReadModel.content_hash(message.content),
+                        occurred_at=message.occurred_at,
+                    )
+                )
+                ordinal += 1
+    return tuple(rows)
 
 
 @dataclass(frozen=True)
@@ -102,116 +155,122 @@ class ProtectedTreeSentinel:
 
 @dataclass(frozen=True)
 class ImportedEvidenceAudit:
-    expected: int
-    actual: int
-    missing: int
-    extra: int
-    duplicate: int
-    ordered_role_matches: int
+    expected_rows: int
+    actual_rows: int
+    missing_external_keys: tuple[ExternalMessageKey, ...]
+    extra_external_keys: tuple[ExternalMessageKey, ...]
+    stable_duplicates: StableDuplicateSummary
+    ordered_external_key_matches: int
+    role_matches: int
+    sequence_matches: int
+    timestamp_matches: int
     content_hash_matches: int
-    sequence_matches: int = 0
-    source_matches: int = 0
-    conversation_matches: int = 0
-    ordered_external_id_matches: int = 0
-    duplicate_external_ids: int = 0
-    duplicate_content_hashes: int = 0
+    source_matches: int
+    conversation_matches: int
+    intentional_content_hash_groups: tuple[ContentHashGroup, ...]
 
     @property
-    def role_matches(self) -> int:
-        return self.ordered_role_matches
-
-    @property
-    def ordered_message_id_matches(self) -> int:
-        return self.ordered_external_id_matches
-
-    @property
-    def ordered_external_message_id_matches(self) -> int:
-        return self.ordered_external_id_matches
-
-    @property
-    def duplicate_hashes(self) -> int:
-        return self.duplicate_content_hashes
+    def ready(self) -> bool:
+        expected = self.expected_rows
+        return bool(
+            expected > 0
+            and self.actual_rows == expected
+            and not self.missing_external_keys
+            and not self.extra_external_keys
+            and self.stable_duplicates.total == 0
+            and all(
+                value == expected
+                for value in (
+                    self.ordered_external_key_matches,
+                    self.role_matches,
+                    self.sequence_matches,
+                    self.timestamp_matches,
+                    self.content_hash_matches,
+                    self.source_matches,
+                    self.conversation_matches,
+                )
+            )
+        )
 
     @classmethod
-    def from_read_model(cls, read_model: Any, expected_records: Sequence[Any]) -> "ImportedEvidenceAudit":
+    def from_read_model(
+        cls,
+        read_model: SourceReadModel,
+        *,
+        ingestion_batch_id: str,
+        expected_rows: Sequence[ExpectedImportedRow],
+    ) -> "ImportedEvidenceAudit":
         rows: list[Mapping[str, Any]] = []
         offset = 0
         while True:
-            page = read_model.list_messages(owner=True, limit=200, offset=offset)
+            page = read_model.list_ingestion_messages(ingestion_batch_id, limit=200, offset=offset)
             rows.extend(page.get("items") or [])
-            if not page.get("next_offset"):
+            pagination = page.get("pagination") or {}
+            if not pagination.get("has_more"):
                 break
-            offset = int(page["next_offset"])
-        def expected_id(item: Any) -> str:
-            return str(getattr(item, "message_external_id", getattr(item, "message_id", "")))
+            offset += int(pagination.get("limit") or len(page.get("items") or []))
 
-        def actual_id(row: Mapping[str, Any]) -> str:
-            # ``message_id`` is a generated database primary key and cannot
-            # stand in for the adapter's external identity.
-            return str(row.get("external_id") or "")
-
-        def actual_source(row: Mapping[str, Any]) -> str:
-            return str(row.get("source_external_id") or row.get("source_id") or "")
-
-        def actual_conversation(row: Mapping[str, Any]) -> str:
-            return str(row.get("conversation_external_id") or row.get("conversation_id") or "")
-
-        expected_ids = [expected_id(r) for r in expected_records]
-        actual_ids = [actual_id(row) for row in rows]
-        actual_hashes = [str(row.get("content_hash") or "") for row in rows]
-        id_counts = {key: actual_ids.count(key) for key in set(actual_ids) if key}
-        hash_counts = {key: actual_hashes.count(key) for key in set(actual_hashes) if key}
-        duplicate_external_ids = sum(max(0, count - 1) for count in id_counts.values())
-        duplicate_content_hashes = sum(max(0, count - 1) for count in hash_counts.values())
-        # Count each duplicate row once when both its external ID and hash are
-        # duplicated, while retaining the two diagnostic counters separately.
-        seen_ids: set[str] = set()
-        seen_hashes: set[str] = set()
-        duplicate_rows: set[int] = set()
-        for index, (external_id, content_hash) in enumerate(zip(actual_ids, actual_hashes)):
-            if external_id and external_id in seen_ids:
-                duplicate_rows.add(index)
-            if content_hash and content_hash in seen_hashes:
-                duplicate_rows.add(index)
-            if external_id:
-                seen_ids.add(external_id)
-            if content_hash:
-                seen_hashes.add(content_hash)
-        duplicate = len(duplicate_rows)
-        expected_set = set(expected_ids)
-        actual_set = set(actual_ids)
-        by_id: dict[str, Mapping[str, Any]] = {}
-        for row in rows:
-            key = actual_id(row)
-            if key:
-                by_id.setdefault(key, row)
-        role = sequence = content = source = conversation = 0
-        for expected in expected_records:
-            row = by_id.get(expected_id(expected))
-            if row is None:
-                continue
-            role += int(str(row.get("role") or "") == str(getattr(expected, "role", "")))
-            sequence += int(str(row.get("sequence") if row.get("sequence") is not None else "") == str(getattr(expected, "sequence", "")))
-            content += int(str(row.get("content_hash") or "") == str(getattr(expected, "content_hash", "")))
-            source += int(actual_source(row) == str(getattr(expected, "source_external_id", getattr(expected, "source_id", ""))))
-            conversation += int(actual_conversation(row) == str(getattr(expected, "conversation_external_id", getattr(expected, "conversation_id", ""))))
-        # Preserve the order delivered by the read model.  Sorting actual rows
-        # here would turn a persisted-order defect into a false pass.
-        ordered_external = len(expected_ids) if actual_ids == expected_ids else 0
+        expected_keys = [item.stable_external_key for item in expected_rows]
+        actual_keys = [
+            ExternalMessageKey(
+                str(row.get("source_external_id") or ""),
+                str(row.get("conversation_external_id") or ""),
+                str(row.get("message_external_id") or ""),
+            )
+            for row in rows
+        ]
+        expected_set = set(expected_keys)
+        actual_set = set(actual_keys)
+        source_identity: dict[str, set[str]] = {}
+        conversation_identity: dict[tuple[str, str], set[str]] = {}
+        message_counts: dict[ExternalMessageKey, int] = {}
+        for row, key in zip(rows, actual_keys):
+            source_identity.setdefault(key.source_external_id, set()).add(str(row.get("source_id") or ""))
+            conversation_identity.setdefault((key.source_external_id, key.conversation_external_id), set()).add(str(row.get("conversation_id") or ""))
+            message_counts[key] = message_counts.get(key, 0) + 1
+        duplicates = StableDuplicateSummary(
+            source_records=sum(max(0, len(ids) - 1) for ids in source_identity.values()),
+            conversation_records=sum(max(0, len(ids) - 1) for ids in conversation_identity.values()),
+            message_records=sum(max(0, count - 1) for count in message_counts.values()),
+            memory_records=0,
+        )
+        paired = zip(expected_rows, rows)
+        role = sequence = timestamp = content = source = conversation = ordered_external = 0
+        for expected, row in paired:
+            actual_key = ExternalMessageKey(
+                str(row.get("source_external_id") or ""),
+                str(row.get("conversation_external_id") or ""),
+                str(row.get("message_external_id") or ""),
+            )
+            ordered_external += int(actual_key == expected.stable_external_key)
+            role += int(row.get("role") == expected.role)
+            sequence += int(row.get("sequence") == expected.sequence)
+            timestamp += int(row.get("occurred_at") == expected.occurred_at)
+            content += int(row.get("content_hash") == expected.content_hash)
+            source += int(actual_key.source_external_id == expected.source_external_id)
+            conversation += int(actual_key.conversation_external_id == expected.conversation_external_id)
+        grouped: dict[str, set[ExternalMessageKey]] = {}
+        for item in expected_rows:
+            grouped.setdefault(item.content_hash, set()).add(item.stable_external_key)
+        intentional = tuple(
+            ContentHashGroup(content_hash, tuple(sorted(keys, key=lambda key: (key.source_external_id, key.conversation_external_id, key.message_external_id))))
+            for content_hash, keys in sorted(grouped.items(), key=lambda pair: pair[0])
+            if len(keys) >= 2
+        )
         return cls(
-            expected=len(expected_records),
-            actual=len(rows),
-            missing=len(expected_set - actual_set),
-            extra=len(actual_set - expected_set),
-            duplicate=duplicate,
-            ordered_role_matches=role,
-            content_hash_matches=content,
+            expected_rows=len(expected_rows),
+            actual_rows=len(rows),
+            missing_external_keys=tuple(sorted(expected_set - actual_set, key=lambda key: (key.source_external_id, key.conversation_external_id, key.message_external_id))),
+            extra_external_keys=tuple(sorted(actual_set - expected_set, key=lambda key: (key.source_external_id, key.conversation_external_id, key.message_external_id))),
+            stable_duplicates=duplicates,
+            ordered_external_key_matches=ordered_external,
+            role_matches=role,
             sequence_matches=sequence,
+            timestamp_matches=timestamp,
+            content_hash_matches=content,
             source_matches=source,
             conversation_matches=conversation,
-            ordered_external_id_matches=ordered_external,
-            duplicate_external_ids=duplicate_external_ids,
-            duplicate_content_hashes=duplicate_content_hashes,
+            intentional_content_hash_groups=intentional,
         )
 
 

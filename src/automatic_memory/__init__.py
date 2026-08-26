@@ -21,6 +21,7 @@ from .evaluation import (
 )
 from .quality_gate import (
     AutomaticMemoryFunctionalGate,
+    build_expected_import_rows,
     build_prequery_identity_map,
     EXPECTED_QUESTION_COUNT,
     generate_100k_history,
@@ -57,6 +58,7 @@ __all__ = [
     "load_questions",
     "score_question",
     "AutomaticMemoryFunctionalGate",
+    "build_expected_import_rows",
     "build_prequery_identity_map",
     "EXPECTED_QUESTION_COUNT",
     "generate_100k_history",

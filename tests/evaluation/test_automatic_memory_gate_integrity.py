@@ -2,8 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.automatic_memory.quality_evidence import ProtectedTreeSentinel
-from src.automatic_memory.quality_evidence import ImportedEvidenceAudit
+from src.automatic_memory.quality_evidence import ExpectedImportedRow, ImportedEvidenceAudit, ProtectedTreeSentinel
 
 
 def test_protected_sentinel_detects_nested_mutation(tmp_path: Path):
@@ -34,12 +33,13 @@ def test_protected_sentinel_rejects_missing_root(tmp_path: Path):
 
 def test_import_audit_counts_extra_duplicate_and_role_order_hash():
     class ReadModel:
-        def list_messages(self, **kwargs):
-            return {"items": [
-                {"external_id": "m1", "role": "user", "sequence": 1, "content_hash": "h1", "source_id": "s", "conversation_id": "c"},
-                {"external_id": "m1", "role": "assistant", "sequence": 0, "content_hash": "wrong", "source_id": "other", "conversation_id": "other"},
-                {"external_id": "extra", "role": "user", "sequence": 2, "content_hash": "hx", "source_id": "s", "conversation_id": "c"}], "next_offset": None}
-    class R:
-        message_id = "m1"; role = "user"; content_hash = "h1"; source_id = "s"; conversation_id = "c"; occurred_at = ""
-    audit = ImportedEvidenceAudit.from_read_model(ReadModel(), [R()])
-    assert (audit.actual, audit.extra, audit.duplicate, audit.ordered_role_matches, audit.content_hash_matches) == (3, 1, 1, 1, 1)
+        def list_ingestion_messages(self, ingestion_batch_id, *, limit=200, offset=0):
+            rows = [
+                {"source_id": "s", "source_external_id": "source", "conversation_id": "c", "conversation_external_id": "conversation", "message_id": "p1", "message_external_id": "m1", "ingestion_batch_id": ingestion_batch_id, "ingestion_ordinal": 0, "role": "user", "sequence": 1, "occurred_at": "", "content_hash": "h1"},
+                {"source_id": "s", "source_external_id": "source", "conversation_id": "c", "conversation_external_id": "conversation", "message_id": "p2", "message_external_id": "m1", "ingestion_batch_id": ingestion_batch_id, "ingestion_ordinal": 1, "role": "assistant", "sequence": 0, "occurred_at": "", "content_hash": "wrong"},
+                {"source_id": "s", "source_external_id": "source", "conversation_id": "conversation-2", "conversation_external_id": "conversation-2", "message_id": "p3", "message_external_id": "extra", "ingestion_batch_id": ingestion_batch_id, "ingestion_ordinal": 2, "role": "user", "sequence": 2, "occurred_at": "", "content_hash": "hx"},
+            ]
+            return {"items": rows[offset:offset + limit], "pagination": {"total": len(rows), "offset": offset, "limit": limit, "has_more": False}}
+    expected = (ExpectedImportedRow("source", "conversation", "m1", 0, 1, "user", "h1", ""),)
+    audit = ImportedEvidenceAudit.from_read_model(ReadModel(), ingestion_batch_id="batch", expected_rows=expected)
+    assert (audit.actual_rows, len(audit.extra_external_keys), audit.stable_duplicates.message_records, audit.role_matches, audit.content_hash_matches) == (3, 1, 1, 1, 1)

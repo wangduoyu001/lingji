@@ -53,7 +53,13 @@ from .evaluation import (
     load_questions,
     score_question,
 )
-from .quality_evidence import ExpectedImportedRow, ImportedEvidenceAudit, ProtectedTreeSentinel, QualityEvidenceReadiness
+from .quality_evidence import (
+    ExpectedImportedRow,
+    ImportedEvidenceAudit,
+    ProtectedTreeSentinel,
+    QualityEvidenceReadiness,
+    build_expected_import_rows,
+)
 
 
 FUNCTIONAL_BLOCKED_REASONS = (
@@ -162,23 +168,6 @@ def _history_fixture(corpus: Sequence[CorpusRecord], path: Path) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _expected_import_rows(batch: Any) -> tuple[ExpectedImportedRow, ...]:
-    rows: list[ExpectedImportedRow] = []
-    for source in batch.structured_sources:
-        for conversation in source.conversations:
-            for message in conversation.messages:
-                rows.append(ExpectedImportedRow(
-                    source_external_id=str(source.external_id),
-                    conversation_external_id=str(conversation.external_id),
-                    message_external_id=str(message.external_id),
-                    sequence=int(message.sequence),
-                    role=str(message.role),
-                    content_hash=SourceReadModel.content_hash(message.content),
-                    occurred_at=str(message.occurred_at),
-                ))
-    return tuple(rows)
-
-
 def _all_messages(read_model: SourceReadModel) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     offset = 0
@@ -265,41 +254,31 @@ def _register_fastmcp(gateway: MemoryGateway):
     return mcp
 
 
-def _stable_message_map(read_model: SourceReadModel) -> dict[str, dict[str, Any]]:
+def _match_persisted_messages(
+    corpus: Sequence[CorpusRecord],
+    read_model: SourceReadModel,
+    *,
+    ingestion_batch_id: str,
+) -> dict[str, dict[str, Any]]:
+    """Resolve promotion fixture messages from one persisted import batch, read-only."""
     output: dict[str, dict[str, Any]] = {}
     offset = 0
     while True:
-        page = read_model.list_messages(owner=True, limit=200, offset=offset)
+        page = read_model.list_ingestion_messages(ingestion_batch_id, limit=200, offset=offset)
         for item in page.get("items") or []:
-            if item.get("external_id"):
-                output[str(item["external_id"])] = item
-        if not page.get("next_offset"):
+            external_id = str(item.get("message_external_id") or "")
+            if external_id:
+                output[external_id] = dict(item)
+        pagination = page.get("pagination") or {}
+        if not pagination.get("has_more"):
             break
-        offset = int(page["next_offset"])
-    return output
-
-
-def _apply_fixture_metadata(corpus: Sequence[CorpusRecord], read_model: SourceReadModel) -> dict[str, dict[str, Any]]:
-    imported = _stable_message_map(read_model)
+        offset += int(pagination.get("limit") or len(page.get("items") or []))
     by_message: dict[str, dict[str, Any]] = {}
     for record in corpus:
         suffix = f":message:{record.message_id}"
-        item = next((value for key, value in imported.items() if key.endswith(suffix)), None)
-        if item is None:
-            continue
-        updated = read_model.upsert_message({
-                **item,
-                "privacy": record.privacy,
-                "projects": [record.project_id],
-                "agent_scope": list(record.agent_scope),
-                "metadata": {
-                    **dict(item.get("metadata") or {}),
-                    "fixture_lifecycle": record.lifecycle,
-                    "fixture_authority": record.authority,
-                    "fixture_risk": record.risk,
-                },
-            })
-        by_message[record.message_id] = updated
+        item = next((value for key, value in output.items() if key.endswith(suffix)), None)
+        if item is not None:
+            by_message[record.message_id] = item
     return by_message
 
 
@@ -345,8 +324,7 @@ def _promote_fixtures(
                 "agent_scope": list(record.agent_scope),
                 "valid_from": record.occurred_at,
                 "modified_at": record.occurred_at,
-                "risk_flags": ["security"] if record.risk == "high" else [],
-                    "fixture_fact_id": record.fact_id,
+                    "risk_flags": ["security"] if record.risk == "high" else [],
             },
         )
         decision = service.evaluate(candidate)
@@ -577,25 +555,37 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             source_type="generic_ai_history",
             input_path=fixture_input,
         ))
-        expected_rows = _expected_import_rows(adapter_batch)
+        ingestion_batch_id = "quality-expected-projection"
+        expected_rows = build_expected_import_rows(adapter_batch)
         memory_db = MemoryDatabase(temporary_root / "storage" / "index" / "lingji_memory.db")
         state_db = StateDatabase(temporary_root / "storage" / "state" / "lingji_state.db")
         read_model = SourceReadModel(memory_db)
         pipeline = _build_pipeline(temporary_root, memory_db, read_model, state_db)
-        pipeline.execute("generic_ai_history", input_path=fixture_input, adapter_name="generic_ai_history")
+        pipeline.execute(
+            "generic_ai_history",
+            input_path=fixture_input,
+            adapter_name="generic_ai_history",
+            execution_id=ingestion_batch_id,
+        )
         indexer = __import__("src.indexer.index", fromlist=["PEMISIndex"]).PEMISIndex(
             temporary_root / "vault", temporary_root / "storage"
         )
         indexer.build_index()
         memory_db.rebuild_from_index(indexer.get_all(), temporary_root / "vault")
-        message_map = _apply_fixture_metadata(corpus, read_model)
-        audit = ImportedEvidenceAudit.from_read_model(read_model, expected_rows)
-        imported_messages = audit.actual
-        ordered_role_matches = audit.ordered_role_matches
+        message_map = _match_persisted_messages(
+            corpus, read_model, ingestion_batch_id=ingestion_batch_id
+        )
+        audit = ImportedEvidenceAudit.from_read_model(
+            read_model,
+            ingestion_batch_id=ingestion_batch_id,
+            expected_rows=expected_rows,
+        )
+        imported_messages = audit.actual_rows
+        ordered_role_matches = audit.role_matches
         decisions, activation_correct, activation_total = _promote_fixtures(
             corpus, message_map, memory_db, read_model, state_db
         )
-        duplicate_records = audit.duplicate
+        duplicate_records = audit.stable_duplicates.total
         gateway, _profiles = _build_gateway(temporary_root, memory_db, read_model, state_db)
         mcp = _register_fastmcp(gateway)
         labels_by_external = {
@@ -709,17 +699,7 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             report = replace(report, production_pollution=None)
         readiness = QualityEvidenceReadiness(
             import_audit=(
-                audit.expected > 0
-                and audit.actual == audit.expected
-                and audit.missing == 0
-                and audit.extra == 0
-                and audit.duplicate == 0
-                and audit.ordered_external_id_matches == audit.expected
-                and audit.ordered_role_matches == audit.expected
-                and audit.sequence_matches == audit.expected
-                and audit.content_hash_matches == audit.expected
-                and audit.source_matches == audit.expected
-                and audit.conversation_matches == audit.expected
+                audit.ready
             ),
             promotion_provenance=all(
                 decision.get("status") != "active" or bool(read_model.memory_links(decision.get("candidate_id", "")))
@@ -908,6 +888,7 @@ def run_100k_benchmark(*, output_path: Path) -> dict[str, Any]:
 __all__ = [
     "AutomaticMemoryFunctionalGate",
     "ExpectedImportedRow",
+    "build_expected_import_rows",
     "EXPECTED_QUESTION_COUNT",
     "generate_100k_history",
     "run_100k_benchmark",
