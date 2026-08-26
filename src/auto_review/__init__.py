@@ -15,6 +15,12 @@ from .models import (
     RuleFinding,
 )
 from .project import project_scope, same_project
+from .promotion import (
+    AutoMemoryPromotionService,
+    AutomaticMemoryPromotionService,
+    POLICY_VERSION,
+    PromotionStatus,
+)
 from .service import ShadowAutoReviewService
 
 __all__ = [
@@ -40,4 +46,8 @@ __all__ = [
     "resolve_auto_review_models",
     "same_project",
     "verify_shadow_audit_payload",
+    "AutoMemoryPromotionService",
+    "AutomaticMemoryPromotionService",
+    "POLICY_VERSION",
+    "PromotionStatus",
 ]

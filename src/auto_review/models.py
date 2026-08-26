@@ -39,6 +39,15 @@ class ReviewCandidate:
     source_refs: tuple[str, ...] = ()
     content_hash: str = ""
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    # Extraction provenance used by the automatic-promotion boundary.  These
+    # fields are optional so the legacy OFF/SHADOW evaluator remains backward
+    # compatible with existing candidate producers.
+    confidence: float | None = None
+    authority: str = ""
+    source_kind: str = ""
+    extractor_version: str = ""
+    structured_content: Mapping[str, Any] = field(default_factory=dict)
+    risk_flags: tuple[str, ...] = ()
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "ReviewCandidate":
@@ -52,6 +61,16 @@ class ReviewCandidate:
                 return tuple(str(item) for item in raw if str(item).strip())
             return (str(raw),)
 
+        raw_flags = value.get("risk_flags") or (value.get("metadata") or {}).get("risk_flags") or ()
+        if isinstance(raw_flags, str):
+            raw_flags = (raw_flags,)
+        try:
+            confidence = float(value["confidence"]) if value.get("confidence") is not None else None
+        except (TypeError, ValueError):
+            confidence = None
+        structured = value.get("structured_content") or value.get("structured") or {}
+        if not isinstance(structured, Mapping):
+            structured = {}
         return cls(
             memory_id=str(value.get("memory_id") or value.get("id") or "").strip(),
             title=str(value.get("title") or "").strip(),
@@ -64,6 +83,12 @@ class ReviewCandidate:
             source_refs=values("source_refs", "sources"),
             content_hash=str(value.get("current_hash") or value.get("content_hash") or "").strip(),
             metadata=dict(value.get("metadata") or {}),
+            confidence=confidence,
+            authority=str(value.get("authority") or value.get("source_authority") or "").strip().lower(),
+            source_kind=str(value.get("source_kind") or value.get("source_type") or "").strip().lower(),
+            extractor_version=str(value.get("extractor_version") or "").strip(),
+            structured_content=dict(structured),
+            risk_flags=tuple(str(item).strip().lower() for item in raw_flags if str(item).strip()),
         )
 
 

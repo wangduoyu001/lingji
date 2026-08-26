@@ -279,6 +279,95 @@ class MemoryDatabase:
             revision = self._bump_revision(connection)
         return {"memory_id": str(entry.get("id")), "chunks": len(chunks), "revision": revision}
 
+    def upsert_derived_projection(
+        self,
+        *,
+        memory_id: str,
+        title: str,
+        content: str,
+        content_hash: str,
+        evidence_refs: list[str] | tuple[str, ...],
+        confidence: float | None,
+        authority: str,
+        source_kind: str,
+        policy_version: str,
+        decision_id: str,
+        candidate_metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Persist one rebuildable automatic-memory current projection.
+
+        This is deliberately a derived index write.  It never writes the
+        owner's Vault or promotes a Core Memory document.  The stable virtual
+        path keeps repeated promotion idempotent while retaining provenance in
+        the normal relationships read model.
+        """
+        normalized_id = str(memory_id or "").strip()
+        if not normalized_id:
+            raise ValueError("memory_id is required")
+        body = str(content or "").strip()
+        if not body:
+            raise ValueError("content is required")
+        metadata = dict(candidate_metadata or {})
+        entry = {
+            "id": normalized_id,
+            "relative_path": f"__derived__/automatic-memory/{normalized_id}.md",
+            "title": str(title or normalized_id),
+            "memory_type": str(metadata.get("memory_type") or "knowledge"),
+            "memory_tier": "derived",
+            "status": "active",
+            "review_status": "auto_activated",
+            "privacy": str(metadata.get("privacy") or "private"),
+            "importance": str(metadata.get("importance") or "medium"),
+            "confidence": str(confidence) if confidence is not None else "",
+            "project": metadata.get("project_ids") or metadata.get("project") or [],
+            "tags": ["automatic-memory", "derived-current"],
+            "content_hash": str(content_hash or ""),
+            "modified_at": metadata.get("modified_at") or "",
+            "people": [],
+            "organizations": [],
+            "tools": [],
+            "models": [],
+            "sources": list(evidence_refs),
+            "tasks": [],
+            "decisions": [],
+            "related": [],
+            "properties": {
+                "memory_tier": "derived",
+                "valid_from": metadata.get("valid_from") or "",
+                "valid_to": metadata.get("valid_to") or "",
+                "pin_to_context": False,
+                "agent_scope": metadata.get("agent_scope") or [],
+                "recall_weight": metadata.get("recall_weight") or 1.0,
+            },
+            "memory_scope_reason": "derived_current_projection",
+        }
+        # The provenance fields are stored alongside the ordinary relationships
+        # so rebuilds and diagnostics use the existing MemoryDatabase schema.
+        entry["sources"] = list(evidence_refs)
+        entry["_promotion_relationships"] = {
+            "evidence_refs": list(evidence_refs),
+            "authority": str(authority or ""),
+            "source_kind": str(source_kind or ""),
+            "policy_version": str(policy_version),
+            "decision_id": str(decision_id),
+        }
+        chunker = MarkdownChunker()
+        chunks = chunker.chunk(normalized_id, body)
+        with self._lock, self._connection() as connection:
+            self._upsert_document(connection, entry, chunks)
+            row = connection.execute(
+                "SELECT relationships_json FROM memory_documents WHERE memory_id = ?",
+                (normalized_id,),
+            ).fetchone()
+            relationships = self._loads(row["relationships_json"], {}) if row else {}
+            relationships.update(entry["_promotion_relationships"])
+            connection.execute(
+                "UPDATE memory_documents SET relationships_json = ? WHERE memory_id = ?",
+                (self._json(relationships), normalized_id),
+            )
+            revision = self._bump_revision(connection)
+        return {"memory_id": normalized_id, "chunks": len(chunks), "revision": revision}
+
     def _upsert_document(
         self,
         connection: sqlite3.Connection,

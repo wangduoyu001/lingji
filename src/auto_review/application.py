@@ -28,12 +28,56 @@ class AutoReviewApplicationService:
         model_inventory: Callable[[], Mapping[str, Any]] | None = None,
         evaluator: Any | None = None,
         ai_reviewer_factory: Callable[..., Any] = LocalOllamaReviewer,
+        promotion_service: Any | None = None,
     ):
         self.state_db = state_db
         self.settings = app_settings
         self.model_inventory = model_inventory
         self.evaluator = evaluator or DeterministicAutoReviewEvaluator()
         self.ai_reviewer_factory = ai_reviewer_factory
+        self.promotion_service = promotion_service
+
+    def promote_candidate(self, candidate_value: Mapping[str, Any]) -> dict[str, Any]:
+        """Delegate to the explicit derived-memory promotion boundary.
+
+        The legacy application service remains SHADOW-only unless the caller
+        wires the owner-governed promotion service explicitly.
+        """
+        if self.promotion_service is None:
+            raise RuntimeError("derived memory promotion service is not configured")
+        return self.promotion_service.evaluate(candidate_value)
+
+    def approve_candidate(
+        self,
+        candidate_id: str,
+        *,
+        expected_content_hash: str,
+        owner_confirmed: bool,
+    ) -> dict[str, Any]:
+        if self.promotion_service is None:
+            raise RuntimeError("derived memory promotion service is not configured")
+        return self.promotion_service.approve(
+            candidate_id,
+            expected_content_hash=expected_content_hash,
+            owner_confirmed=owner_confirmed,
+        )
+
+    def reject_candidate(
+        self,
+        candidate_id: str,
+        *,
+        expected_content_hash: str,
+        owner_confirmed: bool,
+        reason: str,
+    ) -> dict[str, Any]:
+        if self.promotion_service is None:
+            raise RuntimeError("derived memory promotion service is not configured")
+        return self.promotion_service.reject(
+            candidate_id,
+            expected_content_hash=expected_content_hash,
+            owner_confirmed=owner_confirmed,
+            reason=reason,
+        )
 
     def status(self) -> dict[str, Any]:
         mode = self._configured_mode()
