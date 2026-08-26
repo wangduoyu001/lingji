@@ -187,3 +187,19 @@ def test_replayed_failure_pending_is_resolved_after_retry_success(tmp_path: Path
     from src.work.projector import WorkProjector
 
     assert WorkProjector(recovered).fact(submitted["work_id"])["failure"] is None
+
+
+def test_duplicate_capture_reuses_original_work_fact(tmp_path: Path):
+    state, queue, pipeline, service = _service(tmp_path)
+    first = service.submit_text({"capture_id": "capture-original", "title": "same", "text": "same"})
+    duplicate = service.submit_text({"capture_id": "capture-duplicate", "title": "same", "text": "same"})
+
+    assert duplicate["duplicate"] is True
+    assert duplicate["job_id"] == first["job_id"]
+    assert duplicate["work_id"] == first["work_id"]
+    assert len(queue.list()) == 1
+    assert len(WorkStore(state).list_work()) == 1
+    pipeline.process_job(first["job_id"], worker_id="task8")
+    store = WorkStore(state)
+    assert store.get_outcome(first["work_id"]).status == "completed"
+    assert len([event for event in store.list_events(first["work_id"]) if event.event_type == "extraction.completed"]) == 1

@@ -376,25 +376,42 @@ class CaptureControlService:
             "reason": result.reason or ("Existing capture job reused" if duplicate else ""),
         }
         if self.work_bridge is not None:
-            work = self.work_bridge.create_from_capture(
-                result.capture_id,
-                str(envelope.title or envelope.source_type),
-                source_id=result.capture_id,
-                approved=True,
-                metadata={"source_type": envelope.source_type, "job_id": job_id or None},
-            )
-            self.work_bridge.store.append_event(
-                ExecutionEvent(
-                    work_id=work.work_id,
-                    event_id=f"capture:{result.capture_id}:submitted",
-                    event_type="capture.submitted",
-                    detail={"status": response["status"], "job_id": job_id or None},
+            canonical_capture_id = result.capture_id
+            if duplicate:
+                canonical_capture_id = ""
+                if job_id:
+                    try:
+                        job_payload = self.queue.get(job_id).get("payload")
+                    except LookupError:
+                        job_payload = None
+                    if isinstance(job_payload, Mapping):
+                        canonical_capture_id = str(job_payload.get("capture_id") or "").strip()
+                if not canonical_capture_id:
+                    existing = self.work_bridge.store.get_work_by_source_id(result.capture_id)
+                    if existing is not None:
+                        canonical_capture_id = result.capture_id
+            work = None
+            if canonical_capture_id:
+                work = self.work_bridge.store.get_work_by_source_id(canonical_capture_id)
+                if work is None and not duplicate:
+                    work = self.work_bridge.create_from_capture(
+                        canonical_capture_id,
+                        str(envelope.title or envelope.source_type),
+                        source_id=canonical_capture_id,
+                        approved=True,
+                        metadata={"source_type": envelope.source_type, "job_id": job_id or None},
+                    )
+            if work is not None:
+                self.work_bridge.store.append_event(
+                    ExecutionEvent(
+                        work_id=work.work_id,
+                        event_id=f"capture:{canonical_capture_id}:submitted",
+                        event_type="capture.submitted",
+                        detail={"status": response["status"], "job_id": job_id or None},
+                    )
                 )
-            )
-            self.work_bridge.store.save_next_action(
-                NextAction(work_id=work.work_id, description="等待提取与索引完成", actor="system")
-            )
-            response["work_id"] = work.work_id
+                self.work_bridge.store.save_next_action(NextAction(work_id=work.work_id, description="等待提取与索引完成", actor="system"))
+                response["work_id"] = work.work_id
         self._audit(
             "capture_duplicate" if duplicate else "capture_submitted",
             result.capture_id,
