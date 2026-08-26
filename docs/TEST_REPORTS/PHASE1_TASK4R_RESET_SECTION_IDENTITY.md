@@ -61,3 +61,23 @@ The questions hash above is recorded from the repository authority and must be r
 - Quality evidence remains an automated focused measurement only; no real Production/Vault or owner acceptance was attempted.
 - The docs commit SHA is the commit carrying this report and acceptance-log entry; root should record it from `git rev-parse HEAD` after commit.
 - Final clean-tree evidence must be taken after the docs commit and local ignored report write.
+
+## Repair round 1 (product `db9e26e`)
+
+Independent review found five Important defects and one explicit Minor. Before repair, new adversarial tests produced authentic RED:
+
+```text
+focused: 5 failed, 19 passed, 1 warning
+```
+
+The repair requires the real production raw citation mapping and exact equality for all five identity fields, rejects contradictory composite representations, calls the typed selector once per Gateway question while leaving MCP parity `NOT_MEASURED`, preserves citation IDs using the corpus citation set, and rejects surrounding whitespace in canonical kind/identity strings. Additional tests cover limits 0/1/2, enrichment/order, validation beyond limit, unknown/contradictory links, >200 rows, all-question expectation mutation, and read-only fixture-label snapshots.
+
+After repair:
+
+```text
+focused: 25 passed, 1 warning
+brief regression: 58 passed, 1 warning
+historical deferred Task4R1 pair: 5 failed, 10 passed, 1 warning
+```
+
+The historical failures are expected rejected old-selector/API/readiness incompatibilities and remain deferred to Task 6. The existing Pydantic class-based-config deprecation warning remains. Frozen corpus/questions were unchanged; hashes remain the values recorded above. Product commit: `db9e26e`; docs commit: recorded by `git rev-parse HEAD` after this report update.

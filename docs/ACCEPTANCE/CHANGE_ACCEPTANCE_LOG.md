@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 3 · Repair round 1
+
+- 基准：`6f8ddb00df11610316a798faee11e26a052c6463`；仅修复 Task 3 independent review 的 I1–I5 与明确纳入的 canonical whitespace Minor。
+- 风险等级：P0。不得进入 Task 4 readiness、Task 5 promotion state machine、Task 6 runner reset、4R2、MCP parity、100k、Artifact、Production、Vault 或 retrieval tuning。
+- 自动验收：raw citation 五字段强制且逐项相等；composite 表示冲突和 link 冲突 fail-closed；每个真实 Gateway pack 每问只 selector 一次；citation ID 按 corpus citation 集保留；补齐 adversarial/limit/order/>200/snapshot/expectation-mutation 测试；canonical kind/ID 拒绝周围 whitespace。
+- 证据：RED focused `5 failed, 19 passed`；GREEN focused `25 passed, 1 warning`；brief regression `58 passed, 1 warning`；历史 rejected Task4R1 callers `5 failed, 10 passed, 1 warning`，保留并延期 Task 6。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 3 · Typed ContextPack section identity
 
 - 基准：`24a0920414508e29cabda262bd68e120c9c880fe`；本轮仅新增内存态 typed evidence identity registry/selector，并接入真实 quality Gateway pack。
