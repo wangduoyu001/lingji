@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
@@ -29,6 +30,8 @@ class CronScheduler:
         self._running_jobs: set[str] = set()
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
+        self._owner = f"cron-{uuid4().hex}"
+        self._lease_seconds = 30.0
 
     def add_job(
         self,
@@ -68,7 +71,11 @@ class CronScheduler:
         while self.running:
             try:
                 current_mode = str(self.mode_provider() or "NORMAL").upper()
-                for job in self.state_db.due_scheduler_jobs():
+                for job in self.state_db.claim_due_scheduler_jobs(
+                    self._owner,
+                    lease_seconds=self._lease_seconds,
+                    current_mode=current_mode,
+                ):
                     if not self.running:
                         break
                     name = job["name"]
@@ -93,7 +100,26 @@ class CronScheduler:
 
     def _run_job(self, job):
         name = job["name"]
-        self.state_db.mark_job_started(name)
+        lease_id = str(job.get("lease_id") or "")
+        heartbeat_stop = threading.Event()
+
+        def heartbeat() -> None:
+            interval = max(min(self._lease_seconds / 3.0, 1.0), 0.05)
+            while not heartbeat_stop.wait(interval):
+                if not self.state_db.renew_scheduler_job_lease(
+                    name,
+                    self._owner,
+                    lease_id,
+                    lease_seconds=self._lease_seconds,
+                ):
+                    return
+
+        heartbeat_thread = threading.Thread(
+            target=heartbeat,
+            daemon=True,
+            name=f"lingji-scheduler-heartbeat-{name}",
+        )
+        heartbeat_thread.start()
         success = False
         error = None
         try:
@@ -104,7 +130,15 @@ class CronScheduler:
             error = str(exc)
             logger.exception("Scheduled job failed: %s", name)
         finally:
-            self.state_db.mark_job_finished(name, success=success, error=error)
+            heartbeat_stop.set()
+            heartbeat_thread.join(timeout=max(self._lease_seconds, 0.2))
+            self.state_db.mark_job_finished(
+                name,
+                success=success,
+                error=error,
+                owner=self._owner,
+                lease_id=lease_id,
+            )
             with self._lock:
                 self._running_jobs.discard(name)
 
@@ -144,3 +178,7 @@ class CronScheduler:
 
     def get_status(self):
         return self.state_db.list_scheduler_jobs()
+
+    def set_jobs_enabled(self, prefix: str, enabled: bool) -> None:
+        """Persist lifecycle changes for one owner without another scheduler."""
+        self.state_db.set_scheduler_jobs_enabled(prefix, enabled)

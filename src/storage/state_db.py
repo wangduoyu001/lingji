@@ -56,6 +56,10 @@ class StateDatabase:
                     next_run_at TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'pending',
                     last_error TEXT,
+                    lease_id TEXT,
+                    lease_owner TEXT,
+                    lease_heartbeat_at TEXT,
+                    lease_expires_at TEXT,
                     updated_at TEXT NOT NULL
                 );
 
@@ -175,6 +179,22 @@ class StateDatabase:
                     connection.execute(
                         f"ALTER TABLE automatic_memory_scans ADD COLUMN {name} {definition}"
                     )
+            scheduler_columns = {
+                str(row[1])
+                for row in connection.execute(
+                    "PRAGMA table_info(scheduler_jobs)"
+                ).fetchall()
+            }
+            for name, definition in (
+                ("lease_id", "TEXT"),
+                ("lease_owner", "TEXT"),
+                ("lease_heartbeat_at", "TEXT"),
+                ("lease_expires_at", "TEXT"),
+            ):
+                if name not in scheduler_columns:
+                    connection.execute(
+                        f"ALTER TABLE scheduler_jobs ADD COLUMN {name} {definition}"
+                    )
 
     @staticmethod
     def _iso(value: datetime) -> str:
@@ -212,7 +232,9 @@ class StateDatabase:
                 connection.execute(
                     """
                     UPDATE scheduler_jobs
-                    SET interval_seconds = ?, min_mode = ?, enabled = ?, run_on_start = ?, updated_at = ?
+                    SET interval_seconds = ?, min_mode = ?, enabled = ?, run_on_start = ?,
+                        next_run_at = CASE WHEN ? = 1 THEN ? ELSE next_run_at END,
+                        updated_at = ?
                     WHERE name = ?
                     """,
                     (
@@ -220,6 +242,8 @@ class StateDatabase:
                         min_mode,
                         int(enabled),
                         int(run_on_start),
+                        int(run_on_start),
+                        self._iso(now),
                         self._iso(now),
                         name,
                     ),
@@ -257,13 +281,122 @@ class StateDatabase:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def claim_due_scheduler_jobs(
+        self,
+        owner: str,
+        *,
+        now: datetime | None = None,
+        lease_seconds: float = 30.0,
+        current_mode: str = "NORMAL",
+    ) -> list[dict[str, Any]]:
+        """Atomically reclaim stale jobs and claim each due job once.
+
+        The claim is serialized by SQLite's write transaction, so separate
+        CronScheduler instances sharing one StateDatabase cannot run the same
+        due row concurrently.
+        """
+        now = now or datetime.now()
+        now_text = self._iso(now)
+        lease_id_prefix = f"{owner}-"
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                UPDATE scheduler_jobs
+                SET status = 'pending', lease_id = NULL, lease_owner = NULL,
+                    lease_heartbeat_at = NULL, lease_expires_at = NULL,
+                    next_run_at = CASE WHEN next_run_at <= ? THEN next_run_at ELSE ? END,
+                    updated_at = ?
+                WHERE status = 'running'
+                  AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
+                """,
+                (now_text, now_text, now_text, now_text),
+            )
+            rows = connection.execute(
+                """
+                SELECT * FROM scheduler_jobs
+                WHERE enabled = 1 AND next_run_at <= ? AND status != 'running'
+                ORDER BY next_run_at ASC
+                """,
+                (now_text,),
+            ).fetchall()
+            claimed: list[dict[str, Any]] = []
+            for row in rows:
+                required = str(row["min_mode"] or "NORMAL").upper()
+                active = str(current_mode or "NORMAL").upper()
+                if active == "EMERGENCY":
+                    allowed = required == "EMERGENCY"
+                elif active == "MAINTENANCE":
+                    allowed = required in {"NORMAL", "MAINTENANCE"}
+                else:
+                    allowed = required == "NORMAL"
+                if not allowed:
+                    continue
+                lease_id = f"{lease_id_prefix}{uuid4().hex}"
+                lease_expires = self._lease_expiry(now_text, lease_seconds)
+                connection.execute(
+                    """
+                    UPDATE scheduler_jobs
+                    SET status = 'running', last_started_at = ?, last_error = NULL,
+                        lease_id = ?, lease_owner = ?, lease_heartbeat_at = ?,
+                        lease_expires_at = ?, updated_at = ?
+                    WHERE name = ? AND status != 'running'
+                    """,
+                    (
+                        now_text,
+                        lease_id,
+                        str(owner),
+                        now_text,
+                        lease_expires,
+                        now_text,
+                        row["name"],
+                    ),
+                )
+                current = connection.execute(
+                    "SELECT * FROM scheduler_jobs WHERE name = ?", (row["name"],)
+                ).fetchone()
+                if current is not None and current["lease_id"] == lease_id:
+                    claimed.append(dict(current))
+            return claimed
+
+    def renew_scheduler_job_lease(
+        self,
+        name: str,
+        owner: str,
+        lease_id: str,
+        *,
+        lease_seconds: float = 30.0,
+        now: datetime | None = None,
+    ) -> bool:
+        now = now or datetime.now()
+        now_text = self._iso(now)
+        with self._lock, self._connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE scheduler_jobs
+                SET lease_heartbeat_at = ?, lease_expires_at = ?, updated_at = ?
+                WHERE name = ? AND status = 'running' AND lease_owner = ? AND lease_id = ?
+                """,
+                (
+                    now_text,
+                    self._lease_expiry(now_text, lease_seconds),
+                    now_text,
+                    name,
+                    str(owner),
+                    str(lease_id),
+                ),
+            )
+        return cursor.rowcount == 1
+
     def mark_job_started(self, name: str, now: datetime | None = None) -> None:
         now = now or datetime.now()
         with self._lock, self._connection() as connection:
             connection.execute(
                 """
                 UPDATE scheduler_jobs
-                SET status = 'running', last_started_at = ?, last_error = NULL, updated_at = ?
+                SET status = 'running', last_started_at = ?, last_error = NULL,
+                    lease_id = NULL, lease_owner = NULL, lease_heartbeat_at = NULL,
+                    lease_expires_at = NULL, updated_at = ?
                 WHERE name = ?
                 """,
                 (self._iso(now), self._iso(now), name),
@@ -275,6 +408,8 @@ class StateDatabase:
         success: bool,
         error: str | None = None,
         now: datetime | None = None,
+        owner: str | None = None,
+        lease_id: str | None = None,
     ) -> None:
         now = now or datetime.now()
         with self._lock, self._connection() as connection:
@@ -284,20 +419,27 @@ class StateDatabase:
             if not row:
                 return
             next_run = now + timedelta(seconds=float(row["interval_seconds"]))
+            where = "name = ?"
+            values: list[Any] = [
+                "success" if success else "failed",
+                self._iso(now),
+                self._iso(next_run),
+                None if success else str(error or "unknown error")[:1000],
+                self._iso(now),
+                name,
+            ]
+            if owner is not None and lease_id is not None:
+                where += " AND status = 'running' AND lease_owner = ? AND lease_id = ?"
+                values.extend([str(owner), str(lease_id)])
             connection.execute(
-                """
+                f"""
                 UPDATE scheduler_jobs
-                SET status = ?, last_finished_at = ?, next_run_at = ?, last_error = ?, updated_at = ?
-                WHERE name = ?
+                SET status = ?, last_finished_at = ?, next_run_at = ?, last_error = ?,
+                    lease_id = NULL, lease_owner = NULL, lease_heartbeat_at = NULL,
+                    lease_expires_at = NULL, updated_at = ?
+                WHERE {where}
                 """,
-                (
-                    "success" if success else "failed",
-                    self._iso(now),
-                    self._iso(next_run),
-                    None if success else str(error or "unknown error")[:1000],
-                    self._iso(now),
-                    name,
-                ),
+                tuple(values),
             )
 
     def list_scheduler_jobs(self) -> list[dict[str, Any]]:
@@ -306,6 +448,18 @@ class StateDatabase:
                 "SELECT * FROM scheduler_jobs ORDER BY name"
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def set_scheduler_jobs_enabled(self, prefix: str, enabled: bool) -> None:
+        """Pause/resume one owner-owned job family without another scheduler."""
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                "UPDATE scheduler_jobs SET enabled = ?, updated_at = ? WHERE name LIKE ?",
+                (
+                    int(bool(enabled)),
+                    self._iso(datetime.now()),
+                    f"{prefix}%",
+                ),
+            )
 
     def needs_processing(
         self,
@@ -555,6 +709,17 @@ class StateDatabase:
             rows = connection.execute(
                 "SELECT * FROM automatic_memory_sources ORDER BY created_at, source_id"
             ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_automatic_memory_scans(self, source_id: str | None = None) -> list[dict[str, Any]]:
+        query = "SELECT * FROM automatic_memory_scans"
+        values: tuple[Any, ...] = ()
+        if source_id is not None:
+            query += " WHERE source_id = ?"
+            values = (str(source_id),)
+        query += " ORDER BY updated_at DESC, scan_id DESC"
+        with self._connection() as connection:
+            rows = connection.execute(query, values).fetchall()
         return [dict(row) for row in rows]
 
     def register_automatic_memory_source_atomic(
@@ -928,6 +1093,76 @@ class StateDatabase:
         if row is None:
             raise KeyError(source_id)
         return dict(row)
+
+    def complete_automatic_memory_scan_if_authorized(
+        self, scan_id: str, *, progress: int, total: int
+    ) -> dict[str, Any] | None:
+        """Complete only the scan that still owns an active authorization.
+
+        Revoke and this transition serialize on the same SQLite write lock;
+        whichever commits first determines the truthful terminal state.
+        """
+        now = self._iso(datetime.now(timezone.utc))
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                """
+                UPDATE automatic_memory_scans
+                SET status = 'completed', progress = ?, total = ?, last_error = NULL,
+                    lease_id = NULL, lease_owner_pid = NULL, lease_owner_thread = NULL,
+                    lease_owner_instance = NULL, lease_heartbeat_at = NULL,
+                    lease_expires_at = NULL, updated_at = ?
+                WHERE scan_id = ? AND status = 'running'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM automatic_memory_sources AS sources
+                    JOIN automatic_memory_grants AS grants ON grants.grant_id = sources.grant_id
+                    WHERE sources.source_id = automatic_memory_scans.source_id
+                      AND sources.status = 'authorized'
+                      AND grants.owner_confirmed = 1
+                      AND (grants.expires_at IS NULL OR grants.expires_at > ?)
+                  )
+                """,
+                (int(progress), int(total), now, scan_id, now),
+            )
+            if cursor.rowcount != 1:
+                return None
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def fail_automatic_memory_scan_if_running(
+        self,
+        scan_id: str,
+        *,
+        last_error: str,
+        progress: int | None = None,
+        total: int | None = None,
+    ) -> dict[str, Any] | None:
+        now = self._iso(datetime.now(timezone.utc))
+        assignments = ["status = 'failed'", "last_error = ?", "updated_at = ?"]
+        values: list[Any] = [str(last_error)[:2000], now]
+        if progress is not None:
+            assignments.append("progress = ?")
+            values.append(int(progress))
+        if total is not None:
+            assignments.append("total = ?")
+            values.append(int(total))
+        values.append(scan_id)
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                f"UPDATE automatic_memory_scans SET {', '.join(assignments)} "
+                "WHERE scan_id = ? AND status = 'running'",
+                tuple(values),
+            )
+            if cursor.rowcount != 1:
+                return None
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_scans WHERE scan_id = ?", (scan_id,)
+            ).fetchone()
+        return dict(row) if row is not None else None
 
     def create_automatic_memory_scan(self, record: dict[str, Any]) -> dict[str, Any]:
         with self._lock, self._connection() as connection:

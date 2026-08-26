@@ -4,6 +4,8 @@ from .models import AuthorizationScope, ScanRun, SourceRecord
 from .source_registry import SourceRegistry
 from .snapshot import ConsistentSnapshot, FileStat, SnapshotResult
 from .checkpoint import CheckpointStore, ResumeToken, SnapshotJobRunner
+from .watcher import AutomaticMemoryWatcher
+from .scheduler import AutomaticMemoryScheduler, ReconciliationReport
 
 __all__ = [
     "AuthorizationScope",
@@ -16,4 +18,7 @@ __all__ = [
     "CheckpointStore",
     "ResumeToken",
     "SnapshotJobRunner",
+    "AutomaticMemoryWatcher",
+    "AutomaticMemoryScheduler",
+    "ReconciliationReport",
 ]

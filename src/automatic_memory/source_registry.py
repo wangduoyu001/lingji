@@ -6,7 +6,7 @@ import secrets
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from src.storage import StateDatabase
 
@@ -42,6 +42,26 @@ class SourceRegistry:
 
     def __init__(self, state_db: StateDatabase):
         self.state_db = state_db
+        self._lifecycle_listeners: list[Callable[[SourceRecord], None]] = []
+
+    def add_lifecycle_listener(self, listener: Callable[[SourceRecord], None]) -> None:
+        if listener not in self._lifecycle_listeners:
+            self._lifecycle_listeners.append(listener)
+
+    def remove_lifecycle_listener(self, listener: Callable[[SourceRecord], None]) -> None:
+        try:
+            self._lifecycle_listeners.remove(listener)
+        except ValueError:
+            pass
+
+    def _notify_lifecycle(self, source: SourceRecord) -> None:
+        for listener in tuple(self._lifecycle_listeners):
+            try:
+                listener(source)
+            except Exception:
+                # A lifecycle observer is an operational projection; a broken
+                # observer must not undo the already-committed authorization.
+                continue
 
     def register(self, scope: AuthorizationScope, kind: str, root: str) -> SourceRecord:
         if not scope.owner_confirmed:
@@ -113,7 +133,36 @@ class SourceRegistry:
             )
         except KeyError as exc:
             raise LookupError(f"source not found: {source_id}") from exc
-        return self._source(source)
+        result = self._source(source)
+        self._notify_lifecycle(result)
+        return result
+
+    def set_status(self, source_id: str, status: str, *, reason: str = "") -> SourceRecord:
+        """Persist a capability/status transition and notify local observers."""
+        if status == "revoked":
+            return self.revoke(source_id)
+        if status not in {"authorized", "unsupported", "degraded", "expired"}:
+            raise ValueError(f"unsupported source status: {status}")
+        try:
+            row = self.state_db.update_automatic_memory_source(
+                source_id,
+                status=status,
+                revoked_at=None,
+            )
+        except KeyError as exc:
+            raise LookupError(f"source not found: {source_id}") from exc
+        if reason and status != "authorized":
+            # Keep the reason in the existing append-only audit stream; source
+            # status remains the sole lifecycle authority.
+            self.state_db.append_event(
+                "automatic_memory_source_status",
+                "source",
+                source_id,
+                {"status": status, "reason": reason},
+            )
+        result = self._source(row)
+        self._notify_lifecycle(result)
+        return result
 
     def list_sources(self) -> list[SourceRecord]:
         now = _iso(datetime.now(timezone.utc))
@@ -213,6 +262,22 @@ class SourceRegistry:
             if value is not None:
                 values[key] = value
         return self._scan(self.state_db.update_automatic_memory_scan(scan_id, **values))
+
+    def complete_scan_if_authorized(
+        self, scan_id: str, *, progress: int, total: int
+    ) -> ScanRun | None:
+        row = self.state_db.complete_automatic_memory_scan_if_authorized(
+            scan_id, progress=progress, total=total
+        )
+        return self._scan(row) if row is not None else None
+
+    def fail_scan_if_running(
+        self, scan_id: str, *, last_error: str, progress: int | None = None, total: int | None = None
+    ) -> ScanRun | None:
+        row = self.state_db.fail_automatic_memory_scan_if_running(
+            scan_id, last_error=last_error, progress=progress, total=total
+        )
+        return self._scan(row) if row is not None else None
 
     def _require_scan_row(self, scan_id: str) -> dict[str, Any]:
         row = self.state_db.get_automatic_memory_scan(scan_id)

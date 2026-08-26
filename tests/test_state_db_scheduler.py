@@ -1,6 +1,7 @@
 import tempfile
 import time
 import unittest
+import threading
 from pathlib import Path
 
 from src.scheduler.cron import CronScheduler
@@ -71,6 +72,46 @@ class StateDatabaseSchedulerTests(unittest.TestCase):
         events = self.db.recent_events(limit=10)
         self.assertEqual(events[0]["event_type"], "updated")
         self.assertEqual(events[1]["event_type"], "created")
+
+    def test_stale_running_job_is_reclaimed_after_restart(self):
+        self.db.upsert_scheduler_job("stale", 1, run_on_start=True)
+        self.db.mark_job_started("stale")
+        with self.db._lock, self.db._connection() as connection:
+            connection.execute(
+                "UPDATE scheduler_jobs SET status = 'running', lease_expires_at = ?, next_run_at = ? WHERE name = ?",
+                ("2000-01-01T00:00:00", "2000-01-01T00:00:00", "stale"),
+            )
+        calls = []
+        scheduler = self._scheduler()
+        scheduler.start(lambda name: calls.append(name))
+        deadline = time.time() + 2
+        while not calls and time.time() < deadline:
+            time.sleep(0.02)
+        self.assertEqual(calls, ["stale"])
+
+    def test_two_scheduler_instances_claim_one_due_job(self):
+        self.db.upsert_scheduler_job("shared", 1, run_on_start=True)
+        calls = []
+        gate = threading.Event()
+        release = threading.Event()
+
+        def runner(name):
+            calls.append(name)
+            gate.set()
+            release.wait(1)
+
+        first = CronScheduler(self.db, poll_seconds=0.01, max_workers=1)
+        second = CronScheduler(self.db, poll_seconds=0.01, max_workers=1)
+        self.schedulers.extend([first, second])
+        first.start(runner)
+        second.start(runner)
+        assert gate.wait(1)
+        time.sleep(0.1)
+        release.set()
+        deadline = time.time() + 2
+        while len(calls) < 1 and time.time() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(calls, ["shared"])
 
 
 if __name__ == "__main__":

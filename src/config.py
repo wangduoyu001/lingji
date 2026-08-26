@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     runtime_settings_file: str = "runtime_settings.json"
     scheduler_poll_seconds: float = 60.0
     scheduler_workers: int = 2
+    automatic_memory_debounce_seconds: int = Field(default=5, ge=1, le=60)
+    automatic_memory_reconciliation_seconds: int = Field(default=900, ge=60)
+    automatic_memory_integrity_seconds: int = Field(default=86400, ge=3600)
     manual_command_interval_minutes: int = 2
     extraction_request_interval_minutes: int = 1
 
