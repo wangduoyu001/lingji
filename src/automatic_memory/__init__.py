@@ -6,6 +6,19 @@ from .snapshot import ConsistentSnapshot, FileStat, SnapshotResult
 from .checkpoint import CheckpointStore, ResumeToken, SnapshotJobRunner
 from .watcher import AutomaticMemoryWatcher
 from .scheduler import AutomaticMemoryScheduler, ReconciliationReport
+from .evaluation import (
+    AcceptanceGate,
+    AutomaticMemoryAcceptanceGate,
+    CorpusRecord,
+    EvaluationInputError,
+    EvaluationQuestion,
+    EvaluationReport,
+    QuestionResult,
+    evaluate_run,
+    load_corpus,
+    load_questions,
+    score_question,
+)
 
 __all__ = [
     "AuthorizationScope",
@@ -21,4 +34,15 @@ __all__ = [
     "AutomaticMemoryWatcher",
     "AutomaticMemoryScheduler",
     "ReconciliationReport",
+    "AcceptanceGate",
+    "AutomaticMemoryAcceptanceGate",
+    "CorpusRecord",
+    "EvaluationInputError",
+    "EvaluationQuestion",
+    "EvaluationReport",
+    "QuestionResult",
+    "evaluate_run",
+    "load_corpus",
+    "load_questions",
+    "score_question",
 ]
