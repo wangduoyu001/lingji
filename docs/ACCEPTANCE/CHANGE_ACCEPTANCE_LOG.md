@@ -1207,6 +1207,7 @@ Windows 重启后恢复 = 100%
 - [x] Repair round 1：真实 `ExtractionPipeline` 队列完成、最终失败、重试和直接 execute 均回写同一 Work Fact；回调异常不改变队列状态，失败重试不提前制造主人待办，终态失败才记录 Failure/failed outcome/PendingAction，重复回调幂等。
 - [x] 增加回调异常回归：生命周期 callback 抛错时队列仍保持真实 completed/failed 状态，Work Fact 不假报丢失。
 - [x] Repair round 2：WorkStore/Projector 从现有 `extraction_jobs` completed/failed 终态重放 Work Fact，覆盖 callback 崩溃窗口；事件与 owner action 按稳定 ID 幂等，重试成功 resolve 旧待办，retrying 不创建主人待办，原因脱敏。
+- [x] 恢复语义回归：历史 Failure 保留审计，但重试成功后的 current Work Fact 不再投影旧 Failure。
 
 ### 真机与主人确认
 
