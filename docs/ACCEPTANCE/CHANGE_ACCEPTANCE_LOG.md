@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 4 · Readiness envelope and protected-tree gate eligibility
+
+- 基准：`55fdd044809b262c59b68d7d37b02d7239978db8`；本轮仅实现四态质量证据 readiness、冻结 evaluator 的 fail-closed envelope finalizer、测试根限定的 ProtectedTreeSentinel 与低层原子 JSON writer。
+- 风险等级：P0。不得修改 `run_quality_gate` 公共返回/lifecycle、e2e/historical callers、AcceptanceRoots、cleanup inventory、Task 5/6、Task4R2、release/100k、Production/Vault、冻结 evaluator/fixtures/retrieval。
+- 自动验收：先取得 `tests/evaluation/test_task4_reset_readiness.py` 真实 RED；GREEN 覆盖 state truth table、gate-call eligibility、sentinel root/symlink/race/mutation contract、atomic writer fsync/replace/failure cleanup；随后执行 brief focused/regression/visibility checks、fixture hashes、diff/acceptance/local-handoff。
+- 清理/回滚：仅测试自有临时 roots；ignored 报告写入 `.superpowers/sdd/2026-08-26-task4r-reset/task-4-report.md`；不接触主人 Production/Vault 或真实任务单。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 3 · Repair round 4
 
 - 基准：`e42fd0b0a4825bc39263b344b2ad43c36f768b3d`；产品提交：`bea44958440a5a556d9ae2a6229db54bd80a4c7f`；仅修复 independent review I9/I10：批次 opaque ID 碰撞 fail-before-persist 与全存储 scanner 的 raw/decoded/物理 body 边界。
