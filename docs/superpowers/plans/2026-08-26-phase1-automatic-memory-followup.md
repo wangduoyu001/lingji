@@ -34,6 +34,7 @@
 - Modify: `src/work/capture_bridge.py`
 - Modify: `src/control/capture.py`
 - Modify only if the shared DTO must expose the resulting state: `src/work/projector.py`
+- Modify: `desktop/lingji-control/package.json` (register the existing `scripts/work-fact-smoke.mjs` as `test:work-fact`)
 - Test: `tests/test_task8_work_transition_matrix.py`
 - Test: `tests/test_task8_extraction_work_lifecycle.py`
 - Update: `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`
@@ -43,6 +44,7 @@
 **Interfaces:**
 - Add `WorkStore.apply_extraction_transition(work_id: str, phase: Literal["retrying", "completed", "failed"], *, summary: str, evidence: Mapping[str, Any], stage: str = "extraction", retryable: bool = False, occurred_at: str | None = None) -> None`.
 - `CaptureWorkBridge.complete_extraction`, `CaptureWorkBridge.record_failure`, the retrying callback in `CaptureControlService._on_pipeline_lifecycle`, and `WorkStore.reconcile_extraction_jobs` must delegate to that method.
+- `desktop/lingji-control/package.json` maps `test:work-fact` exactly to `tsx scripts/work-fact-smoke.mjs`; no second smoke implementation is created.
 - The method performs one transaction under the existing `StateDatabase` lock. Stable IDs remain `work:<work_id>:extraction.completed`, `work:<work_id>:failed:<stage>`, `next:<work_id>:retrying|completed|failed`, and `owner-failure:<work_id>`.
 - State invariants:
   - `retrying`: current next actor `system`; zero unresolved owner actions; no new terminal outcome.
