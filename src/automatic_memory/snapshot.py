@@ -157,18 +157,18 @@ class ConsistentSnapshot:
             try:
                 current_lease = scan.get("lease_id")
                 status = scan.get("status")
-                if not isinstance(current_lease, str) or not isinstance(status, str):
+                if not isinstance(status, str):
                     return False
-                if status == "running" and current_lease == lease_id:
-                    expiry = self._parse_lease_expiry(scan.get("lease_expires_at"))
-                    if expiry is None:
-                        return False
-                    return expiry <= datetime.now(timezone.utc)
-                if status == "running" and current_lease:
-                    return True
                 if status in {"completed", "cancelled", "failed", "paused"}:
                     return True
-                return False
+                if status != "running" or not isinstance(current_lease, str):
+                    return False
+                if current_lease != lease_id:
+                    return False
+                expiry = self._parse_lease_expiry(scan.get("lease_expires_at"))
+                if expiry is None:
+                    return False
+                return expiry <= datetime.now(timezone.utc)
             except Exception:
                 return False
         try:

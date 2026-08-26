@@ -105,6 +105,43 @@ def test_active_owned_temp_with_legacy_null_expiry_is_preserved(tmp_path: Path):
     assert temporary.exists()
 
 
+@pytest.mark.parametrize("status", ["completed", "cancelled", "failed", "paused"])
+def test_terminal_owned_snapshot_temp_is_reclaimed_without_lease(
+    tmp_path: Path, status: str
+):
+    state, _, _, scan, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
+    temporary = snapshot._temporary_path(scan.scan_id, f"terminal-{status}")
+    temporary.write_bytes(b"terminal staging")
+    with state._connection() as connection:
+        connection.execute(
+            "UPDATE automatic_memory_scans SET status = ?, lease_id = NULL, "
+            "lease_expires_at = NULL WHERE scan_id = ?",
+            (status, scan.scan_id),
+        )
+
+    ConsistentSnapshot(state, snapshot.raw_root)
+
+    assert not temporary.exists()
+
+
+def test_running_owned_snapshot_temp_with_mismatched_lease_is_preserved(
+    tmp_path: Path,
+):
+    state, _, _, scan, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
+    state.acquire_automatic_memory_scan_lease(scan.scan_id, "current-lease", ttl_seconds=60)
+    temporary = snapshot._temporary_path(scan.scan_id, "old-lease")
+    temporary.write_bytes(b"mismatched staging")
+    with state._connection() as connection:
+        connection.execute(
+            "UPDATE automatic_memory_scans SET lease_expires_at = ? WHERE scan_id = ?",
+            ("2000-01-01T00:00:00.000000+00:00", scan.scan_id),
+        )
+
+    ConsistentSnapshot(state, snapshot.raw_root)
+
+    assert temporary.exists()
+
+
 @pytest.mark.parametrize(
     "kind, keep",
     [
