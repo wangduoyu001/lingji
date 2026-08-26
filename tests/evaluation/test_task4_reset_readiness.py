@@ -14,6 +14,8 @@ from src.automatic_memory.quality_evidence import (
     ProtectedTreeSentinel,
     QualityEvidenceReadiness,
     QualityPublicationError,
+    _open_anchored_directory,
+    _open_publication_parent,
     finalize_quality_envelope,
     write_quality_json_atomic,
 )
@@ -490,3 +492,315 @@ def test_atomic_writer_parent_replacement_cannot_publish_outside(tmp_path: Path,
     with pytest.raises(QualityPublicationError):
         write_quality_json_atomic(parent / "report.json", {"new": True}, protected_roots=())
     assert not (outside / "report.json").exists()
+
+
+def test_initial_root_identity_failure_is_typed_and_path_redacted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setattr(evidence_module.os, "fstat", lambda _fd: (_ for _ in ()).throw(OSError("/private/root")))
+    with pytest.raises(evidence_module.ProtectedTreeInvalidError) as error:
+        ProtectedTreeSentinel.capture((root,))
+    assert error.value.code == "ROOT_FSTAT_FAILED"
+    assert str(error.value) == "ROOT_FSTAT_FAILED"
+
+
+def test_final_root_identity_failure_is_typed_and_path_redacted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    real_fstat = evidence_module.os.fstat
+    calls = 0
+
+    def failing_final_fstat(fd: int):
+        nonlocal calls
+        calls += 1
+        if calls == 4:
+            raise OSError("/private/root-final")
+        return real_fstat(fd)
+
+    monkeypatch.setattr(evidence_module.os, "fstat", failing_final_fstat)
+    with pytest.raises(evidence_module.ProtectedTreeInvalidError) as error:
+        ProtectedTreeSentinel.capture((root,))
+    assert error.value.code == "ROOT_FSTAT_FAILED"
+    assert str(error.value) == "ROOT_FSTAT_FAILED"
+
+
+def test_hostile_report_string_subclass_is_rejected_without_stringification() -> None:
+    class HostileString(str):
+        def strip(self):
+            raise RuntimeError("/private/report")
+
+    malformed = replace(report(), blocked_reasons=(HostileString("BLOCKED"),))
+    result = finalize_quality_envelope(
+        readiness=readiness(), production_pollution=0,
+        evaluation_report=malformed, acceptance_gate=SpyGate(),
+    )
+    assert result.evaluation_report is None
+    assert (result.functional_status, result.phase_status, result.windows_status) == (
+        "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED",
+    )
+    assert result.blocked_reasons == ("MALFORMED_EVALUATION_REPORT",)
+
+
+def test_malformed_report_tuple_member_is_rejected_without_truthiness() -> None:
+    class HostileValue:
+        def __bool__(self):
+            raise RuntimeError("/private/report")
+
+    malformed = replace(report(), blocked_reasons=(HostileValue(),))
+    result = finalize_quality_envelope(
+        readiness=readiness(), production_pollution=0,
+        evaluation_report=malformed, acceptance_gate=SpyGate(),
+    )
+    assert result.evaluation_report is None
+    assert result.blocked_reasons == ("MALFORMED_EVALUATION_REPORT",)
+
+
+def test_report_validation_exception_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        evidence_module, "_valid_evaluation_report",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("/private/validation")),
+    )
+    result = finalize_quality_envelope(
+        readiness=readiness(), production_pollution=0,
+        evaluation_report=report(), acceptance_gate=SpyGate(),
+    )
+    assert result.evaluation_report is None
+    assert (result.functional_status, result.phase_status, result.windows_status) == (
+        "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED",
+    )
+    assert result.blocked_reasons == ("MALFORMED_EVALUATION_REPORT",)
+
+
+def test_atomic_writer_wraps_fdopen_exception_and_cleans_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    destination = output_dir / "report.json"
+    destination.write_text("old", encoding="utf-8")
+    monkeypatch.setattr(evidence_module.os, "fdopen", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("/private/fd")))
+    with pytest.raises(QualityPublicationError) as error:
+        write_quality_json_atomic(destination, {"new": True}, protected_roots=())
+    assert error.value.code == "WRITE_FAILED"
+    assert str(error.value) == "WRITE_FAILED"
+    assert destination.read_text(encoding="utf-8") == "old"
+    assert not list(output_dir.glob("*.tmp"))
+
+
+@pytest.mark.parametrize("opener,expected", [
+    (_open_anchored_directory, "FD_CLOSE_FAILED"),
+    (_open_publication_parent, "FD_CLOSE_FAILED"),
+])
+def test_anchored_helper_does_not_retry_descriptor_after_close_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, opener, expected: str,
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    real_close = evidence_module.os.close
+    calls: dict[int, int] = {}
+    raised = False
+
+    def close_after_real_close(fd: int) -> None:
+        nonlocal raised
+        calls[fd] = calls.get(fd, 0) + 1
+        if not raised:
+            raised = True
+            real_close(fd)
+            raise OSError("/private/close")
+        real_close(fd)
+
+    monkeypatch.setattr(evidence_module.os, "close", close_after_real_close)
+    with pytest.raises((evidence_module.ProtectedTreeInvalidError, QualityPublicationError)) as error:
+        opener(root)
+    assert error.value.code == expected
+    assert max(calls.values()) == 1
+
+
+class _FailingWriterStream:
+    def __init__(self, fd: int, stage: str) -> None:
+        self.fd = fd
+        self.stage = stage
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _exc_type, _exc_value, _traceback):
+        evidence_module.os.close(self.fd)
+        if self.stage == "close":
+            raise RuntimeError("/private/stream-close")
+        return False
+
+    def write(self, _payload: bytes) -> int:
+        if self.stage == "write":
+            raise RuntimeError("/private/stream-write")
+        return 1
+
+    def flush(self) -> None:
+        if self.stage == "flush":
+            raise RuntimeError("/private/stream-flush")
+
+    def fileno(self) -> int:
+        return self.fd
+
+
+@pytest.mark.parametrize("stage", ["write", "flush", "close"])
+def test_atomic_writer_wraps_each_stream_stage_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str,
+) -> None:
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    destination = output_dir / "report.json"
+    destination.write_text("old", encoding="utf-8")
+    monkeypatch.setattr(evidence_module.os, "fdopen", lambda fd, *_args, **_kwargs: _FailingWriterStream(fd, stage))
+    monkeypatch.setattr(evidence_module.os, "fsync", lambda _fd: None)
+    with pytest.raises(QualityPublicationError) as error:
+        write_quality_json_atomic(destination, {"new": True}, protected_roots=())
+    assert error.value.code == "WRITE_FAILED"
+    assert str(error.value) == "WRITE_FAILED"
+    assert destination.read_text(encoding="utf-8") == "old"
+    assert not list(output_dir.glob("*.tmp"))
+
+
+def test_atomic_writer_wraps_replace_exception_and_preserves_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    destination = output_dir / "report.json"
+    destination.write_text("old", encoding="utf-8")
+    monkeypatch.setattr(evidence_module.os, "replace", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("/private/replace")))
+    with pytest.raises(QualityPublicationError) as error:
+        write_quality_json_atomic(destination, {"new": True}, protected_roots=())
+    assert error.value.code == "REPLACE_FAILED"
+    assert str(error.value) == "REPLACE_FAILED"
+    assert destination.read_text(encoding="utf-8") == "old"
+    assert not list(output_dir.glob("*.tmp"))
+
+
+def test_atomic_writer_cleanup_failure_is_stable_after_real_unlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    destination = output_dir / "report.json"
+    destination.write_text("old", encoding="utf-8")
+    real_replace = evidence_module.os.replace
+    real_unlink = evidence_module.os.unlink
+    monkeypatch.setattr(evidence_module.os, "replace", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("replace")))
+
+    def unlink_then_raise(path: object, *args: object, **kwargs: object) -> None:
+        real_unlink(path, *args, **kwargs)
+        raise OSError("/private/cleanup")
+
+    monkeypatch.setattr(evidence_module.os, "unlink", unlink_then_raise)
+    with pytest.raises(QualityPublicationError) as error:
+        write_quality_json_atomic(destination, {"new": True}, protected_roots=())
+    assert error.value.code == "TEMP_CLEANUP_FAILED"
+    assert str(error.value) == "TEMP_CLEANUP_FAILED"
+    assert destination.read_text(encoding="utf-8") == "old"
+    assert not list(output_dir.glob("*.tmp"))
+
+
+def test_atomic_writer_parent_close_failure_is_stable_after_replace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    destination = output_dir / "report.json"
+    destination.write_text("old", encoding="utf-8")
+    real_fsync = evidence_module.os.fsync
+    real_close = evidence_module.os.close
+    parent_fd: int | None = None
+    fsync_calls = 0
+    raised = False
+
+    def record_parent_fsync(fd: int) -> None:
+        nonlocal parent_fd, fsync_calls
+        fsync_calls += 1
+        real_fsync(fd)
+        if fsync_calls == 2:
+            parent_fd = fd
+
+    def close_parent_after_real_close(fd: int) -> None:
+        nonlocal raised
+        if parent_fd is not None and fd == parent_fd and not raised:
+            raised = True
+            real_close(fd)
+            raise OSError("/private/parent-close")
+        real_close(fd)
+
+    monkeypatch.setattr(evidence_module.os, "fsync", record_parent_fsync)
+    monkeypatch.setattr(evidence_module.os, "close", close_parent_after_real_close)
+    with pytest.raises(QualityPublicationError) as error:
+        write_quality_json_atomic(destination, {"new": True}, protected_roots=())
+    assert error.value.code == "FD_CLOSE_FAILED"
+    assert str(error.value) == "FD_CLOSE_FAILED"
+    assert json.loads(destination.read_text(encoding="utf-8")) == {"new": True}
+    assert not list(output_dir.glob("*.tmp"))
+
+
+@pytest.mark.parametrize("replacement", ["symlink", "directory"])
+def test_root_replacement_before_final_anchored_open_is_root_race(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, replacement: str,
+) -> None:
+    root, outside = tmp_path / "root", tmp_path / "outside"
+    root.mkdir(); outside.mkdir()
+    (outside / "secret").write_text("outside", encoding="utf-8")
+    real_open_anchored = evidence_module._open_anchored_directory
+    calls = 0
+
+    def replace_before_final_open(path: Path) -> int:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            old = tmp_path / "root-old"
+            os.rename(root, old)
+            if replacement == "symlink":
+                root.symlink_to(outside, target_is_directory=True)
+            else:
+                root.mkdir()
+                (root / "secret").write_text("outside", encoding="utf-8")
+        return real_open_anchored(path)
+
+    monkeypatch.setattr(evidence_module, "_open_anchored_directory", replace_before_final_open)
+    with pytest.raises(evidence_module.ProtectedTreeInvalidError) as error:
+        ProtectedTreeSentinel.capture((root,))
+    assert error.value.code == "ROOT_RACE"
+
+
+def test_snapshot_after_final_observation_is_deferred_to_next_capture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "root"
+    replacement = tmp_path / "replacement"
+    root.mkdir(); replacement.mkdir()
+    (root / "entry").write_text("before", encoding="utf-8")
+    real_fstat = evidence_module.os.fstat
+    calls = 0
+
+    def replace_after_final_observation(fd: int):
+        nonlocal calls
+        calls += 1
+        value = real_fstat(fd)
+        if calls == 7:
+            old = tmp_path / "root-old"
+            os.rename(root, old)
+            os.rename(replacement, root)
+        return value
+
+    monkeypatch.setattr(evidence_module.os, "fstat", replace_after_final_observation)
+    first = ProtectedTreeSentinel.capture((root,))
+    assert first.entries
+    second = ProtectedTreeSentinel.capture((root,))
+    assert first.diff(second)
+
+
+def test_successful_sentinel_and_writer_return_to_descriptor_baseline(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    nested = root / "nested"
+    nested.mkdir(parents=True)
+    (nested / "entry").write_text("content", encoding="utf-8")
+    output = tmp_path / "output"
+    output.mkdir()
+    baseline = len(os.listdir("/dev/fd"))
+    ProtectedTreeSentinel.capture((root,))
+    write_quality_json_atomic(output / "report.json", {"ok": True}, protected_roots=())
+    assert len(os.listdir("/dev/fd")) <= baseline

@@ -131,6 +131,13 @@ class ProtectedTreeSentinel:
 
     @classmethod
     def capture(cls, roots: Sequence[Path]) -> "ProtectedTreeSentinel":
+        """Capture a finite descriptor-anchored snapshot.
+
+        The snapshot point is the successful final no-follow root descriptor
+        identity observation and its comparison with the initial observation.
+        A mutation strictly after that observation belongs to a later capture;
+        this operation performs no unbounded post-snapshot retries.
+        """
         if not roots:
             raise ProtectedTreeUnavailableError("ROOTS_EMPTY")
 
@@ -185,25 +192,37 @@ class ProtectedTreeSentinel:
             root_id = _root_identifier(root)
             fd = _open_anchored_directory(root)
             try:
-                root_identity = os.fstat(fd)
+                try:
+                    root_identity = os.fstat(fd)
+                except Exception as exc:
+                    raise ProtectedTreeInvalidError("ROOT_FSTAT_FAILED") from exc
                 _capture_directory_fd(fd, root_id, "", entries, is_root=True)
                 try:
                     final_fd = _open_anchored_directory(root)
                     try:
-                        final_identity = os.fstat(final_fd)
-                    finally:
                         try:
-                            os.close(final_fd)
-                        except OSError as exc:
+                            final_identity = os.fstat(final_fd)
+                        except Exception as exc:
+                            raise ProtectedTreeInvalidError("ROOT_FSTAT_FAILED") from exc
+                    finally:
+                        owned_final_fd = final_fd
+                        final_fd = -1
+                        try:
+                            os.close(owned_final_fd)
+                        except Exception as exc:
                             raise ProtectedTreeInvalidError("FD_CLOSE_FAILED") from exc
                 except ProtectedTreeSentinelError as exc:
+                    if isinstance(exc, ProtectedTreeInvalidError) and exc.code == "ROOT_FSTAT_FAILED":
+                        raise
                     raise ProtectedTreeInvalidError("ROOT_RACE") from exc
                 if not _metadata_matches(root_identity, final_identity, include_size=False):
                     raise ProtectedTreeInvalidError("ROOT_RACE")
             finally:
+                owned_fd = fd
+                fd = -1
                 try:
-                    os.close(fd)
-                except OSError as exc:
+                    os.close(owned_fd)
+                except Exception as exc:
                     raise ProtectedTreeInvalidError("FD_CLOSE_FAILED") from exc
         return cls(identifiers, entries)
 
@@ -261,28 +280,35 @@ def _open_anchored_directory(path: Path) -> int:
         for component in path.parts[1:]:
             child_fd = os.open(component, flags, dir_fd=fd)
             previous_fd = fd
+            fd = -1
             try:
                 os.close(previous_fd)
-            except OSError as exc:
+            except Exception as exc:
+                owned_child_fd = child_fd
+                child_fd = -1
                 try:
-                    os.close(child_fd)
-                except OSError:
+                    os.close(owned_child_fd)
+                except Exception:
                     pass
                 raise ProtectedTreeInvalidError("FD_CLOSE_FAILED") from exc
             fd = child_fd
         return fd
     except ProtectedTreeSentinelError:
-        if fd >= 0:
+        owned_fd = fd
+        fd = -1
+        if owned_fd >= 0:
             try:
-                os.close(fd)
-            except OSError:
+                os.close(owned_fd)
+            except Exception:
                 pass
         raise
     except OSError as exc:
-        if fd >= 0:
+        owned_fd = fd
+        fd = -1
+        if owned_fd >= 0:
             try:
-                os.close(fd)
-            except OSError:
+                os.close(owned_fd)
+            except Exception:
                 pass
         raise ProtectedTreeUnavailableError("ROOT_OPEN_FAILED") from exc
 
@@ -327,9 +353,11 @@ def _capture_file_fd(
         raise ProtectedTreeUnavailableError("FILE_UNREADABLE") from exc
     finally:
         if fd >= 0:
+            owned_fd = fd
+            fd = -1
             try:
-                os.close(fd)
-            except OSError as exc:
+                os.close(owned_fd)
+            except Exception as exc:
                 raise ProtectedTreeInvalidError("FD_CLOSE_FAILED") from exc
 
 
@@ -377,9 +405,11 @@ def _capture_directory_fd(
                 raise ProtectedTreeInvalidError("TREE_TRAVERSAL_RACE") from exc
             finally:
                 if child_fd >= 0:
+                    owned_child_fd = child_fd
+                    child_fd = -1
                     try:
-                        os.close(child_fd)
-                    except OSError as exc:
+                        os.close(owned_child_fd)
+                    except Exception as exc:
                         raise ProtectedTreeInvalidError("FD_CLOSE_FAILED") from exc
         elif stat_module.S_ISREG(child_stat.st_mode):
             _capture_file_fd(fd, name, child_key, child_stat, entries)
@@ -484,12 +514,12 @@ def write_quality_json_atomic(
                 stream.write(payload)
                 stream.flush()
                 os.fsync(stream.fileno())
-        except OSError as exc:
+        except Exception as exc:
             raise QualityPublicationError("WRITE_FAILED") from exc
         try:
             os.replace(temporary.name, output.name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
             temporary = None
-        except OSError as exc:
+        except Exception as exc:
             raise QualityPublicationError("REPLACE_FAILED") from exc
         try:
             current_parent = os.stat(parent, follow_symlinks=False)
@@ -512,9 +542,11 @@ def write_quality_json_atomic(
     finally:
         cleanup_error: QualityPublicationError | None = None
         if fd >= 0:
+            owned_fd = fd
+            fd = -1
             try:
-                os.close(fd)
-            except OSError:
+                os.close(owned_fd)
+            except Exception:
                 pass
         if temporary is not None:
             try:
@@ -525,9 +557,11 @@ def write_quality_json_atomic(
             except OSError as exc:
                 cleanup_error = QualityPublicationError("TEMP_CLEANUP_FAILED")
         if parent_fd >= 0:
+            owned_parent_fd = parent_fd
+            parent_fd = -1
             try:
-                os.close(parent_fd)
-            except OSError:
+                os.close(owned_parent_fd)
+            except Exception:
                 if cleanup_error is None:
                     cleanup_error = QualityPublicationError("FD_CLOSE_FAILED")
         if cleanup_error is not None:
@@ -545,28 +579,35 @@ def _open_publication_parent(path: Path) -> int:
         for component in absolute.parts[1:]:
             child = os.open(component, flags, dir_fd=fd)
             previous_fd = fd
+            fd = -1
             try:
                 os.close(previous_fd)
-            except OSError as exc:
+            except Exception as exc:
+                owned_child = child
+                child = -1
                 try:
-                    os.close(child)
-                except OSError:
+                    os.close(owned_child)
+                except Exception:
                     pass
                 raise QualityPublicationError("FD_CLOSE_FAILED") from exc
             fd = child
         return fd
     except QualityPublicationError:
-        if fd >= 0:
+        owned_fd = fd
+        fd = -1
+        if owned_fd >= 0:
             try:
-                os.close(fd)
-            except OSError:
+                os.close(owned_fd)
+            except Exception:
                 pass
         raise
     except OSError as exc:
-        if fd >= 0:
+        owned_fd = fd
+        fd = -1
+        if owned_fd >= 0:
             try:
-                os.close(fd)
-            except OSError:
+                os.close(owned_fd)
+            except Exception:
                 pass
         raise QualityPublicationError("PARENT_UNAVAILABLE") from exc
 
@@ -861,7 +902,7 @@ def _valid_counter(value: Any) -> bool:
 def _valid_percentage(value: Any) -> bool:
     import math
     return (
-        isinstance(value, (int, float)) and not isinstance(value, bool)
+        type(value) in (int, float)
         and math.isfinite(float(value)) and 0 <= float(value) <= 100
     )
 
@@ -874,6 +915,8 @@ def _valid_ratio(numerator: Any, denominator: Any, percentage: Any) -> bool:
 
 
 def _valid_evaluation_report(report: EvaluationReport, pollution: int) -> bool:
+    if type(report) is not EvaluationReport:
+        return False
     counters = (
         "answered_questions", "imported_messages", "expected_messages", "ordered_role_matches",
         "expected_ordered_roles", "valid_fact_hits", "valid_fact_total", "citation_hits", "citation_total",
@@ -908,7 +951,7 @@ def _valid_evaluation_report(report: EvaluationReport, pollution: int) -> bool:
         if value is not None and not _valid_percentage(value):
             return False
     if type(report.blocked_reasons) is not tuple or any(
-        not isinstance(reason, str) or not reason.strip() for reason in report.blocked_reasons
+        type(reason) is not str or not reason for reason in report.blocked_reasons
     ):
         return False
     return True
@@ -937,9 +980,13 @@ def finalize_quality_envelope(
         return _closed_envelope(readiness, None, ("PRODUCTION_SENTINEL_MISMATCH",))
     if not readiness.functional_measured:
         return _closed_envelope(readiness, production_pollution, blocked_reasons)
-    if not isinstance(evaluation_report, EvaluationReport):
+    if type(evaluation_report) is not EvaluationReport:
         return _closed_envelope(readiness, production_pollution, ("MALFORMED_EVALUATION_REPORT",))
-    if not _valid_evaluation_report(evaluation_report, production_pollution):
+    try:
+        report_valid = _valid_evaluation_report(evaluation_report, production_pollution)
+    except Exception:
+        report_valid = False
+    if not report_valid:
         return _closed_envelope(readiness, None, ("MALFORMED_EVALUATION_REPORT",))
     safe_reasons = _safe_reason_values(blocked_reasons)
     try:
