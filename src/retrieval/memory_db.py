@@ -717,7 +717,12 @@ class MemoryDatabase:
             if allowed:
                 item["temporal_reason"] = reason
                 output.append(item)
-        if not output and temporal.mode == "history":
+        short_cjk_query = any(
+            len(term) < 3
+            for term in re.findall(r"[A-Za-z0-9_.+-]+|[\u4e00-\u9fff]+", str(query or ""))
+            if term
+        )
+        if temporal.mode == "history" and (not output or short_cjk_query):
             # FTS trigram/unicode tokenizers may return no row for short CJK
             # terms.  History/why must still inspect the same evidence set, so
             # use a bounded metadata/chunk substring fallback here.
@@ -735,16 +740,20 @@ class MemoryDatabase:
                         FROM memory_chunks c JOIN memory_documents d ON d.memory_id = c.memory_id
                         WHERE d.privacy IN (""" + ",".join("?" for _ in privacy) + ")"
                     , tuple(privacy)).fetchall()
+                seen_ids = {str(item.get("memory_id") or "") for item in output}
                 for row in fallback_rows:
                     raw = dict(row)
                     haystack = " ".join(str(raw.get(key) or "") for key in ("title", "heading", "text", "tags_json")).casefold()
                     if not all(term in haystack for term in terms):
                         continue
                     item = self._search_dict(raw)
+                    if str(item.get("memory_id") or "") in seen_ids:
+                        continue
                     allowed, reason = temporal.allows(item)
                     if allowed:
                         item["temporal_reason"] = reason
                         output.append(item)
+                        seen_ids.add(str(item.get("memory_id") or ""))
                         if len(output) >= max(int(limit), 1):
                             break
         return output
