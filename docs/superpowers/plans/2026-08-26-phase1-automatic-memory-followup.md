@@ -134,40 +134,91 @@
 
 **Acceptance:** Current mode stale leakage 0 across direct builder, gateway, and MCP; identical scope inputs return identical fact/citation IDs; rendered ContextPack is at most 12,000 characters; every returned fact is traceable; lexical degradation is explicit and usable.
 
-### Task 4: Quality, Scale, Crash and Degradation Gate
+### Task 4R1: Repair Functional-Gate Truthfulness and Promotion Provenance
 
-**Purpose:** Run the frozen evaluator against the real Task 3 retrieval path and prove stability at product scale.
+**Purpose:** Replace the rejected Task 4 draft with a thin, auditable functional runner whose counters come from the real product path. This repairs the measuring instrument only; it does not tune Task 3 retrieval or alter frozen evaluation inputs.
 
 **Files:**
-- Modify: `src/automatic_memory/evaluation.py`
-- Create: `src/automatic_memory/quality_gate.py`
-- Modify: `src/automatic_memory/__init__.py`
-- Modify only if the real promotion-to-evidence path proves absent: `src/auto_review/promotion.py`
-- Create: `tests/evaluation/test_automatic_memory_end_to_end.py`
-- Create: `tests/performance/test_automatic_memory_100k.py`
-- Create: `scripts/automatic_memory_quality_gate.py`
-- Modify: `scripts/validate.ps1`
+- Refactor: `src/automatic_memory/quality_gate.py`
+- Create: `src/automatic_memory/quality_evidence.py`
+- Modify only for verified message provenance: `src/auto_review/promotion.py`
+- Modify exports only if needed: `src/automatic_memory/__init__.py`
+- Expand: `tests/evaluation/test_automatic_memory_end_to_end.py`
+- Create: `tests/evaluation/test_automatic_memory_gate_integrity.py`
 - Update: `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`
-- Report: `docs/TEST_REPORTS/PHASE1_TASK9_QUALITY_SCALE_GATE.md`
+- Update: `docs/TEST_REPORTS/PHASE1_TASK9_QUALITY_SCALE_GATE.md`
+- Required implementation evidence: `.superpowers/sdd/2026-08-26-phase1-automatic-memory-followup/task-4-report.md`
 
 **Interfaces:**
-- `run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Path) -> EvaluationReport` imports the synthetic corpus through supported adapters, indexes through existing storage, queries through `MemoryGateway`, and writes a machine-readable JSON report under `output/validation/`.
-- `AutomaticMemoryFunctionalGate.evaluate(report: EvaluationReport) -> Literal["PASS", "FAIL"]` evaluates only the measured Task 4 counters. The existing full `AutomaticMemoryAcceptanceGate` must still return `BLOCKED` while owner/reboot/Mac evidence is absent; a functional PASS must never be reported as Phase 1 PASS.
-- The runner converts the frozen corpus to a versioned Generic AI History Inbox file inside a temporary Acceptance root, executes the real adapter/pipeline/sink/structured read model/index path, and builds a real custom `agent-synthetic` profile. Fixture lifecycle/authority/scope fields may be applied as explicit evaluation ground truth after import, but expected question IDs/citations may not be used to manufacture retrieval results.
-- Every low-risk promotion candidate goes through the existing `AutoMemoryPromotionService`; protected/Core/high-risk and assistant-only inference must remain pending. When an active derived memory cites an imported message, the normal promotion integration must create/reuse the existing `message_memory_links` relationship so ContextPack can return real source/conversation/message citations. The test runner must not add links only after seeing expected answers.
-- Question execution calls the real `MemoryGateway.build_context_pack` and an installed FastMCP server's registered `build_context_pack` tool. `_FakeMCP`, mocked gateway results, direct expected-ID injection, expected-driven top-K selection, and network models are forbidden in the quality gate.
-- Retrieval-to-fixture identity mapping may use stable imported external IDs/content hashes created before querying. Selection from returned context must use one fixed, question-independent deterministic rule; it may not inspect `expected_fact_ids`, `forbidden_fact_ids`, or `expected_citation_ids` before producing a `QuestionResult`.
-- The 100k generator creates deterministic synthetic messages outside Production/Vault and records seed, counts, hashes, runtime, P50/P95, ContextPack sizes, and cleanup result.
-- The machine-readable envelope records fixture hashes, code commit, temporary root, import/role/order counts, per-question fact/citation IDs, raw `EvaluationReport`, `functional_status`, full `phase_status`, MCP attempts, semantic degradation cases, corruption isolation, production/Vault sentinels, cleanup inventory, and any blocked physical evidence. It writes atomically and rejects a path inside Production/Vault.
-- `scripts/validate.ps1 -Mode focused -Area automatic-memory-quality` runs deterministic functional evaluation. Scale and idle-CPU evidence remain a separately named local acceptance command and are never silently substituted by unit tests.
+- `ImportedEvidenceAudit.from_read_model(read_model, expected_records) -> ImportedEvidenceAudit` obtains actual imported rows from the existing `SourceReadModel` and computes exact total, extra, missing, duplicate, ordered external message ID, role, sequence, content-hash, source and conversation comparisons. It must not compute metrics from a pre-deduplicated expected map.
+- `ProtectedTreeSentinel.capture(roots: Sequence[Path]) -> ProtectedTreeSentinel` records every relative path, entry type, mode, size and SHA-256 content hash for regular files. It rejects symlink escape and unreadable entries instead of silently omitting them. `diff(after) -> tuple[SentinelChange, ...]` is the only source for Production/Vault mutation counters.
+- `PromotionEvidence` records candidate ID, real service decision, resulting lifecycle, memory ID, resolved message primary IDs, created/reused link IDs and rollback outcome. Generic source/event/evidence refs are never treated as message primary IDs without resolving them through the existing read model.
+- `run_quality_gate(...)` remains the public orchestrator, but query execution uses each frozen `EvaluationQuestion.query` verbatim. The selection rule is fixed before question execution and remains blind to expected, forbidden and citation IDs.
+- Every `score_question` validation error aborts the run and makes the machine envelope invalid. A retrieval miss is represented by an empty retrieved set before scoring; forbidden/unknown/duplicate/extra evidence or evaluator exceptions are never caught and converted to a miss.
+- The full phase status uses `AutomaticMemoryAcceptanceGate` exactly: any measured miss is `FAIL`; only an otherwise measured PASS may become `BLOCKED` because owner/reboot/Mac evidence is absent.
 
-- [ ] **Step 1: Write the end-to-end test that initially fails against the real Task 3 path; prohibit stubbed retrieval/results and assert all EvaluationReport numerators/denominators, promotion outcomes, imported-message identity, real registered FastMCP calls, output provenance and Production sentinels. Preserve the RED command/output.**
-- [ ] **Step 2: Add a deterministic 100k-message generator and bounded benchmark. Default unit runs must report an explicit opt-in skip; `LINGJI_RUN_100K=1` must generate/import exactly 100,000 unique messages, verify a stable seed/hash, exercise hot retrieval, write a scale report, and clean its temporary Acceptance root. Release validation must enable it.**
-- [ ] **Step 3: Implement the gate runner and focused validation registration. Keep generated data in an explicit temporary Acceptance root, reject Production/Vault paths, verify before/after sentinels, and atomically publish only the machine-readable result under `output/validation/`.**
-- [ ] **Step 4: Require 100/100 executed, message import completeness 100%, role/order match 100%, recall at least 90%, citation at least 95%, automatic activation at least 95%, installed-FastMCP success at least 95%, protected false promotion 0, stale leakage 0, duplicates 0, ContextPack reduction at least 90%, and single-source corruption/Qdrant outage not blocking other sources or lexical retrieval. The Task 4 functional gate may PASS, while the full phase gate remains BLOCKED for owner/reboot/M5 evidence. The Mac M5 P95 at most 3 seconds and idle CPU at most 3% are recorded only in Task 6.**
-- [ ] **Step 5: Run focused gate, Task 1–3 regressions, acceptance sync, and local handoff. Commit product/tests as `test: gate automatic memory quality and scale`, then evidence/docs as `docs: record automatic memory quality results`.**
+- [ ] **Step 1: Write RED integrity tests that deliberately inject one extra imported row, one duplicate external ID/content hash, swapped message sequence, wrong role, wrong content hash, nested protected-file mutation, symlink escape, unknown/forbidden/duplicate evidence and a `score_question` exception. Require every defect to fail closed and preserve exact RED command/output in `task-4-report.md`.**
+- [ ] **Step 2: Write RED promotion tests for active low-risk user evidence, protected/Core/high-risk/assistant-only pending outcomes, link idempotency, generic non-message source refs, rejected/error outcomes and link-write failure rollback. Assert that only explicit imported message primary IDs create `message_memory_links`.**
+- [ ] **Step 3: Refactor the 747-line draft by responsibility. Keep `quality_gate.py` as orchestration and envelope assembly; move only reusable audit/sentinel value objects into `quality_evidence.py`. Delete query rewriting, hard-coded result flags and broad evaluator exception handling. Do not create a second importer, scorer, retriever, promotion policy or MCP server.**
+- [ ] **Step 4: Run the two integrity test files and promotion tests to GREEN. Then mutation-check that changing frozen expected IDs cannot alter the retrieval selection, while changing real Gateway output does alter it. Verify the two frozen fixture hashes remain exact.**
+- [ ] **Step 5: Correct the public report: state `TDD_ORDER_NOT_MET` for the rejected initial draft, list the new authentic RED/GREEN evidence separately, and report full phase `FAIL` whenever measured counters fail. Run `git diff --check`, acceptance sync and local handoff checks. Commit code/tests as `fix: make automatic memory gate evidence truthful`, then docs as `docs: record task4 gate repair evidence`.**
 
-**Acceptance:** Deterministic functional gate PASS on a clean tree; full phase gate truthfully BLOCKED only by named physical evidence; opt-in scale report contains exactly 100,000 messages and stable seed/hash; no Production pollution; all temporary fixtures are accounted for; Mac-only release P95 and idle CPU remain `BLOCKED` until Task 6, never guessed from CI.
+**Acceptance:** All import/order/duplicate/promotion/sentinel counters are derived from actual persisted rows or filesystem snapshots; no hard-coded PASS booleans remain; invalid evaluator evidence fails the run; query text is unchanged; independent Luna returns spec compliant with no Critical/Important finding.
+
+### Task 4R2: Real MCP, Degradation and 100k Scale Evidence
+
+**Purpose:** Prove real tool parity, failure isolation and scale without allowing unit-test skips or constant fields to masquerade as acceptance evidence.
+
+**Files:**
+- Create: `src/automatic_memory/quality_degradation.py`
+- Create: `src/automatic_memory/scale_benchmark.py`
+- Refactor: `src/automatic_memory/quality_gate.py`
+- Modify: `scripts/automatic_memory_quality_gate.py`
+- Modify: `scripts/validate.ps1`
+- Expand: `tests/evaluation/test_automatic_memory_end_to_end.py`
+- Expand: `tests/performance/test_automatic_memory_100k.py`
+- Create: `tests/evaluation/test_automatic_memory_degradation.py`
+- Update: `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`
+- Update: `docs/TEST_REPORTS/PHASE1_TASK9_QUALITY_SCALE_GATE.md`
+
+**Interfaces:**
+- The quality runner obtains the installed production FastMCP registration through the repository's real MCP factory, then calls `await FastMCP.call_tool("build_context_pack", arguments)`. Each `McpParityCase` records Gateway and MCP ordered fact IDs, citation IDs, source/conversation/message/memory identities, `used_chars`, `max_chars`, lifecycle/scope checks and parse result. Success requires equality on every field and `used_chars <= max_chars`.
+- `run_degradation_cases(...) -> tuple[DegradationCase, ...]` executes two measured cases: Qdrant unavailable while lexical retrieval still answers, and one corrupted Generic History source while a second authorized source imports and remains retrievable. No constant `True` result is accepted.
+- Context reduction baseline is the actually rendered complete relevant conversations for each question before ContextPack selection. `baseline_context_chars` is the sum of those measured strings; `rendered_context_chars` is the final returned packs. No `max(...)`, guessed length or whole-corpus multiplication is allowed.
+- `generate_scale_fixture(path, *, seed=41041, count=100_000) -> ScaleFixtureManifest` writes exactly 100,000 messages with unique message IDs and content hashes, then re-reads the file to verify count, uniqueness and deterministic SHA-256. A second generation with the same seed must produce the same hash.
+- `run_100k_benchmark(...) -> ScaleBenchmarkReport` measures actual import count, peak resident message count or sampled process RSS with the metric name stated accurately, hot-query P50/P95, ContextPack lengths, tree sentinels and cleanup inventory. It retains only the atomic JSON report outside the temporary Acceptance root.
+- `scripts/validate.ps1 -Mode focused -Area automatic-memory-quality` runs deterministic functional/degradation tests but not 100k. `-Mode release` sets `LINGJI_RUN_100K=1`, checks the report says `executed=true` and `imported_messages=100000`, and fails if pytest reports the scale test skipped.
+
+- [ ] **Step 1: Write RED tests for full Gateway/FastMCP identity parity, bounded output, forbidden scope/lifecycle rejection, real Qdrant outage fallback, corrupted-source isolation, measured baseline and nested Production/Vault sentinel changes. Preserve the exact RED output.**
+- [ ] **Step 2: Implement the smallest real MCP/degradation path by calling existing factories and adapters. Each case records inputs, observed outputs and failure reason codes; exceptions cannot be replaced with success booleans.**
+- [ ] **Step 3: Write RED 100k tests for count `100000`, unique message IDs `100000`, unique content hashes `100000`, seed `41041`, stable regenerated fixture hash, non-skipped release invocation, measured latency samples, before/after sentinels and an explicit cleanup inventory.**
+- [ ] **Step 4: Implement the scale fixture and runner outside Production/Vault. Run the opt-in benchmark once with `LINGJI_RUN_100K=1`; require report `executed=true`, exactly 100,000 imported messages, no protected-tree change, nonempty P50/P95 samples and zero remaining bulk fixture files. Development-host latency is informational and cannot satisfy Task 6 Mac thresholds.**
+- [ ] **Step 5: Run Task 4R1–4R2 focused tests, Task 1–3 regressions, `git diff --check`, acceptance sync and local handoff. Commit code/tests as `test: prove automatic memory degradation and scale`, then docs as `docs: record measured quality scale evidence`.**
+
+**Acceptance:** Real MCP parity is at least 95% with complete identity/scope/bounds evidence; Qdrant outage and one-source corruption are actually injected and isolated; ContextPack reduction is calculated from measured relevant conversations; the opt-in report proves exactly 100,000 unique messages and cleanup; independent Luna returns spec compliant with no Critical/Important finding.
+
+### Task 4Q: Frozen Quality Run and Conditional Retrieval Repair
+
+**Purpose:** Use the repaired measuring instrument to establish the real product result before authorizing any retrieval change.
+
+**Files:**
+- No product changes for the first run.
+- Update after the run: `docs/TEST_REPORTS/PHASE1_TASK9_QUALITY_SCALE_GATE.md`
+- Conditional diagnostic report if measured FAIL: `.superpowers/sdd/2026-08-26-phase1-automatic-memory-followup/task-4q-diagnosis.md`
+- Conditional product files are selected only after the diagnostic names the failing production boundary; frozen fixtures, evaluator, gate and thresholds remain read-only during retrieval repair.
+
+**Decision procedure:**
+- Run the 100 frozen questions through the repaired functional gate on a clean tree.
+- If all measured thresholds pass, functional status is `PASS` and full phase status is `BLOCKED` only for named owner/reboot/Mac evidence; proceed to Task 5.
+- If recall, citation, activation, stale leakage, dedup, MCP parity or reduction fails, status is `FAIL`. A fresh Luna diagnostic agent must classify every failed question by first broken boundary: import identity, promotion/provenance, lexical retrieval, semantic retrieval, temporal/scope filter, ContextPack selection/rendering, Gateway transport or MCP serialization.
+- Root reviews the diagnosis and writes a bounded repair brief containing only the production boundary proven responsible. A fresh Luna writes RED tests from the failed category, implements one root-cause fix without reading expected IDs at runtime, and a second fresh Luna reviews it. The repaired gate and frozen hashes are rerun unchanged.
+- No retrieval repair round may modify `tests/evaluation/fixtures/*`, `src/automatic_memory/evaluation.py`, Task 4 gate selection, thresholds or report arithmetic. Three failed root-cause hypotheses trigger an architecture review instead of a fourth guess.
+
+- [ ] **Step 1: Run `./.venv/bin/python scripts/automatic_memory_quality_gate.py --output output/validation/automatic-memory-quality.json` and record exact raw counters, statuses, per-category failures, fixture hashes and clean-tree SHA.**
+- [ ] **Step 2: Verify the machine report independently: recompute aggregate counters from its 100 per-question rows, confirm no expected-driven selection, and compare Production/Vault sentinels before accepting the status.**
+- [ ] **Step 3: Follow the decision procedure. Do not start Task 5 while functional status is `FAIL` or Task 4R1/4R2 has an open Critical/Important review finding.**
+
+**Acceptance:** 100/100 executed; import and role/order 100%; valid-fact recall `>=90%`; citation accuracy `>=95%`; automatic activation and real FastMCP success `>=95%`; protected false promotions, stale-current leaks, duplicate records and Production pollution all `0`; measured ContextPack reduction `>=90%`. The full phase remains `BLOCKED` until Task 6 physical evidence even when the functional result passes.
 
 ### Task 5: macOS Release Candidate and Acceptance Task Preparation
 
