@@ -253,6 +253,19 @@ def test_overlong_owned_token_is_preserved_as_unknown_stale_temp(tmp_path: Path)
     assert temporary.exists()
 
 
+@pytest.mark.parametrize("owner", ["../escape", "中文", "x" * 129, ""])
+def test_owned_temp_creation_rejects_untrusted_owner_tokens(
+    tmp_path: Path, owner: str
+):
+    """Creation must enforce the same bounded token grammar as cleanup parsing."""
+    _, _, _, _, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
+
+    with pytest.raises(ValueError, match="owner"):
+        snapshot._temporary_path(owner, "safe-lease")
+
+    assert list(snapshot.raw_root.glob(".snapshot-owned-*.tmp")) == []
+
+
 def test_unknown_fresh_temp_is_preserved_but_legacy_stale_temp_is_reclaimed(tmp_path: Path):
     _, registry, _, _, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
     raw_root = snapshot.raw_root

@@ -103,7 +103,12 @@ class ConsistentSnapshot:
 
     @staticmethod
     def _encode_owner(value: str) -> str:
-        return base64.urlsafe_b64encode(str(value).encode("utf-8")).decode("ascii").rstrip("=")
+        if not isinstance(value, str) or _OWNER_ID_PATTERN.fullmatch(value) is None:
+            raise ValueError("snapshot owner must be a bounded safe token")
+        encoded = base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
+        if len(encoded) > _OWNER_SEGMENT_MAX_LENGTH:
+            raise ValueError("snapshot owner token exceeds the supported length")
+        return encoded
 
     @staticmethod
     def _decode_owner(value: str) -> str:
