@@ -128,6 +128,13 @@ class HybridRetriever:
             privacy=filters.privacy,
             mode="history",
         )
+        if self.semantic_provider is not None:
+            history_filters = replace(filters, mode="history", as_of=None, statuses=ALL_LIFECYCLE_STATUSES)
+            for semantic in self._semantic_search(query, max(len(output) * 12, 60), history_filters):
+                memory = self.database.fetch_memory(str(semantic.get("memory_id") or ""), include_chunks=True)
+                resolved = self._resolve_semantic_result(semantic, memory)
+                if resolved and not any(str(item.get("memory_id") or "") == str(resolved.get("memory_id") or "") for item in historical):
+                    historical.append(resolved)
         excluded: list[dict[str, Any]] = []
         winners = {str(item.get("memory_id") or ""): item for item in output}
         conflict_ids = {
@@ -162,6 +169,7 @@ class HybridRetriever:
             fields = temporal_fields(item)
             item["why"] = {
                 **fields,
+                "citation": {**self._citation(item), "source_refs": fields["source_refs"]},
                 "selection_rule": "current_valid_and_authority_ordered",
                 "exclusion_reason": item.get("temporal_reason") or "selected",
                 "conflict": conflict,

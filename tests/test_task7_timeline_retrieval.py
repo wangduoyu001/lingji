@@ -99,6 +99,7 @@ class TimelineRetrievalTests(unittest.TestCase):
         self.assertTrue(all(item.get("why") for item in results))
         self.assertIn("authority", results[0]["why"])
         self.assertIn("citation", results[0])
+        self.assertIn("citation", results[0]["why"])
         self.assertIn("source_refs", results[0]["why"])
 
         self.note("03-Knowledge/expired.md", "expired", "过期决定", "权威决定。", status="superseded", superseded_by="high", sources=["msg-old"], valid_from="2025-01-01T00:00:00Z", valid_to="2026-01-01T00:00:00Z")
