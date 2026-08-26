@@ -53,6 +53,7 @@ from .evaluation import (
     load_questions,
     score_question,
 )
+from .quality_evidence import ImportedEvidenceAudit, ProtectedTreeSentinel
 
 
 FUNCTIONAL_BLOCKED_REASONS = (
@@ -359,22 +360,6 @@ def _pack_identity(pack: Mapping[str, Any]) -> tuple[tuple[str, str, str, str], 
     return tuple(values)
 
 
-def _quality_query(query: str) -> str:
-    """Apply one fixed, expectation-blind query normalization for the gate.
-
-    The frozen questions are natural-language prompts while the local FTS
-    contract is trigram-based.  Keeping the first four-character CJK phrase
-    (or first lexical token for non-CJK prompts) makes the benchmark exercise
-    the real Gateway/MCP path without consulting any expected IDs.
-    """
-    normalized = " ".join(str(query or "").split())
-    runs = re.findall(r"[\u4e00-\u9fff]+", normalized)
-    if runs:
-        return runs[0][:4]
-    tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9_.-]*", normalized)
-    return tokens[0][:64] if tokens else normalized[:64]
-
-
 def _select_retrieval_evidence(
     pack: Mapping[str, Any],
     imported_identity: Mapping[str, tuple[str, str]],
@@ -461,6 +446,8 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_root = Path(tempfile.mkdtemp(prefix="lingji-acceptance-quality-", dir=str(output_path.parent)))
+    from src.config import settings
+    protected_before = ProtectedTreeSentinel.capture((Path(settings.vault_path), Path(settings.storage_path)))
     production_sentinels_before = _production_sentinels()
     production_sentinels_after: dict[str, str] = {}
     message_map: dict[str, dict[str, Any]] = {}
@@ -518,7 +505,7 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
         baseline_context_chars = baseline_unit * len(questions)
         for question in questions:
             arguments = {
-                "query": _quality_query(question.query),
+                "query": question.query,
                 "agent_id": "agent-synthetic",
                 "project": "project-lingji",
                 "max_chars": 4000,
@@ -555,17 +542,9 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
                     )
                 )
             except Exception:
-                # Keep the evaluator's strict evidence rules intact while
-                # recording an actual retrieval miss as a failed result.
-                question_results.append(
-                    score_question(
-                        question,
-                        fact_by_memory,
-                        (),
-                        (),
-                        context_chars=len(str(gateway_pack.get("markdown") or "")),
-                    )
-                )
+                raise
+        protected_after = ProtectedTreeSentinel.capture((Path(settings.vault_path), Path(settings.storage_path)))
+        production_changes = protected_before.diff(protected_after)
         report = evaluate_run(
             fact_by_memory,
             questions,
@@ -586,13 +565,14 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             rendered_context_chars=rendered_context_chars,
             mcp_successes=mcp_successes,
             mcp_attempts=mcp_attempts,
-            production_pollution=0,
+            production_pollution=len(production_changes),
             owner_review_success=None,
             reboot_recovery=None,
             blocked_reasons=FUNCTIONAL_BLOCKED_REASONS,
         )
         functional_status = AutomaticMemoryFunctionalGate.evaluate(report)
-        phase_status = AutomaticMemoryAcceptanceGate.evaluate(report)
+        measured_status = AutomaticMemoryFunctionalGate.evaluate(report)
+        phase_status = "FAIL" if measured_status == "FAIL" else AutomaticMemoryAcceptanceGate.evaluate(report)
         production_sentinels_after = _production_sentinels()
         envelope = {
             "fixture_hashes": fixture_hashes,
@@ -609,7 +589,8 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             "mcp_cases": mcp_cases,
             "semantic_degradation": {"qdrant_outage_isolated": True, "lexical_retrieval_available": True},
             "corruption_isolation": {"single_source_corruption_isolated": True, "other_sources_continue": True},
-            "production_pollution": report.production_pollution,
+            "production_pollution": len(production_changes),
+            "protected_tree_changes": [asdict(change) for change in production_changes],
             "production_vault_sentinels": {
                 "before": production_sentinels_before,
                 "after": production_sentinels_after,
