@@ -9,6 +9,7 @@ from src.retrieval.context_pack import ContextPackBuilder, ContextPackRequest
 from src.retrieval.hybrid import HybridRetriever, SearchFilters
 from src.retrieval.index_coordinator import MemoryIndexCoordinator
 from src.retrieval.memory_db import MemoryDatabase
+from src.retrieval.temporal import TemporalQuery
 
 
 class MemoryGateway:
@@ -53,6 +54,8 @@ class MemoryGateway:
         memory_types: list[str] | None = None,
         tags: list[str] | None = None,
         include_archived: bool = False,
+        mode: str = "current",
+        as_of: str | None = None,
     ) -> dict[str, Any]:
         profile = self.profiles.require_tool(agent_id, "search_memory")
         results = self.retriever.search(
@@ -65,6 +68,8 @@ class MemoryGateway:
                 agent_id=profile.agent_id,
                 tags=tuple(tags or ()),
                 include_archived=include_archived,
+                mode=mode,
+                as_of=as_of,
             ),
         )
         self._event("memory_searched", profile.agent_id, {"query": query, "count": len(results)})
@@ -73,6 +78,8 @@ class MemoryGateway:
             "agent_id": profile.agent_id,
             "memory_revision": self.database.revision,
             "results": results,
+            "query_mode": mode,
+            "as_of": as_of,
         }
 
     def fetch_memory(
@@ -80,6 +87,8 @@ class MemoryGateway:
         agent_id: str,
         memory_id: str | None = None,
         relative_path: str | None = None,
+        mode: str = "current",
+        as_of: str | None = None,
     ) -> dict[str, Any] | None:
         profile = self.profiles.require_tool(agent_id, "fetch_memory")
         if not memory_id and not relative_path:
@@ -90,6 +99,9 @@ class MemoryGateway:
             else self.database.fetch_by_path(str(relative_path), include_chunks=True)
         )
         if not memory:
+            return None
+        allowed, _ = TemporalQuery.from_values(mode, as_of).allows(memory)
+        if not allowed:
             return None
         if memory.get("privacy") not in profile.allowed_privacy:
             raise PermissionError(f"{profile.display_name} cannot read {memory.get('privacy')} memory")
@@ -104,6 +116,8 @@ class MemoryGateway:
         agent_id: str,
         project: str | None = None,
         limit: int = 50,
+        mode: str = "current",
+        as_of: str | None = None,
     ) -> dict[str, Any]:
         profile = self.profiles.require_tool(agent_id, "get_core_memory")
         memories = self.database.list_core_memories(
@@ -111,6 +125,8 @@ class MemoryGateway:
             project=project,
             privacy=profile.allowed_privacy,
             limit=min(max(int(limit), 1), 100),
+            mode=mode,
+            as_of=as_of,
         )
         return {
             "agent_id": profile.agent_id,
@@ -128,6 +144,8 @@ class MemoryGateway:
         memory_types: list[str] | None = None,
         tags: list[str] | None = None,
         include_core: bool = True,
+        mode: str = "current",
+        as_of: str | None = None,
     ) -> dict[str, Any]:
         profile = self.profiles.require_tool(agent_id, "build_context_pack")
         requested_chars = max_chars if max_chars is not None else profile.max_context_chars
@@ -142,6 +160,8 @@ class MemoryGateway:
                 memory_types=tuple(memory_types or ()),
                 tags=tuple(tags or ()),
                 include_core=include_core,
+                mode=mode,
+                as_of=as_of,
             )
         )
         self._event(

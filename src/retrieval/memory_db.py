@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from src.retrieval.chunker import MarkdownChunk, MarkdownChunker
+from src.retrieval.temporal import ALL_LIFECYCLE_STATUSES, TemporalQuery, temporal_fields
 
 SCHEMA_VERSION = "1"
 
@@ -392,6 +393,12 @@ class MemoryDatabase:
                 "related_ids",
             )
         }
+        for key in (
+            "authority", "evidence_refs", "supersession_reason", "invalidating_reason",
+            "created_by", "confirmed_by", "policy_version", "extractor_version",
+        ):
+            if entry.get(key) not in (None, ""):
+                relationships[key] = entry.get(key)
         memory_scope_reason = str(
             entry.get("memory_scope_reason")
             or properties.get("memory_scope_reason")
@@ -586,13 +593,18 @@ class MemoryDatabase:
         project: str | None = None,
         privacy: tuple[str, ...] = ("public", "private"),
         limit: int = 50,
+        mode: str = "current",
+        as_of: str | None = None,
     ) -> list[dict[str, Any]]:
         placeholders = ",".join("?" for _ in privacy)
+        temporal = TemporalQuery.from_values(mode, as_of)
+        status_clause = "AND status = 'active'" if temporal.mode in {"current", "why"} else ""
+        pin_clause = "AND pin_to_context = 1" if temporal.mode in {"current", "why"} else ""
         sql = f"""
             SELECT * FROM memory_documents
             WHERE memory_tier = 'core'
-              AND pin_to_context = 1
-              AND status = 'active'
+              {pin_clause}
+              {status_clause}
               AND privacy IN ({placeholders})
             ORDER BY recall_weight DESC,
                      CASE importance WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END DESC,
@@ -604,6 +616,9 @@ class MemoryDatabase:
         output = []
         for row in rows:
             item = self._document_dict(row)
+            allowed, _ = temporal.allows(item)
+            if not allowed:
+                continue
             scopes = item["agent_scope"]
             if scopes and agent_id and agent_id not in scopes and "all" not in scopes:
                 continue
@@ -622,7 +637,11 @@ class MemoryDatabase:
         statuses: tuple[str, ...] = ("active", "needs_review", "received"),
         privacy: tuple[str, ...] = ("public", "private"),
         as_of: str | None = None,
+        mode: str = "current",
     ) -> list[dict[str, Any]]:
+        temporal = TemporalQuery.from_values(mode, as_of)
+        if not temporal.valid:
+            return []
         expression = self._fts_expression(query)
         if not expression:
             return []
@@ -631,16 +650,15 @@ class MemoryDatabase:
         if memory_types:
             where.append("d.memory_type IN (" + ",".join("?" for _ in memory_types) + ")")
             params.extend(memory_types)
-        if statuses:
+        if statuses and temporal.mode in {"current", "why"}:
             where.append("d.status IN (" + ",".join("?" for _ in statuses) + ")")
             params.extend(statuses)
         if privacy:
             where.append("d.privacy IN (" + ",".join("?" for _ in privacy) + ")")
             params.extend(privacy)
-        if as_of:
-            where.append("(d.valid_from IS NULL OR d.valid_from = '' OR d.valid_from <= ?)")
-            where.append("(d.valid_to IS NULL OR d.valid_to = '' OR d.valid_to > ?)")
-            params.extend([as_of, as_of])
+        # Temporal intervals are normalized by TemporalQuery after the row is
+        # materialized.  Do not compare ISO strings in SQLite: offsets such as
+        # +08:00 and Z do not have lexical ordering semantics.
         params.append(max(int(limit), 1))
         sql = f"""
             SELECT
@@ -687,7 +705,53 @@ class MemoryDatabase:
             params[0] = fallback
             with self._connection() as connection:
                 rows = connection.execute(sql, params).fetchall()
-        return [self._search_dict(row) for row in rows]
+        output = []
+        for row in rows:
+            item = self._search_dict(row)
+            allowed, reason = temporal.allows(item)
+            if allowed:
+                item["temporal_reason"] = reason
+                output.append(item)
+        return output
+
+    def refresh_project_decision(
+        self,
+        old_memory_id: str,
+        new_memory_id: str,
+        *,
+        reason: str = "",
+        invalidates: bool = False,
+    ) -> dict[str, Any]:
+        """Link a current project decision to its replacement without deleting evidence."""
+        old_id, new_id = str(old_memory_id).strip(), str(new_memory_id).strip()
+        if not old_id or not new_id or old_id == new_id:
+            raise ValueError("distinct old and new memory IDs are required")
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        status = "invalidated" if invalidates else "superseded"
+        with self._lock, self._connection() as connection:
+            old = connection.execute("SELECT * FROM memory_documents WHERE memory_id = ?", (old_id,)).fetchone()
+            new = connection.execute("SELECT * FROM memory_documents WHERE memory_id = ?", (new_id,)).fetchone()
+            if not old or not new:
+                raise KeyError("both old and new memory records are required")
+            existing = self._document_dict(old)
+            if existing.get("status") == status and str(existing.get("superseded_by") or "") == new_id:
+                return {"memory_id": old_id, "replacement_id": new_id, "status": status, "idempotent": True}
+            old_fields = temporal_fields(existing)
+            new_fields = temporal_fields(self._document_dict(new))
+            if new_fields["authority_rank"] < old_fields["authority_rank"]:
+                return {"memory_id": old_id, "replacement_id": new_id, "status": existing.get("status"), "conflict": True, "reason": "lower_authority_cannot_displace"}
+            relationships = existing.get("relationships") or {}
+            relationships.update({
+                "superseded_by": new_id,
+                "supersession_reason" if not invalidates else "invalidating_reason": str(reason or "project_refresh"),
+                "replacement_at": now,
+            })
+            connection.execute(
+                "UPDATE memory_documents SET status = ?, valid_to = ?, superseded_by = ?, pin_to_context = 0, relationships_json = ?, updated_at = ? WHERE memory_id = ?",
+                (status, now, new_id, self._json(relationships), now, old_id),
+            )
+            self._bump_revision(connection)
+        return {"memory_id": old_id, "replacement_id": new_id, "status": status, "reason": str(reason or "project_refresh"), "idempotent": False}
 
     def list_recent(self, limit: int = 30, privacy: tuple[str, ...] = ("public", "private")) -> list[dict[str, Any]]:
         placeholders = ",".join("?" for _ in privacy)

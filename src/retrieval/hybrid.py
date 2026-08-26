@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from src.retrieval.memory_db import MemoryDatabase
+from src.retrieval.temporal import ALL_LIFECYCLE_STATUSES, TemporalQuery, temporal_fields
 
 
 class SemanticProvider(Protocol):
@@ -32,12 +33,16 @@ class SearchFilters:
     tags: tuple[str, ...] = ()
     as_of: str | None = None
     include_archived: bool = False
+    mode: str = "current"
 
     def normalized(self) -> "SearchFilters":
         statuses = self.statuses
         if self.include_archived and "archived" not in statuses:
             statuses = (*statuses, "archived")
-        as_of = self.as_of or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        temporal = TemporalQuery.from_values(self.mode, self.as_of)
+        as_of = temporal.as_of
+        if temporal.mode in {"as_of", "history"}:
+            statuses = ALL_LIFECYCLE_STATUSES
         return SearchFilters(
             project=self.project,
             memory_types=tuple(sorted(set(self.memory_types))),
@@ -47,6 +52,7 @@ class SearchFilters:
             tags=tuple(sorted(set(self.tags))),
             as_of=as_of,
             include_archived=self.include_archived,
+            mode=temporal.mode,
         )
 
 
@@ -94,10 +100,21 @@ class HybridRetriever:
             statuses=normalized.statuses,
             privacy=normalized.privacy,
             as_of=normalized.as_of,
+            mode=normalized.mode,
         )
         semantic = self._semantic_search(clean_query, candidate_limit, normalized)
         fused = self._fuse(clean_query, lexical, semantic, normalized)
         output = fused[:limit]
+        if normalized.mode == "why":
+            conflict = len({temporal_fields(item)["authority_rank"] for item in output}) > 1
+            for item in output:
+                fields = temporal_fields(item)
+                item["why"] = {
+                    **fields,
+                    "selection_rule": "current_valid_and_authority_ordered",
+                    "exclusion_reason": item.get("temporal_reason") or "selected",
+                    "conflict": conflict,
+                }
         self._cache_put(cache_key, output)
         return output
 
@@ -218,6 +235,7 @@ class HybridRetriever:
             "project": memory.get("project", []),
             "tags": memory.get("tags", []),
             "relationships": memory.get("relationships", {}),
+            "superseded_by": memory.get("superseded_by", ""),
             "valid_from": memory.get("valid_from"),
             "valid_to": memory.get("valid_to"),
             "pin_to_context": memory.get("pin_to_context", False),
@@ -253,6 +271,11 @@ class HybridRetriever:
             item_tags = {str(value).lower() for value in (item.get("tags") or [])}
             if not set(tag.lower() for tag in filters.tags).issubset(item_tags):
                 return False
+        temporal = TemporalQuery.from_values(filters.mode, filters.as_of)
+        allowed, reason = temporal.allows(item)
+        item["temporal_reason"] = reason
+        if not allowed:
+            return False
         return True
 
     def _metadata_boost(
@@ -284,6 +307,7 @@ class HybridRetriever:
             boost += 0.008
         if item.get("review_status") == "approved":
             boost += 0.008
+        boost += temporal_fields(item)["authority_rank"] * 0.02
         if "semantic" in item.get("retrieval_channels", []):
             boost += self._clamp_score(item.get("semantic_score")) * 0.01
         return boost

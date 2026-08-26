@@ -6,6 +6,7 @@ from typing import Any
 
 from src.retrieval.hybrid import HybridRetriever as BaseHybridRetriever
 from src.retrieval.hybrid import SearchFilters
+from src.retrieval.temporal import temporal_fields
 
 
 class HybridRetriever(BaseHybridRetriever):
@@ -20,6 +21,9 @@ class HybridRetriever(BaseHybridRetriever):
         limit = max(int(limit), 1)
         primary = super().search(query, limit=limit, filters=filters)
         if len(primary) >= limit:
+            if (filters or SearchFilters()).mode == "why":
+                for item in primary:
+                    item["why"] = {**temporal_fields(item), "selection_rule": "current_valid_and_authority_ordered", "exclusion_reason": item.get("temporal_reason") or "selected"}
             return primary
         normalized = (filters or SearchFilters()).normalized()
         fallback = self._substring_search(query, max(limit * 3, 20), normalized)
@@ -39,7 +43,12 @@ class HybridRetriever(BaseHybridRetriever):
             ),
             reverse=True,
         )
-        return self._dedupe(combined)[:limit]
+        output = self._dedupe(combined)[:limit]
+        if normalized.mode == "why":
+            conflict = len({temporal_fields(item)["authority_rank"] for item in output}) > 1
+            for item in output:
+                item["why"] = {**temporal_fields(item), "selection_rule": "current_valid_and_authority_ordered", "exclusion_reason": item.get("temporal_reason") or "selected", "conflict": conflict}
+        return output
 
     def _substring_search(
         self,
@@ -63,20 +72,14 @@ class HybridRetriever(BaseHybridRetriever):
         if filters.memory_types:
             where.append("d.memory_type IN (" + ",".join("?" for _ in filters.memory_types) + ")")
             params.extend(filters.memory_types)
-        if filters.statuses:
+        if filters.statuses and filters.mode in {"current", "why"}:
             where.append("d.status IN (" + ",".join("?" for _ in filters.statuses) + ")")
             params.extend(filters.statuses)
         if filters.privacy:
             where.append("d.privacy IN (" + ",".join("?" for _ in filters.privacy) + ")")
             params.extend(filters.privacy)
-        if filters.as_of:
-            where.extend(
-                [
-                    "(d.valid_from IS NULL OR d.valid_from = '' OR d.valid_from <= ?)",
-                    "(d.valid_to IS NULL OR d.valid_to = '' OR d.valid_to > ?)",
-                ]
-            )
-            params.extend([filters.as_of, filters.as_of])
+        # TemporalQuery post-filter performs timezone-normalized validation;
+        # SQLite string comparisons would be wrong for offset timestamps.
         params.append(int(limit))
         sql = f"""
             SELECT

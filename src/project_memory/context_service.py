@@ -4,6 +4,7 @@ from typing import Any, Callable, Iterable
 
 from src.gateway.profiles import AIProfileRegistry
 from src.retrieval.hybrid import SearchFilters
+from src.retrieval.temporal import TemporalQuery
 
 from .models import ProjectContextPack, stable_citation
 
@@ -24,7 +25,7 @@ class ProjectContextService:
         self.profiles = profiles or AIProfileRegistry()
         self.session_provider = session_provider
 
-    def build(self, agent_id: str, project_id: str, query: str, session_id: str | None = None, max_chars: int | None = None, allow_cross_project: bool = False) -> dict[str, Any]:
+    def build(self, agent_id: str, project_id: str, query: str, session_id: str | None = None, max_chars: int | None = None, allow_cross_project: bool = False, mode: str = "current", as_of: str | None = None) -> dict[str, Any]:
         profile = self.profiles.get(agent_id)
         if not project_id:
             raise ValueError("project_id is required")
@@ -38,15 +39,15 @@ class ProjectContextService:
         sessions_budget = int(limit * self.ALLOCATIONS["recent_sessions"])
         related_budget = max(limit - core_budget - dt_budget - sessions_budget, 0)
 
-        core = self.database.list_core_memories(agent_id=profile.agent_id, project=None if allow_cross_project else project_id, privacy=profile.allowed_privacy, limit=100)
-        pack.core_memories = self._bounded(self._eligible_full(core, profile, project_id, allow_cross_project), core_budget)
+        core = self.database.list_core_memories(agent_id=profile.agent_id, project=None if allow_cross_project else project_id, privacy=profile.allowed_privacy, limit=100, mode=mode, as_of=as_of)
+        pack.core_memories = self._bounded(self._eligible_full(core, profile, project_id, allow_cross_project, mode, as_of), core_budget)
 
         recent = self.database.list_recent(limit=200, privacy=profile.allowed_privacy)
         decisions = [item for item in recent if str(item.get("memory_type")) == "decision"]
         tasks = [item for item in recent if str(item.get("memory_type")) in {"task", "blocker"}]
         half = dt_budget // 2
-        pack.decisions = self._bounded(self._eligible_full(decisions, profile, project_id, allow_cross_project), half)
-        pack.active_tasks = self._bounded(self._eligible_full(tasks, profile, project_id, allow_cross_project), dt_budget - half)
+        pack.decisions = self._bounded(self._eligible_full(decisions, profile, project_id, allow_cross_project, mode, as_of), half)
+        pack.active_tasks = self._bounded(self._eligible_full(tasks, profile, project_id, allow_cross_project, mode, as_of), dt_budget - half)
 
         sessions = list(self.session_provider(project_id=project_id, session_id=session_id or "", limit=30) if self.session_provider else [])
         pack.recent_sessions = self._bounded(
@@ -56,13 +57,15 @@ class ProjectContextService:
                 project_id,
                 allow_cross_project,
                 allowed_statuses={"active", "completed", "failed", "abandoned"},
+                mode=mode,
+                as_of=as_of,
             ),
             sessions_budget,
         )
 
         if query:
-            results = self.retriever.search(query, limit=40, filters=SearchFilters(project=None if allow_cross_project else project_id, privacy=profile.allowed_privacy, agent_id=profile.agent_id, include_archived=False))
-            pack.related_messages = self._bounded(self._eligible(results, profile, project_id, allow_cross_project), related_budget)
+            results = self.retriever.search(query, limit=40, filters=SearchFilters(project=None if allow_cross_project else project_id, privacy=profile.allowed_privacy, agent_id=profile.agent_id, include_archived=False, mode=mode, as_of=as_of))
+            pack.related_messages = self._bounded(self._eligible(results, profile, project_id, allow_cross_project, mode=mode, as_of=as_of), related_budget)
 
         sections = [
             ("Core Memory", pack.core_memories),
@@ -82,8 +85,8 @@ class ProjectContextService:
             pack.markdown = self._natural_take(pack.markdown, limit)
         return pack.to_dict()
 
-    def _eligible_full(self, items, profile, project_id, allow_cross_project):
-        for item in self._eligible(items, profile, project_id, allow_cross_project):
+    def _eligible_full(self, items, profile, project_id, allow_cross_project, mode="current", as_of=None):
+        for item in self._eligible(items, profile, project_id, allow_cross_project, mode=mode, as_of=as_of):
             memory_id = str(item.get("memory_id") or "")
             full = self.database.fetch_memory(memory_id, include_chunks=True) if memory_id else item
             if full:
@@ -91,16 +94,20 @@ class ProjectContextService:
                 merged.update(full)
                 yield merged
 
-    def _eligible(self, items, profile, project_id, allow_cross_project, allowed_statuses=None):
+    def _eligible(self, items, profile, project_id, allow_cross_project, allowed_statuses=None, mode="current", as_of=None):
         statuses = set(allowed_statuses or {"active"})
+        temporal = TemporalQuery.from_values(mode, as_of)
         for raw in items:
             item = dict(raw)
+            allowed, _ = temporal.allows(item)
+            if not allowed:
+                continue
             path = str(item.get("relative_path") or (item.get("citation") or {}).get("path") or "")
             if path.startswith("08-Private/"):
                 continue
             if str(item.get("privacy") or "private") not in profile.allowed_privacy:
                 continue
-            if str(item.get("status") or "active") not in statuses:
+            if mode in {"current", "why"} and str(item.get("status") or "active") not in statuses:
                 continue
             review = str(item.get("review_status") or "approved")
             if review not in {"", "approved"}:

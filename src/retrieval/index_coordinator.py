@@ -235,6 +235,7 @@ class MemoryIndexCoordinator:
                     d.content_hash AS document_content_hash,
                     d.modified_at,
                     d.updated_at
+                    , d.relationships_json
                 FROM memory_chunks c
                 JOIN memory_documents d ON d.memory_id = c.memory_id
                 ORDER BY c.memory_id, c.ordinal
@@ -275,6 +276,14 @@ class MemoryIndexCoordinator:
                 "modified_at": str(item.get("modified_at") or ""),
                 "updated_at": str(item.get("updated_at") or ""),
             }
+            relationships = self._loads(item.get("relationships_json"), {})
+            if isinstance(relationships, dict):
+                for key in (
+                    "authority", "evidence_refs", "supersession_reason", "invalidating_reason",
+                    "created_by", "confirmed_by", "policy_version", "extractor_version",
+                ):
+                    if key in relationships:
+                        payload[key] = relationships[key]
             text = str(item.get("text") or "")
             point = SemanticPoint(
                 chunk_id=chunk_id,
