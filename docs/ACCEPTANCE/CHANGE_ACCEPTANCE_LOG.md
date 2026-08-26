@@ -4,6 +4,38 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 9 · terminal snapshot cleanup precedence
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`b979b66f14d6e64e40049ee6f7258c259bfceb30`
+- 影响模块：snapshot staging cleanup terminal-state and lease ownership decision
+- 风险等级：P1
+- 用户可感知变化：合法 owned snapshot temp 在 scan 明确进入 completed/cancelled/failed/paused 终态时可确定性回收，即使当前 lease_id 为 NULL；running temp 只有编码 lease 与当前 lease 匹配且 expiry 明确过期时才可回收。
+- 数据或安全边界变化：scan 缺失、查询异常、字段异常、未知状态、NULL/非法 expiry、mismatched lease、malformed 或超长 owned token 均 fail-closed 保留；普通 legacy `.snapshot-*.tmp` 仍按 24 小时策略处理。
+
+### 新增或修改的自动验收
+
+- [ ] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_extraction_queue.py tests/test_extraction_worker.py`：76 passed，覆盖终态 NULL lease 回收、running mismatch/NULL expiry 保留、unknown/overlong/malformed owned 保留、legacy 24h、跨来源 active temp、protected snapshot job、lease/crash/idempotency。
+- [ ] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_hardening.py tests/test_extraction_worker.py tests/test_structured_ingestion.py`：47 passed，Task 1/extraction/queue/worker 回归（含 1 个既有 FastAPI deprecation warning；更正历史 round 8 条目误写的 104）。
+- [ ] `./.venv/bin/python -m py_compile src/automatic_memory/snapshot.py src/automatic_memory/checkpoint.py src/extraction/pipeline.py src/extraction/queue.py src/extraction/sink.py src/storage/state_db.py`、`git diff --check`、`./.venv/bin/python scripts/check_acceptance_sync.py`、`./.venv/bin/python scripts/check_local_execution_handoff.py`。
+
+### 回归项与边界
+
+- [ ] 保持 non-UTC/invalid expiry fail-closed、unknown/overlong owned 保留、普通 legacy `.snapshot-*.tmp` 24 小时策略、活跃跨来源保护、protected snapshot job 边界、lease/crash/idempotency、source/raw 不改动。
+- [ ] 不扩展 Task 3 或其他架构；不新增数据库、队列、raw archive、watcher、适配器或消费者。
+- [ ] Full-suite 既有 Desktop assertion mismatch 与缺少 `python` executable 的 `test_second_brain` baseline failures 不修改、不掩盖；内部 SDD 报告继续 ignored。
+
+### 清理与回滚
+
+- 临时数据前缀：`PHASE1_AUTOMATIC_MEMORY_TASK2_FIX9_`
+- 本轮 pytest 临时授权 root、SQLite、raw、queue 与 crash marker 自动清理；未创建持久 debug 目录或日志。
+- 回滚：回滚产品 Commit `b979b66f14d6e64e40049ee6f7258c259bfceb30`，不触碰主人数据。
+
+### 最终报告
+
+- 报告路径：本地调度报告继续由 `.superpowers/` 忽略；正式证据为本条目与测试命令输出。
+- 报告分支：`codex/phase1-automatic-memory`
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 2 fix round 8 · unknown owned snapshot retention
 
 - 产品分支：`codex/phase1-automatic-memory`
@@ -16,7 +48,7 @@
 ### 新增或修改的自动验收
 
 - [ ] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_extraction_queue.py tests/test_extraction_worker.py`：71 passed，覆盖不存在 scan 的有效编码 stale owned temp 保留、超长 token stale owned temp 保留、malformed/异常 DB、lease expiry、legacy 24h 与既有 Task 2 lease/crash/idempotency 边界。
-- [ ] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_hardening.py tests/test_extraction_worker.py tests/test_structured_ingestion.py`：104 passed，Task 1/extraction/queue/worker 回归（含 1 个既有 FastAPI deprecation warning）。
+- [ ] `./.venv/bin/python -m pytest -q tests/test_automatic_memory_source_registry.py tests/test_automatic_memory_control_api.py tests/test_extraction_idempotency.py tests/test_extraction_queue.py tests/test_extraction_hardening.py tests/test_extraction_worker.py tests/test_structured_ingestion.py`：47 passed，Task 1/extraction/queue/worker 回归（含 1 个既有 FastAPI deprecation warning；原记录的 104 为计数错误，已按真实命令输出更正）。
 - [ ] `./.venv/bin/python -m py_compile src/automatic_memory/snapshot.py src/automatic_memory/checkpoint.py src/extraction/pipeline.py src/extraction/queue.py src/extraction/sink.py src/storage/state_db.py`、`git diff --check`、`./.venv/bin/python scripts/check_acceptance_sync.py`、`./.venv/bin/python scripts/check_local_execution_handoff.py`。
 
 ### 回归项与边界
