@@ -4,6 +4,30 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 7 · unified timeline retrieval
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`942c33a693efaab76f2372307fbb9b5a9223a270`
+- 影响模块：统一 temporal query contract、MemoryDatabase lexical、Qdrant semantic payload/filter boundary、hybrid post-filter、Core/ContextPack、MemoryGateway、Project Context、MCP
+- 风险等级：P0
+- 用户可感知变化：检索入口统一支持 `current`、`as_of`、`history`、`why`；当前结果排除被替代/失效/归档内容，历史可按时间找回，`why` 提供权威级别、来源引用、有效期和替代原因。时区偏移和损坏时间元数据按规范化瞬时处理并 fail-closed；语义结果经过同一 SQLite 权威记录复核，不能绕过当前过滤。
+- 数据或安全边界变化：保留原始证据和历史记录；项目刷新只在可重建 Memory DB 中写替代/失效链接，不删除 Vault/原始证据；不新增 gateway、retriever、temporal database 或事实源。
+
+### 新增或修改的自动验收
+
+- [x] `tests/test_task7_timeline_retrieval.py`：6 passed，覆盖 current/history/as_of/why、半开区间边界、时区偏移、损坏时间 fail-closed、幂等项目刷新、Gateway/ContextPack 模式传播、语义 stale-only 泄漏阻断。
+- [x] Task 7 相关检索/Gateway/MCP/Project Context 回归：80 passed，2 warnings（既有依赖弃用警告）。
+- [x] Task 1–6 回归：241 passed，3 warnings（既有 zip duplicate、Pydantic、依赖弃用警告）。
+- [x] 涉及文件 `py_compile`、`git diff --check`：PASS。
+- [ ] `scripts/check_acceptance_sync.py`、`scripts/check_local_execution_handoff.py`：根代理在文档提交后复读。
+- [ ] Qdrant unavailable、真实 Production Vault、主人 UI/M5 真机验收：仍不在本轮范围。
+
+### 回归与回滚
+
+- [x] 既有 privacy/project/agent-scope、Core、ContextPack、MCP 和 Qdrant/semantic wiring 回归保持通过。
+- [x] SQLite 只作为可重建 lexical/read model；Qdrant 仍为可重建 semantic projection，当前状态由 Memory DB temporal predicate 最终裁决。
+- 回滚：回退产品 Commit `942c33a693efaab76f2372307fbb9b5a9223a270` 与本条文档提交；不触碰 Vault、原始聊天证据、Qdrant 正式数据或主人配置。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 6 final repair · candidate-owned evidence self-reference
 
 - 产品分支：`codex/phase1-automatic-memory`

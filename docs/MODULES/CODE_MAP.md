@@ -369,7 +369,7 @@ src/retrieval/memory_db.py
 = rebuildable derived promotion and owner/Core boundary
 
 Task 7:
-src/retrieval/temporal_filter.py
+src/retrieval/temporal.py
 src/retrieval/memory_db.py
 src/retrieval/qdrant_provider.py
 src/retrieval/hybrid.py
