@@ -15,6 +15,7 @@ from typing import Any, Mapping, Sequence
 
 from src.extraction.models import ExtractionBatch
 from src.sources import ExternalMessageKey, SourceReadModel, SourceReadModelError
+from src.auto_review.models import PromotionEvidence, PromotionPersistenceAudit, PromotionProjectionState
 from .evaluation import EvaluationReport
 
 
@@ -54,6 +55,24 @@ class StableDuplicateSummary:
     @property
     def total(self) -> int:
         return self.source_records + self.conversation_records + self.message_records + self.memory_records
+
+
+def audit_promotion_persistence(memory_db: Any, *, promotion_evidence: Sequence[PromotionEvidence]) -> PromotionPersistenceAudit:
+    """Compare durable active derived rows with verified activation evidence."""
+    active = [item.memory_id for item in promotion_evidence if item.state is PromotionProjectionState.VISIBLE_ACTIVE or str(item.state) == PromotionProjectionState.VISIBLE_ACTIVE.value]
+    expected = tuple(sorted(active))
+    if len(active) != len(set(active)):
+        expected = tuple(sorted(active))
+    rows = tuple(memory_db.list_derived_projection_identity_rows())
+    persisted = tuple(sorted(str(row.get("memory_id") or "") for row in rows))
+    distinct = set(persisted)
+    return PromotionPersistenceAudit(
+        expected_memory_ids=expected,
+        persisted_memory_ids=persisted,
+        missing_memory_ids=tuple(sorted(set(expected) - distinct)),
+        extra_memory_ids=tuple(sorted(distinct - set(expected))),
+        duplicate_memory_records=max(0, len(persisted) - len(distinct)),
+    )
 
 
 def build_expected_import_rows(batch: ExtractionBatch) -> tuple[ExpectedImportedRow, ...]:

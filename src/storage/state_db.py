@@ -83,7 +83,15 @@ class StateDatabase:
                     entity_type TEXT NOT NULL,
                     entity_id TEXT,
                     payload_json TEXT NOT NULL DEFAULT '{}',
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    stable_event_id TEXT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS promotion_operation_leases (
+                    decision_id TEXT PRIMARY KEY,
+                    owner_id TEXT NOT NULL,
+                    lease_expires_at TEXT NOT NULL,
+                    heartbeat_at TEXT NOT NULL
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_scheduler_due
@@ -176,6 +184,10 @@ class StateDatabase:
                 END;
                 """
             )
+            event_columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(events)").fetchall()}
+            if "stable_event_id" not in event_columns:
+                connection.execute("ALTER TABLE events ADD COLUMN stable_event_id TEXT NULL")
+            connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_events_stable_event_id ON events(stable_event_id) WHERE stable_event_id IS NOT NULL")
             # Task 1 databases may already have the scan table. Keep the
             # migration additive so existing state and recovery tokens survive.
             columns = {
@@ -592,6 +604,79 @@ class StateDatabase:
                 (event_type, entity_type, entity_id, self._json(payload), self._iso(now)),
             )
             return int(cursor.lastrowid)
+
+    @staticmethod
+    def _promotion_json(payload: Any) -> str:
+        return json.dumps(payload if payload is not None else {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+    def get_event(self, event_id: int | str) -> dict[str, Any] | None:
+        with self._connection() as connection:
+            if isinstance(event_id, int) or str(event_id).isdigit():
+                row = connection.execute("SELECT * FROM events WHERE event_id=?", (int(event_id),)).fetchone()
+            else:
+                row = connection.execute("SELECT * FROM events WHERE stable_event_id=?", (str(event_id),)).fetchone()
+        return dict(row) if row else None
+
+    def record_promotion_event_once(
+        self, decision_id: str, event_type: str, entity_id: str | None, payload: Any,
+    ) -> str:
+        decision = str(decision_id or "").strip()
+        selected_type = str(event_type or "").strip()
+        if not decision or not selected_type:
+            raise ValueError("promotion event identity is required")
+        stable_id = f"promotion:{decision}:{selected_type}"
+        body = self._promotion_json(payload)
+        terminal = {"memory_projection_activated", "memory_projection_rolled_back", "memory_projection_repair_required"}
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute("SELECT * FROM events WHERE stable_event_id=?", (stable_id,)).fetchone()
+            if existing is not None:
+                if str(existing["event_type"]) != selected_type or str(existing["entity_id"] or "") != str(entity_id or "") or str(existing["payload_json"]) != body:
+                    raise ValueError("promotion_event_conflict")
+                return stable_id
+            if selected_type in terminal:
+                rows = connection.execute("SELECT event_type,payload_json FROM events WHERE entity_type='memory_candidate' AND entity_id=? AND event_type IN (?,?,?)", (str(entity_id or ""), *terminal)).fetchall()
+                for other in rows:
+                    try:
+                        prior = json.loads(str(other["payload_json"]))
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        prior = {}
+                    if str(prior.get("decision_id") or "") == decision and str(other["event_type"]) != selected_type:
+                        raise ValueError("promotion_terminal_conflict")
+            connection.execute("INSERT INTO events(event_type,entity_type,entity_id,payload_json,created_at,stable_event_id) VALUES(?,?,?,?,?,?)", (selected_type, "memory_candidate", entity_id, body, datetime.now().isoformat(timespec="seconds"), stable_id))
+        return stable_id
+
+    def claim_promotion_lease(self, decision_id: str, owner_id: str, *, now: datetime | None = None, ttl_seconds: float = 60.0) -> bool:
+        now = now or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            raise ValueError("lease clock must be timezone-aware")
+        decision, owner = str(decision_id or ""), str(owner_id or "")
+        expiry = (now.astimezone(timezone.utc) + timedelta(seconds=max(float(ttl_seconds), 0.1))).isoformat()
+        stamp = now.astimezone(timezone.utc).isoformat()
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT owner_id,lease_expires_at FROM promotion_operation_leases WHERE decision_id=?", (decision,)).fetchone()
+            if row is not None:
+                try:
+                    existing_expiry = datetime.fromisoformat(str(row["lease_expires_at"]))
+                    if existing_expiry.tzinfo is None:
+                        return False
+                except (TypeError, ValueError):
+                    return False
+                if existing_expiry > now.astimezone(timezone.utc) and str(row["owner_id"]) != owner:
+                    return False
+                connection.execute("UPDATE promotion_operation_leases SET owner_id=?,lease_expires_at=?,heartbeat_at=? WHERE decision_id=?", (owner, expiry, stamp, decision))
+            else:
+                connection.execute("INSERT INTO promotion_operation_leases(decision_id,owner_id,lease_expires_at,heartbeat_at) VALUES(?,?,?,?)", (decision, owner, expiry, stamp))
+        return True
+
+    def renew_promotion_lease(self, decision_id: str, owner_id: str, *, now: datetime | None = None, ttl_seconds: float = 60.0) -> bool:
+        return self.claim_promotion_lease(decision_id, owner_id, now=now, ttl_seconds=ttl_seconds)
+
+    def release_promotion_lease(self, decision_id: str, owner_id: str) -> bool:
+        with self._lock, self._connection() as connection:
+            cursor = connection.execute("DELETE FROM promotion_operation_leases WHERE decision_id=? AND owner_id=?", (str(decision_id), str(owner_id)))
+            return bool(cursor.rowcount)
 
     def recent_events(self, limit: int = 50) -> list[dict[str, Any]]:
         with self._connection() as connection:

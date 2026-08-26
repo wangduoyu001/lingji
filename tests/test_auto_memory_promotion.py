@@ -14,6 +14,7 @@ from src.auto_review import (
     ReviewCandidate,
 )
 from src.retrieval.memory_db import MemoryDatabase
+from src.sources import SourceReadModel
 from src.storage.state_db import StateDatabase
 
 
@@ -30,7 +31,7 @@ def make_candidate(**overrides):
         "content": content,
         "memory_type": "preference",
         "content_hash": authentic_hash,
-        "source_refs": ("chat:1:message:2",),
+        "source_refs": ("msg-1",),
         "confidence": 0.90,
         "authority": "direct_user",
         "source_kind": "user_chat",
@@ -45,9 +46,12 @@ def make_candidate(**overrides):
 @pytest.fixture
 def harness(tmp_path: Path):
     state = StateDatabase(tmp_path / "state.db")
-    state.append_event("evidence_recorded", "message", "chat:1:message:2", {"content_hash": "evidence"})
     memory = MemoryDatabase(tmp_path / "memory.db")
-    return AutoMemoryPromotionService(state_db=state, memory_db=memory), state, memory
+    source = SourceReadModel(memory)
+    source_row = source.upsert_source({"source_type": "chat", "external_id": "chat-1"})
+    conversation = source.upsert_conversation({"source_id": source_row["source_id"], "external_id": "conv-1"})
+    source.upsert_message({"message_id": "msg-1", "source_id": source_row["source_id"], "conversation_id": conversation["conversation_id"], "external_id": "msg-ext-1", "role": "user", "sequence": 1, "content": "source evidence"})
+    return AutoMemoryPromotionService(state_db=state, memory_db=memory, evidence_store=source), state, memory
 
 
 @pytest.mark.parametrize(
@@ -94,7 +98,8 @@ def test_projection_contains_provenance_and_is_idempotent(harness):
     decisions = [e for e in events if e["event_type"] == "memory_promotion_decision"]
     assert len(decisions) == 1
     projection = memory.fetch_memory(first["candidate_id"])
-    assert projection["relationships"]["evidence_refs"] == ["chat:1:message:2"]
+    assert projection["relationships"]["evidence_refs"][0]["kind"] == "message"
+    assert projection["relationships"]["evidence_refs"][0]["value"] == "msg-1"
     assert projection["relationships"]["policy_version"] == "memory-promotion-1"
 
 
@@ -135,12 +140,17 @@ def test_rejection_requires_confirmation_and_retains_evidence(harness):
 
 def test_projection_failure_is_truthful_pending_error_and_keeps_candidate(tmp_path: Path):
     state = StateDatabase(tmp_path / "state.db")
-    state.append_event("evidence_recorded", "message", "chat:1:message:2", {})
+    state.append_event("evidence_recorded", "message", "msg-1", {})
+    memory = MemoryDatabase(tmp_path / "memory.db")
+    source = SourceReadModel(memory)
+    source_row = source.upsert_source({"source_type": "chat", "external_id": "chat-1"})
+    conversation = source.upsert_conversation({"source_id": source_row["source_id"], "external_id": "conv-1"})
+    source.upsert_message({"message_id": "msg-1", "source_id": source_row["source_id"], "conversation_id": conversation["conversation_id"], "external_id": "msg-ext-1", "role": "user", "sequence": 1, "content": "source evidence"})
 
     def broken(_entry):
         raise OSError("index unavailable")
 
-    service = AutoMemoryPromotionService(state_db=state, projection_writer=broken)
+    service = AutoMemoryPromotionService(state_db=state, projection_writer=broken, evidence_store=source, memory_db=memory)
     result = service.evaluate(make_candidate())
     assert result["status"] == PromotionStatus.ERROR.value
     assert result["reason_codes"] == ["projection_persist_failed"]
@@ -196,7 +206,12 @@ def test_supplied_mismatched_content_hash_is_rejected(harness):
 
 def test_failed_projection_recovers_once_without_duplicate_audits(tmp_path: Path):
     state = StateDatabase(tmp_path / "state.db")
-    state.append_event("evidence_recorded", "message", "chat:1:message:2", {})
+    state.append_event("evidence_recorded", "message", "msg-1", {})
+    memory = MemoryDatabase(tmp_path / "memory.db")
+    source = SourceReadModel(memory)
+    source_row = source.upsert_source({"source_type": "chat", "external_id": "chat-1"})
+    conversation = source.upsert_conversation({"source_id": source_row["source_id"], "external_id": "conv-1"})
+    source.upsert_message({"message_id": "msg-1", "source_id": source_row["source_id"], "conversation_id": conversation["conversation_id"], "external_id": "msg-ext-1", "role": "user", "sequence": 1, "content": "source evidence"})
     calls = {"count": 0}
 
     def flaky(**_kwargs):
@@ -205,7 +220,7 @@ def test_failed_projection_recovers_once_without_duplicate_audits(tmp_path: Path
             raise OSError("index unavailable")
         return {"memory_id": "candidate-1"}
 
-    service = AutoMemoryPromotionService(state_db=state, projection_writer=flaky)
+    service = AutoMemoryPromotionService(state_db=state, projection_writer=flaky, evidence_store=source, memory_db=memory)
     candidate = make_candidate()
     first = service.evaluate(candidate)
     second = service.evaluate(candidate)

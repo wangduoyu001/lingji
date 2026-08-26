@@ -13,6 +13,13 @@ from .models import (
     ReviewContext,
     RiskLevel,
     RuleFinding,
+    PromotionProjectionState,
+    ProvenanceRef,
+    ResolvedProvenance,
+    BatchLinkResult,
+    ProjectionWriteResult,
+    PromotionEvidence,
+    PromotionPersistenceAudit,
 )
 from .project import project_scope, same_project
 from .promotion import (
@@ -50,4 +57,11 @@ __all__ = [
     "AutomaticMemoryPromotionService",
     "POLICY_VERSION",
     "PromotionStatus",
+    "PromotionProjectionState",
+    "ProvenanceRef",
+    "ResolvedProvenance",
+    "BatchLinkResult",
+    "ProjectionWriteResult",
+    "PromotionEvidence",
+    "PromotionPersistenceAudit",
 ]

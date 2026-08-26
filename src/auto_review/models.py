@@ -2,7 +2,84 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
+
+from src.sources import ResolvedMessageRef
+
+
+class PromotionProjectionState(str, Enum):
+    PREPARING = "preparing"
+    VISIBLE_ACTIVE = "active"
+    ROLLED_BACK = "rolled_back"
+    REPAIR_REQUIRED = "repair_required"
+
+
+@dataclass(frozen=True)
+class ProvenanceRef:
+    kind: Literal["message", "event", "source", "conversation", "evidence"]
+    value: str
+    content_hash: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind not in {"message", "event", "source", "conversation", "evidence"}:
+            raise ValueError("unsupported provenance kind")
+        if not str(self.value).strip():
+            raise ValueError("provenance value is required")
+        if self.content_hash is not None and not str(self.content_hash).strip():
+            raise ValueError("provenance content_hash must not be empty")
+
+    def to_dict(self) -> dict[str, str | None]:
+        return {"kind": self.kind, "value": self.value, "content_hash": self.content_hash}
+
+
+@dataclass(frozen=True)
+class ResolvedProvenance:
+    linkable_messages: tuple[ResolvedMessageRef, ...]
+    context_only_refs: tuple[ProvenanceRef, ...]
+
+
+@dataclass(frozen=True)
+class BatchLinkResult:
+    created_messages: tuple[ResolvedMessageRef, ...]
+    reused_messages: tuple[ResolvedMessageRef, ...]
+
+
+@dataclass(frozen=True)
+class ProjectionWriteResult:
+    memory_id: str
+    decision_id: str
+    created: bool
+    state: PromotionProjectionState
+
+
+@dataclass(frozen=True)
+class PromotionEvidence:
+    candidate_id: str
+    decision_id: str
+    memory_id: str
+    state: PromotionProjectionState
+    resolved_messages: tuple[ResolvedMessageRef, ...] = ()
+    context_only_refs: tuple[ProvenanceRef, ...] = ()
+    projection_created: bool = False
+    created_links: tuple[ResolvedMessageRef, ...] = ()
+    reused_links: tuple[ResolvedMessageRef, ...] = ()
+    removed_links: tuple[ResolvedMessageRef, ...] = ()
+    rollback_verified: bool = False
+    error_codes: tuple[str, ...] = ()
+    terminal_event_id: str | None = None
+
+
+@dataclass(frozen=True)
+class PromotionPersistenceAudit:
+    expected_memory_ids: tuple[str, ...]
+    persisted_memory_ids: tuple[str, ...]
+    missing_memory_ids: tuple[str, ...]
+    extra_memory_ids: tuple[str, ...]
+    duplicate_memory_records: int
+
+    @property
+    def ready(self) -> bool:
+        return bool(self.expected_memory_ids) and len(self.expected_memory_ids) == len(set(self.expected_memory_ids)) and not self.missing_memory_ids and not self.extra_memory_ids and self.duplicate_memory_records == 0
 
 
 class AutoReviewMode(str, Enum):
@@ -36,7 +113,7 @@ class ReviewCandidate:
     privacy: str = "private"
     project_ids: tuple[str, ...] = ()
     proposed_by: str = ""
-    source_refs: tuple[str, ...] = ()
+    source_refs: tuple[ProvenanceRef | str, ...] = ()
     content_hash: str = ""
     metadata: Mapping[str, Any] = field(default_factory=dict)
     # Extraction provenance used by the automatic-promotion boundary.  These
@@ -51,15 +128,29 @@ class ReviewCandidate:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "ReviewCandidate":
-        def values(name: str, fallback: str = "") -> tuple[str, ...]:
+        def values(name: str, fallback: str = "") -> tuple[Any, ...]:
             raw = value.get(name)
             if raw in (None, ""):
                 raw = value.get(fallback) if fallback else None
             if raw in (None, ""):
                 return ()
             if isinstance(raw, (list, tuple, set)):
-                return tuple(str(item) for item in raw if str(item).strip())
-            return (str(raw),)
+                selected = raw
+            else:
+                selected = (raw,)
+            result: list[Any] = []
+            for item in selected:
+                if isinstance(item, ProvenanceRef):
+                    result.append(item)
+                elif isinstance(item, Mapping):
+                    result.append(ProvenanceRef(
+                        kind=str(item.get("kind") or "evidence"),
+                        value=str(item.get("value") or ""),
+                        content_hash=item.get("content_hash"),
+                    ))
+                elif str(item).strip():
+                    result.append(str(item).strip())
+            return tuple(result)
 
         raw_flags = value.get("risk_flags") or (value.get("metadata") or {}).get("risk_flags") or ()
         if isinstance(raw_flags, str):

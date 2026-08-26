@@ -296,13 +296,15 @@ class MemoryDatabase:
         decision_id: str,
         candidate_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Persist one rebuildable automatic-memory current projection.
+        """Deprecated unsafe writer; promotion must use prepare/activate.
 
         This is deliberately a derived index write.  It never writes the
         owner's Vault or promotes a Core Memory document.  The stable virtual
         path keeps repeated promotion idempotent while retaining provenance in
         the normal relationships read model.
         """
+        raise RuntimeError("derived_projection_requires_prepare_activate")
+
         normalized_id = str(memory_id or "").strip()
         if not normalized_id:
             raise ValueError("memory_id is required")
@@ -369,6 +371,110 @@ class MemoryDatabase:
             )
             revision = self._bump_revision(connection)
         return {"memory_id": normalized_id, "chunks": len(chunks), "revision": revision}
+
+    def prepare_derived_projection(
+        self, *, memory_id: str, title: str, content: str, content_hash: str,
+        evidence_refs: Any, confidence: float | None, authority: str,
+        source_kind: str, policy_version: str, decision_id: str,
+        candidate_metadata: dict[str, Any] | None = None,
+    ) -> Any:
+        from src.auto_review.models import ProjectionWriteResult, PromotionProjectionState
+        normalized_id = str(memory_id or "").strip()
+        owner = str(decision_id or "").strip()
+        body = str(content or "").strip()
+        if not normalized_id or not owner or not body:
+            raise ValueError("memory_id, decision_id and content are required")
+        metadata = dict(candidate_metadata or {})
+        refs = []
+        for item in evidence_refs or ():
+            if hasattr(item, "to_dict"):
+                refs.append(item.to_dict())
+            elif hasattr(item, "message_id"):
+                refs.append({"kind": "message", "value": str(item.message_id), "content_hash": str(item.content_hash or "")})
+            elif isinstance(item, dict):
+                refs.append(dict(item))
+            else:
+                refs.append({"kind": "evidence", "value": str(item)})
+        refs.sort(key=lambda item: (str(item.get("kind") or ""), str(item.get("value") or ""), str(item.get("content_hash") or "")))
+        relationships = {
+            "evidence_refs": refs, "authority": str(authority or ""),
+            "source_kind": str(source_kind or ""), "policy_version": str(policy_version),
+            "decision_id": owner,
+        }
+        entry = {
+            "id": normalized_id, "relative_path": f"__derived__/automatic-memory/{normalized_id}.md",
+            "title": str(title or normalized_id), "memory_type": str(metadata.get("memory_type") or "knowledge"),
+            "memory_tier": "derived", "status": "preparing", "review_status": "preparing",
+            "privacy": str(metadata.get("privacy") or "private"), "importance": str(metadata.get("importance") or "medium"),
+            "confidence": str(confidence) if confidence is not None else "", "project": metadata.get("project_ids") or metadata.get("project") or [],
+            "tags": ["automatic-memory", "derived-current"], "content_hash": str(content_hash or ""),
+            "modified_at": metadata.get("modified_at") or "", "sources": refs,
+            "properties": {"memory_tier": "derived", "valid_from": metadata.get("valid_from") or "", "valid_to": metadata.get("valid_to") or "", "pin_to_context": False, "agent_scope": metadata.get("agent_scope") or [], "recall_weight": metadata.get("recall_weight") or 1.0},
+            "_promotion_relationships": relationships,
+        }
+        chunks = MarkdownChunker().chunk(normalized_id, body)
+        with self._lock, self._connection() as connection:
+            existing = connection.execute("SELECT * FROM memory_documents WHERE memory_id=?", (normalized_id,)).fetchone()
+            if existing is not None:
+                prior = self._document_dict(existing)
+                prior_rel = prior.get("relationships") or {}
+                if (prior.get("memory_tier") != "derived" or str(prior.get("content_hash") or "") != str(content_hash or "") or str(prior_rel.get("decision_id") or "") != owner or prior_rel.get("evidence_refs") != refs or str(prior_rel.get("policy_version") or "") != str(policy_version)):
+                    raise ValueError("derived_projection_conflict")
+                state = PromotionProjectionState(str(prior.get("status") or "preparing"))
+                return ProjectionWriteResult(normalized_id, owner, False, state)
+            self._upsert_document(connection, entry, chunks)
+            row = connection.execute("SELECT relationships_json FROM memory_documents WHERE memory_id=?", (normalized_id,)).fetchone()
+            current = self._loads(row["relationships_json"], {}) if row else {}
+            current.update(relationships)
+            connection.execute("UPDATE memory_documents SET relationships_json=?, status='preparing', review_status='preparing' WHERE memory_id=?", (self._json(current), normalized_id))
+            self._bump_revision(connection)
+        return ProjectionWriteResult(normalized_id, owner, True, PromotionProjectionState.PREPARING)
+
+    def activate_derived_projection(self, memory_id: str, *, decision_id: str, required_messages: Any) -> Any:
+        from src.auto_review.models import ProjectionWriteResult, PromotionProjectionState
+        expected = {str(item.message_id): str(item.content_hash) for item in required_messages}
+        owner = str(decision_id or "")
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute("SELECT * FROM memory_documents WHERE memory_id=?", (str(memory_id),)).fetchone()
+            if row is None:
+                raise ValueError("derived_projection_missing")
+            relationships = self._loads(row["relationships_json"], {})
+            if row["memory_tier"] != "derived" or str(relationships.get("decision_id") or "") != owner or str(row["status"]) not in {"preparing", "active"}:
+                raise ValueError("derived_projection_activation_conflict")
+            links = connection.execute("SELECT l.message_id,l.relation_type,m.content_hash FROM message_memory_links l JOIN message_records m ON m.message_id=l.message_id WHERE l.memory_id=?", (str(memory_id),)).fetchall()
+            actual = {str(item["message_id"]): str(item["content_hash"] or "") for item in links}
+            if any(str(item["relation_type"]) != "derived_from" for item in links) or actual != expected:
+                raise ValueError("derived_projection_provenance_incomplete")
+            if str(row["status"]) == "active":
+                return ProjectionWriteResult(str(memory_id), owner, False, PromotionProjectionState.VISIBLE_ACTIVE)
+            connection.execute("UPDATE memory_documents SET status='active', review_status='auto_activated', updated_at=? WHERE memory_id=?", (datetime.now().isoformat(timespec="seconds"), str(memory_id)))
+            self._bump_revision(connection)
+        return ProjectionWriteResult(str(memory_id), owner, False, PromotionProjectionState.VISIBLE_ACTIVE)
+
+    def remove_preparing_projection(self, memory_id: str, *, decision_id: str) -> bool:
+        owner = str(decision_id or "")
+        with self._lock, self._connection() as connection:
+            row = connection.execute("SELECT status,memory_tier,relationships_json FROM memory_documents WHERE memory_id=?", (str(memory_id),)).fetchone()
+            if row is None or row["memory_tier"] != "derived" or row["status"] != "preparing":
+                return False
+            rel = self._loads(row["relationships_json"], {})
+            if str(rel.get("decision_id") or "") != owner:
+                return False
+            foreign = connection.execute("SELECT 1 FROM message_memory_links WHERE memory_id=? AND (created_by_decision_id IS NULL OR created_by_decision_id<>?) LIMIT 1", (str(memory_id), owner)).fetchone()
+            if foreign is not None:
+                return False
+            connection.execute("DELETE FROM memory_fts WHERE memory_id=?", (str(memory_id),))
+            cursor = connection.execute("DELETE FROM memory_documents WHERE memory_id=?", (str(memory_id),))
+            if cursor.rowcount:
+                self._bump_revision(connection)
+                return True
+        return False
+
+    def list_derived_projection_identity_rows(self) -> tuple[dict[str, Any], ...]:
+        with self._connection() as connection:
+            rows = connection.execute("SELECT memory_id,status,memory_tier,relationships_json,content_hash FROM memory_documents WHERE memory_tier='derived' AND status='active' ORDER BY memory_id").fetchall()
+        return tuple({"memory_id": str(r["memory_id"]), "status": str(r["status"]), "memory_tier": str(r["memory_tier"]), "decision_id": str(self._loads(r["relationships_json"], {}).get("decision_id") or ""), "content_hash": str(r["content_hash"] or "")} for r in rows)
 
     def _upsert_document(
         self,
@@ -713,6 +819,8 @@ class MemoryDatabase:
         output = []
         for row in rows:
             item = self._search_dict(row)
+            if temporal.mode in {"current", "why"} and item.get("memory_tier") == "derived" and item.get("status") != "active":
+                continue
             allowed, reason = temporal.allows(item)
             if allowed:
                 item["temporal_reason"] = reason
@@ -751,6 +859,8 @@ class MemoryDatabase:
                     if not all(term in haystack for term in terms):
                         continue
                     item = self._search_dict(raw)
+                    if temporal.mode in {"current", "why"} and item.get("memory_tier") == "derived" and item.get("status") != "active":
+                        continue
                     if str(item.get("memory_id") or "") in seen_ids:
                         continue
                     allowed, reason = temporal.allows(item)

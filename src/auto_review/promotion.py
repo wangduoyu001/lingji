@@ -6,8 +6,12 @@ import math
 from dataclasses import asdict
 from enum import Enum
 from typing import Any, Callable, Mapping
+from pathlib import Path
 
-from .models import ReviewCandidate
+from .models import (
+    BatchLinkResult, PromotionEvidence, PromotionProjectionState, ProvenanceRef,
+    ResolvedProvenance, ReviewCandidate,
+)
 
 
 POLICY_VERSION = "memory-promotion-1"
@@ -50,6 +54,7 @@ class AutoMemoryPromotionService:
         self.evidence_store = evidence_store
         self.policy_version = str(policy_version or POLICY_VERSION)
         self._last_promotion_evidence: dict[str, Any] = {}
+        self._operation_owner = f"promotion:{id(self)}"
 
     def evaluate(self, candidate: ReviewCandidate | Mapping[str, Any]) -> dict[str, Any]:
         # Evidence belongs to one promote/evaluate invocation only.  Never let
@@ -57,6 +62,7 @@ class AutoMemoryPromotionService:
         # projection/link provenance.
         self._last_promotion_evidence = {}
         selected = self._normalize(candidate)
+        provenance = self._normalize_provenance(selected)
         existing = self._existing_decision(selected)
         if existing:
             recovered_prior = self._existing_recovery(selected.memory_id, str(existing.get("decision_id") or ""))
@@ -84,6 +90,8 @@ class AutoMemoryPromotionService:
 
         self._record_candidate(selected)
         reasons = self._policy_reasons(selected)
+        if not provenance.linkable_messages:
+            reasons.append("structured_message_provenance_required")
         status = PromotionStatus.ACTIVE if not reasons else PromotionStatus.PENDING_OWNER_REVIEW
         decision_id = self._decision_id(selected, status.value, self.policy_version)
         result = self._result(
@@ -94,34 +102,37 @@ class AutoMemoryPromotionService:
             mutation=False,
         )
         if status is PromotionStatus.ACTIVE:
+            if not self._claim_lease(decision_id):
+                result = self._result(selected, decision_id, PromotionStatus.ERROR, ["promotion_lease_conflict"], mutation=False)
+                self._append("memory_promotion_decision", selected.memory_id, result)
+                return result
+            try:
+                self._record_promotion_event("memory_promotion_preparing", selected, decision_id, provenance)
+            except Exception:
+                self._release_lease(decision_id)
+                result = self._result(selected, decision_id, PromotionStatus.ERROR, ["promotion_start_event_failed"], mutation=False)
+                self._append("memory_promotion_decision", selected.memory_id, result)
+                return result
             try:
                 self._write_projection(selected, decision_id)
-            except Exception as exc:
+            except Exception:
                 if not self._last_promotion_evidence:
-                    self._last_promotion_evidence = {
-                        "candidate_id": selected.memory_id,
-                        "decision_id": decision_id,
-                        "decision": "error",
-                        "resulting_lifecycle": PromotionStatus.ERROR.value,
-                        "memory_id": selected.memory_id,
-                        "resolved_message_primary_ids": [],
-                        "created_link_ids": [],
-                        "reused_link_ids": [],
-                        "rollback": "not_needed",
-                    }
+                    self._last_promotion_evidence = {"candidate_id": selected.memory_id, "decision_id": decision_id, "memory_id": selected.memory_id, "state": PromotionProjectionState.REPAIR_REQUIRED.value, "error_codes": ["promotion_persist_failed"]}
                 result = self._result(
                     selected,
                     decision_id,
                     PromotionStatus.ERROR,
                     ["projection_persist_failed"],
                     mutation=False,
-                    error=f"{type(exc).__name__}: {exc}"[:500],
+                    error="",
                 )
-                self._append("memory_promotion_projection_error", selected.memory_id, result)
+                terminal_type = "memory_projection_rolled_back" if self._last_promotion_evidence.get("state") == PromotionProjectionState.ROLLED_BACK.value else "memory_projection_repair_required"
+                self._record_terminal(selected, decision_id, terminal_type, provenance)
                 self._append("memory_promotion_decision", selected.memory_id, result)
                 return result
             result["promotion_evidence"] = dict(self._last_promotion_evidence)
-            self._append("memory_projection_activated", selected.memory_id, result)
+            self._record_terminal(selected, decision_id, "memory_projection_activated", provenance)
+            self._release_lease(decision_id)
         self._append("memory_promotion_decision", selected.memory_id, result)
         return result
 
@@ -155,10 +166,15 @@ class AutoMemoryPromotionService:
         if candidate.get("status") == PromotionStatus.REJECTED.value:
             raise ValueError("rejected candidate cannot be approved")
         selected = self._normalize(candidate)
+        provenance = self._normalize_provenance(selected)
         decision_id = self._decision_id(selected, "owner_approved", self.policy_version)
         prior = self._existing_owner_result("memory_promotion_owner_approved", selected.memory_id, decision_id)
         if prior is not None:
             return prior
+        if not provenance.linkable_messages:
+            result = self._result(selected, decision_id, PromotionStatus.PENDING_OWNER_REVIEW, ["structured_message_provenance_required"], mutation=False)
+            self._append("memory_promotion_owner_approved", selected.memory_id, result)
+            return result
         result = self._result(selected, decision_id, PromotionStatus.ACTIVE, [], mutation=False)
         try:
             self._write_projection(selected, decision_id)
@@ -248,15 +264,102 @@ class AutoMemoryPromotionService:
 
     def _normalize(self, value: ReviewCandidate | Mapping[str, Any]) -> ReviewCandidate:
         selected = value if isinstance(value, ReviewCandidate) else ReviewCandidate.from_mapping(value)
+        from dataclasses import replace
+        normalized_refs = tuple(
+            item if isinstance(item, ProvenanceRef) else ProvenanceRef("message", str(item).strip())
+            for item in selected.source_refs if str(item).strip()
+        )
+        if normalized_refs != selected.source_refs:
+            selected = replace(selected, source_refs=normalized_refs)
         content_hash = self._authentic_content_hash(selected)
         if selected.content_hash and selected.content_hash != content_hash:
             raise ValueError("content hash does not match normalized candidate content")
         candidate_id = selected.memory_id or f"LJ-CAND-{content_hash[:20].upper()}"
         metadata = dict(selected.metadata)
         if selected.memory_id != candidate_id or selected.content_hash != content_hash:
-            from dataclasses import replace
             selected = replace(selected, memory_id=candidate_id, content_hash=content_hash, metadata=metadata)
         return selected
+
+    def _normalize_provenance(self, candidate: ReviewCandidate) -> ResolvedProvenance:
+        store = self.evidence_store
+        resolved = []
+        context = []
+        seen_messages: set[str] = set()
+        seen_context: set[tuple[str, str, str | None]] = set()
+        for raw in candidate.source_refs:
+            if isinstance(raw, ProvenanceRef):
+                ref = raw
+            elif isinstance(raw, Mapping):
+                try:
+                    ref = ProvenanceRef(str(raw.get("kind") or "evidence"), str(raw.get("value") or ""), raw.get("content_hash"))
+                except ValueError:
+                    context.append(ProvenanceRef("evidence", str(raw)))
+                    continue
+            else:
+                ref = ProvenanceRef("message", str(raw).strip())
+            if ref.kind == "message":
+                resolver = getattr(store, "resolve_exact_message_ref", None) if store is not None else None
+                if not callable(resolver):
+                    context.append(ProvenanceRef("evidence", ref.value, ref.content_hash))
+                    continue
+                try:
+                    item = resolver(ref.value, content_hash=ref.content_hash)
+                except Exception:
+                    continue
+                if item.message_id in seen_messages:
+                    continue
+                seen_messages.add(item.message_id)
+                resolved.append(item)
+            elif ref.kind == "event":
+                event = self.state_db.get_event(ref.value) if hasattr(self.state_db, "get_event") else None
+                payload = self._payload(event or {})
+                identity = payload.get("message") if isinstance(payload.get("message"), Mapping) else payload
+                message_id = identity.get("message_id") if isinstance(identity, Mapping) else None
+                message_hash = identity.get("content_hash") if isinstance(identity, Mapping) else None
+                if message_id and message_hash and store is not None:
+                    try:
+                        item = store.resolve_exact_message_ref(str(message_id), content_hash=str(message_hash))
+                    except Exception:
+                        continue
+                    if item.message_id not in seen_messages:
+                        seen_messages.add(item.message_id)
+                        resolved.append(item)
+                else:
+                    continue
+            else:
+                key = (ref.kind, ref.value, ref.content_hash)
+                if key not in seen_context:
+                    seen_context.add(key)
+                    context.append(ref)
+        return ResolvedProvenance(tuple(resolved), tuple(context))
+
+    def _claim_lease(self, decision_id: str) -> bool:
+        claim = getattr(self.state_db, "claim_promotion_lease", None)
+        return bool(claim(decision_id, self._operation_owner)) if callable(claim) else True
+
+    def _release_lease(self, decision_id: str) -> None:
+        release = getattr(self.state_db, "release_promotion_lease", None)
+        if callable(release):
+            release(decision_id, self._operation_owner)
+
+    def _record_promotion_event(self, event_type: str, candidate: ReviewCandidate, decision_id: str, provenance: ResolvedProvenance) -> str | None:
+        recorder = getattr(self.state_db, "record_promotion_event_once", None)
+        if not callable(recorder):
+            return None
+        payload = {
+            "candidate_id": candidate.memory_id, "decision_id": decision_id, "memory_id": candidate.memory_id,
+            "content_hash": candidate.content_hash, "policy_version": self.policy_version,
+            "state": PromotionProjectionState.PREPARING.value if event_type.endswith("preparing") else PromotionProjectionState.VISIBLE_ACTIVE.value,
+            "messages": [{"message_id": ref.message_id, "content_hash": ref.content_hash, "external_key": {"source_external_id": ref.external_key.source_external_id, "conversation_external_id": ref.external_key.conversation_external_id, "message_external_id": ref.external_key.message_external_id}} for ref in sorted(provenance.linkable_messages, key=lambda x: x.message_id)],
+        }
+        return recorder(decision_id, event_type, candidate.memory_id, payload)
+
+    def _record_terminal(self, candidate: ReviewCandidate, decision_id: str, event_type: str, provenance: ResolvedProvenance) -> str | None:
+        recorder = getattr(self.state_db, "record_promotion_event_once", None)
+        if not callable(recorder):
+            return None
+        state = {"memory_projection_activated": "active", "memory_projection_rolled_back": "rolled_back", "memory_projection_repair_required": "repair_required"}[event_type]
+        return recorder(decision_id, event_type, candidate.memory_id, {"candidate_id": candidate.memory_id, "decision_id": decision_id, "memory_id": candidate.memory_id, "content_hash": candidate.content_hash, "policy_version": self.policy_version, "state": state, "messages": [{"message_id": ref.message_id, "content_hash": ref.content_hash} for ref in sorted(provenance.linkable_messages, key=lambda x: x.message_id)]})
 
     def _policy_reasons(self, candidate: ReviewCandidate) -> list[str]:
         reasons: list[str] = []
@@ -315,7 +418,11 @@ class AutoMemoryPromotionService:
 
     @staticmethod
     def _evidence_refs(candidate: ReviewCandidate) -> tuple[str, ...]:
-        return tuple(str(item).strip() for item in candidate.source_refs if str(item).strip())
+        return tuple(
+            (item.value if isinstance(item, ProvenanceRef) else str(item).strip())
+            for item in candidate.source_refs
+            if (item.value if isinstance(item, ProvenanceRef) else str(item).strip())
+        )
 
     def _message_primary_refs(self, candidate: ReviewCandidate) -> tuple[str, ...]:
         """Only exact SourceReadModel message primary IDs may receive links."""
@@ -493,6 +600,64 @@ class AutoMemoryPromotionService:
             rebuilt += 1
         return {"rebuilt": rebuilt, "failed": failed, "skipped": len(outcomes) - rebuilt - failed}
 
+    def reconcile_incomplete_projections(self) -> tuple[PromotionEvidence, ...]:
+        """Repair durable promotion sagas after a process interruption."""
+        output: list[PromotionEvidence] = []
+        starts = [row for row in self.state_db.recent_events(limit=100000) if row.get("event_type") == "memory_promotion_preparing"]
+        for row in starts:
+            payload = self._payload(row)
+            decision_id = str(payload.get("decision_id") or "")
+            memory_id = str(payload.get("memory_id") or row.get("entity_id") or "")
+            if not decision_id or not memory_id or not self._claim_lease(decision_id):
+                continue
+            refs: list[Any] = []
+            for item in payload.get("messages") or ():
+                if not isinstance(item, Mapping) or not item.get("message_id"):
+                    continue
+                try:
+                    refs.append(self.evidence_store.resolve_exact_message_ref(str(item["message_id"]), content_hash=str(item.get("content_hash") or "")))
+                except Exception:
+                    continue
+            document = self.memory_db.fetch_memory(memory_id, include_chunks=False) if self.memory_db is not None else None
+            terminal = {str(self._payload(item).get("state") or "") for item in self.state_db.recent_events(limit=100000) if item.get("event_type") in {"memory_projection_activated", "memory_projection_rolled_back", "memory_projection_repair_required"} and str(self._payload(item).get("decision_id") or "") == decision_id}
+            candidate_stub = ReviewCandidate(memory_id=memory_id, title="", content="", content_hash=str(payload.get("content_hash") or ""))
+            if "repair_required" in terminal:
+                output.append(PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.REPAIR_REQUIRED, tuple(refs), ( ), False, error_codes=("repair_required",)))
+                self._release_lease(decision_id)
+                continue
+            try:
+                if document is None:
+                    event_id = self._record_terminal(candidate_stub, decision_id, "memory_projection_rolled_back", ResolvedProvenance(tuple(refs), ()))
+                    evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.ROLLED_BACK, tuple(refs), terminal_event_id=event_id, rollback_verified=True)
+                elif document.get("status") == "active":
+                    if "active" not in terminal:
+                        event_id = self._record_terminal(candidate_stub, decision_id, "memory_projection_activated", ResolvedProvenance(tuple(refs), ()))
+                    else:
+                        event_id = None
+                    evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.VISIBLE_ACTIVE, tuple(refs), terminal_event_id=event_id)
+                elif document.get("status") == "preparing" and refs and self.evidence_store.verify_message_memory_links(tuple(refs), memory_id):
+                    self.memory_db.activate_derived_projection(memory_id, decision_id=decision_id, required_messages=tuple(refs))
+                    event_id = self._record_terminal(candidate_stub, decision_id, "memory_projection_activated", ResolvedProvenance(tuple(refs), ()))
+                    evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.VISIBLE_ACTIVE, tuple(refs), terminal_event_id=event_id)
+                elif document.get("status") == "preparing":
+                    self.evidence_store.unlink_message_memory_batch(tuple(refs), memory_id, decision_id=decision_id)
+                    cleaned = self.memory_db.remove_preparing_projection(memory_id, decision_id=decision_id)
+                    if not cleaned:
+                        raise RuntimeError("promotion_cleanup_unverified")
+                    event_id = self._record_terminal(candidate_stub, decision_id, "memory_projection_rolled_back", ResolvedProvenance(tuple(refs), ()))
+                    evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.ROLLED_BACK, tuple(refs), terminal_event_id=event_id, rollback_verified=True)
+                else:
+                    raise RuntimeError("promotion_state_unreconciled")
+            except Exception:
+                try:
+                    event_id = self._record_terminal(candidate_stub, decision_id, "memory_projection_repair_required", ResolvedProvenance(tuple(refs), ()))
+                except Exception:
+                    event_id = None
+                evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.REPAIR_REQUIRED, tuple(refs), terminal_event_id=event_id, error_codes=("promotion_repair_required",))
+            output.append(evidence)
+            self._release_lease(decision_id)
+        return tuple(output)
+
     def _projection_exists(self, candidate_id: str, decision_id: str, content_hash: str) -> bool:
         database = self.memory_db
         fetch = getattr(database, "fetch_memory", None) if database is not None else None
@@ -514,30 +679,26 @@ class AutoMemoryPromotionService:
         )
 
     def _write_projection(self, candidate: ReviewCandidate, decision_id: str) -> Any:
+        # The only production path is prepare -> one transactional source-link
+        # batch -> activation.  A custom writer remains a compatibility seam
+        # for OFF/SHADOW tests and cannot claim provenance visibility.
+        provenance = self._normalize_provenance(candidate)
         writer = self.projection_writer
         if writer is None and self.memory_db is not None:
-            writer = self.memory_db.upsert_derived_projection
+            writer = getattr(self.memory_db, "prepare_derived_projection", None)
         if writer is None:
             raise RuntimeError("derived projection writer is unavailable")
-        refs = list(self._evidence_refs(candidate))
-        resolver = getattr(self.evidence_store, "resolve_message_refs", None) if self.evidence_store is not None else None
-        if refs and callable(resolver):
-            try:
-                message_refs = tuple(str(item) for item in resolver(refs))
-            except Exception as exc:
-                raise RuntimeError(f"message provenance resolution failed: {exc}") from exc
-            if not message_refs:
-                raise RuntimeError("message provenance resolution returned no messages")
-        else:
-            message_refs = self._message_primary_refs(candidate)
-            if refs and self.evidence_store is not None and not message_refs:
-                raise RuntimeError("message provenance is unresolved")
+        if not provenance.linkable_messages:
+            raise RuntimeError("structured_message_provenance_required")
+        if self.memory_db is not None and self.evidence_store is not None:
+            if Path(getattr(self.memory_db, "path", "")).resolve() != Path(getattr(self.evidence_store, "path", "")).resolve():
+                raise RuntimeError("promotion_database_path_mismatch")
         kwargs = {
             "memory_id": candidate.memory_id,
             "title": candidate.title,
             "content": candidate.content,
             "content_hash": candidate.content_hash,
-            "evidence_refs": refs,
+            "evidence_refs": list(provenance.context_only_refs) + [ProvenanceRef("message", item.message_id, item.content_hash) for item in provenance.linkable_messages],
             "confidence": candidate.confidence,
             "authority": candidate.authority,
             "source_kind": candidate.source_kind,
@@ -553,66 +714,40 @@ class AutoMemoryPromotionService:
             state = str(result.get("status") or "").strip().lower()
             if state in {"error", "failed", "degraded", "pending", "rebuild_required"}:
                 raise RuntimeError(str(result.get("error") or result.get("message") or state))
-        created_links: list[str] = []
-        reused_links: list[str] = []
-        attempted_new_links: list[str] = []
-        # Provenance links are part of the normal promotion transaction.  The
-        # source read model is optional for legacy callers, but when supplied
-        # every active derived projection must be linked to its imported
-        # message before the promotion event claims activation.  A failed link
-        # removes the just-written rebuildable projection when possible so an
-        # error cannot masquerade as a successful promotion.
-        linker = getattr(self.evidence_store, "link_message_memory", None)
-        if callable(linker):
+        if self.evidence_store is None:
+            self._last_promotion_evidence = {"candidate_id": candidate.memory_id, "decision_id": decision_id, "memory_id": candidate.memory_id, "state": PromotionProjectionState.VISIBLE_ACTIVE.value, "resolved_message_primary_ids": [x.message_id for x in provenance.linkable_messages]}
+            return result
+        if self.projection_writer is not None:
+            self._last_promotion_evidence = {"candidate_id": candidate.memory_id, "decision_id": decision_id, "memory_id": candidate.memory_id, "state": PromotionProjectionState.VISIBLE_ACTIVE.value, "resolved_message_primary_ids": [x.message_id for x in provenance.linkable_messages], "created_link_ids": [], "reused_link_ids": [], "rollback_verified": False, "error_codes": []}
+            return result
+        linker = getattr(self.evidence_store, "link_message_memory_batch", None)
+        activator = getattr(self.memory_db, "activate_derived_projection", None)
+        if not callable(linker) or not callable(activator):
+            raise RuntimeError("promotion_atomic_interfaces_unavailable")
+        batch = None
+        try:
+            batch = linker(provenance.linkable_messages, candidate.memory_id, decision_id=decision_id, confidence=candidate.confidence)
+            if not self.evidence_store.verify_message_memory_links(provenance.linkable_messages, candidate.memory_id):
+                raise RuntimeError("promotion_provenance_verification_failed")
+            activator(candidate.memory_id, decision_id=decision_id, required_messages=provenance.linkable_messages)
+        except Exception as exc:
+            removed = ()
             try:
-                existing_links = getattr(self.evidence_store, "message_links", None)
-                for reference in message_refs:
-                    already = False
-                    if callable(existing_links):
-                        already = any(str(item.get("memory_id") or "") == candidate.memory_id for item in existing_links(reference))
-                    if not already:
-                        attempted_new_links.append(reference)
-                    linker(reference, candidate.memory_id, relation_type="derived_from", confidence=candidate.confidence)
-                    (reused_links if already else created_links).append(reference)
+                removed = self.evidence_store.unlink_message_memory_batch(provenance.linkable_messages, candidate.memory_id, decision_id=decision_id)
+                cleaned = bool(self.memory_db.remove_preparing_projection(candidate.memory_id, decision_id=decision_id))
+                verified = self.memory_db.fetch_memory(candidate.memory_id, include_chunks=False) is None
             except Exception:
-                unlinker = getattr(self.evidence_store, "unlink_message_memory", None)
-                if callable(unlinker):
-                    for reference in reversed(attempted_new_links):
-                        try:
-                            try:
-                                unlinker(reference, candidate.memory_id, relation_type="derived_from")
-                            except TypeError:
-                                unlinker(reference, candidate.memory_id)
-                        except Exception:
-                            pass
-                remover = getattr(self.memory_db, "remove_memory", None)
-                if callable(remover):
-                    try:
-                        remover(candidate.memory_id)
-                    except Exception:
-                        pass
-                self._last_promotion_evidence = {
-                    "candidate_id": candidate.memory_id,
-                    "decision_id": decision_id,
-                    "decision": "error",
-                    "resulting_lifecycle": PromotionStatus.ERROR.value,
-                    "memory_id": candidate.memory_id,
-                    "resolved_message_primary_ids": list(message_refs),
-                    "created_link_ids": list(created_links),
-                    "reused_link_ids": list(reused_links),
-                    "rollback": "compensated",
-                }
-                raise
+                cleaned, verified = False, False
+            state = PromotionProjectionState.ROLLED_BACK if cleaned and verified else PromotionProjectionState.REPAIR_REQUIRED
+            self._last_promotion_evidence = {"candidate_id": candidate.memory_id, "decision_id": decision_id, "memory_id": candidate.memory_id, "state": state.value, "removed_link_ids": [x.message_id for x in removed], "rollback_verified": bool(cleaned and verified), "error_codes": ["promotion_persist_failed"]}
+            raise
         self._last_promotion_evidence = {
-            "candidate_id": candidate.memory_id,
-            "decision_id": decision_id,
-            "decision": "active",
-            "resulting_lifecycle": PromotionStatus.ACTIVE.value,
-            "memory_id": candidate.memory_id,
-            "resolved_message_primary_ids": list(message_refs),
-            "created_link_ids": list(created_links),
-            "reused_link_ids": list(reused_links),
-            "rollback": "not_needed",
+            "candidate_id": candidate.memory_id, "decision_id": decision_id, "memory_id": candidate.memory_id,
+            "state": PromotionProjectionState.VISIBLE_ACTIVE.value,
+            "resolved_message_primary_ids": [x.message_id for x in provenance.linkable_messages],
+            "created_link_ids": [x.message_id for x in batch.created_messages],
+            "reused_link_ids": [x.message_id for x in batch.reused_messages],
+            "rollback_verified": False, "error_codes": [],
         }
         return result
 
@@ -644,11 +779,14 @@ class AutoMemoryPromotionService:
     def _candidate_payload(candidate: ReviewCandidate) -> dict[str, Any]:
         payload = asdict(candidate)
         payload["project_ids"] = list(candidate.project_ids)
-        payload["source_refs"] = list(candidate.source_refs)
+        payload["source_refs"] = [
+            item.to_dict() if isinstance(item, ProvenanceRef) else item
+            for item in candidate.source_refs
+        ]
         payload["risk_flags"] = list(candidate.risk_flags)
         payload["structured_content"] = dict(candidate.structured_content)
         payload["candidate_id"] = candidate.memory_id
-        payload["evidence_refs"] = list(candidate.source_refs)
+        payload["evidence_refs"] = list(payload["source_refs"])
         return payload
 
     def _decision_id(self, candidate: ReviewCandidate, status: str, policy_version: str) -> str:

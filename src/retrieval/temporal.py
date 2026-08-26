@@ -13,9 +13,9 @@ AUTHORITY_ORDER = {
     "current_project_authority": 40,
     "user_explicit": 50,
 }
-EXCLUDED_CURRENT = {"superseded", "invalidated", "archived", "rejected"}
+EXCLUDED_CURRENT = {"superseded", "invalidated", "archived", "rejected", "preparing", "repair_required", "rolled_back"}
 ALL_LIFECYCLE_STATUSES = (
-    "active", "needs_review", "received", "superseded", "invalidated", "archived", "rejected"
+    "active", "needs_review", "received", "superseded", "invalidated", "archived", "rejected", "preparing", "repair_required", "rolled_back"
 )
 
 

@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 
+from .identities import ExternalMessageKey, ResolvedMessageRef
+
 SOURCE_READ_MODEL_SCHEMA_VERSION = "2"
 _SOURCE_READ_MODEL_MIGRATION_VERSION = "1"
 _ID_PREFIXES = {"source": "LJ-SRC", "conversation": "LJ-CONV", "message": "LJ-MSG"}
@@ -187,6 +189,7 @@ class SourceReadModel:
             )
             self._ensure_ingestion_columns(connection)
             message_added = self._ensure_inheritance_columns(connection, "message_records")
+            self._ensure_promotion_columns(connection)
             if conversation_added:
                 self._backfill_conversation_inheritance(connection)
             if message_added:
@@ -220,6 +223,12 @@ class SourceReadModel:
             raise
         else:
             connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+
+    @staticmethod
+    def _ensure_promotion_columns(connection: sqlite3.Connection) -> None:
+        columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(message_memory_links)").fetchall()}
+        if "created_by_decision_id" not in columns:
+            connection.execute("ALTER TABLE message_memory_links ADD COLUMN created_by_decision_id TEXT NULL")
 
     def _ensure_inheritance_columns(
         self, connection: sqlite3.Connection, table: str
@@ -331,6 +340,127 @@ class SourceReadModel:
                 confidence=confidence,
                 created_at=created_at,
             )
+
+    def resolve_exact_message_ref(
+        self, reference: str | ResolvedMessageRef, *, content_hash: str | None = None
+    ) -> ResolvedMessageRef:
+        value = reference.message_id if isinstance(reference, ResolvedMessageRef) else str(reference or "").strip()
+        expected_hash = content_hash or (reference.content_hash if isinstance(reference, ResolvedMessageRef) else None)
+        if not value:
+            raise SourceReadModelError("provenance_unknown_message")
+        with self._connection() as connection:
+            rows = connection.execute(
+                """SELECT m.message_id, m.external_id AS message_external_id, m.content_hash,
+                          c.external_id AS conversation_external_id, s.external_id AS source_external_id
+                   FROM message_records m JOIN conversation_records c ON c.conversation_id=m.conversation_id
+                   JOIN source_records s ON s.source_id=m.source_id
+                   WHERE m.message_id=? OR m.external_id=? ORDER BY m.message_id""",
+                (value, value),
+            ).fetchall()
+        if len(rows) != 1:
+            raise SourceReadModelError("provenance_ambiguous_message" if rows else "provenance_unknown_message")
+        row = rows[0]
+        actual_hash = str(row["content_hash"] or "")
+        if expected_hash is not None and str(expected_hash) != actual_hash:
+            raise SourceReadModelError("provenance_content_hash_mismatch")
+        return ResolvedMessageRef(
+            str(row["message_id"]),
+            ExternalMessageKey(str(row["source_external_id"] or ""), str(row["conversation_external_id"] or ""), str(row["message_external_id"] or "")),
+            actual_hash,
+        )
+
+    @staticmethod
+    def _message_ref_values(message: Any) -> tuple[str, str | None]:
+        if isinstance(message, ResolvedMessageRef):
+            return message.message_id, message.content_hash
+        if isinstance(message, Mapping):
+            return str(message.get("message_id") or message.get("value") or "").strip(), message.get("content_hash")
+        return str(message or "").strip(), None
+
+    def link_message_memory_batch(
+        self, messages: Iterable[ResolvedMessageRef | Mapping[str, Any] | str], memory_id: str,
+        *, decision_id: str, relation_type: str = "derived_from", confidence: float | None = None,
+    ) -> Any:
+        from src.auto_review.models import BatchLinkResult
+        selected = tuple(messages)
+        if not selected:
+            raise SourceReadModelError("provenance_messages_required")
+        if relation_type != "derived_from":
+            raise SourceReadModelError("unsupported_promotion_relation")
+        normalized_id = self._required(memory_id, "memory_id")
+        owner = self._required(decision_id, "decision_id")
+        with self._lock, self._connection() as connection:
+            resolved: list[ResolvedMessageRef] = []
+            seen: set[str] = set()
+            for item in selected:
+                raw_id, supplied_hash = self._message_ref_values(item)
+                if raw_id in seen:
+                    raise SourceReadModelError("duplicate_message_provenance")
+                seen.add(raw_id)
+                rows = connection.execute(
+                    """SELECT m.message_id, m.external_id AS message_external_id, m.content_hash,
+                              c.external_id AS conversation_external_id, s.external_id AS source_external_id
+                       FROM message_records m JOIN conversation_records c ON c.conversation_id=m.conversation_id
+                       JOIN source_records s ON s.source_id=m.source_id
+                       WHERE m.message_id=? OR m.external_id=?""", (raw_id, raw_id)
+                ).fetchall()
+                if len(rows) != 1:
+                    raise SourceReadModelError("provenance_ambiguous_message" if rows else "provenance_unknown_message")
+                row = rows[0]
+                actual_hash = str(row["content_hash"] or "")
+                if supplied_hash is not None and str(supplied_hash) != actual_hash:
+                    raise SourceReadModelError("provenance_content_hash_mismatch")
+                resolved.append(ResolvedMessageRef(
+                    str(row["message_id"]),
+                    ExternalMessageKey(str(row["source_external_id"] or ""), str(row["conversation_external_id"] or ""), str(row["message_external_id"] or "")),
+                    actual_hash,
+                ))
+            created: list[ResolvedMessageRef] = []
+            reused: list[ResolvedMessageRef] = []
+            for ref in resolved:
+                existing = connection.execute(
+                    "SELECT 1 FROM message_memory_links WHERE message_id=? AND memory_id=? AND relation_type=?",
+                    (ref.message_id, normalized_id, relation_type),
+                ).fetchone()
+                if existing is not None:
+                    reused.append(ref)
+                    continue
+                connection.execute(
+                    "INSERT INTO message_memory_links(message_id,memory_id,relation_type,confidence,created_at,created_by_decision_id) VALUES (?,?,?,?,?,?)",
+                    (ref.message_id, normalized_id, relation_type, confidence, self._now(), owner),
+                )
+                created.append(ref)
+        return BatchLinkResult(tuple(created), tuple(reused))
+
+    def verify_message_memory_links(
+        self, messages: Iterable[ResolvedMessageRef], memory_id: str, *, relation_type: str = "derived_from"
+    ) -> bool:
+        expected = {ref.message_id: ref.content_hash for ref in messages}
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT l.message_id,l.relation_type,m.content_hash FROM message_memory_links l JOIN message_records m ON m.message_id=l.message_id WHERE l.memory_id=?",
+                (str(memory_id),),
+            ).fetchall()
+        if any(str(row["relation_type"]) != relation_type for row in rows):
+            return False
+        actual = {str(row["message_id"]): str(row["content_hash"] or "") for row in rows}
+        return actual == expected
+
+    def unlink_message_memory_batch(
+        self, messages: Iterable[ResolvedMessageRef], memory_id: str, *, decision_id: str,
+        relation_type: str = "derived_from",
+    ) -> tuple[ResolvedMessageRef, ...]:
+        owner = self._required(decision_id, "decision_id")
+        removed: list[ResolvedMessageRef] = []
+        with self._lock, self._connection() as connection:
+            for ref in messages:
+                cursor = connection.execute(
+                    "DELETE FROM message_memory_links WHERE message_id=? AND memory_id=? AND relation_type=? AND created_by_decision_id=?",
+                    (ref.message_id, str(memory_id), relation_type, owner),
+                )
+                if cursor.rowcount:
+                    removed.append(ref)
+        return tuple(removed)
 
     def upsert_bundle(
         self,
@@ -662,7 +792,7 @@ class SourceReadModel:
         with self._connection() as connection:
             rows = connection.execute(
                 """
-                SELECT message_id, memory_id, relation_type, confidence, created_at
+                SELECT message_id, memory_id, relation_type, confidence, created_at, created_by_decision_id
                 FROM message_memory_links
                 WHERE message_id = ?
                 ORDER BY created_at DESC, memory_id
@@ -676,7 +806,7 @@ class SourceReadModel:
             rows = connection.execute(
                 """
                 SELECT
-                    l.message_id, l.memory_id, l.relation_type, l.confidence, l.created_at,
+                    l.message_id, l.memory_id, l.relation_type, l.confidence, l.created_at, l.created_by_decision_id,
                     m.conversation_id, m.source_id, m.role, m.author, m.occurred_at,
                     substr(replace(replace(m.content, char(13), ' '), char(10), ' '), 1, 200)
                         AS content_preview
