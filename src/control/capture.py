@@ -484,16 +484,12 @@ class CaptureControlService:
         status = str(job.get("status") or "")
         if status == "retrying":
             attempt = str(job.get("attempts") or "0")
-            self.work_bridge.store.append_event(
-                ExecutionEvent(
-                    work_id=work.work_id,
-                    event_id=f"work:{work.work_id}:retrying:{attempt}",
-                    event_type="work.retrying",
-                    detail={"actor": "system", "attempt": attempt},
-                )
-            )
-            self.work_bridge.store.save_next_action(
-                NextAction(work_id=work.work_id, action_id=f"next:{work.work_id}:retrying", description="系统自动重试提取", actor="system")
+            self.work_bridge.store.apply_extraction_transition(
+                work.work_id,
+                "retrying",
+                summary="系统自动重试提取",
+                evidence={"job_id": str(job.get("job_id") or ""), "attempt": attempt},
+                occurred_at=str(job.get("updated_at") or "") or None,
             )
             return
         self.work_bridge.record_failure(
@@ -501,17 +497,10 @@ class CaptureControlService:
             stage="extraction",
             reason="提取失败，灵机无法安全完成这条输入",
             retryable=False,
-        )
-        self.work_bridge.store.add_pending_action(
-            PendingAction(
-                action_id=f"owner-failure:{work.work_id}",
-                work_id=work.work_id,
-                description="查看提取失败原因并决定下一步",
-                actor="owner",
-            )
-        )
-        self.work_bridge.store.save_next_action(
-            NextAction(work_id=work.work_id, action_id=f"next:{work.work_id}:failed", description="等待主人查看失败原因", actor="owner")
+            evidence={
+                "job_id": str(job.get("job_id") or ""),
+                "source_type": str(job.get("source_type") or ""),
+            },
         )
 
     @staticmethod

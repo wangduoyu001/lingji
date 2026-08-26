@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Literal, Mapping
 
 from src.storage.state_db import StateDatabase
 
@@ -129,6 +130,174 @@ class WorkStore:
         with self.state._lock, self.state._connection() as connection:
             connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
 
+    @staticmethod
+    def _parse_transition_time(value: str | None) -> datetime | None:
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+
+    @staticmethod
+    def _transition_rank(phase: str) -> int:
+        return {"retrying": 1, "failed": 2, "completed": 3}[phase]
+
+    def apply_extraction_transition(
+        self,
+        work_id: str,
+        phase: Literal["retrying", "completed", "failed"],
+        *,
+        summary: str,
+        evidence: Mapping[str, Any],
+        stage: str = "extraction",
+        retryable: bool = False,
+        occurred_at: str | None = None,
+    ) -> None:
+        """Apply one idempotent extraction lifecycle transition atomically."""
+        if phase not in {"retrying", "completed", "failed"}:
+            raise ValueError(f"Unsupported extraction transition: {phase}")
+        timestamp = occurred_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        incoming_time = self._parse_transition_time(timestamp)
+        with self.state._lock, self.state._connection() as connection:
+            if not connection.execute("SELECT 1 FROM work_items WHERE work_id = ?", (work_id,)).fetchone():
+                raise LookupError(f"Unknown work item: {work_id}")
+
+            outcome_row = connection.execute(
+                "SELECT status, summary, evidence_json, created_at FROM work_outcomes WHERE work_id = ?",
+                (work_id,),
+            ).fetchone()
+            current_phase: str | None = str(outcome_row[0]) if outcome_row else None
+            current_timestamp = str(outcome_row[3] or "") if outcome_row else ""
+            if current_phase not in {"failed", "completed"}:
+                current_phase = None
+            if current_phase is None:
+                latest = connection.execute(
+                    """
+                    SELECT event_type, created_at
+                    FROM execution_events
+                    WHERE work_id = ? AND event_type IN ('work.retrying', 'work.failed', 'extraction.completed')
+                    ORDER BY created_at DESC, event_id DESC
+                    LIMIT 1
+                    """,
+                    (work_id,),
+                ).fetchone()
+                if latest:
+                    current_phase = {
+                        "work.retrying": "retrying",
+                        "work.failed": "failed",
+                        "extraction.completed": "completed",
+                    }[str(latest[0])]
+                    current_timestamp = str(latest[1] or "")
+
+            current_time = self._parse_transition_time(current_timestamp)
+            if current_time is not None and incoming_time is None:
+                return
+            if current_time is not None and incoming_time is not None:
+                if incoming_time < current_time:
+                    return
+                if incoming_time == current_time and current_phase is not None:
+                    if self._transition_rank(phase) < self._transition_rank(current_phase):
+                        return
+
+            evidence_json = self._json(dict(evidence))
+            if phase == "retrying":
+                connection.execute("DELETE FROM work_outcomes WHERE work_id = ?", (work_id,))
+                connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
+                connection.execute(
+                    """
+                    INSERT OR IGNORE INTO execution_events(event_id, work_id, event_type, detail_json, created_at)
+                    VALUES (?, ?, 'work.retrying', ?, ?)
+                    """,
+                    (f"work:{work_id}:retrying", work_id, self._json({"summary": summary, "evidence": dict(evidence), "actor": "system"}), timestamp),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO work_next_actions(work_id, action_id, description, actor, created_at)
+                    VALUES (?, ?, ?, 'system', ?)
+                    ON CONFLICT(work_id) DO UPDATE SET action_id=excluded.action_id, description=excluded.description, actor=excluded.actor, created_at=excluded.created_at
+                    """,
+                    (work_id, f"next:{work_id}:retrying", "系统自动重试提取", timestamp),
+                )
+            elif phase == "completed":
+                connection.execute(
+                    """
+                    INSERT INTO work_outcomes(work_id, status, summary, evidence_json, created_at)
+                    VALUES (?, 'completed', ?, ?, ?)
+                    ON CONFLICT(work_id) DO UPDATE SET status='completed', summary=excluded.summary, evidence_json=excluded.evidence_json, created_at=excluded.created_at
+                    """,
+                    (work_id, summary, evidence_json, timestamp),
+                )
+                connection.execute(
+                    """
+                    INSERT OR IGNORE INTO execution_events(event_id, work_id, event_type, detail_json, created_at)
+                    VALUES (?, ?, 'extraction.completed', ?, ?)
+                    """,
+                    (f"work:{work_id}:extraction.completed", work_id, self._json({"summary": summary, "evidence": dict(evidence)}), timestamp),
+                )
+                connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
+                connection.execute(
+                    """
+                    INSERT INTO work_next_actions(work_id, action_id, description, actor, created_at)
+                    VALUES (?, ?, ?, 'system', ?)
+                    ON CONFLICT(work_id) DO UPDATE SET action_id=excluded.action_id, description=excluded.description, actor=excluded.actor, created_at=excluded.created_at
+                    """,
+                    (work_id, f"next:{work_id}:completed", "系统继续维护可检索记忆", timestamp),
+                )
+            else:
+                failure_id = f"failure:{work_id}:{stage}"
+                connection.execute(
+                    """
+                    INSERT OR REPLACE INTO work_failures(failure_id, work_id, stage, reason, retryable, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (failure_id, work_id, stage, summary, int(retryable), timestamp),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO work_outcomes(work_id, status, summary, evidence_json, created_at)
+                    VALUES (?, 'failed', ?, ?, ?)
+                    ON CONFLICT(work_id) DO UPDATE SET status='failed', summary=excluded.summary, evidence_json=excluded.evidence_json, created_at=excluded.created_at
+                    """,
+                    (work_id, summary, evidence_json, timestamp),
+                )
+                connection.execute(
+                    """
+                    INSERT OR IGNORE INTO execution_events(event_id, work_id, event_type, detail_json, created_at)
+                    VALUES (?, ?, 'work.failed', ?, ?)
+                    """,
+                    (f"work:{work_id}:failed:{stage}", work_id, self._json({"stage": stage, "reason": summary, "retryable": retryable, "evidence": dict(evidence)}), timestamp),
+                )
+                if retryable:
+                    connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
+                    action_id = f"next:{work_id}:retrying"
+                    description = "重试处理"
+                    actor = "system"
+                else:
+                    connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
+                    connection.execute(
+                        """
+                        INSERT OR IGNORE INTO pending_actions(work_id, description, resolved, action_id, actor, created_at)
+                        VALUES (?, ?, 0, ?, 'owner', ?)
+                        """,
+                        (work_id, "查看提取失败原因并决定下一步", f"owner-failure:{work_id}", timestamp),
+                    )
+                    action_id = f"next:{work_id}:failed"
+                    description = "等待主人查看失败原因"
+                    actor = "owner"
+                connection.execute(
+                    """
+                    INSERT INTO work_next_actions(work_id, action_id, description, actor, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(work_id) DO UPDATE SET action_id=excluded.action_id, description=excluded.description, actor=excluded.actor, created_at=excluded.created_at
+                    """,
+                    (work_id, action_id, description, actor, timestamp),
+                )
+            connection.execute("UPDATE work_items SET updated_at = ? WHERE work_id = ?", (timestamp, work_id))
+
     def reconcile_extraction_jobs(self) -> None:
         """Replay terminal extraction facts after a crash between queue and callback."""
         try:
@@ -154,18 +323,10 @@ class WorkStore:
                     if not isinstance(result, dict):
                         result = {}
                     summary = self._safe_result_summary(result)
-                    self.save_outcome(Outcome(work_id=work.work_id, status="completed", summary=summary, evidence={"job_id": str(row[0]), "source_type": str(row[2] or "")}, created_at=str(row[5] or "")))
-                    self.append_event(ExecutionEvent(work_id=work.work_id, event_id=f"work:{work.work_id}:extraction.completed", event_type="extraction.completed", detail={"summary": summary}, created_at=str(row[5] or "")))
-                    self.resolve_pending(work.work_id)
-                    self.save_next_action(NextAction(work_id=work.work_id, action_id=f"next:{work.work_id}:completed", description="系统继续维护可检索记忆", actor="system"))
+                    self.apply_extraction_transition(work.work_id, "completed", summary=summary, evidence={"job_id": str(row[0]), "source_type": str(row[2] or "")}, occurred_at=str(row[5] or ""))
                 else:
                     reason = "提取失败，灵机无法安全完成这条输入"
-                    failure = Failure(work_id=work.work_id, failure_id=f"failure:{work.work_id}:extraction", stage="extraction", reason=reason, retryable=False, created_at=str(row[5] or ""))
-                    self.save_failure(failure)
-                    self.save_outcome(Outcome(work_id=work.work_id, status="failed", summary=reason, evidence={"job_id": str(row[0]), "source_type": str(row[2] or "")}, created_at=failure.created_at))
-                    self.append_event(ExecutionEvent(work_id=work.work_id, event_id=f"work:{work.work_id}:failed:extraction", event_type="work.failed", detail={"stage": "extraction", "reason": reason}, created_at=failure.created_at))
-                    self.add_pending_action(PendingAction(action_id=f"owner-failure:{work.work_id}", work_id=work.work_id, description="查看提取失败原因并决定下一步", actor="owner", created_at=failure.created_at))
-                    self.save_next_action(NextAction(work_id=work.work_id, action_id=f"next:{work.work_id}:failed", description="等待主人查看失败原因", actor="owner", created_at=failure.created_at))
+                    self.apply_extraction_transition(work.work_id, "failed", summary=reason, evidence={"stage": "extraction", "job_id": str(row[0]), "source_type": str(row[2] or "")}, occurred_at=str(row[5] or ""))
             except (TypeError, ValueError, json.JSONDecodeError):
                 continue
 

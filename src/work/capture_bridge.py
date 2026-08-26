@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from .models import ExecutionEvent, Failure, NextAction, Outcome, PendingAction, WorkItem
@@ -57,27 +58,42 @@ class CaptureWorkBridge:
             summary=summary,
             evidence=evidence or {},
         )
-        self.store.save_outcome(outcome)
-        self.store.append_event(
-            ExecutionEvent(
-                work_id=work_id,
-                event_id=f"work:{work_id}:extraction.completed",
-                event_type="extraction.completed",
-                detail={"summary": summary},
-            )
+        self.store.apply_extraction_transition(
+            work_id,
+            "completed",
+            summary=summary,
+            evidence=outcome.evidence,
+            occurred_at=outcome.created_at,
         )
-        self.store.save_next_action(NextAction(work_id=work_id, action_id=f"next:{work_id}:completed", description="系统继续维护可检索记忆", actor="system"))
         return outcome
 
-    def record_failure(self, work_id: str, *, stage: str, reason: str, retryable: bool = False) -> Failure:
+    def record_failure(
+        self,
+        work_id: str,
+        *,
+        stage: str,
+        reason: str,
+        retryable: bool = False,
+        evidence: dict[str, Any] | None = None,
+    ) -> Failure:
         failure = Failure(work_id=work_id, failure_id=f"failure:{work_id}:{stage}", stage=stage, reason=reason, retryable=retryable)
-        self.store.save_failure(failure)
-        self.store.save_outcome(Outcome(work_id=work_id, status="failed", summary=reason, evidence={"stage": stage}, created_at=failure.created_at))
-        self.store.append_event(ExecutionEvent(work_id=work_id, event_id=f"work:{work_id}:failed:{stage}", event_type="work.failed", detail={"stage": stage, "reason": reason, "retryable": retryable}, created_at=failure.created_at))
-        phase = "retrying" if retryable else "failed"
-        self.store.save_next_action(NextAction(work_id=work_id, action_id=f"next:{work_id}:{phase}", description="重试处理" if retryable else "等待主人查看失败原因", actor="system" if retryable else "owner"))
+        transition_evidence = {"stage": stage, **(evidence or {})}
+        self.store.apply_extraction_transition(
+            work_id,
+            "failed",
+            summary=reason,
+            evidence=transition_evidence,
+            stage=stage,
+            retryable=retryable,
+            occurred_at=failure.created_at,
+        )
         return failure
 
     def retry(self, work_id: str) -> None:
-        self.store.append_event(ExecutionEvent(work_id=work_id, event_id=f"work:{work_id}:retrying", event_type="work.retrying", detail={"actor": "system"}))
-        self.store.save_next_action(NextAction(work_id=work_id, action_id=f"next:{work_id}:retrying", description="重新执行失败阶段", actor="system"))
+        self.store.apply_extraction_transition(
+            work_id,
+            "retrying",
+            summary="重新执行失败阶段",
+            evidence={"actor": "system"},
+            occurred_at=datetime.now().isoformat(timespec="microseconds"),
+        )

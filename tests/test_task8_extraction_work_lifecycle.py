@@ -198,6 +198,28 @@ def test_replayed_failure_pending_is_resolved_after_retry_success(tmp_path: Path
     assert WorkProjector(recovered).fact(submitted["work_id"])["failure"] is None
 
 
+def test_callback_failure_then_success_resolves_owner_pending_before_any_replay(tmp_path: Path):
+    state, queue, pipeline, service = _service(tmp_path, failing=True)
+    submitted = service.submit_text(
+        {
+            "capture_id": "capture-callback-immediate-recovery",
+            "source_type": "always_fail",
+            "adapter_name": "always-fail",
+            "text": "hello",
+        }
+    )
+    with queue._connection() as connection:
+        connection.execute("UPDATE extraction_jobs SET max_attempts = 1 WHERE job_id = ?", (submitted["job_id"],))
+    assert pipeline.process_job(submitted["job_id"], worker_id="task8")["job"]["status"] == "failed"
+    assert len(service.work_bridge.store.list_pending(work_id=submitted["work_id"])) == 1
+
+    pipeline.registry._adapters["always-fail"] = SuccessAdapter()
+    queue.retry(submitted["job_id"])
+    assert pipeline.process_job(submitted["job_id"], worker_id="task8")["job"]["status"] == "completed"
+    assert service.work_bridge.store.list_pending(work_id=submitted["work_id"]) == []
+    assert service.work_bridge.store.get_outcome(submitted["work_id"]).status == "completed"
+
+
 def test_duplicate_capture_reuses_original_work_fact(tmp_path: Path):
     state, queue, pipeline, service = _service(tmp_path)
     first = service.submit_text({"capture_id": "capture-original", "title": "same", "text": "same"})
