@@ -157,7 +157,7 @@ class WorkStore:
                     self.save_outcome(Outcome(work_id=work.work_id, status="completed", summary=summary, evidence={"job_id": str(row[0]), "source_type": str(row[2] or "")}, created_at=str(row[5] or "")))
                     self.append_event(ExecutionEvent(work_id=work.work_id, event_id=f"work:{work.work_id}:extraction.completed", event_type="extraction.completed", detail={"summary": summary}, created_at=str(row[5] or "")))
                     self.resolve_pending(work.work_id)
-                    self.save_next_action(NextAction(work_id=work.work_id, description="系统继续维护可检索记忆", actor="system"))
+                    self.save_next_action(NextAction(work_id=work.work_id, action_id=f"next:{work.work_id}:completed", description="系统继续维护可检索记忆", actor="system"))
                 else:
                     reason = "提取失败，灵机无法安全完成这条输入"
                     failure = Failure(work_id=work.work_id, failure_id=f"failure:{work.work_id}:extraction", stage="extraction", reason=reason, retryable=False, created_at=str(row[5] or ""))
@@ -165,7 +165,7 @@ class WorkStore:
                     self.save_outcome(Outcome(work_id=work.work_id, status="failed", summary=reason, evidence={"job_id": str(row[0]), "source_type": str(row[2] or "")}, created_at=failure.created_at))
                     self.append_event(ExecutionEvent(work_id=work.work_id, event_id=f"work:{work.work_id}:failed:extraction", event_type="work.failed", detail={"stage": "extraction", "reason": reason}, created_at=failure.created_at))
                     self.add_pending_action(PendingAction(action_id=f"owner-failure:{work.work_id}", work_id=work.work_id, description="查看提取失败原因并决定下一步", actor="owner", created_at=failure.created_at))
-                    self.save_next_action(NextAction(work_id=work.work_id, description="等待主人查看失败原因", actor="owner", created_at=failure.created_at))
+                    self.save_next_action(NextAction(work_id=work.work_id, action_id=f"next:{work.work_id}:failed", description="等待主人查看失败原因", actor="owner", created_at=failure.created_at))
             except (TypeError, ValueError, json.JSONDecodeError):
                 continue
 

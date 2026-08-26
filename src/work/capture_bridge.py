@@ -66,7 +66,7 @@ class CaptureWorkBridge:
                 detail={"summary": summary},
             )
         )
-        self.store.save_next_action(NextAction(work_id=work_id, description="系统继续维护可检索记忆", actor="system"))
+        self.store.save_next_action(NextAction(work_id=work_id, action_id=f"next:{work_id}:completed", description="系统继续维护可检索记忆", actor="system"))
         return outcome
 
     def record_failure(self, work_id: str, *, stage: str, reason: str, retryable: bool = False) -> Failure:
@@ -74,9 +74,10 @@ class CaptureWorkBridge:
         self.store.save_failure(failure)
         self.store.save_outcome(Outcome(work_id=work_id, status="failed", summary=reason, evidence={"stage": stage}, created_at=failure.created_at))
         self.store.append_event(ExecutionEvent(work_id=work_id, event_id=f"work:{work_id}:failed:{stage}", event_type="work.failed", detail={"stage": stage, "reason": reason, "retryable": retryable}, created_at=failure.created_at))
-        self.store.save_next_action(NextAction(work_id=work_id, description="重试处理" if retryable else "等待主人查看失败原因", actor="system" if retryable else "owner"))
+        phase = "retrying" if retryable else "failed"
+        self.store.save_next_action(NextAction(work_id=work_id, action_id=f"next:{work_id}:{phase}", description="重试处理" if retryable else "等待主人查看失败原因", actor="system" if retryable else "owner"))
         return failure
 
     def retry(self, work_id: str) -> None:
         self.store.append_event(ExecutionEvent(work_id=work_id, event_id=f"work:{work_id}:retrying", event_type="work.retrying", detail={"actor": "system"}))
-        self.store.save_next_action(NextAction(work_id=work_id, description="重新执行失败阶段", actor="system"))
+        self.store.save_next_action(NextAction(work_id=work_id, action_id=f"next:{work_id}:retrying", description="重新执行失败阶段", actor="system"))

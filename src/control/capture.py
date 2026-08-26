@@ -410,7 +410,7 @@ class CaptureControlService:
                         detail={"status": response["status"], "job_id": job_id or None},
                     )
                 )
-                self.work_bridge.store.save_next_action(NextAction(work_id=work.work_id, description="等待提取与索引完成", actor="system"))
+                self.work_bridge.store.save_next_action(NextAction(work_id=work.work_id, action_id=f"next:{work.work_id}:queued", description="等待提取与索引完成", actor="system"))
                 response["work_id"] = work.work_id
         self._audit(
             "capture_duplicate" if duplicate else "capture_submitted",
@@ -497,7 +497,7 @@ class CaptureControlService:
                 )
             )
             self.work_bridge.store.save_next_action(
-                NextAction(work_id=work.work_id, description="系统自动重试提取", actor="system")
+                NextAction(work_id=work.work_id, action_id=f"next:{work.work_id}:retrying", description="系统自动重试提取", actor="system")
             )
             return
         self.work_bridge.record_failure(
@@ -515,7 +515,7 @@ class CaptureControlService:
             )
         )
         self.work_bridge.store.save_next_action(
-            NextAction(work_id=work.work_id, description="等待主人查看失败原因", actor="owner")
+            NextAction(work_id=work.work_id, action_id=f"next:{work.work_id}:failed", description="等待主人查看失败原因", actor="owner")
         )
 
     @staticmethod

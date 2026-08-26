@@ -146,8 +146,12 @@ def test_terminal_completed_job_replays_work_fact_after_callback_crash(tmp_path:
     fact = WorkProjector(restarted).fact(submitted["work_id"])
     assert fact["outcome"]["status"] == "completed"
     assert len([event for event in fact["events"] if event["event_type"] == "extraction.completed"]) == 1
+    action_ids = {restarted.get_next_action(submitted["work_id"]).action_id}
     restarted.reconcile_extraction_jobs()
+    action_ids.add(restarted.get_next_action(submitted["work_id"]).action_id)
     restarted.reconcile_extraction_jobs()
+    action_ids.add(restarted.get_next_action(submitted["work_id"]).action_id)
+    assert len(action_ids) == 1
     assert len([event for event in restarted.list_events(submitted["work_id"]) if event.event_type == "extraction.completed"]) == 1
 
 
@@ -163,7 +167,12 @@ def test_terminal_failed_job_replays_failure_and_owner_pending_after_callback_cr
     assert restarted.get_outcome(submitted["work_id"]).status == "failed"
     assert restarted.get_failure(submitted["work_id"]) is not None
     assert len(restarted.list_pending(work_id=submitted["work_id"])) == 1
+    action_ids = {restarted.get_next_action(submitted["work_id"]).action_id}
     restarted.reconcile_extraction_jobs()
+    action_ids.add(restarted.get_next_action(submitted["work_id"]).action_id)
+    restarted.reconcile_extraction_jobs()
+    action_ids.add(restarted.get_next_action(submitted["work_id"]).action_id)
+    assert len(action_ids) == 1
     assert len(restarted.list_pending(work_id=submitted["work_id"])) == 1
     assert len([event for event in restarted.list_events(submitted["work_id"]) if event.event_type == "work.failed"]) == 1
 
