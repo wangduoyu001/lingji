@@ -4,6 +4,26 @@
 >
 > 记录描述“本次代码变化后，验收必须新增、修改或回归什么”。历史记录不得删除，只能更正明显错误并说明原因。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 6 · safe derived-memory promotion
+
+- 产品分支：`codex/phase1-automatic-memory`
+- 产品 Commit：`63ee78fb4bcbb7034926356026907fa0c6fd12e0`
+- 影响模块：`src/auto_review/promotion.py`, automatic-review candidate provenance, rebuildable `MemoryDatabase` derived projection
+- 风险等级：P0
+- 用户可感知变化：聊天证据先保存为带来源、置信度、权威、提取器版本和风险标记的候选；只有 `confidence >= 0.90`、有直接用户/当前权威项目证据、可验证来源且无冲突/高风险时，才自动进入可重建 current projection。Core、身份、秘密、权限、医疗/法律/金融/安全及不可逆内容必须主人明确确认。
+- 数据或安全边界变化：自动激活只写可重建 `lingji_memory.db` 派生投影，不写 Obsidian Vault、Core Memory 或正式知识；决定和审核事件追加写入既有 `StateDatabase`。主人审批/拒绝使用 expected content hash 防止过期操作；失败投影保持 `error`，不假报激活，原始证据保留。
+
+### 新增或修改的自动验收
+
+- [x] `tests/test_auto_memory_promotion.py`：覆盖阈值、证据、冲突/重复、高风险类别、持久化来源链、幂等、版本重算、主人 hash 确认和投影失败。
+- [x] `tests/test_auto_review_core.py` 与相关 memory lifecycle/retrieval 回归不得回归（focused 40 passed）。
+- [ ] Task 1–5 focused 回归、涉及文件 `py_compile`、`git diff --check`、`scripts/check_acceptance_sync.py`、`scripts/check_local_execution_handoff.py` 全部 PASS；由根代理在产品/文档双提交后复读。
+- [ ] Qdrant/真实 Production Vault/主人 UI 与 M5 真机验收：由根代理另行执行；本任务不读取真实 Vault、不宣称 Phase 1 完成。
+
+### 回滚
+
+- 回滚：回退 Task 6 产品 Commit；只删除可重建派生索引和测试临时数据，不触碰 Vault、原始聊天证据、主人配置或第三方 AI 软件。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 5 final closeout · Qdrant retry truth and raw TOCTOU
 
 - 产品分支：`codex/phase1-automatic-memory`

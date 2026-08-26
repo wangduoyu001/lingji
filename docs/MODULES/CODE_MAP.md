@@ -362,8 +362,8 @@ src/obsidian/service.py
 = bounded memory scope, dry-run manifest, managed-derived migration and rollback (implemented; focused-tested)
 
 Task 6:
-src/automatic_memory/derived_memory.py
-src/auto_review/application.py
+src/auto_review/promotion.py::AutoMemoryPromotionService
+src/auto_review/application.py::AutoReviewApplicationService
 src/memory/lifecycle.py
 src/retrieval/memory_db.py
 = rebuildable derived promotion and owner/Core boundary
