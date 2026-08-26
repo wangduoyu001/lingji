@@ -81,3 +81,15 @@ historical deferred Task4R1 pair: 5 failed, 10 passed, 1 warning
 ```
 
 The historical failures are expected rejected old-selector/API/readiness incompatibilities and remain deferred to Task 6. The existing Pydantic class-based-config deprecation warning remains. Frozen corpus/questions were unchanged; hashes remain the values recorded above. Product commit: `db9e26e`; docs commit: recorded by `git rev-parse HEAD` after this report update.
+
+## Repair round 2 (product `c724ec9`)
+
+Repair Round 2 addressed independent review I6/I7 and M2. The added adversarial suite first produced RED (`7 failed, 25 passed, 1 warning`); after correcting the test's SourceReadModel page size, the real storage assertion exposed fixture-driven supersession data in MemoryDatabase relationships. The runner now rejects unknown selector fact/citation IDs before scoring and publication, validates every populated internal/external/corpus composite representation as three exact strings without normalization, and leaves lifecycle replacement writes to the real application workflow rather than the fixture evaluator.
+
+```text
+focused: 32 passed, 1 warning in 7.65s
+brief regression: 58 passed, 1 warning in 1.11s
+historical deferred Task4R1 pair: 5 failed, 10 passed, 1 warning
+```
+
+The real temporary import/promotion snapshot queries SourceReadModel messages, MemoryDatabase document relationships and StateDatabase candidate metadata; no fixture/evaluator IDs, `fixture_*` keys, expected/forbidden labels or fixture lifecycle overrides appear in those persisted metadata/relationship fields. Frozen fixture hashes remain unchanged. Product commit: `c724ec9`; docs commit: recorded by `git rev-parse HEAD` after this update.

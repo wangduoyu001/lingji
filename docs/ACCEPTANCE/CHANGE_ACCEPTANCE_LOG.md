@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 3 · Repair round 2
+
+- 基准：`7175a37c0446e04be91ab950e0f8a680ed12c9b9`；仅修复 independent review I6/I7 与 M2 存储快照测试缺口。
+- 风险等级：P0。不得进入 Task 4–6、4R2、MCP parity、100k、Artifact、Production、Vault、冻结文件/evaluator 或 retrieval 调参。
+- 自动验收：selector 未知 fact/citation 在评分前抛出并阻断报告；所有 persisted internal/external/corpus composite 表示必须三字段 exact string、非空且无周围空白，partial/malformed fail-closed；真实临时 SourceReadModel/MemoryDatabase/StateDatabase import/promotion 快照不得出现 fixture/evaluator labels 或 fixture 生命周期覆写。
+- 证据：RED focused `7 failed, 25 passed, 1 warning`（修正快照分页测试后额外暴露既有 fixture supersession 写入）；GREEN focused `32 passed, 1 warning`；brief regression `58 passed, 1 warning`；历史 rejected Task4R1 callers 仍单独延期。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 3 · Repair round 1
 
 - 基准：`6f8ddb00df11610316a798faee11e26a052c6463`；仅修复 Task 3 independent review 的 I1–I5 与明确纳入的 canonical whitespace Minor。
