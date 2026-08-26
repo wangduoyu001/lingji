@@ -519,6 +519,7 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             message_links=message_links,
         )
         fact_by_memory = {item.fact_id: item for item in corpus}
+        citation_ids = {item.citation_id for item in corpus}
         baseline_unit = sum(len(item.content) for item in corpus) + sum(len(item.topic_key) for item in corpus)
         baseline_context_chars = baseline_unit * len(questions)
         for question in questions:
@@ -542,20 +543,18 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             rendered_context_chars += len(str(gateway_pack.get("markdown") or ""))
             mcp_attempts += 1
             try:
-                mcp_pack = _run_mcp_call(mcp, arguments)
-                gateway_selection = select_context_evidence(gateway_pack, identity_registry, limit=_SELECTOR_LIMIT)
-                mcp_selection = select_context_evidence(mcp_pack, identity_registry, limit=_SELECTOR_LIMIT)
-                same = gateway_selection == mcp_selection
-                if same:
-                    mcp_successes += 1
-                mcp_cases.append({"question_id": question.question_id, "success": same})
+                _run_mcp_call(mcp, arguments)
+                # MCP parity is intentionally deferred to Task 4R2.  The
+                # call is retained for transport smoke coverage, but no
+                # typed selector or parity verdict is applied here.
+                mcp_cases.append({"question_id": question.question_id, "status": "NOT_MEASURED"})
             except Exception as exc:
-                mcp_cases.append({"question_id": question.question_id, "success": False, "error": type(exc).__name__})
+                mcp_cases.append({"question_id": question.question_id, "status": "NOT_MEASURED", "error": type(exc).__name__})
             selected_evidence = select_context_evidence(gateway_pack, identity_registry, limit=_SELECTOR_LIMIT)
             gateway_selector_calls += 1
             gateway_selected_evidence += len(selected_evidence.fact_ids)
             recalled = tuple(fact_id for fact_id in selected_evidence.fact_ids if fact_id in fact_by_memory)
-            citations = tuple(citation_id for citation_id in selected_evidence.citation_ids if citation_id in fact_by_memory)
+            citations = tuple(citation_id for citation_id in selected_evidence.citation_ids if citation_id in citation_ids)
             for memory_id in recalled:
                 record = fact_by_memory[memory_id]
                 if record.lifecycle != "active" and question.mode == "current":

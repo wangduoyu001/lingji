@@ -62,7 +62,9 @@ _KINDS = _MEMORY_KINDS | {_RAW_KIND}
 def _string(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise EvidenceIdentityError(f"{field} must be a non-empty string")
-    return value.strip()
+    if value != value.strip():
+        raise EvidenceIdentityError(f"{field} must not contain surrounding whitespace")
+    return value
 
 
 def _mapping(value: Any, label: str) -> Mapping[str, Any]:
@@ -176,12 +178,12 @@ def build_identity_registry(
         fact_id = memory_to_fact.get(memory_id)
         if fact_id is None:
             raise EvidenceIdentityError(f"unknown linked memory: {memory_id}")
-        exact = [rows_by_key[key] for key in _row_keys(row) if key in corpus_by_key]
-        if not exact:
+        matches = [corpus_by_key[key] for key in _row_keys(row) if key in corpus_by_key]
+        if not matches:
             raise EvidenceIdentityError("unknown persisted composite corpus identity")
-        if len({id(item) for item in exact}) != 1:
-            raise EvidenceIdentityError("persisted message does not resolve to exactly one corpus identity")
-        corpus_fact, citation_id = corpus_by_key[next(key for key in _row_keys(row) if key in corpus_by_key)]
+        if len(set(matches)) != 1:
+            raise EvidenceIdentityError("persisted message composite identities contradict")
+        corpus_fact, citation_id = matches[0]
         if corpus_fact != fact_id:
             raise EvidenceIdentityError("message and memory promotion facts contradict")
         identity = MessageIdentity(
@@ -203,7 +205,7 @@ def build_identity_registry(
     )
 
 
-def _citation_identity(section: Mapping[str, Any], fields: Sequence[str]) -> Mapping[str, Any]:
+def _citation_identity(section: Mapping[str, Any]) -> Mapping[str, Any]:
     raw = section.get("citation")
     if raw is None:
         return {}
@@ -238,7 +240,7 @@ def select_context_evidence(
         fact_id = registry.memory_to_fact.get(memory_id)
         if fact_id is None:
             raise EvidenceIdentityError(f"unknown section memory identity: {memory_id}")
-        citation = _citation_identity(section, ())
+        citation = _citation_identity(section)
         citation_memory = citation.get("memory_id")
         if citation_memory is not None and _string(citation_memory, "citation memory_id") != memory_id:
             raise EvidenceIdentityError("citation memory identity contradicts section")
@@ -253,9 +255,12 @@ def select_context_evidence(
                 raise EvidenceIdentityError("raw section text must be non-empty")
             if SourceReadModel.content_hash(text) != values["content_hash"]:
                 raise EvidenceIdentityError("raw section content hash mismatch")
-            for field, value in values.items():
-                duplicate = citation.get(field)
-                if duplicate is not None and _string(duplicate, f"citation {field}") != value:
+            if not citation:
+                raise EvidenceIdentityError("raw section citation is required")
+            for field, value in (("memory_id", memory_id), *values.items()):
+                if field not in citation:
+                    raise EvidenceIdentityError(f"raw citation {field} is required")
+                if _string(citation[field], f"citation {field}") != value:
                     raise EvidenceIdentityError(f"citation {field} contradicts raw section")
             identity = RawMessageSectionIdentity(kind=_RAW_KIND, memory_id=memory_id, **values)  # type: ignore[arg-type]
             lookup = MessageIdentity(**values, memory_id=memory_id)  # type: ignore[arg-type]

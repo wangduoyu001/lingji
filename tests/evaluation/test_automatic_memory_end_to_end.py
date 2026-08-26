@@ -14,6 +14,7 @@ from src.automatic_memory.quality_gate import (
     QUESTIONS_SHA256,
     run_quality_gate,
 )
+import src.automatic_memory.quality_gate as quality_gate_module
 
 
 ROOT = Path(__file__).parents[1]
@@ -49,17 +50,38 @@ def test_frozen_inputs_and_selector_are_expectation_blind():
     with pytest.raises(ValueError):
         select_context_evidence(actual, registry)
 
+    questions = load_questions(QUESTIONS, corpus=load_corpus(CORPUS))
+    for question in questions:
+        object.__setattr__(question, "expected_fact_ids", ("forged",))
+        object.__setattr__(question, "forbidden_fact_ids", (record.fact_id,))
+        object.__setattr__(question, "expected_citation_ids", ("forged-citation",))
+        assert select_context_evidence(pack, registry) == baseline
 
-def test_real_quality_gate_reports_measured_result(tmp_path: Path):
+
+def test_real_quality_gate_reports_measured_result(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     output = tmp_path / "quality.json"
+    selector_calls = 0
+    original_selector = quality_gate_module.select_context_evidence
+
+    def counted_selector(*args, **kwargs):
+        nonlocal selector_calls
+        selector_calls += 1
+        return original_selector(*args, **kwargs)
+
+    monkeypatch.setattr(quality_gate_module, "select_context_evidence", counted_selector)
     report = run_quality_gate(CORPUS, QUESTIONS, output_path=output)
     assert report.answered_questions == 100
     assert report.imported_messages == report.expected_messages == len(load_corpus(CORPUS))
     assert len(load_questions(QUESTIONS, corpus=load_corpus(CORPUS))) == 100
     assert report.mcp_attempts == 100
+    assert selector_calls == 100
     # The default test environment has no configured Production Vault root;
     # unavailable sentinel evidence is explicitly nullable, never numeric 0.
     assert report.production_pollution is None
     envelope = json.loads(output.read_text(encoding="utf-8"))
     assert envelope["production_pollution"] is None
+    assert envelope["mcp_parity"]["status"] == "NOT_MEASURED"
+    serialized = output.read_text(encoding="utf-8")
+    assert "fixture_fact_id" not in serialized
+    assert "fixture_citation_id" not in serialized
     assert AutomaticMemoryFunctionalGate.evaluate(report) in {"PASS", "FAIL"}
