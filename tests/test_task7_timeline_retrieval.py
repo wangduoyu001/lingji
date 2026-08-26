@@ -217,6 +217,17 @@ class TimelineRetrievalTests(unittest.TestCase):
             [],
         )
 
+    def test_why_same_conflict_key_isolated_by_project(self):
+        self.note("03-Knowledge/a-new.md", "a-new", "项目A当前", "共享主题决定方案。", project=["Project A"], conflict_key="shared-topic", authority="user_explicit", valid_from="2026-01-01T00:00:00Z")
+        self.note("03-Knowledge/a-old.md", "a-old", "项目A旧版", "共享主题决定方案。", project=["Project A"], conflict_key="shared-topic", authority="old_chat_inference", valid_from="2025-01-01T00:00:00Z")
+        self.note("03-Knowledge/b-new.md", "b-new", "项目B当前", "共享主题决定方案。", project=["Project B"], conflict_key="shared-topic", authority="user_explicit", valid_from="2026-01-01T00:00:00Z")
+        self.note("03-Knowledge/b-old.md", "b-old", "项目B旧版", "共享主题决定方案。", project=["Project B"], conflict_key="shared-topic", authority="old_chat_inference", valid_from="2025-01-01T00:00:00Z")
+        self.rebuild()
+        results = HybridRetriever(self.db).search("共享主题 方案", limit=10, filters=SearchFilters(mode="why"))
+        by_id = {item["memory_id"]: item["why"] for item in results}
+        self.assertEqual({item["memory_id"] for item in by_id["a-new"]["excluded_candidates"]}, {"a-old"})
+        self.assertEqual({item["memory_id"] for item in by_id["b-new"]["excluded_candidates"]}, {"b-old"})
+
 
 if __name__ == "__main__":
     unittest.main()

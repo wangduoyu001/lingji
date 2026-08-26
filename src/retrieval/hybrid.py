@@ -181,10 +181,17 @@ class HybridRetriever:
                 or candidate_relationships.get("decision_key")
                 or ""
             )
+            candidate_projects = candidate.get("project") or []
+            if isinstance(candidate_projects, str):
+                candidate_projects = [candidate_projects]
+            candidate_project_scope = tuple(sorted(str(value) for value in candidate_projects))
             excluded.append({
                 "memory_id": memory_id,
                 "reason": reason,
                 "conflict_key": candidate_conflict_key,
+                "project_scope": candidate_project_scope,
+                "memory_type": str(candidate.get("memory_type") or ""),
+                "privacy": str(candidate.get("privacy") or ""),
                 "authority": fields["authority"],
                 "citation": {**self._citation(candidate), "source_refs": fields["source_refs"]},
                 "valid_from": fields["valid_from"],
@@ -207,11 +214,26 @@ class HybridRetriever:
                 or relationships.get("decision_key")
                 or ""
             )
+            item_projects = item.get("project") or []
+            if isinstance(item_projects, str):
+                item_projects = [item_projects]
+            item_project_scope = tuple(sorted(str(value) for value in item_projects))
             relevant_excluded = [
                 candidate for candidate in excluded
-                if candidate.get("conflict_key") == item_conflict_key
+                if (
+                    candidate.get("conflict_key") == item_conflict_key
+                    and candidate.get("project_scope") == item_project_scope
+                    and candidate.get("memory_type") == str(item.get("memory_type") or "")
+                    and candidate.get("privacy") == str(item.get("privacy") or "")
+                )
             ] if item_conflict_key else [
-                candidate for candidate in excluded if not candidate.get("conflict_key")
+                candidate for candidate in excluded
+                if (
+                    not candidate.get("conflict_key")
+                    and candidate.get("project_scope") == item_project_scope
+                    and candidate.get("memory_type") == str(item.get("memory_type") or "")
+                    and candidate.get("privacy") == str(item.get("privacy") or "")
+                )
             ]
             item["why"] = {
                 **fields,
