@@ -32,8 +32,10 @@ def parse_instant(value: Any, *, default: datetime | None = None) -> datetime | 
             parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
         except (TypeError, ValueError, OverflowError):
             return None
+    # A timezone-less instant is ambiguous across machines and must never
+    # silently become local/UTC time in a retrieval predicate.
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        return None
     try:
         return parsed.astimezone(timezone.utc)
     except (ValueError, OverflowError):

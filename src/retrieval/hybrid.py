@@ -6,7 +6,7 @@ import re
 import threading
 import time
 from collections import OrderedDict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
@@ -40,7 +40,9 @@ class SearchFilters:
         if self.include_archived and "archived" not in statuses:
             statuses = (*statuses, "archived")
         temporal = TemporalQuery.from_values(self.mode, self.as_of)
-        as_of = temporal.as_of
+        # Keep implicit current time out of cache identity.  The caller adds a
+        # per-search evaluation instant after cache lookup.
+        as_of = temporal.as_of if self.as_of is not None else None
         if temporal.mode in {"as_of", "history"}:
             statuses = ALL_LIFECYCLE_STATUSES
         return SearchFilters(
@@ -92,6 +94,12 @@ class HybridRetriever:
         if cached is not None:
             return cached
 
+        evaluation_filters = normalized
+        if normalized.mode in {"current", "why"} and normalized.as_of is None:
+            evaluation_filters = replace(
+                normalized,
+                as_of=datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z"),
+            )
         candidate_limit = max(limit * 6, 30)
         lexical = self.database.search_fts(
             clean_query,
@@ -99,24 +107,66 @@ class HybridRetriever:
             memory_types=normalized.memory_types,
             statuses=normalized.statuses,
             privacy=normalized.privacy,
-            as_of=normalized.as_of,
-            mode=normalized.mode,
+            as_of=evaluation_filters.as_of,
+            mode=evaluation_filters.mode,
         )
-        semantic = self._semantic_search(clean_query, candidate_limit, normalized)
-        fused = self._fuse(clean_query, lexical, semantic, normalized)
+        semantic = self._semantic_search(clean_query, candidate_limit, evaluation_filters)
+        fused = self._fuse(clean_query, lexical, semantic, evaluation_filters)
         output = fused[:limit]
         if normalized.mode == "why":
-            conflict = any(item.get("authority_conflicts") for item in output) or len({temporal_fields(item)["authority_rank"] for item in output}) > 1
-            for item in output:
-                fields = temporal_fields(item)
-                item["why"] = {
-                    **fields,
-                    "selection_rule": "current_valid_and_authority_ordered",
-                    "exclusion_reason": item.get("temporal_reason") or "selected",
-                    "conflict": conflict,
-                }
+            self._attach_why(clean_query, output, evaluation_filters)
         self._cache_put(cache_key, output)
         return output
+
+    def _attach_why(self, query: str, output: list[dict[str, Any]], filters: SearchFilters) -> None:
+        current_ids = {str(item.get("memory_id") or "") for item in output}
+        historical = self.database.search_fts(
+            query,
+            limit=max(len(output) * 12, 60),
+            memory_types=filters.memory_types,
+            statuses=ALL_LIFECYCLE_STATUSES,
+            privacy=filters.privacy,
+            mode="history",
+        )
+        excluded: list[dict[str, Any]] = []
+        winners = {str(item.get("memory_id") or ""): item for item in output}
+        conflict_ids = {
+            str(value)
+            for item in output
+            for value in (item.get("authority_conflicts") or [])
+        }
+        temporal = TemporalQuery.from_values("current", filters.as_of)
+        for candidate in historical:
+            memory_id = str(candidate.get("memory_id") or "")
+            if not memory_id or memory_id in current_ids:
+                continue
+            allowed, reason = temporal.allows(candidate)
+            if allowed and memory_id not in conflict_ids:
+                continue
+            if memory_id in conflict_ids:
+                reason = "lower_authority_conflict"
+            fields = temporal_fields(candidate)
+            excluded.append({
+                "memory_id": memory_id,
+                "reason": reason,
+                "authority": fields["authority"],
+                "citation": {**self._citation(candidate), "source_refs": fields["source_refs"]},
+                "valid_from": fields["valid_from"],
+                "valid_to": fields["valid_to"],
+                "superseded_by": fields["superseded_by"],
+            })
+            if len(excluded) >= 50:
+                break
+        conflict = bool(conflict_ids)
+        for item in output:
+            fields = temporal_fields(item)
+            item["why"] = {
+                **fields,
+                "selection_rule": "current_valid_and_authority_ordered",
+                "exclusion_reason": item.get("temporal_reason") or "selected",
+                "conflict": conflict,
+                "excluded_candidates": excluded,
+            }
 
     def _semantic_search(
         self,

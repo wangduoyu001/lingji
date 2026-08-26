@@ -10,6 +10,7 @@ from src.obsidian.frontmatter import render_frontmatter
 from src.retrieval import HybridRetriever, MarkdownChunker, MemoryDatabase
 from src.retrieval.context_pack import ContextPackBuilder, ContextPackRequest
 from src.retrieval.hybrid import SearchFilters
+from src.retrieval.temporal import TemporalQuery, parse_instant
 from src.storage import StateDatabase
 
 
@@ -56,6 +57,13 @@ class TimelineRetrievalTests(unittest.TestCase):
         self.assertEqual({r["memory_id"] for r in past}, {"old"})
         self.assertEqual(retriever.search("损坏", filters=SearchFilters(mode="as_of", as_of="2026-01-01T00:00:00Z")), [])
 
+    def test_naive_query_and_record_instants_fail_closed(self):
+        self.assertIsNone(parse_instant("2026-01-01T00:00:00"))
+        self.assertFalse(TemporalQuery.from_values("as_of", "2026-01-01T00:00:00").valid)
+        self.note("03-Knowledge/naive.md", "naive", "无时区", "无时区内容。", valid_from="2026-01-01T00:00:00")
+        self.rebuild()
+        self.assertEqual(HybridRetriever(self.db).search("无时区", filters=SearchFilters(mode="as_of", as_of="2026-01-02T00:00:00Z")), [])
+
     def test_offset_timestamps_use_instants_and_half_open_boundary(self):
         self.note("03-Knowledge/offset.md", "offset", "偏移时间", "偏移边界证据。", valid_from="2026-01-01T08:00:00+08:00", valid_to="2026-01-02T08:00:00+08:00")
         self.rebuild()
@@ -93,6 +101,14 @@ class TimelineRetrievalTests(unittest.TestCase):
         self.assertIn("citation", results[0])
         self.assertIn("source_refs", results[0]["why"])
 
+        self.note("03-Knowledge/expired.md", "expired", "过期决定", "权威决定。", status="superseded", superseded_by="high", sources=["msg-old"], valid_from="2025-01-01T00:00:00Z", valid_to="2026-01-01T00:00:00Z")
+        self.rebuild()
+        explained = HybridRetriever(self.db).search("权威决定", filters=SearchFilters(mode="why"))
+        excluded = explained[0]["why"]["excluded_candidates"]
+        self.assertTrue(any(item["memory_id"] == "expired" and item["reason"].startswith("status_") for item in excluded))
+        expired_explanation = next(item for item in excluded if item["memory_id"] == "expired")
+        self.assertIn("msg-old", expired_explanation["citation"]["source_refs"])
+
     def test_lower_authority_conflict_cannot_displace_current_winner(self):
         self.note("03-Knowledge/high.md", "high", "当前决定", "同一项目决定内容。", authority="user_explicit", conflict_key="architecture", valid_from="2026-01-01T00:00:00Z")
         self.note("03-Knowledge/low.md", "low", "较新决定", "同一项目决定内容。", authority="old_chat_inference", conflict_key="architecture", valid_from="2026-02-01T00:00:00Z")
@@ -108,6 +124,8 @@ class TimelineRetrievalTests(unittest.TestCase):
         self.rebuild()
         current = HybridRetriever(self.db).search("偏好", filters=SearchFilters(mode="current"))
         self.assertEqual({item["memory_id"] for item in current}, {"one", "two"})
+        why = HybridRetriever(self.db).search("偏好", filters=SearchFilters(mode="why"))
+        self.assertFalse(any(item["why"]["conflict"] for item in why))
 
     def test_project_refresh_is_idempotent_and_keeps_old_evidence(self):
         self.note("03-Knowledge/old.md", "old", "旧项目决定", "旧方案。", authority="current_project_authority", valid_from="2026-01-01T00:00:00Z")
@@ -119,6 +137,7 @@ class TimelineRetrievalTests(unittest.TestCase):
         self.assertEqual(second["status"], "superseded")
         old = self.db.fetch_memory("old")
         self.assertTrue(old and old["superseded_by"] == "new")
+        self.assertEqual(old["valid_to"], "2026-02-01T00:00:00Z")
         self.assertTrue((self.vault / "03-Knowledge/old.md").exists())
 
     def test_gateway_and_context_preserve_temporal_mode(self):
@@ -130,6 +149,13 @@ class TimelineRetrievalTests(unittest.TestCase):
         pack = gateway.build_context_pack("chatgpt", query="时间线", mode="as_of", as_of="2026-01-01T00:00:00Z")
         self.assertEqual(pack["request"]["mode"], "as_of")
         self.assertLessEqual(len(pack["markdown"]), 12000)
+
+    def test_default_current_cache_key_is_stable_but_explicit_as_of_varies(self):
+        first = SearchFilters().normalized()
+        second = SearchFilters().normalized()
+        self.assertIsNone(first.as_of)
+        self.assertIsNone(second.as_of)
+        self.assertNotEqual(SearchFilters(mode="as_of", as_of="2026-01-01T00:00:00Z").normalized().as_of, SearchFilters(mode="as_of", as_of="2026-01-02T00:00:00Z").normalized().as_of)
 
 
 if __name__ == "__main__":

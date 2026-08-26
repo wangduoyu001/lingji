@@ -5,12 +5,12 @@ import json
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from src.retrieval.chunker import MarkdownChunk, MarkdownChunker
-from src.retrieval.temporal import ALL_LIFECYCLE_STATUSES, TemporalQuery, temporal_fields
+from src.retrieval.temporal import ALL_LIFECYCLE_STATUSES, TemporalQuery, parse_instant, temporal_fields
 
 SCHEMA_VERSION = "1"
 
@@ -730,7 +730,7 @@ class MemoryDatabase:
         old_id, new_id = str(old_memory_id).strip(), str(new_memory_id).strip()
         if not old_id or not new_id or old_id == new_id:
             raise ValueError("distinct old and new memory IDs are required")
-        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
         status = "invalidated" if invalidates else "superseded"
         with self._lock, self._connection() as connection:
             old = connection.execute("SELECT * FROM memory_documents WHERE memory_id = ?", (old_id,)).fetchone()
@@ -744,6 +744,8 @@ class MemoryDatabase:
             new_fields = temporal_fields(self._document_dict(new))
             if new_fields["authority_rank"] < old_fields["authority_rank"]:
                 return {"memory_id": old_id, "replacement_id": new_id, "status": existing.get("status"), "conflict": True, "reason": "lower_authority_cannot_displace"}
+            replacement_start = self._document_dict(new).get("valid_from")
+            valid_to = replacement_start if parse_instant(replacement_start) is not None else now
             relationships = existing.get("relationships") or {}
             relationships.update({
                 "superseded_by": new_id,
@@ -752,7 +754,7 @@ class MemoryDatabase:
             })
             connection.execute(
                 "UPDATE memory_documents SET status = ?, valid_to = ?, superseded_by = ?, pin_to_context = 0, relationships_json = ?, updated_at = ? WHERE memory_id = ?",
-                (status, now, new_id, self._json(relationships), now, old_id),
+                (status, valid_to, new_id, self._json(relationships), now, old_id),
             )
             self._bump_revision(connection)
         return {"memory_id": old_id, "replacement_id": new_id, "status": status, "reason": str(reason or "project_refresh"), "idempotent": False}

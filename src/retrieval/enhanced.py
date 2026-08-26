@@ -6,7 +6,6 @@ from typing import Any
 
 from src.retrieval.hybrid import HybridRetriever as BaseHybridRetriever
 from src.retrieval.hybrid import SearchFilters
-from src.retrieval.temporal import temporal_fields
 
 
 class HybridRetriever(BaseHybridRetriever):
@@ -21,9 +20,6 @@ class HybridRetriever(BaseHybridRetriever):
         limit = max(int(limit), 1)
         primary = super().search(query, limit=limit, filters=filters)
         if len(primary) >= limit:
-            if (filters or SearchFilters()).mode == "why":
-                for item in primary:
-                    item["why"] = {**temporal_fields(item), "selection_rule": "current_valid_and_authority_ordered", "exclusion_reason": item.get("temporal_reason") or "selected"}
             return primary
         normalized = (filters or SearchFilters()).normalized()
         fallback = self._substring_search(query, max(limit * 3, 20), normalized)
@@ -48,9 +44,7 @@ class HybridRetriever(BaseHybridRetriever):
         )
         output = self._dedupe(combined)[:limit]
         if normalized.mode == "why":
-            conflict = any(item.get("authority_conflicts") for item in output) or len({temporal_fields(item)["authority_rank"] for item in output}) > 1
-            for item in output:
-                item["why"] = {**temporal_fields(item), "selection_rule": "current_valid_and_authority_ordered", "exclusion_reason": item.get("temporal_reason") or "selected", "conflict": conflict}
+            self._attach_why(query, output, normalized)
         return output
 
     def _substring_search(
