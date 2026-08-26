@@ -11,6 +11,7 @@
 - Frozen hashes unchanged: corpus `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94`; questions `338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612`.
 - The measured quality result remains FAIL for recall/citation; no retrieval or fixture tuning was performed.
 - Round 2 RED: missing protected root test failed (`DID NOT RAISE`). Round 2 GREEN: `47 passed, 1 warning`.
+- Round 3 RED: persisted audit initially returned zero role/hash matches for a duplicated external ID; Round 3 GREEN: `.venv/bin/pytest -q tests/evaluation/test_automatic_memory_gate_integrity.py tests/evaluation/test_automatic_memory_end_to_end.py tests/test_auto_memory_promotion.py` — `48 passed, 1 warning`.
 
 ## Scope limits
 
@@ -18,5 +19,5 @@ MCP/degradation/100k, corruption isolation and baseline reduction remain 4R2 and
 
 ## Commits
 
-- Code/tests: `fix: complete task4 gate evidence audit` (pending)
-- Docs: `docs: correct task4 repair report` (pending)
+- Code/tests: this round commit follows below.
+- Docs: this round commit follows below.
