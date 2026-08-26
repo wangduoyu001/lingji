@@ -6,6 +6,9 @@
 - 风险等级：P0。保持 primitives-only；不得修改 runner/CLI/e2e/history、AcceptanceRoots、cleanup inventory、Task 5/6、Task4R2、release/100k、Production/Vault、冻结 evaluator/fixtures/retrieval。
 - 自动验收：先复现 Repair 1 C1/I1/I2/I3/M2 RED；focused adversarial count 必须超过 70，随后执行 frozen gate、Task 1–3 regressions、当前 e2e/historical visibility、fixture hashes、diff/acceptance/local-handoff。
 - 清理/回滚：仅测试自有临时 roots；ignored 报告写 `.superpowers/sdd/2026-08-26-task4r-reset/task-4-repair-2-report.md`，不得 force-add。
+- Repair round 3 基准：`4654926e546c1bb23bd30826f6ca59b33f2e8bf1`；仅收敛 anchored helper 单次 FD ownership、root 初始/最终 fstat 稳定错误、EvaluationReport hostile/malformed fail-closed 与 writer stream-stage 异常，并补充 snapshot-point 文档/对抗测试；不得修改 runner/CLI、Task 5/6/4R2、release/100k、Production/Vault、冻结 evaluator/fixtures/retrieval。
+- Repair round 3 自动验收：focused adversarial matrix 必须保持超过 70 collected，并覆盖 close double、root fstat、hostile report、fdopen/write/flush/close/replace/cleanup/parent-close、snapshot next-capture/diff；随后执行 frozen gate、Task 1–3 regressions、当前 e2e/historical visibility、fixture hashes、diff/acceptance/local-handoff。
+- Repair round 3 清理/回滚：仅测试自有临时 roots；ignored 报告写 `.superpowers/sdd/2026-08-26-task4r-reset/task-4-repair-3-report.md`，不得 force-add。
 
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 4 · Repair round 1
 

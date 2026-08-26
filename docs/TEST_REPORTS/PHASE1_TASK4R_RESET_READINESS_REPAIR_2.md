@@ -1,5 +1,32 @@
 # Phase 1 Task 4R-Reset — Repair Round 2
 
+## Repair Round 3 (2026-08-27)
+
+Repair 3 is limited to `quality_evidence.py`, its focused adversarial tests and
+this existing Task 4 report. Anchored directory helpers now poison ownership
+before propagating a close failure, root identity observations have stable
+path-redacted errors, report validation requires exact built-in values and
+fails closed around validation exceptions, and all writer stream/replace
+exceptions are stable publication errors. The sentinel contract explicitly
+defines the snapshot point as the successful final no-follow root identity
+observation and comparison inputs; later mutations are deferred to the next
+capture/diff.
+
+- Authentic RED: **6 failed, 77 deselected** on the six new R3 boundary probes.
+- GREEN focused: `tests/evaluation/test_task4_reset_readiness.py` — **95 passed**, **95 collected**.
+- Frozen gate + Task 1–3 primitive regression — **118 passed**.
+- Current e2e visibility — **20 passed, 1 warning**.
+- Historical Task4R1 visibility — **4 failed, 2 passed, 1 warning** in
+  `test_task4r1_round5_final_red.py`; **4 failed, 5 passed, 1 warning** in
+  `test_task4r1_takeover_red.py`. These remain rejected-caller compatibility
+  blockers deferred to Task 6 and were not modified.
+- Fixture SHA-256 remains corpus
+  `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94` and
+  questions `338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612`.
+- POSIX dir-FD/no-follow is the supported anchored guarantee; unsupported
+  platforms fail closed. No Production/Vault, Artifact, 100k, release, UI,
+  Task 5/6 or Task4R2 work was performed.
+
 ## Scope
 
 Repair Round 2 closes the remaining Task 4 C1/I1/I2/I3 and descriptor-ownership
