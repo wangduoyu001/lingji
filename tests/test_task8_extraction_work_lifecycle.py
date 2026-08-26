@@ -25,6 +25,17 @@ class AlwaysFailAdapter(ExtractionAdapter):
         raise RuntimeError("fixture extraction failure")
 
 
+class SuccessAdapter(ExtractionAdapter):
+    name = "always-fail"
+    version = "2"
+    source_types = ("always_fail",)
+
+    def extract(self, request):
+        return ExtractionBatch(
+            documents=(ExtractedDocument(stable_id="success-1", title="success", body="ok", source_type="always_fail"),)
+        )
+
+
 def _service(tmp_path: Path, *, failing: bool = False):
     state_path = tmp_path / "lingji_state.db"
     state = StateDatabase(state_path)
@@ -121,3 +132,55 @@ def test_lifecycle_callback_failure_does_not_change_queue_status(tmp_path: Path)
     result = pipeline.process_job(submitted["job_id"], worker_id="task8")
     assert result["job"]["status"] == "completed"
     assert WorkStore(state).get_outcome(submitted["work_id"]).status == "completed"
+
+
+def test_terminal_completed_job_replays_work_fact_after_callback_crash(tmp_path: Path):
+    state, queue, pipeline, service = _service(tmp_path)
+    pipeline._lifecycle_callbacks.clear()
+    submitted = service.submit_text({"capture_id": "capture-crash-complete", "text": "hello"})
+    assert pipeline.process_job(submitted["job_id"], worker_id="task8")["job"]["status"] == "completed"
+
+    restarted = WorkStore(StateDatabase(tmp_path / "lingji_state.db"))
+    from src.work.projector import WorkProjector
+
+    fact = WorkProjector(restarted).fact(submitted["work_id"])
+    assert fact["outcome"]["status"] == "completed"
+    assert len([event for event in fact["events"] if event["event_type"] == "extraction.completed"]) == 1
+    restarted.reconcile_extraction_jobs()
+    restarted.reconcile_extraction_jobs()
+    assert len([event for event in restarted.list_events(submitted["work_id"]) if event.event_type == "extraction.completed"]) == 1
+
+
+def test_terminal_failed_job_replays_failure_and_owner_pending_after_callback_crash(tmp_path: Path):
+    state, queue, pipeline, service = _service(tmp_path, failing=True)
+    pipeline._lifecycle_callbacks.clear()
+    submitted = service.submit_text({"capture_id": "capture-crash-fail", "source_type": "always_fail", "adapter_name": "always-fail", "text": "hello"})
+    with queue._connection() as connection:
+        connection.execute("UPDATE extraction_jobs SET max_attempts = 1 WHERE job_id = ?", (submitted["job_id"],))
+    assert pipeline.process_job(submitted["job_id"], worker_id="task8")["job"]["status"] == "failed"
+
+    restarted = WorkStore(StateDatabase(tmp_path / "lingji_state.db"))
+    assert restarted.get_outcome(submitted["work_id"]).status == "failed"
+    assert restarted.get_failure(submitted["work_id"]) is not None
+    assert len(restarted.list_pending(work_id=submitted["work_id"])) == 1
+    restarted.reconcile_extraction_jobs()
+    assert len(restarted.list_pending(work_id=submitted["work_id"])) == 1
+    assert len([event for event in restarted.list_events(submitted["work_id"]) if event.event_type == "work.failed"]) == 1
+
+
+def test_replayed_failure_pending_is_resolved_after_retry_success(tmp_path: Path):
+    state, queue, pipeline, service = _service(tmp_path, failing=True)
+    pipeline._lifecycle_callbacks.clear()
+    submitted = service.submit_text({"capture_id": "capture-retry-replay", "source_type": "always_fail", "adapter_name": "always-fail", "text": "hello"})
+    with queue._connection() as connection:
+        connection.execute("UPDATE extraction_jobs SET max_attempts = 1 WHERE job_id = ?", (submitted["job_id"],))
+    assert pipeline.process_job(submitted["job_id"], worker_id="task8")["job"]["status"] == "failed"
+    failed_store = WorkStore(state)
+    assert len(failed_store.list_pending(work_id=submitted["work_id"])) == 1
+
+    pipeline.registry._adapters["always-fail"] = SuccessAdapter()
+    queue.retry(submitted["job_id"])
+    assert pipeline.process_job(submitted["job_id"], worker_id="task8")["job"]["status"] == "completed"
+    recovered = WorkStore(StateDatabase(tmp_path / "lingji_state.db"))
+    assert recovered.get_outcome(submitted["work_id"]).status == "completed"
+    assert recovered.list_pending(work_id=submitted["work_id"]) == []

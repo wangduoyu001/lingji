@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from typing import Any
 
 from src.storage.state_db import StateDatabase
@@ -59,6 +60,7 @@ class WorkStore:
             connection.execute("UPDATE pending_actions SET action_id = 'legacy-' || id WHERE action_id IS NULL")
             connection.execute("UPDATE pending_actions SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
             connection.execute("UPDATE work_outcomes SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
+        self.reconcile_extraction_jobs()
 
     @staticmethod
     def _json(value: Any) -> str:
@@ -118,7 +120,60 @@ class WorkStore:
 
     def add_pending_action(self, action: PendingAction) -> None:
         with self.state._lock, self.state._connection() as connection:
+            existing = connection.execute("SELECT id FROM pending_actions WHERE action_id = ? LIMIT 1", (action.action_id,)).fetchone()
+            if existing:
+                return
             connection.execute("INSERT OR IGNORE INTO pending_actions(work_id, description, resolved, action_id, actor, created_at) VALUES (?, ?, ?, ?, ?, ?)", (action.work_id, action.description, int(action.resolved), action.action_id, action.actor, action.created_at))
+
+    def resolve_pending(self, work_id: str) -> None:
+        with self.state._lock, self.state._connection() as connection:
+            connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
+
+    def reconcile_extraction_jobs(self) -> None:
+        """Replay terminal extraction facts after a crash between queue and callback."""
+        try:
+            with self.state._connection() as connection:
+                rows = connection.execute(
+                    "SELECT job_id, status, source_type, payload_json, result_json, updated_at FROM extraction_jobs WHERE status IN ('completed', 'failed') ORDER BY updated_at ASC, job_id ASC"
+                ).fetchall()
+        except sqlite3.Error:
+            return
+        for row in rows:
+            try:
+                payload = json.loads(row[3] or "{}")
+                if not isinstance(payload, dict):
+                    continue
+                capture_id = str(payload.get("capture_id") or "").strip()
+                if not capture_id:
+                    continue
+                work = self.get_work_by_source_id(capture_id)
+                if work is None:
+                    continue
+                if row[1] == "completed":
+                    result = json.loads(row[4] or "{}")
+                    if not isinstance(result, dict):
+                        result = {}
+                    summary = self._safe_result_summary(result)
+                    self.save_outcome(Outcome(work_id=work.work_id, status="completed", summary=summary, evidence={"job_id": str(row[0]), "source_type": str(row[2] or "")}, created_at=str(row[5] or "")))
+                    self.append_event(ExecutionEvent(work_id=work.work_id, event_id=f"work:{work.work_id}:extraction.completed", event_type="extraction.completed", detail={"summary": summary}, created_at=str(row[5] or "")))
+                    self.resolve_pending(work.work_id)
+                    self.save_next_action(NextAction(work_id=work.work_id, description="系统继续维护可检索记忆", actor="system"))
+                else:
+                    reason = "提取失败，灵机无法安全完成这条输入"
+                    failure = Failure(work_id=work.work_id, failure_id=f"failure:{work.work_id}:extraction", stage="extraction", reason=reason, retryable=False, created_at=str(row[5] or ""))
+                    self.save_failure(failure)
+                    self.save_outcome(Outcome(work_id=work.work_id, status="failed", summary=reason, evidence={"job_id": str(row[0]), "source_type": str(row[2] or "")}, created_at=failure.created_at))
+                    self.append_event(ExecutionEvent(work_id=work.work_id, event_id=f"work:{work.work_id}:failed:extraction", event_type="work.failed", detail={"stage": "extraction", "reason": reason}, created_at=failure.created_at))
+                    self.add_pending_action(PendingAction(action_id=f"owner-failure:{work.work_id}", work_id=work.work_id, description="查看提取失败原因并决定下一步", actor="owner", created_at=failure.created_at))
+                    self.save_next_action(NextAction(work_id=work.work_id, description="等待主人查看失败原因", actor="owner", created_at=failure.created_at))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+
+    @staticmethod
+    def _safe_result_summary(result: dict[str, Any]) -> str:
+        allowed = ("execution_id", "source_type", "adapter", "adapter_version", "indexed", "document_count", "memory_count")
+        summary = {key: result[key] for key in allowed if key in result and isinstance(result[key], (str, int, float, bool, type(None)))}
+        return json.dumps(summary, ensure_ascii=False, sort_keys=True) if summary else "Extraction completed"
 
     def list_pending(self, limit: int = 20, *, work_id: str | None = None) -> list[PendingAction]:
         query = "SELECT action_id, work_id, description, resolved, actor, created_at FROM pending_actions WHERE resolved = 0"
