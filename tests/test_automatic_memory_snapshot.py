@@ -287,6 +287,8 @@ def test_snapshot_restart_cleans_only_interrupted_snapshot_temps(tmp_path: Path)
     raw_root.mkdir(parents=True)
     stale = raw_root / ".snapshot-interrupted.tmp"
     stale.write_bytes(b"sensitive staging content")
+    old = __import__("time").time() - 3 * 24 * 60 * 60
+    os.utime(stale, (old, old))
 
     ConsistentSnapshot(registry, raw_root)
 

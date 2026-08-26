@@ -59,6 +59,105 @@ def _scan_fixture(tmp_path: Path, count: int = 10):
     return state, registry, source, scan, root, snapshot, queue
 
 
+def test_active_owned_snapshot_temp_survives_second_snapshot_constructor(tmp_path: Path):
+    state, _, _, scan, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
+    lease_id = "active-copy-lease"
+    state.acquire_automatic_memory_scan_lease(scan.scan_id, lease_id, ttl_seconds=60)
+    temporary = snapshot._temporary_path(scan.scan_id, lease_id)
+    temporary.write_bytes(b"active staging")
+
+    ConsistentSnapshot(state, tmp_path / "storage" / "raw")
+
+    assert temporary.exists()
+
+
+def test_expired_owned_snapshot_temp_is_reclaimed_on_restart(tmp_path: Path):
+    state, _, _, scan, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
+    lease_id = "expired-copy-lease"
+    state.acquire_automatic_memory_scan_lease(scan.scan_id, lease_id, ttl_seconds=60)
+    temporary = snapshot._temporary_path(scan.scan_id, lease_id)
+    temporary.write_bytes(b"expired staging")
+    with state._connection() as connection:
+        connection.execute(
+            "UPDATE automatic_memory_scans SET lease_expires_at = ? WHERE scan_id = ?",
+            ("2000-01-01T00:00:00.000000+00:00", scan.scan_id),
+        )
+
+    ConsistentSnapshot(state, tmp_path / "storage" / "raw")
+
+    assert not temporary.exists()
+
+
+def test_unknown_fresh_temp_is_preserved_but_legacy_stale_temp_is_reclaimed(tmp_path: Path):
+    _, registry, _, _, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
+    raw_root = snapshot.raw_root
+    fresh = raw_root / ".snapshot-legacy-fresh.tmp"
+    stale = raw_root / ".snapshot-legacy-stale.tmp"
+    fresh.write_bytes(b"fresh unknown staging")
+    stale.write_bytes(b"stale unknown staging")
+    old = time.time() - 3 * 24 * 60 * 60
+    os.utime(stale, (old, old))
+
+    ConsistentSnapshot(registry, raw_root)
+
+    assert fresh.exists()
+    assert not stale.exists()
+
+
+def test_concurrent_sources_keep_each_others_active_snapshot_temp(tmp_path: Path):
+    state, registry, source_a, scan_a, root_a, snapshot_a, queue = _scan_fixture(tmp_path, count=1)
+    root_b = tmp_path / "authorized-b"
+    root_b.mkdir()
+    source_b = registry.register(
+        AuthorizationScope(
+            grant_id="grant-runner-b",
+            source_kinds=("generic_file",),
+            roots=(str(root_b),),
+            granted_at=datetime.now(timezone.utc),
+            expires_at=None,
+            owner_confirmed=True,
+        ),
+        "generic_file",
+        str(root_b),
+    )
+    (root_b / "item-b.txt").write_text("item b", encoding="utf-8")
+    scan_b = registry.start_scan(source_b.source_id)
+    copy_started = threading.Event()
+    release_copy = threading.Event()
+
+    class PausedSnapshot(ConsistentSnapshot):
+        def _copy_to_temp(self, source: Path, temporary: Path) -> None:
+            copy_started.set()
+            assert release_copy.wait(10)
+            super()._copy_to_temp(source, temporary)
+
+    runner_a = SnapshotJobRunner(
+        PausedSnapshot(state, snapshot_a.raw_root),
+        queue,
+        state,
+        path_provider=lambda current_scan, current_source: list(root_a.glob("*.txt")),
+    )
+    result_a: list = []
+    worker_a = threading.Thread(target=lambda: result_a.append(runner_a.run(scan_a.scan_id)))
+    worker_a.start()
+    assert copy_started.wait(10)
+    runner_b = SnapshotJobRunner(
+        ConsistentSnapshot(state, snapshot_a.raw_root),
+        queue,
+        state,
+        path_provider=lambda current_scan, current_source: list(root_b.glob("*.txt")),
+    )
+    result_b = runner_b.run(scan_b.scan_id)
+    assert list(snapshot_a.raw_root.glob(".snapshot-owned-*.tmp"))
+    release_copy.set()
+    worker_a.join(timeout=10)
+
+    assert result_a and result_a[0].status == "completed"
+    assert result_b.status == "completed"
+    assert queue.count(source_type="automatic_memory_snapshot") == 2
+    assert len(list(snapshot_a.raw_root.iterdir())) == 2
+
+
 def _acquire_from_process(db_path: str, scan_id: str, lease_id: str, start, output) -> None:
     state = StateDatabase(db_path)
     start.wait(10)

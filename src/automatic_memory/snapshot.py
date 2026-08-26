@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import os
 import re
 import shutil
 import stat as stat_module
 import tempfile
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +38,12 @@ class SnapshotResult:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+_TEMP_RETENTION_SECONDS = 24 * 60 * 60
+_OWNED_TEMP_PATTERN = re.compile(
+    r"^\.snapshot-owned-([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.[A-Za-z0-9]+\.tmp$"
+)
 
 
 class ConsistentSnapshot:
@@ -77,12 +85,52 @@ class ConsistentSnapshot:
         self._copy_source_fd: int | None = None
 
     def _cleanup_temporary_snapshots(self) -> None:
-        """Remove only this component's interrupted staging files on restart."""
+        """Reclaim only provably dead or explicitly stale staging files."""
         for temporary in self.raw_root.glob(".snapshot-*.tmp"):
             try:
-                temporary.unlink()
+                if self._temporary_is_reclaimable(temporary):
+                    temporary.unlink()
             except FileNotFoundError:
                 pass
+
+    @staticmethod
+    def _encode_owner(value: str) -> str:
+        return base64.urlsafe_b64encode(str(value).encode("utf-8")).decode("ascii").rstrip("=")
+
+    @staticmethod
+    def _decode_owner(value: str) -> str:
+        padding = "=" * (-len(value) % 4)
+        return base64.urlsafe_b64decode(value + padding).decode("utf-8")
+
+    def _temporary_is_reclaimable(self, temporary: Path) -> bool:
+        match = _OWNED_TEMP_PATTERN.match(temporary.name)
+        if match:
+            try:
+                scan_id = self._decode_owner(match.group(1))
+                lease_id = self._decode_owner(match.group(2))
+                scan = self.state_db.get_automatic_memory_scan(scan_id)
+            except (LookupError, ValueError, UnicodeError):
+                scan = None
+            if scan is not None:
+                current_lease = str(scan.get("lease_id") or "")
+                status = str(scan.get("status") or "")
+                if status == "running" and current_lease == lease_id:
+                    expires_at = scan.get("lease_expires_at")
+                    if expires_at and str(expires_at) > datetime.now(
+                        timezone.utc
+                    ).isoformat(timespec="microseconds"):
+                        return False
+                    return True
+                elif status == "running" and current_lease:
+                    return True
+                elif status in {"completed", "cancelled", "failed", "paused"}:
+                    return True
+                else:
+                    return False
+        try:
+            return time.time() - temporary.stat().st_mtime >= _TEMP_RETENTION_SECONDS
+        except FileNotFoundError:
+            return False
 
     def capture(
         self,
@@ -107,7 +155,7 @@ class ConsistentSnapshot:
             source = root / Path(relative)
             stat_before = self._file_stat(source)
             last_before = stat_before
-            temporary = self._temporary_path()
+            temporary = self._temporary_path(scan_id, lease_id)
             try:
                 source_fd = self._secure_open_source(root, relative)
                 self._copy_source_fd = source_fd
@@ -235,8 +283,19 @@ class ConsistentSnapshot:
             inode=int(getattr(stat, "st_ino", 0)) or None,
         )
 
-    def _temporary_path(self) -> Path:
-        fd, name = tempfile.mkstemp(prefix=".snapshot-", suffix=".tmp", dir=self.raw_root)
+    def _temporary_path(
+        self, scan_id: str | None = None, lease_id: str | None = None
+    ) -> Path:
+        if (scan_id is None) != (lease_id is None):
+            raise ValueError("scan_id and lease_id must be provided together")
+        if scan_id is not None and lease_id is not None:
+            prefix = (
+                ".snapshot-owned-"
+                f"{self._encode_owner(scan_id)}.{self._encode_owner(lease_id)}."
+            )
+        else:
+            prefix = ".snapshot-"
+        fd, name = tempfile.mkstemp(prefix=prefix, suffix=".tmp", dir=self.raw_root)
         os.close(fd)
         return Path(name)
 
