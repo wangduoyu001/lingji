@@ -1342,6 +1342,19 @@ Windows 重启后恢复 = 100%
 - 真实 Artifact、UI、Production/Vault、Mac M5、Windows 仍未执行；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。
 - 报告路径：`docs/TEST_REPORTS/PHASE1_TASK9_UNIFIED_RAG.md`；文档/报告提交不在文件内自引用自身 SHA。
 
+## 2026-08-26 · Phase 1 Automatic Memory · Task 3 repair round 2
+
+- 审查结论：生产 enhanced retriever 的短中文 fallback 未被 ContextPack 使用；本轮仅修复 Task 3。
+- 产品 Commit：`e23cac5` (`fix: unify enhanced retrieval diagnostics`)
+- RED：新 parity/diagnostic/ContextPack-Gateway-MCP 回归首次 `12 passed, 3 failed`；失败为 inherited `search_with_diagnostics` 短中文结果为空、语义异常仍无 fallback、注册 MCP 短中文证据为空。
+- GREEN：Task 3 focused `31 passed`；scoped `40 passed, 1 existing Pydantic warning`。
+- 实现：`search()` 与 `search_with_diagnostics()` 共用 enhanced 单次 fallback/fusion helper；base why attachment 可按调用抑制，enhanced 最终只附加一次；不新增 retriever、缓存状态或权限路径。
+- 注册 MCP 实测：真实 `MemoryGateway` + registered tool path 能召回 `灵机` 记忆/消息，semantic absent diagnostics 正确；ContextPack/Gateway 同样通过。
+- Task 2 fixture SHA 保持 corpus `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94`、questions `338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612`。
+- `git diff --check` 与 `git diff 90832a1..HEAD --check`：PASS；acceptance sync/local handoff 待本条文档提交后重跑。
+- 真实 Artifact、UI、Production/Vault、Mac M5 与 Windows 仍未执行；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。
+- 文档/报告提交不在文件内自引用自身 SHA。
+
 ## 2026-08-26 · Phase 1 Automatic Memory · Task 2 follow-up · Frozen 100-question quality gate
 
 - 产品分支：`codex/phase1-automatic-memory`

@@ -157,3 +157,59 @@ automatic_memory_questions.jsonl 338f5051c43902af1ef1358aebeb356ef1d409284a1aac1
 the report's pre-existing Markdown trailing spaces. Acceptance sync and local
 handoff remain required below and were rerun before the repair documentation
 commit.
+
+## Repair round 2
+
+Scoped review found that the production-exported enhanced retriever's bounded
+short-Chinese fallback existed only on `search()`. ContextPack used inherited
+`search_with_diagnostics()`, so a short query could work in direct search but
+disappear from ContextPack, Gateway, and MCP.
+
+New RED tests covered ordered identity parity for `current`, `as_of`,
+`history`, and `why`, semantic absent/throwing diagnostics, ContextPack and
+Gateway evidence, and the registered MCP path. Exact first run:
+
+```text
+12 passed, 3 failed
+```
+
+The three failures were the parity assertion, semantic-failure fallback
+assertion, and registered MCP short-Chinese evidence assertion. The parity test
+iterates all four temporal modes; its single failure represents the inherited
+diagnostics result being empty for the short query.
+
+Product repair commit: `e23cac5` (`fix: unify enhanced retrieval diagnostics`).
+
+The existing enhanced fallback was moved behind one call-local helper used by
+both `search()` and `search_with_diagnostics()`. The base retrieval path now
+supports suppressing its internal `why` attachment so the enhanced path adds it
+exactly once after fallback fusion. No mutable diagnostic state or second
+retriever was introduced.
+
+Focused verification:
+
+```text
+./.venv/bin/python -m pytest -q \
+  tests/test_automatic_memory_context_pack.py \
+  tests/test_automatic_memory_mcp.py \
+  tests/test_task7_timeline_retrieval.py
+```
+
+Result: `31 passed`.
+
+Scoped verification:
+
+```text
+./.venv/bin/python -m pytest -q \
+  tests/test_memory_retrieval.py \
+  tests/test_permanent_memory_gateway.py \
+  tests/test_task7_timeline_retrieval.py \
+  tests/test_source_service.py \
+  tests/test_memory_capability_contract.py
+```
+
+Result: `40 passed, 1 existing Pydantic warning`.
+
+The Task 2 frozen fixture hashes remain unchanged. `git diff --check` and
+`git diff 90832a1..HEAD --check` pass. Artifact, UI, Production/Vault, Mac M5,
+and Windows acceptance remain unrun.
