@@ -198,6 +198,25 @@ class TimelineRetrievalTests(unittest.TestCase):
         self.assertNotIn("decision-old", excluded_ids)
         self.assertNotIn("project-b-source", {source for item in excluded for source in item["citation"]["source_refs"]})
 
+    def test_semantic_candidates_fail_closed_on_memory_type_and_privacy(self):
+        self.note("03-Knowledge/restricted.md", "restricted", "决策私密", "不应被公开知识检索召回。", memory_type="decision", privacy="private", valid_from="2026-01-01T00:00:00Z")
+        self.rebuild()
+
+        class Provider:
+            def search(self, query, limit, filters=None):
+                chunk = self_outer.db.fetch_memory("restricted")["chunks"][0]["chunk_id"]
+                return [{"chunk_id": chunk, "memory_id": "restricted", "score": 1.0}]
+
+        self_outer = self
+        retriever = HybridRetriever(self.db, semantic_provider=Provider())
+        self.assertEqual(
+            retriever.search(
+                "公开知识",
+                filters=SearchFilters(memory_types=("knowledge",), privacy=("public",)),
+            ),
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

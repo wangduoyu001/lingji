@@ -398,6 +398,12 @@ class HybridRetriever:
         }
 
     def _passes_post_filters(self, item: dict[str, Any], filters: SearchFilters) -> bool:
+        memory_type = str(item.get("memory_type") or "").strip()
+        if filters.memory_types and (not memory_type or memory_type not in filters.memory_types):
+            return False
+        privacy = str(item.get("privacy") or "").strip()
+        if filters.privacy and (not privacy or privacy not in filters.privacy):
+            return False
         scopes = item.get("agent_scope") or []
         if isinstance(scopes, str):
             scopes = [scopes]
