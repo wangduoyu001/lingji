@@ -42,7 +42,7 @@ def _now_iso() -> str:
 
 _TEMP_RETENTION_SECONDS = 24 * 60 * 60
 _OWNED_TEMP_PATTERN = re.compile(
-    r"^\.snapshot-owned-([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.[A-Za-z0-9]+\.tmp$"
+    r"^\.snapshot-owned-([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+\.tmp$"
 )
 
 
@@ -102,33 +102,51 @@ class ConsistentSnapshot:
         padding = "=" * (-len(value) % 4)
         return base64.urlsafe_b64decode(value + padding).decode("utf-8")
 
+    @staticmethod
+    def _parse_lease_expiry(value: Any) -> datetime | None:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        normalized = value.strip()
+        if normalized.endswith("Z"):
+            normalized = normalized[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if parsed.tzinfo is None:
+            return None
+        return parsed.astimezone(timezone.utc)
+
     def _temporary_is_reclaimable(self, temporary: Path) -> bool:
-        match = _OWNED_TEMP_PATTERN.match(temporary.name)
-        if match:
+        if temporary.name.startswith(".snapshot-owned-"):
+            match = _OWNED_TEMP_PATTERN.match(temporary.name)
+            if not match:
+                return False
             try:
                 scan_id = self._decode_owner(match.group(1))
                 lease_id = self._decode_owner(match.group(2))
                 scan = self.state_db.get_automatic_memory_scan(scan_id)
-            except (LookupError, ValueError, UnicodeError):
-                scan = None
-            if scan is not None:
-                current_lease = str(scan.get("lease_id") or "")
-                status = str(scan.get("status") or "")
-                if status == "running" and current_lease == lease_id:
-                    expires_at = scan.get("lease_expires_at")
-                    if not expires_at:
-                        return False
-                    if expires_at and str(expires_at) > datetime.now(
-                        timezone.utc
-                    ).isoformat(timespec="microseconds"):
-                        return False
-                    return True
-                elif status == "running" and current_lease:
-                    return True
-                elif status in {"completed", "cancelled", "failed", "paused"}:
-                    return True
-                else:
+            except Exception:
+                return False
+            if scan is None:
+                return time.time() - temporary.stat().st_mtime >= _TEMP_RETENTION_SECONDS
+            try:
+                current_lease = scan.get("lease_id")
+                status = scan.get("status")
+                if not isinstance(current_lease, str) or not isinstance(status, str):
                     return False
+                if status == "running" and current_lease == lease_id:
+                    expiry = self._parse_lease_expiry(scan.get("lease_expires_at"))
+                    if expiry is None:
+                        return False
+                    return expiry <= datetime.now(timezone.utc)
+                if status == "running" and current_lease:
+                    return True
+                if status in {"completed", "cancelled", "failed", "paused"}:
+                    return True
+                return False
+            except Exception:
+                return False
         try:
             return time.time() - temporary.stat().st_mtime >= _TEMP_RETENTION_SECONDS
         except FileNotFoundError:

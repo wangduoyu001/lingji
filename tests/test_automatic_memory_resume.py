@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import multiprocessing
 import os
 from pathlib import Path
@@ -103,6 +103,77 @@ def test_active_owned_temp_with_legacy_null_expiry_is_preserved(tmp_path: Path):
     ConsistentSnapshot(state, tmp_path / "storage" / "raw")
 
     assert temporary.exists()
+
+
+@pytest.mark.parametrize(
+    "kind, keep",
+    [
+        ("future-offset", True),
+        ("past-offset", False),
+        ("future-z", True),
+        ("past-z", False),
+        ("future-utc", True),
+        ("past-utc", False),
+        ("future-naive", True),
+        ("past-naive", True),
+        ("invalid", True),
+    ],
+)
+def test_owned_temp_expiry_parsing_is_timezone_aware_and_fail_closed(
+    tmp_path: Path, kind: str, keep: bool
+):
+    now = datetime.now(timezone.utc)
+    offset = timezone(timedelta(hours=5))
+    expiry = {
+        "future-offset": (now + timedelta(days=1)).astimezone(offset).isoformat(),
+        "past-offset": (now - timedelta(days=1)).astimezone(offset).isoformat(),
+        "future-z": (now + timedelta(days=1)).isoformat().replace("+00:00", "Z"),
+        "past-z": (now - timedelta(days=1)).isoformat().replace("+00:00", "Z"),
+        "future-utc": (now + timedelta(days=1)).isoformat(),
+        "past-utc": (now - timedelta(days=1)).isoformat(),
+        "future-naive": (now + timedelta(days=1)).replace(tzinfo=None).isoformat(),
+        "past-naive": (now - timedelta(days=1)).replace(tzinfo=None).isoformat(),
+        "invalid": "not-a-timestamp",
+    }[kind]
+    state, _, _, scan, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
+    lease_id = f"lease-{kind}"
+    state.acquire_automatic_memory_scan_lease(scan.scan_id, lease_id, ttl_seconds=60)
+    temporary = snapshot._temporary_path(scan.scan_id, lease_id)
+    temporary.write_bytes(b"timestamp staging")
+    with state._connection() as connection:
+        connection.execute(
+            "UPDATE automatic_memory_scans SET lease_expires_at = ? WHERE scan_id = ?",
+            (expiry, scan.scan_id),
+        )
+
+    ConsistentSnapshot(state, snapshot.raw_root)
+
+    assert temporary.exists() is keep, kind
+
+
+def test_malformed_owned_stale_temp_is_fail_closed_and_db_errors_preserve(tmp_path: Path, monkeypatch):
+    state, _, _, scan, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
+    malformed = snapshot.raw_root / ".snapshot-owned-NOT-BASE64.tmp"
+    malformed.write_bytes(b"malformed staging")
+    undecodable = snapshot.raw_root / ".snapshot-owned-A.A.legacy.tmp"
+    undecodable.write_bytes(b"undecodable staging")
+    old = time.time() - 3 * 24 * 60 * 60
+    os.utime(malformed, (old, old))
+    os.utime(undecodable, (old, old))
+    ConsistentSnapshot(state, snapshot.raw_root)
+    assert malformed.exists()
+    assert undecodable.exists()
+
+    owned = snapshot._temporary_path(scan.scan_id, "lease-db-error")
+    owned.write_bytes(b"db error staging")
+    os.utime(owned, (old, old))
+    monkeypatch.setattr(
+        state,
+        "get_automatic_memory_scan",
+        lambda scan_id: (_ for _ in ()).throw(RuntimeError("state unavailable")),
+    )
+    ConsistentSnapshot(state, snapshot.raw_root)
+    assert owned.exists()
 
 
 def test_unknown_fresh_temp_is_preserved_but_legacy_stale_temp_is_reclaimed(tmp_path: Path):
