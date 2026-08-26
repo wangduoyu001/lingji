@@ -1,5 +1,13 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 5 · Promotion provenance visibility atomicity
+
+- 基线：`c0a812efa440cf416821afc30643f2655729dd44`；产品提交：`055c463`。影响范围为既有 StateDB、共享 `lingji_memory.db`、SourceReadModel、Temporal 与 promotion audit；不接触 Production/Vault、runner/CLI/frozen evaluator、Task6/4R2/100k、retrieval ranking、Desktop/UI 或 Artifact。
+- 风险等级：P0。派生投影只允许 `preparing → active`，消息 provenance 使用 exact identity/hash，links 采用单事务 batch 与 durable decision owner；StateDB stable event/lease 为 additive migration，跨 StateDB/MemoryDB 仍是可恢复 saga，不宣称跨库 ACID。
+- 自动验收：新 promotion transaction suite 先在未改产品基线上取得真实 `3 failed` RED（非 collection error），随后 focused `58 passed`；source/memory/lifecycle/timeline 直接回归 `39 passed`；`py_compile` 与 `git diff --check` PASS。
+- 真机/主人确认：`LOCAL_EXECUTION_TASK.md` 为 `IDLE`，不启动 Artifact、服务、UI，不读取 Production/Vault，不执行主人观察；因此本条不构成验收或合并结论。
+- 清理/回滚：仅 pytest `tmp_path` synthetic SQLite；无永久测试数据。回滚产品提交 `055c463` 与本条文档/报告提交，不触碰正式 Vault、raw、memory、Qdrant 或用户配置。完整证据：`docs/TEST_REPORTS/PHASE1_TASK4R_RESET_PROMOTION.md`；忽略报告：`.superpowers/sdd/2026-08-26-task4r-reset/task-5-report.md`。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 4 · Repair round 2
 
 - 基准：`00191f13641753ecac511240fe8fc715140a44c0`；本轮仅修复 Task 4 Repair 1 review 的 child/root snapshot races、same-size second-pass mutation、reason hostile-input 与 FD ownership 缺口。
