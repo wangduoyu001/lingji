@@ -55,6 +55,7 @@ class AutoMemoryPromotionService:
         self.policy_version = str(policy_version or POLICY_VERSION)
         self._last_promotion_evidence: dict[str, Any] = {}
         self._operation_owner = f"promotion:{id(self)}"
+        self._provenance_errors: list[str] = []
 
     def evaluate(self, candidate: ReviewCandidate | Mapping[str, Any]) -> dict[str, Any]:
         # Evidence belongs to one promote/evaluate invocation only.  Never let
@@ -73,9 +74,23 @@ class AutoMemoryPromotionService:
             # A failed derived-index write may be retried after the provider
             # recovers.  Reuse the immutable decision ID and append only the
             # recovery outcome; do not create a duplicate decision audit.
+            decision_id = str(existing.get("decision_id") or "")
+            if not self._claim_lease(decision_id):
+                return existing
+            start_recorded = self.state_db.get_event(f"promotion:{decision_id}:memory_promotion_preparing") is not None if hasattr(self.state_db, "get_event") else False
             try:
+                if not start_recorded:
+                    self._record_promotion_event("memory_promotion_preparing", selected, decision_id, provenance)
+                    start_recorded = True
                 self._write_projection(selected, str(existing.get("decision_id") or ""))
             except Exception:
+                if start_recorded:
+                    terminal_type = "memory_projection_rolled_back" if self._last_promotion_evidence.get("state") == PromotionProjectionState.ROLLED_BACK.value else "memory_projection_repair_required"
+                    try:
+                        self._record_terminal(selected, decision_id, terminal_type, provenance)
+                    except Exception:
+                        pass
+                self._release_lease(decision_id)
                 return existing
             recovered = dict(existing)
             recovered.update({
@@ -84,12 +99,14 @@ class AutoMemoryPromotionService:
                 "error": "",
             })
             recovered["promotion_evidence"] = dict(self._last_promotion_evidence)
-            self._append("memory_projection_activated", selected.memory_id, recovered)
+            self._record_terminal(selected, decision_id, "memory_projection_activated", provenance)
             self._append("memory_promotion_recovered", selected.memory_id, recovered)
+            self._release_lease(decision_id)
             return recovered
 
         self._record_candidate(selected)
         reasons = self._policy_reasons(selected)
+        reasons.extend(code for code in self._provenance_errors if code not in reasons)
         if not provenance.linkable_messages:
             reasons.append("structured_message_provenance_required")
         status = PromotionStatus.ACTIVE if not reasons else PromotionStatus.PENDING_OWNER_REVIEW
@@ -116,7 +133,7 @@ class AutoMemoryPromotionService:
             try:
                 self._write_projection(selected, decision_id)
             except Exception:
-                if not self._last_promotion_evidence:
+                if not self._last_promotion_evidence and self.projection_writer is None:
                     self._last_promotion_evidence = {"candidate_id": selected.memory_id, "decision_id": decision_id, "memory_id": selected.memory_id, "state": PromotionProjectionState.REPAIR_REQUIRED.value, "error_codes": ["promotion_persist_failed"]}
                 result = self._result(
                     selected,
@@ -126,8 +143,9 @@ class AutoMemoryPromotionService:
                     mutation=False,
                     error="",
                 )
-                terminal_type = "memory_projection_rolled_back" if self._last_promotion_evidence.get("state") == PromotionProjectionState.ROLLED_BACK.value else "memory_projection_repair_required"
-                self._record_terminal(selected, decision_id, terminal_type, provenance)
+                if self.projection_writer is None:
+                    terminal_type = "memory_projection_rolled_back" if self._last_promotion_evidence.get("state") == PromotionProjectionState.ROLLED_BACK.value else "memory_projection_repair_required"
+                    self._record_terminal(selected, decision_id, terminal_type, provenance)
                 self._append("memory_promotion_decision", selected.memory_id, result)
                 return result
             result["promotion_evidence"] = dict(self._last_promotion_evidence)
@@ -176,9 +194,14 @@ class AutoMemoryPromotionService:
             self._append("memory_promotion_owner_approved", selected.memory_id, result)
             return result
         result = self._result(selected, decision_id, PromotionStatus.ACTIVE, [], mutation=False)
+        if not self._claim_lease(decision_id):
+            return self._result(selected, decision_id, PromotionStatus.ERROR, ["promotion_lease_conflict"], mutation=False)
+        start_recorded = False
         try:
+            self._record_promotion_event("memory_promotion_preparing", selected, decision_id, provenance)
+            start_recorded = True
             self._write_projection(selected, decision_id)
-        except Exception as exc:
+        except Exception:
             if not self._last_promotion_evidence:
                 self._last_promotion_evidence = {
                     "candidate_id": selected.memory_id,
@@ -193,13 +216,18 @@ class AutoMemoryPromotionService:
                 }
             result = self._result(
                 selected, decision_id, PromotionStatus.ERROR, ["projection_persist_failed"],
-                mutation=False, error=f"{type(exc).__name__}: {exc}"[:500],
+                mutation=False, error="",
             )
+            if start_recorded:
+                terminal_type = "memory_projection_rolled_back" if self._last_promotion_evidence.get("state") == PromotionProjectionState.ROLLED_BACK.value else "memory_projection_repair_required"
+                self._record_terminal(selected, decision_id, terminal_type, provenance)
             self._append("memory_promotion_projection_error", selected.memory_id, result)
+            self._release_lease(decision_id)
             return result
         result["promotion_evidence"] = dict(self._last_promotion_evidence)
+        self._record_terminal(selected, decision_id, "memory_projection_activated", provenance)
         self._append("memory_promotion_owner_approved", selected.memory_id, result)
-        self._append("memory_projection_activated", selected.memory_id, result)
+        self._release_lease(decision_id)
         return result
 
     def reject(
@@ -265,10 +293,24 @@ class AutoMemoryPromotionService:
     def _normalize(self, value: ReviewCandidate | Mapping[str, Any]) -> ReviewCandidate:
         selected = value if isinstance(value, ReviewCandidate) else ReviewCandidate.from_mapping(value)
         from dataclasses import replace
-        normalized_refs = tuple(
-            item if isinstance(item, ProvenanceRef) else ProvenanceRef("message", str(item).strip())
-            for item in selected.source_refs if str(item).strip()
-        )
+        normalized_refs: list[ProvenanceRef] = []
+        resolver = getattr(self.evidence_store, "resolve_exact_message_ref", None) if self.evidence_store is not None else None
+        for item in selected.source_refs:
+            if not str(item).strip():
+                continue
+            if isinstance(item, ProvenanceRef):
+                normalized_refs.append(item)
+                continue
+            raw = str(item).strip()
+            if callable(resolver):
+                try:
+                    resolved = resolver(raw)
+                    normalized_refs.append(ProvenanceRef("message", raw, resolved.content_hash))
+                    continue
+                except Exception:
+                    pass
+            normalized_refs.append(ProvenanceRef("evidence", raw))
+        normalized_refs = tuple(normalized_refs)
         if normalized_refs != selected.source_refs:
             selected = replace(selected, source_refs=normalized_refs)
         content_hash = self._authentic_content_hash(selected)
@@ -281,6 +323,7 @@ class AutoMemoryPromotionService:
         return selected
 
     def _normalize_provenance(self, candidate: ReviewCandidate) -> ResolvedProvenance:
+        self._provenance_errors = []
         store = self.evidence_store
         resolved = []
         context = []
@@ -304,7 +347,14 @@ class AutoMemoryPromotionService:
                     continue
                 try:
                     item = resolver(ref.value, content_hash=ref.content_hash)
-                except Exception:
+                except Exception as exc:
+                    message = str(exc)
+                    if "ambiguous" in message:
+                        self._provenance_errors.append("provenance_ambiguous_message")
+                    elif "mismatch" in message:
+                        self._provenance_errors.append("provenance_content_hash_mismatch")
+                    else:
+                        self._provenance_errors.append("provenance_unknown_message")
                     continue
                 if item.message_id in seen_messages:
                     continue
@@ -320,11 +370,13 @@ class AutoMemoryPromotionService:
                     try:
                         item = store.resolve_exact_message_ref(str(message_id), content_hash=str(message_hash))
                     except Exception:
+                        self._provenance_errors.append("provenance_event_invalid")
                         continue
                     if item.message_id not in seen_messages:
                         seen_messages.add(item.message_id)
                         resolved.append(item)
                 else:
+                    self._provenance_errors.append("provenance_event_invalid")
                     continue
             else:
                 key = (ref.kind, ref.value, ref.content_hash)
@@ -359,7 +411,7 @@ class AutoMemoryPromotionService:
         if not callable(recorder):
             return None
         state = {"memory_projection_activated": "active", "memory_projection_rolled_back": "rolled_back", "memory_projection_repair_required": "repair_required"}[event_type]
-        return recorder(decision_id, event_type, candidate.memory_id, {"candidate_id": candidate.memory_id, "decision_id": decision_id, "memory_id": candidate.memory_id, "content_hash": candidate.content_hash, "policy_version": self.policy_version, "state": state, "messages": [{"message_id": ref.message_id, "content_hash": ref.content_hash} for ref in sorted(provenance.linkable_messages, key=lambda x: x.message_id)]})
+        return recorder(decision_id, event_type, candidate.memory_id, {"candidate_id": candidate.memory_id, "decision_id": decision_id, "memory_id": candidate.memory_id, "content_hash": candidate.content_hash, "policy_version": self.policy_version, "state": state, "messages": [{"message_id": ref.message_id, "content_hash": ref.content_hash, "external_key": {"source_external_id": ref.external_key.source_external_id, "conversation_external_id": ref.external_key.conversation_external_id, "message_external_id": ref.external_key.message_external_id}} for ref in sorted(provenance.linkable_messages, key=lambda x: x.message_id)]})
 
     def _policy_reasons(self, candidate: ReviewCandidate) -> list[str]:
         reasons: list[str] = []
@@ -451,6 +503,13 @@ class AutoMemoryPromotionService:
         wanted = str(reference).strip()
         if not wanted:
             return False
+        # Typed event references are verifiable by their durable event identity;
+        # they must not be mistaken for a message primary key merely because
+        # the public evidence_refs projection contains their value.
+        for item in candidate.source_refs:
+            if isinstance(item, ProvenanceRef) and item.kind == "event" and item.value == wanted:
+                getter = getattr(self.state_db, "get_event", None)
+                return callable(getter) and getter(wanted) is not None
         metadata = dict(candidate.metadata)
         candidate_owned = {
             str(candidate.memory_id).strip(),
@@ -615,7 +674,22 @@ class AutoMemoryPromotionService:
                 if not isinstance(item, Mapping) or not item.get("message_id"):
                     continue
                 try:
-                    refs.append(self.evidence_store.resolve_exact_message_ref(str(item["message_id"]), content_hash=str(item.get("content_hash") or "")))
+                    resolved = self.evidence_store.resolve_exact_message_ref(str(item["message_id"]), content_hash=str(item.get("content_hash") or ""))
+                    external = item.get("external_key")
+                    if isinstance(external, Mapping):
+                        expected_external = (
+                            str(external.get("source_external_id") or ""),
+                            str(external.get("conversation_external_id") or ""),
+                            str(external.get("message_external_id") or ""),
+                        )
+                        actual_external = (
+                            resolved.external_key.source_external_id,
+                            resolved.external_key.conversation_external_id,
+                            resolved.external_key.message_external_id,
+                        )
+                        if expected_external != actual_external:
+                            continue
+                    refs.append(resolved)
                 except Exception:
                     continue
             document = self.memory_db.fetch_memory(memory_id, include_chunks=False) if self.memory_db is not None else None
@@ -630,12 +704,19 @@ class AutoMemoryPromotionService:
                     event_id = self._record_terminal(candidate_stub, decision_id, "memory_projection_rolled_back", ResolvedProvenance(tuple(refs), ()))
                     evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.ROLLED_BACK, tuple(refs), terminal_event_id=event_id, rollback_verified=True)
                 elif document.get("status") == "active":
-                    if "active" not in terminal:
+                    sound = bool(refs) and bool(self.evidence_store) and self.evidence_store.verify_message_memory_links(tuple(refs), memory_id, decision_id=decision_id)
+                    if not sound:
+                        self.memory_db.mark_repair_required(memory_id, decision_id=decision_id)
+                        if "active" in terminal:
+                            raise RuntimeError("promotion_repair_terminal_conflict")
+                        event_id = self._record_terminal(candidate_stub, decision_id, "memory_projection_repair_required", ResolvedProvenance(tuple(refs), ()))
+                        evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.REPAIR_REQUIRED, tuple(refs), terminal_event_id=event_id, error_codes=("promotion_provenance_incomplete",))
+                    elif "active" not in terminal:
                         event_id = self._record_terminal(candidate_stub, decision_id, "memory_projection_activated", ResolvedProvenance(tuple(refs), ()))
+                        evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.VISIBLE_ACTIVE, tuple(refs), terminal_event_id=event_id)
                     else:
-                        event_id = None
-                    evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.VISIBLE_ACTIVE, tuple(refs), terminal_event_id=event_id)
-                elif document.get("status") == "preparing" and refs and self.evidence_store.verify_message_memory_links(tuple(refs), memory_id):
+                        evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.VISIBLE_ACTIVE, tuple(refs))
+                elif document.get("status") == "preparing" and refs and self.evidence_store.verify_message_memory_links(tuple(refs), memory_id, decision_id=decision_id):
                     self.memory_db.activate_derived_projection(memory_id, decision_id=decision_id, required_messages=tuple(refs))
                     event_id = self._record_terminal(candidate_stub, decision_id, "memory_projection_activated", ResolvedProvenance(tuple(refs), ()))
                     evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.VISIBLE_ACTIVE, tuple(refs), terminal_event_id=event_id)
@@ -648,12 +729,14 @@ class AutoMemoryPromotionService:
                     evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.ROLLED_BACK, tuple(refs), terminal_event_id=event_id, rollback_verified=True)
                 else:
                     raise RuntimeError("promotion_state_unreconciled")
-            except Exception:
+            except Exception as exc:
+                terminal_event_id = None
+                error_codes = ["promotion_repair_required"]
                 try:
-                    event_id = self._record_terminal(candidate_stub, decision_id, "memory_projection_repair_required", ResolvedProvenance(tuple(refs), ()))
+                    terminal_event_id = self._record_terminal(candidate_stub, decision_id, "memory_projection_repair_required", ResolvedProvenance(tuple(refs), ()))
                 except Exception:
-                    event_id = None
-                evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.REPAIR_REQUIRED, tuple(refs), terminal_event_id=event_id, error_codes=("promotion_repair_required",))
+                    error_codes.extend(("promotion_repair_terminal_conflict", "reconcile_unreconciled"))
+                evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.REPAIR_REQUIRED, tuple(refs), terminal_event_id=terminal_event_id, error_codes=tuple(error_codes))
             output.append(evidence)
             self._release_lease(decision_id)
         return tuple(output)
@@ -727,7 +810,7 @@ class AutoMemoryPromotionService:
         batch = None
         try:
             batch = linker(provenance.linkable_messages, candidate.memory_id, decision_id=decision_id, confidence=candidate.confidence)
-            if not self.evidence_store.verify_message_memory_links(provenance.linkable_messages, candidate.memory_id):
+            if not self.evidence_store.verify_message_memory_links(provenance.linkable_messages, candidate.memory_id, decision_id=decision_id):
                 raise RuntimeError("promotion_provenance_verification_failed")
             activator(candidate.memory_id, decision_id=decision_id, required_messages=provenance.linkable_messages)
         except Exception as exc:

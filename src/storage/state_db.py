@@ -4,10 +4,11 @@ import json
 import os
 import sqlite3
 import threading
+import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 from uuid import uuid4
 
 
@@ -607,6 +608,48 @@ class StateDatabase:
 
     @staticmethod
     def _promotion_json(payload: Any) -> str:
+        top_level = {"candidate_id", "decision_id", "memory_id", "content_hash", "policy_version", "state", "messages", "error_codes", "errors"}
+        message_keys = {"message_id", "content_hash", "external_key"}
+        external_keys = {"source_external_id", "conversation_external_id", "message_external_id"}
+        forbidden = re.compile(r"(?:sk-[a-z0-9]|api[_ -]?key|token|secret|password|authorization|fixture|evaluator|exception|traceback)", re.I)
+
+        def check(value: Any, context: str = "top") -> None:
+            if isinstance(value, Mapping):
+                if context == "top":
+                    allowed = top_level
+                elif context == "message":
+                    allowed = message_keys
+                elif context == "external":
+                    allowed = external_keys
+                else:
+                    raise ValueError("promotion_payload_schema_invalid")
+                if any(str(name) not in allowed for name in value):
+                    raise ValueError("promotion_payload_schema_invalid")
+                for name, item in value.items():
+                    if context == "top" and name == "messages":
+                        child = "messages"
+                    elif context == "message" and name == "external_key":
+                        child = "external"
+                    else:
+                        child = "scalar"
+                    check(item, child)
+            elif isinstance(value, (list, tuple)):
+                child = "message" if context == "messages" else "scalar"
+                for item in value:
+                    check(item, child)
+            elif isinstance(value, str):
+                normalized_path = value.replace("\\/", "/").replace("\\\\", "\\")
+                if forbidden.search(value) or normalized_path.startswith(("/", "\\")) or re.match(r"^[a-z]:[\\/]", normalized_path, re.I):
+                    raise ValueError("promotion_payload_forbidden_content")
+            elif value is not None and not isinstance(value, (bool, int, float)):
+                raise ValueError("promotion_payload_schema_invalid")
+        if isinstance(payload, Mapping):
+            if "messages" in payload and not isinstance(payload["messages"], (list, tuple)):
+                raise ValueError("promotion_payload_schema_invalid")
+            for field in ("error_codes", "errors"):
+                if field in payload and (not isinstance(payload[field], (list, tuple)) or any(not isinstance(item, str) for item in payload[field])):
+                    raise ValueError("promotion_payload_schema_invalid")
+        check(payload, "top")
         return json.dumps(payload if payload is not None else {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
     def get_event(self, event_id: int | str) -> dict[str, Any] | None:
@@ -635,7 +678,7 @@ class StateDatabase:
                     raise ValueError("promotion_event_conflict")
                 return stable_id
             if selected_type in terminal:
-                rows = connection.execute("SELECT event_type,payload_json FROM events WHERE entity_type='memory_candidate' AND entity_id=? AND event_type IN (?,?,?)", (str(entity_id or ""), *terminal)).fetchall()
+                rows = connection.execute("SELECT event_type,payload_json FROM events WHERE entity_type='memory_candidate' AND event_type IN (?,?,?)", (*terminal,)).fetchall()
                 for other in rows:
                     try:
                         prior = json.loads(str(other["payload_json"]))

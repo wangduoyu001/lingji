@@ -410,11 +410,14 @@ class SourceReadModel:
                 actual_hash = str(row["content_hash"] or "")
                 if supplied_hash is not None and str(supplied_hash) != actual_hash:
                     raise SourceReadModelError("provenance_content_hash_mismatch")
-                resolved.append(ResolvedMessageRef(
+                resolved_ref = ResolvedMessageRef(
                     str(row["message_id"]),
                     ExternalMessageKey(str(row["source_external_id"] or ""), str(row["conversation_external_id"] or ""), str(row["message_external_id"] or "")),
                     actual_hash,
-                ))
+                )
+                if isinstance(item, ResolvedMessageRef) and item.external_key != resolved_ref.external_key:
+                    raise SourceReadModelError("provenance_external_identity_mismatch")
+                resolved.append(resolved_ref)
             created: list[ResolvedMessageRef] = []
             reused: list[ResolvedMessageRef] = []
             for ref in resolved:
@@ -433,18 +436,33 @@ class SourceReadModel:
         return BatchLinkResult(tuple(created), tuple(reused))
 
     def verify_message_memory_links(
-        self, messages: Iterable[ResolvedMessageRef], memory_id: str, *, relation_type: str = "derived_from"
+        self, messages: Iterable[ResolvedMessageRef], memory_id: str, *, relation_type: str = "derived_from",
+        decision_id: str | None = None,
     ) -> bool:
+        expected_refs = {ref.message_id: ref for ref in messages}
         expected = {ref.message_id: ref.content_hash for ref in messages}
         with self._connection() as connection:
             rows = connection.execute(
-                "SELECT l.message_id,l.relation_type,m.content_hash FROM message_memory_links l JOIN message_records m ON m.message_id=l.message_id WHERE l.memory_id=?",
+                """SELECT l.message_id,l.relation_type,m.content_hash,m.external_id AS message_external_id,
+                          c.external_id AS conversation_external_id,s.external_id AS source_external_id,
+                          l.created_by_decision_id
+                   FROM message_memory_links l JOIN message_records m ON m.message_id=l.message_id
+                   JOIN conversation_records c ON c.conversation_id=m.conversation_id
+                   JOIN source_records s ON s.source_id=m.source_id WHERE l.memory_id=?""",
                 (str(memory_id),),
             ).fetchall()
         if any(str(row["relation_type"]) != relation_type for row in rows):
             return False
         actual = {str(row["message_id"]): str(row["content_hash"] or "") for row in rows}
-        return actual == expected
+        if actual != expected:
+            return False
+        for row in rows:
+            wanted = expected_refs.get(str(row["message_id"]))
+            if wanted is None or wanted.external_key != ExternalMessageKey(str(row["source_external_id"] or ""), str(row["conversation_external_id"] or ""), str(row["message_external_id"] or "")):
+                return False
+            if decision_id is not None and str(row["created_by_decision_id"] or "") != str(decision_id):
+                return False
+        return True
 
     def unlink_message_memory_batch(
         self, messages: Iterable[ResolvedMessageRef], memory_id: str, *, decision_id: str,

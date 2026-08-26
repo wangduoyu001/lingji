@@ -432,7 +432,9 @@ class MemoryDatabase:
 
     def activate_derived_projection(self, memory_id: str, *, decision_id: str, required_messages: Any) -> Any:
         from src.auto_review.models import ProjectionWriteResult, PromotionProjectionState
-        expected = {str(item.message_id): str(item.content_hash) for item in required_messages}
+        from src.sources import ExternalMessageKey
+        expected_refs = {str(item.message_id): item for item in required_messages}
+        expected = {key: str(item.content_hash) for key, item in expected_refs.items()}
         owner = str(decision_id or "")
         with self._lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -442,9 +444,30 @@ class MemoryDatabase:
             relationships = self._loads(row["relationships_json"], {})
             if row["memory_tier"] != "derived" or str(relationships.get("decision_id") or "") != owner or str(row["status"]) not in {"preparing", "active"}:
                 raise ValueError("derived_projection_activation_conflict")
-            links = connection.execute("SELECT l.message_id,l.relation_type,m.content_hash FROM message_memory_links l JOIN message_records m ON m.message_id=l.message_id WHERE l.memory_id=?", (str(memory_id),)).fetchall()
+            links = connection.execute(
+                """SELECT l.message_id,l.relation_type,l.created_by_decision_id,m.content_hash,
+                          m.external_id AS message_external_id,
+                          c.external_id AS conversation_external_id,
+                          s.external_id AS source_external_id
+                   FROM message_memory_links l
+                   JOIN message_records m ON m.message_id=l.message_id
+                   JOIN conversation_records c ON c.conversation_id=m.conversation_id
+                   JOIN source_records s ON s.source_id=m.source_id
+                   WHERE l.memory_id=?""",
+                (str(memory_id),),
+            ).fetchall()
             actual = {str(item["message_id"]): str(item["content_hash"] or "") for item in links}
-            if any(str(item["relation_type"]) != "derived_from" for item in links) or actual != expected:
+            identity_ok = all(
+                str(item["message_id"]) in expected_refs
+                and str(item["created_by_decision_id"] or "") == owner
+                and expected_refs[str(item["message_id"])].external_key == ExternalMessageKey(
+                    str(item["source_external_id"] or ""),
+                    str(item["conversation_external_id"] or ""),
+                    str(item["message_external_id"] or ""),
+                )
+                for item in links
+            )
+            if any(str(item["relation_type"]) != "derived_from" for item in links) or actual != expected or not identity_ok:
                 raise ValueError("derived_projection_provenance_incomplete")
             if str(row["status"]) == "active":
                 return ProjectionWriteResult(str(memory_id), owner, False, PromotionProjectionState.VISIBLE_ACTIVE)
@@ -470,6 +493,18 @@ class MemoryDatabase:
                 self._bump_revision(connection)
                 return True
         return False
+
+    def mark_repair_required(self, memory_id: str, *, decision_id: str) -> bool:
+        with self._lock, self._connection() as connection:
+            row = connection.execute("SELECT relationships_json,memory_tier FROM memory_documents WHERE memory_id=?", (str(memory_id),)).fetchone()
+            if row is None or row["memory_tier"] != "derived":
+                return False
+            relationships = self._loads(row["relationships_json"], {})
+            if str(relationships.get("decision_id") or "") != str(decision_id):
+                return False
+            connection.execute("UPDATE memory_documents SET status='repair_required', review_status='repair_required', updated_at=? WHERE memory_id=?", (datetime.now().isoformat(timespec="seconds"), str(memory_id)))
+            self._bump_revision(connection)
+            return True
 
     def list_derived_projection_identity_rows(self) -> tuple[dict[str, Any], ...]:
         with self._connection() as connection:
