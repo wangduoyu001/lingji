@@ -5,7 +5,7 @@
 Date: 2026-08-28
 Triggering final review: `f3d70084e8dfb8a07e2fe46f7e1008e11cdf7c2d`
 Product/test commit: `4aa0b7841dab76fed5c784008c2449808e3648f2`
-Evidence/docs commit: `PENDING` (metadata correction follows; this report does not self-reference the metadata commit)
+Evidence/docs commit: `b344c03958e8cbdfcb58acc0f5091cae9b687d27` (metadata correction follows; this report does not self-reference the metadata commit)
 
 ### Scope and result
 
