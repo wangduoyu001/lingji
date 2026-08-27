@@ -68,12 +68,18 @@ class AutoMemoryPromotionService:
         if existing:
             recovered_prior = self._existing_recovery(selected.memory_id, str(existing.get("decision_id") or ""))
             if recovered_prior is not None:
-                return recovered_prior
+                if self._owner_approval_exists(selected.memory_id, selected.content_hash):
+                    return recovered_prior
+                return self._quarantine_existing_result(existing)
             if existing.get("status") != PromotionStatus.ERROR.value:
+                if existing.get("status") == PromotionStatus.ACTIVE.value and not self._owner_approval_exists(selected.memory_id, selected.content_hash):
+                    return self._quarantine_existing_result(existing)
                 return existing
             # A failed derived-index write may be retried after the provider
             # recovers.  Reuse the immutable decision ID and append only the
             # recovery outcome; do not create a duplicate decision audit.
+            if not self._owner_approval_exists(selected.memory_id, selected.content_hash):
+                return existing
             decision_id = str(existing.get("decision_id") or "")
             if not self._claim_lease(decision_id):
                 return existing
@@ -661,6 +667,36 @@ class AutoMemoryPromotionService:
                 return item
         return None
 
+    def _owner_approval_exists(self, candidate_id: str, content_hash: str) -> bool:
+        """Return true only for a durable, successful owner approval event."""
+        wanted_id = str(candidate_id or "")
+        wanted_hash = str(content_hash or "")
+        if not wanted_id or not wanted_hash:
+            return False
+        for row in self.state_db.recent_events(limit=100000):
+            if row.get("event_type") != "memory_promotion_owner_approved":
+                continue
+            payload = self._payload(row)
+            if (
+                str(payload.get("candidate_id") or "") == wanted_id
+                and str(payload.get("content_hash") or "") == wanted_hash
+                and str(payload.get("status") or "") == PromotionStatus.ACTIVE.value
+            ):
+                return True
+        return False
+
+    @staticmethod
+    def _quarantine_existing_result(existing: Mapping[str, Any]) -> dict[str, Any]:
+        result = dict(existing)
+        result.update({
+            "status": PromotionStatus.PENDING_OWNER_REVIEW.value,
+            "reason_codes": ["automatic_activation_quarantined"],
+            "mutation_performed": False,
+            "error": "",
+        })
+        result.pop("promotion_evidence", None)
+        return result
+
     def _existing_recovery(self, candidate_id: str, decision_id: str) -> dict[str, Any] | None:
         return self._existing_owner_result("memory_promotion_recovered", candidate_id, decision_id)
 
@@ -683,7 +719,11 @@ class AutoMemoryPromotionService:
             if event_type == "memory_promotion_owner_rejected":
                 rejected.add(candidate_id)
                 latest.pop(candidate_id, None)
-            elif event_type in active_events and payload.get("status") == PromotionStatus.ACTIVE.value:
+            elif (
+                event_type in active_events
+                and payload.get("status") == PromotionStatus.ACTIVE.value
+                and self._owner_approval_exists(candidate_id, str(payload.get("content_hash") or ""))
+            ):
                 rejected.discard(candidate_id)
                 latest[candidate_id] = payload
         outcomes = latest
@@ -762,7 +802,12 @@ class AutoMemoryPromotionService:
                         evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.VISIBLE_ACTIVE, tuple(refs), terminal_event_id=event_id)
                     else:
                         evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.VISIBLE_ACTIVE, tuple(refs))
-                elif document.get("status") == "preparing" and refs and self.evidence_store.verify_message_memory_links(tuple(refs), memory_id, decision_id=decision_id):
+                elif (
+                    document.get("status") == "preparing"
+                    and refs
+                    and self._owner_approval_exists(memory_id, str(payload.get("content_hash") or ""))
+                    and self.evidence_store.verify_message_memory_links(tuple(refs), memory_id, decision_id=decision_id)
+                ):
                     self.memory_db.activate_derived_projection(memory_id, decision_id=decision_id, required_messages=tuple(refs))
                     event_id = self._record_terminal(candidate_stub, decision_id, "memory_projection_activated", ResolvedProvenance(tuple(refs), ()))
                     evidence = PromotionEvidence(memory_id, decision_id, memory_id, PromotionProjectionState.VISIBLE_ACTIVE, tuple(refs), terminal_event_id=event_id)

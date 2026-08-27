@@ -13,7 +13,7 @@ from src.storage.state_db import StateDatabase
 from src.automatic_memory.quality_evidence import audit_promotion_persistence
 from src.retrieval.temporal import TemporalQuery
 from src.auto_review.models import PromotionEvidence, PromotionProjectionState
-from src.auto_review.promotion import AutoMemoryPromotionService
+from src.auto_review.promotion import AutoMemoryPromotionService, PromotionStatus
 
 
 def test_append_requires_safe_promotion_event_boundary() -> None:
@@ -85,6 +85,15 @@ def _owner_approve(service: AutoMemoryPromotionService, candidate: ReviewCandida
         pending["candidate_id"],
         expected_content_hash=pending["content_hash"],
         owner_confirmed=True,
+    )
+
+
+def _event_count(state: StateDatabase, event_type: str, decision_id: str) -> int:
+    return sum(
+        1
+        for row in state.recent_events(100)
+        if row["event_type"] == event_type
+        and json.loads(row["payload_json"]).get("decision_id") == decision_id
     )
 
 
@@ -209,6 +218,80 @@ def test_owner_approval_uses_stable_preparing_and_terminal_events(tmp_path: Path
     assert "memory_promotion_preparing" in event_types
     assert "memory_projection_activated" in event_types
     assert any(row["stable_event_id"] and row["stable_event_id"].endswith(":memory_projection_activated") for row in state.recent_events(100))
+
+
+def test_legacy_error_decision_cannot_auto_recover_without_owner_approval(tmp_path: Path) -> None:
+    state, memory, source = _stores(tmp_path)
+    message = _message(source)
+    content = "fact"
+    content_hash = __import__("hashlib").sha256(
+        json.dumps({"title": content, "content": content, "structured": {}}, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    candidate = ReviewCandidate(
+        memory_id="memory-1", title=content, content=content, content_hash=content_hash,
+        source_refs=(message["message_id"],), confidence=0.9,
+        authority="direct_user", source_kind="chat",
+    )
+    service = AutoMemoryPromotionService(state_db=state, memory_db=memory, evidence_store=source)
+    selected = service._normalize(candidate)
+    decision_id = service._decision_id(selected, "active", service.policy_version)
+    service._record_candidate(selected)
+    legacy_error = service._result(
+        selected, decision_id, PromotionStatus.ERROR, ["projection_persist_failed"], mutation=False,
+    )
+    service._append("memory_promotion_decision", selected.memory_id, legacy_error)
+
+    result = service.evaluate(candidate)
+
+    assert result["status"] == PromotionStatus.ERROR.value
+    assert memory.fetch_memory(candidate.memory_id) is None
+    assert source.memory_links(candidate.memory_id) == []
+    event_types = {row["event_type"] for row in state.recent_events(100)}
+    assert "memory_promotion_preparing" not in event_types
+    assert "memory_projection_activated" not in event_types
+    assert "memory_promotion_recovered" not in event_types
+
+    approved = service.approve(
+        candidate.memory_id,
+        expected_content_hash=candidate.content_hash,
+        owner_confirmed=True,
+    )
+    assert approved["status"] == PromotionStatus.ACTIVE.value
+
+
+def test_reconcile_unknown_prepared_saga_rolls_back_without_owner_approval(tmp_path: Path) -> None:
+    state, memory, source = _stores(tmp_path)
+    message = _message(source)
+    content = "fact"
+    content_hash = __import__("hashlib").sha256(
+        json.dumps({"title": content, "content": content, "structured": {}}, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    candidate = ReviewCandidate(
+        memory_id="memory-1", title=content, content=content, content_hash=content_hash,
+        source_refs=(message["message_id"],), confidence=0.9,
+        authority="direct_user", source_kind="chat",
+    )
+    service = AutoMemoryPromotionService(state_db=state, memory_db=memory, evidence_store=source)
+    selected = service._normalize(candidate)
+    provenance = service._normalize_provenance(selected)
+    decision_id = service._decision_id(selected, "active", service.policy_version)
+    service._record_promotion_event("memory_promotion_preparing", selected, decision_id, provenance)
+    memory.prepare_derived_projection(
+        memory_id=selected.memory_id, title=selected.title, content=selected.content,
+        content_hash=selected.content_hash, evidence_refs=(), confidence=selected.confidence,
+        authority=selected.authority, source_kind=selected.source_kind,
+        policy_version=service.policy_version, decision_id=decision_id,
+        candidate_metadata=dict(selected.metadata),
+    )
+    source.link_message_memory_batch(provenance.linkable_messages, selected.memory_id, decision_id=decision_id)
+
+    evidence = service.reconcile_incomplete_projections()
+
+    assert evidence and evidence[0].state is PromotionProjectionState.ROLLED_BACK
+    assert memory.fetch_memory(selected.memory_id) is None
+    assert source.memory_links(selected.memory_id) == []
+    assert _event_count(state, "memory_projection_activated", decision_id) == 0
+    assert _event_count(state, "memory_projection_rolled_back", decision_id) == 1
 
 
 def test_unresolved_legacy_reference_is_context_evidence_not_message(tmp_path: Path) -> None:
