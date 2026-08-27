@@ -1631,7 +1631,7 @@ Windows 重启后恢复 = 100%
 - 产品提交：`22be155e30279fdd43384a02cc2a456efb805144`（`fix: close promotion safety boundary`）
 - 报告/文档提交：待提交（`docs: record promotion safety closeout`）
 
-## 2026-08-27 · Phase 1 Automatic Memory · Task 1 · Thin quality runner and authority boundary
+## 2026-08-27 · Phase 1 Automatic Memory · Task 1 Repair Round 2 · Thin quality runner and authority boundary
 
 - 基线：`5c3bed8f8a4fb77632b41ec7e0c23c8ebeb72a78`
 - 影响模块：`src/automatic_memory/quality_gate.py`, `src/automatic_memory/quality_evidence.py`, quality CLI/validation wiring and reset runner tests
@@ -1641,8 +1641,8 @@ Windows 重启后恢复 = 100%
 
 ### 增量自动验收
 
-- [x] Task 6 RED/GREEN runner boundary tests：缺失/无效 evidence 不进入 `EvaluationReport`，measured failure 保持 `FAIL`，cleanup failure 覆盖 pre-cleanup 结论，release 在 4R2 readiness 前以 `BLOCKED_4R2_REQUIRED` 拒绝 100k；repair enum boundary RED `1 failed` → GREEN `1 passed`。
-- [x] Task 1–5 reset regressions、冻结 corpus/questions SHA-256、`py_compile`、`git diff --check`、acceptance sync、local handoff；最终复跑 `268 passed`。
+- [x] Repair Round 2 RED/GREEN：历史 C1 断言恢复后 targeted RED `5 failed, 34 passed`；mode/access、lexical cleanup inventory、measured-failure precedence、release preflight spy、gateway enum、cleanup allowlist GREEN。
+- [x] Task 1–5 reset regressions、冻结 corpus/questions SHA-256、`py_compile`、`git diff --check`、acceptance sync、local handoff；最终复跑含 `tests/test_task4_reset_promotion_transaction.py` 的完整矩阵 `336 passed`。
 - [ ] 不执行 Artifact、真实 UI、主人观察、Production/Vault、4R2 或 100k；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。
 
 ### 清理与回滚
@@ -1653,5 +1653,5 @@ Windows 重启后恢复 = 100%
 ### 最终报告
 
 - 完整报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-1-report.md`
-- 产品/测试提交：`2b99cc53d493929a0e2e75c0f79d6834355fb7dc`；最小后续 repair：`50cc0e0`
-- 文档/报告提交：产品提交后分离提交；报告不自引用其自身 SHA，最终 SHA 以 `git log` 为准。
+- 产品/测试提交：`2b99cc53d493929a0e2e75c0f79d6834355fb7dc`、`50cc0e0`、`5f75e3af9b2269519337de68db6a688bd4e654f0`
+- 权威文档提交：`3414101d8fe30033aaea66eaa2cf615d580ad515`；先前报告证据：`d1c0185887e450945c5eb607aa7199b835cd2483`
