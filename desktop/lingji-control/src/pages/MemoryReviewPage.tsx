@@ -2,17 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api";
 import { Empty, Notice } from "../components/ui";
 import type { PageProps } from "../types";
+import type { CaptureInspectorTarget } from "./captureCenterTypes";
 import { REVIEW_LIMIT, canApprove, integrityMessage } from "./codexWorkspaceContract";
 import { MemoryReviewApi } from "./memoryReviewApi";
 import type { CoreIntegrity, CoreMemoryDraft, MemoryCandidate, ReviewFilters } from "./memoryReviewTypes";
 import "./LocalMemoryLoop.css";
 
 const emptyDraft: CoreMemoryDraft = { title: "", content: "", project_ids: [], memory_type: "decision", importance: "medium", privacy: "private", tags: [] };
-const dt = (value?: string) => value ? new Date(value).toLocaleString() : "未知";
+const dt = (value?: string | null) => value ? new Date(value).toLocaleString() : "尚未获得";
 const hasFilters = (filters: ReviewFilters) => Boolean(filters.projectId || filters.agent || filters.type || filters.importance || filters.q);
 const confidenceLabel = (value: unknown) => typeof value === "number" ? `${Math.round(value * 100)}%` : value == null || value === "" ? "未知" : String(value);
 
-export default function MemoryReviewPage({ api, active }: PageProps) {
+export default function MemoryReviewPage({ api, active, onOpenInspector }: PageProps & { onOpenInspector?: (target: CaptureInspectorTarget) => void }) {
   const client = useMemo(() => new MemoryReviewApi(api), [api]);
   const [filters, setFilters] = useState<ReviewFilters>({ projectId: "", agent: "", type: "", importance: "", q: "", limit: REVIEW_LIMIT, offset: 0 });
   const [items, setItems] = useState<MemoryCandidate[]>([]);
@@ -136,7 +137,7 @@ export default function MemoryReviewPage({ api, active }: PageProps) {
     <section className="workspace-hero memory-review-hero">
       <div>
         <span className="desktop-eyebrow">OWNER AUTHORITY</span>
-        <h2>人工记忆审核</h2>
+        <h2>候选记忆与主人决定</h2>
         <p>决定哪些候选内容可以进入长期记忆。AI 可以提议，但不能替主人按下批准。</p>
       </div>
       <div className="workspace-hero-actions">
@@ -187,14 +188,18 @@ export default function MemoryReviewPage({ api, active }: PageProps) {
           </header>
 
           <div className="review-fact-grid">
-            <div><span>来源 Session</span><strong>{selected.source_session_id ?? "未知"}</strong></div>
-            <div><span>来源 Message</span><strong>{selected.source_message_id ?? "未知"}</strong></div>
-            <div><span>影响 Agent</span><strong>{selected.affected_agents?.join("、") || "未知"}</strong></div>
-            <div><span>当前 Hash</span><strong className="mono-truncate">{selected.current_hash ?? "未知"}</strong></div>
+            <div><strong>来源：{selected.source_name || "尚未获得"}</strong>{selected.source_session_id && onOpenInspector && <button className="text-button" onClick={() => onOpenInspector({ source_type: "codex_session", conversation_id: selected.source_session_id })}>打开来源检查</button>}</div>
+            <div><strong>对话：{selected.conversation_title || "尚未获得"}</strong>{selected.source_message_id && onOpenInspector && <button className="text-button" onClick={() => onOpenInspector({ message_id: selected.source_message_id })}>打开原文检查</button>}</div>
+            <div><strong>原文片段：{selected.message_excerpt || "尚未获得"}</strong></div>
+            <div><strong>时间：{dt(selected.provenance_at || selected.created_at)}</strong></div>
+            <div><strong>当前状态：{selected.current_state || "尚未获得"}</strong></div>
+            <div><strong>历史状态：{selected.history_state || "尚未获得"}</strong></div>
+            <div><span>影响 Agent</span><strong>{selected.affected_agents?.join("、") || "尚未获得"}</strong></div>
+            <div><span>当前 Hash</span><strong className="mono-truncate">{selected.current_hash ?? "尚未获得"}</strong></div>
           </div>
 
           <section className="review-provenance">
-            <div><span>AI 提议理由</span><p>{selected.proposal_reason ?? "未知"}</p></div>
+            <div><p>为什么：{selected.proposal_reason ?? "尚未获得"}</p></div>
             <div><span>相似长期记忆</span><p>{selected.similar_core?.map((item) => item.title ?? item.memory_id).join("；") || "没有发现相似 Core Memory"}</p></div>
           </section>
 

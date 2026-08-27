@@ -60,3 +60,22 @@ export type WorkFact = {
   pending_actions: PendingAction[];
   failure: Failure | null;
 };
+
+export type WorkSummary = {
+  phase?: string | null;
+  result?: string | null;
+  time?: string | null;
+  source?: string | null;
+  source_id?: string | null;
+  next_actor?: string | null;
+};
+
+export type WorkHistoryItem = WorkFact & { summary?: WorkSummary | null };
+
+export type WorkHistoryResponse = {
+  ["items"]: WorkHistoryItem[];
+  limit?: number;
+  offset?: number;
+  total?: number | null;
+  has_more?: boolean;
+};

@@ -16,7 +16,7 @@ const GROUPS: Array<{ title: string; description: string; pages: PageId[] }> = [
   {
     title: "采集与任务",
     description: "处理手动投喂、媒体分析和任务明细。",
-    pages: ["capture_center", "capture", "media", "jobs"],
+    pages: ["capture_center", "media", "jobs"],
   },
   {
     title: "存储与运维",

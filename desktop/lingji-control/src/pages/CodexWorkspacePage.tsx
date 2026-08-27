@@ -24,6 +24,7 @@ export default function CodexWorkspacePage({ api, active, onOpenInspector }: Pro
   const [maxChars, setMaxChars] = useState(12000);
   const [contextPack, setContextPack] = useState<ContextPack | null>(null);
   const [busy, setBusy] = useState("");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [error, setError] = useState<ApiError | null>(null);
   const listAbort = useRef<AbortController | null>(null);
   const listRequestId = useRef(0);
@@ -219,7 +220,7 @@ export default function CodexWorkspacePage({ api, active, onOpenInspector }: Pro
         <label>字符预算<input type="number" min={1000} max={100000} value={maxChars} onChange={(event) => setMaxChars(Number(event.target.value))} /></label>
         <button className="button primary" disabled={busy === "context" || !contextTask.trim()} onClick={() => void buildContext()}>{busy === "context" ? "构建中…" : "构建 Context Pack"}</button>
         {contextPack && <div className="context-pack-result">
-          <div className="context-pack-header"><div><strong>Context Pack</strong><small>{contextPack.used_chars ?? "未知"} / {contextPack.max_chars ?? maxChars} chars</small></div><button className="button secondary" onClick={() => void navigator.clipboard.writeText(contextPack.markdown)}>复制 Context Pack</button></div>
+          <div className="context-pack-header"><div><strong>Context Pack</strong><small>{contextPack.used_chars ?? "未知"} / {contextPack.max_chars ?? maxChars} chars</small></div><button className="button secondary" onClick={async () => { setCopyState("idle"); try { await navigator.clipboard.writeText(contextPack.markdown); setCopyState("copied"); } catch { setCopyState("failed"); } window.setTimeout(() => setCopyState("idle"), 2200); }}>{copyState === "copied" ? "已复制" : copyState === "failed" ? "复制失败" : "复制 Context Pack"}</button></div>
           <pre>{contextPack.markdown}</pre>
         </div>}
       </div>

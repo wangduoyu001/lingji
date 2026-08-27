@@ -54,8 +54,8 @@ function filtersForTarget(target?: CaptureInspectorTarget | null): InspectorFilt
   };
 }
 
-const text = (value: unknown): string => value === null || value === undefined || value === "" ? "未知" : String(value);
-const dateTime = (value: unknown): string => value ? new Date(String(value)).toLocaleString() : "未知";
+const text = (value: unknown): string => value === null || value === undefined || value === "" ? "尚未获得" : String(value);
+const dateTime = (value: unknown): string => value ? new Date(String(value)).toLocaleString() : "尚未获得";
 const privacyClass = (row: { privacy?: string | null }): string => isRestricted(row) ? " restricted" : "";
 
 function StateView({ error, empty, filtered }: { error: ApiError | null; empty: boolean; filtered?: boolean }) {
@@ -339,7 +339,8 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
               <dl>
                 <dt>Memory ID</dt><dd>{selectedMemory.memory_id}</dd>
                 <dt>类型</dt><dd>{text(selectedMemory.memory_type)}</dd>
-                <dt>状态</dt><dd>{text(selectedMemory.status)}</dd>
+                <dt>当前状态</dt><dd>{text(selectedMemory.status)}</dd>
+                <dt>历史状态</dt><dd>{text(memorySource?.canonical && (memorySource.canonical as Record<string, unknown>).history_state)}</dd>
                 <dt>Chunk 数量</dt><dd>{
                   typeof selectedMemory.chunk_count === "number"
                     ? selectedMemory.chunk_count.toLocaleString()
@@ -349,7 +350,9 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
                 }</dd>
                 <dt>Vector 状态</dt><dd>{text(memoryVector?.state)}</dd>
                 <dt>rebuild_required</dt><dd>{rebuildLabel(memoryVector?.rebuild_required)}</dd>
-                <dt>Vault 相对路径</dt><dd>{text(memorySource?.canonical?.relative_path)}</dd>
+                <dt>来源名称</dt><dd>{text(memorySource?.canonical?.relative_path)}</dd>
+                <dt>时间</dt><dd>{dateTime((memorySource?.canonical as Record<string, unknown> | null | undefined)?.occurred_at || (memorySource?.canonical as Record<string, unknown> | null | undefined)?.created_at)}</dd>
+                <dt>为什么</dt><dd>{text((memorySource?.canonical as Record<string, unknown> | null | undefined)?.reason || (memorySource?.canonical as Record<string, unknown> | null | undefined)?.proposal_reason)}</dd>
                 <dt>Citations</dt><dd>{
                   Array.isArray(memorySource?.canonical?.citations) && memorySource.canonical.citations.length > 0
                     ? memorySource.canonical.citations.map((c: Citation) =>
@@ -359,7 +362,7 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
                 }</dd>
               </dl>
               <h4>来源 Message Links</h4>
-              {memorySource?.links?.length ? memorySource.links.map((link, index) => <p key={`${link.message_id ?? "unknown"}-${index}`}>{text(link.message_id)} · {text(link.relation_type)} · {text(link.citation)}</p>) : <p>未知或没有来源 Message Link。</p>}
+              {memorySource?.links?.length ? memorySource.links.map((link, index) => link.message_id ? <button className="memory-link" key={`${link.message_id}-${index}`} onClick={() => void openMessage({ message_id: link.message_id! })}><strong>打开原文：{text(link.message_id)}</strong><span>{text(link.relation_type)} · {text(link.citation)}</span></button> : <p key={`missing-${index}`}>来源消息：尚未获得</p>) : <p>来源消息：尚未获得</p>}
               <h4>Vector Chunks</h4>
               <pre>{JSON.stringify(memoryVector?.chunks ?? [], null, 2)}</pre>
             </div>

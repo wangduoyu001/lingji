@@ -21,7 +21,6 @@ export const ADVANCED_NAVIGATION: NavigationItem[] = [
   { id: "memory_inspector", label: "记忆检查器", hint: "来源、对话、消息与记忆关系", group: "advanced", icon: "inspect" },
   { id: "obsidian", label: "Obsidian", hint: "Vault、状态与安全操作", group: "advanced", icon: "vault" },
   { id: "capture_center", label: "手动投喂中心", hint: "提交文本、网页、文件与媒体到正式采集队列", group: "advanced", icon: "capture" },
-  { id: "capture", label: "主动投喂", hint: "网页、文字与本地文件", group: "advanced", icon: "feed" },
   { id: "media", label: "媒体分析", hint: "转写、OCR、镜头与语义摘要", group: "advanced", icon: "media" },
   { id: "jobs", label: "任务队列明细", hint: "提取任务、重试和失败细节", group: "advanced", icon: "queue" },
   { id: "vector_center", label: "向量中心", hint: "Embedding、Qdrant 与索引覆盖率", group: "advanced", icon: "vector" },

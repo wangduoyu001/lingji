@@ -13,6 +13,8 @@ assert.match(api, /expected_content_hash/);
 assert.match(api, /owner_confirmed: true/);
 assert.match(page, /候选内容已变化，请刷新后重新审核/); assert.match(page, /批准/); assert.match(page, /编辑后批准/); assert.match(page, /拒绝理由/);
 assert.match(page, /确认加入长期记忆/); assert.match(page, /归档后不再默认注入 Codex，但不会物理删除文件/);
+assert.match(page, /来源：/); assert.match(page, /对话：/); assert.match(page, /原文片段：/); assert.match(page, /当前状态：/); assert.match(page, /历史状态：/); assert.match(page, /为什么：/);
+assert.match(page, /打开来源检查/); assert.match(page, /打开原文检查/);
 assert.doesNotMatch(page, /永久删除/); assert.doesNotMatch(page, /HMAC|Tombstone|复杂 Merge/);
 assert.match(contract, /external_modified/); assert.match(contract, /missing/);
 assert.match(page, /AbortController/); assert.match(page, /requestId/);
