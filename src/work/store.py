@@ -325,7 +325,15 @@ class WorkStore:
                     """,
                     (work_id, action_id, description, actor, timestamp),
                 )
-            connection.execute("UPDATE work_items SET updated_at = ? WHERE work_id = ?", (timestamp, work_id))
+            item_status = {
+                "retrying": "retrying",
+                "completed": "completed",
+                "failed": "failed",
+            }[phase]
+            connection.execute(
+                "UPDATE work_items SET status = ?, updated_at = ? WHERE work_id = ?",
+                (item_status, timestamp, work_id),
+            )
 
     def reconcile_extraction_jobs(self) -> None:
         """Replay terminal extraction facts after a crash between queue and callback."""

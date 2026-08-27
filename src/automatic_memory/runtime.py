@@ -116,6 +116,7 @@ class AutomaticMemoryRuntime:
         self._paused = False
         self._cleanup_pending = False
         self._cleanup_errors: list[str] = []
+        self._scan_reports: dict[str, Any] = {}
         self.work_store = WorkStore(state_db)
         self.work_projector = WorkProjector(self.work_store)
         self.work_bridge = CaptureWorkBridge(self.work_store)
@@ -314,16 +315,17 @@ class AutomaticMemoryRuntime:
         title = f"扫描 {source.kind if source else source_id}"
         work = self.work_store.get_work(work_id)
         if work is None:
-            work = self.work_store.create_work(WorkItem(work_id=work_id, title=title, source_id=scan_id, status="accepted", owner_approved=True))
+            work = self.work_store.create_work(WorkItem(work_id=work_id, title=title, source_id=source_id, status="accepted", owner_approved=True))
             self.work_store.append_event(ExecutionEvent(work_id=work_id, event_id=f"scan:{scan_id}:started", event_type="scan.started", detail={"scan_id": scan_id, "source_id": source_id, "reason": reason}))
         try:
             result = self.runner.run(scan_id)
+            self._scan_reports[scan_id] = result
             status = getattr(result, "status", None) or (result.get("status") if isinstance(result, dict) else None)
             self.work_store.append_event(ExecutionEvent(work_id=work_id, event_id=f"scan:{scan_id}:{status or 'progress'}", event_type="scan.completed" if status == "completed" else "scan.progress", detail={"scan_id": scan_id, "status": status, "progress": getattr(result, "progress", None)}))
             if status == "failed":
                 self.work_bridge.record_failure(work_id, stage="snapshot", reason=str(getattr(result, "last_error", None) or "automatic-memory snapshot failed"), retryable=True, evidence={"scan_id": scan_id})
             else:
-                self._maybe_finalize_scan_work(scan_id)
+                self._maybe_finalize_scan_work(scan_id, result)
             return result
         except Exception as exc:
             self.work_bridge.record_failure(work_id, stage="snapshot", reason=str(exc)[:2000], retryable=True, evidence={"scan_id": scan_id})
@@ -340,17 +342,26 @@ class AutomaticMemoryRuntime:
         self.work_store.append_event(ExecutionEvent(work_id=work_id, event_id=f"extraction:{job.get('job_id')}:{phase}", event_type=f"extraction.{phase}", detail={"job_id": job.get("job_id"), "error": error, "source_type": payload.get("source_type")}))
         self._maybe_finalize_scan_work(scan_id)
 
-    def _maybe_finalize_scan_work(self, scan_id: str) -> None:
+    def _maybe_finalize_scan_work(self, scan_id: str, report: Any | None = None) -> None:
         work_id = f"automatic-memory:{scan_id}"
         if self.work_store.get_work(work_id) is None:
             return
+        report = report or self._scan_reports.get(scan_id)
         jobs = [item for item in self.queue.list_page(source_type="automatic_memory_snapshot", limit=200) if str((item.get("payload") or {}).get("scan_id") or "") == scan_id]
         if any(item.get("status") not in {"completed", "failed", "cancelled"} for item in jobs):
             return
         if any(item.get("status") in {"failed", "cancelled"} for item in jobs):
             self.work_bridge.record_failure(work_id, stage="extraction", reason="一个或多个来源文件提取失败，其他来源仍可继续", retryable=False, evidence={"scan_id": scan_id, "failed_jobs": [item.get("job_id") for item in jobs if item.get("status") in {"failed", "cancelled"}]})
+            self._scan_reports.pop(scan_id, None)
             return
-        self.work_bridge.complete_extraction(work_id, f"扫描完成，已处理 {len(jobs)} 个来源文件", evidence={"scan_id": scan_id, "jobs": len(jobs), "next_actor": "system"})
+        queued = int(getattr(report, "queued", 0) or 0)
+        reused = int(getattr(report, "reused", 0) or 0)
+        total = queued + reused if report is not None else len(jobs)
+        if not jobs and reused == 0 and queued == 0 and report is None:
+            return
+        summary = f"扫描完成，已检查 {total} 个来源文件（新增 {queued}，复用 {reused}）"
+        self.work_bridge.complete_extraction(work_id, summary, evidence={"scan_id": scan_id, "jobs": len(jobs), "queued": queued, "reused": reused, "next_actor": "system"})
+        self._scan_reports.pop(scan_id, None)
 
     def pause(self) -> dict[str, object]:
         self.scheduler.pause()

@@ -422,8 +422,15 @@ class ExtractionPipeline:
             self._notify_lifecycle("completed", {**job, "status": "completed"}, result, None)
             return {"job": completed, "result": result}
         except PermissionError as exc:
-            released = self.queue.release_claim(job["job_id"], worker_id=worker_id, lease_token=lease_token)
-            return {"job": released, "error": str(exc)}
+            failed = self.queue.fail(
+                job["job_id"],
+                str(exc),
+                worker_id=worker_id,
+                lease_token=lease_token,
+                terminal=True,
+            )
+            self._notify_lifecycle("failed", {**job, **failed}, None, str(exc))
+            return {"job": failed, "error": str(exc)}
         except Exception as exc:
             logger.exception("Automatic-memory snapshot job failed: %s", job["job_id"])
             failed = self.queue.fail(job["job_id"], str(exc), worker_id=worker_id, lease_token=lease_token, terminal=True)
@@ -476,17 +483,17 @@ class ExtractionPipeline:
             adapter = self.registry.resolve(source_type, request_path, request.payload)
             batch = adapter.extract(request)
             raw_snapshot = {"raw_path": str(raw_path), "sha256": actual_sha, "size": raw_path.stat().st_size, "kind": source_type}
-            vault_result = self.sink.write_batch(batch, adapter_name=adapter.name, adapter_version=adapter.version, raw_snapshot=raw_snapshot)
-            result: dict[str, Any] = {"execution_id": request.job_id, "source_type": source_type, "adapter": adapter.name, "adapter_version": adapter.version, **vault_result}
-            indexing_succeeded = self.on_documents_written is None
-            if self.on_documents_written:
-                try:
-                    self.on_documents_written(result)
-                    result["indexed"] = True
-                    indexing_succeeded = True
-                except Exception as exc:
-                    result["indexed"] = False
-                    result["index_error"] = safe_extraction_error(exc, message="Post-extraction index synchronization failed; see local logs")
+            vault_result = {
+                "documents": 0,
+                "created": [],
+                "updated": [],
+                "skipped": [],
+                "paths": [],
+                "warnings": ["automatic-memory snapshot is retained as raw and structured evidence; Vault document publishing is disabled"],
+                "raw_snapshot": raw_snapshot,
+            }
+            result: dict[str, Any] = {"execution_id": request.job_id, "source_type": source_type, "adapter": adapter.name, "adapter_version": adapter.version, "indexed": False, "index_error": "Vault/index document publishing unavailable for automatic-memory snapshots", **vault_result}
+            indexing_succeeded = False
             result["structured_read_model"] = self._write_structured(batch=batch, raw_snapshot=raw_snapshot, vault_results=vault_result,
                                                                       execution_id=request.job_id, adapter_name=adapter.name,
                                                                       adapter_version=adapter.version, indexing_succeeded=indexing_succeeded)
@@ -511,8 +518,9 @@ class ExtractionPipeline:
                 self._notify_lifecycle("completed", {**claimed, "status": "completed"}, result, None)
                 return {"job": completed, "result": result}
             except PermissionError as exc:
-                released = self.queue.release_claim(job_id, worker_id=worker_id or self._worker_id(), lease_token=lease_token)
-                return {"job": released, "error": str(exc)}
+                failed = self.queue.fail(job_id, str(exc), worker_id=worker_id or self._worker_id(), lease_token=lease_token, terminal=True)
+                self._notify_lifecycle("failed", {**claimed, **failed}, None, str(exc))
+                return {"job": failed, "error": str(exc)}
             except Exception as exc:
                 failed = self.queue.fail(job_id, str(exc), worker_id=worker_id or self._worker_id(), lease_token=lease_token, terminal=True)
                 self._notify_lifecycle("failed", {**claimed, **failed}, None, str(exc))

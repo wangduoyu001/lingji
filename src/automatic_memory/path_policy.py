@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 from src.obsidian.discovery import discover_memory_paths
@@ -31,10 +32,16 @@ def _reject_root(root: Path) -> Path:
 
 
 def _sensitive(path: Path) -> bool:
-    # Match the selected component, not operating-system ancestors such as
-    # macOS's /private/var temporary tree.
+    # Match tokens in the selected component, not operating-system ancestors
+    # such as macOS's /private/var temporary tree. Separators are boundaries,
+    # so safe names such as ``author.json`` are not overblocked while
+    # ``AUTH-token.json`` and ``auth_token.json`` are rejected.
     name = path.name.casefold()
-    return name in _SENSITIVE_NAMES or any(name.endswith(suffix) for suffix in _SENSITIVE_SUFFIXES)
+    if any(name.endswith(suffix) for suffix in _SENSITIVE_SUFFIXES):
+        return True
+    stem = name.rsplit(".", 1)[0] if "." in name else name
+    tokens = {token for token in re.split(r"[^a-z0-9]+", stem) if token}
+    return bool(tokens & _SENSITIVE_NAMES)
 
 
 def _within(root: Path, candidate: Path) -> bool:

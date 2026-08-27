@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -43,7 +44,13 @@ def test_automatic_memory_authorize_scan_pause_retry_and_reopen(tmp_path: Path):
     settings.storage_path.mkdir()
     database_path = settings.storage_path / "lingji_state.db"
     control = LocalControlService.__new__(LocalControlService)
+    class Runtime:
+        def scan_now(self, source_id):
+            return asdict(control.automatic_memory_registry.start_scan(source_id))
+
     control.state_db = StateDatabase(database_path)
+    control.automatic_memory_registry = None
+    control.runtime = None
     app = create_control_app(settings, service=control, token="local-secret")
     headers = {"X-LingJi-Token": "local-secret"}
     authorization = {
@@ -66,6 +73,7 @@ def test_automatic_memory_authorize_scan_pause_retry_and_reopen(tmp_path: Path):
         assert source["status"] == "authorized"
         assert source["root"] == str(root)
         source_id = source["source_id"]
+        control.runtime = Runtime()
 
         denied = client.post(
             "/api/automatic-memory/authorize",

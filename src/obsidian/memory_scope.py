@@ -17,6 +17,7 @@ from .frontmatter import FrontmatterError, split_frontmatter
 MEMORY_INBOX = "_LingJi/Memory Inbox"
 MEMORY_LIBRARY = "_LingJi/Memory Library"
 MEMORY_DIRECTORIES = (MEMORY_INBOX, MEMORY_LIBRARY)
+FRONTMATTER_MAX_BYTES = 8192
 
 
 @dataclass(frozen=True)
@@ -106,7 +107,7 @@ class ObsidianMemoryScope:
             metadata = frontmatter
         else:
             try:
-                metadata, _ = split_frontmatter(candidate.read_text(encoding="utf-8-sig"))
+                metadata = self._read_frontmatter(candidate)
             except Exception:
                 return ObsidianMemoryDecision(candidate, False, "invalid_frontmatter")
 
@@ -146,12 +147,36 @@ class ObsidianMemoryScope:
         decisions: list[ObsidianMemoryDecision] = []
         for path in sorted(
             path for path in self._root_lexical.rglob("*")
-            if path.is_file() and path.suffix.casefold() == ".md"
+            if path.is_file() and path.suffix.casefold() == ".md" and not path.is_symlink()
         ):
-            decision = self.classify(path)
+            decision = self.decide(path)
             if decision.eligible:
                 decisions.append(decision)
         return tuple(decisions)
+
+    @staticmethod
+    def _read_frontmatter(path: Path) -> Mapping[str, object]:
+        with path.open("rb") as handle:
+            prefix = handle.read(4)
+            if prefix.startswith(b"\xef\xbb\xbf"):
+                prefix += handle.read(4)
+            if prefix not in {b"---\n", b"\xef\xbb\xbf---\n"}:
+                return {}
+            while len(prefix) < FRONTMATTER_MAX_BYTES:
+                line = handle.readline(FRONTMATTER_MAX_BYTES - len(prefix))
+                if not line:
+                    break
+                prefix += line
+                if line.rstrip(b"\r\n") == b"---":
+                    break
+        text = prefix.decode("utf-8-sig")
+        if not text.startswith("---\n"):
+            return {}
+        end = text.find("\n---", 4)
+        if end == -1:
+            raise FrontmatterError("Frontmatter exceeds bounded read or is missing its closing delimiter")
+        metadata, _ = split_frontmatter(text[: end + 4])
+        return metadata
 
 
 __all__ = [

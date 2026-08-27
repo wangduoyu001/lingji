@@ -22,6 +22,7 @@ class ReconciliationReport:
     unchanged: int
     errors: tuple[str, ...]
     complete: bool
+    reused: int = 0
 
 
 class AutomaticMemoryScheduler:
@@ -486,12 +487,13 @@ class AutomaticMemoryScheduler:
             complete = result.status == "completed"
             return ReconciliationReport(
                 int(result.total or result.progress) if complete else int(result.progress),
-                int(result.progress),
+                int(result.queued or 0) if complete else int(result.progress),
                 0,
                 (result.last_error or f"scan ended with status {result.status}",)
                 if not complete
                 else (),
                 complete,
+                int(result.reused or 0),
             )
         if result is None:
             raise TypeError("automatic-memory scan runner must return a report")

@@ -663,7 +663,7 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
                 "SELECT * FROM extraction_jobs WHERE idempotency_key = ?", (key,)
             ).fetchone()
             if existing is not None:
-                return self._parse_row(existing)
+                return {**self._parse_row(existing), "existing_job": True}
             connection.execute(
                 """
                 INSERT INTO extraction_jobs (
@@ -688,7 +688,7 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
             row = connection.execute(
                 "SELECT * FROM extraction_jobs WHERE job_id = ?", (job_id,)
             ).fetchone()
-        return self._parse_row(row)
+        return {**self._parse_row(row), "existing_job": False}
 
     @staticmethod
     def _filters(

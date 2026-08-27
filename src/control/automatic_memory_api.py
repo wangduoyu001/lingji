@@ -39,7 +39,7 @@ def register_automatic_memory_routes(
     app: Any, control: Any, secured: list[Any]
 ) -> None:
     """Expose source metadata and scan controls through the existing 8766 auth."""
-    from dataclasses import asdict
+    from dataclasses import asdict, is_dataclass
     from fastapi import HTTPException
 
     registry: SourceRegistry | None = getattr(control, "automatic_memory_registry", None)
@@ -85,8 +85,11 @@ def register_automatic_memory_routes(
 
     @app.post("/api/automatic-memory/scan", dependencies=secured)
     def start_scan(request: AutomaticMemoryScanRequest) -> dict[str, Any]:
-        result = call(lambda: registry.start_scan(request.source_id))
-        return asdict(result)
+        runtime = getattr(control, "runtime", None)
+        if runtime is None:
+            raise HTTPException(status_code=409, detail="automatic-memory runtime is not composed")
+        result = call(lambda: runtime.scan_now(request.source_id))
+        return asdict(result) if is_dataclass(result) else dict(result)
 
     @app.post("/api/automatic-memory/pause", dependencies=secured)
     def pause_scan(request: AutomaticMemoryScanActionRequest) -> dict[str, Any]:

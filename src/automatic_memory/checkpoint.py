@@ -5,7 +5,7 @@ import json
 import math
 import os
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Literal
 from uuid import uuid4
@@ -263,6 +263,8 @@ class SnapshotJobRunner:
             else:
                 pending.append(path)
         paths = pending
+        queued_count = 0
+        reused_count = 0
         source_sentinel = sentinels.get(cursor, "")
         lease_id = uuid4().hex
         attempt = int(row.get("attempt") or 0) + 1
@@ -332,7 +334,7 @@ class SnapshotJobRunner:
                 if self.before_queue is not None:
                     self.before_queue()
                 try:
-                    self.queue.enqueue_authorized_snapshot(
+                    admission = self.queue.enqueue_authorized_snapshot(
                         scan_id=scan_id,
                         lease_id=lease_id,
                         source_id=source_id,
@@ -342,6 +344,10 @@ class SnapshotJobRunner:
                         input_path=raw_path,
                         source_type=str(source.get("kind") or ""),
                     )
+                    if admission.get("existing_job"):
+                        reused_count += 1
+                    else:
+                        queued_count += 1
                 except Exception as exc:
                     raise RuntimeError(
                         "raw committed before queue admission; orphan raw evidence "
@@ -413,7 +419,7 @@ class SnapshotJobRunner:
         except LeaseLostError:
             self._stop_heartbeat()
             return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
-        return self._scan(finalized)
+        return replace(self._scan(finalized), queued=queued_count, reused=reused_count)
 
     def _pause(self, scan_id: str, token: ResumeToken) -> ScanRun:
         self._stop_heartbeat()

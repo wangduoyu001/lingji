@@ -71,7 +71,8 @@ class ExtractionWorkerTests(unittest.TestCase):
 
             result = pipeline.process_job(job["job_id"], worker_id="revoking-worker")
 
-            self.assertEqual(result["job"]["status"], "queued")
+            self.assertEqual(result["job"]["status"], "failed")
+            self.assertIn("authorization", result["job"]["last_error"])
             self.assertEqual(queue.stats()["completed"], 0)
             self.assertEqual(list((root / "vault").rglob("*.md")), [])
 
