@@ -46,6 +46,8 @@ Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明
 
 所有聊天先进入原始证据和可检索层。Automatic archival and candidate generation continue; automatic activation is quarantined; owner approval is required until a future independently approved recovery gate exists. Derived current memory 仍只是可重建投影；Core、身份、高风险和正式永久知识仍需主人明确确认。`superseded`、`invalidated`、`archived` 历史保留审计，但 current lexical/Qdrant/hybrid/Core/ContextPack/MCP 默认排除。Opportunity Center 在 Phase 1 PASS 前保持冻结。
 
+当前 frozen quality/e2e runner 的 automatic-activation assertions 因 quarantine 预期阻塞；这不是 retrieval 或 ingestion 回归，交由主计划 Task 1 做权威契约重置，不能声称 quality path 不受影响。`quality_gate.py`、runner 与冻结 e2e 本轮保持不变。
+
 ## 2. 最近一次主人验收结论
 
 最后一次真实 M5 验收仍然是：

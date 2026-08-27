@@ -1,5 +1,15 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 0 · Owner-review quarantine repair round 1
+
+- 基线：Task 0 产品/tests `03b959a34e548630c621c14e53f5055b18850e0e`、文档 `9bba461754c7e6e3e12fe28e36feb33974ad08b0`；本轮产品/tests 提交为 `1330fff4cbe40944cdc8727d45addb74e967611f`。先复现两项 Critical：旧 `status=error` decision 会无确认自动恢复 active；无 durable owner approval 的 preparing+linked saga 会被 reconcile 激活。修复仅在既有 recovery seams 增加持久 owner-confirmed 证据门槛；无证据 in-flight saga 使用现有 rollback 语义退出 current，不猜测确认。并检查已有 decision/recovered result、`promote`/`submit` aliases 与 rebuild activation seam；不修改 recovery matrix。
+- 风险等级：P0。`evaluate()` 的旧 error/recovered/active 结果无 owner-confirmed evidence 时不再返回 active 或触发恢复；`reconcile_incomplete_projections()` 仅在 durable owner approval 存在时激活 preparing projection；`rebuild_derived_projections()` 不重建无 owner evidence 的 active promotion。明确 `approve(..., owner_confirmed=True)` 仍可激活。
+- 自动验收：新增真实 SQLite RED 两项为 `2 failed`（旧 error auto-recovery、无 owner evidence reconcile activation）；修复后 promotion/task4 transaction 为 `99 passed`，promotion/source/memory/lifecycle/timeline scoped regressions 为 `126 passed, 2 warnings`。Recovery matrix 保持未修改；其中原有 link-commit restart activation 断言因 quarantine 预期失败 `1 failed, 14 passed`，不为本轮修复测试而改写。
+- 诚实性边界：frozen `quality_gate.py`/runner/e2e 的 automatic-activation assertions 因 quarantine 预期阻塞；本轮不越界修改它们，交由主计划 Task 1 做权威契约重置，不能声称 quality path 不受影响。针对 `tests/evaluation/test_automatic_memory_end_to_end.py::test_real_promotion_uses_opaque_memory_ids_and_scans_all_temporary_sqlite_values` 的 targeted run 仍因预期无自动 link 而失败。
+- Fixture hashes 保持 corpus `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94`、questions `338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612`；`py_compile`、`git diff --check`、acceptance sync 与 local handoff 在文档提交后复读。
+- 真机/主人确认：`LOCAL_EXECUTION_TASK.md` 为 `IDLE`；不启动 Artifact、服务或 UI，不读取 Production/Vault，不执行主人观察；本条不构成产品发布验收或合并结论。
+- 清理/回滚：仅 pytest `tmp_path` synthetic SQLite；无永久测试数据。回滚本轮产品/tests 提交与本条文档提交，不触碰正式 Vault、raw、memory、Qdrant 或用户配置。完整报告：`.superpowers/sdd/2026-08-27-owner-review-quarantine/task-0-report.md`（ignored）。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 0 · Owner-review-only promotion quarantine
 
 - 基准：`5763bc94fc19f93ea2d4f6b280eba14bb2ba5317`；本轮仅在 `src/auto_review/promotion.py` 的 `evaluate(...)` 状态边界隔离自动激活，并更新对应 promotion regressions。Automatic archival and candidate generation continue; automatic activation is quarantined; owner approval is required until a future independently approved recovery gate exists. 不修改 recovery matrix、检索/向量、runner、质量阈值、fixtures、Desktop、自动扫描、Extraction、Artifact、Production 或 Vault。
