@@ -144,11 +144,14 @@ class AutomaticMemoryRuntime:
                 # Keep stop idempotent but release a scheduler that may have
                 # been supplied already running by an embedding test/host.
                 return
-            self._started = False
         # Stop admission first.  CronScheduler.stop waits for in-flight
         # reconciliation before the extraction consumer is stopped.
-        self.scheduler.stop()
-        self.worker.stop()
+        try:
+            self.scheduler.stop()
+        finally:
+            self.worker.stop()
+            with self._lock:
+                self._started = False
 
     def status(self) -> dict[str, object]:
         worker_status: dict[str, Any] = {}
