@@ -115,6 +115,13 @@ class AcceptanceRoots:
             raise ValueError("acceptance root outside allowed temporary base") from exc
         if not root.exists() or not root.is_dir() or root.is_symlink():
             raise ValueError("acceptance root unavailable")
+        root_mode = root.stat().st_mode
+        if root_mode & 0o444 == 0 or root_mode & 0o111 == 0:
+            raise ValueError("acceptance root lacks read/traverse access")
+        try:
+            os.listdir(root)
+        except OSError as exc:
+            raise ValueError("acceptance root is not readable/traversable") from exc
         children = (self.storage_root, self.vault_root, self.output_root, self.lease_marker)
         for child in children:
             path = child.expanduser()
@@ -128,8 +135,19 @@ class AcceptanceRoots:
         for directory in (self.storage_root, self.vault_root, self.output_root):
             if not directory.exists() or not directory.is_dir():
                 raise ValueError("acceptance child unavailable")
+            mode = directory.stat().st_mode
+            # Do not rely on os.access: the acceptance runner may execute as
+            # root, for which mode-000 paths can still appear accessible.
+            if mode & 0o444 == 0 or mode & 0o111 == 0:
+                raise ValueError("acceptance child lacks read/traverse access")
+            try:
+                os.listdir(directory)
+            except OSError as exc:
+                raise ValueError("acceptance child is not readable/traversable") from exc
         if not self.lease_marker.exists() or not self.lease_marker.is_file():
             raise ValueError("acceptance lease marker unavailable")
+        if self.lease_marker.stat().st_mode & 0o444 == 0:
+            raise ValueError("acceptance lease marker is not readable")
         if self.lease_token is None:
             raise ValueError("acceptance lease token unavailable")
         if self.lease_marker.read_text(encoding="utf-8") != self.lease_token:
@@ -176,8 +194,10 @@ def cleanup_failure_envelope(_report: Any, error: AcceptanceCleanupError) -> Qua
         "scale", "owner_review", "reboot_recovery", "mac_release", "windows_release",
     )}
     readiness = QualityEvidenceReadiness(**values)
+    known_codes = {"TEMP_CLEANUP_FAILED", "TEMP_CLEANUP_INCOMPLETE"}
+    code = error.code if type(error.code) is str and error.code in known_codes else "UNTRUSTED_BLOCKED_REASON"
     return QualityRunEnvelope(
-        readiness, None, None, "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED", (error.code,)
+        readiness, None, None, "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED", (code,)
     )
 
 
@@ -186,7 +206,7 @@ def verify_acceptance_cleanup(roots: AcceptanceRoots) -> None:
         path for path in (
             roots.storage_root, roots.vault_root, roots.output_root,
             roots.lease_marker, roots.root,
-        ) if path.exists()
+        ) if os.path.lexists(os.fspath(path))
     )
     if leftovers:
         raise AcceptanceCleanupError("TEMP_CLEANUP_INCOMPLETE")
@@ -195,6 +215,26 @@ def verify_acceptance_cleanup(roots: AcceptanceRoots) -> None:
 def ensure_4r2_ready_for_scale(readiness: QualityEvidenceReadiness) -> None:
     if not isinstance(readiness, QualityEvidenceReadiness) or not readiness.mac_release_ready:
         raise QualityScaleBlockedError("BLOCKED_4R2_REQUIRED")
+
+
+def run_release_preflight(
+    readiness: QualityEvidenceReadiness,
+    *,
+    prepare_scale_environment: Any | None = None,
+    run_scale_command: Any | None = None,
+) -> None:
+    """Authorize release sequencing before constructing scale callbacks.
+
+    PowerShell 5.1 calls the Python CLI preflight.  Keeping the admission
+    check and callback ordering here makes the boundary directly testable on
+    hosts without PowerShell and guarantees a blocked release cannot invoke
+    the 100k environment or command callbacks.
+    """
+    ensure_4r2_ready_for_scale(readiness)
+    if prepare_scale_environment is not None:
+        prepare_scale_environment()
+    if run_scale_command is not None:
+        run_scale_command()
 
 
 def _sha256(path: Path) -> str:
@@ -415,10 +455,28 @@ def _promote_fixtures(
                 "agent_scope": list(record.agent_scope),
                 "valid_from": record.occurred_at,
                 "modified_at": record.occurred_at,
-                    "risk_flags": ["security"] if record.risk == "high" else [],
             },
         )
         decision = service.evaluate(candidate)
+        # The quality fixture deliberately carries owner-confirmed authority.
+        # The current promotion API records an automatic candidate as pending
+        # first; use its explicit approval path to exercise the real durable
+        # projection and link persistence without weakening the quarantine
+        # default for ordinary candidates.
+        if is_eligible and decision.get("status") == "pending_owner_review":
+            recorded = service.candidate(memory_id)
+            if not isinstance(recorded, Mapping):
+                raise ValueError("promotion candidate was not durably recorded")
+            # StateDatabase intentionally redacts evaluator/path-like body
+            # text.  Such a candidate remains quarantined; trying to approve
+            # the redacted replay would be a content-hash mismatch, not a
+            # reason to weaken the persistence contract.
+            if "promotion_payload_redacted" not in (recorded.get("reason_codes") or []):
+                decision = service.approve(
+                    memory_id,
+                    expected_content_hash=recorded.get("content_hash", ""),
+                    owner_confirmed=True,
+                )
         decisions[record.fact_id] = decision
         if is_eligible and decision.get("status") == "active":
             activation_correct += 1
@@ -642,7 +700,7 @@ def _run_quality_gate_impl(
             "functional_status": functional_status,
             "phase_status": phase_status,
             "gateway_selection": {
-                "status": "READY" if readiness.gateway_selection else "INCOMPLETE",
+                "status": "READY" if readiness.gateway_selection is EvidenceState.READY else "INCOMPLETE",
                 "calls_completed": gateway_calls_completed,
                 "selector_calls": gateway_selector_calls,
                 "empty_responses": gateway_empty_responses,

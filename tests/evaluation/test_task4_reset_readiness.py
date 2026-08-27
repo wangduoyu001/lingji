@@ -9,6 +9,14 @@ from pathlib import Path
 import pytest
 
 from src.automatic_memory.evaluation import AutomaticMemoryAcceptanceGate, EvaluationReport
+from src.automatic_memory.quality_gate import (
+    AcceptanceCleanupError,
+    AcceptanceRoots,
+    cleanup_failure_envelope,
+    run_release_preflight,
+    verify_acceptance_cleanup,
+    QualityScaleBlockedError,
+)
 from src.automatic_memory.quality_evidence import (
     EvidenceState,
     ProtectedTreeSentinel,
@@ -957,3 +965,100 @@ def test_cleanup_runtime_error_is_stable_and_reports_actual_residue(
     assert str(error.value) == "TEMP_CLEANUP_FAILED"
     assert destination.read_text(encoding="utf-8") == "old"
     assert not list(output_dir.glob("*.tmp"))
+
+
+def test_acceptance_admission_checks_mode_bits_and_real_directory_access(tmp_path: Path) -> None:
+    root = tmp_path / "lingji-task4r-mode"
+    root.mkdir()
+    storage, vault, output, marker = (root / name for name in ("storage", "vault", "output", ".lease"))
+    storage.mkdir(); vault.mkdir(); output.mkdir(); marker.write_text("lease", encoding="utf-8")
+    roots = AcceptanceRoots(root, storage, vault, output, marker, tmp_path, "lease")
+    roots.validate_temporary_isolation()
+    for target in (root, storage, vault, output):
+        target.chmod(0)
+        try:
+            with pytest.raises(ValueError):
+                roots.validate_temporary_isolation()
+        finally:
+            target.chmod(0o755)
+    marker.chmod(0)
+    try:
+        with pytest.raises(ValueError):
+            roots.validate_temporary_isolation()
+    finally:
+        marker.chmod(0o644)
+
+
+def test_cleanup_inventory_detects_dangling_symlink(tmp_path: Path) -> None:
+    root = tmp_path / "lingji-task4r-residue"
+    root.mkdir()
+    storage = root / "storage"
+    storage.symlink_to(tmp_path / "missing-target", target_is_directory=True)
+    roots = AcceptanceRoots(root, storage, root / "vault", root / "output", root / ".lease")
+    with pytest.raises(AcceptanceCleanupError) as error:
+        verify_acceptance_cleanup(roots)
+    assert error.value.code == "TEMP_CLEANUP_INCOMPLETE"
+
+
+@pytest.mark.parametrize("verdict", ["PASS", "BOGUS", None])
+def test_measured_functional_failure_cannot_be_downgraded_by_gate(verdict: object) -> None:
+    class Gate:
+        def evaluate(self, _report: EvaluationReport) -> object:
+            if verdict == "RAISE":
+                raise RuntimeError("private gate detail")
+            return verdict
+
+    result = finalize_quality_envelope(
+        readiness=readiness(import_audit=EvidenceState.FAILED), production_pollution=0,
+        evaluation_report=report(), acceptance_gate=Gate(),
+    )
+    assert result.functional_status == result.phase_status == "FAIL"
+    assert result.windows_status == "BLOCKED"
+    assert result.evaluation_report is not None
+    expected_reason = "CONTRADICTORY_FUNCTIONAL_EVIDENCE" if verdict == "PASS" else "MALFORMED_GATE_RESULT"
+    assert expected_reason in result.blocked_reasons
+
+
+def test_measured_functional_failure_and_gate_exception_remain_fail() -> None:
+    class Gate:
+        def evaluate(self, _report: EvaluationReport) -> str:
+            raise RuntimeError("private gate detail")
+
+    result = finalize_quality_envelope(
+        readiness=readiness(import_audit=EvidenceState.FAILED), production_pollution=0,
+        evaluation_report=report(), acceptance_gate=Gate(),
+    )
+    assert result.functional_status == result.phase_status == "FAIL"
+    assert result.evaluation_report is not None
+    assert "GATE_EXCEPTION" in result.blocked_reasons
+
+
+def test_release_preflight_blocks_before_scale_callbacks_and_orders_success() -> None:
+    calls: list[str] = []
+    with pytest.raises(QualityScaleBlockedError):
+        run_release_preflight(
+            readiness(scale=EvidenceState.NOT_MEASURED),
+            prepare_scale_environment=lambda: calls.append("env"),
+            run_scale_command=lambda: calls.append("command"),
+        )
+    assert calls == []
+    run_release_preflight(
+        readiness(), prepare_scale_environment=lambda: calls.append("env"),
+        run_scale_command=lambda: calls.append("command"),
+    )
+    assert calls == ["env", "command"]
+
+
+def test_release_validation_entry_calls_python_preflight_before_scale() -> None:
+    text = Path("scripts/validate.ps1").read_text(encoding="utf-8")
+    release = text.split("function Invoke-ReleaseValidation", 1)[1].split("$scopeText", 1)[0]
+    assert "scripts/automatic_memory_quality_gate.py" in release
+    assert "--check-4r2" in release
+    assert "LINGJI_RUN_100K" not in release
+
+
+def test_cleanup_failure_unknown_code_is_stable_and_redacted() -> None:
+    secret = "/private/path/token=do-not-leak"
+    result = cleanup_failure_envelope(None, AcceptanceCleanupError(secret))
+    assert result.blocked_reasons == ("UNTRUSTED_BLOCKED_REASON",)
+    assert secret not in repr(result)

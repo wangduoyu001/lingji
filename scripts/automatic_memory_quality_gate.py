@@ -16,7 +16,7 @@ from src.automatic_memory.quality_gate import (
     run_100k_benchmark,
     run_quality_gate,
     temporary_acceptance_roots,
-    ensure_4r2_ready_for_scale,
+    run_release_preflight,
     verify_acceptance_cleanup,
     QualityScaleBlockedError,
 )
@@ -33,7 +33,7 @@ def main() -> int:
     output_root.mkdir(parents=True, exist_ok=True)
     if args.check_4r2:
         try:
-            ensure_4r2_ready_for_scale(None)
+            run_release_preflight(None)
         except QualityScaleBlockedError as exc:
             raise SystemExit(str(exc)) from exc
         return 0

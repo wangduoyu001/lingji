@@ -335,14 +335,61 @@ def test_scanner_rejects_marker_in_metadata_json_and_labels_in_body():
 def test_real_promotion_uses_opaque_memory_ids_and_scans_all_temporary_sqlite_values(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    # Automatic activation remains quarantined; the reset runner may persist
-    # only derived evidence and must publish a truthful NOT_EVALUATED envelope.
-    with quality_gate_module.temporary_acceptance_roots(base_directory=tmp_path) as roots:
-        envelope = quality_gate_module.run_quality_gate(
-            CORPUS,
-            QUESTIONS,
-            output_path=roots.output_root / "quality.json",
-            acceptance_roots=roots,
-        )
-        assert envelope.functional_status == envelope.phase_status == "NOT_EVALUATED"
-        assert envelope.evaluation_report is None
+    held_roots: list[Path] = []
+    real_rmtree = quality_gate_module.shutil.rmtree
+
+    def hold_quality_root(path, *args, **kwargs):
+        candidate = Path(path)
+        if candidate.name.startswith("lingji-task4r-"):
+            held_roots.append(candidate)
+            return
+        return real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(quality_gate_module.shutil, "rmtree", hold_quality_root)
+    try:
+        with quality_gate_module.temporary_acceptance_roots(base_directory=tmp_path) as roots:
+            envelope = quality_gate_module.run_quality_gate(
+                CORPUS, QUESTIONS,
+                output_path=roots.output_root / "quality.json",
+                acceptance_roots=roots,
+            )
+            assert envelope.functional_status == envelope.phase_status == "NOT_EVALUATED"
+            assert envelope.evaluation_report is None
+        assert len(held_roots) == 1
+        root = held_roots[0]
+        corpus = load_corpus(CORPUS)
+        labels = {item.fact_id for item in corpus} | {item.citation_id for item in corpus}
+        stores = {
+            "source_read_model": root / "storage" / "index" / "lingji_memory.db",
+            "memory_database": root / "storage" / "index" / "lingji_memory.db",
+            "state_database": root / "storage" / "state" / "lingji_state.db",
+        }
+        snapshots = {name: _sqlite_snapshot(path) for name, path in stores.items()}
+        for store_name, snapshot in snapshots.items():
+            for table, rows in snapshot.items():
+                for row in rows:
+                    for column, value in row.items():
+                        _assert_clean_storage_value(store_name, table, column, value, labels)
+
+        memory_snapshot = snapshots["memory_database"]
+        documents = memory_snapshot.get("memory_documents", [])
+        links = memory_snapshot.get("message_memory_links", [])
+        assert documents, "real promotion must create non-empty memory documents"
+        assert links, "real promotion must create non-empty message-memory links"
+        derived_documents = [row for row in documents if str(row.get("memory_tier")) == "derived"]
+        assert derived_documents, "real promotion must create non-empty derived memory documents"
+        persisted_memory_ids = {str(row["memory_id"]) for row in derived_documents}
+        assert persisted_memory_ids
+        assert not persisted_memory_ids.intersection(labels)
+        assert all(str(row.get("memory_id")) in persisted_memory_ids for row in links)
+
+        state_events = snapshots["state_database"].get("events", [])
+        promotion_events = [
+            row for row in state_events
+            if str(row.get("event_type")) in {"memory_promotion_decision", "memory_promotion_owner_approved"}
+            and '"status": "active"' in str(row.get("payload_json") or "")
+        ]
+        assert promotion_events, "real promotion must emit an active decision event"
+    finally:
+        for root in held_roots:
+            real_rmtree(root, ignore_errors=True)
