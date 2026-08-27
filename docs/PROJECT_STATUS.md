@@ -44,7 +44,7 @@ Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明
 
 强制边界：ChatGPT 只接受官方导出；Codex transcript 必须 schema-detect 并对未知结构 fail-closed；Claude Desktop 不抓不透明内部存储，无官方导出时显示 `unsupported` 或 `consent_required`；禁止 Cookie、Token、凭证、浏览器资料、私有 DB、进程注入、应用目录写入、全盘扫描和网络上传。Obsidian 仅允许 `_LingJi/Memory Inbox`、`_LingJi/Memory Library` 或 `lingji_memory: true`，`lingji_memory: false` 最高优先级。
 
-所有聊天先进入原始证据和可检索层。低风险、高置信、无冲突且置信度 `>= 0.90` 的 derived current memory 可以自动激活，但只是可重建投影；Core、身份、高风险和正式永久知识仍需主人明确确认。`superseded`、`invalidated`、`archived` 历史保留审计，但 current lexical/Qdrant/hybrid/Core/ContextPack/MCP 默认排除。Opportunity Center 在 Phase 1 PASS 前保持冻结。
+所有聊天先进入原始证据和可检索层。Automatic archival and candidate generation continue; automatic activation is quarantined; owner approval is required until a future independently approved recovery gate exists. Derived current memory 仍只是可重建投影；Core、身份、高风险和正式永久知识仍需主人明确确认。`superseded`、`invalidated`、`archived` 历史保留审计，但 current lexical/Qdrant/hybrid/Core/ContextPack/MCP 默认排除。Opportunity Center 在 Phase 1 PASS 前保持冻结。
 
 ## 2. 最近一次主人验收结论
 
@@ -248,7 +248,7 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 | 3 | macOS ChatGPT/Codex/Claude/generic JSON/JSONL/Markdown adapters | `FROZEN / REVIEW PASS` |
 | 4 | `watchfiles==1.2.0`、5 秒防抖、15 分钟 reconciliation、每日完整性、持久 scheduler | `FROZEN / REVIEW PASS` |
 | 5 | Obsidian 隔离、dry-run manifest、派生索引迁移与 rollback | `FROZEN / REVIEW PASS` |
-| 6 | derived current-memory promotion 与 Core/owner review 边界 | `FROZEN / REVIEW PASS` |
+| 6 | derived current-memory promotion 与 Core/owner review 边界 | `FROZEN / OWNER-REVIEW QUARANTINED` |
 | 7 | lexical/Qdrant/hybrid/Core/ContextPack/MemoryGateway/MCP 全链路 temporal filter | `FROZEN / REVIEW PASS` |
 | 8 | Work Fact、Python/TS DTO、8766、Desktop 与提取生命周期 | `IMPLEMENTED / TASK 1 REVIEW ROUND 1 PENDING` |
 | 9 | 固定 100 问评测、统一 RAG/ContextPack/MCP、质量与规模门禁 | `PLANNED AFTER TASK 8` |

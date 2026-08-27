@@ -1,5 +1,13 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 0 · Owner-review-only promotion quarantine
+
+- 基准：`5763bc94fc19f93ea2d4f6b280eba14bb2ba5317`；本轮仅在 `src/auto_review/promotion.py` 的 `evaluate(...)` 状态边界隔离自动激活，并更新对应 promotion regressions。Automatic archival and candidate generation continue; automatic activation is quarantined; owner approval is required until a future independently approved recovery gate exists. 不修改 recovery matrix、检索/向量、runner、质量阈值、fixtures、Desktop、自动扫描、Extraction、Artifact、Production 或 Vault。
+- 风险等级：P0。完全满足自动激活条件的候选只能产生 `pending_owner_review` 与稳定 reason `automatic_activation_quarantined`，仅写候选/决定审计；不得写 preparing/terminal/rollback/repair、派生 projection 或 message-memory link。既有 `approve(..., owner_confirmed=True)`、拒绝、哈希和 provenance fail-closed 行为保持不变。
+- 自动验收：RED 新增隔离测试首次运行 `1 failed`（当前实现返回 `active`）；GREEN promotion/task4 transaction 回归为 `95 passed`。完整 focused regressions、fixture hashes、`py_compile`、acceptance sync、local handoff 与 `git diff --check` 在文档提交前完成并记录于任务报告。
+- 真机/主人确认：`LOCAL_EXECUTION_TASK.md` 为 `IDLE`；不启动 Artifact、服务或 UI，不读取 Production/Vault，不执行主人观察；本条不构成产品发布验收或合并结论。
+- 清理/回滚：仅 pytest `tmp_path` synthetic SQLite；无永久测试数据。回滚本轮产品/测试提交与本条文档提交，不触碰正式 Vault、raw、memory、Qdrant 或用户配置。完整报告：`.superpowers/sdd/2026-08-27-owner-review-quarantine/task-0-report.md`（ignored）。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 0 · Promotion boundary final repair round 2
 
 - 基准：`650f79f4658cf495e42daea37b9de1d3cd801ca4`；产品提交：`b909565f1a44709a6d1e6cd922adaf2908b91642`；本轮仅关闭 Task 5 Repair Round 2 的六项 promotion boundary finding：canonical message 重复 fail-closed、promotion payload 严格 schema、typed provenance 稳定错误、普通 promotion audit 脱敏、direct prepare 证据/metadata 校验，以及 post-commit/recovery 状态保护。不得修改 `quality_gate.py`、runner/CLI、Task 6/4R2、冻结 evaluator/fixtures/questions/thresholds、retrieval ranking/query/filter、Desktop、Artifact、Production、Vault 或本机任务单激活。
