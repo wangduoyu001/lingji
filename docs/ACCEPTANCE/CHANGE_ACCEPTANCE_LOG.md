@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Phase 1 Product Landing · Task 5B Repair Round 1 · Memory Review loading/provenance evidence
+
+- 审查基线：Task 5B 终审 `9272e60fc5fa4b485831e101f5f1a66573f1498d`。本轮仅修复 I1（候选列表/详情 pending 时诚实 loading、错误/空态区分、迟到详情响应不可覆盖较新选择）与 I2（rendered fixture/DTO 严格对齐现有 `MemoryReviewService._read_candidate()` payload）；不修改 backend、Task4 首页、记忆算法、向量或真实环境。
+- RED：延迟 candidates 请求后 `npm run test:e2e:memory` 因缺少“正在读取候选记忆…”失败（1 failed）。GREEN：Memory Review list/detail loading、AbortController/request-id 保护、真实 `relative_path/source_refs/created_at` 与缺失字段“尚未获得”映射的 rendered E2E、build、focused smokes 通过。
+- fixture 删除 `source_name/source_session_id/source_message_id/conversation_title/message_excerpt/provenance_at/current_state/history_state/proposal_reason/affected_agents` 等 mock-only 字段；未新增 API。审查 Minor M1/M2/M3 为证据覆盖不足，本轮按最小边界保留披露，未修改。
+- 仍未执行 live 8766、Sidecar、Artifact、Production/Vault、主人数据或主人验收；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。
+
 ## 2026-08-28 · Phase 1 Product Landing · Task 5B · Owner workflow UI
 
 - 基线：Task 5A final review `289d663b619e20df0b5dcd933cc97f11c92679f0` / `ACCEPT_FOR_5B`。本轮仅修改 Desktop Activity、Attention、Memory Review/Inspector、Capture 导航、Context Pack 复制反馈、Work Fact TypeScript DTO 与 fake-server smokes；复用认证 Work API 和既有记忆接口，不新增后端/API、状态源、记忆/RAG/向量能力。
