@@ -171,6 +171,18 @@ class AutomaticMemoryRuntime:
 
 **Repair Round 1 status (2026-08-28):** Independent review `9ed229461165b748066b9cba3d2ed169af43db56` retained I1/I2. The sole authorized repair is product/tests `efde650e77a4ecda7f7266aefe48b29b9e8712de`: exact cleanup ownership with Cron retry and shared start/stop serialization, covered by real thread/barrier/event tests. This is the final Task6A repair; a remaining Critical/Important after re-review is `BLOCKED_AT_REPAIR_CAP`. Task 5B final review commit `bd2ff43` is recorded as `ACCEPTED_FOR_TASK6` / `ACCEPT_FOR_TASK6` (reviewed product head `8136374`).
 
+### Task 6H: Add a Durable, Instance-Bound Runtime Heartbeat
+
+**Boundary:** This is an independent bounded observability closeout for the Task 6 heartbeat gate. It reuses the existing StateDB, AutomaticMemoryScheduler/Cron loop, Runtime status route and WorkStore; it does not add a service, queue, API family, retrieval/promotion path, discovery behavior or UI feature.
+
+- [x] Add RED tests for idle refresh, active Work Fact refresh without event growth, pause/stop state, restart instance isolation, clock-jump/DB-write fail-closed recovery and reconciliation cadence separation.
+- [x] Persist one mutable `automatic_memory_heartbeats` row per `instance_id` with generation, UTC timestamp, lifecycle state, reason and error; update it from the existing Cron scheduler thread at a cadence no slower than 5 seconds.
+- [x] Extend `/api/automatic-memory/runtime` with the heartbeat timestamp, computed age, reason, instance, generation, state and last error. Preserve nullable unavailable values when the scheduler is not composed.
+- [x] Keep reconciliation polling independent from heartbeat wakeups; touch active scan Work Facts directly and never append heartbeat event rows or touch terminal/idle work.
+- [x] Run focused heartbeat, Task2 lifecycle/API, compile/diff/sync/handoff checks. Do not run live 8766/8767, Artifact, Production/Vault or owner acceptance.
+
+**Status (2026-08-28):** Focused `tests/test_task6h_heartbeat.py` `6 passed`; Task2 lifecycle/API `50 passed, 1 warning`; packaged/control `21 passed, 6 warnings`. Measured idle age remained `<=1s`; a `0.05s` heartbeat cadence produced one scheduler claim in `0.25s`, proving reconciliation is not heartbeat-frequency work. Task6 remains `IN_PROGRESS / NOT_ACCEPTED` pending packaged crash and full independent review.
+
 ### Task 3: Connect Authorized Discovery, Snapshot and Extraction to Work Fact
 
 **Purpose:** 让已有来源适配器从授权目录完成“发现 → 快照 → 队列 → 解析 → 索引/记忆候选 → Work Fact”，而不是只停留在 raw/job。

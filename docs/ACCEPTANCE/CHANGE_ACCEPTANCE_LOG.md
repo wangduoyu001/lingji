@@ -1,5 +1,14 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Phase 1 Product Landing · Task 6H · durable runtime heartbeat
+
+- 本轮是独立 bounded observability closeout，不修复 Task6S、不启动 live/Artifact/Production/Vault，`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。在既有 `StateDatabase` 内增加可重建 `automatic_memory_heartbeats` 表；每个 AutomaticMemoryScheduler 实例以 `instance_id + generation` 写入一行，状态包含 `running/paused/stopping/degraded/stopped`、UTC `heartbeat_at`、`reason` 与 `last_error`。
+- 复用既有 Cron scheduler thread 的 heartbeat callback，默认 cadence 5 秒以内；heartbeat wake-up 不执行 reconciliation/claim，原有 poll cadence 保持独立。active scan 仅无事件地刷新现有 Work Fact `work_items.updated_at`，idle 不创建 Work Fact/event rows。
+- `/api/automatic-memory/runtime` 扩展 `scheduler_heartbeat_at/age/reason/instance/generation/state/last_error`，age 由 UTC timestamp 实算；未来时钟、超过 10 秒、读写失败或调度线程不再刷新均 fail-closed 为 degraded，旧实例行不会被新实例复用。pause 继续 heartbeat，stop 写入 stopped 并停止更新。
+- RED：新增 Task6H heartbeat matrix 在缺少 heartbeat cadence 参数/来源时 `3 failed`；GREEN：`tests/test_task6h_heartbeat.py` `6 passed`，覆盖 idle refresh、pause/stop、实例重启隔离、clock jump/DB write failure recovery、active Work Fact 无 event growth 与 reconciliation claim cadence 边界。Task2 lifecycle/API regression `50 passed, 1 warning`，control API/packaged `21 passed, 6 warnings`。
+-  measured evidence：focused idle heartbeat age `<=1s`（test cadence `0.1s`），同一 instance row 无增长；heartbeat `0.05s` cadence 下 0.25s 仅 `1` 次 claim（阈值 `<=2`），证明未以 heartbeat 频率执行 reconciliation；active Work Fact 事件数保持不变。报告 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6h-report.md`。
+- Task6 仍为 `IN_PROGRESS / NOT_ACCEPTED`，待 packaged crash 30/70、现有 lexical/semantic scenario、双轮完整证据与独立 fresh review；本轮不宣称 release、Artifact、主人验收或 Production/Vault 验收。
+
 ## 2026-08-28 · Phase 1 Product Landing · Task 6A Repair Round 1 (final authorized repair)
 
 - 独立审查 `9ed229461165b748066b9cba3d2ed169af43db56` 保留两个 Important：cleanup retry 必须按 watcher/Cron/source ownership 精确清理并重试 Cron；scheduler `start` 必须与 stop/retry 共用 lifecycle serialization。此轮是 Task 6A 唯一批准 Repair Round 1；之后不再修复，若新审查仍有 Critical/Important 则 `BLOCKED_AT_REPAIR_CAP`。

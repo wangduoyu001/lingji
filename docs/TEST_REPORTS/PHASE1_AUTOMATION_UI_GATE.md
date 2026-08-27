@@ -90,13 +90,45 @@ history is retained; and ContextPack linked raw-message evidence uses the same
 batch StateDB resolver before append. Task6S remains `NOT_ACCEPTED` pending a fresh
 review, Task6H heartbeat, and packaged crash evidence.
 
-## Heartbeat and limitations
+## Task 6H durable heartbeat
 
-Heartbeat is `NOT_MEASURED/BLOCKED`: `/api/automatic-memory/runtime` truthfully
-reports `scheduler_heartbeat_age=null` with the existing unavailable reason.
-Work Fact `updated_at` and terminal timestamps are not substituted for a live
-heartbeat. A separate Task6H brief is required to add a trustworthy measured
-source before this gate can pass.
+Task6H is an independent bounded observability closeout. The existing
+`StateDatabase` now contains one mutable `automatic_memory_heartbeats` row per
+scheduler `instance_id + generation`, with UTC `heartbeat_at`, lifecycle
+`state`, `reason`, and `last_error`. The existing Cron scheduler thread invokes
+the heartbeat callback at a bounded cadence (default at most 5 seconds), while
+its reconciliation polling and SQLite claim cadence remain independent.
+
+`/api/automatic-memory/runtime` reads that same durable source and returns
+`scheduler_heartbeat_at`, computed UTC `scheduler_heartbeat_age`,
+`scheduler_heartbeat_reason`, `scheduler_heartbeat_instance`, generation, state
+and last error. Pause continues to refresh a `paused` heartbeat; clean stop
+writes `stopped` and no longer updates. Future timestamps, stale age over 10s,
+thread/write/read failures are degraded/fail-closed and recover on the next
+successful heartbeat. A restarted runtime receives a new instance and never
+reuses an old instance's running row. Active scans touch their existing Work
+Fact `work_items.updated_at` directly without appending event rows; idle
+heartbeats do not create Work Fact or event rows.
+
+RED was reproduced by the new focused suite when heartbeat cadence/source was
+absent (`3 failed`). GREEN is:
+
+```text
+./.venv/bin/python -m pytest -q tests/test_task6h_heartbeat.py
+6 passed
+```
+
+Measured focused evidence: idle heartbeat age stayed `<=1s` with a `0.1s`
+test cadence; the same instance row was updated in place; active Work Fact
+event count did not change. With a `0.05s` heartbeat cadence and the normal
+reconciliation poll set to 60s, a 0.25s run made one scheduler claim (asserted
+`<=2`), demonstrating that heartbeat wakeups do not run reconciliation at high
+frequency. Task2 lifecycle/API regression was `50 passed, 1 warning`; control /
+packaged API regression was `21 passed, 6 warnings`.
+
+This does not change the authority's `IN_PROGRESS / NOT_ACCEPTED` status:
+packaged crash matrix, full two-run evidence, live/Artifact/owner acceptance
+and fresh independent Task6 review remain outstanding.
 
 The packaged two-clean-root command, rendered Desktop memory E2E, Task2–5
 regressions, compileall, diff-check, acceptance sync and local handoff remain
