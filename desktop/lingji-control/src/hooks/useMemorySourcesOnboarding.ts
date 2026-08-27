@@ -16,8 +16,15 @@ export function useMemorySourcesOnboarding({ api, connected, page, setPage }: On
   const pageRef = useRef(page);
   const retryRef = useRef(0);
   const timerRef = useRef<number | null>(null);
+  const connectedRef = useRef(connected);
+  const mountedRef = useRef(false);
 
   useEffect(() => { pageRef.current = page; }, [page]);
+  useEffect(() => { connectedRef.current = connected; }, [connected]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!connected) {
@@ -29,18 +36,20 @@ export function useMemorySourcesOnboarding({ api, connected, page, setPage }: On
       api.get<Array<{ status?: string; kind?: string }>>("/api/automatic-memory/sources"),
       api.get<Array<{ status?: string; kind?: string }>>("/api/automatic-memory/discovered"),
     ]).then(([authorized, discovered]) => {
+      if (!mountedRef.current || !connectedRef.current) return;
       checkedRef.current = true;
       retryRef.current = 0;
       const destination = decideOnboardingRoute({ page: pageRef.current, checked: false, readsSucceeded: true, authorized, discovered });
       if (destination) setPage(destination);
     }).catch(() => {
       // A transient source-read failure must not mark onboarding complete.
-      if (retryRef.current >= 5) return;
+      if (!mountedRef.current || !connectedRef.current) return;
       retryRef.current += 1;
+      const delay = Math.min(250 * (2 ** Math.min(retryRef.current - 1, 5)), 8_000);
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;
-        if (!checkedRef.current) setAttempt((value) => value + 1);
-      }, 1_000);
+        if (mountedRef.current && connectedRef.current && !checkedRef.current) setAttempt((value) => value + 1);
+      }, delay);
     });
     return () => {
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);

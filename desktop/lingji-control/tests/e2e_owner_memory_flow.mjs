@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, onboardingFailures: 1 };
+const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false };
 const allStateDiscovered = [
   ["detected", "available"], ["consent", "consent_required"], ["unsupported", "unsupported"], ["authorized", "available"],
   ["scanning", "available"], ["current", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
@@ -22,8 +22,20 @@ const server = http.createServer((req, res) => {
   req.on("data", (chunk) => { body += chunk; });
   req.on("end", () => {
     if (path === "/api/overview") return json(res, 200, { health: { status: "healthy" }, memory_runtime: { state: "healthy", as_of: new Date().toISOString(), memory: { documents: 1 } }, queue: { stats: {} } });
-    if (path === "/api/automatic-memory/discovered") return json(res, 200, state.allStates ? allStateDiscovered : [{ kind: "generic_ai_history", display_name: "Generic Inbox", candidate_root: "/tmp/lingji-fixture", status: "available", capability: "metadata_discovery", reason: null }]);
-    if (path === "/api/automatic-memory/sources") { if (state.onboardingFailures > 0) { state.onboardingFailures -= 1; return json(res, 503, { detail: { code: "TEMPORARY", message: "temporary source read failure" } }); } return json(res, 200, state.allStates ? allStateSources : state.revoked ? [{ source_id: "src-fixture", kind: "generic_ai_history", root: "/tmp/lingji-fixture", status: "revoked", capability: "metadata_discovery" }] : state.authorized ? [{ source_id: "src-fixture", kind: "generic_ai_history", root: "/tmp/lingji-fixture", status: "authorized", capability: "metadata_discovery" }] : []); }
+    if (path === "/api/automatic-memory/discovered") {
+      const response = () => json(res, 200, state.allStates ? allStateDiscovered : [{ kind: "generic_ai_history", display_name: "Generic Inbox", candidate_root: "/tmp/lingji-fixture", status: "available", capability: "metadata_discovery", reason: null }]);
+      if (state.outage) return json(res, 503, { detail: { code: "OFFLINE", message: "source service unavailable" } });
+      if (state.onboardingDelay && !state.onboardingRelease) { const timer = setInterval(() => { if (state.onboardingRelease) { clearInterval(timer); response(); } }, 20); return; }
+      return response();
+    }
+    if (path === "/api/automatic-memory/sources") {
+      const response = () => state.onboardingFailures > 0
+        ? (state.onboardingFailures -= 1, json(res, 503, { detail: { code: "TEMPORARY", message: "temporary source read failure" } }))
+        : json(res, 200, state.allStates ? allStateSources : state.revoked ? [{ source_id: "src-fixture", kind: "generic_ai_history", root: "/tmp/lingji-fixture", status: "revoked", capability: "metadata_discovery" }] : state.authorized ? [{ source_id: "src-fixture", kind: "generic_ai_history", root: "/tmp/lingji-fixture", status: "authorized", capability: "metadata_discovery" }] : []);
+      if (state.outage) return json(res, 503, { detail: { code: "OFFLINE", message: "source service unavailable" } });
+      if (state.onboardingDelay && !state.onboardingRelease) { const timer = setInterval(() => { if (state.onboardingRelease) { clearInterval(timer); response(); } }, 20); return; }
+      return response();
+    }
     if (path === "/api/automatic-memory/summary") return json(res, 200, { counts: state.allStates ? { completed: 1, failed: 1 } : state.scan ? { [state.scan.status]: 1 } : {}, total: state.allStates ? allStateScans.length : state.scan ? 1 : 0, latest: state.allStates ? allStateScans[1] : state.scan ? { ...state.scan } : null, progress: state.scan ? { current: state.scan.progress, total: 1 } : { current: null, total: null }, last_error: state.scan?.last_error ?? null, next_action: "wait" });
     if (path === "/api/automatic-memory/runtime") return json(res, 200, { state: "running", running: true, paused: false, worker_state: true, authorized_watcher_count: 1 });
     if (path === "/api/automatic-memory/scans") {
@@ -33,6 +45,8 @@ const server = http.createServer((req, res) => {
     }
     if (path === "/__test/complete") { state.completeNextRead = true; return json(res, 200, { ok: true }); }
     if (path === "/__test/all-states") { state.allStates = true; return json(res, 200, { ok: true }); }
+    if (path === "/__test/release-onboarding") { state.onboardingRelease = true; return json(res, 200, { ok: true }); }
+    if (path === "/__test/outage") { state.outage = body.includes("true"); return json(res, 200, { ok: true, outage: state.outage }); }
     if (path === "/api/automatic-memory/authorize") { state.authorized = true; state.revoked = false; return json(res, 200, { source_id: "src-fixture", kind: "generic_ai_history", root: "/tmp/lingji-fixture", status: "authorized" }); }
     if (path === "/api/automatic-memory/scan") { state.scanRequests += 1; state.scanReads = 0; state.scan = state.scanRequests === 2 ? { scan_id: "scan-fixture", source_id: "src-fixture", status: "failed", progress: 0, total: 1, last_error: "fixture failure" } : { scan_id: "scan-fixture", source_id: "src-fixture", status: "running", progress: 0, total: 1 }; return json(res, 200, state.scan); }
     if (path === "/api/automatic-memory/retry") { state.scan = { scan_id: "scan-fixture", source_id: "src-fixture", status: "completed", progress: 1, total: 1, queued: 1, reused: 0 }; return json(res, 200, state.scan); }
@@ -54,8 +68,7 @@ try {
   assert.equal((await fetch(`http://127.0.0.1:${apiPort}/api/overview`)).status, 401, "missing token must be rejected");
   assert.equal((await fetch(`http://127.0.0.1:${apiPort}/api/overview`, { headers: { "X-LingJi-Token": "wrong-token" } })).status, 401, "wrong token must be rejected");
   const browser = await chromium.launch({ headless: true, ...(existsSync(installedChrome) ? { executablePath: installedChrome } : {}) });
-  const page = await browser.newPage();
-  await page.addInitScript(({ port }) => {
+  const installTauri = async (target) => target.addInitScript(({ port }) => {
     window.__TAURI_INTERNALS__ = { invoke: async (command) => {
       if (command === "control_credentials") return { base_url: `http://127.0.0.1:${port}`, token: "fixture-token" };
       if (command === "runtime_bootstrap_status") return { configured: true, c_drive_write_detected: false, active_workspace: "acceptance", data_root_display: "fixture" };
@@ -63,9 +76,32 @@ try {
       return { healthy: true, managed: true, binary_available: true, host: "127.0.0.1", port: port };
     } };
   }, { port: apiPort });
+  state.onboardingFailures = 0;
+  state.onboardingDelay = true;
+  const racePage = await browser.newPage();
+  await installTauri(racePage);
+  await racePage.goto("http://127.0.0.1:4178", { waitUntil: "domcontentloaded" });
+  try {
+    await racePage.locator(".desktop-nav-item").filter({ hasText: "活动记录" }).waitFor({ timeout: 10_000 });
+  } catch (reason) {
+    console.error("race body:", await racePage.locator("body").innerText());
+    throw reason;
+  }
+  await racePage.locator(".desktop-nav-item").filter({ hasText: "活动记录" }).click();
+  await new Promise((resolve) => setTimeout(resolve, 1_100));
+  await racePage.getByRole("heading", { name: "活动记录", exact: true }).waitFor();
+  assert.equal(await racePage.getByRole("heading", { name: "让灵机知道哪些内容可以接管", exact: true }).count(), 0, "delayed onboarding reads cannot redirect after navigation");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/release-onboarding`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await racePage.getByRole("heading", { name: "活动记录", exact: true }).waitFor();
+  await racePage.close();
+  state.onboardingDelay = false;
+  state.onboardingFailures = 7;
+  const page = await browser.newPage();
+  await installTauri(page);
   await page.goto("http://127.0.0.1:4178", { waitUntil: "networkidle" });
   try {
-    await page.getByRole("heading", { name: "让灵机知道哪些内容可以接管" }).waitFor({ timeout: 10_000 });
+    await page.getByRole("heading", { name: "让灵机知道哪些内容可以接管" }).waitFor({ timeout: 30_000 });
   } catch (reason) {
     console.error("rendered body:", await page.locator("body").innerText());
     throw reason;
@@ -76,6 +112,13 @@ try {
   await page.getByRole("heading", { name: "扫描中" }).waitFor();
   assert.equal(await page.getByText("扫描已完成").count(), 0, "running scan cannot show terminal success");
   await fetch(`http://127.0.0.1:${apiPort}/__test/complete`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
+  await page.getByRole("button", { name: "重新读取" }).click();
+  await page.getByRole("heading", { name: "已接管" }).waitFor();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/outage`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
+  await page.getByRole("button", { name: "重新读取" }).click();
+  await page.getByText("暂时无法读取记忆来源", { exact: false }).waitFor();
+  assert.equal(await page.getByText("尚未获得", { exact: true }).count(), 0, "outage must preserve prior snapshot rather than show fake zeros");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/outage`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
   await page.getByRole("button", { name: "重新读取" }).click();
   await page.getByRole("heading", { name: "已接管" }).waitFor();
   await page.getByRole("button", { name: "撤销" }).click();
@@ -116,6 +159,8 @@ try {
     for (const label of expected.deny) assert.equal(await card.getByRole("button", { name: label, exact: true }).count(), 0, `${kind} cannot offer ${label}`);
   }
   await page.locator('[data-source-kind="fixture_expired"]').getByText("授权已过期，需要重新授权。", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="fixture_paused"]').getByText("已暂停", { exact: false }).waitFor();
+  await page.locator('[data-source-kind="fixture_paused"]').getByText("继续扫描", { exact: false }).waitFor();
   await browser.close();
   console.log("e2e_owner_memory_flow: PASS");
 } finally {

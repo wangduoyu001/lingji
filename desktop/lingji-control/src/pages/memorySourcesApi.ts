@@ -60,6 +60,7 @@ function describe(discovered: DiscoveredSource, state: SourceState, scan?: ScanR
   if (state === "current") return { detail: `已接管「${rootName(discovered.candidate_root)}」，最近一次扫描已完成。`, nextAction: "可查看本次扫描结果。" };
   if (state === "scanning") {
     const progress = scan?.progress != null && scan?.total != null ? `（${scan.progress}/${scan.total}）` : "";
+    if (scan?.status === "paused") return { detail: `扫描已暂停，已保留「${rootName(discovered.candidate_root)}」的授权。`, nextAction: "继续扫描，完成后才会显示为已接管。" };
     return { detail: `正在检查「${rootName(discovered.candidate_root)}」${progress}，完成后才会显示为已接管。`, nextAction: "等待扫描完成，或暂停后稍后继续。" };
   }
   if (state === "failed") return { detail: scan?.last_error ? `这次扫描没有完成：${scan.last_error}` : "这次扫描没有完成。", nextAction: "请重试；原授权仍保留。" };

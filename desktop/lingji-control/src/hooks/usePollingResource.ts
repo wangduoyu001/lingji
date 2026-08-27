@@ -22,6 +22,10 @@ export function ownsRequest(current: unknown, candidate: unknown): boolean {
   return current === candidate;
 }
 
+export function canPublishRequest(current: unknown, candidate: unknown, aborted: boolean): boolean {
+  return !aborted && ownsRequest(current, candidate);
+}
+
 const INITIAL_STATE = {
   data: null,
   loading: false,
@@ -103,7 +107,7 @@ export function usePollingResource<T>(options: PollingResourceOptions<T>): Polli
       }));
       try {
         const data = await fetcher(controller.signal);
-        if (!mountedRef.current || controller.signal.aborted) return;
+        if (!mountedRef.current || !canPublishRequest(requestIdentityRef.current, requestIdentity, controller.signal.aborted)) return;
         const succeededAt = new Date().toISOString();
         failureCountRef.current = 0;
         lastErrorRef.current = null;
@@ -119,7 +123,7 @@ export function usePollingResource<T>(options: PollingResourceOptions<T>): Polli
           failureCount: 0,
         });
       } catch (reason) {
-        if (!mountedRef.current || isAbortReason(reason)) return;
+        if (!mountedRef.current || !canPublishRequest(requestIdentityRef.current, requestIdentity, controller.signal.aborted) || isAbortReason(reason)) return;
         const error = toResourceError(reason);
         const failureCount = failureCountRef.current + 1;
         failureCountRef.current = failureCount;

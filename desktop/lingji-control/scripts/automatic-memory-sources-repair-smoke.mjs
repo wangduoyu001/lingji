@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { actionAvailability, authorizationEvidence, decideOnboardingRoute } from "../src/pages/memorySourcesApi.ts";
-import { ownsRequest } from "../src/hooks/usePollingResource.ts";
+import { canPublishRequest, ownsRequest } from "../src/hooks/usePollingResource.ts";
 
 const available = [{ status: "available", kind: "generic_ai_history" }];
 const empty = [];
@@ -15,4 +15,7 @@ const oldRequest = {};
 const freshRequest = {};
 assert.equal(ownsRequest(freshRequest, oldRequest), false, "aborted pre-action poll cannot clear the newer request");
 assert.equal(ownsRequest(freshRequest, freshRequest), true);
+assert.equal(canPublishRequest(freshRequest, oldRequest, true), false, "aborted ordinary errors cannot overwrite a newer request");
+assert.equal(canPublishRequest(freshRequest, freshRequest, true), false, "aborted current errors cannot publish");
+assert.equal(canPublishRequest(freshRequest, freshRequest, false), true);
 console.log("automatic-memory-sources-repair-smoke: PASS");

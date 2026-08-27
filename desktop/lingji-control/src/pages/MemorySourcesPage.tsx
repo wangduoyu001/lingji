@@ -119,6 +119,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
         <button className="button secondary" disabled={resource.refreshing} onClick={() => void resource.refresh()}>{resource.refreshing ? "读取中…" : "重新读取"}</button>
       </section>
       {resource.stale && <Notice kind="warning">当前显示的是上一次成功读取的结果，正在重试。请不要把过期状态当成当前状态。</Notice>}
+      {resource.error && snapshot && <Notice kind="warning">暂时无法读取记忆来源：{resource.error.message}。已保留上一次成功结果，请点击“重新读取”恢复。</Notice>}
       {error && <Notice kind="error">{error}</Notice>}
       {message && <Notice kind="info">{message}</Notice>}
       <section className="memory-sources-summary" aria-label="来源总览">
