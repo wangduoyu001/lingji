@@ -1,5 +1,9 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Phase 1 Product Landing · Task 5B Repair Round 1 follow-up · list error/empty distinction
+
+- 在最终 I1 修复中增加 Memory Review `listError` 分支：初次候选请求失败且没有旧数据时显示明确错误，不显示“没有待审核记忆”空态；保留既有错误提示与可重试刷新入口。未变更 backend/API；该补丁后的 Memory Review smoke、全 UI smokes、build、rendered E2E、compile/diff/handoff 均通过。
+
 ## 2026-08-28 · Phase 1 Product Landing · Task 5B Repair Round 1 · Memory Review loading/provenance evidence
 
 - 审查基线：Task 5B 终审 `9272e60fc5fa4b485831e101f5f1a66573f1498d`。本轮仅修复 I1（候选列表/详情 pending 时诚实 loading、错误/空态区分、迟到详情响应不可覆盖较新选择）与 I2（rendered fixture/DTO 严格对齐现有 `MemoryReviewService._read_candidate()` payload）；不修改 backend、Task4 首页、记忆算法、向量或真实环境。
