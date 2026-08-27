@@ -100,9 +100,13 @@ class ContextPackBuilder:
                 full = self.database.fetch_memory(memory_id, include_chunks=True)
                 section = self._memory_section(
                     full or result,
-                    "project_authority_memory"
-                    if self._authority(result or full or {}) == "current_project_authority"
-                    else "retrieved_memory",
+                    "structured_message_evidence"
+                    if str((result or full or {}).get("memory_type") or "") == "structured_evidence"
+                    else (
+                        "project_authority_memory"
+                        if self._authority(result or full or {}) == "current_project_authority"
+                        else "retrieved_memory"
+                    ),
                     result=result,
                 )
                 if section:
@@ -148,6 +152,15 @@ class ContextPackBuilder:
             "start_line": citation.get("start_line") or self._first_line(memory),
             "end_line": citation.get("end_line") or self._last_line(memory),
         })
+        relationships = memory.get("relationships") or {}
+        if isinstance(relationships, dict) and memory.get("memory_type") == "structured_evidence":
+            for key in (
+                "source_id", "conversation_id", "message_id",
+                "source_external_id", "conversation_external_id",
+                "message_external_id", "content_hash", "raw_reference",
+            ):
+                if relationships.get(key) not in (None, ""):
+                    citation[key] = relationships[key]
         return {
             "kind": kind,
             "memory_id": memory_id,
@@ -166,8 +179,12 @@ class ContextPackBuilder:
             # A source service alone does not prove provenance.  The status is
             # upgraded to ``structured`` only when the read model exposes an
             # actual message_memory_links row in _linked_evidence().
-            "provenance_status": "missing",
-            "provenance_reason": "source_query_service_unavailable" if not self.source_query_service else "no_structured_message_link",
+            "provenance_status": "structured" if memory.get("memory_type") == "structured_evidence" else "missing",
+            "provenance_reason": (
+                "structured_evidence_projection"
+                if memory.get("memory_type") == "structured_evidence"
+                else "source_query_service_unavailable" if not self.source_query_service else "no_structured_message_link"
+            ),
         }
 
     def _linked_evidence(self, sections: list[dict[str, Any]], request: ContextPackRequest) -> list[dict[str, Any]]:
@@ -298,7 +315,7 @@ class ContextPackBuilder:
 
     @staticmethod
     def _render_section(section: dict[str, Any], index: int, *, text: str | None = None) -> str:
-        labels = {"core_memory": "核心记忆", "project_authority_memory": "项目权威记忆", "retrieved_memory": "检索记忆", "raw_message_evidence": "原始消息证据"}
+        labels = {"core_memory": "核心记忆", "project_authority_memory": "项目权威记忆", "retrieved_memory": "检索记忆", "raw_message_evidence": "原始消息证据", "structured_message_evidence": "结构化消息证据"}
         body = str(section.get("text") if text is None else text)
         metadata = " · ".join([
             f"memory_id={section.get('memory_id') or ''}",

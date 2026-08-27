@@ -281,6 +281,10 @@ class MemoryIndexCoordinator:
                 for key in (
                     "authority", "evidence_refs", "supersession_reason", "invalidating_reason",
                     "created_by", "confirmed_by", "policy_version", "extractor_version",
+                    "structured_source_type", "source_id", "source_external_id", "source_status",
+                    "conversation_id", "conversation_external_id", "message_id",
+                    "message_external_id", "role", "author", "sequence", "occurred_at",
+                    "content_hash", "raw_reference",
                 ):
                     if key in relationships:
                         payload[key] = relationships[key]

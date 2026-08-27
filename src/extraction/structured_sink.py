@@ -82,6 +82,20 @@ class StructuredReadModelSink:
             state = "degraded"
             totals = {key: 0 for key in totals}
         result = self._result(state, **totals, warnings=warnings)
+        if state == "written" and self.memory_database is not None:
+            sync = getattr(self.memory_database, "sync_structured_evidence", None)
+            if callable(sync):
+                try:
+                    result["lexical_index"] = sync()
+                except Exception as exc:
+                    logger.exception("Structured lexical evidence projection failed")
+                    result["lexical_index"] = {"state": "degraded"}
+                    result["warnings"].append(
+                        safe_extraction_error(
+                            exc,
+                            message="structured lexical evidence projection failed; see local logs",
+                        )
+                    )
         self._event("structured_ingestion_completed", execution_id, result)
         return result
 

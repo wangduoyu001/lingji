@@ -112,6 +112,7 @@ class IncrementalMemorySynchronizer:
                        COUNT(c.chunk_id) AS chunk_count
                 FROM memory_documents d
                 LEFT JOIN memory_chunks c ON c.memory_id = d.memory_id
+                WHERE d.memory_type <> 'structured_evidence'
                 GROUP BY d.memory_id, d.relative_path, d.content_hash
                 """
             ).fetchall()

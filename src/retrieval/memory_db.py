@@ -231,9 +231,20 @@ class MemoryDatabase:
         chunks = 0
         skipped = 0
         with self._lock, self._connection() as connection:
-            connection.execute("DELETE FROM memory_fts")
-            connection.execute("DELETE FROM memory_chunks")
-            connection.execute("DELETE FROM memory_documents")
+            # Structured message evidence is sourced from the read model, not
+            # the Vault. A normal Vault rebuild must leave that projection
+            # intact so a later source import remains searchable.
+            connection.execute(
+                "DELETE FROM memory_fts WHERE memory_id IN "
+                "(SELECT memory_id FROM memory_documents WHERE memory_type <> 'structured_evidence')"
+            )
+            connection.execute(
+                "DELETE FROM memory_chunks WHERE memory_id IN "
+                "(SELECT memory_id FROM memory_documents WHERE memory_type <> 'structured_evidence')"
+            )
+            connection.execute(
+                "DELETE FROM memory_documents WHERE memory_type <> 'structured_evidence'"
+            )
             for entry in entries:
                 relative_path = str(entry.get("relative_path") or "")
                 if not relative_path or entry.get("is_private"):
@@ -280,6 +291,148 @@ class MemoryDatabase:
             self._upsert_document(connection, entry, chunks)
             revision = self._bump_revision(connection)
         return {"memory_id": str(entry.get("id")), "chunks": len(chunks), "revision": revision}
+
+    def sync_structured_evidence(
+        self,
+        *,
+        chunker: MarkdownChunker | None = None,
+    ) -> dict[str, int | bool]:
+        """Materialize structured message rows into the existing lexical index.
+
+        Source/Conversation/Message rows remain the evidence authority.  The
+        records written here are rebuildable search projections only: they have
+        a distinct memory type/tier and a deterministic path derived from the
+        persisted message identity, never a Vault file.  Keeping this writer on
+        ``MemoryDatabase`` means the normal FTS and semantic snapshot seams can
+        consume the same projection without introducing another index.
+        """
+        chunker = chunker or MarkdownChunker()
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    s.source_id, s.external_id AS source_external_id,
+                    s.source_type, s.status AS source_status,
+                    c.conversation_id, c.external_id AS conversation_external_id,
+                    c.title AS conversation_title,
+                    m.message_id, m.external_id AS message_external_id,
+                    m.role, m.author, m.occurred_at, m.sequence, m.content,
+                    m.content_hash, m.raw_reference, m.privacy,
+                    m.projects_json, m.agent_scope_json, m.updated_at
+                FROM message_records m
+                JOIN conversation_records c ON c.conversation_id = m.conversation_id
+                JOIN source_records s ON s.source_id = m.source_id
+                ORDER BY m.message_id
+                """
+            ).fetchall()
+
+            entries: list[tuple[dict[str, Any], list[MarkdownChunk]]] = []
+            for row in rows:
+                content = str(row["content"] or "").strip()
+                if not content:
+                    # Empty structured rows remain available to source APIs but
+                    # must never create a useless lexical document.
+                    continue
+                source_status = str(row["source_status"] or "").strip().lower()
+                document_status = "active" if source_status == "active" else "archived"
+                memory_id = f"LJ-EVIDENCE-{str(row['message_id']).upper()}"
+                entry = {
+                    "id": memory_id,
+                    "relative_path": f"__structured__/evidence/{memory_id}.md",
+                    "title": str(row["conversation_title"] or row["message_id"]),
+                    "memory_type": "structured_evidence",
+                    "memory_tier": "evidence",
+                    "status": document_status,
+                    "review_status": "evidence",
+                    "privacy": str(row["privacy"] or "private"),
+                    "project": self._loads(row["projects_json"], []),
+                    "tags": ["structured-evidence", str(row["source_type"] or "")],
+                    "content_hash": str(row["content_hash"] or self.content_hash(content)),
+                    "modified_at": str(row["updated_at"] or ""),
+                    "sources": [
+                        value
+                        for value in (row["raw_reference"], row["source_id"])
+                        if str(value or "").strip()
+                    ],
+                    "properties": {
+                        "memory_tier": "evidence",
+                        "valid_from": row["occurred_at"],
+                        "agent_scope": self._loads(row["agent_scope_json"], []),
+                        "recall_weight": 1.0,
+                    },
+                    "authority": "old_chat_inference",
+                    "evidence_refs": [str(row["message_id"])],
+                    "memory_scope_reason": "structured_evidence_projection",
+                    "structured_source_type": str(row["source_type"] or ""),
+                    "source_id": str(row["source_id"] or ""),
+                    "source_external_id": str(row["source_external_id"] or ""),
+                    "source_status": source_status,
+                    "conversation_id": str(row["conversation_id"] or ""),
+                    "conversation_external_id": str(row["conversation_external_id"] or ""),
+                    "message_id": str(row["message_id"] or ""),
+                    "message_external_id": str(row["message_external_id"] or ""),
+                    "role": str(row["role"] or ""),
+                    "author": str(row["author"] or ""),
+                    "sequence": int(row["sequence"] or 0),
+                    "occurred_at": row["occurred_at"],
+                    "content_hash": str(row["content_hash"] or self.content_hash(content)),
+                }
+                body = f"[{entry['role']}] {content}"
+                entries.append((entry, chunker.chunk(memory_id, body)))
+
+            target_ids = {entry["id"] for entry, _ in entries}
+            existing = connection.execute(
+                "SELECT memory_id FROM memory_documents WHERE memory_type = 'structured_evidence'"
+            ).fetchall()
+            removed = 0
+            for row in existing:
+                memory_id = str(row["memory_id"])
+                if memory_id in target_ids:
+                    continue
+                connection.execute("DELETE FROM memory_fts WHERE memory_id = ?", (memory_id,))
+                connection.execute("DELETE FROM memory_documents WHERE memory_id = ?", (memory_id,))
+                removed += 1
+
+            added = 0
+            updated = 0
+            for entry, chunks in entries:
+                prior = connection.execute(
+                    "SELECT content_hash FROM memory_documents WHERE memory_id = ?",
+                    (entry["id"],),
+                ).fetchone()
+                self._upsert_document(connection, entry, chunks)
+                if prior is None:
+                    added += 1
+                elif str(prior["content_hash"] or "") != str(entry["content_hash"]):
+                    updated += 1
+            if added or updated or removed:
+                revision = self._bump_revision(connection)
+            else:
+                revision = int(self._get_meta(connection, "revision") or 0)
+            self._set_meta(connection, "structured_evidence_document_count", str(len(entries)))
+            self._set_meta(
+                connection,
+                "structured_evidence_chunk_count",
+                str(sum(len(chunks) for _, chunks in entries)),
+            )
+        return {
+            "documents": len(entries),
+            "chunks": sum(len(chunks) for _, chunks in entries),
+            "added": added,
+            "updated": updated,
+            "removed": removed,
+            "unchanged": len(entries) - added - updated,
+            "revision": revision,
+            "full_rebuild": False,
+        }
+
+    def rebuild_structured_evidence(
+        self,
+        *,
+        chunker: MarkdownChunker | None = None,
+    ) -> dict[str, int | bool]:
+        """Rebuild only structured evidence projections from source rows."""
+        return self.sync_structured_evidence(chunker=chunker)
 
     def upsert_derived_projection(
         self,
@@ -586,6 +739,10 @@ class MemoryDatabase:
             "authority", "evidence_refs", "supersession_reason", "invalidating_reason",
             "created_by", "confirmed_by", "policy_version", "extractor_version",
             "conflict_key", "topic_key", "decision_key",
+            "structured_source_type", "source_id", "source_external_id", "source_status",
+            "conversation_id", "conversation_external_id", "message_id",
+            "message_external_id", "role", "author", "sequence", "occurred_at",
+            "content_hash",
         ):
             value = entry.get(key)
             if value in (None, ""):

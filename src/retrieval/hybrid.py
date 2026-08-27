@@ -562,13 +562,23 @@ class HybridRetriever:
 
     @staticmethod
     def _citation(item: dict[str, Any]) -> dict[str, Any]:
-        return {
+        citation = {
             "memory_id": item.get("memory_id"),
             "path": item.get("relative_path"),
             "heading": item.get("heading"),
             "start_line": item.get("start_line"),
             "end_line": item.get("end_line"),
         }
+        relationships = item.get("relationships") or {}
+        if isinstance(relationships, dict):
+            for key in (
+                "source_id", "conversation_id", "message_id",
+                "source_external_id", "conversation_external_id",
+                "message_external_id", "content_hash", "raw_reference",
+            ):
+                if relationships.get(key) not in (None, ""):
+                    citation[key] = relationships[key]
+        return citation
 
     @staticmethod
     def _dedupe(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
