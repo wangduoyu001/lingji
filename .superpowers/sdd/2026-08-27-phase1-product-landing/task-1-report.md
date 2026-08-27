@@ -52,6 +52,13 @@ Complete Task 1–5 reset matrix (including the required promotion transaction s
 336 passed in 65.44s
 ```
 
+The original pre-transaction reset command was also rerun on the final tree (the added Round2 coverage increases its count from the historical 252):
+
+```text
+./.venv/bin/python -m pytest -q tests/test_task4_reset_ingestion_order.py tests/evaluation/test_task4_reset_import_audit.py tests/evaluation/test_task4_reset_section_identity.py tests/evaluation/test_task4_reset_readiness.py tests/evaluation/test_task4_reset_runner.py tests/evaluation/test_automatic_memory_end_to_end.py tests/evaluation/test_task4r1_round5_final_red.py tests/evaluation/test_task4r1_takeover_red.py tests/test_task4_reset_validation_guard.py tests/test_automatic_memory_acceptance_gate.py
+282 passed in 71.83s
+```
+
 Additional evidence:
 
 - `./.venv/bin/python scripts/automatic_memory_quality_gate.py --check-4r2`: expected exit `1`, `BLOCKED_4R2_REQUIRED`; no 100k execution.
