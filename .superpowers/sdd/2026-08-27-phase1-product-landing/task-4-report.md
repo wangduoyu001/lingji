@@ -1,5 +1,37 @@
 # Phase 1 Product Landing — Task 4 Report
 
+## Task 4C — Home Fact Closure
+
+Date: 2026-08-28
+Triggering final review: `f3d70084e8dfb8a07e2fe46f7e1008e11cdf7c2d`
+Product/test commit: `4aa0b7841dab76fed5c784008c2449808e3648f2`
+Evidence/docs commit: `PENDING` (metadata correction follows; this report does not self-reference the metadata commit)
+
+### Scope and result
+
+This is a new bounded UI follow-up, not Task 4 Repair Round 3. It closes only the final review's Home omissions: `本次更新`, `本次跳过`, and the neutral unknown queue state. No backend/API, queue, CurrentWorkPanel, other page, retrieval/vector, release, live service, Production/Vault or owner data was changed.
+
+The Home now always asks both update/skip questions. Numeric values are rendered from existing backend `ScanRun` fields when present; absent values remain `尚未获得`. An absent `queue.running` is also `尚未获得`, never `后台自动运行`. Existing `本次新增`, `本次复用` and `本次失败` remain separate and are not relabeled.
+
+### TDD and verification
+
+RED was reproduced before the product change: the static observation smoke rejected the old `后台自动运行` fallback, and the rendered E2E could not find the missing Home update metric. GREEN after `4aa0b7841dab76fed5c784008c2449808e3648f2`:
+
+```text
+npm run build                                      PASS
+npm run test:memory-sources                        PASS
+npm run test:memory-sources-repair                PASS
+npm run test:work-fact                             PASS
+npm run test:runtime                               PASS
+npm run test:inspector                             PASS
+npm exec -- tsx scripts/observation-first-ui-smoke.mjs PASS
+npm run test:e2e:memory                            PASS
+```
+
+The rendered fake authenticated server proves backend numeric values (`新增=1`, `更新=2`, `跳过=3`, `失败=0`), missing update/skip values (`尚未获得`), and missing queue running (`尚未获得`). It also confirms the post-onboarding Home route remains reachable.
+
+The broader smoke baseline still contains the unrelated pre-existing `codex-workspace-smoke` failure (`CurrentWorkPanel.tsx` lacks `当前项目`); this follow-up did not modify or weaken that baseline. No live 8766/Sidecar/Artifact/Production/Vault or owner acceptance was performed because `LOCAL_EXECUTION_TASK.md` remains `IDLE`.
+
 Date: 2026-08-27
 Branch: `codex/phase1-automatic-memory`
 Original product/test commit: `2dc03e6` (`feat: add automatic memory source onboarding`)

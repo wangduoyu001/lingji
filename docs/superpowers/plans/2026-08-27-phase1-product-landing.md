@@ -238,6 +238,17 @@ def enumerate_authorized_files(source: SourceRecord) -> tuple[Path, ...]: ...
 
 **Acceptance:** A nontechnical user can finish first-run authorization and explain which sources are detected, authorized, current, unsupported or failed without reading IDs, JSON, logs or command output.
 
+### Task 4C: Home Fact Closure (bounded follow-up)
+
+**Boundary:** This is a new, narrowly scoped UI follow-up required by the final Task 4 review at exact commit `f3d70084e8dfb8a07e2fe46f7e1008e11cdf7c2d`. It is not a Repair Round 3 and does not reopen onboarding, backend/API, Task 2/3, CurrentWorkPanel, retrieval, vector, release or new feature work.
+
+- [x] Add Home metrics `本次更新` and `本次跳过`; render numeric backend values when present and `尚未获得` when absent.
+- [x] Replace unmeasured `后台自动运行` with neutral `尚未获得` when `queue.running` is unavailable; preserve measured running counts.
+- [x] Add rendered/static RED assertions and verify the connected Home route after onboarding does not prevent the assertions.
+- [x] Run focused UI/source/runtime/inspector/work-fact checks, build, rendered E2E, diff-check, acceptance sync and local handoff. Preserve the unchanged legacy smoke baseline failure in the evidence.
+
+**Task 4C acceptance:** Home visibly asks both update/skip questions, never invents missing counts or queue activity, and the rendered fake-server flow proves both numeric and unavailable branches. Product/test commit and evidence are recorded in the Task 4 report; this follow-up remains deterministic/local evidence only and does not authorize Artifact, release, live 8766, Production/Vault or owner acceptance.
+
 ### Task 5: Make the Existing Owner Workflow Understandable
 
 **Purpose:** 修复上次 M5 失败的主人体验，不增加业务能力：能看见历史工作、处理真实待办、从候选记忆跳到可读证据，并只保留一个正式手动采集入口。

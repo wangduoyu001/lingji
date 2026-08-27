@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Phase 1 Product Landing · Task 4C · Home fact closure
+
+- 基准/触发审查：Task 4 final independent review `f3d70084e8dfb8a07e2fe46f7e1008e11cdf7c2d`；本轮是独立的 bounded follow-up，不是 Repair Round 3。仅修改 Home DTO/UI 与既有静态/渲染测试，不改后端/API、队列、CurrentWorkPanel、其他页面、检索/向量、发布或本机任务。
+- RED：`observation-first-ui-smoke.mjs` 因旧的 `后台自动运行` 断言失败；`npm run test:e2e:memory` 因 Home 缺少 `本次更新` 失败。GREEN：产品/测试提交 `4aa0b7841dab76fed5c784008c2449808e3648f2` 后，Home 渲染 fake backend 的 `本次新增=1`、`本次更新=2`、`本次跳过=3`、`本次失败=0`，字段缺失时更新/跳过均显示 `尚未获得`，缺少 `queue.running` 时显示 `尚未获得`。
+- 计划验证：`npm run build`、`npm run test:memory-sources`、`npm run test:memory-sources-repair`、`npm run test:work-fact`、`npm run test:runtime`、`npm run test:inspector`、`npm exec -- tsx scripts/observation-first-ui-smoke.mjs` 与 `npm run test:e2e:memory`；不得把未执行的真实 8766/Artifact/主人验收写成通过。
+- 既有 smoke 的 `codex-workspace-smoke` 基线失败保持原样并单独披露；`LOCAL_EXECUTION_TASK.md` 为 `IDLE`，不启动服务、不访问 Production/Vault、不进行发布或主人验收。本条只证明确定性 UI/build/E2E。
+
 ## 2026-08-27 · Phase 1 Product Landing · Task 4 · Chinese automatic-memory source onboarding
 
 - 基线：`8f94a1e`（当前 `codex/phase1-automatic-memory`）；本轮仅修改 Desktop UI、UI DTO/API 投影、既有 observation smoke、package scripts 与 deterministic tests。后端/API、数据库、队列、检索、promotion、Task 2/3 代码均未修改。

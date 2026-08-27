@@ -3,7 +3,7 @@
 > Updated: 2026-08-27
 > Formal/default branch: `master`
 > Phase 1 implementation base: `d12c1fb837257e83835a7cdb899bb29a9c675c3d`
-> Current Phase 1 worktree Head: `f2f7312`
+> Current Phase 1 product head: `4aa0b7841dab76fed5c784008c2449808e3648f2` (Task 4C)
 > Current implementation branch: `codex/phase1-automatic-memory`
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
@@ -39,6 +39,8 @@ Phase 1 PASS 后，Phase 2 第一优先级固定为 **Opportunity Center / 机�
 当前 `LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。在 Work Fact 收口、固定 100 问评测、统一 RAG、质量/规模门禁和同 SHA Artifact 锁定之前，不执行新的真实安装或 M5 主人验收。
 
 Task 3 Repair Round 1 已在本分支产品提交 `f2f7312` 完成八项重要缺口修复；最终 Repair Round 2 产品提交 `7058da0` 补齐 BOM/CRLF frontmatter、自动 Generic AI 跨来源身份命名空间和暂停恢复 Work Fact 计数。该状态仅表示代码与合成 fixture 验证通过；不表示 Artifact、真实 UI、主人观察或 Production/Vault 验收完成。Task 2 的 stale scheduler cleanup-state 边界保持不变，自动晋级 seam 仍禁止调用。
+
+Task 4C 已完成一个有界的 Home 事实显示收口：在不改后端的前提下，首页现在明确显示本次更新、本次跳过；后端缺失时保持“尚未获得”，未知队列活动不再伪装为“后台自动运行”。产品/测试提交为 `4aa0b7841dab76fed5c784008c2449808e3648f2`，它只表示确定性 UI/build/E2E 证据通过，不表示真实 8766、Artifact、主人观察或发布验收通过。该收口依据 Task 4 最终审查 `f3d70084e8dfb8a07e2fe46f7e1008e11cdf7c2d`，不扩大到后端、CurrentWorkPanel 或新功能。
 
 ## 1B. 自动化第二大脑的锁定方向
 
