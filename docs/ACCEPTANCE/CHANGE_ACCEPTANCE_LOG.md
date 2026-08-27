@@ -7,6 +7,7 @@
 - 自动验收：新增 runtime lifecycle、canonical path、认证 status route 与 promotion-seam sentinel 测试；RED 先记录占位实现导致 `3 failed, 14 passed`（随后 GREEN 目标为 runtime + packaged tests 全部通过）。计划回归 `tests/test_automatic_memory_scheduler.py`、相关 control tests、`npm run test:runtime`、`py_compile`、`git diff --check`、acceptance sync 和 local handoff。
 - 真机/主人确认：`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`；本条不启动 Artifact、服务、UI，不访问 Production/Vault，不构成发布验收或合并结论。
 - 清理/回滚：测试只使用 pytest 临时目录和 synthetic SQLite；回滚本轮产品/tests 与文档提交，不触碰正式 Vault、raw、memory、Qdrant 或主人配置。
+- 增量修复：`c415f5aff067d8f13bc5898f639581142634e2dd` 保证 scheduler stop 抛错时仍停止 worker 并标记 runtime stopped；对应 lifecycle 回归保持通过。
 
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 0 · Owner-review quarantine repair round 1
 
