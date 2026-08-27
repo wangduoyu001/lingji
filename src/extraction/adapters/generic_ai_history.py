@@ -103,6 +103,14 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
             raise ValueError(f"unsupported History Inbox: {detection.reason}")
         raw_input = path.read_bytes()
         source_scope = self._digest(raw_input.hex())
+        automatic_source_id = ""
+        if request.options.get("automatic_memory"):
+            automatic_source_id = str(request.payload.get("source_id") or "").strip()
+            if automatic_source_id:
+                source_scope = self._digest(f"automatic-memory:{automatic_source_id}:{source_scope}")
+        provenance = {"source_scope": source_scope}
+        if automatic_source_id:
+            provenance["automatic_memory_source_id"] = automatic_source_id
         conversations = self._load(path)
         documents: list[ExtractedDocument] = []
         structured: list[StructuredConversation] = []
@@ -116,7 +124,7 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
                     content=item["content"],
                     sequence=index,
                     occurred_at=item["timestamp"],
-                    metadata={"conversation_id": conversation_id, "message_id": item["message_id"], "source_scope": source_scope},
+                    metadata={"conversation_id": conversation_id, "message_id": item["message_id"], **provenance},
                 )
                 for index, item in enumerate(conversation["messages"])
             )
@@ -147,7 +155,7 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
                     updated_at=conversation["messages"][-1]["timestamp"],
                     metadata={
                         "conversation_id": conversation_id,
-                        "source_scope": source_scope,
+                        **provenance,
                         "message_ids": [item["message_id"] for item in conversation["messages"]],
                         "schema": HISTORY_SCHEMA,
                         "schema_version": HISTORY_VERSION,
@@ -163,7 +171,7 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
                     started_at=messages[0].occurred_at,
                     ended_at=messages[-1].occurred_at,
                     participants=tuple(dict.fromkeys(item.role for item in messages)),
-                    metadata={"schema": HISTORY_SCHEMA, "schema_version": HISTORY_VERSION, "source_scope": source_scope},
+                    metadata={"schema": HISTORY_SCHEMA, "schema_version": HISTORY_VERSION, **provenance},
                 )
             )
         return ExtractionBatch(
@@ -174,7 +182,7 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
                     external_id="generic-history-source-" + source_scope,
                     display_name="Generic AI History Inbox",
                     conversations=tuple(structured),
-                    metadata={"schema": HISTORY_SCHEMA, "schema_version": HISTORY_VERSION, "source_scope": source_scope},
+                    metadata={"schema": HISTORY_SCHEMA, "schema_version": HISTORY_VERSION, **provenance},
                 ),
             ),
             summary={"conversations_found": len(documents), "documents_created": len(documents)},

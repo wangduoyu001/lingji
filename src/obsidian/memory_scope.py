@@ -157,11 +157,30 @@ class ObsidianMemoryScope:
     @staticmethod
     def _read_frontmatter(path: Path) -> Mapping[str, object]:
         with path.open("rb") as handle:
-            prefix = handle.read(4)
-            if prefix.startswith(b"\xef\xbb\xbf"):
-                prefix += handle.read(4)
-            if prefix not in {b"---\n", b"\xef\xbb\xbf---\n"}:
+            prefix = bytearray(handle.read(4))
+            bom = prefix.startswith(b"\xef\xbb\xbf")
+            if bom:
+                # The initial four-byte probe contains the BOM and the first
+                # dash.  Read only the remaining marker bytes before deciding
+                # whether this is frontmatter; ordinary notes remain bounded
+                # to this small probe when they do not start with `---`.
+                prefix.extend(handle.read(2))
+                if bytes(prefix[3:6]) != b"---":
+                    return {}
+                prefix.extend(handle.read(1))
+            elif bytes(prefix[:3]) != b"---":
                 return {}
+
+            line_ending = bytes(prefix[6:7]) if bom else bytes(prefix[3:4])
+            if line_ending == b"\r":
+                if len(prefix) >= FRONTMATTER_MAX_BYTES:
+                    return {}
+                prefix.extend(handle.read(1))
+                if bytes(prefix[-1:]) != b"\n":
+                    return {}
+            elif line_ending != b"\n":
+                return {}
+
             while len(prefix) < FRONTMATTER_MAX_BYTES:
                 line = handle.readline(FRONTMATTER_MAX_BYTES - len(prefix))
                 if not line:
@@ -169,7 +188,7 @@ class ObsidianMemoryScope:
                 prefix += line
                 if line.rstrip(b"\r\n") == b"---":
                     break
-        text = prefix.decode("utf-8-sig")
+        text = bytes(prefix).decode("utf-8-sig").replace("\r\n", "\n")
         if not text.startswith("---\n"):
             return {}
         end = text.find("\n---", 4)

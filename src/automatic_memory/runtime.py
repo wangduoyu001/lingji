@@ -347,6 +347,12 @@ class AutomaticMemoryRuntime:
         if self.work_store.get_work(work_id) is None:
             return
         report = report or self._scan_reports.get(scan_id)
+        scan = self.state_db.get_automatic_memory_scan(scan_id)
+        if scan is None or scan.get("status") not in {"completed", "failed", "cancelled"}:
+            # A paused/resumable scan may already have terminal extraction
+            # jobs from its first checkpoint.  Do not turn those jobs into a
+            # terminal Work Fact until the durable scan itself completes.
+            return
         jobs = [item for item in self.queue.list_page(source_type="automatic_memory_snapshot", limit=200) if str((item.get("payload") or {}).get("scan_id") or "") == scan_id]
         if any(item.get("status") not in {"completed", "failed", "cancelled"} for item in jobs):
             return
@@ -356,7 +362,13 @@ class AutomaticMemoryRuntime:
             return
         queued = int(getattr(report, "queued", 0) or 0)
         reused = int(getattr(report, "reused", 0) or 0)
-        total = queued + reused if report is not None else len(jobs)
+        reported_total = getattr(report, "total", None) if report is not None else None
+        if reported_total is None and report is not None:
+            reported_total = getattr(report, "discovered", None)
+        if reported_total is None:
+            total = queued + reused if report is not None else len(jobs)
+        else:
+            total = max(int(reported_total or 0), len(jobs))
         if not jobs and reused == 0 and queued == 0 and report is None:
             return
         summary = f"扫描完成，已检查 {total} 个来源文件（新增 {queued}，复用 {reused}）"
