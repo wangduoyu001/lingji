@@ -18,6 +18,14 @@
 - 既有完整 smoke：新增 repair smoke、UI/观察检查通过后，保留在既有 `codex-workspace-smoke.mjs` 的 `CurrentWorkPanel.tsx` 缺少“当前项目”断言失败；本轮未修改该无关基线。
 - 本轮仍不执行 Artifact、真实 8766、真实 UI/主人观察、Production/Vault；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。证据 artifact 提交：`33757d8cda435fbb01ba10b0b82f12e5cdd6faf8`；metadata-only 提交：`3564abaee0da59408c0b97f1cc02487a0b0e5f84`。
 
+### Task 4 Repair Round 2（审查 d5f902a 后，最终产品修复）
+
+- 基线/审查：Round 1 产品 `5201d6b`、Round 1 最终报告 `ac73e26`、本轮审查 `d5f902a`；最终修复产品/tests 提交：`b45b1dd7bf860510473f49388b8424d62de9f787`。本轮仅修复 onboarding 长时重试/断连重置、真实 rendered outage/recovery 与 late-navigation race、paused owner copy、polling late-error identity guard；无后端/API/Task 2/3/CurrentWorkPanel/Artifact/Production/Vault 变更。
+- RED：七次临时 source failure 令旧六次预算停在 Overview（`locator.waitFor: Timeout 10000ms exceeded`）；移除 outage Notice 的暂时性 RED 为 `locator.waitFor: Timeout 30000ms exceeded`；I4 repair smoke 在 helper 导出前为缺少 `canPublishRequest` 的 SyntaxError。GREEN：长重试自动恢复、延迟响应导航 race、保留快照的 outage/offline/retry/recovery、paused `已暂停`/`继续扫描`、late ordinary error guard 均由 rendered/repair smoke 通过。
+- 自动验收：`npm run build`、`npm run test:memory-sources`、`npm run test:memory-sources-repair`、`npm run test:e2e:memory`、`npm run test:work-fact`、`npm run test:runtime`、`npm run test:inspector`、`observation-first-ui-smoke.mjs` PASS；完整 smoke 在不变的 `codex-workspace-smoke.mjs` `CurrentWorkPanel.tsx` 缺少“当前项目”断言处失败，未修改或弱化该基线。
+- 证据边界：rendered harness 使用本地 fake 8766-like server 与已安装系统 Chrome，显式验证 token、离线恢复、九态动作/下一步、授权/扫描终态；不宣称真实 8766、打包版、Artifact、主人观察或 Production/Vault 验收。`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。
+- 证据文档与 metadata-only SHA 在最终产品 Head 固定后补写。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 2 · Packaged runtime composition
 
 - 基线：`5510b4f27b8fd0567f4fd89a7f5ba2f65635bb77`；产品范围为一个 packaged Python 进程内的 `AutomaticMemoryRuntime` 组合、既有 Extraction Worker/Scheduler/Watcher/Checkpoint 生命周期、认证 8766 runtime status 读取和 exact-instance shutdown 接线。

@@ -239,7 +239,7 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 
 当前必须先完成一个明确门禁：独立审查确认 `2f833aa` 的 callback/replay/restart/重复/乱序矩阵及指定回归，再调度固定 100 问评测；在此之前不调度 RAG，也不继续视觉扩展。
 
-Task 4 Product Landing UI 已接入 Desktop：新增“记忆来源”观察页与一次性后端事实 onboarding，使用既有认证 8766 discovered/sources/scans/summary/runtime 读写接口；Home 现在投影来源、活动、本次扫描计数与记忆状态。原产品 `2dc03e6` 经独立审查 `44b00d3` 后，修复产品 `5201d6ba2a152713610297769acd73b10e88b28f` 已补齐一次性读取重试/防陈旧导航、精确授权证据、撤销重授权、九态渲染覆盖、post-action snapshot 与 token 回归。契约 smoke、Playwright/系统 Chrome 渲染 harness、TypeScript build 已通过；真实打包版与主人验收仍未执行。
+Task 4 Product Landing UI 已接入 Desktop：新增“记忆来源”观察页与一次性后端事实 onboarding，使用既有认证 8766 discovered/sources/scans/summary/runtime 读写接口；Home 现在投影来源、活动、本次扫描计数与记忆状态。原产品 `2dc03e6` 经独立审查 `44b00d3` 与 Round 2 审查 `d5f902a` 后，最终修复产品 `b45b1dd7bf860510473f49388b8424d62de9f787` 已补齐长时 capped-backoff 重试/断连重置、真实 outage/recovery 与 delayed-navigation race、精确授权证据、撤销重授权、九态渲染覆盖、暂停文案、post-action snapshot、polling late-error 与 token 回归。契约 smoke、Playwright/系统 Chrome 渲染 harness、TypeScript build 已通过；真实打包版与主人验收仍未执行。
 
 ## 5. Phase 1 重新规划后的开发顺序
 

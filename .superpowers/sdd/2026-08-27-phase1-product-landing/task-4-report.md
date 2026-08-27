@@ -5,6 +5,8 @@ Branch: `codex/phase1-automatic-memory`
 Original product/test commit: `2dc03e6` (`feat: add automatic memory source onboarding`)
 Review: `44b00d3` (`docs: record task four independent review`)
 Repair product/test commit: `5201d6ba2a152713610297769acd73b10e88b28f` (`fix: close automatic memory landing review findings`)
+Repair Round 2 review: `d5f902a` (`docs: review task four repair round one`)
+Final repair product/test commit: `b45b1dd7bf860510473f49388b8424d62de9f787` (`fix: harden task four onboarding recovery`)
 Evidence artifact commit: `33757d8cda435fbb01ba10b0b82f12e5cdd6faf8`
 Metadata correction commit: `3564abaee0da59408c0b97f1cc02487a0b0e5f84`
 
@@ -13,6 +15,8 @@ Metadata correction commit: `3564abaee0da59408c0b97f1cc02487a0b0e5f84`
 `IMPLEMENTED_FOCUSED_PASS` for the Chinese automatic-memory source onboarding and observation projection slice. This is a code-level and deterministic fake-server result only. It is not packaged Artifact, release, real 8766, Production/Vault, or owner acceptance.
 
 The independent review repair round is also `IMPLEMENTED_FOCUSED_PASS` for I1–I4, I6 and I7. The unrelated `CurrentWorkPanel` baseline remains unchanged.
+
+Repair Round 2 closes I1–I4 from review `d5f902a`; it remains deterministic/local evidence only and does not authorize Artifact, release, live 8766, Production/Vault, or owner acceptance.
 
 ## Scope delivered
 
@@ -37,6 +41,14 @@ Repair-round RED/GREEN:
 
 - RED before repair: `automatic-memory-sources-repair-smoke.mjs` failed with `ERR_MODULE_NOT_FOUND` for the not-yet-exported repair helpers; the rendered flow failed at the revoked source because no reauthorization button was present.
 - GREEN after repair: `npm run build`, `npm run test:memory-sources-repair`, and `npm run test:e2e:memory` all passed. The rendered harness now proves transient onboarding retry, stale-navigation protection, exact same-kind/root authorization evidence, revoked reauthorization, all nine source states plus offline/expired/unsupported/paused/failed action gating, verified post-action rendering, request ownership, and authenticated token rejection.
+
+Round 2 RED/GREEN:
+
+- RED I1: with seven transient `/sources` failures, the old six-attempt hook stopped on Overview; `npm run test:e2e:memory` failed at the onboarding heading with `locator.waitFor: Timeout 10000ms exceeded`.
+- RED I2: after temporarily removing only the outage Notice (with the outage rendered test retained), `npm run test:e2e:memory` failed at `locator.waitFor: Timeout 30000ms exceeded` for `暂时无法读取记忆来源`.
+- RED I3: the paused-state assertion initially failed because the existing copy did not expose the required paused-specific owner text; the final rendered assertion requires `已暂停` and `继续扫描`.
+- RED I4: `npm run test:memory-sources-repair` failed before implementation with `SyntaxError: ... usePollingResource.ts does not provide an export named 'canPublishRequest'`.
+- GREEN: final `npm run test:e2e:memory`, `npm run test:memory-sources-repair`, and `npm run build` all PASS. The actual delayed onboarding race keeps the page on Activity after late responses; outage preserves the prior snapshot, shows the offline explanation/retry affordance, and recovers after server restoration.
 
 ## Verification
 
