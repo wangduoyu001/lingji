@@ -79,6 +79,15 @@ def _message(source: SourceReadModel, content: str = "fact") -> dict:
     )
 
 
+def _owner_approve(service: AutoMemoryPromotionService, candidate: ReviewCandidate) -> dict:
+    pending = service.evaluate(candidate)
+    return service.approve(
+        pending["candidate_id"],
+        expected_content_hash=pending["content_hash"],
+        owner_confirmed=True,
+    )
+
+
 def test_legacy_derived_writer_cannot_publish_active_projection(tmp_path: Path) -> None:
     _, memory, _ = _stores(tmp_path)
 
@@ -159,7 +168,7 @@ def test_active_reconcile_with_missing_message_link_requires_repair(tmp_path: Pa
     content_hash = __import__("hashlib").sha256(json.dumps({"title": content, "content": content, "structured": {}}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     candidate = ReviewCandidate(memory_id="memory-1", title=content, content=content, content_hash=content_hash, source_refs=(message["message_id"],), confidence=0.9, authority="direct_user", source_kind="chat")
     service = AutoMemoryPromotionService(state_db=state, memory_db=memory, evidence_store=source)
-    result = service.evaluate(candidate)
+    result = _owner_approve(service, candidate)
     decision_id = result["decision_id"]
     with memory._connection() as connection:
         connection.execute("DELETE FROM message_memory_links WHERE memory_id=?", ("memory-1",))
@@ -176,7 +185,7 @@ def test_active_reconcile_terminal_conflict_reports_unreconciled_blocker(tmp_pat
     content_hash = __import__("hashlib").sha256(json.dumps({"title": "fact", "content": "fact", "structured": {}}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     candidate = ReviewCandidate(memory_id="memory-1", title="fact", content="fact", content_hash=content_hash, source_refs=(message["message_id"],), confidence=0.9, authority="direct_user", source_kind="chat")
     service = AutoMemoryPromotionService(state_db=state, memory_db=memory, evidence_store=source)
-    result = service.evaluate(candidate)
+    result = _owner_approve(service, candidate)
     decision_id = result["decision_id"]
     with memory._connection() as connection:
         connection.execute("DELETE FROM message_memory_links WHERE memory_id=?", ("memory-1",))
@@ -244,7 +253,8 @@ def test_event_provenance_resolves_exact_message_and_hash(tmp_path: Path) -> Non
         "message_id": message["message_id"], "content_hash": message["content_hash"],
     })
     candidate = ReviewCandidate(memory_id="memory-1", title="fact", content="fact", source_refs=(ProvenanceRef("event", str(event_id)),), confidence=0.9, authority="direct_user", source_kind="chat")
-    result = __import__("src.auto_review", fromlist=["AutoMemoryPromotionService"]).AutoMemoryPromotionService(state_db=state, memory_db=memory, evidence_store=source).evaluate(candidate)
+    service = __import__("src.auto_review", fromlist=["AutoMemoryPromotionService"]).AutoMemoryPromotionService(state_db=state, memory_db=memory, evidence_store=source)
+    result = _owner_approve(service, candidate)
     assert result["status"] == "active"
 
 
@@ -299,7 +309,8 @@ def test_same_file_preflight_rejects_split_memory_and_source_databases(tmp_path:
     message = _message(source)
     candidate = ReviewCandidate(memory_id="memory-1", title="fact", content="fact", source_refs=(message["message_id"],), confidence=0.9, authority="direct_user", source_kind="chat")
     from src.auto_review import AutoMemoryPromotionService
-    result = AutoMemoryPromotionService(state_db=state, memory_db=memory, evidence_store=source).evaluate(candidate)
+    service = AutoMemoryPromotionService(state_db=state, memory_db=memory, evidence_store=source)
+    result = _owner_approve(service, candidate)
     assert result["status"] == "error"
     assert memory.fetch_memory("memory-1") is None
 
@@ -352,7 +363,7 @@ def test_start_event_failure_has_no_projection_or_links(tmp_path: Path, monkeypa
         raise RuntimeError("start unavailable")
     monkeypatch.setattr(state, "record_promotion_event_once", fail_start)
     service = __import__("src.auto_review", fromlist=["AutoMemoryPromotionService"]).AutoMemoryPromotionService(state_db=state, memory_db=memory, evidence_store=source)
-    result = service.evaluate(candidate)
+    result = _owner_approve(service, candidate)
     assert result["status"] == "error"
     assert memory.fetch_memory("memory-1") is None
     assert source.memory_links("memory-1") == []
@@ -371,7 +382,7 @@ def test_promotion_failure_stages_leave_truthful_terminal_and_no_active_projecti
         monkeypatch.setattr(source, "link_message_memory_batch", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("link unavailable")))
     else:
         monkeypatch.setattr(memory, "activate_derived_projection", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("activate unavailable")))
-    result = service.evaluate(candidate)
+    result = _owner_approve(service, candidate)
     assert result["status"] == "error"
     assert memory.fetch_memory("memory-1") is None
     assert source.memory_links("memory-1") == []

@@ -58,7 +58,7 @@ def harness(tmp_path: Path):
     ("overrides", "status", "reason"),
     [
         ({"confidence": 0.899}, PromotionStatus.PENDING_OWNER_REVIEW, "confidence_below_threshold"),
-        ({"confidence": 0.90}, PromotionStatus.ACTIVE, "auto_activation_eligible"),
+        ({"confidence": 0.90}, PromotionStatus.PENDING_OWNER_REVIEW, "automatic_activation_quarantined"),
         ({"authority": "ai_inference", "source_kind": "summary"}, PromotionStatus.PENDING_OWNER_REVIEW, "direct_user_or_authoritative_source_required"),
         ({"source_refs": ()}, PromotionStatus.PENDING_OWNER_REVIEW, "evidence_required"),
         ({"metadata": {"has_conflict": True}}, PromotionStatus.PENDING_OWNER_REVIEW, "unresolved_conflict"),
@@ -77,20 +77,31 @@ def test_policy_matrix(harness, overrides, status, reason):
     assert reason in result["reason_codes"]
 
 
-def test_authoritative_current_project_source_can_activate(harness):
+def test_authoritative_current_project_source_requires_owner_approval(harness):
     service, _state, _memory = harness
     candidate = make_candidate(
         authority="project_authority",
         source_kind="current_project_document",
         metadata={"current_authoritative": True},
     )
-    assert service.evaluate(candidate)["status"] == PromotionStatus.ACTIVE.value
+    result = service.evaluate(candidate)
+    assert result["status"] == PromotionStatus.PENDING_OWNER_REVIEW.value
+    assert result["reason_codes"] == ["automatic_activation_quarantined"]
 
 
 def test_projection_contains_provenance_and_is_idempotent(harness):
     service, state, memory = harness
-    first = service.evaluate(make_candidate())
-    second = service.evaluate(make_candidate())
+    pending = service.evaluate(make_candidate())
+    first = service.approve(
+        pending["candidate_id"],
+        expected_content_hash=pending["content_hash"],
+        owner_confirmed=True,
+    )
+    second = service.approve(
+        pending["candidate_id"],
+        expected_content_hash=pending["content_hash"],
+        owner_confirmed=True,
+    )
     assert first["status"] == PromotionStatus.ACTIVE.value
     assert second["decision_id"] == first["decision_id"]
     assert len(memory.list_documents()) == 1
@@ -101,6 +112,36 @@ def test_projection_contains_provenance_and_is_idempotent(harness):
     assert projection["relationships"]["evidence_refs"][0]["kind"] == "message"
     assert projection["relationships"]["evidence_refs"][0]["value"] == "msg-1"
     assert projection["relationships"]["policy_version"] == "memory-promotion-1"
+
+
+def test_eligible_automatic_evaluation_is_quarantined_until_owner_approval(harness):
+    service, state, memory = harness
+    candidate = make_candidate()
+
+    first = service.evaluate(candidate)
+    second = service.evaluate(candidate)
+
+    assert first["status"] == PromotionStatus.PENDING_OWNER_REVIEW.value
+    assert first["reason_codes"] == ["automatic_activation_quarantined"]
+    assert second["status"] == first["status"]
+    assert "automatic_activation_quarantined" in second["reason_codes"]
+    assert second["decision_id"] == first["decision_id"]
+    assert memory.fetch_memory(candidate.memory_id) is None
+    assert service.evidence_store.memory_links(candidate.memory_id) == []
+    event_types = {row["event_type"] for row in state.recent_events(100)}
+    assert "memory_promotion_preparing" not in event_types
+    assert "memory_projection_activated" not in event_types
+    assert "memory_projection_rolled_back" not in event_types
+    assert "memory_projection_repair_required" not in event_types
+    assert event_types <= {"memory_candidate_recorded", "memory_promotion_decision"}
+
+    approved = service.approve(
+        first["candidate_id"],
+        expected_content_hash=first["content_hash"],
+        owner_confirmed=True,
+    )
+    assert approved["status"] == PromotionStatus.ACTIVE.value
+    assert memory.fetch_memory(candidate.memory_id)["memory_tier"] == "derived"
 
 
 def test_policy_or_extractor_version_creates_new_decision_preserving_audit(harness):
@@ -151,7 +192,12 @@ def test_projection_failure_is_truthful_pending_error_and_keeps_candidate(tmp_pa
         raise OSError("index unavailable")
 
     service = AutoMemoryPromotionService(state_db=state, projection_writer=broken, evidence_store=source, memory_db=memory)
-    result = service.evaluate(make_candidate())
+    pending = service.evaluate(make_candidate())
+    result = service.approve(
+        pending["candidate_id"],
+        expected_content_hash=pending["content_hash"],
+        owner_confirmed=True,
+    )
     assert result["status"] == PromotionStatus.ERROR.value
     assert result["reason_codes"] == ["projection_persist_failed"]
     assert result["mutation_performed"] is False
@@ -204,7 +250,7 @@ def test_supplied_mismatched_content_hash_is_rejected(harness):
         service.evaluate(make_candidate(content_hash="forged"))
 
 
-def test_failed_projection_recovers_once_without_duplicate_audits(tmp_path: Path):
+def test_failed_owner_approval_does_not_bypass_quarantine_on_retry(tmp_path: Path):
     state = StateDatabase(tmp_path / "state.db")
     state.append_event("evidence_recorded", "message", "msg-1", {})
     memory = MemoryDatabase(tmp_path / "memory.db")
@@ -222,21 +268,31 @@ def test_failed_projection_recovers_once_without_duplicate_audits(tmp_path: Path
 
     service = AutoMemoryPromotionService(state_db=state, projection_writer=flaky, evidence_store=source, memory_db=memory)
     candidate = make_candidate()
-    first = service.evaluate(candidate)
+    pending = service.evaluate(candidate)
+    first = service.approve(
+        pending["candidate_id"],
+        expected_content_hash=pending["content_hash"],
+        owner_confirmed=True,
+    )
     second = service.evaluate(candidate)
     third = service.evaluate(candidate)
     assert first["status"] == PromotionStatus.ERROR.value
-    assert second["status"] == PromotionStatus.ACTIVE.value
-    assert third["status"] == PromotionStatus.ACTIVE.value
+    assert second["status"] == PromotionStatus.PENDING_OWNER_REVIEW.value
+    assert third["status"] == PromotionStatus.PENDING_OWNER_REVIEW.value
+    assert calls["count"] == 1
     events = state.recent_events(100)
     assert len([e for e in events if e["event_type"] == "memory_promotion_decision"]) == 1
-    assert len([e for e in events if e["event_type"] == "memory_promotion_recovered"]) == 1
-    assert len([e for e in events if e["event_type"] == "memory_projection_activated"]) == 1
+    assert len([e for e in events if e["event_type"] == "memory_promotion_projection_error"]) == 1
 
 
 def test_derived_projection_rebuild_replays_state_events(harness):
     service, _state, memory = harness
-    first = service.evaluate(make_candidate())
+    pending = service.evaluate(make_candidate())
+    first = service.approve(
+        pending["candidate_id"],
+        expected_content_hash=pending["content_hash"],
+        owner_confirmed=True,
+    )
     memory.rebuild_from_index([], Path("."))
     assert memory.fetch_memory(first["candidate_id"]) is None
     rebuilt = service.rebuild_derived_projections()

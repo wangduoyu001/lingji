@@ -109,6 +109,8 @@ class AutoMemoryPromotionService:
         reasons.extend(code for code in self._provenance_errors if code not in reasons)
         if not provenance.linkable_messages:
             reasons.append("structured_message_provenance_required")
+        if not reasons:
+            reasons.append("automatic_activation_quarantined")
         status = PromotionStatus.ACTIVE if not reasons else PromotionStatus.PENDING_OWNER_REVIEW
         decision_id = self._decision_id(selected, status.value, self.policy_version)
         result = self._result(
