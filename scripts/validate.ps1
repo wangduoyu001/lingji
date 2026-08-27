@@ -3,7 +3,7 @@ param(
     [ValidateSet("focused", "full", "release")]
     [string]$Mode = "focused",
 
-    [ValidateSet("retrieval", "capture", "control", "obsidian", "desktop", "sidecar", "docs", "validation", "automatic-memory-quality")]
+    [ValidateSet("retrieval", "capture", "control", "obsidian", "desktop", "sidecar", "docs", "validation", "automatic-memory-quality", "automatic-memory-landing")]
     [string]$Area = "docs",
 
     [string]$PythonCommand = "python",
@@ -267,6 +267,14 @@ function Invoke-FocusedValidation {
                 -WorkingDirectory $repoRoot `
                 -Command $PythonCommand `
                 -Arguments @("scripts/automatic_memory_quality_gate.py")
+        }
+        "automatic-memory-landing" {
+            Invoke-ValidationStep `
+                -Name "automatic-memory-packaged-flow" `
+                -WorkingDirectory $repoRoot `
+                -Command $PythonCommand `
+                -Arguments @("-m", "pytest", "-q", "tests/integration/test_automatic_memory_packaged_flow.py", "--tb=short")
+            Invoke-DesktopScript "desktop-rendered-owner-memory" "test:e2e:memory"
         }
     }
 }

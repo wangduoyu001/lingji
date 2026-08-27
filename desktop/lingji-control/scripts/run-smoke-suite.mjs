@@ -22,6 +22,11 @@ const scripts = [
   "settings-governance-smoke.mjs",
 ];
 
+// Task6's rendered owner flow is the single maintained E2E surface. Keep it
+// in the smoke registry so focused landing validation cannot silently omit UI
+// coverage; the flow owns its temporary fixture server and browser lifecycle.
+scripts.push("../tests/e2e_owner_memory_flow.mjs");
+
 for (const script of scripts) {
   console.log(`\n[smoke] ${script}`);
   await import(new URL(script, import.meta.url));
