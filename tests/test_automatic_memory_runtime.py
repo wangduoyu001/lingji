@@ -152,6 +152,25 @@ def test_scan_pause_resume_delegate_to_existing_scheduler(tmp_path: Path):
     ]
 
 
+def test_scan_now_preserves_current_durable_identity_when_an_older_scan_exists(tmp_path: Path):
+    runtime, scheduler, _worker = _runtime(tmp_path)
+    scheduler.reconcile = lambda source_id, *, reason="manual": {
+        "source_id": source_id,
+        "reason": reason,
+        "complete": True,
+        "scan_id": "scan-current",
+        "work_id": "automatic-memory:scan-current",
+    }
+    runtime.state_db.list_automatic_memory_scans = lambda source_id=None: [
+        {"scan_id": "scan-old", "source_id": source_id or "source-1"}
+    ]
+
+    result = runtime.scan_now("source-1")
+
+    assert result["scan_id"] == "scan-current"
+    assert result["work_id"] == "automatic-memory:scan-current"
+
+
 def test_runtime_uses_canonical_state_and_queue_path(tmp_path: Path):
     runtime, _scheduler, _worker = _runtime(tmp_path)
     assert Path(runtime.state_db.path).resolve() == Path(runtime.queue.path).resolve()

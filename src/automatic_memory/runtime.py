@@ -285,18 +285,16 @@ class AutomaticMemoryRuntime:
         result = self.scheduler.reconcile(source_id, reason="manual")
         if is_dataclass(result):
             value = asdict(result)
-            value.update({"source_id": source_id, "work_id": self._scan_work_id_from_source(source_id)})
+            value["source_id"] = source_id
             return value
         if isinstance(result, dict):
             value = dict(result)
             value.setdefault("source_id", source_id)
-            value.setdefault("work_id", self._scan_work_id_from_source(source_id))
+            scan_id = value.get("scan_id")
+            if scan_id is not None:
+                value.setdefault("work_id", f"automatic-memory:{scan_id}")
             return value
         return {"source_id": source_id, "result": result}
-
-    def _scan_work_id_from_source(self, source_id: str) -> str | None:
-        scans = self.state_db.list_automatic_memory_scans(source_id)
-        return f"automatic-memory:{scans[0]['scan_id']}" if scans else None
 
     def _authorized_paths(self, _scan: Any, source: Any) -> tuple[Path, ...]:
         if isinstance(source, SourceRecord):

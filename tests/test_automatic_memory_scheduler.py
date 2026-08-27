@@ -44,6 +44,24 @@ def test_reconciliation_admits_once_and_persists_report(tmp_path: Path):
     assert any(event["event_type"] == "automatic_memory_reconciliation" for event in db.recent_events(10))
 
 
+def test_reconcile_report_contains_the_durable_scan_identity_for_each_call(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+    scheduler = AutomaticMemoryScheduler(
+        db,
+        registry,
+        scan_runner=lambda *_args: ReconciliationReport(1, 1, 0, (), True),
+    )
+
+    first = scheduler.reconcile(source_id, reason="manual")
+    second = scheduler.reconcile(source_id, reason="manual")
+
+    assert first.scan_id
+    assert first.work_id == f"automatic-memory:{first.scan_id}"
+    assert second.scan_id
+    assert second.work_id == f"automatic-memory:{second.scan_id}"
+    assert first.scan_id != second.scan_id
+
+
 def test_start_stop_pause_resume_and_restart_use_persisted_cron_jobs(tmp_path: Path):
     db, registry, source_id = registered(tmp_path)
     scheduler = AutomaticMemoryScheduler(db, registry, scan_runner=lambda *args: None, poll_seconds=0.01)

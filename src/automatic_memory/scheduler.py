@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import threading
 from concurrent.futures import Future
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -23,6 +23,11 @@ class ReconciliationReport:
     errors: tuple[str, ...]
     complete: bool
     reused: int = 0
+    # Durable identity of the scan admitted by this reconciliation call.  The
+    # optional fields preserve compatibility with existing runner callbacks and
+    # reports while allowing callers to bind evidence to this exact scan.
+    scan_id: str | None = None
+    work_id: str | None = None
 
 
 class AutomaticMemoryScheduler:
@@ -246,7 +251,13 @@ class AutomaticMemoryScheduler:
             )
             if claimed is None:
                 return ReconciliationReport(
-                    0, 0, 0, ("scan is already being processed",), False
+                    0,
+                    0,
+                    0,
+                    ("scan is already being processed",),
+                    False,
+                    scan_id=scan.scan_id,
+                    work_id=f"automatic-memory:{scan.scan_id}",
                 )
             heartbeat_stop = threading.Event()
             heartbeat = threading.Thread(
@@ -262,7 +273,11 @@ class AutomaticMemoryScheduler:
                 heartbeat_stop.set()
                 if heartbeat is not threading.current_thread():
                     heartbeat.join(timeout=1.0)
-            report = self._report(result)
+            report = replace(
+                self._report(result),
+                scan_id=scan.scan_id,
+                work_id=f"automatic-memory:{scan.scan_id}",
+            )
             if report.complete:
                 current = self.registry.get_scan(scan.scan_id)
                 if current.status == "completed":
@@ -289,13 +304,7 @@ class AutomaticMemoryScheduler:
                         if current.status == "cancelled"
                         else "source authorization changed during reconciliation"
                     )
-                    report = ReconciliationReport(
-                        report.discovered,
-                        report.queued,
-                        report.unchanged,
-                        (error,),
-                        False,
-                    )
+                    report = replace(report, errors=(error,), complete=False)
             else:
                 error = "; ".join(report.errors)[:2000] or "reconciliation incomplete"
                 self.registry.fail_scan_if_running(
@@ -341,7 +350,15 @@ class AutomaticMemoryScheduler:
                     "next_action": "retry this source on the next scheduled pass",
                 },
             )
-            return ReconciliationReport(0, 0, 0, (error,), False)
+            return ReconciliationReport(
+                0,
+                0,
+                0,
+                (error,),
+                False,
+                scan_id=scan.scan_id if scan is not None else None,
+                work_id=(f"automatic-memory:{scan.scan_id}" if scan is not None else None),
+            )
         finally:
             if scan is not None and "scheduler_lease_id" in locals():
                 try:
