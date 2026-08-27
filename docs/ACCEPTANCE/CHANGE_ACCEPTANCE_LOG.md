@@ -16,7 +16,7 @@
 - RED：repair smoke 在 helper 导出尚未实现时为 `ERR_MODULE_NOT_FOUND`；rendered fake-server flow 在 revoked 状态找不到重授权按钮而超时。GREEN：`npm run build`、`npm run test:memory-sources-repair`、`npm run test:e2e:memory`、原 source/work-fact/runtime/inspector smoke 均 PASS。
 - 覆盖：成功读取后一次性 onboarding、失败读取有界自动重试且不发生陈旧导航；同 kind 不同 root 与 stale authorization 被拒绝；撤销来源显示真实重新授权；九种状态及 offline/expired/unsupported/paused/failed action gating；post-action fresh snapshot 优先展示；旧轮询请求不得清除新请求；fake server 拒绝缺失/错误 `X-LingJi-Token`，生产 client 使用认证 token。
 - 既有完整 smoke：新增 repair smoke、UI/观察检查通过后，保留在既有 `codex-workspace-smoke.mjs` 的 `CurrentWorkPanel.tsx` 缺少“当前项目”断言失败；本轮未修改该无关基线。
-- 本轮仍不执行 Artifact、真实 8766、真实 UI/主人观察、Production/Vault；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。证据 artifact 提交：`33757d8cda435fbb01ba10b0b82f12e5cdd6faf8`；metadata-only 精确 SHA 在随后 metadata record 提交中补写。
+- 本轮仍不执行 Artifact、真实 8766、真实 UI/主人观察、Production/Vault；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。证据 artifact 提交：`33757d8cda435fbb01ba10b0b82f12e5cdd6faf8`；metadata-only 提交：`3564abaee0da59408c0b97f1cc02487a0b0e5f84`。
 
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 2 · Packaged runtime composition
 

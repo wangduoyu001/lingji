@@ -6,7 +6,7 @@ Original product/test commit: `2dc03e6` (`feat: add automatic memory source onbo
 Review: `44b00d3` (`docs: record task four independent review`)
 Repair product/test commit: `5201d6ba2a152713610297769acd73b10e88b28f` (`fix: close automatic memory landing review findings`)
 Evidence artifact commit: `33757d8cda435fbb01ba10b0b82f12e5cdd6faf8`
-Metadata correction commit: pending final metadata record
+Metadata correction commit: `3564abaee0da59408c0b97f1cc02487a0b0e5f84`
 
 ## Verdict
 
