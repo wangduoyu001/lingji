@@ -150,6 +150,8 @@ class AutomaticMemoryRuntime:
 
 **Acceptance:** Launching the packaged Sidecar is sufficient to run the existing automatic-memory backend; no terminal or command line is needed; closing/stopping the instance leaves no watcher/worker thread owned by that instance.
 
+**Final Task 2 disposition (2026-08-27):** The packaged runtime now owns one canonical state database/queue, starts the real scheduler, worker and watcher, attaches newly authorized sources without restart, exposes authenticated truthful runtime state, and passes its focused and broader runtime regressions. The final independent review retained one Important lifecycle edge: after an initially uncooperative watcher later exits, a stale scheduler cleanup error can keep the reported state at `degraded/cleanup_pending` instead of returning to `stopped`. The two-repair cap is exhausted. Task 2 is therefore accepted only as a development dependency for Tasks 3–5, not as release evidence. Those tasks must preserve truthful degraded/needs-restart presentation and must never translate this state to “已停止”. Exact sidecar process exit is the terminal cleanup boundary for this rare path. Task 6, release and Artifact acceptance remain blocked until a narrowly scoped lifecycle follow-up proves stale cleanup state is cleared or the shutdown contract is independently revised. Task 3 may continue because normal start, live authorization, scanning ownership and ordinary shutdown are verified; it must not modify this lifecycle edge or claim packaged shutdown acceptance.
+
 ### Task 3: Connect Authorized Discovery, Snapshot and Extraction to Work Fact
 
 **Purpose:** 让已有来源适配器从授权目录完成“发现 → 快照 → 队列 → 解析 → 索引/记忆候选 → Work Fact”，而不是只停留在 raw/job。
