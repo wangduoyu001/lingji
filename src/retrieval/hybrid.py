@@ -133,10 +133,10 @@ class HybridRetriever:
             return [], channel_state
         limit = max(int(limit), 1)
         revision = self.database.revision
-        # An implicit current/why query is evaluated against the wall clock.
-        # Caching it under a timeless key can replay a memory after its
-        # valid_to boundary. Explicit as_of/history queries remain cacheable.
-        cacheable = not (normalized.mode in {"current", "why"} and normalized.as_of is None)
+        # Every current/why query must re-check StateDB authority at query time;
+        # a cache hit cannot outlive revoke or natural expiry. History and
+        # explicit as_of are immutable temporal reads and remain cacheable.
+        cacheable = normalized.mode not in {"current", "why"}
         cache_key = self._cache_key(clean_query, limit, normalized, revision) if cacheable else ""
         if not diagnostics and cacheable:
             cached = self._cache_get(cache_key)

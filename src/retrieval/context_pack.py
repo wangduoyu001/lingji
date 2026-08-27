@@ -114,7 +114,11 @@ class ContextPackBuilder:
                     used_memory_ids.add(memory_id)
 
         sections = self._ordered_sections(sections)
-        sections.extend(self._linked_evidence(sections, request))
+        linked_evidence, linked_diagnostics = self._linked_evidence(sections, request)
+        sections.extend(linked_evidence)
+        diagnostics["source_authority"] = linked_diagnostics.get("source_authority", "available")
+        if linked_diagnostics.get("reason_code") != "none" or diagnostics.get("reason_code") == "none":
+            diagnostics["reason_code"] = linked_diagnostics.get("reason_code", "none")
         sections = self._ordered_sections(sections)
         pack = {
             "schema_version": 2,
@@ -189,12 +193,14 @@ class ContextPackBuilder:
             "sequence": relationships.get("sequence") if isinstance(relationships, dict) else None,
         }
 
-    def _linked_evidence(self, sections: list[dict[str, Any]], request: ContextPackRequest) -> list[dict[str, Any]]:
+    def _linked_evidence(self, sections: list[dict[str, Any]], request: ContextPackRequest) -> tuple[list[dict[str, Any]], dict[str, str]]:
         if self.source_query_service is None:
-            return []
+            return [], {"source_authority": "available", "reason_code": "none"}
         viewer = ViewerContext("agent", request.agent_id, tuple(request.privacy), False)
         temporal = TemporalQuery.from_values(request.mode, request.as_of)
         output: list[dict[str, Any]] = []
+        pending: list[tuple[dict[str, Any], dict[str, Any], str, str]] = []
+        visible_selected: set[int] = set()
         seen: set[tuple[str, ...]] = set()
         for selected in sections:
             memory_id = str(selected.get("memory_id") or "")
@@ -211,6 +217,26 @@ class ContextPackBuilder:
                 content = str(item.get("content") or "").strip()
                 if not content:
                     continue
+                automatic_source_id = ""
+                if self.source_read_model is not None:
+                    source = self.source_read_model.get_source(str(item.get("source_id") or "")) or {}
+                    metadata = source.get("metadata") or {}
+                    if isinstance(metadata, dict):
+                        automatic_source_id = str(metadata.get("automatic_memory_source_id") or "").strip()
+                pending.append((selected, item, automatic_source_id, memory_id))
+
+        authority_diagnostics = {"source_authority": "available", "reason_code": "none"}
+        decisions: dict[str, bool] = {}
+        authority = getattr(self.retriever, "source_authority", None)
+        authorize_source_ids = getattr(authority, "authorize_source_ids", None)
+        automatic_ids = {automatic_id for _selected, _item, automatic_id, _memory_id in pending if automatic_id}
+        if temporal.mode in {"current", "why"} and automatic_ids and callable(authorize_source_ids):
+            decisions, authority_diagnostics = authorize_source_ids(automatic_ids)
+
+        for selected, item, automatic_source_id, memory_id in pending:
+                if automatic_source_id and temporal.mode in {"current", "why"} and not decisions.get(automatic_source_id, False):
+                    continue
+                content = str(item.get("content") or "").strip()
                 content_hash = str(item.get("content_hash") or "").strip() or hashlib.sha256(content.encode("utf-8")).hexdigest()
                 identity = tuple(self._normalize_identity(item.get(key)) for key in ("source_id", "conversation_id", "message_id")) + (self._normalize_identity(memory_id), self._normalize_identity(content_hash))
                 if identity in seen:
@@ -241,12 +267,13 @@ class ContextPackBuilder:
                     "role": item.get("role"),
                     "provenance_status": "structured",
                 })
-                visible_evidence = True
-            if visible_evidence:
+                visible_selected.add(id(selected))
+        for selected in sections:
+            if id(selected) in visible_selected:
                 selected["provenance_status"] = "structured"
                 selected["provenance_reason"] = "visible_message_memory_link"
         output.sort(key=lambda item: tuple(str(item.get(key) or "") for key in ("source_id", "conversation_id", "message_id", "memory_id", "content_hash")))
-        return output
+        return output, authority_diagnostics
 
     @staticmethod
     def _evidence_temporally_allowed(occurred_at: Any, temporal: TemporalQuery) -> bool:

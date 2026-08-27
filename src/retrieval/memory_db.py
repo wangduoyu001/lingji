@@ -398,6 +398,14 @@ class MemoryDatabase:
             added = 0
             updated = 0
             removed = 0
+            target_identities = {
+                (
+                    str(entry.get("source_id") or ""),
+                    str(entry.get("conversation_id") or ""),
+                    str(entry.get("message_id") or ""),
+                )
+                for entry, _chunks in entries
+            }
             for entry, chunks in entries:
                 identity = (
                     str(entry.get("source_id") or ""),
@@ -467,6 +475,37 @@ class MemoryDatabase:
                     added += 1
                 elif str(prior["content_hash"] or "") != str(entry["content_hash"]):
                     updated += 1
+            # A read-model rebuild may remove a source/message row while the
+            # derived projection still has an active document. Archive those
+            # orphaned rows in this same transaction; keep their FTS text for
+            # history/as_of and never touch ordinary Obsidian documents.
+            orphan_rows = connection.execute(
+                """
+                SELECT memory_id, relationships_json
+                FROM memory_documents
+                WHERE memory_type = 'structured_evidence' AND status = 'active'
+                """
+            ).fetchall()
+            orphaned_at = datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+            for orphan in orphan_rows:
+                relationships = self._loads(orphan["relationships_json"], {})
+                identity = tuple(
+                    str(relationships.get(key) or "")
+                    for key in ("source_id", "conversation_id", "message_id")
+                )
+                if identity in target_identities:
+                    continue
+                relationships["invalidating_reason"] = "source_read_model_identity_removed"
+                connection.execute(
+                    """
+                    UPDATE memory_documents
+                    SET status = 'archived', valid_to = ?, relationships_json = ?,
+                        pin_to_context = 0, updated_at = ?
+                    WHERE memory_id = ? AND status = 'active'
+                    """,
+                    (orphaned_at, self._json(relationships), orphaned_at, str(orphan["memory_id"])),
+                )
+                removed += 1
             if added or updated or removed:
                 revision = self._bump_revision(connection)
             else:

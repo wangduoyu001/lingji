@@ -64,6 +64,10 @@ class SourceAuthorityResolver:
         ]
         return filtered, {"source_authority": status, "reason_code": reason}
 
+    def authorize_source_ids(self, source_ids: set[str]) -> tuple[dict[str, bool], dict[str, str]]:
+        decisions, status, reason = self._decisions({str(value).strip() for value in source_ids if str(value).strip()})
+        return decisions, {"source_authority": status, "reason_code": reason}
+
     def allows_current(self, item: Mapping[str, Any]) -> tuple[bool, dict[str, str]]:
         if str(item.get("memory_type") or "") != "structured_evidence":
             return True, {"source_authority": "available", "reason_code": "none"}

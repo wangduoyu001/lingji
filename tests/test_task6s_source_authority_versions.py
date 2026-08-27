@@ -10,6 +10,8 @@ from src.automatic_memory import AuthorizationScope, SourceRegistry
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.gateway.bootstrap import build_memory_gateway
 from src.retrieval.memory_db import MemoryDatabase
+from src.retrieval.hybrid import HybridRetriever, SearchFilters
+from src.retrieval.source_authority import SourceAuthorityResolver
 from src.sources.read_model import SourceReadModel
 from src.storage import StateDatabase
 
@@ -166,6 +168,63 @@ def test_state_authority_unavailable_fails_closed_with_truthful_diagnostic(tmp_p
         assert outcome["results"] == []
         assert outcome["diagnostics"]["source_authority"] == "unavailable"
         assert outcome["diagnostics"]["reason_code"] == "source_authority_unavailable"
+    finally:
+        gateway.close()
+
+
+def test_explicit_current_cache_hit_rechecks_source_authority(tmp_path: Path):
+    settings, source, state, registry, authorized, pipeline, gateway = _automatic(tmp_path, "cached authority evidence")
+    del source, pipeline, registry
+    try:
+        retriever = HybridRetriever(
+            gateway.database,
+            source_authority=SourceAuthorityResolver(state),
+            cache_size=8,
+            cache_ttl_seconds=120,
+        )
+        filters = SearchFilters(mode="current", as_of="2026-08-28T00:00:00Z")
+        assert retriever.search("cached authority evidence", filters=filters)
+        state.revoke_automatic_memory_source_atomic(
+            authorized.source_id,
+            revoked_at=datetime.now(timezone.utc).isoformat(),
+            reason="cache authority test",
+        )
+        assert retriever.search("cached authority evidence", filters=filters) == []
+    finally:
+        gateway.close()
+
+
+def test_structured_rebuild_archives_active_orphan_projection(tmp_path: Path):
+    settings, source, state, registry, authorized, pipeline, gateway = _automatic(tmp_path, "orphan projection evidence")
+    del source, state, registry, authorized, pipeline
+    try:
+        model = SourceReadModel(MemoryDatabase(settings.memory_db_path))
+        model.rebuild([])
+        rebuilt = gateway.database.sync_structured_evidence()
+        assert rebuilt["documents"] == 0
+        assert gateway.search_memory("chatgpt", "orphan projection evidence")["results"] == []
+        history = gateway.search_memory("chatgpt", "orphan projection evidence", mode="history")
+        assert history["results"]
+        assert history["results"][0]["status"] == "archived"
+    finally:
+        gateway.close()
+
+
+def test_context_pack_linked_automatic_evidence_uses_same_authority_guard(tmp_path: Path):
+    settings, source, state, registry, authorized, pipeline, gateway = _automatic(tmp_path, "linked revoked evidence")
+    try:
+        ordinary_path = tmp_path / "ordinary.md"
+        ordinary_path.write_text("ordinary anchor", encoding="utf-8")
+        gateway.database.upsert_from_entry(
+            {"id": "ordinary-anchor", "title": "Ordinary anchor", "memory_type": "note", "memory_tier": "archival"},
+            ordinary_path,
+        )
+        doc = next(d for d in gateway.database.list_documents() if d["memory_type"] == "structured_evidence")
+        message_id = doc["relationships"]["message_id"]
+        SourceReadModel(gateway.database).link_message_memory(message_id, "ordinary-anchor")
+        registry.revoke(authorized.source_id)
+        pack = gateway.build_context_pack("chatgpt", query="ordinary anchor", include_core=False)
+        assert not [section for section in pack["sections"] if section["kind"] == "raw_message_evidence"]
     finally:
         gateway.close()
 
