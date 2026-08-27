@@ -46,6 +46,8 @@ Task 5A 已完成 Owner Work API 基础收口（代码/测试已通过 focused �
 
 Task 5A Repair Round 1 已完成最后授权修复，等待独立终审：解决主人待办后不再残留旧的主人下一步，且不会删除更新的系统下一步；来源摘要来自现有工作标题并保留精确来源 ID 作为次要诊断。产品/测试提交为 `5e71cda68edfb86eac99804bc66fbfb6540bcb9c`，自动验证聚焦 40 passed、广义 Work/Task8/Capture/自动记忆回归 102 passed；不代表真实服务、UI、Artifact 或主人验收完成。
 
+Task 5B UI 已完成本地 focused 实现：Activity 读取认证 `/api/work/history` 分页并以中文摘要为主，Attention 通过既有 resolve 路由完成真实待办，Memory Review/Inspector 显示现有字段可提供的可读 provenance 并保留真实检查入口，导航隐藏重复 legacy Capture，900px 与复制反馈有确定性覆盖。产品/测试与验收报告待独立审查；未启动 live 8766、Sidecar、Artifact，未访问 Production/Vault 或主人数据，`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。
+
 ## 1B. 自动化第二大脑的锁定方向
 
 Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明确 allowlist 内自动发现并持续接管官方支持或明确授权的 AI 记录，保存完整本地原始证据、来源链和可重建 RAG 投影，并在 Desktop 真实显示发现、处理、结果、失败、下一动作与执行者。

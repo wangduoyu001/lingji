@@ -418,6 +418,27 @@ src/work/projector.py::history/timeline/resolve_pending
 src/control/work_service.py::work_history/resolve_pending
 src/control/work_routes.py
 = authenticated bounded work history, chronological timeline and idempotent pending-action resolution; all reuse lingji_state.db Work Fact persistence
+
+Task 5B Desktop owner workflow additions:
+
+```text
+desktop/lingji-control/src/pages/ActivityPage.tsx
+desktop/lingji-control/src/pages/AttentionPage.tsx
+desktop/lingji-control/src/pages/MemoryReviewPage.tsx
+desktop/lingji-control/src/pages/MemoryInspectorPage.tsx
+desktop/lingji-control/src/navigation.ts
+desktop/lingji-control/src/contracts/workFact.ts
+= history/pending/provenance projections over authenticated existing APIs; no second state source
+```
+
+Focused UI validation:
+
+```powershell
+npm run build
+npm run test:work-fact
+npm run test:memory-review
+npm run test:e2e:memory
+```
 ```
 
 Focused validation:

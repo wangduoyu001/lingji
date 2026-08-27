@@ -285,13 +285,13 @@ POST /api/work/pending-actions/{action_id}/resolve
 - Capture Center remains the sole visible manual capture surface; the old `CapturePage` is removed from navigation or redirects to it.
 
 - [x] **Step 1: Write RED API tests for work history pagination, friendly event summaries and pending-action resolution.** Assert stable `work_id`/`action_id`, restart persistence and no mismatch between current/history/pending projections. Task 5A initial product/tests commit: `f799b8aed526b52b259a360b7162ceef9b86b0a3`; initial RED: 4 failed behavioral tests. Repair Round 1 product/tests: `5e71cda68edfb86eac99804bc66fbfb6540bcb9c`; repair RED: 3 failed behavioral tests.
-- [ ] **Step 2: Write RED rendered tests for completed work, failed work, actionable pending item and readable memory provenance.**
-- [ ] **Step 3: Implement Activity as real recent history.** Replace raw `event_type + JSON` primary display with Chinese phase, result, time, source and next actor; keep technical codes in an expandable diagnostic area.
-- [ ] **Step 4: Implement Attention completion/jump behavior.** Every visible item must resolve through the backend or navigate to its related Work/Memory; no dead-end card is permitted.
-- [ ] **Step 5: Make memory provenance readable and clickable.** Show source name, conversation title, message excerpt, timestamp, current/history state and why it was promoted; preserve exact IDs only as secondary details.
-- [ ] **Step 6: Hide the duplicate legacy capture navigation entry and keep Capture Center as the single route.** Prove Capture → Work → Memory/Failure uses one identity chain.
-- [ ] **Step 7: Normalize state/error/empty copy and narrow-window layout.** At 900px width there is no horizontal clipping; copy actions visibly report success or failure.
-- [ ] **Step 8: Run focused backend, Desktop smoke, TypeScript build and rendered e2e, then independent review.**
+- [x] **Step 2: Write RED rendered tests for completed work, failed work, actionable pending item and readable memory provenance.**
+- [x] **Step 3: Implement Activity as real recent history.** Replace raw `event_type + JSON` primary display with Chinese phase, result, time, source and next actor; keep technical codes in an expandable diagnostic area.
+- [x] **Step 4: Implement Attention completion/jump behavior.** Every visible item must resolve through the backend or navigate to its related Work/Memory; no dead-end card is permitted.
+- [x] **Step 5: Make memory provenance readable and clickable.** Show source name, conversation title, message excerpt, timestamp, current/history state and why it was promoted; preserve exact IDs only as secondary details.
+- [x] **Step 6: Hide the duplicate legacy capture navigation entry and keep Capture Center as the single route.** Prove Capture → Work → Memory/Failure uses one identity chain.
+- [x] **Step 7: Normalize state/error/empty copy and narrow-window layout.** At 900px width there is no horizontal clipping; copy actions visibly report success or failure.
+- [x] **Step 8: Run focused backend, Desktop smoke, TypeScript build and rendered e2e, then independent review.**
 
 **Acceptance:** The owner can answer: what happened, whether it succeeded, what needs action, what was remembered and which original content proves it. No primary page requires reading technical IDs or JSON.
 

@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Phase 1 Product Landing · Task 5B · Owner workflow UI
+
+- 基线：Task 5A final review `289d663b619e20df0b5dcd933cc97f11c92679f0` / `ACCEPT_FOR_5B`。本轮仅修改 Desktop Activity、Attention、Memory Review/Inspector、Capture 导航、Context Pack 复制反馈、Work Fact TypeScript DTO 与 fake-server smokes；复用认证 Work API 和既有记忆接口，不新增后端/API、状态源、记忆/RAG/向量能力。
+- RED：新增真实 fake-8766 rendered flow 首次运行在 Activity history 文案处超时；基线 Activity 仍请求 `/api/work/current`。GREEN：Desktop build、Task 5B work-fact/memory-review smokes 与 rendered E2E 全部通过；报告见 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-5b-report.md`。
+- 渲染场景覆盖 Work History 中文摘要和折叠技术详情、pending resolve 后真实退出列表与失败可见、可读 provenance 和 Inspector 入口、legacy Capture 隐藏、900px 无横向裁切。Task 4 source/repair/runtime/inspector/observation smokes 及 Task 5A backend/Work Fact 回归保持通过。
+- 未执行 live 8766、Sidecar、Artifact、Production/Vault、主人数据或主人验收；`LOCAL_EXECUTION_TASK.md` 继续保持 `IDLE`。兼容 `/capture` 路由未删除。
+
 ## 2026-08-28 · Phase 1 Product Landing · Task 5A · Owner Work API foundation
 
 - 基线：`7d4e4e1bbeeaf24f5000bac2944a1e6c3502bc48`。本轮仅扩展既有 `WorkStore`、`WorkProjector`、`WorkControlService` 与认证 8766 Work Fact 路由：历史分页、稳定时间线投影和 pending action resolve；不得新增任务状态源/API、修改 UI、记忆/RAG/向量、Task 2/3 runtime、Artifact、真实 8766、Production/Vault 或主人数据。
