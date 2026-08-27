@@ -2,12 +2,16 @@
 
 Date: 2026-08-27
 Branch: `codex/phase1-automatic-memory`
-Product/test commit: `2dc03e6` (`feat: add automatic memory source onboarding`)
-Evidence/docs commit: pending
+Original product/test commit: `2dc03e6` (`feat: add automatic memory source onboarding`)
+Review: `44b00d3` (`docs: record task four independent review`)
+Repair product/test commit: `5201d6ba2a152713610297769acd73b10e88b28f` (`fix: close automatic memory landing review findings`)
+Evidence/docs commit: pending (metadata-only correction follows)
 
 ## Verdict
 
 `IMPLEMENTED_FOCUSED_PASS` for the Chinese automatic-memory source onboarding and observation projection slice. This is a code-level and deterministic fake-server result only. It is not packaged Artifact, release, real 8766, Production/Vault, or owner acceptance.
+
+The independent review repair round is also `IMPLEMENTED_FOCUSED_PASS` for I1–I4, I6 and I7. The unrelated `CurrentWorkPanel` baseline remains unchanged.
 
 ## Scope delivered
 
@@ -28,6 +32,11 @@ ERR_MODULE_NOT_FOUND: .../src/pages/memorySourcesApi.ts
 
 The contract smoke then covered canonical merge, all nine UI states, unknown counts, expired copy, action payloads, stale-action verification, terminal scan evidence and no premature terminal success. Rendered coverage uses a fake authenticated 8766-like HTTP server and existing system Chrome.
 
+Repair-round RED/GREEN:
+
+- RED before repair: `automatic-memory-sources-repair-smoke.mjs` failed with `ERR_MODULE_NOT_FOUND` for the not-yet-exported repair helpers; the rendered flow failed at the revoked source because no reauthorization button was present.
+- GREEN after repair: `npm run build`, `npm run test:memory-sources-repair`, and `npm run test:e2e:memory` all passed. The rendered harness now proves transient onboarding retry, stale-navigation protection, exact same-kind/root authorization evidence, revoked reauthorization, all nine source states plus offline/expired/unsupported/paused/failed action gating, verified post-action rendering, request ownership, and authenticated token rejection.
+
 ## Verification
 
 ```text
@@ -38,6 +47,7 @@ npm run test:e2e:memory               PASS
 npm run test:work-fact                PASS
 npm run test:runtime                  PASS
 npm run test:inspector                PASS
+npm run test:memory-sources-repair   PASS
 npm run test:smoke                    FAIL (pre-existing codex-workspace-smoke baseline: CurrentWorkPanel.tsx lacks “当前项目”; all earlier/new scripts pass)
 ```
 
@@ -64,6 +74,17 @@ Product/test commit `2dc03e6`:
 - `desktop/lingji-control/tests/e2e_owner_memory_flow.mjs`
 - `desktop/lingji-control/package.json`
 
+Repair product/test commit `5201d6ba2a152713610297769acd73b10e88b28f`:
+
+- `desktop/lingji-control/src/hooks/useMemorySourcesOnboarding.ts`
+- `desktop/lingji-control/src/hooks/usePollingResource.ts`
+- `desktop/lingji-control/src/pages/MemorySourcesPage.tsx`
+- `desktop/lingji-control/src/pages/memorySourcesApi.ts`
+- `desktop/lingji-control/tests/e2e_owner_memory_flow.mjs`
+- `desktop/lingji-control/scripts/automatic-memory-sources-repair-smoke.mjs`
+- `desktop/lingji-control/scripts/run-smoke-suite.mjs`
+- `desktop/lingji-control/package.json`
+
 Evidence/docs commit also updates `docs/MODULES/CODE_MAP.md`, `docs/PROJECT_STATUS.md`, `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`, and this report.
 
 ## Boundaries and known limitations
@@ -71,5 +92,6 @@ Evidence/docs commit also updates `docs/MODULES/CODE_MAP.md`, `docs/PROJECT_STAT
 - `LOCAL_EXECUTION_TASK.md` is `IDLE`; no live 8766 server, packaged Sidecar, Artifact build/install, real UI, owner data, Production/Vault, or third-party client action was performed.
 - Playwright used the already installed `/Applications/Google Chrome.app`; no browser was downloaded.
 - The complete legacy smoke suite remains blocked by the unrelated existing `codex-workspace-smoke.mjs` assertion. This task did not alter Task 3 Work Fact/CurrentWorkPanel behavior or weaken that test.
+- Full smoke reaches that unchanged baseline after the new repair smoke and all preceding UI/runtime/observation checks pass. No test was removed, skipped, or weakened.
 - Task 2 stale scheduler cleanup-state behavior remains unchanged; the UI presents degraded runtime as “需要重启/检查”, never “已停止”.
 - No automatic promotion seam, backend/API expansion, database, queue, parser, retrieval or vector change was made.

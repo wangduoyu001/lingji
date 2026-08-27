@@ -370,6 +370,7 @@ desktop/lingji-control/src/AppPages.tsx
 desktop/lingji-control/src/navigation.ts
 desktop/lingji-control/src/pages/OverviewPage.tsx
 = first-run Chinese source discovery/authorization/scan status projection using the authenticated Task 3 endpoints; one-time onboarding and Home source/activity/memory summary. UI smoke: `cd desktop/lingji-control && npm run test:memory-sources`; rendered harness: `npm run test:e2e:memory`.
+Repair coverage additionally lives in `desktop/lingji-control/src/hooks/useMemorySourcesOnboarding.ts`, `desktop/lingji-control/scripts/automatic-memory-sources-repair-smoke.mjs`, and the authenticated rendered harness; run `npm run test:memory-sources-repair` for the focused review regressions.
 
 Task 5:
 src/obsidian/memory_scope.py

@@ -10,6 +10,14 @@
 - 真机/主人确认：`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`；按规则不启动打包版、8766、Artifact，不接触主人数据。真实 UI、窄窗口主人观察和发布验收待根代理安排；本条不构成产品验收或合并结论。
 - 清理/回滚：fake server/Vite/Chrome 测试进程在 finally 退出；测试只使用临时 fixture 状态。回滚本轮产品/tests 提交与本条文档提交，不触碰正式 Vault、raw、memory、Qdrant 或主人设置。
 
+### Task 4 Repair Round 1（独立审查 44b00d3 后）
+
+- 基线/审查：原产品 `2dc03e6`；独立审查 `44b00d3`；修复产品/tests 提交：`5201d6ba2a152713610297769acd73b10e88b28f`。本轮只修改 Desktop onboarding/source UI、polling 请求所有权与 deterministic UI tests；后端/API、Task 2/3、Production/Vault 未修改。
+- RED：repair smoke 在 helper 导出尚未实现时为 `ERR_MODULE_NOT_FOUND`；rendered fake-server flow 在 revoked 状态找不到重授权按钮而超时。GREEN：`npm run build`、`npm run test:memory-sources-repair`、`npm run test:e2e:memory`、原 source/work-fact/runtime/inspector smoke 均 PASS。
+- 覆盖：成功读取后一次性 onboarding、失败读取有界自动重试且不发生陈旧导航；同 kind 不同 root 与 stale authorization 被拒绝；撤销来源显示真实重新授权；九种状态及 offline/expired/unsupported/paused/failed action gating；post-action fresh snapshot 优先展示；旧轮询请求不得清除新请求；fake server 拒绝缺失/错误 `X-LingJi-Token`，生产 client 使用认证 token。
+- 既有完整 smoke：新增 repair smoke、UI/观察检查通过后，保留在既有 `codex-workspace-smoke.mjs` 的 `CurrentWorkPanel.tsx` 缺少“当前项目”断言失败；本轮未修改该无关基线。
+- 本轮仍不执行 Artifact、真实 8766、真实 UI/主人观察、Production/Vault；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。证据文档提交与 metadata-only 提交将在产品 Head 固定后补写精确 SHA。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 2 · Packaged runtime composition
 
 - 基线：`5510b4f27b8fd0567f4fd89a7f5ba2f65635bb77`；产品范围为一个 packaged Python 进程内的 `AutomaticMemoryRuntime` 组合、既有 Extraction Worker/Scheduler/Watcher/Checkpoint 生命周期、认证 8766 runtime status 读取和 exact-instance shutdown 接线。
