@@ -15,6 +15,7 @@ assert.match(page, /候选内容已变化，请刷新后重新审核/); assert.m
 assert.match(page, /确认加入长期记忆/); assert.match(page, /归档后不再默认注入 Codex，但不会物理删除文件/);
 assert.match(page, /来源：/); assert.match(page, /来源引用：/); assert.match(page, /对话：尚未获得/); assert.match(page, /原文片段：尚未获得/); assert.match(page, /当前状态：尚未获得/); assert.match(page, /历史状态：尚未获得/); assert.match(page, /为什么：尚未获得/);
 assert.match(page, /正在读取候选记忆…/); assert.match(page, /正在读取候选详情…/); assert.match(page, /detailRequestId/);
+assert.match(page, /listError/); assert.match(page, /候选记忆读取失败，请重试/);
 assert.doesNotMatch(page, /永久删除/); assert.doesNotMatch(page, /HMAC|Tombstone|复杂 Merge/);
 assert.match(contract, /external_modified/); assert.match(contract, /missing/);
 assert.match(page, /AbortController/); assert.match(page, /requestId/);

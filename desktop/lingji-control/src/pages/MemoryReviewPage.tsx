@@ -27,6 +27,7 @@ export default function MemoryReviewPage({ api, active, onOpenInspector }: PageP
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [listError, setListError] = useState<ApiError | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const requestId = useRef(0);
   const detailAbortRef = useRef<AbortController | null>(null);
@@ -39,14 +40,19 @@ export default function MemoryReviewPage({ api, active, onOpenInspector }: PageP
     const id = ++requestId.current;
     abortRef.current = abort;
     setListLoading(true);
+    setListError(null);
     try {
       const response = await client.candidates(filters, abort.signal);
       if (id === requestId.current) {
         setItems(response.items ?? []);
+        setListError(null);
         setError(null);
       }
     } catch (reason) {
-      if (id === requestId.current && reason instanceof ApiError && reason.code !== "REQUEST_CANCELLED") setError(reason);
+      if (id === requestId.current && reason instanceof ApiError && reason.code !== "REQUEST_CANCELLED") {
+        setListError(reason);
+        setError(reason);
+      }
     } finally {
       if (id === requestId.current) setListLoading(false);
     }
@@ -182,7 +188,7 @@ export default function MemoryReviewPage({ api, active, onOpenInspector }: PageP
         </div>
 
         <div className="review-candidate-list">
-          {listLoading && items.length === 0 ? <div className="loop-state">正在读取候选记忆…</div> : items.length ? items.map((item) => (
+          {listLoading && items.length === 0 ? <div className="loop-state">正在读取候选记忆…</div> : listError && items.length === 0 ? <div className="loop-state error">候选记忆读取失败，请重试。</div> : items.length ? items.map((item) => (
             <button
               className={`review-candidate-card ${selected?.memory_id === item.memory_id ? "active" : ""}`}
               key={item.memory_id}
