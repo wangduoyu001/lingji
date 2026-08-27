@@ -54,6 +54,8 @@ Task 6A Lifecycle Closeout: implementation/focused evidence `IMPLEMENTED_FOCUSED
 
 Task 6A Repair Round 1（独立审查 `9ed229461165b748066b9cba3d2ed169af43db56`）已完成：产品/测试提交 `efde650e77a4ecda7f7266aefe48b29b9e8712de` 为唯一授权修复，按 watcher/Cron/source ownership 精确重试和清除 cleanup，且 start/stop 共用 lifecycle serialization。最终 review `22aae07be9accf7d56a4273e8d45a521b2323dab` accepted for Task6。Task 6 packaged E2E、release、Artifact 与主人验收仍未完成或授权。
 
+Task 6 Repair Round 1（diagnostic review `361733b3c660e1b5dc36e5500e1f2436da41572e`）：产品/测试提交 `04eb1d3`、`b6e8c77`、`31f40a3` 已完成有界 durable scan/work identity 和 packaged evidence harness 修复。定向 regression 52 passed；单 root clean Acceptance raw evidence 已记录在唯一权威报告 `docs/TEST_REPORTS/PHASE1_AUTOMATION_UI_GATE.md`。Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`：packaged ingestion 不产生正式 lexical memory document（scenario 8 BLOCKED），现有 scheduler idle heartbeat 保持诚实 `NOT_MEASURED/BLOCKED`（需 Task6H），crash 30/70 最终矩阵与完整双轮报告仍待独立复核。不得宣称 release、Artifact、主人或 Production/Vault 验收。
+
 ## 1B. 自动化第二大脑的锁定方向
 
 Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明确 allowlist 内自动发现并持续接管官方支持或明确授权的 AI 记录，保存完整本地原始证据、来源链和可重建 RAG 投影，并在 Desktop 真实显示发现、处理、结果、失败、下一动作与执行者。

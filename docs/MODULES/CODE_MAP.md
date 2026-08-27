@@ -387,6 +387,12 @@ src/memory/lifecycle.py
 src/retrieval/memory_db.py
 = rebuildable derived promotion and owner/Core boundary
 
+Packaged automation E2E evidence:
+`tests/integration/test_automatic_memory_packaged_flow.py` launches the formal
+control-api composition in isolated Acceptance roots; the single authority is
+`docs/TEST_REPORTS/PHASE1_AUTOMATION_UI_GATE.md`. Repair Round 1 adds durable
+reconciliation scan/work identity only in the existing scheduler/runtime.
+
 Task 7:
 src/retrieval/temporal.py
 src/retrieval/memory_db.py

@@ -2,47 +2,63 @@
 
 Status: `IN_PROGRESS / NOT_ACCEPTED`
 
-This is the single authority for Task 6 packaged automation evidence. It is
-Acceptance-only evidence from temporary roots; it does not represent an
-Artifact, release, live 8766/8767, Production/Vault, or owner acceptance.
+This is the sole Task 6 evidence authority. It is Acceptance-only evidence from
+temporary roots; it is not Artifact, release, live 8766/8767, Production/Vault,
+or owner acceptance.
 
-## Identity and boundaries
+## Identity and bounded repair
 
-- Base reviewed: Task 6A final review `22aae07be9accf7d56a4273e8d45a521b2323dab`, accepted for Task 6.
-- Execution: `tests/integration/test_automatic_memory_packaged_flow.py` launches `run_packaged_control_api.py` in a subprocess and drives the authenticated loopback API.
-- Roots: pytest `tmp_path` only; third-party and Vault recursive sentinels record relative path, SHA-256, size, `mtime_ns`, mode, and symlink identity.
-- Product wiring note: current scan route returns a reconciliation report without `scan_id`; the test resolves the persisted scan from `/api/automatic-memory/scans` and records this compatibility gap. No product change is included in this evidence commit.
+- Base: Task 6A final review `22aae07be9accf7d56a4273e8d45a521b2323dab`, accepted for Task 6.
+- Diagnostic review: `361733b3c660e1b5dc36e5500e1f2436da41572e`; this is Task 6 Repair Round 1, not Task 6A.
+- Product/test commits: `04eb1d3` (durable scan identity), `b6e8c77` (reconciliation event identity), `31f40a3` (packaged evidence harness).
+- The test launches `run_packaged_control_api.py` and drives the authenticated loopback API. Every wait binds source + durable scan identity + trigger reason; no list-first fallback remains.
+- Acceptance env sets existing `LINGJI_EXTRACTION_STALE_AFTER_SECONDS=30` and the settings-equivalent `EXTRACTION_STALE_AFTER_SECONDS=30`; no production default or DB lease is modified.
 
-## Scenario matrix
+## RED and focused evidence
 
-| # | Scenario | Evidence status | Raw counts / timing |
-|---:|---|---|---|
-| 1 | Fresh metadata discovery without content read | `RED/GREEN pending` | Persisted source rows remain 0 before authorization; raw directory remains empty. |
-| 2 | One-time authorization and startup scan | `RED/GREEN pending` | StateDB scans, extraction jobs, structured source/conversation/message rows, and terminal queue state are read from disk. |
-| 3 | File event enters queue within 30 seconds | `RED/GREEN pending` | Watcher-triggered scan timing is measured with `monotonic()` and terminal scan identity. |
-| 4 | Suppressed event found by accelerated reconciliation | `RED/GREEN pending` | Runtime pause/resume plus explicit reconciliation path; persisted scan report is inspected. |
-| 5 | Crash at 30% and 70%, restart to identical terminal counts | `RED/GREEN pending` | Real process kill/restart, durable lease expiry/retry, job counts and terminal status are measured per percentage. |
-| 6 | Pause/resume/revoke/authorization expiry | `RED/GREEN pending` | Runtime state and source status are read through authenticated API; expiry is observed from the persisted source registry. |
-| 7 | Corrupt source isolated while another source completes | `RED/GREEN pending` | Per-source scan/job terminal statuses are compared from StateDB. |
-| 8 | Qdrant unavailable with truthful lexical fallback | `PASS (focused helper)` | Formal HybridRetriever diagnostics report semantic degradation reason and non-empty lexical result. |
-| 9 | Sleep/wake equivalent clock jump and process restart | `RED/GREEN pending` | Source mtime jump plus packaged process restart; runtime and reconciliation terminal status are read after restart. |
-| 10 | Third-party/Vault non-interference | `RED/GREEN pending` | Recursive pre/post sentinel diff must be empty. |
-
-## Commands
+The required RED first failed with `AttributeError: ReconciliationReport.scan_id` in
+the race/old-scan regression. After the bounded scheduler/runtime fix:
 
 ```text
-./.venv/bin/python -m pytest -q tests/integration/test_automatic_memory_packaged_flow.py --tb=short
-cd desktop/lingji-control && npm run test:e2e:memory
+./.venv/bin/python -m pytest -q tests/test_automatic_memory_scheduler.py tests/test_automatic_memory_runtime.py tests/test_automatic_memory_repair_round1.py
+52 passed
+./.venv/bin/python -m pytest -q tests/integration/...::test_qdrant_outage_uses_formal_retrieval_orchestration_with_lexical_fallback
+1 passed (focused helper only; not Task 6 scenario 8 evidence)
 ```
 
-The complete Task 6 focused command is registered as
-`validate.ps1 -Mode focused -Area automatic-memory-landing`; it includes the
-packaged integration test and the existing rendered `e2e_owner_memory_flow.mjs`.
+One clean Acceptance root completed with the following raw persisted evidence
+(the second fresh root is repeatability only; same-root idempotency is measured
+inside each run):
 
-## Limitations and cleanup
+| Scenario | Result and measured evidence |
+|---|---|
+| 1 metadata-only discovery/body-read guard | PASS: 3 discovered metadata records; StateDB sources `0`, raw `0` before authorization. No body is opened by discovery. |
+| 2 authorization + startup scan | PASS: exact scan/work identity; discovered `1`, queued `1`, structured source/conversation/message `1/1/1`, memory `0`; terminal queue `0`; Work Fact outcome `completed`, next actor `system`. |
+| 2 same-root same-bytes idempotency | PASS: second exact scan report queued `0`, reused `1`; source/conversation/message/memory identity sets unchanged; duplicates `0/0/0/0`; raw SHA set unchanged. |
+| 3 file event | PASS: watcher trigger reason `event`, exact durable scan identity, latency `0.124s` (`<=30s`). |
+| 4 suppressed event / reconciliation | PASS: runtime pause then resume; no manual scan POST; production Cron reason `reconciliation`, exact scan identity, terminal after the legal 60-second scheduler floor. |
+| 5 30%/70% crash + restart | Implemented as real sidecar kill at persisted progress barrier; records scan_id, progress/total, snapshot and scheduler lease owner/expiry, exact recovered scan, terminal source/scan/job/raw/structured identity sets and counts. Latest exploratory run reached terminal states but was interrupted before a publishable matrix receipt; final Task6 remains NOT_ACCEPTED. |
+| 6 pause/resume/revoke/expiry | PASS in clean run: paused/resumed states persisted; expiry returned source `expired` and truthful incomplete report; revoke returned `revoked` and disabled source jobs. |
+| 7 corrupt isolation | PASS: corrupt source scan terminal with extraction job `failed`; healthy source scan terminal with extraction job `completed`; source identities isolated. Work Fact identity is bound to each scan. |
+| 8 Qdrant unavailable + lexical fallback | BLOCKED: formal semantic-client failure injection and orchestration run, but packaged automatic-memory ingestion produces raw/structured read-model rows and no formal lexical `memory_documents`. The only available lexical hit is a pre-seeded Vault fixture and is explicitly rejected as self-proof. No retrieval/design change is authorized. |
+| 9 sleep/wake equivalent | PASS in clean run: mtime clock jump + process restart; startup reconciliation reason and exact scan identity terminal. |
+| 10 recursive non-interference | PASS in clean run: third-party sentinel diff `{}`; Vault diff `{}` after explicit bootstrap-directory allowlist. Each sentinel records relative path, SHA-256, size, mtime_ns, mode and symlink target. |
 
-No Artifact was installed, no Production/Vault or owner data was accessed, and
-no real 8766/8767 port was used. A skipped core scenario is a failure. Final
-raw counts, run identities, timings, sentinel diff, regression commands and
-cleanup receipts are added only after the two clean-root runs complete.
+Clean-run final persisted counts: StateDB sources `4`, queued `0`; structured
+source/conversation/message/memory `4/4/4/0`; duplicate counts
+`0/0/0/0`. The run saved `logs/packaged.stdout.log` and
+`logs/packaged.stderr.log`, PID/port/child inventory, and a cleanup receipt with
+port rebind verified. Temporary roots were removed after evidence extraction.
 
+## Heartbeat and limitations
+
+Heartbeat is `NOT_MEASURED/BLOCKED`: `/api/automatic-memory/runtime` truthfully
+reports `scheduler_heartbeat_age=null` with the existing unavailable reason.
+Work Fact `updated_at` and terminal timestamps are not substituted for a live
+heartbeat. A separate Task6H brief is required to add a trustworthy measured
+source before this gate can pass.
+
+The packaged two-clean-root command, rendered Desktop memory E2E, Task2–5
+regressions, compileall, diff-check, acceptance sync and local handoff remain
+required before any future acceptance claim. Any skipped or blocked core
+scenario is failure; this report makes no release or owner-acceptance claim.

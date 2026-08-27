@@ -1848,3 +1848,11 @@ Windows 重启后恢复 = 100%
 - 回滚：代码/测试提交与文档/证据提交分离；如集成 RED 暴露 Tasks 2–5 wiring bug，先停在最小复现并通知根代理，未经授权不扩改产品。
 - UI/回归：注册 `focused -Area automatic-memory-landing` 与既有 `desktop/lingji-control/tests/e2e_owner_memory_flow.mjs` rendered command；另行执行 Task 2/3/4/5 regressions、compileall、diff-check、acceptance sync、local handoff。真实 UI、Artifact、主人观察和 release 仍为未完成状态。
 - 报告：唯一权威报告 `docs/TEST_REPORTS/PHASE1_AUTOMATION_UI_GATE.md`；`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6-report.md` 仅作交接引用。
+
+### Task 6 Repair Round 1（diagnostic review `361733b3c660e1b5dc36e5500e1f2436da41572e`）
+
+- 边界：仅修正 Task6 packaged harness 证据边界和批准的 scheduler/runtime durable `scan_id/work_id` wiring；不改变 DB schema、queue、retrieval、promotion、UI 或 API family。Task6A final review `22aae07be9accf7d56a4273e8d45a521b2323dab` 保持 `ACCEPT_FOR_TASK6`，不将本轮标为 Task6A。
+- RED：新增 race/old-scan regression 首次失败为 `AttributeError: ReconciliationReport.scan_id`；修复后 scheduler/runtime 定向回归 `52 passed`。
+- 自动化边界：真实 `run_packaged_control_api.py` subprocess、loopback authenticated API、StateDB/queue/raw/structured/Work Fact/lexical reads；每个 root 保存脱敏 stdout/stderr、PID/port/child inventory，并验证实例退出和端口重新 bind。启动前递归 sentinel 基线仅允许显式 VaultLayout bootstrap directory paths，第三方树零排除。
+- 失败/阻塞边界：Qdrant 必须在 packaged ingestion 产生的正式 lexical record 上执行正式 retrieval orchestration；当前 automatic-memory ingestion 仅写 raw/structured read model、不产生 lexical `memory_documents`，预置 Vault fact 不计证据，scenario 8 保持 `BLOCKED`。现有 scheduler idle heartbeat 为 nullable/诚实 `NOT_MEASURED/BLOCKED`，不以终态 Work Fact 时间冒充，需另开 Task6H。
+- 清理/回滚：仅清理本轮 pytest/`/private/tmp` Acceptance roots、logs 和 fixtures；按 PID/实例停止，端口重新绑定确认；代码/测试和报告文档分离提交。回滚本轮仅回退 `04eb1d3`、`b6e8c77`、`31f40a3` 及对应文档，不触碰主人数据。

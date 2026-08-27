@@ -339,12 +339,12 @@ POST /api/work/pending-actions/{action_id}/resolve
 9. Sleep/wake equivalent clock jump and process restart.
 10. Third-party/Vault content, metadata and permissions sentinel unchanged.
 
-- [x] **Step 1: Write the failing packaged-flow integration test against an Acceptance-only root.** It launches the same packaged composition as release, not isolated classes directly; current RED records the scan-route DTO gap.
-- [x] **Step 2: Add a recursive file-tree sentinel.** Record relative path, content hash, size, mtime and mode for third-party fixtures and Vault; compare before/after with only declared fixture writes excluded.
-- [ ] **Step 3: Make the smallest wiring fixes exposed by the integration test.** Product changes outside Tasks 2–5 require a new root-approved brief; do not tune retrieval or add features under an acceptance label.
-- [ ] **Step 4: Register `focused -Area automatic-memory-landing` and one Desktop rendered test command.** A skipped core scenario is a failure, not PASS.
-- [ ] **Step 5: Run the ten scenarios twice from clean Acceptance roots.** Second run must produce zero duplicate source/conversation/message/memory rows and zero third-party mutation.
-- [ ] **Step 6: Dispatch independent security/quality review and record raw counts in the single test report.**
+- [x] **Step 1: Write the failing packaged-flow integration test against an Acceptance-only root.** RED includes the durable scan identity race/old-scan regression and launches the same packaged composition as release, not isolated classes directly.
+- [x] **Step 2: Add a recursive file-tree sentinel.** Record relative path, SHA-256, size, mtime_ns, mode and symlink identity before sidecar startup; compare after all helpers with only explicit VaultLayout bootstrap directory paths allowlisted.
+- [x] **Step 3: Make the smallest wiring fixes exposed by the integration test.** Repair Round 1 is limited to scheduler/runtime durable `scan_id/work_id` and reconciliation event identity; no retrieval, DB schema, queue, promotion or UI changes.
+- [x] **Step 4: Register `focused -Area automatic-memory-landing` and one Desktop rendered test command.** A skipped core scenario remains a failure.
+- [ ] **Step 5: Run and publish the ten scenarios twice from clean Acceptance roots.** Same-root idempotency and clean-root repeatability are implemented; Task6 remains NOT_ACCEPTED while Qdrant packaged lexical data, crash matrix receipt and heartbeat gate are unresolved.
+- [ ] **Step 6: Dispatch independent security/quality review and record final raw counts in the single test report.**
 
 **Acceptance:** All ten scenarios execute with real evidence; no permanent queued job, no hidden failure, no production pollution, no third-party mutation, zero duplicates, Work Fact heartbeat age at most 10 seconds.
 
