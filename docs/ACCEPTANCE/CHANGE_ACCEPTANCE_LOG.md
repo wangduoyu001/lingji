@@ -1,5 +1,13 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 0 · Promotion boundary final repair round 2
+
+- 基准：`650f79f4658cf495e42daea37b9de1d3cd801ca4`；产品提交：`b909565f1a44709a6d1e6cd922adaf2908b91642`；本轮仅关闭 Task 5 Repair Round 2 的六项 promotion boundary finding：canonical message 重复 fail-closed、promotion payload 严格 schema、typed provenance 稳定错误、普通 promotion audit 脱敏、direct prepare 证据/metadata 校验，以及 post-commit/recovery 状态保护。不得修改 `quality_gate.py`、runner/CLI、Task 6/4R2、冻结 evaluator/fixtures/questions/thresholds、retrieval ranking/query/filter、Desktop、Artifact、Production、Vault 或本机任务单激活。
+- 风险等级：P0。派生投影仍只允许 `preparing → active`，所有消息 link 使用 canonical identity/hash；StateDB/MemoryDB/SourceReadModel 保持可重建与跨库 saga 语义，不新增事实源。
+- 自动验收：真实 RED `./.venv/bin/python -m pytest -q tests/test_task4_reset_promotion_transaction.py` 为 `6 failed, 42 passed`（无 collection error）；GREEN 同命令 `48 passed`。变更相关回归 `tests/test_auto_memory_promotion.py tests/test_source_read_model.py tests/test_memory_retrieval.py tests/test_memory_lifecycle.py tests/test_task7_timeline_retrieval.py` 为 `71 passed, 2 warnings`；扩展 promotion/source/memory/lifecycle/timeline 回归为 `154 passed, 2 warnings`；fixture hashes 未修改；`py_compile` 与 `git diff --check` PASS。验收同步与本机 handoff 需在文档提交后复读。
+- 真机/主人确认：`LOCAL_EXECUTION_TASK.md` 为 `IDLE`；不启动 Artifact、服务或 UI，不读取 Production/Vault，不执行主人观察；本条不构成产品验收或合并结论。
+- 清理/回滚：仅 pytest `tmp_path` synthetic SQLite；无永久测试数据。回滚本轮产品与文档提交，不触碰正式 Vault、raw、memory、Qdrant 或用户配置。完整报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-0-report.md`（ignored）。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 4R-Reset Task 5 · Promotion provenance visibility atomicity
 
 - 基线：`c0a812efa440cf416821afc30643f2655729dd44`；Repair 1 基线：`263ca2df2beb720b046897cf3c6960731567a34e`；产品提交：`055c4637f2d1c8e7283cdeb39161c23f7e5ef042`，Repair 1 产品提交：`b5d7a482787c47137ea8f12458939f100098e524`。影响范围为既有 StateDB、共享 `lingji_memory.db`、SourceReadModel、Temporal 与 promotion audit；不接触 Production/Vault、runner/CLI/frozen evaluator、Task6/4R2/100k、retrieval ranking、Desktop/UI 或 Artifact。
