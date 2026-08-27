@@ -367,6 +367,7 @@ class MemoryDatabase:
                     "source_id": str(row["source_id"] or ""),
                     "source_external_id": str(row["source_external_id"] or ""),
                     "source_status": source_status,
+                    "raw_reference": str(row["raw_reference"] or ""),
                     "conversation_id": str(row["conversation_id"] or ""),
                     "conversation_external_id": str(row["conversation_external_id"] or ""),
                     "message_id": str(row["message_id"] or ""),
@@ -742,7 +743,7 @@ class MemoryDatabase:
             "structured_source_type", "source_id", "source_external_id", "source_status",
             "conversation_id", "conversation_external_id", "message_id",
             "message_external_id", "role", "author", "sequence", "occurred_at",
-            "content_hash",
+            "content_hash", "raw_reference",
         ):
             value = entry.get(key)
             if value in (None, ""):

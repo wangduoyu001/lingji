@@ -120,8 +120,25 @@ class AutomaticMemoryRuntime:
         self.work_store = WorkStore(state_db)
         self.work_projector = WorkProjector(self.work_store)
         self.work_bridge = CaptureWorkBridge(self.work_store)
+        if hasattr(self.registry, "add_lifecycle_listener"):
+            # Project StateDB authorization transitions into the existing
+            # structured read/index rows before current retrieval can observe
+            # them. This is a read-model projection, not a second authority.
+            self.registry.add_lifecycle_listener(self._on_source_lifecycle_projection)
         if hasattr(self.pipeline, "add_lifecycle_callback"):
             self.pipeline.add_lifecycle_callback(self._on_extraction_lifecycle)
+
+    def _on_source_lifecycle_projection(self, source: Any) -> None:
+        sink = getattr(self.pipeline, "structured_sink", None)
+        read_model = getattr(sink, "read_model", None)
+        project = getattr(read_model, "sync_automatic_source_lifecycle", None)
+        if not callable(project):
+            return
+        source_id = str(getattr(source, "source_id", "") or "")
+        status = str(getattr(source, "status", "") or "")
+        if not source_id or not status:
+            return
+        project(source_id, status)
 
     def _validate_canonical_state_path(self) -> None:
         def verified_path(value: Any, label: str) -> Path:
@@ -172,6 +189,10 @@ class AutomaticMemoryRuntime:
                 # Scheduler owns watcher and CronScheduler; do not start either
                 # child directly here.
                 self.scheduler.start()
+                # ``list_sources`` also materializes expired grants in StateDB;
+                # project those states on every restart before serving queries.
+                for source in self.registry.list_sources():
+                    self._on_source_lifecycle_projection(source)
             except BaseException as start_error:
                 errors = [f"start failed: {start_error}"]
                 for component in (self.scheduler, self.worker):

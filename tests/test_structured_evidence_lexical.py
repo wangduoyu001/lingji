@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,6 +10,9 @@ from src.gateway.bootstrap import build_memory_gateway
 from src.retrieval.hybrid import SearchFilters
 from src.retrieval.memory_db import MemoryDatabase
 from src.sources.read_model import SourceReadModel
+from src.automatic_memory import AuthorizationScope, SourceRegistry
+from src.automatic_memory.runtime import AutomaticMemoryRuntime
+from src.storage import StateDatabase
 
 
 def _settings(root: Path) -> SimpleNamespace:
@@ -68,6 +72,86 @@ def _history(path: Path, *, source_message: str) -> None:
             }
         ),
         encoding="utf-8",
+    )
+
+
+def _automatic_source(root: Path, settings: SimpleNamespace, source_message: str):
+    source = root / "automatic-history.json"
+    _history(source, source_message=source_message)
+    state = StateDatabase(settings.state_db_path)
+    registry = SourceRegistry(state)
+    authorized = registry.register(
+        AuthorizationScope(
+            grant_id="grant-lexical-lifecycle",
+            source_kinds=("generic_ai_history",),
+            roots=(str(root),),
+            granted_at=datetime.now(timezone.utc),
+            expires_at=None,
+            owner_confirmed=True,
+        ),
+        "generic_ai_history",
+        str(root),
+    )
+    pipeline = build_extraction_pipeline(settings)
+    pipeline.execute(
+        "generic_ai_history",
+        input_path=source,
+        payload={"source_id": authorized.source_id},
+        options={"automatic_memory": True},
+        execution_id="exec-automatic-lifecycle",
+    )
+    runtime = AutomaticMemoryRuntime(state_db=state, pipeline=pipeline, settings=settings, registry=registry)
+    return source, state, registry, authorized, pipeline, runtime
+
+
+def _formal_mcp_server(monkeypatch, gateway):
+    import sys
+    import types
+
+    class FakeMCP:
+        def __init__(self, *args, **kwargs):
+            self.tools = {}
+
+        def tool(self, *args, **kwargs):
+            def register(function):
+                self.tools[function.__name__] = function
+                return function
+
+            return register
+
+        def resource(self, *args, **kwargs):
+            return lambda function: function
+
+        def prompt(self, *args, **kwargs):
+            return lambda function: function
+
+    mcp_package = types.ModuleType("mcp")
+    mcp_server_package = types.ModuleType("mcp.server")
+    fastmcp_package = types.ModuleType("mcp.server.fastmcp")
+    fastmcp_package.FastMCP = FakeMCP
+    monkeypatch.setitem(sys.modules, "mcp", mcp_package)
+    monkeypatch.setitem(sys.modules, "mcp.server", mcp_server_package)
+    monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", fastmcp_package)
+    monkeypatch.setattr(
+        "src.mcp_server.PEMISIndex",
+        lambda *args, **kwargs: types.SimpleNamespace(
+            build_index=lambda: None,
+            get_all=lambda: [],
+            layout=types.SimpleNamespace(should_index=lambda *args, **kwargs: False),
+        ),
+    )
+    monkeypatch.setattr("src.mcp_server.SkillRegistry", lambda *args, **kwargs: types.SimpleNamespace(status=lambda: {}))
+    monkeypatch.setattr("src.mcp_server.MarkdownChunker", lambda *args, **kwargs: object())
+    monkeypatch.setattr("src.mcp_server.register_codex_mcp_tools", lambda *args, **kwargs: None)
+    monkeypatch.setattr("src.mcp_server.register_project_context_tools", lambda *args, **kwargs: None)
+    from src import mcp_server
+
+    return mcp_server.create_mcp_server(
+        gateway=gateway,
+        codex_service=object(),
+        project_context_service=object(),
+        extraction_pipeline=object(),
+        default_agent_id="chatgpt",
     )
 
 
@@ -223,6 +307,9 @@ def test_gateway_context_pack_keeps_structured_citation_when_semantic_client_fai
         section = next(item for item in pack["sections"] if item["memory_id"] == hit["memory_id"])
         assert section["provenance_status"] == "structured"
         assert section["citation"]["message_id"] == hit["citation"]["message_id"]
+        assert section["citation"]["raw_reference"].startswith("raw:")
+        assert section["role"] == "assistant"
+        assert section["sequence"] == 0
         assert pack["diagnostics"]["semantic"] == "degraded"
         assert pack["diagnostics"]["reason_code"] == "semantic_query_failed"
     finally:
@@ -230,9 +317,6 @@ def test_gateway_context_pack_keeps_structured_citation_when_semantic_client_fai
 
 
 def test_formal_mcp_search_entry_returns_structured_message_citation(monkeypatch, tmp_path: Path):
-    import sys
-    import types
-
     settings = _settings(tmp_path)
     source = tmp_path / "history.json"
     _history(source, source_message="mcp structured evidence 2e6f")
@@ -240,55 +324,98 @@ def test_formal_mcp_search_entry_returns_structured_message_citation(monkeypatch
     pipeline.execute("generic_ai_history", input_path=source, execution_id="exec-mcp")
     gateway = build_memory_gateway(settings, rebuild_if_empty=False)
 
-    class FakeMCP:
-        def __init__(self, *args, **kwargs):
-            self.tools = {}
-
-        def tool(self, *args, **kwargs):
-            def register(function):
-                self.tools[function.__name__] = function
-                return function
-
-            return register
-
-        def resource(self, *args, **kwargs):
-            return lambda function: function
-
-        def prompt(self, *args, **kwargs):
-            return lambda function: function
-
-    mcp_package = types.ModuleType("mcp")
-    mcp_server_package = types.ModuleType("mcp.server")
-    fastmcp_package = types.ModuleType("mcp.server.fastmcp")
-    fastmcp_package.FastMCP = FakeMCP
-    monkeypatch.setitem(sys.modules, "mcp", mcp_package)
-    monkeypatch.setitem(sys.modules, "mcp.server", mcp_server_package)
-    monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", fastmcp_package)
-    monkeypatch.setattr(
-        "src.mcp_server.PEMISIndex",
-        lambda *args, **kwargs: types.SimpleNamespace(
-            build_index=lambda: None,
-            get_all=lambda: [],
-            layout=types.SimpleNamespace(should_index=lambda *args, **kwargs: False),
-        ),
-    )
-    monkeypatch.setattr("src.mcp_server.SkillRegistry", lambda *args, **kwargs: types.SimpleNamespace(status=lambda: {}))
-    monkeypatch.setattr("src.mcp_server.MarkdownChunker", lambda *args, **kwargs: object())
-    monkeypatch.setattr("src.mcp_server.register_codex_mcp_tools", lambda *args, **kwargs: None)
-    monkeypatch.setattr("src.mcp_server.register_project_context_tools", lambda *args, **kwargs: None)
     try:
-        from src import mcp_server
-
-        server = mcp_server.create_mcp_server(
-            gateway=gateway,
-            codex_service=object(),
-            project_context_service=object(),
-            extraction_pipeline=object(),
-            default_agent_id="chatgpt",
-        )
+        server = _formal_mcp_server(monkeypatch, gateway)
         result = server.tools["search_memory"]("mcp structured evidence")
         assert result["results"]
         assert result["results"][0]["memory_type"] == "structured_evidence"
         assert result["results"][0]["citation"]["message_id"]
     finally:
+        gateway.close()
+
+
+def test_state_db_revoke_and_expiry_are_excluded_from_current_gateway_context_and_mcp(tmp_path: Path, monkeypatch):
+    settings = _settings(tmp_path)
+    source, state, registry, authorized, pipeline, runtime = _automatic_source(
+        tmp_path, settings, "lifecycle evidence must be revoked"
+    )
+    del source, state, pipeline
+    gateway = build_memory_gateway(settings, rebuild_if_empty=False)
+    try:
+        server = _formal_mcp_server(monkeypatch, gateway)
+        assert gateway.search_memory("chatgpt", "lifecycle evidence must be revoked")["results"]
+        registry.revoke(authorized.source_id)
+        assert not gateway.search_memory("chatgpt", "lifecycle evidence must be revoked")["results"]
+        assert gateway.build_context_pack("chatgpt", query="lifecycle evidence must be revoked", include_core=False)["sections"] == []
+        assert not server.tools["search_memory"]("lifecycle evidence must be revoked")["results"]
+        registry.set_status(authorized.source_id, "authorized")
+        assert gateway.search_memory("chatgpt", "lifecycle evidence must be revoked")["results"]
+        registry.set_status(authorized.source_id, "expired", reason="test expiry")
+        assert not gateway.search_memory("chatgpt", "lifecycle evidence must be revoked")["results"]
+        assert not server.tools["search_memory"]("lifecycle evidence must be revoked")["results"]
+        historical = gateway.search_memory("chatgpt", "lifecycle evidence must be revoked", mode="history")
+        assert historical["results"]
+        as_of = gateway.search_memory(
+            "chatgpt", "lifecycle evidence must be revoked",
+            mode="as_of", as_of="2026-08-28T00:00:00Z",
+        )
+        assert as_of["results"]
+        runtime.stop()
+        restarted = AutomaticMemoryRuntime(
+            state_db=StateDatabase(settings.state_db_path),
+            pipeline=build_extraction_pipeline(settings),
+            settings=settings,
+            registry=SourceRegistry(StateDatabase(settings.state_db_path)),
+        )
+        try:
+            restarted.start()
+            assert not gateway.search_memory("chatgpt", "lifecycle evidence must be revoked")["results"]
+        finally:
+            restarted.stop()
+    finally:
+        runtime.stop()
+        gateway.close()
+
+
+def test_automatic_content_update_replaces_current_evidence_version(tmp_path: Path):
+    settings = _settings(tmp_path)
+    source, state, registry, authorized, pipeline, runtime = _automatic_source(
+        tmp_path, settings, "ORIGINAL automatic evidence"
+    )
+    gateway = build_memory_gateway(settings, rebuild_if_empty=False)
+    try:
+        before = [item for item in gateway.database.list_documents() if item["memory_type"] == "structured_evidence"]
+        assert len(before) == 1
+        before_identity = {
+            key: before[0]["relationships"][key]
+            for key in ("source_id", "conversation_id", "message_id")
+        }
+        source.write_text(source.read_text(encoding="utf-8").replace("ORIGINAL", "UPDATED"), encoding="utf-8")
+        pipeline.execute(
+            "generic_ai_history",
+            input_path=source,
+            payload={"source_id": authorized.source_id},
+            options={"automatic_memory": True},
+            execution_id="exec-automatic-update",
+        )
+        replay = pipeline.execute(
+            "generic_ai_history",
+            input_path=source,
+            payload={"source_id": authorized.source_id},
+            options={"automatic_memory": True},
+            execution_id="exec-automatic-replay",
+        )
+        docs = [item for item in gateway.database.list_documents() if item["memory_type"] == "structured_evidence"]
+        assert len(docs) == 1
+        assert {
+            key: docs[0]["relationships"][key]
+            for key in ("source_id", "conversation_id", "message_id")
+        } == before_identity
+        assert replay["structured_read_model"]["lexical_index"]["added"] == 0
+        assert replay["structured_read_model"]["lexical_index"]["updated"] == 0
+        assert gateway.search_memory("chatgpt", "UPDATED automatic evidence")["results"]
+        assert not gateway.search_memory("chatgpt", "ORIGINAL automatic evidence")["results"]
+        assert next(item for item in registry.list_sources() if item.source_id == authorized.source_id).status == "authorized"
+    finally:
+        runtime.stop()
         gateway.close()

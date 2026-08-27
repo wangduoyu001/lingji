@@ -322,6 +322,74 @@ class SourceReadModel:
             message_id = self._upsert_message(connection, record)
         return self.get_message(message_id, include_content=True) or {}
 
+    def sync_automatic_source_lifecycle(
+        self,
+        automatic_source_id: str,
+        status: str,
+        *,
+        updated_at: str | None = None,
+    ) -> dict[str, int | str]:
+        """Project an existing StateDB authorization transition into read/index rows.
+
+        Automatic source IDs are already persisted in structured source metadata.
+        This keeps the lifecycle bridge on the existing read model and its
+        ``memory_documents`` projection; it does not create another state store.
+        Unknown/non-authorized states fail closed as archived evidence.
+        """
+        source_key = str(automatic_source_id or "").strip()
+        if not source_key:
+            raise SourceReadModelError("automatic source identity is required")
+        source_status = str(status or "").strip().lower()
+        projected_status = "active" if source_status == "authorized" else "archived"
+        timestamp = str(updated_at or self._now())
+        with self._lock, self._connection() as connection:
+            source_rows = connection.execute(
+                """
+                SELECT source_id FROM source_records
+                WHERE json_extract(metadata_json, '$.automatic_memory_source_id') = ?
+                """,
+                (source_key,),
+            ).fetchall()
+            source_ids = tuple(str(row["source_id"]) for row in source_rows)
+            if not source_ids:
+                return {"sources": 0, "documents": 0, "status": projected_status}
+            connection.execute(
+                """
+                UPDATE source_records
+                SET status = ?, updated_at = ?
+                WHERE json_extract(metadata_json, '$.automatic_memory_source_id') = ?
+                """,
+                (projected_status, timestamp, source_key),
+            )
+            documents = 0
+            for source_id in source_ids:
+                rows = connection.execute(
+                    """
+                    SELECT memory_id FROM memory_documents
+                    WHERE memory_type = 'structured_evidence'
+                      AND json_extract(relationships_json, '$.source_id') = ?
+                    """,
+                    (source_id,),
+                ).fetchall()
+                documents += len(rows)
+                connection.execute(
+                    """
+                    UPDATE memory_documents
+                    SET status = ?, review_status = 'evidence', updated_at = ?
+                    WHERE memory_type = 'structured_evidence'
+                      AND json_extract(relationships_json, '$.source_id') = ?
+                    """,
+                    (projected_status, timestamp, source_id),
+                )
+                # FTS stores only searchable text; status is read from the
+                # joined document row, so no second FTS index update is needed.
+            # MemoryDatabase.revision is part of the existing Hybrid cache key;
+            # bump it so a cached current result cannot outlive authorization.
+            connection.execute(
+                "UPDATE memory_meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE key = 'revision'"
+            )
+            return {"sources": len(source_ids), "documents": documents, "status": projected_status}
+
     def link_message_memory(
         self,
         message_id: str,

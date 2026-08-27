@@ -107,7 +107,11 @@ class GenericAIHistoryAdapter(ExtractionAdapter):
         if request.options.get("automatic_memory"):
             automatic_source_id = str(request.payload.get("source_id") or "").strip()
             if automatic_source_id:
-                source_scope = self._digest(f"automatic-memory:{automatic_source_id}:{source_scope}")
+                # Automatic snapshots of one authorized source must retain a
+                # stable identity when the export bytes change. The raw
+                # snapshot hash remains provenance, while source/conversation/
+                # message rows are upserted by their stable external IDs.
+                source_scope = self._digest(f"automatic-memory:{automatic_source_id}")
         provenance = {"source_scope": source_scope}
         if automatic_source_id:
             provenance["automatic_memory_source_id"] = automatic_source_id

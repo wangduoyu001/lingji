@@ -158,6 +158,7 @@ class ContextPackBuilder:
                 "source_id", "conversation_id", "message_id",
                 "source_external_id", "conversation_external_id",
                 "message_external_id", "content_hash", "raw_reference",
+                "role", "sequence",
             ):
                 if relationships.get(key) not in (None, ""):
                     citation[key] = relationships[key]
@@ -176,15 +177,16 @@ class ContextPackBuilder:
             "importance": memory.get("importance"),
             "retrieval_score": result.get("retrieval_score"),
             "retrieval_channels": result.get("retrieval_channels", []),
-            # A source service alone does not prove provenance.  The status is
-            # upgraded to ``structured`` only when the read model exposes an
-            # actual message_memory_links row in _linked_evidence().
+            # Structured evidence carries its identity in the rebuildable
+            # projection; ordinary memory still requires a read-model link.
             "provenance_status": "structured" if memory.get("memory_type") == "structured_evidence" else "missing",
             "provenance_reason": (
                 "structured_evidence_projection"
                 if memory.get("memory_type") == "structured_evidence"
                 else "source_query_service_unavailable" if not self.source_query_service else "no_structured_message_link"
             ),
+            "role": relationships.get("role") if isinstance(relationships, dict) else None,
+            "sequence": relationships.get("sequence") if isinstance(relationships, dict) else None,
         }
 
     def _linked_evidence(self, sections: list[dict[str, Any]], request: ContextPackRequest) -> list[dict[str, Any]]:

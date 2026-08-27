@@ -575,6 +575,7 @@ class HybridRetriever:
                 "source_id", "conversation_id", "message_id",
                 "source_external_id", "conversation_external_id",
                 "message_external_id", "content_hash", "raw_reference",
+                "role", "sequence",
             ):
                 if relationships.get(key) not in (None, ""):
                     citation[key] = relationships[key]
