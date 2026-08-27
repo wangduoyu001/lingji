@@ -4,7 +4,7 @@ Date: 2026-08-27
 Branch: `codex/phase1-automatic-memory`
 Base review HEAD: `53c4ce0`
 Product/test commit: `f2f7312`
-Evidence/docs commit: pending (will be replaced with the completed docs commit SHA)
+Evidence/docs commit: `4e5d744`
 
 ## Executive verdict
 

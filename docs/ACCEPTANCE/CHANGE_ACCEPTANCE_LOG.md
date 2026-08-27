@@ -1705,7 +1705,7 @@ Windows 重启后恢复 = 100%
 
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 3 Repair Round 1 · eight Important findings
 
-- 基线/审查：`53c4ce0` / review `0d7bb84`；产品/测试提交：`f2f7312`；报告/文档提交：待提交；分支：`codex/phase1-automatic-memory`。
+- 基线/审查：`53c4ce0` / review `0d7bb84`；产品/测试提交：`f2f7312`；报告/文档提交：`4e5d744`；分支：`codex/phase1-automatic-memory`。
 - 影响模块：existing extraction queue/pipeline, SnapshotJobRunner/ScanRun/ReconciliationReport, bounded Obsidian memory scope, automatic-memory path policy/runtime/API, existing WorkStore, and repair regression tests。
 - 本轮仅修复 I1–I8：内部未授权快照终态失败并通知生命周期；Obsidian 只读有界 frontmatter 且保留 managed `lingji_memory:false` 优先级；敏感文件名大小写/分隔符变体排除；两次扫描新增/复用计数与结构化身份真实；scan API 通过已组合 runtime；WorkItem source/status 与 Outcome 一致；修正历史证据 SHA；automatic AI-chat snapshot 不调用 Vault 文档 sink、不改配置 Vault。
 - 安全边界：不修改 Task 2 lifecycle/timing edge，不调用 promotion seams，不新增 store/parser/queue/API/indexer/UI/retrieval/vector/quality/release/100k，不执行 Artifact、live 8766、Production/Vault/owner 数据。
@@ -1721,10 +1721,10 @@ Windows 重启后恢复 = 100%
 ### 清理与回滚
 
 - 临时数据：仅 pytest `tmp_path` synthetic files/SQLite/Vault; 自动清理，未接触主人数据。
-- 回滚：回退产品/测试提交 `f2f7312` 与本条 evidence/docs 提交；不触碰正式记忆、raw evidence、Qdrant、主人设置或第三方软件。
+- 回滚：回退产品/测试提交 `f2f7312` 与本条 evidence/docs 提交 `4e5d744`；不触碰正式记忆、raw evidence、Qdrant、主人设置或第三方软件。
 
 ### 最终报告
 
 - 完整报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-3-repair-1-report.md`
 - 产品/测试提交：`f2f7312`
-- 报告/文档提交：待提交
+- 报告/文档提交：`4e5d744`
