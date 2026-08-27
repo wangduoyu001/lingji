@@ -1923,3 +1923,12 @@ Windows 重启后恢复 = 100%
   `IDLE`。Task 6 authority `docs/TEST_REPORTS/PHASE1_AUTOMATION_UI_GATE.md` 仍
   `IN_PROGRESS / NOT_ACCEPTED`，其 packaged crash/H 门禁与此前 scenario 8 blocker
   不因本轮 focused evidence 改写。
+## 2026-08-28 · Task 6S · Query-time source authority and evidence versions
+
+- 基线：Task6L Repair Round 1 product/test `5258ecef98e2b58dfb9c12af585a4fbd44c260dd`；终审 `3edbfc8`（`BLOCKED_AT_REPAIR_CAP`）确认四项 Important：自然授权过期 current 泄漏、投影异常吞错导致 current 泄漏、revoke 与 upsert 竞态回流、v1→v2 未保留 history。Task6S 是全新架构重规划，不是 Task6L Repair2。
+- 范围：复用现有 `lingji_state.db` AutomaticMemory SourceRegistry/StateDatabase 作为唯一授权权威；通过正式 Gateway/Hybrid/MCP/ContextPack composition 注入查询时批量 resolver；复用 `lingji_memory.db`/`memory_documents`/FTS 保存 content-hash 版本、validity、supersession 元数据。不得新增 DB/API/retriever/queue/表或调用 promotion/Obsidian/Core。
+- 风险等级：P0。current structured evidence 对 unknown、StateDB unavailable/locked/解析错误、revoked/expired 一律 fail closed；history/as_of 继续遵守 viewer/agent/project/privacy 范围。普通 Obsidian/非 structured memory 不得被 guard 误杀。
+- RED：新增真实 pipeline/Gateway/ContextPack/MCP 测试，覆盖自然 expiry 无 callback、projection observer 抛错、threaded revoke-vs-upsert barrier、StateDB unavailable/locked、v1→v2 current/history/as_of、same bytes、cross-source、Qdrant outage、普通 Obsidian。
+- GREEN：单次 query 批量检查 source status；授权变更立即影响 current 且 resolver diagnostics 诚实；新 hash 插入 active 版本并原子 archive 旧版本，保留 `valid_from/valid_to/superseded_by/supersedes/reason`；顺序重放 v1/v2 raw snapshot 可重建两版 history。
+- 真机/主人确认：`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`；不启动 live 8766/8767、Artifact、Production/Vault 或主人 UI/数据。本条不构成 Task6、release 或主人验收通过。
+- 清理/回滚：仅 pytest 临时 SQLite/raw/fixture；报告与日志使用 `.superpowers/sdd/2026-08-27-phase1-product-landing/`，不 force-add ignored 报告。回滚本轮产品/测试与文档提交，不触碰主人数据。

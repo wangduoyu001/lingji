@@ -107,6 +107,10 @@ src/retrieval/qdrant_provider.py::QdrantSemanticProvider
 src/retrieval/hybrid.py::HybridRetriever
 = Lexical + Semantic + RRF
 
+src/retrieval/source_authority.py::SourceAuthorityResolver
+= Query-time batch guard for automatic structured evidence; reads only the
+  existing StateDB authority and fails closed on unknown/unavailable status
+
 src/model_center/embedding.py::OllamaEmbeddingProvider
 src/model_center/inventory.py::LocalModelInventoryService
 src/gateway/memory.py::MemoryGateway
@@ -161,6 +165,10 @@ src/extraction/worker.py
 src/extraction/sink.py
 src/extraction/structured_sink.py
 = StructuredReadModel 写入后接入上述可重建 structured evidence lexical projection
+
+src/extraction/pipeline.py::ExtractionPipeline.replay_automatic_snapshots
+= Ordered raw snapshot replay through the formal extraction path so the
+  existing memory_documents projection can rebuild content-hash evidence history
 ```
 
 正式数据处理链：

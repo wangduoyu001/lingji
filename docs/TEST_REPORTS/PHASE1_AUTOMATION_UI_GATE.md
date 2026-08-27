@@ -70,6 +70,18 @@ source/conversation/message/memory `4/4/4/0`; duplicate counts
 `logs/packaged.stderr.log`, PID/port/child inventory, and a cleanup receipt with
 port rebind verified. Temporary roots were removed after evidence extraction.
 
+## Task 6S architecture re-plan (2026-08-28)
+
+Task6L's fresh architecture re-plan is recorded in
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6s-report.md`.
+Product/tests commit `5fb2966` injects the existing StateDB-backed
+`SourceAuthorityResolver` into formal Gateway/Hybrid composition and retains
+content-hash evidence versions in the existing `memory_documents` projection.
+Task6S focused tests are `8 passed`; Task6L lexical tests remain `9 passed`.
+This does not change this authority's `IN_PROGRESS / NOT_ACCEPTED` status: Task6H
+heartbeat, packaged crash matrix, live/Artifact/owner acceptance and fresh
+independent review remain outstanding.
+
 ## Heartbeat and limitations
 
 Heartbeat is `NOT_MEASURED/BLOCKED`: `/api/automatic-memory/runtime` truthfully
