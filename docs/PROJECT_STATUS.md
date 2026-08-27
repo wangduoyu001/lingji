@@ -38,7 +38,7 @@ Phase 1 PASS 后，Phase 2 第一优先级固定为 **Opportunity Center / 机�
 
 当前 `LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。在 Work Fact 收口、固定 100 问评测、统一 RAG、质量/规模门禁和同 SHA Artifact 锁定之前，不执行新的真实安装或 M5 主人验收。
 
-Task 3 Repair Round 1 已在本分支产品提交 `f2f7312` 完成八项重要缺口修复：内部未授权快照终态失败且不饥饿有效任务；Obsidian 枚举仅做有界 frontmatter 读取并保留 `lingji_memory: false` 优先级；敏感文件名分隔符/大小写变体 fail-closed；两次扫描报告新增/复用计数真实且结构化身份不重复；scan API 通过已组合 runtime；Work Fact 使用真实 source_id 且终态一致；自动 AI 聊天快照不写配置 Vault Markdown。该状态仅表示代码与合成 fixture 验证通过；不表示 Artifact、真实 UI、主人观察或 Production/Vault 验收完成。Task 2 的 stale scheduler cleanup-state 边界保持不变，自动晋级 seam 仍禁止调用。
+Task 3 Repair Round 1 已在本分支产品提交 `f2f7312` 完成八项重要缺口修复；最终 Repair Round 2 产品提交 `7058da0` 补齐 BOM/CRLF frontmatter、自动 Generic AI 跨来源身份命名空间和暂停恢复 Work Fact 计数。该状态仅表示代码与合成 fixture 验证通过；不表示 Artifact、真实 UI、主人观察或 Production/Vault 验收完成。Task 2 的 stale scheduler cleanup-state 边界保持不变，自动晋级 seam 仍禁止调用。
 
 ## 1B. 自动化第二大脑的锁定方向
 

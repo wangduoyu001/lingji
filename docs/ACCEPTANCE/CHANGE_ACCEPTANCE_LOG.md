@@ -1705,7 +1705,7 @@ Windows 重启后恢复 = 100%
 
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 3 Repair Round 1 · eight Important findings
 
-- 基线/审查：`53c4ce0` / review `0d7bb84`；产品/测试提交：`f2f7312`；报告/文档提交：`4e5d744`；分支：`codex/phase1-automatic-memory`。
+- 基线/审查：`53c4ce0` / review `0d7bb84`；产品/测试提交：`f2f7312`；报告/文档提交：`4e5d744`；元数据修正提交：`95cfc90`；分支：`codex/phase1-automatic-memory`。
 - 影响模块：existing extraction queue/pipeline, SnapshotJobRunner/ScanRun/ReconciliationReport, bounded Obsidian memory scope, automatic-memory path policy/runtime/API, existing WorkStore, and repair regression tests。
 - 本轮仅修复 I1–I8：内部未授权快照终态失败并通知生命周期；Obsidian 只读有界 frontmatter 且保留 managed `lingji_memory:false` 优先级；敏感文件名大小写/分隔符变体排除；两次扫描新增/复用计数与结构化身份真实；scan API 通过已组合 runtime；WorkItem source/status 与 Outcome 一致；修正历史证据 SHA；automatic AI-chat snapshot 不调用 Vault 文档 sink、不改配置 Vault。
 - 安全边界：不修改 Task 2 lifecycle/timing edge，不调用 promotion seams，不新增 store/parser/queue/API/indexer/UI/retrieval/vector/quality/release/100k，不执行 Artifact、live 8766、Production/Vault/owner 数据。
@@ -1728,3 +1728,30 @@ Windows 重启后恢复 = 100%
 - 完整报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-3-repair-1-report.md`
 - 产品/测试提交：`f2f7312`
 - 报告/文档提交：`4e5d744`
+- 元数据修正提交：`95cfc90`
+
+## 2026-08-27 · Phase 1 Automatic Memory · Task 3 Repair Round 2 FINAL · four Important findings
+
+- 基线/审查：`3edbfc8` / Repair Round 1 review；产品/测试提交：`7058da0`；报告/文档提交：evidence artifact SHA will be recorded by metadata-only follow-up；分支：`codex/phase1-automatic-memory`。
+- 影响模块：bounded Obsidian frontmatter reader, existing Generic AI History adapter identity material, automatic-memory Work Fact projection, and Task 3 evidence metadata。
+- 本轮仅修复四项最终 Important：LF/CRLF 与 BOM frontmatter 显式拒绝、自动 Generic AI 跨授权 source identity namespace、30%/70% pause-resume truthful Work Fact total、Round 1 三提交身份补全。无第三轮修复。
+- 安全边界：不修改 Task 2 lifecycle/timing edge，不调用 promotion seams，不新增 parser/store/queue/API/indexer/UI，不写 Vault Markdown，不执行 Artifact、live 8766、Production/Vault/owner 数据。
+
+### 增量自动验收
+
+- [x] 修复 RED：`./.venv/bin/python -m pytest -q tests/test_automatic_memory_repair_round2.py --tb=short` → `5 failed in 0.75s`，覆盖五个新增断言（CRLF/BOM、跨来源身份、30%/70% 恢复计数、三 SHA 证据）。
+- [x] Repair Round 2 focused GREEN：同一命令 → `5 passed in 0.86s`。
+- [x] Task 3 repair 与直接受影响矩阵 → `223 passed, 7 warnings`；历史 Task 2 scheduler timing boundary 本次通过但仍保持隔离，不计为本轮修复。
+- [x] `compileall`、`git diff --check 3edbfc8..HEAD`、`check_acceptance_sync.py`、`check_local_execution_handoff.py` required before final metadata；handoff remains `IDLE`。
+- [ ] 不执行 Artifact、真实 UI、Production/Vault、8766 live server、owner acceptance；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。
+
+### 清理与回滚
+
+- 临时数据：仅 pytest `tmp_path` synthetic files/SQLite/Vault；自动清理，未接触主人数据。
+- 回滚：回退产品/测试提交 `7058da0` 与本条 evidence/docs 提交；不触碰正式记忆、raw evidence、Qdrant、主人设置或第三方软件。
+
+### 最终报告
+
+- 完整报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-3-repair-2-report.md`
+- 产品/测试提交：`7058da0`
+- 报告/文档提交：evidence artifact SHA will be recorded by metadata-only follow-up

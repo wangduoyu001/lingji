@@ -4,7 +4,8 @@ Date: 2026-08-27
 Branch: `codex/phase1-automatic-memory`
 Base review HEAD: `53c4ce0`
 Product/test commit: `f2f7312`
-Evidence/docs commit: `4e5d744`
+Evidence artifact commit: `4e5d744`
+Metadata correction commit: `95cfc90`
 
 ## Executive verdict
 
@@ -49,7 +50,7 @@ Scan WorkItems now use the actual automatic-memory `source_id`, retain stable `a
 
 ### I7 — evidence metadata
 
-The prior Task 3 report now records evidence/docs commit `0d7bb84` and has no trailing whitespace. This repair report and the current acceptance entry intentionally use `pending` only until the final evidence/docs commit exists; the final metadata update records that exact completed docs SHA without self-reference.
+The prior Task 3 report now records evidence/docs commit `0d7bb84` and has no trailing whitespace. This repair report records evidence artifact `4e5d744` and the later metadata-only correction `95cfc90` separately, without self-reference.
 
 ### I8 — no automatic chat Markdown publishing
 
