@@ -67,7 +67,8 @@ class WorkProjector:
             "phase": phase,
             "result": result,
             "time": work.get("updated_at") or outcome.get("created_at") or work.get("created_at"),
-            "source": "已关联来源" if work.get("source_id") else None,
+            "source": str(work.get("title") or "").strip() or None if work.get("source_id") else None,
+            "source_id": work.get("source_id") if work.get("source_id") else None,
             "next_actor": {"owner": "主人", "system": "灵机"}.get(str(actor), None) if actor else None,
         }
 

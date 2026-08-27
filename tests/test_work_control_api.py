@@ -1,4 +1,5 @@
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 from src.control.work_service import WorkControlService
 from src.config import Settings
@@ -95,3 +96,67 @@ def test_pending_action_resolve_is_authenticated_truthful_and_idempotent(tmp_pat
     assert replay.status_code == 200
     assert replay.json()["resolved"] is True
     assert missing.status_code == 404
+
+
+def test_resolve_clears_only_matching_owner_next_action_and_survives_restart(tmp_path: Path):
+    state_path = tmp_path / "state.db"
+    service = WorkControlService(StateDatabase(state_path))
+    work = WorkItem(work_id="owner-next", title="主人确认")
+    service.store.create_work(work)
+    service.store.add_pending_action(PendingAction(work_id=work.work_id, action_id="owner-action", description="请确认"))
+    service.store.save_next_action(NextAction(work_id=work.work_id, action_id="owner-action", description="等待主人确认", actor="owner"))
+
+    resolved = service.resolve_pending("owner-action")
+    assert resolved["resolved"] is True
+    assert service.store.list_pending(work_id=work.work_id) == []
+    assert service.store.get_next_action(work.work_id) is None
+    restarted = WorkControlService(StateDatabase(state_path))
+    assert restarted.current_work()["pending_actions"] == []
+    assert restarted.current_work()["next_action"] is None
+    assert restarted.work_history()["items"][0]["summary"]["next_actor"] is None
+
+
+def test_resolve_does_not_delete_a_newer_system_next_action(tmp_path: Path):
+    service = WorkControlService(StateDatabase(tmp_path / "state.db"))
+    work = WorkItem(work_id="newer-next", title="新下一步")
+    service.store.create_work(work)
+    service.store.add_pending_action(PendingAction(work_id=work.work_id, action_id="owner-action", description="请确认"))
+    service.store.save_next_action(NextAction(work_id=work.work_id, action_id="system-action", description="系统继续维护", actor="system"))
+
+    service.resolve_pending("owner-action")
+    next_action = service.store.get_next_action(work.work_id)
+    assert next_action is not None
+    assert next_action.action_id == "system-action"
+    assert next_action.actor == "system"
+
+
+def test_concurrent_resolve_replays_converge_without_owner_next_actor(tmp_path: Path):
+    service = WorkControlService(StateDatabase(tmp_path / "state.db"))
+    work = WorkItem(work_id="concurrent-resolve", title="并发待办")
+    service.store.create_work(work)
+    service.store.add_pending_action(PendingAction(work_id=work.work_id, action_id="owner-action", description="请确认"))
+    service.store.save_next_action(NextAction(work_id=work.work_id, action_id="owner-action", description="等待主人确认", actor="owner"))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: service.resolve_pending("owner-action"), range(2)))
+
+    assert results == [results[0], results[0]]
+    assert service.pending_actions()["pending_actions"] == []
+    assert service.current_work()["next_action"] is None
+
+
+def test_history_source_summary_is_readable_distinct_and_keeps_exact_id_secondary(tmp_path: Path):
+    service = WorkControlService(StateDatabase(tmp_path / "state.db"))
+    codex = WorkItem(work_id="source-a", title="Codex 开发会话", source_id="codex-session-a")
+    chatgpt = WorkItem(work_id="source-b", title="ChatGPT 官方导出", source_id="chatgpt-export-b")
+    plain = WorkItem(work_id="source-c", title="手动任务")
+    for item in (codex, chatgpt, plain):
+        service.store.create_work(item)
+
+    items = {entry["work"]["work_id"]: entry for entry in service.work_history(limit=10)["items"]}
+    assert items["source-a"]["summary"]["source"] == "Codex 开发会话"
+    assert items["source-b"]["summary"]["source"] == "ChatGPT 官方导出"
+    assert items["source-a"]["summary"]["source"] != items["source-b"]["summary"]["source"]
+    assert items["source-a"]["summary"]["source_id"] == "codex-session-a"
+    assert items["source-c"]["summary"]["source"] is None
+    assert items["source-c"]["summary"]["source_id"] is None

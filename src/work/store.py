@@ -171,17 +171,31 @@ class WorkStore:
         Repeating the same request is deliberately idempotent; an unknown ID is
         not converted into a fake success.
         """
-        action = self.get_pending_action(action_id)
-        if action is None:
-            raise LookupError(f"Unknown pending action: {action_id}")
-        if not action.resolved:
-            with self.state._lock, self.state._connection() as connection:
-                connection.execute(
-                    "UPDATE pending_actions SET resolved = 1 WHERE action_id = ? AND resolved = 0",
-                    (action_id,),
-                )
-            action.resolved = True
-        return action
+        with self.state._lock, self.state._connection() as connection:
+            row = connection.execute(
+                "SELECT action_id, work_id, description, resolved, actor, created_at FROM pending_actions WHERE action_id = ?",
+                (action_id,),
+            ).fetchone()
+            if not row:
+                raise LookupError(f"Unknown pending action: {action_id}")
+            connection.execute(
+                "UPDATE pending_actions SET resolved = 1 WHERE action_id = ? AND resolved = 0",
+                (action_id,),
+            )
+            # A resolved owner action must not remain the next actor, but a
+            # newer system action for the same work must survive unchanged.
+            connection.execute(
+                "DELETE FROM work_next_actions WHERE work_id = ? AND action_id = ? AND actor = 'owner'",
+                (row[1], action_id),
+            )
+        return PendingAction(
+            action_id=row[0],
+            work_id=row[1],
+            description=row[2],
+            resolved=True,
+            actor=row[4] or "owner",
+            created_at=row[5] or "",
+        )
 
     @staticmethod
     def _parse_transition_time(value: str | None) -> datetime | None:
