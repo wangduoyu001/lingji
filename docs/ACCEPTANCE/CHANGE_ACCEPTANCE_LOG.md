@@ -8,6 +8,7 @@
 - 真机/主人确认：`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`；本条不启动 Artifact、服务、UI，不访问 Production/Vault，不构成发布验收或合并结论。
 - 清理/回滚：测试只使用 pytest 临时目录和 synthetic SQLite；回滚本轮产品/tests 与文档提交，不触碰正式 Vault、raw、memory、Qdrant 或主人配置。
 - 增量修复：`c415f5aff067d8f13bc5898f639581142634e2dd` 保证 scheduler stop 抛错时仍停止 worker 并标记 runtime stopped；对应 lifecycle 回归保持通过。
+- Repair Round 1：产品提交 `bc34b9da3427906810a46e32fcccd6d5efe4f680` 修复 partial-start cleanup、stop timeout/异常的 `degraded + cleanup_pending` 重试语义、动态授权 source attach、watcher/worker 存活线程可观测性与 never-started pause 状态；新增真实 pipeline/StateDB/service/runtime/worker/scheduler packaged composition 正常与 startup-failure 测试。变更仍不覆盖 Task 3 consumer/discovery/Work Fact/UI/promotion/Artifact/Production/Vault。
 
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 0 · Owner-review quarantine repair round 1
 
