@@ -46,3 +46,6 @@
 
 **Acceptance:** No unconfirmed candidate can become active through automatic evaluation; explicit owner-confirmed approval remains functional; no projection/link/terminal saga row is created before approval; archival, evidence, retrieval and existing memories are unaffected; status and UI-facing semantics are truthful.
 
+## Final Review Disposition
+
+Repair Round 1 closed fresh evaluation, legacy error recovery and unconfirmed preparing-projection activation, but the final independent review still found that `reconcile_incomplete_projections()` can preserve an already-active legacy projection and append its missing terminal event without durable owner approval. The single repair allowance is exhausted, so this plan is not accepted and receives no further state-machine change. The binding fallback moves to the product composition boundary in `2026-08-27-phase1-product-landing.md`: no packaged background path may call automatic evaluate/reconcile/rebuild; only explicit authenticated owner-confirmed approve/reject remains enabled. Runtime tests must use raising sentinels to enforce that boundary.
