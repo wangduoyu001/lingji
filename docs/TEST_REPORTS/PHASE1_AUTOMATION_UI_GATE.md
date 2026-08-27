@@ -82,6 +82,14 @@ This does not change this authority's `IN_PROGRESS / NOT_ACCEPTED` status: Task6
 heartbeat, packaged crash matrix, live/Artifact/owner acceptance and fresh
 independent review remain outstanding.
 
+Task6S Repair Round 1 product/tests commit `9692cf7` closes the three current
+structured-evidence bypasses identified by independent review `1816d361`: current
+and why Hybrid results are never served from a stale authority-unsafe cache;
+active orphan projections are archived during the existing structured sync while
+history is retained; and ContextPack linked raw-message evidence uses the same
+batch StateDB resolver before append. Task6S remains `NOT_ACCEPTED` pending a fresh
+review, Task6H heartbeat, and packaged crash evidence.
+
 ## Heartbeat and limitations
 
 Heartbeat is `NOT_MEASURED/BLOCKED`: `/api/automatic-memory/runtime` truthfully

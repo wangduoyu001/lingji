@@ -1932,3 +1932,10 @@ Windows 重启后恢复 = 100%
 - GREEN：单次 query 批量检查 source status；授权变更立即影响 current 且 resolver diagnostics 诚实；新 hash 插入 active 版本并原子 archive 旧版本，保留 `valid_from/valid_to/superseded_by/supersedes/reason`；顺序重放 v1/v2 raw snapshot 可重建两版 history。
 - 真机/主人确认：`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`；不启动 live 8766/8767、Artifact、Production/Vault 或主人 UI/数据。本条不构成 Task6、release 或主人验收通过。
 - 清理/回滚：仅 pytest 临时 SQLite/raw/fixture；报告与日志使用 `.superpowers/sdd/2026-08-27-phase1-product-landing/`，不 force-add ignored 报告。回滚本轮产品/测试与文档提交，不触碰主人数据。
+
+## 2026-08-28 · Task 6S · Repair Round 1 — cache, orphan projection, linked evidence
+
+- 审查基线：Task6S product/tests `5fb2966`、docs/evidence `bbdc037`；独立终审 `1816d361542a86141eeb28de0d88c66899aa0ce1` 保留三项 Important：显式 current/why cache 命中绕过 authority、read-model rebuild 后 active orphan structured projection、ContextPack linked raw evidence 绕过 authority。本轮是唯一批准 Repair Round 1；若仍有 Important 即 `BLOCKED_AT_REPAIR_CAP`。
+- 最小范围：只改现有 `HybridRetriever` cache、`MemoryDatabase.sync_structured_evidence`、`ContextPackBuilder` 与同一 resolver 注入/测试；不新增 DB/API/retriever/服务/表，不改 history 语义、promotion、Vault/Core、ranking/vector。
+- RED：新增 warm-cache→revoke、rebuild([])→sync orphan、ordinary anchor linked automatic message revoke 三项真实测试，修复前 `3 failed`。GREEN：每次 current/why（含显式 as_of）不缓存或重新授权检查；孤儿 active 版本原子 archived 并保留 history；linked message 批量 authority check 后才追加，普通 linked evidence 保留。
+- 自动验收：Task6S/Task6L/context focused、Task2/3 lifecycle+ingestion、Task6 packaged lexical/Qdrant、compile、diff-check、acceptance sync、local handoff；仅 pytest 临时 roots。Task6 权威仍 `IN_PROGRESS / NOT_ACCEPTED`，Task6H heartbeat、crash、live/Artifact/owner acceptance 未执行。
