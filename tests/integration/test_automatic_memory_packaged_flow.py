@@ -168,9 +168,9 @@ def _duplicate_counts(root: Path) -> dict[str, int]:
         return {"source": 0, "conversation": 0, "message": 0, "memory": 0}
     with sqlite3.connect(db) as connection:
         checks = {
-            "source": "SELECT COUNT(*) - COUNT(DISTINCT source_id) FROM source_records",
-            "conversation": "SELECT COUNT(*) - COUNT(DISTINCT conversation_id) FROM conversation_records",
-            "message": "SELECT COUNT(*) - COUNT(DISTINCT message_id) FROM message_records",
+            "source": "SELECT COUNT(*) - COUNT(DISTINCT COALESCE(external_id, source_id)) FROM source_records",
+            "conversation": "SELECT COUNT(*) - COUNT(DISTINCT COALESCE(external_id, conversation_id)) FROM conversation_records",
+            "message": "SELECT COUNT(*) - COUNT(DISTINCT COALESCE(external_id, message_id)) FROM message_records",
             "memory": "SELECT COUNT(*) - COUNT(DISTINCT memory_id) FROM memory_documents",
         }
         return {key: int(connection.execute(sql).fetchone()[0]) for key, sql in checks.items()}
