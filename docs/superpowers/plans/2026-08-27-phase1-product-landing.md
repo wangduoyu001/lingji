@@ -102,6 +102,8 @@
 
 **Acceptance:** Current evidence architecture is closed with no open Critical/Important; no new product capability is introduced; current docs are truthful; further work moves to runtime/UI.
 
+**Final Task 1 disposition (2026-08-27):** Repair Round 2 passed the complete 336-test reset matrix and closed all data-admission, cleanup, measured-failure, history-coverage and evidence-integrity findings. The final independent review still found two Important acceptance gaps: this macOS environment cannot execute/instrument the actual PowerShell release entry, and runner-stage exceptions can escape without publishing a fresh truthful `NOT_EVALUATED` envelope. The two-repair cap is exhausted. Task 1 is composition-quarantined from Task 4R2, release, 100k and Artifact claims; those paths remain blocked. Runtime, authorized ingestion, Work Fact and Desktop Tasks 2–6 may proceed because they neither call this quality runner nor claim release acceptance. A later independent runner-error-envelope/release-entry task must close both gaps before Task 7/8.
+
 ### Task 2: Compose One Real Packaged Automatic-Memory Runtime
 
 **Purpose:** 让正式 Sidecar 启动时真正启动现有 Extraction Worker、AutomaticMemory Scheduler、watcher 和 checkpoint runner，关闭时按同一实例停止。
@@ -134,6 +136,9 @@ class AutomaticMemoryRuntime:
 - The runtime receives the existing `StateDatabase`, `SQLiteExtractionQueue`, extraction pipeline and settings; it does not construct alternate stores.
 - Start/stop is idempotent and exact-instance scoped.
 - The runtime never instantiates or invokes automatic promotion evaluation/reconciliation/rebuild. Tests replace all five forbidden background seams with raising sentinels. Explicit owner-confirmed review actions remain outside scheduler/worker startup.
+- “One database/queue” means one canonical `lingji_state.db` path and one queue wrapper shared by the runtime/service/worker. Existing factories may hold multiple SQLite connections to that same file; object-identity of every connection is not required, and no second logical database/file is allowed.
+- Existing scheduler/worker classes do not expose a trustworthy idle heartbeat timestamp. Task 2 returns `scheduler_heartbeat_age=null` with an explicit unavailable reason; it must not derive a fake value from scan/update timestamps or add a heartbeat daemon. Task 6 may add a real measured source under a new reviewed brief.
+- Task 2 proves lifecycle and snapshot admission only. The `automatic_memory_snapshot` consumer, adapter dispatch and terminal raw→extraction outcome belong to Task 3; Task 2 must not claim a queued snapshot was fully imported.
 
 - [ ] **Step 1: Write RED lifecycle tests.** Prove packaged start starts one worker and one scheduler, a second start is a no-op, stop releases watcher/cron/worker, and restart reuses persisted scans without a second database.
 - [ ] **Step 1a: Write RED promotion-isolation tests.** Monkeypatch `evaluate`, `promote`, `submit`, `reconcile_incomplete_projections` and `rebuild_derived_projections` to raise; packaged startup, startup scan, scheduled reconciliation, restart and shutdown must complete without calling them.
@@ -306,6 +311,8 @@ POST /api/work/pending-actions/{action_id}/resolve
 ### Task 7: Run the Existing Quality and Scale Gate Without Expanding Product Scope
 
 **Purpose:** 恢复 Task 4R2/100-question/100k 门禁，只评价已有产品，不把门禁继续发展成产品子系统。
+
+**Entry gate:** Task 7 cannot start until a separately reviewed runner-error-envelope/release-entry integration task proves truthful envelope publication for every runner exception and executable/instrumented PowerShell release ordering. The current `BLOCKED_4R2_REQUIRED` quarantine remains authoritative.
 
 **Files:**
 - Modify only as authorized by existing `docs/superpowers/plans/2026-08-26-phase1-automatic-memory-followup.md` Task 4R2/4Q sections.
