@@ -24,7 +24,7 @@
 - RED：七次临时 source failure 令旧六次预算停在 Overview（`locator.waitFor: Timeout 10000ms exceeded`）；移除 outage Notice 的暂时性 RED 为 `locator.waitFor: Timeout 30000ms exceeded`；I4 repair smoke 在 helper 导出前为缺少 `canPublishRequest` 的 SyntaxError。GREEN：长重试自动恢复、延迟响应导航 race、保留快照的 outage/offline/retry/recovery、paused `已暂停`/`继续扫描`、late ordinary error guard 均由 rendered/repair smoke 通过。
 - 自动验收：`npm run build`、`npm run test:memory-sources`、`npm run test:memory-sources-repair`、`npm run test:e2e:memory`、`npm run test:work-fact`、`npm run test:runtime`、`npm run test:inspector`、`observation-first-ui-smoke.mjs` PASS；完整 smoke 在不变的 `codex-workspace-smoke.mjs` `CurrentWorkPanel.tsx` 缺少“当前项目”断言处失败，未修改或弱化该基线。
 - 证据边界：rendered harness 使用本地 fake 8766-like server 与已安装系统 Chrome，显式验证 token、离线恢复、九态动作/下一步、授权/扫描终态；不宣称真实 8766、打包版、Artifact、主人观察或 Production/Vault 验收。`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。
-- 证据文档与 metadata-only SHA 在最终产品 Head 固定后补写。
+- Round 2 证据 artifact 提交：`963dde9e1985e4f7bc8379d24ef7fe8814c3b193`；metadata-only SHA 在随后 metadata record 提交中补写。
 
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 2 · Packaged runtime composition
 
