@@ -73,6 +73,8 @@
 - [ ] **Step 5: Dispatch a fresh Luna review.** Acceptance requires `Spec PASS`, `Quality APPROVED`, zero Critical and zero Important. If Repair Round 2 fails, stop and re-plan; do not authorize Repair Round 3.
 **Acceptance:** Task 5 promotion boundary has no open Critical/Important; no retrieval, runner, Desktop, Production/Vault, 100k or release scope is touched; Repair Round 2 is the final authorized repair round.
 
+**Breaker and owner-authorized recovery (2026-08-27):** Repair Round 2 review at product/docs head `3227a279990e3977b73a8f0ba7463aeed13deeb2` returned Spec FAIL / Quality Needs fixes because the real recovery matrix was incomplete, the compatibility event path bypassed redaction, and non-finite ordinary payloads were persistable. The owner authorized the separate one-shot safety plan `docs/superpowers/plans/2026-08-27-promotion-safety-closeout.md`. This main plan resumes at Task 1 only after that plan has a clean independent review; if it fails, automatic promotion is quarantined to owner review before runtime/UI work continues.
+
 ### Task 1: Close the Thin Runner and Authority Boundary
 
 **Purpose:** 完成现有 Task 4R-Reset Task 6 thin-runner 收口和 whole-reset review；完成后不再扩展证据框架，立即转入产品接线。
