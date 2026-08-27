@@ -5,6 +5,8 @@
 - Task: Thin Quality Runner Reset and Authority Reconciliation
 - Base: `5c3bed8f8a4fb77632b41ec7e0c23c8ebeb72a78`
 - Product/test commit: `7b549ab63d752177a4572db8f78f4ea6d879f8aa`
+- Documentation/authority commit: `edca62e0977a59f7d7185fe49df9c6e58c90e381`
+- HEAD at this report update: `edca62e0977a59f7d7185fe49df9c6e58c90e381`
 - Branch: `codex/phase1-automatic-memory`
 - Fixtures: unchanged synthetic corpus/questions only
 - Out of scope: retrieval ranking, thresholds, questions, corpus, vectors, promotion behavior, Desktop, Production/Vault, 4R2 and 100k execution
@@ -25,7 +27,7 @@ Historical round-5 takeover/activation tests were migrated to preserve rejection
    Result: `8 passed`.
 3. Task6 runner regression command:
    `./.venv/bin/python -m pytest -q tests/test_task4_reset_ingestion_order.py tests/evaluation/test_task4_reset_import_audit.py tests/evaluation/test_task4_reset_section_identity.py tests/evaluation/test_task4_reset_readiness.py tests/evaluation/test_task4_reset_runner.py tests/evaluation/test_automatic_memory_end_to_end.py tests/evaluation/test_task4r1_round5_final_red.py tests/evaluation/test_task4r1_takeover_red.py tests/test_task4_reset_validation_guard.py tests/test_automatic_memory_acceptance_gate.py`
-   Result: `252 passed`.
+   Result: `252 passed` (fresh post-commit rerun).
 4. Fixture hashes:
    - corpus: `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94`
    - questions: `338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612`
