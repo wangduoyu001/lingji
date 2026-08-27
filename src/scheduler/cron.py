@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
@@ -32,6 +33,13 @@ class CronScheduler:
         self._stop_event = threading.Event()
         self._owner = f"cron-{uuid4().hex}"
         self._lease_seconds = 30.0
+        self._heartbeat_callback = None
+        self._heartbeat_interval = None
+
+    def configure_heartbeat(self, callback, *, interval_seconds: float = 5.0) -> None:
+        """Configure a lightweight callback run by the existing scheduler loop."""
+        self._heartbeat_callback = callback
+        self._heartbeat_interval = max(min(float(interval_seconds), 5.0), 0.05)
 
     def add_job(
         self,
@@ -68,34 +76,52 @@ class CronScheduler:
         logger.info("Scheduler started: %d jobs", len(self.state_db.list_scheduler_jobs()))
 
     def _loop(self):
+        last_heartbeat = 0.0
+        last_poll = 0.0
         while self.running:
             try:
-                current_mode = str(self.mode_provider() or "NORMAL").upper()
-                for job in self.state_db.claim_due_scheduler_jobs(
-                    self._owner,
-                    lease_seconds=self._lease_seconds,
-                    current_mode=current_mode,
+                now = time.monotonic()
+                if (
+                    self._heartbeat_callback is not None
+                    and (last_heartbeat == 0.0 or now - last_heartbeat >= (self._heartbeat_interval or 5.0))
                 ):
-                    if not self.running:
-                        break
-                    name = job["name"]
-                    if not self._mode_allows(current_mode, job.get("min_mode", "NORMAL")):
-                        continue
-                    with self._lock:
-                        if name in self._running_jobs:
+                    self._heartbeat_callback()
+                    last_heartbeat = now
+                if last_poll == 0.0 or now - last_poll >= self.poll_seconds:
+                    current_mode = str(self.mode_provider() or "NORMAL").upper()
+                    for job in self.state_db.claim_due_scheduler_jobs(
+                        self._owner,
+                        lease_seconds=self._lease_seconds,
+                        current_mode=current_mode,
+                    ):
+                        if not self.running:
+                            break
+                        name = job["name"]
+                        if not self._mode_allows(current_mode, job.get("min_mode", "NORMAL")):
                             continue
-                        self._running_jobs.add(name)
-                    executor = self._executor
-                    if executor is None:
                         with self._lock:
-                            self._running_jobs.discard(name)
-                        break
-                    executor.submit(self._run_job, job)
-                if self._stop_event.wait(self.poll_seconds):
+                            if name in self._running_jobs:
+                                continue
+                            self._running_jobs.add(name)
+                        executor = self._executor
+                        if executor is None:
+                            with self._lock:
+                                self._running_jobs.discard(name)
+                            break
+                        executor.submit(self._run_job, job)
+                    last_poll = now
+                wait_seconds = self.poll_seconds - (now - last_poll)
+                wait_seconds = max(wait_seconds, 0.001)
+                if self._heartbeat_callback is not None:
+                    wait_seconds = min(wait_seconds, self._heartbeat_interval or 5.0)
+                if self._stop_event.wait(wait_seconds):
                     break
             except Exception as exc:
                 logger.exception("Scheduler loop failed: %s", exc)
-                if self._stop_event.wait(self.poll_seconds):
+                wait_seconds = min(self.poll_seconds, self._heartbeat_interval or self.poll_seconds)
+                if self._heartbeat_callback is not None:
+                    wait_seconds = min(wait_seconds, self._heartbeat_interval or 5.0)
+                if self._stop_event.wait(wait_seconds):
                     break
 
     def _run_job(self, job):

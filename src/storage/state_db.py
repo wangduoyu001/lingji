@@ -65,6 +65,16 @@ class StateDatabase:
                     updated_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS automatic_memory_heartbeats (
+                    instance_id TEXT PRIMARY KEY,
+                    generation INTEGER NOT NULL,
+                    heartbeat_at TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    reason TEXT,
+                    last_error TEXT,
+                    updated_at TEXT NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS processing_states (
                     source_id TEXT NOT NULL,
                     processor TEXT NOT NULL,
@@ -497,6 +507,55 @@ class StateDatabase:
                     f"{prefix}%",
                 ),
             )
+
+    def upsert_automatic_memory_heartbeat(
+        self,
+        instance_id: str,
+        generation: int,
+        state: str,
+        *,
+        heartbeat_at: str | None = None,
+        reason: str | None = None,
+        last_error: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist the one mutable heartbeat row owned by a runtime instance."""
+        timestamp = heartbeat_at or datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO automatic_memory_heartbeats
+                    (instance_id, generation, heartbeat_at, state, reason, last_error, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(instance_id) DO UPDATE SET
+                    generation = excluded.generation,
+                    heartbeat_at = excluded.heartbeat_at,
+                    state = excluded.state,
+                    reason = excluded.reason,
+                    last_error = excluded.last_error,
+                    updated_at = excluded.updated_at
+                """,
+                (str(instance_id), int(generation), timestamp, str(state), reason, last_error, timestamp),
+            )
+            row = connection.execute(
+                "SELECT * FROM automatic_memory_heartbeats WHERE instance_id = ?",
+                (str(instance_id),),
+            ).fetchone()
+        return dict(row)
+
+    def list_automatic_memory_heartbeats(
+        self, *, instance_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        with self._connection() as connection:
+            if instance_id is None:
+                rows = connection.execute(
+                    "SELECT * FROM automatic_memory_heartbeats ORDER BY heartbeat_at DESC, instance_id"
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    "SELECT * FROM automatic_memory_heartbeats WHERE instance_id = ?",
+                    (str(instance_id),),
+                ).fetchall()
+        return [dict(row) for row in rows]
 
     def needs_processing(
         self,

@@ -148,10 +148,15 @@ def register_automatic_memory_routes(
                 "state": "stopped",
                 "running": False,
                 "paused": False,
+                "scheduler_heartbeat_at": None,
                 "scheduler_heartbeat_age": None,
                 "scheduler_heartbeat_reason": (
                     "unavailable: automatic-memory runtime is not composed"
                 ),
+                "scheduler_heartbeat_instance": None,
+                "scheduler_heartbeat_generation": None,
+                "scheduler_heartbeat_state": None,
+                "scheduler_heartbeat_last_error": None,
                 "worker_state": None,
                 "authorized_watcher_count": None,
                 "last_global_error": None,

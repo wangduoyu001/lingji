@@ -100,6 +100,16 @@ class WorkStore:
             row = connection.execute("SELECT work_id, title, source_id, status, owner_approved, created_at, updated_at FROM work_items WHERE source_id = ? ORDER BY created_at LIMIT 1", (source_id,)).fetchone()
         return self._work(row) if row else None
 
+    def touch_work(self, work_id: str, *, updated_at: str | None = None) -> bool:
+        """Refresh an active work fact without appending an activity event."""
+        timestamp = updated_at or datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        with self.state._lock, self.state._connection() as connection:
+            cursor = connection.execute(
+                "UPDATE work_items SET updated_at = ? WHERE work_id = ? AND status IN ('accepted', 'running', 'retrying')",
+                (timestamp, str(work_id)),
+            )
+        return cursor.rowcount == 1
+
     def append_event(self, event: ExecutionEvent) -> None:
         with self.state._lock, self.state._connection() as connection:
             connection.execute("INSERT OR IGNORE INTO execution_events(event_id, work_id, event_type, detail_json, created_at) VALUES (?, ?, ?, ?, ?)", (event.event_id, event.work_id, event.event_type, self._json(event.detail), event.created_at))

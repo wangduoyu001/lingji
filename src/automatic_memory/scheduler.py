@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import threading
+from datetime import datetime, timezone
 from concurrent.futures import Future
 from dataclasses import dataclass, replace
 from typing import Any, Callable
@@ -49,6 +50,8 @@ class AutomaticMemoryScheduler:
         debounce_seconds: float = 5.0,
         reconciliation_seconds: float = RECONCILIATION_SECONDS,
         integrity_seconds: float = INTEGRITY_SECONDS,
+        heartbeat_seconds: float = 5.0,
+        heartbeat_work_callback: Callable[[], Any] | None = None,
     ) -> None:
         self.state_db = state_db
         self.registry = source_registry
@@ -57,6 +60,8 @@ class AutomaticMemoryScheduler:
         self.debounce_seconds = max(float(debounce_seconds), 0.1)
         self.reconciliation_seconds = max(float(reconciliation_seconds), 1.0)
         self.integrity_seconds = max(float(integrity_seconds), 1.0)
+        self.heartbeat_seconds = max(min(float(heartbeat_seconds), 5.0), 0.05)
+        self.heartbeat_work_callback = heartbeat_work_callback
         self.watcher = watcher or AutomaticMemoryWatcher(
             source_provider=self._source,
             on_change=lambda source_id: self.reconcile(source_id, reason="event"),
@@ -74,6 +79,10 @@ class AutomaticMemoryScheduler:
         self._source_cleanup_errors: dict[str, str] = {}
         self._cleanup_error_parts: dict[str, dict[str, str]] = {}
         self._stop_lock = threading.Lock()
+        self.instance_id = f"automatic-memory-{uuid4().hex}"
+        self.generation = 0
+        self._heartbeat_last_error: str | None = None
+        self._heartbeat_reason: str | None = None
 
     @property
     def source_cleanup_errors(self) -> dict[str, str]:
@@ -116,6 +125,7 @@ class AutomaticMemoryScheduler:
                 if self._running:
                     return
                 self._lifecycle_generation += 1
+                self.generation = self._lifecycle_generation
                 generation = self._lifecycle_generation
                 listener = lambda source, token=generation: self._on_source_lifecycle(source, token)
                 self._listener_callback = listener
@@ -126,7 +136,16 @@ class AutomaticMemoryScheduler:
                 sources = self.registry.list_sources()
                 for source in sources:
                     self._attach_source(source)
-                self.cron.start(self._run_cron_job)
+                self._write_heartbeat("running")
+                configure_heartbeat = getattr(self.cron, "configure_heartbeat", None)
+                if callable(configure_heartbeat):
+                    configure_heartbeat(self._heartbeat_tick, interval_seconds=self.heartbeat_seconds)
+                try:
+                    self.cron.start(self._run_cron_job)
+                except BaseException as exc:
+                    self._running = False
+                    self._write_heartbeat("degraded", reason=f"scheduler start failed: {exc}")
+                    raise
 
     def stop(self) -> None:
         # Serialize start, shutdown, and retries so lifecycle generations cannot
@@ -140,6 +159,7 @@ class AutomaticMemoryScheduler:
                     self.registry.remove_lifecycle_listener(callback)
                 self._listener_callback = None
                 self._listener_registered = False
+            self._write_heartbeat("stopping")
             watcher_result: dict[str, object] = {}
             watcher_error: BaseException | None = None
             try:
@@ -175,13 +195,78 @@ class AutomaticMemoryScheduler:
             else:
                 self._clear_cleanup_owner("cron")
             if errors:
+                self._write_heartbeat("degraded", reason="; ".join(str(error) for error in errors))
                 raise RuntimeError("; ".join(str(error) for error in errors))
+            self._write_heartbeat("stopped")
+
+    def heartbeat_status(self) -> dict[str, Any] | None:
+        try:
+            rows = self.state_db.list_automatic_memory_heartbeats(instance_id=self.instance_id)
+        except Exception as exc:
+            return {
+                "instance_id": self.instance_id,
+                "generation": self.generation,
+                "state": "degraded",
+                "heartbeat_at": None,
+                "reason": f"heartbeat read failed: {exc}",
+                "last_error": str(exc)[:2000],
+            }
+        row = rows[0] if rows else None
+        if self._heartbeat_last_error:
+            if row is None:
+                return {
+                    "instance_id": self.instance_id,
+                    "generation": self.generation,
+                    "state": "degraded",
+                    "heartbeat_at": None,
+                    "reason": self._heartbeat_reason,
+                    "last_error": self._heartbeat_last_error,
+                }
+            row = dict(row)
+            row["state"] = "degraded"
+            row["reason"] = self._heartbeat_reason
+            row["last_error"] = self._heartbeat_last_error
+        return row
+
+    def _heartbeat_tick(self) -> None:
+        with self._lock:
+            if not self._running:
+                return
+            state = "paused" if self._paused else "running"
+            # Keep the lifecycle lock through the write.  Otherwise stop could
+            # publish ``stopped`` and then lose the race to a tick that had
+            # already observed ``_running``.
+            self._write_heartbeat(state)
+        callback = self.heartbeat_work_callback
+        if callback is not None:
+            try:
+                callback()
+            except Exception as exc:
+                self._heartbeat_reason = f"active work heartbeat failed: {exc}"
+
+    def _write_heartbeat(self, state: str, *, reason: str | None = None) -> None:
+        timestamp = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        try:
+            self.state_db.upsert_automatic_memory_heartbeat(
+                self.instance_id,
+                self.generation,
+                state,
+                heartbeat_at=timestamp,
+                reason=reason,
+                last_error=self._heartbeat_last_error if state == "degraded" else None,
+            )
+            self._heartbeat_last_error = None
+            self._heartbeat_reason = reason
+        except Exception as exc:
+            self._heartbeat_last_error = str(exc)[:2000]
+            self._heartbeat_reason = f"heartbeat write failed: {self._heartbeat_last_error}"
 
     def pause(self) -> None:
         with self._lock:
             self._paused = True
         self.watcher.pause()
         self.cron.set_jobs_enabled(self.JOB_PREFIX, False)
+        self._write_heartbeat("paused")
 
     def resume(self) -> None:
         with self._lock:
@@ -191,6 +276,7 @@ class AutomaticMemoryScheduler:
             if source.status != "authorized":
                 self._disable_source(source.source_id)
         self.watcher.resume()
+        self._write_heartbeat("running")
 
     def status(self) -> tuple[ScanRun, ...]:
         rows = self.state_db.list_automatic_memory_scans()

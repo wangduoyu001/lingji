@@ -8,6 +8,7 @@ components (and are completed by the later automatic-memory tasks).
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
 from typing import Any, Callable
@@ -99,6 +100,9 @@ class AutomaticMemoryRuntime:
                 integrity_seconds=float(
                     getattr(settings, "automatic_memory_integrity_seconds", 86400.0)
                 ),
+                heartbeat_seconds=float(
+                    getattr(settings, "automatic_memory_heartbeat_seconds", 5.0)
+                ),
             )
         self.scheduler = scheduler
         if worker is None:
@@ -120,6 +124,8 @@ class AutomaticMemoryRuntime:
         self.work_store = WorkStore(state_db)
         self.work_projector = WorkProjector(self.work_store)
         self.work_bridge = CaptureWorkBridge(self.work_store)
+        if hasattr(self.scheduler, "heartbeat_work_callback"):
+            self.scheduler.heartbeat_work_callback = self._touch_active_scan_work
         if hasattr(self.registry, "add_lifecycle_listener"):
             # Project StateDB authorization transitions into the existing
             # structured read/index rows before current retrieval can observe
@@ -280,6 +286,40 @@ class AutomaticMemoryRuntime:
             state = "running"
         else:
             state = "degraded"
+        heartbeat = None
+        heartbeat_reason = self.HEARTBEAT_UNAVAILABLE_REASON
+        heartbeat_age = None
+        heartbeat_state = None
+        heartbeat_instance = None
+        heartbeat_generation = None
+        heartbeat_last_error = None
+        heartbeat_reader = getattr(self.scheduler, "heartbeat_status", None)
+        if callable(heartbeat_reader):
+            heartbeat = heartbeat_reader()
+            if heartbeat is not None:
+                heartbeat_state = heartbeat.get("state")
+                heartbeat_instance = heartbeat.get("instance_id")
+                heartbeat_generation = heartbeat.get("generation")
+                heartbeat_last_error = heartbeat.get("last_error")
+                heartbeat_reason = heartbeat.get("reason") or heartbeat_last_error
+                timestamp = heartbeat.get("heartbeat_at")
+                try:
+                    parsed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=timezone.utc)
+                    heartbeat_age = (datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds()
+                    if heartbeat_age < 0:
+                        heartbeat_reason = "clock jump detected: heartbeat is in the future"
+                        state = "degraded"
+                    elif heartbeat_age > 10 and heartbeat_state in {"running", "paused"}:
+                        heartbeat_reason = f"heartbeat stale: age={heartbeat_age:.3f}s"
+                        state = "degraded"
+                except (TypeError, ValueError, OverflowError):
+                    heartbeat_age = None
+                    heartbeat_reason = "heartbeat timestamp unavailable"
+                    state = "degraded" if started else state
+                if heartbeat_state == "degraded":
+                    state = "degraded"
         watcher = getattr(self.scheduler, "watcher", None)
         try:
             sources = tuple(watcher.running_sources()) if watcher is not None else ()
@@ -293,14 +333,25 @@ class AutomaticMemoryRuntime:
             "cleanup_error": cleanup_error,
             "source_cleanup_errors": source_cleanup_errors,
             "scheduler_state": "running" if scheduler_running else "stopped",
-            "scheduler_heartbeat_age": None,
-            "scheduler_heartbeat_reason": self.HEARTBEAT_UNAVAILABLE_REASON,
+            "scheduler_heartbeat_at": heartbeat.get("heartbeat_at") if heartbeat else None,
+            "scheduler_heartbeat_age": heartbeat_age,
+            "scheduler_heartbeat_reason": heartbeat_reason,
+            "scheduler_heartbeat_instance": heartbeat_instance,
+            "scheduler_heartbeat_generation": heartbeat_generation,
+            "scheduler_heartbeat_state": heartbeat_state,
+            "scheduler_heartbeat_last_error": heartbeat_last_error,
             "worker_state": worker_running,
             "worker": worker_status,
             "authorized_watcher_count": len(sources) if sources is not None else None,
             "watcher_sources": list(sources) if sources is not None else None,
             "last_global_error": self._last_global_error() or cleanup_error,
         }
+
+    def _touch_active_scan_work(self) -> None:
+        """Refresh active scan Work Facts without appending event rows."""
+        for scan in self.state_db.list_automatic_memory_scans():
+            if scan.get("status") == "running":
+                self.work_store.touch_work(f"automatic-memory:{scan['scan_id']}")
 
     def scan_now(self, source_id: str) -> dict[str, object]:
         result = self.scheduler.reconcile(source_id, reason="manual")
