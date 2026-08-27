@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false };
+const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false };
 const allStateDiscovered = [
   ["detected", "available"], ["consent", "consent_required"], ["unsupported", "unsupported"], ["authorized", "available"],
   ["scanning", "available"], ["current", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
@@ -36,20 +36,28 @@ const server = http.createServer((req, res) => {
       if (state.onboardingDelay && !state.onboardingRelease) { const timer = setInterval(() => { if (state.onboardingRelease) { clearInterval(timer); response(); } }, 20); return; }
       return response();
     }
-    if (path === "/api/automatic-memory/summary") return json(res, 200, { counts: state.allStates ? { completed: 1, failed: 1 } : state.scan ? { [state.scan.status]: 1 } : {}, total: state.allStates ? allStateScans.length : state.scan ? 1 : 0, latest: state.allStates ? allStateScans[1] : state.scan ? { ...state.scan } : null, progress: state.scan ? { current: state.scan.progress, total: 1 } : { current: null, total: null }, last_error: state.scan?.last_error ?? null, next_action: "wait" });
+    if (path === "/api/automatic-memory/summary") {
+      const latest = state.allStates ? allStateScans[1] : state.scan ? { ...state.scan } : null;
+      if (state.omitHomeCounts && latest) {
+        delete latest.updated;
+        delete latest.skipped;
+      }
+      return json(res, 200, { counts: state.allStates ? { completed: 1, failed: 1 } : state.scan ? { [state.scan.status]: 1 } : {}, total: state.allStates ? allStateScans.length : state.scan ? 1 : 0, latest, progress: state.scan ? { current: state.scan.progress, total: 1 } : { current: null, total: null }, last_error: state.scan?.last_error ?? null, next_action: "wait" });
+    }
     if (path === "/api/automatic-memory/runtime") return json(res, 200, { state: "running", running: true, paused: false, worker_state: true, authorized_watcher_count: 1 });
     if (path === "/api/automatic-memory/scans") {
       if (state.allStates) return json(res, 200, allStateScans);
-      if (state.scan?.status === "running" && state.completeNextRead) state.scan = { ...state.scan, status: "completed", progress: 1, total: 1, queued: 1, reused: 0 };
+      if (state.scan?.status === "running" && state.completeNextRead) state.scan = { ...state.scan, status: "completed", progress: 1, total: 1, queued: 1, reused: 0, failed: 0, updated: 2, skipped: 3 };
       return json(res, 200, state.scan ? [{ ...state.scan, updated_at: new Date().toISOString() }] : []);
     }
     if (path === "/__test/complete") { state.completeNextRead = true; return json(res, 200, { ok: true }); }
     if (path === "/__test/all-states") { state.allStates = true; return json(res, 200, { ok: true }); }
+    if (path === "/__test/omit-home-counts") { state.omitHomeCounts = body.includes("true"); return json(res, 200, { ok: true }); }
     if (path === "/__test/release-onboarding") { state.onboardingRelease = true; return json(res, 200, { ok: true }); }
     if (path === "/__test/outage") { state.outage = body.includes("true"); return json(res, 200, { ok: true, outage: state.outage }); }
     if (path === "/api/automatic-memory/authorize") { state.authorized = true; state.revoked = false; return json(res, 200, { source_id: "src-fixture", kind: "generic_ai_history", root: "/tmp/lingji-fixture", status: "authorized" }); }
     if (path === "/api/automatic-memory/scan") { state.scanRequests += 1; state.scanReads = 0; state.scan = state.scanRequests === 2 ? { scan_id: "scan-fixture", source_id: "src-fixture", status: "failed", progress: 0, total: 1, last_error: "fixture failure" } : { scan_id: "scan-fixture", source_id: "src-fixture", status: "running", progress: 0, total: 1 }; return json(res, 200, state.scan); }
-    if (path === "/api/automatic-memory/retry") { state.scan = { scan_id: "scan-fixture", source_id: "src-fixture", status: "completed", progress: 1, total: 1, queued: 1, reused: 0 }; return json(res, 200, state.scan); }
+    if (path === "/api/automatic-memory/retry") { state.scan = { scan_id: "scan-fixture", source_id: "src-fixture", status: "completed", progress: 1, total: 1, queued: 1, reused: 0, failed: 0, updated: 2, skipped: 3 }; return json(res, 200, state.scan); }
     if (path.startsWith("/api/automatic-memory/scans/")) return json(res, 200, state.scan ?? { status: "unknown" });
     if (path === "/api/automatic-memory/revoke") { state.authorized = false; state.revoked = true; state.scan = null; return json(res, 200, { source_id: "src-fixture", status: "revoked" }); }
     return json(res, 404, { detail: "not found" });
@@ -132,7 +140,33 @@ try {
   await page.getByRole("heading", { name: "已接管" }).waitFor();
   await page.getByRole("button", { name: "活动记录" }).click();
   await page.getByRole("heading", { name: "活动记录" }).waitFor();
-  await page.getByRole("button", { name: "记忆来源" }).click();
+  await page.getByRole("button", { name: "运行状态" }).click();
+  await page.getByRole("heading", { name: "运行正常", exact: true }).waitFor();
+  const metricValue = async (title) => page.locator(".metric").filter({ hasText: title }).locator("strong").innerText();
+  const waitMetric = async (title, expected, message) => {
+    const deadline = Date.now() + 10_000;
+    let value = "";
+    while (Date.now() < deadline) {
+      value = await metricValue(title);
+      if (value === expected) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(value, expected, message);
+  };
+  await waitMetric("本次新增", "1", "Home must render the backend added count");
+  await waitMetric("本次更新", "2", "Home must render the backend updated count");
+  await waitMetric("本次跳过", "3", "Home must render the backend skipped count");
+  await waitMetric("本次失败", "0", "Home must render the backend failed count");
+  assert.equal(await page.locator(".observation-live-state").getByText("尚未获得", { exact: true }).count(), 1, "unknown queue activity must be neutral");
+  await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
+  await page.getByRole("heading", { name: "让灵机知道哪些内容可以接管" }).waitFor();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/omit-home-counts`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
+  await page.getByRole("button", { name: "重新读取" }).click();
+  await page.getByRole("button", { name: "运行状态" }).click();
+  await page.getByRole("heading", { name: "运行正常", exact: true }).waitFor();
+  assert.equal(await metricValue("本次更新"), "尚未获得", "Home must keep absent updated count neutral");
+  assert.equal(await metricValue("本次跳过"), "尚未获得", "Home must keep absent skipped count neutral");
+  await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
   await page.getByRole("heading", { name: "让灵机知道哪些内容可以接管" }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/all-states`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
   await page.getByRole("button", { name: "重新读取" }).click();

@@ -41,6 +41,9 @@ export type ScanRun = {
   total?: number | null;
   queued?: number | null;
   reused?: number | null;
+  updated?: number | null;
+  skipped?: number | null;
+  failed?: number | null;
   updated_at?: string | null;
   last_error?: string | null;
 };

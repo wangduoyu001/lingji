@@ -77,7 +77,11 @@ assert.match(connection, /autoRecoveryActive/);
 assert.match(connection, /后台自动恢复已暂停/);
 
 assert.match(overview, /状态每 10 秒自动更新/);
-assert.match(overview, /后台自动运行/);
+assert.equal(overview.includes("后台自动运行"), false, "unknown queue activity must not be presented as running");
+for (const metric of ["本次新增", "本次更新", "本次跳过", "本次失败"]) {
+  assert.match(overview, new RegExp(metric), `Overview must ask for ${metric}`);
+}
+assert.match(overview, /尚未获得/);
 assert.match(overview, /查看待办/);
 assert.equal(overview.includes("刷新本机状态"), false, "Overview must not require manual refresh");
 assert.equal(overview.includes("健康检查"), false, "Detailed health checks belong in diagnostics");
