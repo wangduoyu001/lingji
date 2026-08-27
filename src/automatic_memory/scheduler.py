@@ -319,6 +319,8 @@ class AutomaticMemoryScheduler:
                 source_id,
                 {
                     "reason": reason,
+                    "scan_id": report.scan_id,
+                    "work_id": report.work_id,
                     "discovered": report.discovered,
                     "queued": report.queued,
                     "unchanged": report.unchanged,
@@ -345,6 +347,8 @@ class AutomaticMemoryScheduler:
                 source_id,
                 {
                     "reason": reason,
+                    "scan_id": scan.scan_id if scan is not None else None,
+                    "work_id": (f"automatic-memory:{scan.scan_id}" if scan is not None else None),
                     "error": error,
                     "complete": False,
                     "next_action": "retry this source on the next scheduled pass",
