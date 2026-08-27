@@ -13,6 +13,44 @@ from src.storage.state_db import StateDatabase
 from src.automatic_memory.quality_evidence import audit_promotion_persistence
 from src.retrieval.temporal import TemporalQuery
 from src.auto_review.models import PromotionEvidence, PromotionProjectionState
+from src.auto_review.promotion import AutoMemoryPromotionService
+
+
+def test_append_requires_safe_promotion_event_boundary() -> None:
+    class AppendOnlyState:
+        def __init__(self) -> None:
+            self.calls: list[tuple[object, ...]] = []
+
+        def append_event(self, *args: object) -> None:
+            self.calls.append(args)
+
+    state = AppendOnlyState()
+    service = object.__new__(AutoMemoryPromotionService)
+    service.state_db = state
+    with pytest.raises(RuntimeError, match="safe promotion event recorder unavailable"):
+        service._append("memory_candidate_recorded", "candidate-1", {"token": "sk-secret"})
+    assert state.calls == []
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_ordinary_promotion_event_rejects_non_finite_nested_values(tmp_path: Path, bad: float) -> None:
+    database_path = tmp_path / "state.db"
+    state = StateDatabase(database_path)
+    with pytest.raises(ValueError, match="non-finite promotion payload value"):
+        state.append_promotion_event(
+            "memory_candidate_recorded",
+            "candidate-1",
+            {
+                "structured_content": {"confidence": bad},
+                "promotion_evidence": {"score": bad},
+            },
+        )
+    with __import__("sqlite3").connect(database_path) as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM events WHERE entity_id = ?",
+            ("candidate-1",),
+        ).fetchone()[0]
+    assert count == 0
 
 
 def _stores(tmp_path: Path) -> tuple[StateDatabase, MemoryDatabase, SourceReadModel]:

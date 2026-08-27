@@ -922,7 +922,16 @@ class AutoMemoryPromotionService:
 
     @staticmethod
     def _candidate_payload(candidate: ReviewCandidate) -> dict[str, Any]:
-        payload = asdict(candidate)
+        def owner_safe(value: Any) -> Any:
+            if isinstance(value, float) and not math.isfinite(value):
+                return None
+            if isinstance(value, Mapping):
+                return {str(key): owner_safe(item) for key, item in value.items()}
+            if isinstance(value, (list, tuple, set)):
+                return [owner_safe(item) for item in value]
+            return value
+
+        payload = owner_safe(asdict(candidate))
         payload["project_ids"] = list(candidate.project_ids)
         payload["source_refs"] = [
             item.to_dict() if isinstance(item, ProvenanceRef) else item
@@ -947,10 +956,9 @@ class AutoMemoryPromotionService:
 
     def _append(self, event_type: str, entity_id: str, payload: Mapping[str, Any]) -> None:
         safe_recorder = getattr(self.state_db, "append_promotion_event", None)
-        if callable(safe_recorder):
-            safe_recorder(event_type, entity_id, dict(payload))
-            return
-        self.state_db.append_event(event_type, "memory_candidate", entity_id, dict(payload))
+        if not callable(safe_recorder):
+            raise RuntimeError("safe promotion event recorder unavailable")
+        safe_recorder(event_type, entity_id, dict(payload))
 
     @staticmethod
     def _payload(row: Mapping[str, Any]) -> dict[str, Any]:

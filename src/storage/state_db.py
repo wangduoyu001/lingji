@@ -653,7 +653,7 @@ class StateDatabase:
                 if forbidden.search(value) or normalized_path.startswith(("/", "\\")) or re.match(r"^[a-z]:[\\/]", normalized_path, re.I):
                     raise ValueError("promotion_payload_forbidden_content")
             elif isinstance(value, float) and not math.isfinite(value):
-                raise ValueError("promotion_payload_schema_invalid")
+                raise ValueError("non-finite promotion payload value")
             elif value is not None and not isinstance(value, (bool, int, float)):
                 raise ValueError("promotion_payload_schema_invalid")
         if isinstance(payload, Mapping):
@@ -726,6 +726,17 @@ class StateDatabase:
         return output
 
     def append_promotion_event(self, event_type: str, entity_id: str | None, payload: Any) -> int:
+        def reject_non_finite(value: Any) -> None:
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError("non-finite promotion payload value")
+            if isinstance(value, Mapping):
+                for item in value.values():
+                    reject_non_finite(item)
+            elif isinstance(value, (list, tuple, set)):
+                for item in value:
+                    reject_non_finite(item)
+
+        reject_non_finite(payload)
         return self.append_event(event_type, "memory_candidate", entity_id, self._safe_promotion_payload(payload))
 
     def get_event(self, event_id: int | str) -> dict[str, Any] | None:
