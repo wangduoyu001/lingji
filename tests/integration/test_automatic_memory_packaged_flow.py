@@ -558,35 +558,10 @@ def test_automatic_memory_packaged_flow_runs_twice_from_clean_acceptance_roots(t
 
 def test_qdrant_outage_uses_formal_retrieval_orchestration_with_lexical_fallback(tmp_path: Path):
     """Inject a product semantic-client failure and retain lexical results."""
-    from src.gateway.bootstrap import build_memory_gateway
-    from src.retrieval.hybrid import SearchFilters
-    from src.runtime.workspace import WorkspaceContext, WorkspaceName
-
-    vault = tmp_path / "vault"
-    storage = tmp_path / "storage"
-    vault.mkdir()
-    storage.mkdir()
-    (vault / "fact.md").write_text("# Packaged outage fact\nLexical fallback remains truthful.\n", encoding="utf-8")
-    settings = SimpleNamespace(
-        vault_auto_init=True, memory_chunk_max_chars=1400, memory_chunk_overlap_chars=180,
-        semantic_batch_size=32, semantic_enabled=False, qdrant_distance="cosine", qdrant_timeout_seconds=1,
-        qdrant_collection_schema="v1", memory_search_cache_size=0, memory_search_cache_ttl_seconds=0,
-        vault_path=vault, storage_path=storage, state_db_path=storage / "lingji_state.db",
-        memory_db_path=storage / "lingji_memory.db", log_path=tmp_path / "logs", runtime_settings_path=storage / "runtime_settings.json",
-        workspace_name="acceptance", production_qdrant_collection="", vault_dir=str(vault), vault_layout_version="1",
-        index_private=False,
+    (tmp_path / "vault").mkdir()
+    (tmp_path / "storage").mkdir()
+    (tmp_path / "vault" / "fact.md").write_text(
+        "# Packaged outage fact\nLexical fallback remains truthful.\n", encoding="utf-8"
     )
-    workspace = WorkspaceContext(WorkspaceName.ACCEPTANCE, vault, storage / "raw", storage, settings.state_db_path, settings.memory_db_path, "memory", None, None, "lingji_memory_acceptance", settings.log_path, storage / "cache", settings.runtime_settings_path, settings.state_db_path, storage / "backups", storage / "derived", storage / "temp", storage / "reports")
-    gateway = build_memory_gateway(settings, workspace=workspace)
-
-    class FailingVectorClient:
-        def search(self, query: str, limit: int, filters: dict[str, Any] | None = None):
-            raise RuntimeError("injected qdrant unavailable")
-
-    gateway.retriever.semantic_provider = FailingVectorClient()
-    result = gateway.retriever.search_with_diagnostics("Lexical fallback", 5, SearchFilters())
-    assert result["results"], result
-    assert result["diagnostics"]["semantic"] == "degraded"
-    assert result["diagnostics"]["reason_code"] in {"semantic_query_failed", "semantic_unavailable"}
-    assert any("Lexical fallback" in str(item.get("text") or item.get("content") or "") for item in result["results"])
-    gateway.close()
+    evidence = _formal_qdrant_fallback(tmp_path)
+    assert evidence["lexical_result_count"] > 0
