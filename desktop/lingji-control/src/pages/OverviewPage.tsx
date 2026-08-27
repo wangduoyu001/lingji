@@ -1,11 +1,13 @@
+import { useCallback, useMemo } from "react";
 import CurrentWorkPanel from "../components/CurrentWorkPanel";
-import { Empty, Metric, Notice, bytes } from "../components/ui";
+import { Empty, Metric, Notice } from "../components/ui";
 import type { LingJiApi } from "../api";
+import { MemorySourcesApi, sourceStateLabel, scanStatusLabel, countLabel } from "./memorySourcesApi";
+import type { MemorySourcesSnapshot } from "./memorySourcesTypes";
+import { usePollingResource } from "../hooks/usePollingResource";
 import type { PageId, Row } from "../types";
 
-const display = (value: unknown, suffix = "") =>
-  value === null || value === undefined || value === "" ? "未知" : `${String(value)}${suffix}`;
-
+const display = (value: unknown, fallback = "尚未获得") => value === null || value === undefined || value === "" ? fallback : String(value);
 const stateTone = (value: unknown): "good" | "warn" | "bad" | undefined => {
   const state = String(value ?? "").toLowerCase();
   if (["healthy", "ready", "available", "ok"].includes(state)) return "good";
@@ -13,138 +15,44 @@ const stateTone = (value: unknown): "good" | "warn" | "bad" | undefined => {
   if (["failed", "error", "unavailable", "blocked"].includes(state)) return "bad";
   return undefined;
 };
+const stateLabel = (value: unknown) => ({ healthy: "运行正常", ready: "已就绪", degraded: "需要检查", failed: "运行失败", unavailable: "当前不可用", stale: "数据过期" } as Record<string, string>)[String(value ?? "")] ?? display(value);
 
-function stateLabel(value: unknown): string {
-  const state = String(value ?? "unknown").toLowerCase();
-  const labels: Record<string, string> = {
-    healthy: "运行正常",
-    ready: "已就绪",
-    available: "可用",
-    degraded: "降级运行",
-    warning: "需要关注",
-    stale: "数据过期",
-    failed: "运行失败",
-    error: "存在错误",
-    unavailable: "当前不可用",
-    blocked: "已阻止",
-  };
-  return labels[state] ?? display(value);
-}
-
-export default function OverviewPage({
-  data,
-  api,
-  active,
-  onNavigate,
-}: {
-  data: Row | null;
-  api: LingJiApi;
-  active: boolean;
-  onNavigate: (page: PageId) => void;
-}) {
+export default function OverviewPage({ data, api, active, onNavigate }: { data: Row | null; api: LingJiApi; active: boolean; onNavigate: (page: PageId) => void }) {
+  const sourceApi = useMemo(() => new MemorySourcesApi(api), [api]);
+  const loadSources = useCallback(() => sourceApi.snapshot(), [sourceApi]);
+  const sourceResource = usePollingResource<MemorySourcesSnapshot>({ fetcher: loadSources, enabled: active, intervalMs: 10_000, staleAfterMs: 30_000 });
   if (!data) return <Empty text="灵机核心连接后会自动显示运行状态。" />;
   const d = data as Record<string, unknown>;
   const health = (d.health ?? {}) as Record<string, unknown>;
   const queue = ((d.queue as Record<string, unknown> | undefined)?.stats ?? {}) as Record<string, unknown>;
-  const storageRoot = (d.storage ?? {}) as Record<string, unknown>;
-  const storage = (storageRoot.totals ?? {}) as Record<string, unknown>;
-  const storageAlerts = (storageRoot.alerts ?? {}) as Record<string, unknown>;
   const memoryRuntime = (d.memory_runtime ?? {}) as Record<string, unknown>;
   const memory = (memoryRuntime.memory ?? d.memory_stats ?? {}) as Record<string, unknown>;
-  const vector = (memoryRuntime.vector ?? d.vector_status ?? {}) as Record<string, unknown>;
-  const embedding = (memoryRuntime.embedding ?? d.embedding_status ?? {}) as Record<string, unknown>;
-  const hardware = (d.hardware ?? {}) as Record<string, unknown>;
-  const computePolicy = (hardware.compute_policy ?? {}) as Record<string, unknown>;
   const runtimeState = memoryRuntime.state ?? health.status;
-  const stale = Boolean(memoryRuntime.stale);
+  const sourceSnapshot = sourceResource.data;
+  const latest = sourceSnapshot?.summary?.latest;
+  const latestSource = latest ? sourceSnapshot?.sources.find((item) => item.source_id === latest.source_id) : undefined;
+  const pending = (d.pending_memory_count ?? d.pending_review_count) as unknown;
+  const activeMemory = memory.active ?? memory.core_memories ?? memory.documents;
+  const latestStatus = latestSource?.state ?? latest?.status;
+  const run = latest as Record<string, unknown> | null;
 
-  return (
-    <div className="stack overview-page observation-page">
-      <section className={`overview-hero overview-hero-${stateTone(runtimeState) ?? "neutral"}`}>
-        <div className="overview-hero-main">
-          <span className="desktop-eyebrow">SYSTEM POSTURE</span>
-          <div className="overview-title-line">
-            <h2>{stateLabel(runtimeState)}</h2>
-            <span className={`pill ${stateTone(runtimeState) === "good" ? "ok" : stateTone(runtimeState) === "bad" ? "error" : "warning"}`}>
-              {display(runtimeState)}
-            </span>
-          </div>
-          <p>
-            灵机会自动检查服务、处理队列、更新索引和恢复连接。
-            {memoryRuntime.as_of ? ` · 状态时间 ${display(memoryRuntime.as_of)}` : ""}
-          </p>
-        </div>
-        <div className="observation-live-state">
-          <span className={stateTone(runtimeState) === "good" ? "status-dot online" : "status-dot"} />
-          <div>
-            <strong>{Number(queue.running ?? 0) > 0 ? `${display(queue.running)} 个任务运行中` : "后台自动运行"}</strong>
-            <small>状态每 10 秒自动更新</small>
-          </div>
-        </div>
-      </section>
+  return <div className="stack overview-page observation-page">
+    <section className={`overview-hero overview-hero-${stateTone(runtimeState) ?? "neutral"}`}>
+      <div className="overview-hero-main"><span className="desktop-eyebrow">SYSTEM POSTURE</span><div className="overview-title-line"><h2>{stateLabel(runtimeState)}</h2><span className={`pill ${stateTone(runtimeState) === "good" ? "ok" : stateTone(runtimeState) === "bad" ? "error" : "warning"}`}>{display(runtimeState)}</span></div><p>灵机会自动检查来源、处理队列并保留可追溯的扫描结果。</p></div>
+      <div className="observation-live-state"><span className={stateTone(runtimeState) === "good" ? "status-dot online" : "status-dot"} /><div><strong>{queue.running != null ? `${display(queue.running)} 个任务运行中` : "后台自动运行"}</strong><small>状态每 10 秒自动更新</small></div></div>
+    </section>
+    {sourceResource.stale && <Notice kind="warning">来源状态来自上一次成功读取，正在刷新；请不要把过期状态当成当前状态。</Notice>}
+    {sourceResource.error && <Notice kind="warning">来源状态暂时不可用：{sourceResource.error.message}。请打开“记忆来源”重试。</Notice>}
+    <CurrentWorkPanel api={api} active={active} />
+    <section className="attention-summary"><div><span className="desktop-eyebrow">OWNER ATTENTION</span><h3>需要你决定的事项以真实待办为准</h3><p>只有持久化工作事实要求主人确认时，灵机才会把事情交给你。</p></div><button className="button secondary" onClick={() => onNavigate("attention")}>查看待办</button></section>
 
-      {stale && <Notice kind="warning">当前记忆和向量统计来自旧快照，系统正在自动刷新。</Notice>}
+    <section className="overview-section source-overview-card"><div className="overview-section-heading"><div><span className="desktop-eyebrow">MEMORY SOURCES</span><h3>灵机发现并接管了什么</h3></div><button className="button secondary" onClick={() => onNavigate("memory_sources")}>查看记忆来源</button></div>
+      <div className="source-overview-copy"><div><strong>已发现</strong><span>{sourceSnapshot ? sourceSnapshot.discovered.map((item) => item.display_name).join("、") || "尚未发现" : "尚未获得"}</span></div><div><strong>已授权 / 当前</strong><span>{sourceSnapshot ? `${sourceSnapshot.authorized.filter((item) => item.status === "authorized").length} 个已授权，${sourceSnapshot.sources.filter((item) => item.state === "current").length} 个已接管` : "尚未获得"}</span></div><div><strong>下一步</strong><span>{latestSource?.nextAction ?? "打开记忆来源查看授权和扫描下一步。"}</span></div></div>
+    </section>
 
-      <CurrentWorkPanel api={api} active={active} />
+    <section className="overview-section"><div className="overview-section-heading"><div><span className="desktop-eyebrow">CURRENT ACTIVITY</span><h3>现在正在做什么</h3></div><small>{latestStatus ? (latestSource ? sourceStateLabel(latestStatus) : scanStatusLabel(String(latestStatus))) : "尚未获得"}</small></div><div className="metric-grid observation-metric-grid"><Metric title="当前活动" value={latestSource?.display_name ?? "尚未获得"} detail={latestSource ? `${latestSource.detail} · 进度 ${latestSource.latestScan?.progress ?? "尚未获得"}/${latestSource.latestScan?.total ?? "尚未获得"}` : "打开记忆来源查看"} tone={stateTone(latestStatus)} /><Metric title="本次新增" value={countLabel(run?.queued)} detail="后端未提供时显示尚未获得" /><Metric title="本次复用" value={countLabel(run?.reused)} detail="已有证据不会重复导入" /><Metric title="本次失败" value={countLabel(run?.failed)} detail={latest?.last_error ? String(latest.last_error) : "没有可确认的失败数量"} tone={latest?.last_error ? "bad" : undefined} /></div></section>
 
-      <section className="attention-summary">
-        <div>
-          <span className="desktop-eyebrow">OWNER ATTENTION</span>
-          <h3>需要你决定的事项以真实待办为准</h3>
-          <p>只有持久化 Work Fact 中存在 PendingAction 时，灵机才会把事情交给你。</p>
-        </div>
-        <button className="button secondary" onClick={() => onNavigate("attention")}>查看待办</button>
-      </section>
-
-      <section className="overview-section">
-        <div className="overview-section-heading">
-          <div><span className="desktop-eyebrow">SYSTEM SIGNALS</span><h3>关键状态</h3></div>
-          <small>详细技术信息已移到高级诊断</small>
-        </div>
-        <div className="metric-grid observation-metric-grid">
-          <Metric
-            title="任务队列"
-            value={Number(queue.running ?? 0) > 0 ? `${display(queue.running)} 运行中` : `${display(queue.pending)} 等待`}
-            detail={`自动重试 ${display(queue.retrying)} · 失败 ${display(queue.failed)}`}
-            tone={Number(queue.failed ?? 0) > 0 ? "bad" : Number(queue.retrying ?? 0) > 0 ? "warn" : "good"}
-          />
-          <Metric
-            title="记忆处理"
-            value={display(memory.documents)}
-            detail={`文档 · ${display(memory.chunks)} 个分块`}
-            tone={stateTone(memory.state)}
-          />
-          <Metric
-            title="向量索引"
-            value={display(vector.vectors)}
-            detail={`${stateLabel(vector.state)} · 维度 ${display(vector.dimension)}`}
-            tone={vector.rebuild_required ? "bad" : stateTone(vector.state)}
-          />
-          <Metric
-            title="本地模型"
-            value={display(embedding.active_model ?? embedding.configured_model)}
-            detail={stateLabel(embedding.state)}
-            tone={stateTone(embedding.state)}
-          />
-          <Metric
-            title="算力模式"
-            value={display(computePolicy.requested_mode ?? computePolicy.mode)}
-            detail={`设备 ${display(computePolicy.selected_device ?? computePolicy.device)}`}
-            tone={stateTone(computePolicy.state)}
-          />
-          <Metric
-            title="磁盘剩余"
-            value={storage.disk_free_bytes == null ? "未知" : bytes(Number(storage.disk_free_bytes))}
-            detail={`${display(storage.disk_free_percent, "%")} · 灵机占用 ${storage.bytes == null ? "未知" : bytes(Number(storage.bytes))}`}
-            tone={storageAlerts.below_minimum_free ? "bad" : "good"}
-          />
-        </div>
-      </section>
-
-      <div className="overview-footer-actions">
-        <button className="button secondary" onClick={() => onNavigate("activity")}>查看活动记录</button>
-        <button className="button secondary" onClick={() => onNavigate("diagnostics")}>打开高级诊断</button>
-      </div>
-    </div>
-  );
+    <section className="overview-section"><div className="overview-section-heading"><div><span className="desktop-eyebrow">MEMORY POSTURE</span><h3>记忆现在是什么状态</h3></div><button className="button secondary" onClick={() => onNavigate("memory_review")}>查看记忆审核</button></div><div className="metric-grid observation-metric-grid"><Metric title="可用记忆" value={countLabel(activeMemory)} detail="来自现有记忆状态接口" /><Metric title="待主人确认" value={countLabel(pending)} detail="只有真实待办才需要你决定" tone={typeof pending === "number" && pending > 0 ? "warn" : undefined} /><Metric title="工作队列" value={queue.pending != null ? `${display(queue.pending)} 等待` : "尚未获得"} detail={queue.failed != null ? `失败 ${display(queue.failed)}` : "失败数量尚未获得"} tone={stateTone(queue.failed != null && Number(queue.failed) > 0 ? "failed" : undefined)} /><Metric title="数据新鲜度" value={memoryRuntime.stale ? "需要刷新" : memoryRuntime.as_of ? "最新状态" : "尚未获得"} detail={display(memoryRuntime.as_of)} tone={memoryRuntime.stale ? "warn" : undefined} /></div></section>
+    <div className="overview-footer-actions"><button className="button secondary" onClick={() => onNavigate("activity")}>查看活动记录</button><button className="button secondary" onClick={() => onNavigate("diagnostics")}>打开高级诊断</button></div>
+  </div>;
 }
