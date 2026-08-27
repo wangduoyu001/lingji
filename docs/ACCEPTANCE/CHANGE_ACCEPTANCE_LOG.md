@@ -1676,3 +1676,29 @@ Windows 重启后恢复 = 100%
 - [x] Desktop smoke：`npm run test:runtime` → `runtime-sidecar-smoke: PASS`；compileall 与 `git diff --check` → PASS。
 - [ ] broader promotion recovery matrix has one unrelated baseline failure (`test_recovery_case_06_restart_after_link_commit_activates_after_verification`: rolled_back vs VISIBLE_ACTIVE); no promotion code/seams were changed in Task2 Round2。
 - [ ] 不执行 Artifact、真实 UI、Production/Vault、8766 live server、Task3 snapshot consumer/adapter/terminal extraction 或 owner acceptance；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。Round2 后停止，不开启第三轮。
+
+## 2026-08-27 · Phase 1 Automatic Memory · Task 3 · Authorized discovery → extraction → Work Fact
+
+- 基线：`b36c597`；产品/测试提交：`bc3636a`；分支：`codex/phase1-automatic-memory`。
+- 影响模块：`src/automatic_memory/discovery.py`, `src/automatic_memory/path_policy.py`, `src/automatic_memory/checkpoint.py`, `src/automatic_memory/runtime.py`, `src/extraction/queue.py`, `src/extraction/pipeline.py`, `src/control/automatic_memory_api.py` 及 Task 3 focused tests。
+- 用户可感知变化：在明确授权与 allowlist 内元数据发现来源，安全枚举受支持文件；通过既有 extraction registry/queue/pipeline/adapters 消费 internal snapshot，写入结构化 source/conversation/message 行，并暴露可追踪的 terminal Work Fact 与认证 8766 读取/动作接口。
+- 安全边界：发现阶段不读聊天正文；拒绝 filesystem root、whole home、凭证/token/cookie/private DB、symlink escape、无界递归与未知格式；Obsidian 仅复用 managed-path/frontmatter discovery；不调用任何自动晋级 seam；不接触 Production/Vault/owner data。
+
+### 增量自动验收
+
+- [x] 严格 TDD RED：初次模块缺失导致 collection errors 后，测试先改为明确模块缺失断言；随后执行 focused behavioral RED：`./.venv/bin/python -m pytest -q tests/test_automatic_memory_discovery.py tests/test_automatic_memory_runtime_flow.py tests/test_automatic_memory_work_fact.py tests/test_automatic_memory_obsidian.py --tb=short` → `14 failed`。
+- [x] GREEN focused：`./.venv/bin/python -m pytest -q tests/test_automatic_memory_discovery.py tests/test_automatic_memory_runtime_flow.py tests/test_automatic_memory_work_fact.py tests/test_automatic_memory_obsidian.py tests/test_automatic_memory_control_api.py tests/test_extraction_worker.py` → `24 passed, 1 warning`。
+- [x] 直接受影响 runtime/extraction/worker/Obsidian/API 回归（排除 Task 2 已知 stale scheduler timing edge）：同一矩阵加 `-k 'not daily_integrity_job_runs_without_event'` → `195 passed, 1 deselected, 7 warnings`。不加排除项时唯一失败为既有 `integrity_seconds` 最小值 clamp 导致的 `test_daily_integrity_job_runs_without_event`；Task 3 未修改该边界。
+- [x] `compileall`、`git diff --check`、acceptance sync、local handoff 纳入最终门禁；重复授权 snapshot 使用既有 idempotency key，来源失败不阻塞其他来源。
+- [ ] 不执行 Artifact、真实 UI、Production/Vault、8766 live server、owner acceptance 或本机 ACTIVE 任务；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。
+
+### 清理与回滚
+
+- 临时数据：仅 pytest `tmp_path` synthetic source files/SQLite/Vault；测试自动清理，未接触主人数据。
+- 回滚：分别回退产品/测试提交 `bc3636a` 与本条 evidence/docs 提交；不触碰正式记忆、raw evidence、Qdrant、主人设置或第三方软件。
+
+### 最终报告
+
+- 完整报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-3-report.md`
+- 产品/测试提交：`bc3636a`
+- 报告/文档提交：待提交

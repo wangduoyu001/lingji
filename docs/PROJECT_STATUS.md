@@ -1,9 +1,9 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
-> Updated: 2026-08-26
+> Updated: 2026-08-27
 > Formal/default branch: `master`
 > Phase 1 implementation base: `d12c1fb837257e83835a7cdb899bb29a9c675c3d`
-> Current Phase 1 worktree Head: `8f2267d8d2994658186acfe4b13add9758db257b`
+> Current Phase 1 worktree Head: `bc3636a`
 > Current implementation branch: `codex/phase1-automatic-memory`
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
@@ -37,6 +37,8 @@ Phase 1 PASS 后，Phase 2 第一优先级固定为 **Opportunity Center / 机�
 此前唯一已复现的 P0 缺口是：一次终态失败已经产生主人待办后，实时生命周期 callback 随即成功时，成功 Outcome 会立即写入，但旧 PendingAction 要等后续 `WorkStore` 重放/读取才被解决。Task 1 已通过单一事务转换和 callback/replay/restart/乱序矩阵修复并回归验证；剩余执行权威为 `docs/superpowers/plans/2026-08-26-phase1-automatic-memory-followup.md`。
 
 当前 `LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。在 Work Fact 收口、固定 100 问评测、统一 RAG、质量/规模门禁和同 SHA Artifact 锁定之前，不执行新的真实安装或 M5 主人验收。
+
+Task 3 已在本分支产品提交 `bc3636a` 完成代码级收口：授权元数据发现、受限 allowlist 枚举、既有 extraction registry/queue/pipeline/adapters 的 internal snapshot 消费、结构化 source/conversation/message 行、终态 Work Fact 与认证 8766 发现/扫描/进度/恢复接口均有 focused/regression 覆盖。该状态仅表示代码与合成 fixture 验证通过；不表示 Artifact、真实 UI、主人观察或 Production/Vault 验收完成。Task 2 的 stale scheduler cleanup-state 边界保持不变，自动晋级 seam 仍禁止调用。
 
 ## 1B. 自动化第二大脑的锁定方向
 

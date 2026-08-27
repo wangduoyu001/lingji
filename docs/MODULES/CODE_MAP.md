@@ -318,9 +318,9 @@ python -m pytest -q --tb=short -k "work or capture_work"
 .\scripts\validate.ps1 -Mode focused -Area desktop
 ```
 
-## Automatic Memory（Phase 1 planned ownership）
+## Automatic Memory（Phase 1 ownership and Task 3 implementation）
 
-本节只登记 Task 0 修复后的计划入口；这些路径在实现并通过对应测试前，不得被描述为已实现能力。顺序是依赖顺序，不是当前完成状态。
+本节登记 Phase 1 入口及其当前状态。Task 3 已在本分支实现并通过 focused/regression tests；其余未标记为已实现的条目仍是计划边界。
 
 ```text
 Task 1:
@@ -341,12 +341,20 @@ src/control/automatic_memory_api.py
 Focused tests: `tests/test_automatic_memory_runtime.py`, `tests/test_packaged_control_api.py`, `tests/test_automatic_memory_scheduler.py`; Desktop smoke: `desktop/lingji-control/scripts/runtime-sidecar-smoke.mjs`
 
 Task 3:
+src/automatic_memory/discovery.py
+src/automatic_memory/path_policy.py
+src/automatic_memory/checkpoint.py
+src/automatic_memory/runtime.py
+src/extraction/queue.py
+src/extraction/pipeline.py
+src/control/automatic_memory_api.py
 src/extraction/adapters/chatgpt.py
 src/extraction/adapters/codex.py
 src/extraction/adapters/generic_ai_history.py
 src/extraction/adapters/claude_desktop.py
 src/extraction/registry.py
-= macOS official ChatGPT, schema-detected Codex, generic JSON/JSONL/Markdown and Claude boundary
+= authorized metadata-only discovery and bounded allowlisted enumeration; existing adapters/registry consume internal snapshot jobs into structured source/conversation/message rows; terminal Work Fact lifecycle and authenticated 8766 discovery/scan/progress/recovery reads/actions
+Focused tests: `tests/test_automatic_memory_discovery.py`, `tests/test_automatic_memory_runtime_flow.py`, `tests/test_automatic_memory_work_fact.py`, `tests/test_automatic_memory_obsidian.py`, `tests/test_automatic_memory_control_api.py`
 
 Task 4:
 src/automatic_memory/watcher.py
