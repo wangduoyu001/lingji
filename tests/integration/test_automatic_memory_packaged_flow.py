@@ -529,7 +529,7 @@ def _run_crash_restart_matrix(root: Path) -> dict[str, Any]:
             terminal = _wait_until(lambda: next((row for row in sidecar.get("/api/automatic-memory/scans") if row.get("status") == "completed"), None), timeout=20.0)
             assert terminal is not None, sidecar.get("/api/automatic-memory/scans")
             thread.join(timeout=5)
-            counts = _sqlite_counts(run_root)
+            counts = _wait_until(lambda: _sqlite_counts(run_root) if _sqlite_counts(run_root)["queued"] == 0 else None, timeout=30.0) or _sqlite_counts(run_root)
             assert counts["queued"] == 0
             results[percentage] = {"crash_progress": progress["progress"], "terminal": terminal, "jobs": len(counts["jobs"]), "structured": _structured_counts(root)}
         finally:
