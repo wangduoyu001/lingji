@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -401,3 +403,127 @@ def test_real_control_main_cleans_runtime_when_scheduler_start_fails(
     names = {thread.name for thread in threading.enumerate()}
     assert "lingji-scheduler" not in names
     assert "lingji-extraction-worker" not in names
+
+
+def _run_packaged_wrapper_subprocess(root: Path, *, fail_start: bool = False):
+    script = r'''
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+fail_start = sys.argv[2] == "fail"
+import run_control_api
+from src.config import Settings
+from src.automatic_memory.models import AuthorizationScope
+from src.automatic_memory.source_registry import SourceRegistry
+from src.storage import StateDatabase
+
+settings = Settings(
+    storage_dir=str(root / "storage"),
+    vault_dir=str(root / "vault"),
+    snapshot_dir=str(root / "snapshots"),
+    log_dir=str(root / "logs"),
+    scheduler_poll_seconds=0.02,
+    extraction_poll_seconds=0.2,
+)
+run_control_api.settings = settings
+state = StateDatabase(settings.state_db_path)
+registry = SourceRegistry(state)
+registry.register(
+    AuthorizationScope(
+        "wrapper-grant", ("generic_ai_history",), (str(root),),
+        __import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+        None, True,
+    ),
+    "generic_ai_history", str(root),
+)
+if fail_start:
+    from src.automatic_memory.scheduler import AutomaticMemoryScheduler
+    original_start = AutomaticMemoryScheduler.start
+    def start_then_fail(scheduler):
+        original_start(scheduler)
+        raise RuntimeError("wrapper startup failure")
+    AutomaticMemoryScheduler.start = start_then_fail
+
+import uvicorn
+def fake_uvicorn(app, **kwargs):
+    import gc
+    from src.automatic_memory.runtime import AutomaticMemoryRuntime
+    runtime = next(
+        value for value in gc.get_objects()
+        if isinstance(value, AutomaticMemoryRuntime)
+    )
+    owned = [
+        thread.name for thread in __import__("threading").enumerate()
+        if thread.name.startswith(("lingji-",))
+    ]
+    print("WRAPPER_UVICORN " + json.dumps({
+        "host": kwargs["host"], "port": kwargs["port"],
+        "db_path": str(state.path),
+        "queue_path": str(runtime.queue.path),
+        "pipeline_queue_path": str(runtime.pipeline.queue.path),
+        "registry_db_path": str(runtime.registry.state_db.path),
+        "scheduler_db_path": str(runtime.scheduler.state_db.path),
+        "jobs": len(state.list_scheduler_jobs()),
+        "owned_threads": sorted(owned),
+    }))
+uvicorn.run = fake_uvicorn
+try:
+    import run_packaged_control_api
+    run_packaged_control_api.main([
+        "--data-root", str(root), "--workspace", "acceptance",
+    ])
+except RuntimeError as exc:
+    if not fail_start or "wrapper startup failure" not in str(exc):
+        raise
+    owned = [
+        thread.name for thread in __import__("threading").enumerate()
+        if thread.name.startswith(("lingji-scheduler", "lingji-extraction-worker", "lingji-memory-watch"))
+    ]
+    print("WRAPPER_FAILURE " + json.dumps({"message": str(exc), "owned_threads": sorted(owned)}))
+'''
+    return subprocess.run(
+        [sys.executable, "-c", script, str(root), "fail" if fail_start else "ok"],
+        cwd=str(Path(__file__).parents[1]),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_packaged_wrapper_main_runs_real_composition_and_cleans_subprocess(
+    runtime_tmp_path: Path,
+):
+    root = runtime_tmp_path / "wrapper-runtime"
+    result = _run_packaged_wrapper_subprocess(root)
+    assert result.returncode == 0, result.stderr
+    marker = next(line for line in result.stdout.splitlines() if line.startswith("WRAPPER_UVICORN "))
+    payload = json.loads(marker.removeprefix("WRAPPER_UVICORN "))
+    assert payload["port"] == 8766
+    assert payload["jobs"] == 2
+    assert len({
+        payload["db_path"], payload["queue_path"],
+        payload["pipeline_queue_path"], payload["registry_db_path"],
+        payload["scheduler_db_path"],
+    }) == 1
+    assert any(name == "lingji-scheduler" for name in payload["owned_threads"])
+    assert any(name == "lingji-extraction-worker" for name in payload["owned_threads"])
+    db_files = {path.name for path in (root / "storage").glob("*.db")}
+    assert db_files == {"lingji_state.db", "lingji_memory.db"}
+    assert not (root / "runtime" / "sidecar-state.json").exists()
+    assert not (root / "runtime" / "sidecar-stop-request.json").exists()
+
+
+def test_packaged_wrapper_main_failure_cleans_real_subprocess(
+    runtime_tmp_path: Path,
+):
+    root = runtime_tmp_path / "wrapper-start-failure"
+    result = _run_packaged_wrapper_subprocess(root, fail_start=True)
+    assert result.returncode == 0, result.stderr
+    marker = next(line for line in result.stdout.splitlines() if line.startswith("WRAPPER_FAILURE "))
+    payload = json.loads(marker.removeprefix("WRAPPER_FAILURE "))
+    assert "wrapper startup failure" in payload["message"]
+    assert payload["owned_threads"] == []
+    assert not (root / "runtime" / "sidecar-state.json").exists()
+    assert not (root / "runtime" / "sidecar-stop-request.json").exists()

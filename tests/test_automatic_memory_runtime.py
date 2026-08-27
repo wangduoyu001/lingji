@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+import threading
 import time
 
 import pytest
@@ -99,6 +100,7 @@ def _runtime(tmp_path: Path):
     queue = type("Queue", (), {"path": state.path})()
     pipeline = type("Pipeline", (), {"queue": queue})()
     scheduler = _Scheduler()
+    scheduler.state_db = state
     worker = _Worker()
     runtime = AutomaticMemoryRuntime(
         state_db=state,
@@ -156,11 +158,35 @@ def test_runtime_uses_canonical_state_and_queue_path(tmp_path: Path):
     assert Path(runtime.pipeline.queue.path).resolve() == Path(runtime.state_db.path).resolve()
 
 
+@pytest.mark.parametrize("mismatched", ["registry", "scheduler"])
+def test_runtime_rejects_mismatched_registry_or_scheduler_state_db(
+    tmp_path: Path, mismatched: str
+):
+    canonical = StateDatabase(tmp_path / "a.db")
+    other = StateDatabase(tmp_path / "b.db")
+    queue = type("Queue", (), {"path": canonical.path})()
+    pipeline = type("Pipeline", (), {"queue": queue})()
+    registry = SourceRegistry(other if mismatched == "registry" else canonical)
+    scheduler = _Scheduler()
+    scheduler.state_db = other if mismatched == "scheduler" else canonical
+
+    with pytest.raises(ValueError, match="one canonical state database"):
+        AutomaticMemoryRuntime(
+            state_db=canonical,
+            queue=queue,
+            pipeline=pipeline,
+            registry=registry,
+            scheduler=scheduler,
+            worker=_Worker(),
+        )
+
+
 def test_start_failure_retries_cleanup_for_partially_started_scheduler(tmp_path: Path):
     state = StateDatabase(tmp_path / "lingji_state.db")
     queue = type("Queue", (), {"path": state.path})()
     pipeline = type("Pipeline", (), {"queue": queue})()
     scheduler = _PartiallyStartingScheduler()
+    scheduler.state_db = state
     worker = _Worker()
     runtime = AutomaticMemoryRuntime(
         state_db=state, queue=queue, pipeline=pipeline, scheduler=scheduler, worker=worker
@@ -178,8 +204,10 @@ def test_start_failure_retries_cleanup_for_partially_started_scheduler(tmp_path:
 
 
 def test_stop_error_keeps_cleanup_pending_and_allows_retry(tmp_path: Path):
-    runtime, scheduler, worker = _runtime(tmp_path)
+    runtime, _scheduler, worker = _runtime(tmp_path)
+    state = runtime.state_db
     scheduler = _RetryingStopScheduler()
+    scheduler.state_db = state
     runtime.scheduler = scheduler
     runtime.start()
 
@@ -290,6 +318,88 @@ def test_watcher_reports_surviving_thread_after_bounded_stop(tmp_path: Path):
     release.set()
     watcher.stop(timeout_seconds=1)
     assert watcher.running_sources() == ()
+
+
+def test_revoke_linearizes_quickly_and_runtime_reports_survivor_until_retry(
+    tmp_path: Path,
+):
+    from src.automatic_memory.scheduler import AutomaticMemoryScheduler
+
+    release = threading.Event()
+
+    def backend(_root, **_kwargs):
+        while not release.is_set():
+            time.sleep(0.01)
+        yield set()
+
+    state = StateDatabase(tmp_path / "lingji_state.db")
+    registry = SourceRegistry(state)
+    source = registry.register(
+        AuthorizationScope(
+            "grant-revoke",
+            ("generic_ai_history",),
+            (str(tmp_path),),
+            datetime.now(timezone.utc),
+            None,
+            True,
+        ),
+        "generic_ai_history",
+        str(tmp_path),
+    )
+    watcher = AutomaticMemoryWatcher(
+        source_provider=lambda source_id: next(
+            item for item in registry.list_sources() if item.source_id == source_id
+        ),
+        on_change=lambda _source_id: None,
+        watch_backend=backend,
+    )
+    scheduler = AutomaticMemoryScheduler(
+        state,
+        registry,
+        scan_runner=lambda *_args: None,
+        watcher=watcher,
+        poll_seconds=0.02,
+    )
+    queue = type("Queue", (), {"path": state.path})()
+    pipeline = type("Pipeline", (), {"queue": queue})()
+    runtime = AutomaticMemoryRuntime(
+        state_db=state,
+        queue=queue,
+        pipeline=pipeline,
+        registry=registry,
+        scheduler=scheduler,
+        worker=_Worker(),
+    )
+    runtime.start()
+    deadline = time.monotonic() + 1.0
+    while source.source_id not in watcher.running_sources() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert source.source_id in watcher.running_sources()
+
+    def broken_observer(_source):
+        raise RuntimeError("observer failed")
+
+    registry.add_lifecycle_listener(broken_observer)
+    started = time.monotonic()
+    registry.revoke(source.source_id)
+    elapsed = time.monotonic() - started
+    assert elapsed < 0.5
+    assert source.source_id not in {
+        row["name"].split(":")[1]
+        for row in state.list_scheduler_jobs()
+        if row["name"].startswith(f"automatic_memory:{source.source_id}:")
+        and row["enabled"]
+    }
+    assert source.source_id in watcher.running_sources()
+    status = runtime.status()
+    assert status["state"] == "degraded"
+    assert status["cleanup_pending"] is True
+    assert source.source_id in status["source_cleanup_errors"]
+
+    release.set()
+    runtime.stop()
+    assert watcher.running_sources() == ()
+    assert runtime.status()["state"] == "stopped"
 
 
 def test_runtime_status_route_is_authenticated_and_truthful(tmp_path: Path):

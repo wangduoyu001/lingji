@@ -63,7 +63,6 @@ class AutomaticMemoryRuntime:
             raise TypeError("queue or pipeline.queue is required")
         if pipeline_queue is not None and self.queue is not pipeline_queue:
             raise ValueError("runtime and extraction pipeline must share one queue wrapper")
-        self._validate_canonical_state_path()
         self.registry = registry or SourceRegistry(state_db)
         self.snapshot = snapshot
         self.runner = runner
@@ -105,6 +104,7 @@ class AutomaticMemoryRuntime:
                 batch_size=int(getattr(settings, "extraction_batch_size", 5)),
             )
         self.worker = worker
+        self._validate_canonical_state_path()
         self._lock = RLock()
         self._started = False
         self._paused = False
@@ -112,15 +112,40 @@ class AutomaticMemoryRuntime:
         self._cleanup_errors: list[str] = []
 
     def _validate_canonical_state_path(self) -> None:
-        state_path = Path(self.state_db.path).expanduser().resolve(strict=False)
-        queue_path = Path(self.queue.path).expanduser().resolve(strict=False)
+        def verified_path(value: Any, label: str) -> Path:
+            raw = getattr(value, "path", None)
+            if raw is None:
+                raise ValueError(
+                    f"automatic-memory runtime cannot verify {label} canonical state path"
+                )
+            try:
+                return Path(raw).expanduser().resolve(strict=False)
+            except (TypeError, ValueError, OSError) as exc:
+                raise ValueError(
+                    f"automatic-memory runtime cannot verify {label} canonical state path"
+                ) from exc
+
+        state_path = verified_path(self.state_db, "state_db")
+        queue_path = verified_path(self.queue, "queue")
         pipeline_queue = getattr(self.pipeline, "queue", None)
-        pipeline_path = (
-            Path(pipeline_queue.path).expanduser().resolve(strict=False)
-            if pipeline_queue is not None
-            else queue_path
-        )
-        if state_path != queue_path or state_path != pipeline_path:
+        if pipeline_queue is None:
+            raise ValueError(
+                "automatic-memory runtime cannot verify pipeline.queue canonical state path"
+            )
+        pipeline_path = verified_path(pipeline_queue, "pipeline.queue")
+        registry_db = getattr(self.registry, "state_db", None)
+        scheduler_db = getattr(self.scheduler, "state_db", None)
+        if registry_db is None:
+            raise ValueError(
+                "automatic-memory runtime cannot verify registry canonical state path"
+            )
+        if scheduler_db is None:
+            raise ValueError(
+                "automatic-memory runtime cannot verify scheduler canonical state path"
+            )
+        registry_path = verified_path(registry_db, "registry")
+        scheduler_path = verified_path(scheduler_db, "scheduler")
+        if len({state_path, queue_path, pipeline_path, registry_path, scheduler_path}) != 1:
             raise ValueError(
                 "automatic-memory runtime requires one canonical state database and queue path"
             )
@@ -201,6 +226,17 @@ class AutomaticMemoryRuntime:
             paused = self._paused
             cleanup_pending = self._cleanup_pending
             cleanup_error = "; ".join(self._cleanup_errors) if self._cleanup_errors else None
+        source_cleanup_errors = getattr(self.scheduler, "source_cleanup_errors", {}) or {}
+        source_cleanup_errors = dict(source_cleanup_errors)
+        if source_cleanup_errors:
+            cleanup_pending = True
+            source_error = "; ".join(
+                f"{source_id}: {error}"
+                for source_id, error in sorted(source_cleanup_errors.items())
+            )
+            cleanup_error = "; ".join(
+                value for value in (cleanup_error, source_error) if value
+            )
         if not started and not cleanup_pending:
             state = "stopped"
         elif cleanup_pending:
@@ -222,6 +258,7 @@ class AutomaticMemoryRuntime:
             "paused": paused,
             "cleanup_pending": cleanup_pending,
             "cleanup_error": cleanup_error,
+            "source_cleanup_errors": source_cleanup_errors,
             "scheduler_state": "running" if scheduler_running else "stopped",
             "scheduler_heartbeat_age": None,
             "scheduler_heartbeat_reason": self.HEARTBEAT_UNAVAILABLE_REASON,

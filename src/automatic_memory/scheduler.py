@@ -65,6 +65,12 @@ class AutomaticMemoryScheduler:
         self._lifecycle_generation = 0
         self._scheduler_owner = f"automatic-memory-scheduler-{uuid4().hex}"
         self._scheduler_lease_seconds = 30.0
+        self._source_cleanup_errors: dict[str, str] = {}
+
+    @property
+    def source_cleanup_errors(self) -> dict[str, str]:
+        with self._lock:
+            return dict(self._source_cleanup_errors)
 
     def start(self) -> None:
         with self._lock:
@@ -94,6 +100,10 @@ class AutomaticMemoryScheduler:
                 self._listener_callback = None
                 self._listener_registered = False
                 if result.get("surviving_threads"):
+                    self._source_cleanup_errors["__scheduler__"] = (
+                        "automatic-memory watcher threads survived stop: "
+                        + ", ".join(result["surviving_threads"])
+                    )
                     raise RuntimeError(
                         "automatic-memory watcher threads survived stop: "
                         + ", ".join(result["surviving_threads"])
@@ -127,7 +137,13 @@ class AutomaticMemoryScheduler:
                 )
             )
         if errors:
+            with self._lock:
+                self._source_cleanup_errors["__scheduler__"] = "; ".join(
+                    str(error) for error in errors
+                )
             raise RuntimeError("; ".join(str(error) for error in errors))
+        with self._lock:
+            self._source_cleanup_errors.clear()
 
     def pause(self) -> None:
         with self._lock:
@@ -335,8 +351,42 @@ class AutomaticMemoryScheduler:
         )
 
     def _disable_source(self, source_id: str) -> None:
-        self.watcher.stop_source(source_id)
-        self.cron.set_jobs_enabled(self._source_prefix(source_id), False)
+        # Disable admission before asking a watcher backend to stop. The
+        # bounded join is deliberately short: revocation is a linearized
+        # lifecycle transition and must not block on an uncooperative backend.
+        errors: list[str] = []
+        try:
+            self.cron.set_jobs_enabled(self._source_prefix(source_id), False)
+        except Exception as exc:
+            errors.append(f"failed to disable source jobs: {exc}")
+        try:
+            result = self.watcher.stop_source(source_id, timeout_seconds=0.1) or {}
+        except Exception as exc:
+            result = {}
+            errors.append(f"failed to stop source watcher: {exc}")
+        survivors = result.get("surviving_threads") or []
+        if survivors:
+            errors.append(
+                "source watcher cleanup pending: "
+                + ", ".join(str(item) for item in survivors)
+            )
+        with self._lock:
+            if errors:
+                self._source_cleanup_errors[source_id] = "; ".join(errors)
+            else:
+                self._source_cleanup_errors.pop(source_id, None)
+        if errors:
+            try:
+                self.state_db.append_event(
+                    "automatic_memory_source_cleanup_failed",
+                    "source",
+                    source_id,
+                    {"error": "; ".join(errors), "cleanup_pending": bool(survivors)},
+                )
+            except Exception:
+                # In-memory status remains authoritative if audit persistence
+                # is unavailable; lifecycle observers must not hide the fact.
+                pass
 
     def _attach_source(self, source) -> None:
         """Attach one newly authorized source to this scheduler instance."""
