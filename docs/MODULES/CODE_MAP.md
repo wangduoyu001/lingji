@@ -97,7 +97,9 @@ tests/test_runtime_truth.py
 src/retrieval/memory_db.py
 = 可重建 Lexical/Metadata Index；`sync_structured_evidence()` 将已落库的
   structured source/conversation/message 正文投影为 `structured_evidence`
-  文档，保留来源身份与时态字段，不写入 Vault
+  文档，保留来源身份与时态字段，不写入 Vault；现有 SourceReadModel
+  lifecycle projection 将 automatic source revoke/expiry fail-closed 同步到
+  evidence 文档状态，内容更新保持稳定 message identity 并幂等替换索引投影
 
 src/retrieval/qdrant_provider.py::QdrantSemanticProvider
 = 可重建 Semantic Index Provider
@@ -356,7 +358,7 @@ src/extraction/adapters/codex.py
 src/extraction/adapters/generic_ai_history.py
 src/extraction/adapters/claude_desktop.py
 src/extraction/registry.py
-= authorized metadata-only discovery and bounded allowlisted enumeration; existing adapters/registry consume internal snapshot jobs into structured source/conversation/message rows; terminal Work Fact lifecycle and authenticated 8766 discovery/scan/progress/recovery reads/actions. Repair Round 1 additionally enforces terminal invalid-job handling, bounded Obsidian frontmatter reads, separator-aware sensitive filenames, inserted/reused scan counts, runtime-backed scan dispatch, source/terminal Work Fact consistency, and no Vault document publishing for automatic chat snapshots. Final Repair Round 2 adds BOM/CRLF-safe bounded frontmatter, automatic Generic AI source identity namespacing, and truthful resumed-scan Work Fact totals.
+= authorized metadata-only discovery and bounded allowlisted enumeration; existing adapters/registry consume internal snapshot jobs into structured source/conversation/message rows; terminal Work Fact lifecycle and authenticated 8766 discovery/scan/progress/recovery reads/actions. Repair Round 1 additionally enforces terminal invalid-job handling, bounded Obsidian frontmatter reads, separator-aware sensitive filenames, inserted/reused scan counts, runtime-backed scan dispatch, source/terminal Work Fact consistency, and no Vault document publishing for automatic chat snapshots. Final Repair Round 2 adds BOM/CRLF-safe bounded frontmatter, automatic Generic AI source identity namespacing, and truthful resumed-scan Work Fact totals. Task 6L Repair Round 1 keeps the automatic source namespace stable across changed raw snapshots and projects StateDB lifecycle transitions through the existing SourceRegistry/read-model listener into current evidence visibility.
 Focused tests: `tests/test_automatic_memory_discovery.py`, `tests/test_automatic_memory_runtime_flow.py`, `tests/test_automatic_memory_work_fact.py`, `tests/test_automatic_memory_obsidian.py`, `tests/test_automatic_memory_control_api.py`, `tests/test_automatic_memory_repair_round1.py`, `tests/test_automatic_memory_repair_round2.py`
 
 Task 4:

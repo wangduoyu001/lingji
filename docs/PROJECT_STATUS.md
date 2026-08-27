@@ -1,6 +1,6 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
-> Updated: 2026-08-27
+> Updated: 2026-08-28
 > Formal/default branch: `master`
 > Phase 1 implementation base: `d12c1fb837257e83835a7cdb899bb29a9c675c3d`
 > Current Phase 1 product head: `4aa0b7841dab76fed5c784008c2449808e3648f2` (Task 4C)
@@ -56,7 +56,7 @@ Task 6A Repair Round 1（独立审查 `9ed229461165b748066b9cba3d2ed169af43db56`
 
 Task 6 Repair Round 1（diagnostic review `361733b3c660e1b5dc36e5500e1f2436da41572e`）：产品/测试提交 `04eb1d3`、`b6e8c77`、`31f40a3` 已完成有界 durable scan/work identity 和 packaged evidence harness 修复。定向 regression 52 passed；单 root clean Acceptance raw evidence 已记录在唯一权威报告 `docs/TEST_REPORTS/PHASE1_AUTOMATION_UI_GATE.md`。Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`：packaged ingestion 不产生正式 lexical memory document（scenario 8 BLOCKED），现有 scheduler idle heartbeat 保持诚实 `NOT_MEASURED/BLOCKED`（需 Task6H），crash 30/70 最终矩阵与完整双轮报告仍待独立复核。不得宣称 release、Artifact、主人或 Production/Vault 验收。
 
-Task 6L Structured Evidence Lexical Wiring（有界落地，待独立终审）：`StructuredReadModelSink` 现在在既有 `lingji_memory.db` 内，把非空 structured message rows 物化为可重建 `memory_type=structured_evidence` / `memory_tier=evidence` FTS 文档；文档保留 source/conversation/message 复合身份、role/order/content hash/raw/time provenance，不写 Obsidian、不创建 candidate/active memory、不调用 promotion seam。正式 Gateway/Hybrid/MCP/ContextPack 复用该 lexical projection，Qdrant/semantic 查询失败时保留 lexical hit 与 degraded diagnostics；普通 Obsidian rebuild 不会删除该投影，且可从 structured rows 单独 rebuild。当前 focused evidence 在 `tests/test_structured_evidence_lexical.py`；授权状态撤销仍由 `lingji_state.db` 管理，而 structured source status 位于 `lingji_memory.db`，跨库实时 revoke 隔离未在本任务扩展，报告保留该限制。Task6 主报告仍 `IN_PROGRESS / NOT_ACCEPTED`。
+Task 6L Structured Evidence Lexical Wiring（Repair Round 1 已实现，待独立终审）：`StructuredReadModelSink` 现在在既有 `lingji_memory.db` 内，把非空 structured message rows 物化为可重建 `memory_type=structured_evidence` / `memory_tier=evidence` FTS 文档；文档保留 source/conversation/message 复合身份、role/order/content hash/raw/time provenance，不写 Obsidian、不创建 candidate/active memory、不调用 promotion seam。正式 Gateway/Hybrid/MCP/ContextPack 复用该 lexical projection，Qdrant/semantic 查询失败时保留 lexical hit 与 degraded diagnostics；普通 Obsidian rebuild 不会删除该投影，且可从 structured rows 单独 rebuild。Repair Round 1 的产品/测试提交为 `5258ecef98e2b58dfb9c12af585a4fbd44c260dd`：现有 SourceRegistry lifecycle listener 将 StateDB 的 revoke/expired/unsupported/degraded 状态 fail-closed 投影为 structured source/evidence archived，启动重启时重新投影；自动 Generic source identity 不再随 raw bytes 改变，内容更新幂等 upsert 同一 message evidence，raw citation、role、sequence 继续出现在正式 citation/ContextPack。Task6 主报告仍 `IN_PROGRESS / NOT_ACCEPTED`，等待 Task6H heartbeat、crash 最终门禁与独立终审。
 
 ## 1B. 自动化第二大脑的锁定方向
 

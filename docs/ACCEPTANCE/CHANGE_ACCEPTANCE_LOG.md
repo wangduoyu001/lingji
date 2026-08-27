@@ -1886,3 +1886,40 @@ Windows 重启后恢复 = 100%
 - Safety: pytest temporary roots only; no live 8766/8767, Artifact,
   Production/Vault, owner data, Qdrant or UI acceptance. Product/tests and
   docs/evidence are separate commits.
+
+## 2026-08-28 · Task 6L · Repair Round 1 — lifecycle isolation and update supersession
+
+- 基线/审查：Task 6L product/test `9ced68b`，独立审查 `c69afdc`；本轮只修复
+  Important I1（StateDB revoke/expired 在 current Gateway/Hybrid/MCP/ContextPack
+  泄漏）和 I2（自动 snapshot 内容更新产生两个 active current evidence），并顺手
+  修复同审查直接相关的 Minor M1（raw citation）与 M2（ContextPack role/sequence）。
+  产品/测试提交：`5258ecef98e2b58dfb9c12af585a4fbd44c260dd`；无第二 repair。
+- 边界：复用现有 `SourceRegistry` lifecycle listener、`SourceReadModel`、
+  `memory_documents`/FTS 与 `MemoryDatabase.revision`；StateDB 仍是授权权威，
+  `lingji_memory.db` 仍是可重建检索投影。自动聊天仍只写 raw + structured evidence，
+  不写 Obsidian、不创建 candidate/Core/active memory、不调用 promotion seam，不改
+  ranking/embedding/vector/evaluator/API family。未知/非 authorized 状态投影为
+  archived，current fail-closed；启动时从持久 StateDB 状态重新投影。
+- RED：新增真实 `SourceRegistry` + `ExtractionPipeline.execute()` 测试前，revoke
+  后 Gateway current 仍有结果、内容更新后有两个 active 文档；未直接塞入
+  `memory_documents`。GREEN：生命周期投影、稳定 automatic source namespace、
+  citation/raw_reference 与 ContextPack role/sequence 修复后通过。
+- focused/regression：`tests/test_structured_evidence_lexical.py` `9 passed, 1
+  warning`；structured/extraction/retrieval/context matrix `57 passed, 1 warning`
+  （修复前 focused aggregate 为 55，新增 2 个 repair tests）；审查候选/来源/时态
+  matrix `46 passed, 2 warnings`；runtime/discovery/Obsidian/worker `36 passed,
+  1 warning`；Gateway/MCP/ContextPack/Obsidian/promotion quarantine `75 passed,
+  1 warning`；Task 6 packaged Qdrant lexical helper `1 passed, 1 warning`。
+- 正式路径证据：真实 pipeline 导入的同一 message identity 在 Gateway current、
+  ContextPack 与正式 MCP `search_memory` 中可检索；revoke/expired 后三者的
+  current 结果为空，history/as_of 保留原始 structured evidence，重启后仍隔离；
+  Qdrant client 抛错时 Gateway/ContextPack 保留 lexical structured evidence，
+  diagnostics 为 `semantic=degraded` / `reason_code=semantic_query_failed`。
+  内容 v1→v2 只保留一个 current document，same-bytes replay 新增/更新均为 0，
+  cross-source identity 仍独立；raw reference、role、sequence 随 citation 返回。
+- 验证：`python -m compileall -q src tests/test_structured_evidence_lexical.py`
+  PASS；`git diff --check 81ffaec..5258ece` PASS。未执行 live 8766/8767、Artifact、
+  release、Production/Vault、owner acceptance；`LOCAL_EXECUTION_TASK.md` 保持
+  `IDLE`。Task 6 authority `docs/TEST_REPORTS/PHASE1_AUTOMATION_UI_GATE.md` 仍
+  `IN_PROGRESS / NOT_ACCEPTED`，其 packaged crash/H 门禁与此前 scenario 8 blocker
+  不因本轮 focused evidence 改写。

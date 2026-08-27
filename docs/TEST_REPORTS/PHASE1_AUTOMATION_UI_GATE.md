@@ -44,6 +44,26 @@ inside each run):
 | 9 sleep/wake equivalent | PASS in clean run: mtime clock jump + process restart; startup reconciliation reason and exact scan identity terminal. |
 | 10 recursive non-interference | PASS in clean run: third-party sentinel diff `{}`; Vault diff `{}` after explicit bootstrap-directory allowlist. Each sentinel records relative path, SHA-256, size, mtime_ns, mode and symlink target. |
 
+### Task 6L lexical landing (Repair Round 1)
+
+Task 6L product/test commit `5258ecef98e2b58dfb9c12af585a4fbd44c260dd` closes the
+structured-evidence lexical projection gap using the existing `lingji_memory.db`
+`memory_documents`/FTS path. Automatic source lifecycle transitions from StateDB are
+projected through the existing SourceRegistry listener into read-model/evidence status;
+revoke, expiry, and restart therefore fail closed for current Gateway, Hybrid, MCP and
+ContextPack retrieval while history/as_of retains the raw/structured evidence. Generic
+automatic source identity is stable across changed raw snapshots, so v1→v2 updates
+replace one evidence projection and same-byte replay is idempotent. Raw citation,
+message role and sequence are included in the formal evidence citation.
+
+Focused repair evidence: lexical tests `9 passed, 1 warning`; focused aggregate `57
+passed, 1 warning`; review matrices `46 passed, 2 warnings`, `36 passed, 1 warning`,
+and `75 passed, 1 warning`; packaged Qdrant lexical helper `1 passed, 1 warning`.
+These are Acceptance-only synthetic fixture results. They do not convert this Task 6
+authority from `IN_PROGRESS / NOT_ACCEPTED`: Task 6H heartbeat, final crash matrix,
+and independent Task 6 review remain outstanding, and no live service, Artifact,
+Production/Vault, or owner acceptance was run.
+
 Clean-run final persisted counts: StateDB sources `4`, queued `0`; structured
 source/conversation/message/memory `4/4/4/0`; duplicate counts
 `0/0/0/0`. The run saved `logs/packaged.stdout.log` and
