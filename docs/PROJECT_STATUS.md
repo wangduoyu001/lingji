@@ -50,9 +50,9 @@ Task 5B UI 已完成本地 focused 实现：Activity 读取认证 `/api/work/his
 
 Task 5B final review disposition: ACCEPTED_FOR_TASK6 / ACCEPT_FOR_TASK6; final review commit `bd2ff43`, reviewed product head `8136374`, Critical=0, Important=0, Minor=3 non-blocking evidence gaps. No live 8766, Sidecar, Artifact, Production/Vault or owner data was run.
 
-Task 6A Lifecycle Closeout: implementation/focused evidence `IMPLEMENTED_FOCUSED_PASS`; product/tests `15eb4433c9d6c3ba218e89d50bec84987ad35915`. A real watcher thread can remain `degraded/cleanup_pending` while alive, then a later retry after natural exit clears stale scheduler cleanup state and reaches `stopped`. Independent Task6A review is pending; Task 6/release/Artifact/owner acceptance remain unclaimed.
+Task 6A Lifecycle Closeout: implementation/focused evidence `IMPLEMENTED_FOCUSED_PASS`; product/tests `15eb4433c9d6c3ba218e89d50bec84987ad35915`. A real watcher thread can remain `degraded/cleanup_pending` while alive, then a later retry after natural exit clears stale scheduler cleanup state and reaches `stopped`. Final review commit `22aae07be9accf7d56a4273e8d45a521b2323dab` accepted Task6A for Task6 composition. Task 6 packaged E2E is now the active code/evidence gate; release/Artifact/owner acceptance remain unclaimed.
 
-Task 6A Repair Round 1（独立审查 `9ed229461165b748066b9cba3d2ed169af43db56`）已完成：产品/测试提交 `efde650e77a4ecda7f7266aefe48b29b9e8712de` 为唯一授权修复，按 watcher/Cron/source ownership 精确重试和清除 cleanup，且 start/stop 共用 lifecycle serialization。Task6A 新终审待进行；这是最后授权修复，若仍有 Critical/Important 则 `BLOCKED_AT_REPAIR_CAP`。Task 6、release、Artifact 与主人验收仍未完成或授权。
+Task 6A Repair Round 1（独立审查 `9ed229461165b748066b9cba3d2ed169af43db56`）已完成：产品/测试提交 `efde650e77a4ecda7f7266aefe48b29b9e8712de` 为唯一授权修复，按 watcher/Cron/source ownership 精确重试和清除 cleanup，且 start/stop 共用 lifecycle serialization。最终 review `22aae07be9accf7d56a4273e8d45a521b2323dab` accepted for Task6。Task 6 packaged E2E、release、Artifact 与主人验收仍未完成或授权。
 
 ## 1B. 自动化第二大脑的锁定方向
 

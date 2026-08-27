@@ -1838,3 +1838,13 @@ Windows 重启后恢复 = 100%
 - 产品/测试提交：`7058da0`
 - 报告/文档提交：`b83232d`
 - 元数据修正提交：`843b9cb`
+## 2026-08-28 · Phase 1 Product Landing · Task 6 Packaged Automation E2E
+
+- 基线：Task 6A final review `22aae07be9accf7d56a4273e8d45a521b2323dab` accepted for Task 6; reviewed product head remains `efde650e77a4ecda7f7266aefe48b29b9e8712de` plus final review documentation. Task 5B final review `bd2ff43` remains `ACCEPT_FOR_TASK6`.
+- 范围：仅在 pytest `tmp_path` / OS temporary Acceptance roots 中启动真实 `run_packaged_control_api` composition subprocess，驱动认证 loopback API 和持久 StateDB/queue/raw/structured/read-model/lexical evidence；不安装 Artifact、不访问 Production/Vault/主人数据、不占用真实 8766/8767。允许注入仅限测试网络端口、clock-jump equivalent and process crash/restart boundaries; no promotion seam is called.
+- 自动验收：十个核心场景必须实际执行并保存 raw counts/timings：metadata-only discovery、one-time authorization/startup scan、watch event queue latency、suppressed-event accelerated reconciliation、30%/70% crash restart terminal parity、pause/resume/revoke/expiry、corrupt-source isolation、Qdrant outage truthful lexical fallback、sleep/wake clock-jump restart、recursive third-party/Vault sentinel. 每轮从 clean Acceptance root 开始并连续运行两轮；source/conversation/message/memory duplicate counts、queued residue、silent errors、heartbeat age 和 sentinel diff 均从持久状态/递归文件树重算，禁止常量和布尔自证。
+- 失败边界：无法在 Acceptance-only 等价路径证明的项必须记录 `BLOCKED` 或 `FAIL`，不得跳过；任何 packaged composition、持久计数、隔离、降级 reason、恢复 parity 或 sentinel 变更失败即不通过。Qdrant 场景必须注入正式 vector client failure 并走正式 retrieval orchestration；不改变 promotion、quality runner、retrieval ranking/model/vector design、UI feature 或 API family。
+- 清理：每个测试结束停止并按 PID/实例确认 packaged subprocess 退出，删除本轮临时 root、日志和 fixture；不得清理工作区主人数据。失败证据仅保留脱敏摘要/报告需要的 counts、timings、sentinel diff。
+- 回滚：代码/测试提交与文档/证据提交分离；如集成 RED 暴露 Tasks 2–5 wiring bug，先停在最小复现并通知根代理，未经授权不扩改产品。
+- UI/回归：注册 `focused -Area automatic-memory-landing` 与既有 `desktop/lingji-control/tests/e2e_owner_memory_flow.mjs` rendered command；另行执行 Task 2/3/4/5 regressions、compileall、diff-check、acceptance sync、local handoff。真实 UI、Artifact、主人观察和 release 仍为未完成状态。
+- 报告：唯一权威报告 `docs/TEST_REPORTS/PHASE1_AUTOMATION_UI_GATE.md`；`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6-report.md` 仅作交接引用。
