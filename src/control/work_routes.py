@@ -11,7 +11,7 @@ def register_work_routes(app: Any, control: Any, secured: list[Any]) -> None:
     clients consume the same work facts instead of rebuilding state locally.
     """
 
-    from fastapi import HTTPException
+    from fastapi import HTTPException, Query
 
     def safe(call: Any) -> Any:
         try:
@@ -29,6 +29,17 @@ def register_work_routes(app: Any, control: Any, secured: list[Any]) -> None:
     def pending_actions() -> dict[str, Any]:
         return safe(control.pending_actions)
 
+    @app.get('/api/work/history', dependencies=secured)
+    def work_history(
+        limit: int = Query(default=20, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
+        return safe(lambda: control.work_history(limit=limit, offset=offset))
+
     @app.get('/api/work/timeline/{work_id}', dependencies=secured)
     def work_timeline(work_id: str) -> dict[str, Any]:
         return safe(lambda: control.work_timeline(work_id))
+
+    @app.post('/api/work/pending-actions/{action_id}/resolve', dependencies=secured)
+    def resolve_pending(action_id: str) -> dict[str, Any]:
+        return safe(lambda: control.resolve_pending(action_id))

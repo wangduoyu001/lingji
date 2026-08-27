@@ -21,3 +21,9 @@ class WorkControlService:
 
     def work_timeline(self, work_id: str) -> dict[str, Any]:
         return self.projector.timeline(work_id)
+
+    def work_history(self, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+        return self.projector.history(limit=limit, offset=offset)
+
+    def resolve_pending(self, action_id: str) -> dict[str, Any]:
+        return self.projector.resolve_pending(action_id)

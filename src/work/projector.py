@@ -41,7 +41,54 @@ class WorkProjector:
         self.store.reconcile_extraction_jobs()
         return {"pending_actions": [dict(item.__dict__) for item in self.store.list_pending(limit=limit)]}
 
+    @staticmethod
+    def _friendly_summary(fact: dict[str, Any]) -> dict[str, Any]:
+        work = fact.get("work") or {}
+        outcome = fact.get("outcome") or {}
+        next_action = fact.get("next_action") or {}
+        pending = fact.get("pending_actions") or []
+        status = str(outcome.get("status") or work.get("status") or "")
+        phase = {
+            "pending": "等待处理",
+            "accepted": "已接收",
+            "running": "处理中",
+            "retrying": "重试中",
+            "completed": "已完成",
+            "success": "已完成",
+            "failed": "处理失败",
+        }.get(status)
+        result = {
+            "completed": "成功",
+            "success": "成功",
+            "failed": "失败",
+        }.get(str(outcome.get("status") or ""))
+        actor = next_action.get("actor") or (pending[0].get("actor") if pending else None)
+        return {
+            "phase": phase,
+            "result": result,
+            "time": work.get("updated_at") or outcome.get("created_at") or work.get("created_at"),
+            "source": "已关联来源" if work.get("source_id") else None,
+            "next_actor": {"owner": "主人", "system": "灵机"}.get(str(actor), None) if actor else None,
+        }
+
+    def history(self, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+        if int(limit) < 1 or int(limit) > 100 or int(offset) < 0:
+            raise ValueError("limit must be between 1 and 100 and offset must not be negative")
+        self.store.reconcile_extraction_jobs()
+        works = self.store.list_work(limit=int(limit), offset=int(offset))
+        items: list[dict[str, Any]] = []
+        for work in works:
+            fact = self.fact(work.work_id)
+            fact["summary"] = self._friendly_summary(fact)
+            items.append(fact)
+        total = self.store.count_work()
+        return {"items": items, "limit": int(limit), "offset": int(offset), "total": total, "has_more": int(offset) + len(items) < total}
+
+    def resolve_pending(self, action_id: str) -> dict[str, Any]:
+        action = self.store.resolve_pending_action(action_id)
+        return {"action_id": action.action_id, "work_id": action.work_id, "resolved": action.resolved}
+
     def timeline(self, work_id: str, limit: int = 100) -> dict[str, Any]:
         fact = self.fact(work_id)
-        fact["events"] = [dict(item.__dict__) for item in self.store.list_events(work_id, limit=limit)]
+        fact["events"] = [dict(item.__dict__) for item in self.store.list_events(work_id, limit=limit, ascending=True)]
         return fact

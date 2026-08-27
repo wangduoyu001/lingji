@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from src.config import Settings
 from src.control.api import create_control_app
+from src.control.work_service import WorkControlService
 from src.storage.state_db import StateDatabase
 from src.work.capture_bridge import CaptureWorkBridge
 from src.work.models import ExecutionEvent, Failure, NextAction, Outcome, PendingAction, WorkItem
@@ -101,3 +102,38 @@ def test_authenticated_work_routes_use_same_state_db_and_hide_paths(tmp_path: Pa
         assert "workspace" not in json.dumps(response.json())
         assert client.get("/api/work/pending-actions", headers={"X-LingJi-Token": "secret"}).status_code == 200
         assert client.get("/api/work/timeline/unknown", headers={"X-LingJi-Token": "secret"}).status_code == 404
+
+
+def test_history_and_pending_routes_share_persisted_projection_and_bound_inputs(tmp_path: Path):
+    root = tmp_path / "workspace"
+    settings = Settings(
+        _env_file=None,
+        vault_dir=str(root / "vault"),
+        storage_dir=str(root / "storage"),
+        log_dir=str(root / "logs"),
+        backup_dir=str(root / "backup"),
+        startup_min_free_gb=0,
+    )
+    settings.storage_path.mkdir(parents=True, exist_ok=True)
+    control = WorkControlService(StateDatabase(settings.state_db_path))
+    work = WorkItem(work_id="shared-work", title="共享投影", status="running")
+    control.store.create_work(work)
+    control.store.append_event(ExecutionEvent(work_id=work.work_id, event_id="shared-event", event_type="started"))
+    control.store.add_pending_action(PendingAction(work_id=work.work_id, action_id="shared-action", description="需要主人确认"))
+
+    with TestClient(create_control_app(settings, token="secret")) as client:
+        headers = {"X-LingJi-Token": "secret"}
+        history = client.get("/api/work/history?limit=1&offset=0", headers=headers)
+        pending = client.get("/api/work/pending-actions", headers=headers)
+        timeline = client.get(f"/api/work/timeline/{work.work_id}", headers=headers)
+        too_large = client.get("/api/work/history?limit=201", headers=headers)
+        negative = client.get("/api/work/history?offset=-1", headers=headers)
+
+    assert history.status_code == 200
+    assert history.json()["items"][0]["work"]["work_id"] == work.work_id
+    assert pending.status_code == 200
+    assert pending.json()["pending_actions"][0]["action_id"] == "shared-action"
+    assert timeline.status_code == 200
+    assert timeline.json()["work"]["work_id"] == work.work_id
+    assert too_large.status_code == 422
+    assert negative.status_code == 422

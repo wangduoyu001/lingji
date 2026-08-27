@@ -147,6 +147,42 @@ class WorkStore:
         with self.state._lock, self.state._connection() as connection:
             connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
 
+    def get_pending_action(self, action_id: str) -> PendingAction | None:
+        """Return one pending action, including a previously resolved action."""
+        with self.state._connection() as connection:
+            row = connection.execute(
+                "SELECT action_id, work_id, description, resolved, actor, created_at FROM pending_actions WHERE action_id = ?",
+                (action_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return PendingAction(
+            action_id=row[0],
+            work_id=row[1],
+            description=row[2],
+            resolved=bool(row[3]),
+            actor=row[4] or "owner",
+            created_at=row[5] or "",
+        )
+
+    def resolve_pending_action(self, action_id: str) -> PendingAction:
+        """Resolve one durable action and return its resulting state.
+
+        Repeating the same request is deliberately idempotent; an unknown ID is
+        not converted into a fake success.
+        """
+        action = self.get_pending_action(action_id)
+        if action is None:
+            raise LookupError(f"Unknown pending action: {action_id}")
+        if not action.resolved:
+            with self.state._lock, self.state._connection() as connection:
+                connection.execute(
+                    "UPDATE pending_actions SET resolved = 1 WHERE action_id = ? AND resolved = 0",
+                    (action_id,),
+                )
+            action.resolved = True
+        return action
+
     @staticmethod
     def _parse_transition_time(value: str | None) -> datetime | None:
         if not value:
@@ -385,12 +421,28 @@ class WorkStore:
             rows = connection.execute(query, tuple(params)).fetchall()
         return [PendingAction(action_id=r[0], work_id=r[1], description=r[2], resolved=bool(r[3]), actor=r[4] or "owner", created_at=r[5] or "") for r in rows]
 
-    def list_work(self, limit: int = 20) -> list[WorkItem]:
+    def count_work(self) -> int:
         with self.state._connection() as connection:
-            rows = connection.execute("SELECT work_id, title, source_id, status, owner_approved, created_at, updated_at FROM work_items ORDER BY COALESCE(updated_at, created_at) DESC, work_id DESC LIMIT ?", (max(int(limit), 1),)).fetchall()
+            row = connection.execute("SELECT COUNT(*) FROM work_items").fetchone()
+        return int(row[0] if row else 0)
+
+    def list_work(self, limit: int = 20, *, offset: int = 0) -> list[WorkItem]:
+        if int(limit) < 1 or int(offset) < 0:
+            raise ValueError("limit must be positive and offset must not be negative")
+        with self.state._connection() as connection:
+            rows = connection.execute(
+                "SELECT work_id, title, source_id, status, owner_approved, created_at, updated_at FROM work_items ORDER BY COALESCE(updated_at, created_at) DESC, work_id DESC LIMIT ? OFFSET ?",
+                (int(limit), int(offset)),
+            ).fetchall()
         return [self._work(r) for r in rows]
 
-    def list_events(self, work_id: str, limit: int = 100) -> list[ExecutionEvent]:
+    def list_events(self, work_id: str, limit: int = 100, *, ascending: bool = False) -> list[ExecutionEvent]:
+        if int(limit) < 1:
+            raise ValueError("limit must be positive")
+        order = "ASC" if ascending else "DESC"
         with self.state._connection() as connection:
-            rows = connection.execute("SELECT event_id, event_type, detail_json, created_at FROM execution_events WHERE work_id = ? ORDER BY created_at DESC, event_id DESC LIMIT ?", (work_id, max(int(limit), 1))).fetchall()
+            rows = connection.execute(
+                f"SELECT event_id, event_type, detail_json, created_at FROM execution_events WHERE work_id = ? ORDER BY created_at {order}, event_id {order} LIMIT ?",
+                (work_id, int(limit)),
+            ).fetchall()
         return [ExecutionEvent(work_id=work_id, event_id=r[0], event_type=r[1], detail=json.loads(r[2] or "{}"), created_at=r[3]) for r in rows]
