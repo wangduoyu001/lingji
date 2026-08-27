@@ -450,7 +450,7 @@ def _automatic_scan_until_terminal(
     return result
 
 
-def _formal_qdrant_fallback(root: Path) -> dict[str, Any]:
+def _formal_qdrant_fallback(root: Path, *, required_packaged_text: str | None = None) -> dict[str, Any]:
     """Exercise HybridRetriever's production orchestration against persisted data."""
     from src.gateway.bootstrap import build_memory_gateway
     from src.retrieval.hybrid import SearchFilters
@@ -480,7 +480,14 @@ def _formal_qdrant_fallback(root: Path) -> dict[str, Any]:
     assert result["results"], evidence
     assert result["diagnostics"]["semantic"] == "degraded"
     assert result["diagnostics"]["reason_code"] in {"semantic_query_failed", "semantic_unavailable"}
-    assert any("Lexical fallback" in str(item.get("text") or item.get("content") or "") for item in result["results"])
+    if required_packaged_text is not None:
+        assert any(required_packaged_text in str(item.get("text") or item.get("content") or "") for item in result["results"]), {
+            "blocked_reason": "formal lexical index contains no record produced by packaged automatic-memory ingestion",
+            "required_packaged_text": required_packaged_text,
+            **evidence,
+        }
+    else:
+        assert any("Lexical fallback" in str(item.get("text") or item.get("content") or "") for item in result["results"])
     gateway.close()
     return evidence
 
@@ -641,10 +648,30 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
     assert all(not diff for diff in evidence["sentinel_diff"].values())
     final_counts = _sqlite_counts(root)
     evidence["final"] = {"state": {"sources": final_counts["sources"], "queued": final_counts["queued"]}, "structured": _structured_counts(root), "duplicates": _duplicate_counts(root), "timings": timings}
+    evidence["heartbeat"] = {
+        "status": "NOT_MEASURED/BLOCKED",
+        "scheduler_heartbeat_age": None,
+        "reason": "existing runtime contract exposes no trustworthy idle scheduler heartbeat",
+        "work_fact_updated_at_is_not_used_as_heartbeat": True,
+    }
     evidence["cleanup_receipt"] = sidecar_receipt
     assert final_counts["queued"] == 0
     assert all(value == 0 for value in evidence["final"]["duplicates"].values())
-    evidence["scenarios"]["8_qdrant_outage"] = _formal_qdrant_fallback(root)
+    # Automatic-memory currently writes raw/structured read-model records but
+    # intentionally does not publish a Vault/lexical memory document. Keep the
+    # requirement as a hard assertion: a pre-seeded Vault fact must not satisfy
+    # the packaged-ingestion Qdrant scenario.
+    try:
+        _formal_qdrant_fallback(root, required_packaged_text="event driven acceptance fact")
+    except AssertionError as exc:
+        evidence["scenarios"]["8_qdrant_outage"] = {
+            "status": "BLOCKED",
+            "reason": "no formal lexical record is produced by packaged automatic-memory ingestion",
+            "formal_failure": str(exc),
+            "structured_counts": _structured_counts(root),
+        }
+    else:
+        evidence["scenarios"]["8_qdrant_outage"] = {"status": "PASS"}
     evidence["scenarios"]["10_sentinel"] = evidence["sentinel_diff"]
     return evidence
 
@@ -739,6 +766,7 @@ def test_automatic_memory_packaged_flow_runs_twice_from_clean_acceptance_roots(t
     }
     assert scenario_names <= set(all_runs[0]["scenarios"])
     assert all(run["final"]["state"]["queued"] == 0 for run in all_runs)
+    assert all(run["scenarios"]["8_qdrant_outage"]["status"] == "PASS" for run in all_runs)
 
 
 def test_qdrant_outage_uses_formal_retrieval_orchestration_with_lexical_fallback(tmp_path: Path):
