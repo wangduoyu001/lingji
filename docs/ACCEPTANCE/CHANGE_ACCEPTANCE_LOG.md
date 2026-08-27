@@ -1,5 +1,13 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Automatic Memory · Task 2 · Packaged runtime composition
+
+- 基线：`5510b4f27b8fd0567f4fd89a7f5ba2f65635bb77`；产品范围为一个 packaged Python 进程内的 `AutomaticMemoryRuntime` 组合、既有 Extraction Worker/Scheduler/Watcher/Checkpoint 生命周期、认证 8766 runtime status 读取和 exact-instance shutdown 接线。
+- 约束：runtime/service/worker 共享 canonical `lingji_state.db` 路径与同一个 extraction queue wrapper；不得创建第二逻辑 DB、队列、daemon、端口或调用 `AutoMemoryPromotionService.evaluate/promote/submit/reconcile_incomplete_projections/rebuild_derived_projections`。scheduler heartbeat 当前无可信空闲来源，status 必须 `null` 并说明 unavailable；snapshot consumer、adapter dispatch、terminal extraction 与 Work Fact 留给 Task 3。
+- 自动验收：新增 runtime lifecycle、canonical path、认证 status route 与 promotion-seam sentinel 测试；RED 先记录占位实现导致 `3 failed, 14 passed`（随后 GREEN 目标为 runtime + packaged tests 全部通过）。计划回归 `tests/test_automatic_memory_scheduler.py`、相关 control tests、`npm run test:runtime`、`py_compile`、`git diff --check`、acceptance sync 和 local handoff。
+- 真机/主人确认：`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`；本条不启动 Artifact、服务、UI，不访问 Production/Vault，不构成发布验收或合并结论。
+- 清理/回滚：测试只使用 pytest 临时目录和 synthetic SQLite；回滚本轮产品/tests 与文档提交，不触碰正式 Vault、raw、memory、Qdrant 或主人配置。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 0 · Owner-review quarantine repair round 1
 
 - 基线：Task 0 产品/tests `03b959a34e548630c621c14e53f5055b18850e0e`、文档 `9bba461754c7e6e3e12fe28e36feb33974ad08b0`；本轮产品/tests 提交为 `1330fff4cbe40944cdc8727d45addb74e967611f`。先复现两项 Critical：旧 `status=error` decision 会无确认自动恢复 active；无 durable owner approval 的 preparing+linked saga 会被 reconcile 激活。修复仅在既有 recovery seams 增加持久 owner-confirmed 证据门槛；无证据 in-flight saga 使用现有 rollback 语义退出 current，不猜测确认。并检查已有 decision/recovered result、`promote`/`submit` aliases 与 rebuild activation seam；不修改 recovery matrix。

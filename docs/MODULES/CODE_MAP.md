@@ -332,12 +332,13 @@ src/control/service.py
 = persistent source authorization, scan run/progress/error/recovery and authenticated 8766 routes
 
 Task 2:
-src/automatic_memory/snapshot.py
-src/automatic_memory/checkpoint.py
-src/extraction/idempotency.py
-src/extraction/sink.py
-src/extraction/queue.py
-= stat-before/copy/stat-after, content-addressed raw, idempotency, leases, retries and resume
+src/automatic_memory/runtime.py
+run_control_api.py
+src/control/service.py
+src/control/api.py
+src/control/automatic_memory_api.py
+= packaged worker/scheduler/watcher/checkpoint composition, exact-instance lifecycle and authenticated runtime status; snapshot admission reuses the existing checkpoint/queue path and terminal consumer remains Task 3
+Focused tests: `tests/test_automatic_memory_runtime.py`, `tests/test_packaged_control_api.py`, `tests/test_automatic_memory_scheduler.py`; Desktop smoke: `desktop/lingji-control/scripts/runtime-sidecar-smoke.mjs`
 
 Task 3:
 src/extraction/adapters/chatgpt.py
