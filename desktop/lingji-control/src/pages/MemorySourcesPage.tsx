@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, type LingJiApi } from "../api";
-import { actionEvidence, MemorySourcesApi, scanStatusLabel, sourceStateLabel } from "./memorySourcesApi";
+import { actionAvailability, actionEvidence, authorizationEvidence, MemorySourcesApi, scanStatusLabel, sourceStateLabel } from "./memorySourcesApi";
 import type { MemorySourcesSnapshot, SourceFact, SourceState } from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 import { Empty, Notice } from "../components/ui";
@@ -41,6 +41,14 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
+  const [verifiedSnapshot, setVerifiedSnapshot] = useState<MemorySourcesSnapshot | null>(null);
+  const verifiedBaselineRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (verifiedSnapshot && resource.lastSuccessAt !== verifiedBaselineRef.current) {
+      setVerifiedSnapshot(null);
+    }
+  }, [resource.lastSuccessAt, verifiedSnapshot]);
 
   const runAction = async (key: string, operation: () => Promise<unknown>, verify: (next: MemorySourcesSnapshot) => boolean, success = "") => {
     if (busy) return;
@@ -53,8 +61,13 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
       // polling hook intentionally keeps its previous data while refreshing,
       // so reading resource.data here would verify a stale closure.
       const next = await sourceApi.snapshot();
-      await resource.refresh();
       if (!verify(next)) throw new Error("后端还没有返回可确认的状态，请稍后查看。");
+      // Hold the verified post-action facts in the rendered state until the
+      // polling hook has completed its own fresh read. This prevents an older
+      // in-flight poll from briefly replacing a confirmed action result.
+      verifiedBaselineRef.current = resource.lastSuccessAt;
+      setVerifiedSnapshot(next);
+      await resource.refresh({ force: true });
       if (success) setMessage(success);
     } catch (reason) {
       setError(actionError(reason));
@@ -81,10 +94,15 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
       if (!selected) return;
       root = selected;
     }
-    await runAction(`authorize:${source.kind}`, () => sourceApi.authorize(source, root), (next) => next.sources.some((item) => item.kind === source.kind && ["authorized", "scanning", "current"].includes(item.state)), "已记录授权，正在准备首轮扫描。请等待扫描状态变为“已接管”。");
+    let returnedSourceId: string | undefined;
+    await runAction(`authorize:${source.kind}`, async () => {
+      const result = await sourceApi.authorize(source, root);
+      if (result && typeof result === "object" && "source_id" in result) returnedSourceId = String((result as { source_id: unknown }).source_id);
+      return result;
+    }, (next) => authorizationEvidence({ kind: source.kind, root }, next.authorized, returnedSourceId), "已记录授权，正在准备首轮扫描。请等待扫描状态变为“已接管”。");
   };
 
-  const snapshot = resource.data;
+  const snapshot = verifiedSnapshot ?? resource.data;
   if (!active) return <Empty text="连接灵机核心后才能查看记忆来源。" />;
   if (resource.loading && !snapshot) return <div className="empty-state" aria-busy="true">正在读取已发现的来源…</div>;
   if (resource.error && !snapshot) return <div className="stack"><Notice kind="error">暂时无法读取记忆来源：{resource.error.message}。请确认灵机核心正在运行后重试。</Notice><button className="button secondary" onClick={() => void resource.refresh()}>重新读取</button></div>;
@@ -121,11 +139,12 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
 function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }: { source: SourceFact; busy: string | null; onAuthorize: () => void; onAction: (key: string, operation: () => Promise<unknown>, verify: (next: MemorySourcesSnapshot) => boolean, success?: string) => Promise<void>; sourceApi: MemorySourcesApi; onDetail: (detail: Record<string, unknown>) => void }) {
   const scan = source.latestScan;
   const key = source.source_id || source.kind;
-  const canAuthorize = ["detected", "consent_required", "degraded"].includes(source.state) && (Boolean(source.root) || isPickerSource(source));
-  const canScan = Boolean(source.source_id) && ["authorized", "current"].includes(source.state);
-  const canPause = Boolean(scan?.scan_id) && source.state === "scanning" && scan?.status === "running";
-  const canRetry = Boolean(scan?.scan_id) && source.state === "failed";
-  const canRevoke = Boolean(source.source_id) && !["revoked", "unsupported"].includes(source.state);
+  const actions = actionAvailability(source.state, { source_id: source.source_id, root: source.root, kind: source.kind, scan_status: scan?.status });
+  const canAuthorize = actions.includes("authorize");
+  const canScan = actions.includes("scan");
+  const canPause = actions.includes("pause");
+  const canRetry = actions.includes("retry");
+  const canRevoke = actions.includes("revoke");
   const invoke = (action: string, operation: () => Promise<unknown>, verify: (next: MemorySourcesSnapshot) => boolean, success?: string) => onAction(`${action}:${key}`, operation, verify, success);
   const showDetail = async () => {
     if (!scan?.scan_id) return;
@@ -140,9 +159,9 @@ function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }
       {canRevoke && <button className="button danger" disabled={Boolean(busy)} onClick={() => void invoke("revoke", () => sourceApi.revoke(source.source_id!), (next) => next.sources.some((item) => item.source_id === source.source_id && item.state === "revoked"), "已撤销授权；灵机不会再读取这个来源。")}>撤销</button>}
       {canScan && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("scan", () => sourceApi.scan(source.source_id!), (next) => actionEvidence(next, source.source_id!, "scan"))}>立即扫描</button>}
       {canPause && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("pause", () => sourceApi.pause(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "pause"))}>暂停</button>}
-      {source.state === "scanning" && scan?.status === "paused" && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("resume", () => sourceApi.resume(scan.scan_id), (next) => actionEvidence(next, source.source_id!, "resume"))}>继续</button>}
+      {actions.includes("resume") && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("resume", () => sourceApi.resume(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "resume"))}>继续</button>}
       {canRetry && <button className="button warning" disabled={Boolean(busy)} onClick={() => void invoke("retry", () => sourceApi.retry(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "retry"))}>重试</button>}
-      {scan?.scan_id && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void showDetail()}>查看结果</button>}
+      {actions.includes("detail") && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void showDetail()}>查看结果</button>}
     </div>
     {!canAuthorize && source.state === "consent_required" && <small className="memory-source-reason">需要先确认一个受支持的目录；当前没有可安全授权的路径。</small>}
     {source.latestScan?.last_error && <small className="memory-source-error">后端原因：{source.latestScan.last_error}</small>}

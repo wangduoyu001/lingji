@@ -13,10 +13,14 @@ export type PollingResourceOptions<T> = {
 
 export type PollingResourceResult<T> = PollingSnapshot<T> & {
   paused: boolean;
-  refresh: () => Promise<void>;
+  refresh: (options?: { force?: boolean }) => Promise<void>;
   pause: () => void;
   resume: () => void;
 };
+
+export function ownsRequest(current: unknown, candidate: unknown): boolean {
+  return current === candidate;
+}
 
 const INITIAL_STATE = {
   data: null,
@@ -63,6 +67,7 @@ export function usePollingResource<T>(options: PollingResourceOptions<T>): Polli
   const staleTimerRef = useRef<number | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const inFlightRef = useRef<Promise<void> | null>(null);
+  const requestIdentityRef = useRef<object | null>(null);
   const failureCountRef = useRef(0);
   const lastErrorRef = useRef<ResourceError | null>(null);
   const lastSuccessAtRef = useRef<string | null>(null);
@@ -74,15 +79,21 @@ export function usePollingResource<T>(options: PollingResourceOptions<T>): Polli
     }
   }, []);
 
-  const refresh = useCallback(async (): Promise<void> => {
+  const refresh = useCallback(async (options: { force?: boolean } = {}): Promise<void> => {
     if (!enabled) return;
-    if (inFlightRef.current) return inFlightRef.current;
+    if (inFlightRef.current && !options.force) return inFlightRef.current;
+    if (options.force) {
+      controllerRef.current?.abort();
+      inFlightRef.current = null;
+    }
 
     const controller = new AbortController();
     controllerRef.current?.abort();
     controllerRef.current = controller;
     const attemptedAt = new Date().toISOString();
 
+    const requestIdentity = {};
+    requestIdentityRef.current = requestIdentity;
     const request = (async () => {
       setState((current) => ({
         ...current,
@@ -124,7 +135,10 @@ export function usePollingResource<T>(options: PollingResourceOptions<T>): Polli
         }));
       } finally {
         if (controllerRef.current === controller) controllerRef.current = null;
-        inFlightRef.current = null;
+        if (ownsRequest(requestIdentityRef.current, requestIdentity)) {
+          inFlightRef.current = null;
+          requestIdentityRef.current = null;
+        }
       }
     })();
 

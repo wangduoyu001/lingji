@@ -13,6 +13,7 @@
     "test:release": "tsx scripts/windows-release-smoke.mjs",
     "test:runtime": "tsx scripts/runtime-sidecar-smoke.mjs",
     "test:memory-sources": "tsx scripts/automatic-memory-sources-smoke.mjs",
+    "test:memory-sources-repair": "tsx scripts/automatic-memory-sources-repair-smoke.mjs",
     "test:e2e:memory": "node tests/e2e_owner_memory_flow.mjs",
     "test:work-fact": "tsx scripts/work-fact-smoke.mjs",
     "test:macos-release": "tsx scripts/macos-release-smoke.mjs",

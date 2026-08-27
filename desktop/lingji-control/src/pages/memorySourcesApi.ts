@@ -173,3 +173,39 @@ export function scanTerminalEvidence(snapshot: MemorySourcesSnapshot, sourceId: 
   const source = snapshot.sources.find((item) => item.source_id === sourceId);
   return source?.latestScan?.status === "completed";
 }
+
+export function decideOnboardingRoute(input: {
+  page: string;
+  checked: boolean;
+  readsSucceeded: boolean;
+  authorized: Array<{ status?: string }>;
+  discovered: Array<{ status?: string }>;
+}): "memory_sources" | null {
+  if (input.checked || !input.readsSucceeded || input.page !== "overview") return null;
+  const hasActive = input.authorized.some((item) => ["authorized", "current"].includes(String(item.status)));
+  const needsAction = input.discovered.some((item) => ["available", "consent_required"].includes(String(item.status)));
+  return !hasActive && needsAction ? "memory_sources" : null;
+}
+
+export function authorizationEvidence(
+  selection: { kind: string; root: string },
+  authorized: Array<{ source_id?: string; kind?: string; root?: string; status?: string }>,
+  returnedSourceId?: string,
+): boolean {
+  return authorized.some((item) => canonicalSourceKey(item.kind, item.root) === canonicalSourceKey(selection.kind, selection.root)
+    && ["authorized", "scanning", "current"].includes(String(item.status))
+    && (!returnedSourceId || item.source_id === returnedSourceId));
+}
+
+export function actionAvailability(state: SourceState, source: { source_id?: string; root?: string; kind?: string; scan_status?: string }): string[] {
+  const picker = ["generic_ai_history", "chatgpt_export"].includes(String(source.kind));
+  const actions: string[] = [];
+  if (["detected", "consent_required", "degraded", "revoked"].includes(state) && (Boolean(source.root) || picker)) actions.push("authorize");
+  if (source.source_id && !["revoked", "unsupported"].includes(state)) actions.push("revoke");
+  if (source.source_id && ["authorized", "current"].includes(state)) actions.push("scan");
+  if (source.source_id && source.scan_status === "running") actions.push("pause");
+  if (source.source_id && source.scan_status === "paused") actions.push("resume");
+  if (source.source_id && source.scan_status === "failed") actions.push("retry");
+  if (source.scan_status) actions.push("detail");
+  return actions;
+}
