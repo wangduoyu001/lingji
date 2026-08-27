@@ -169,6 +169,8 @@ class AutomaticMemoryRuntime:
 
 **Status (2026-08-28):** Implementation/focused evidence `IMPLEMENTED_FOCUSED_PASS`, product/tests `15eb4433c9d6c3ba218e89d50bec84987ad35915`, independent Task6A review pending. Task 2's single lifecycle blocker is closed in code/tests for Task6 composition only; Task 6/release/Artifact/owner acceptance are not complete.
 
+**Repair Round 1 status (2026-08-28):** Independent review `9ed229461165b748066b9cba3d2ed169af43db56` retained I1/I2. The sole authorized repair is product/tests `efde650e77a4ecda7f7266aefe48b29b9e8712de`: exact cleanup ownership with Cron retry and shared start/stop serialization, covered by real thread/barrier/event tests. This is the final Task6A repair; a remaining Critical/Important after re-review is `BLOCKED_AT_REPAIR_CAP`. Task 5B final review commit `bd2ff43` is recorded as `ACCEPTED_FOR_TASK6` / `ACCEPT_FOR_TASK6` (reviewed product head `8136374`).
+
 ### Task 3: Connect Authorized Discovery, Snapshot and Extraction to Work Fact
 
 **Purpose:** 让已有来源适配器从授权目录完成“发现 → 快照 → 队列 → 解析 → 索引/记忆候选 → Work Fact”，而不是只停留在 raw/job。

@@ -1,5 +1,14 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Phase 1 Product Landing · Task 6A Repair Round 1 (final authorized repair)
+
+- 独立审查 `9ed229461165b748066b9cba3d2ed169af43db56` 保留两个 Important：cleanup retry 必须按 watcher/Cron/source ownership 精确清理并重试 Cron；scheduler `start` 必须与 stop/retry 共用 lifecycle serialization。此轮是 Task 6A 唯一批准 Repair Round 1；之后不再修复，若新审查仍有 Critical/Important 则 `BLOCKED_AT_REPAIR_CAP`。
+- 仅修改 `src/automatic_memory/scheduler.py` 与直接生命周期测试 `tests/test_automatic_memory_scheduler.py`。内部错误 ownership 只服务既有 `source_cleanup_errors` 投影，不改变状态/API family；无新轮询、队列、服务、数据模型、promotion、discovery、adapter、snapshot consumer、Work Fact、UI 或 retrieval/vector。
+- RED：真实线程化 Cron 首次 cleanup 失败并保持 alive 时，retry 未再次调用 Cron.stop 且无条件清空其他 source error；真实 watcher stop event 未释放时，start 提前返回，复现 `_running=true` 而 Cron 已 stopped。有效行为 RED 为 `2 failed, 1 passed`（测试 setup 修正后的记录）。GREEN：Task6A repair seams `3 passed`；Task2 broader matrix `171 passed, 6 warnings`。
+- Truthfulness：Cron 仍活或 cleanup 抛错时保留 degraded/cleanup_pending；只有对应 watcher/Cron owner 被确认释放才清除其错误；start/stop/retry/revoke/shutdown 同一 `_stop_lock` 串行，避免双 watcher/旧 generation 交叉。
+- 未执行 live 8766/8767、Sidecar、Artifact、Production/Vault、主人数据或 owner acceptance；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。报告 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6a-report.md`，产品/测试 commit `efde650e77a4ecda7f7266aefe48b29b9e8712de`。
+- Task 5B final review commit `bd2ff43` 已记为 `ACCEPTED_FOR_TASK6` / `ACCEPT_FOR_TASK6`（reviewed product head `8136374`，Critical=0，Important=0，Minor=3 non-blocking）；不改变 Task 6A、Task 6 或 release 的未完成状态。
+
 ## 2026-08-28 · Phase 1 Product Landing · Task 6A Lifecycle Closeout
 
 - 本次是 Task 2 final disposition 批准的独立 bounded lifecycle closeout，目标仅关闭 watcher 在 stop/revoke 时迟到退出后残留 scheduler cleanup error 的唯一阻塞；不是 Task 2 Repair Round 3，不新增功能或第二套生命周期/队列/服务。
