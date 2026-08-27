@@ -93,14 +93,15 @@ def test_complete_ready_evidence_calls_frozen_gate_twice_and_blocks_unmeasured_r
     assert "SCALE_NOT_MEASURED" in result.blocked_reasons
 
 
-def test_failed_functional_evidence_with_frozen_pass_is_contradictory() -> None:
+def test_failed_functional_evidence_with_frozen_pass_remains_fail_closed() -> None:
     gate = SpyGate("PASS")
     result = finalize_quality_envelope(
         readiness=readiness(import_audit=EvidenceState.FAILED), production_pollution=0,
         evaluation_report=report(), acceptance_gate=gate,
     )
-    assert result.evaluation_report is None
-    assert result.functional_status == "NOT_EVALUATED"
+    assert result.evaluation_report is not None
+    assert result.functional_status == result.phase_status == "FAIL"
+    assert result.windows_status == "BLOCKED"
 
 
 def test_sentinel_requires_strict_count_consistency() -> None:

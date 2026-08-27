@@ -10,9 +10,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.automatic_memory.quality_gate import (
-    AutomaticMemoryFunctionalGate,
+    AcceptanceCleanupError,
+    cleanup_failure_envelope,
+    publish_quality_envelope,
     run_100k_benchmark,
     run_quality_gate,
+    temporary_acceptance_roots,
 )
 
 
@@ -33,17 +36,28 @@ def main() -> int:
         print(f"messages={report['messages']} imported={report['imported_messages']} cleanup={report['cleanup_result']}")
         return 0 if report.get("imported_messages") == 100_000 and report.get("cleanup_result") == "cleaned" else 1
     fixtures = repo / "tests" / "evaluation" / "fixtures"
-    output = args.output or output_root / "automatic-memory-quality.json"
-    report = run_quality_gate(
-        fixtures / "automatic_memory_corpus.jsonl",
-        fixtures / "automatic_memory_questions.jsonl",
-        output_path=output,
-    )
-    status = AutomaticMemoryFunctionalGate.evaluate(report)
+    output = (args.output or output_root / "automatic-memory-quality.json").expanduser().resolve()
+    try:
+        output.relative_to(output_root.resolve())
+    except ValueError as exc:
+        raise SystemExit("quality output must remain beneath repository output/validation") from exc
+    envelope = None
+    try:
+        with temporary_acceptance_roots() as roots:
+            envelope = run_quality_gate(
+                fixtures / "automatic_memory_corpus.jsonl",
+                fixtures / "automatic_memory_questions.jsonl",
+                output_path=roots.output_root / "automatic-memory-quality.json",
+                acceptance_roots=roots,
+            )
+    except AcceptanceCleanupError as exc:
+        envelope = cleanup_failure_envelope(envelope, exc)
+    if envelope is None:
+        raise SystemExit("quality runner did not produce an envelope")
+    publish_quality_envelope(envelope, repository_output_path=output)
     print(f"functional quality report: {output}")
-    print(f"recall={report.valid_fact_recall:.2f}% citation={report.citation_accuracy:.2f}% mcp={report.mcp_success_rate:.2f}%")
-    print(f"functional_status={status}")
-    return 0 if status == "PASS" else 1
+    print(f"functional_status={envelope.functional_status}")
+    return 0 if envelope.functional_status == "PASS" else 1
 
 
 if __name__ == "__main__":

@@ -1033,7 +1033,18 @@ def finalize_quality_envelope(
         return _closed_envelope(readiness, production_pollution, ("MALFORMED_GATE_RESULT",))
     if any(getattr(readiness, field) is EvidenceState.FAILED for field in QualityEvidenceReadiness._FUNCTIONAL_FIELDS):
         if functional_verdict == "PASS":
-            return _closed_envelope(readiness, production_pollution, ("CONTRADICTORY_FUNCTIONAL_EVIDENCE",))
+            # A measured failure is authoritative even if a downstream gate
+            # incorrectly claims PASS.  Preserve the report for diagnosis and
+            # never downgrade a real failure into an unavailable/blocked state.
+            return QualityRunEnvelope(
+                readiness,
+                production_pollution,
+                evaluation_report,
+                "FAIL",
+                "FAIL",
+                "BLOCKED",
+                _reason_codes(safe_reasons + ("CONTRADICTORY_FUNCTIONAL_EVIDENCE", "WINDOWS_AFTER_MAC")),
+            )
     if functional_verdict == "FAIL":
         return QualityRunEnvelope(readiness, production_pollution, evaluation_report, "FAIL", "FAIL", "BLOCKED", _reason_codes(safe_reasons + ("WINDOWS_AFTER_MAC",)))
     if any(getattr(readiness, field) in (EvidenceState.FAILED,) for field in QualityEvidenceReadiness._MAC_FIELDS):

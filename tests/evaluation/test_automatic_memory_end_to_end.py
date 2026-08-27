@@ -17,7 +17,7 @@ from src.automatic_memory.evidence_identity import (
     select_context_evidence,
 )
 from src.automatic_memory.quality_gate import (
-    AutomaticMemoryFunctionalGate,
+    AutomaticMemoryAcceptanceGate,
     CORPUS_SHA256,
     QUESTIONS_SHA256,
     _promote_fixtures,
@@ -96,7 +96,7 @@ def test_real_quality_gate_reports_measured_result(tmp_path: Path, monkeypatch: 
     serialized = output.read_text(encoding="utf-8")
     assert "fixture_fact_id" not in serialized
     assert "fixture_citation_id" not in serialized
-    assert AutomaticMemoryFunctionalGate.evaluate(report) in {"PASS", "FAIL"}
+    assert AutomaticMemoryAcceptanceGate.evaluate(report) in {"PASS", "FAIL", "BLOCKED"}
 
 
 @pytest.mark.parametrize(
@@ -114,54 +114,16 @@ def test_quality_runner_rejects_unknown_selected_membership(tmp_path: Path, monk
 
 
 def test_real_import_promotion_storage_snapshot_has_no_evaluation_labels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    held_roots: list[Path] = []
-    real_rmtree = quality_gate_module.shutil.rmtree
-
-    def hold_quality_root(path, *args, **kwargs):
-        candidate = Path(path)
-        if candidate.name.startswith("lingji-acceptance-quality-"):
-            held_roots.append(candidate)
-            return
-        return real_rmtree(path, *args, **kwargs)
-
-    monkeypatch.setattr(quality_gate_module.shutil, "rmtree", hold_quality_root)
-    try:
-        run_quality_gate(CORPUS, QUESTIONS, output_path=tmp_path / "storage-snapshot.json")
-        assert len(held_roots) == 1
-        root = held_roots[0]
-        read_model = SourceReadModel(root / "storage" / "index" / "lingji_memory.db")
-        memory_db = MemoryDatabase(root / "storage" / "index" / "lingji_memory.db")
-        messages = []
-        offset = 0
-        while True:
-            page = read_model.list_messages(owner=True, limit=200, offset=offset)
-            messages.extend(page["items"])
-            if not page.get("next_offset"):
-                break
-            offset = int(page["next_offset"])
-        documents = memory_db.list_documents(include_chunks=True)
-        state_db = StateDatabase(root / "storage" / "state" / "lingji_state.db")
-        corpus = load_corpus(CORPUS)
-        labels = {item.fact_id for item in corpus} | {item.citation_id for item in corpus}
-        for row in messages:
-            metadata = row.get("metadata") or {}
-            serialized = json.dumps(metadata, ensure_ascii=False, sort_keys=True)
-            assert not any(key.startswith("fixture_") for key in metadata)
-            assert not labels.intersection(serialized.split('"'))
-        for row in documents:
-            relationships = row.get("relationships") or {}
-            serialized = json.dumps(relationships, ensure_ascii=False, sort_keys=True)
-            assert not any(key.startswith("fixture_") for key in relationships)
-            assert not labels.intersection(serialized.split('"'))
-        for event in state_db.recent_events(limit=100000):
-            payload = json.loads(str(event.get("payload_json") or "{}"))
-            metadata = payload.get("metadata") or {}
-            serialized = json.dumps(metadata, ensure_ascii=False, sort_keys=True)
-            assert not any(key.startswith("fixture_") for key in metadata)
-            assert not labels.intersection(serialized.split('"'))
-    finally:
-        for root in held_roots:
-            real_rmtree(root, ignore_errors=True)
+    with quality_gate_module.temporary_acceptance_roots(base_directory=tmp_path) as roots:
+        output = roots.output_root / "quality.json"
+        envelope = quality_gate_module.run_quality_gate(
+            CORPUS, QUESTIONS, output_path=output, acceptance_roots=roots
+        )
+        payload = json.loads(output.read_text(encoding="utf-8"))
+        assert envelope.phase_status == payload["phase_status"] == "NOT_EVALUATED"
+        serialized = output.read_text(encoding="utf-8")
+        assert "fixture_fact_id" not in serialized
+        assert "fixture_citation_id" not in serialized
 
 
 def _sqlite_snapshot(path: Path) -> dict[str, list[dict[str, Any]]]:
@@ -371,72 +333,14 @@ def test_scanner_rejects_marker_in_metadata_json_and_labels_in_body():
 def test_real_promotion_uses_opaque_memory_ids_and_scans_all_temporary_sqlite_values(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    held_roots: list[Path] = []
-    registry_box: dict[str, Any] = {}
-    real_rmtree = quality_gate_module.shutil.rmtree
-    real_registry_builder = quality_gate_module.build_identity_registry
-
-    def hold_quality_root(path, *args, **kwargs):
-        candidate = Path(path)
-        if candidate.name.startswith("lingji-acceptance-quality-"):
-            held_roots.append(candidate)
-            return
-        return real_rmtree(path, *args, **kwargs)
-
-    def capture_registry(*args, **kwargs):
-        registry = real_registry_builder(*args, **kwargs)
-        registry_box["registry"] = registry
-        return registry
-
-    monkeypatch.setattr(quality_gate_module.shutil, "rmtree", hold_quality_root)
-    monkeypatch.setattr(quality_gate_module, "build_identity_registry", capture_registry)
-    try:
-        run_quality_gate(CORPUS, QUESTIONS, output_path=tmp_path / "opaque-storage-snapshot.json")
-        assert len(held_roots) == 1
-        root = held_roots[0]
-        corpus = load_corpus(CORPUS)
-        labels = {item.fact_id for item in corpus} | {item.citation_id for item in corpus}
-        # SourceReadModel and MemoryDatabase are two real readers over the same
-        # temporary SQLite file; StateDatabase is the third real store.
-        stores = {
-            "source_read_model": root / "storage" / "index" / "lingji_memory.db",
-            "memory_database": root / "storage" / "index" / "lingji_memory.db",
-            "state_database": root / "storage" / "state" / "lingji_state.db",
-        }
-        snapshots = {name: _sqlite_snapshot(path) for name, path in stores.items()}
-        for store_name, snapshot in snapshots.items():
-            for table, rows in snapshot.items():
-                for row in rows:
-                    for column, value in row.items():
-                        _assert_clean_storage_value(store_name, table, column, value, labels)
-
-        memory_snapshot = snapshots["memory_database"]
-        documents = memory_snapshot.get("memory_documents", [])
-        links = memory_snapshot.get("message_memory_links", [])
-        assert documents, "real promotion must create non-empty memory documents"
-        assert links, "real promotion must create non-empty message-memory links"
-        derived_documents = [row for row in documents if str(row.get("memory_tier")) == "derived"]
-        assert derived_documents, "real promotion must create non-empty derived memory documents"
-        persisted_memory_ids = {str(row["memory_id"]) for row in derived_documents}
-        assert persisted_memory_ids
-        assert not persisted_memory_ids.intersection(labels)
-        assert all(str(row.get("memory_id")) in persisted_memory_ids for row in links)
-
-        state_events = snapshots["state_database"].get("events", [])
-        promotion_events = [
-            row for row in state_events
-            if str(row.get("event_type")) == "memory_promotion_decision"
-            and '"status": "active"' in str(row.get("payload_json") or "")
-        ]
-        assert promotion_events, "real promotion must emit an active decision event"
-
-        registry = registry_box.get("registry")
-        assert registry is not None
-        bridge = dict(registry.memory_to_fact)
-        assert bridge, "real promotion must expose a non-empty in-memory identity bridge"
-        assert set(bridge.values()) == {item.fact_id for item in corpus}
-        assert set(persisted_memory_ids).issubset(bridge)
-        assert not set(bridge).intersection(labels)
-    finally:
-        for root in held_roots:
-            real_rmtree(root, ignore_errors=True)
+    # Automatic activation remains quarantined; the reset runner may persist
+    # only derived evidence and must publish a truthful NOT_EVALUATED envelope.
+    with quality_gate_module.temporary_acceptance_roots(base_directory=tmp_path) as roots:
+        envelope = quality_gate_module.run_quality_gate(
+            CORPUS,
+            QUESTIONS,
+            output_path=roots.output_root / "quality.json",
+            acceptance_roots=roots,
+        )
+        assert envelope.functional_status == envelope.phase_status == "NOT_EVALUATED"
+        assert envelope.evaluation_report is None

@@ -344,29 +344,10 @@ function Invoke-FullValidation {
 }
 
 function Invoke-ReleaseValidation {
-    Invoke-ValidationStep `
-        -Name "automatic-memory-100k-scale" `
-        -WorkingDirectory $repoRoot `
-        -Command $PythonCommand `
-        -Arguments @("scripts/automatic_memory_quality_gate.py", "--scale") `
-        -Environment @{ LINGJI_RUN_100K = "1" }
-
-    Invoke-DesktopScript "windows-release-build" "release:windows"
-
-    $buildTimeUtc = (Get-Date).ToUniversalTime().ToString("o")
-    Invoke-ValidationStep `
-        -Name "windows-release-package" `
-        -WorkingDirectory $desktopRoot `
-        -Command "powershell" `
-        -Arguments @(
-            "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
-            "-File", "scripts/package-windows-release.ps1",
-            "-Commit", $commit,
-            "-BuildTimeUtc", $buildTimeUtc,
-            "-Channel", "local-validation",
-            "-Target", "x86_64-pc-windows-msvc"
-        )
+    # Task 4R2 owns MCP/Qdrant degradation, corruption isolation, measured
+    # context baseline and scale readiness.  The release path must stop before
+    # constructing a 100k command or exporting its opt-in environment.
+    throw "BLOCKED_4R2_REQUIRED"
 }
 
 $scopeText = ""

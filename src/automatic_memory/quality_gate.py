@@ -7,17 +7,19 @@ manufacture retrieval answers from the frozen question expectations.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import statistics
 import tempfile
 import time
-from dataclasses import asdict, replace
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence
 
@@ -80,14 +82,92 @@ _SELECTOR_LIMIT = 2  # One fixed, question-independent selector for every query.
 EXPECTED_QUESTION_COUNT = 100
 
 
-class AutomaticMemoryFunctionalGate:
-    """Measured-only gate; physical evidence remains the full gate's concern."""
+class AcceptanceCleanupError(RuntimeError):
+    """The isolated acceptance tree could not be removed safely."""
 
-    @staticmethod
-    def evaluate(report: EvaluationReport) -> Literal["PASS", "FAIL"]:
-        functional_report = replace(report, owner_review_success=100.0, reboot_recovery=100.0, blocked_reasons=())
-        verdict = AutomaticMemoryAcceptanceGate.evaluate(functional_report)
-        return "PASS" if verdict == "PASS" else "FAIL"
+    def __init__(self, code: str = "TEMP_CLEANUP_FAILED") -> None:
+        self.code = str(code)
+        super().__init__(self.code)
+
+
+class QualityScaleBlockedError(RuntimeError):
+    """The 100k scale benchmark is not available during the reset phase."""
+
+
+@dataclass(frozen=True)
+class AcceptanceRoots:
+    root: Path
+    storage_root: Path
+    vault_root: Path
+    output_root: Path
+    lease_marker: Path
+
+    def validate_temporary_isolation(self) -> None:
+        root = self.root.expanduser().resolve(strict=False)
+        if not root.is_absolute() or not root.name.startswith("lingji-task4r-"):
+            raise ValueError("invalid acceptance root")
+        if not root.exists() or not root.is_dir() or root.is_symlink():
+            raise ValueError("acceptance root unavailable")
+        children = (self.storage_root, self.vault_root, self.output_root, self.lease_marker)
+        for child in children:
+            path = child.expanduser()
+            if path.is_symlink():
+                raise ValueError("acceptance path cannot be a symlink")
+            resolved = path.resolve(strict=False)
+            try:
+                resolved.relative_to(root)
+            except ValueError as exc:
+                raise ValueError("acceptance path escapes root") from exc
+        for directory in (self.storage_root, self.vault_root, self.output_root):
+            if not directory.exists() or not directory.is_dir():
+                raise ValueError("acceptance child unavailable")
+        if not self.lease_marker.exists() or not self.lease_marker.is_file():
+            raise ValueError("acceptance lease marker unavailable")
+        if not self.lease_marker.read_text(encoding="utf-8").strip():
+            raise ValueError("acceptance lease marker invalid")
+
+
+@contextmanager
+def temporary_acceptance_roots(*, base_directory: Path | None = None):
+    """Create and always remove one isolated reset acceptance tree."""
+    base = Path(base_directory).expanduser().resolve() if base_directory is not None else None
+    root = Path(tempfile.mkdtemp(prefix="lingji-task4r-", dir=str(base) if base else None)).resolve()
+    roots = AcceptanceRoots(
+        root=root,
+        storage_root=root / "storage",
+        vault_root=root / "vault",
+        output_root=root / "output",
+        lease_marker=root / ".lease",
+    )
+    roots.storage_root.mkdir()
+    roots.vault_root.mkdir()
+    roots.output_root.mkdir()
+    roots.lease_marker.write_text(secrets.token_hex(16), encoding="utf-8")
+    roots.validate_temporary_isolation()
+    try:
+        yield roots
+    finally:
+        try:
+            shutil.rmtree(root, ignore_errors=False)
+        except Exception as exc:
+            raise AcceptanceCleanupError() from exc
+
+
+def cleanup_failure_envelope(_report: Any, error: AcceptanceCleanupError) -> QualityRunEnvelope:
+    values = {field: EvidenceState.NOT_MEASURED for field in (
+        "import_audit", "promotion_provenance", "gateway_selection", "production_sentinel",
+        "mcp_parity", "qdrant_degradation", "corruption_isolation", "context_baseline",
+        "scale", "owner_review", "reboot_recovery", "mac_release", "windows_release",
+    )}
+    readiness = QualityEvidenceReadiness(**values)
+    return QualityRunEnvelope(
+        readiness, None, None, "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED", (error.code,)
+    )
+
+
+def ensure_4r2_ready_for_scale(readiness: QualityEvidenceReadiness) -> None:
+    if not isinstance(readiness, QualityEvidenceReadiness) or not readiness.mac_release_ready:
+        raise QualityScaleBlockedError("BLOCKED_4R2_REQUIRED")
 
 
 def _sha256(path: Path) -> str:
@@ -96,38 +176,6 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def _reject_protected_output(output_path: Path) -> None:
-    candidate = output_path.expanduser().resolve(strict=False)
-    from src.config import settings
-
-    protected = {
-        Path(settings.vault_path).expanduser().resolve(strict=False),
-        Path(settings.storage_path).expanduser().resolve(strict=False),
-    }
-    for root in protected:
-        try:
-            candidate.relative_to(root)
-        except ValueError:
-            continue
-        raise ValueError("quality output cannot be written inside Production or Vault")
-
-
-def _production_sentinels() -> dict[str, str]:
-    """Record non-invasive sentinels for the configured production roots."""
-    from src.config import settings
-
-    sentinels: dict[str, str] = {}
-    for label, configured in (("vault", settings.vault_path), ("storage", settings.storage_path)):
-        path = Path(configured).expanduser().resolve(strict=False)
-        try:
-            stat = path.stat()
-            material = f"{path}|{stat.st_mode}|{stat.st_size}|{stat.st_mtime_ns}"
-        except OSError:
-            material = f"{path}|missing"
-        sentinels[label] = hashlib.sha256(material.encode("utf-8")).hexdigest()
-    return sentinels
 
 
 def _atomic_json(path: Path, value: Mapping[str, Any]) -> None:
@@ -225,34 +273,6 @@ def _build_gateway(root: Path, memory_db: MemoryDatabase, read_model: SourceRead
         state_db=state_db,
     )
     return gateway, profiles
-
-
-def _register_fastmcp(gateway: MemoryGateway):
-    from mcp.server.fastmcp import FastMCP
-
-    mcp = FastMCP("LingJi Automatic Memory Acceptance")
-
-    @mcp.tool()
-    def build_context_pack(
-        query: str = "",
-        agent_id: str | None = None,
-        project: str | None = None,
-        max_chars: int | None = None,
-        include_core: bool = False,
-        mode: str = "current",
-        as_of: str | None = None,
-    ) -> dict[str, Any]:
-        return gateway.build_context_pack(
-            str(agent_id or "agent-synthetic"),
-            query=query,
-            project=project,
-            max_chars=max_chars,
-            include_core=include_core,
-            mode=mode,
-            as_of=as_of,
-        )
-
-    return mcp
 
 
 def _match_persisted_messages(
@@ -390,57 +410,35 @@ def validate_selected_evidence(
         raise ValueError("extra or unknown citation evidence")
 
 
-def _run_mcp_call(mcp: Any, arguments: Mapping[str, Any]) -> Mapping[str, Any]:
-    async def call() -> Mapping[str, Any]:
-        content = await mcp.call_tool("build_context_pack", dict(arguments))
-        if isinstance(content, Mapping):
-            return content
-        if isinstance(content, tuple) and len(content) == 2:
-            _rendered, structured = content
-            if isinstance(structured, Mapping):
-                return structured
-            content = _rendered
-        structured = getattr(content, "structured_content", None)
-        if isinstance(structured, Mapping):
-            return structured
-        blocks = getattr(content, "content", None)
-        for block in (blocks if blocks is not None else content) or ():
-            text = getattr(block, "text", None)
-            if text:
-                value = json.loads(text)
-                if isinstance(value, Mapping):
-                    return value
-        raise ValueError("FastMCP build_context_pack returned no parseable pack")
-
-    return asyncio.run(call())
-
-
-def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Path) -> EvaluationReport:
-    """Run the frozen 100-question gate through real local contracts."""
+def _run_quality_gate_impl(
+    corpus_path: Path,
+    questions_path: Path,
+    *,
+    output_path: Path,
+    acceptance_roots: AcceptanceRoots,
+) -> tuple[EvaluationReport, dict[str, Any]]:
+    """Run the frozen 100-question contracts inside admitted roots."""
     corpus_path = Path(corpus_path).expanduser()
     questions_path = Path(questions_path).expanduser()
     output_path = Path(output_path).expanduser()
-    _reject_protected_output(output_path)
+    acceptance_roots.validate_temporary_isolation()
+    try:
+        output_path.resolve(strict=False).relative_to(acceptance_roots.output_root.resolve())
+    except ValueError as exc:
+        raise ValueError("quality output must be inside Acceptance output root") from exc
     corpus = load_corpus(corpus_path)
     questions = load_questions(questions_path, corpus=corpus)
     fixture_hashes = {"corpus": _sha256(corpus_path), "questions": _sha256(questions_path)}
     if fixture_hashes != {"corpus": CORPUS_SHA256, "questions": QUESTIONS_SHA256}:
         raise ValueError("frozen fixture hash mismatch")
 
+    temporary_root = acceptance_roots.root
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_root = Path(tempfile.mkdtemp(prefix="lingji-acceptance-quality-", dir=str(output_path.parent)))
-    from src.config import settings
-    protected_roots = (Path(settings.vault_path), Path(settings.storage_path))
+    # Production sentinel evidence is intentionally unavailable in reset:
+    # reading configured production paths would violate the authority boundary.
     protected_before: ProtectedTreeSentinel | None = None
-    protected_tree_capture_error = ""
-    try:
-        protected_before = ProtectedTreeSentinel.capture(protected_roots)
-    except ValueError as exc:
-        # The sentinel was deliberately given every configured root.  A
-        # missing/unreadable root is evidence unavailable, not a reason to
-        # silently filter that root out of the measurement.
-        protected_tree_capture_error = str(exc)
-    production_sentinels_before = _production_sentinels()
+    protected_tree_capture_error = "NOT_MEASURED_IN_RESET"
+    production_sentinels_before: dict[str, str] = {}
     production_sentinels_after: dict[str, str] = {}
     message_map: dict[str, dict[str, Any]] = {}
     decisions: dict[str, dict[str, Any]] = {}
@@ -504,7 +502,6 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
         )
         duplicate_records = audit.stable_duplicates.total
         gateway, _profiles = _build_gateway(temporary_root, memory_db, read_model, state_db)
-        mcp = _register_fastmcp(gateway)
         persisted_identity_rows: list[dict[str, Any]] = []
         for record in corpus:
             row = message_map.get(record.fact_id)
@@ -552,15 +549,10 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
                 raise ValueError("malformed Gateway sections")
             gateway_empty_responses += int(not gateway_sections)
             rendered_context_chars += len(str(gateway_pack.get("markdown") or ""))
+            # MCP parity is a Task 4R2 measurement.  Keep a row per verbatim
+            # Gateway call without fabricating transport success.
             mcp_attempts += 1
-            try:
-                _run_mcp_call(mcp, arguments)
-                # MCP parity is intentionally deferred to Task 4R2.  The
-                # call is retained for transport smoke coverage, but no
-                # typed selector or parity verdict is applied here.
-                mcp_cases.append({"question_id": question.question_id, "status": "NOT_MEASURED"})
-            except Exception as exc:
-                mcp_cases.append({"question_id": question.question_id, "status": "NOT_MEASURED", "error": type(exc).__name__})
+            mcp_cases.append({"question_id": question.question_id, "status": "NOT_MEASURED"})
             selected_evidence = select_context_evidence(gateway_pack, identity_registry, limit=_SELECTOR_LIMIT)
             gateway_selector_calls += 1
             unknown_facts = tuple(fact_id for fact_id in selected_evidence.fact_ids if fact_id not in fact_by_memory)
@@ -597,11 +589,6 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             except Exception:
                 raise
         protected_after = None
-        if protected_before is not None:
-            try:
-                protected_after = ProtectedTreeSentinel.capture(protected_roots)
-            except ValueError as exc:
-                protected_tree_capture_error = str(exc)
         production_changes = (
             protected_before.diff(protected_after)
             if protected_before is not None and protected_after is not None and not protected_tree_capture_error
@@ -666,7 +653,7 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
         # owns MCP, degradation, corruption and measured baseline evidence.
         functional_status = readiness.functional_status
         phase_status = "NOT_EVALUATED"
-        production_sentinels_after = _production_sentinels()
+        production_sentinels_after = {}
         envelope = {
             "fixture_hashes": fixture_hashes,
             "code_commit": _git_commit(),
@@ -714,13 +701,90 @@ def run_quality_gate(corpus_path: Path, questions_path: Path, *, output_path: Pa
             "cleanup_inventory": {"temporary_root": str(temporary_root), "cleaned": False},
             "blocked_physical_evidence": list(FUNCTIONAL_BLOCKED_REASONS),
         }
-        shutil.rmtree(temporary_root, ignore_errors=False)
-        envelope["cleanup_inventory"]["cleaned"] = True
+        envelope["cleanup_inventory"]["cleaned"] = False
         _atomic_json(output_path, envelope)
-        return report
+        return report, envelope
     except Exception:
-        shutil.rmtree(temporary_root, ignore_errors=True)
         raise
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _jsonable(child) for key, child in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(child) for child in value]
+    if isinstance(value, Enum):
+        return value.value
+    return value
+
+
+def publish_quality_envelope(envelope: QualityRunEnvelope, *, repository_output_path: Path) -> None:
+    """Publish only a finalized envelope, never raw acceptance stores."""
+    if not isinstance(envelope, QualityRunEnvelope):
+        raise TypeError("quality publication requires QualityRunEnvelope")
+    payload = _jsonable(asdict(envelope))
+    _atomic_json(Path(repository_output_path), payload)
+
+
+def run_quality_gate(
+    corpus_path: Path,
+    questions_path: Path,
+    *,
+    output_path: Path,
+    acceptance_roots: AcceptanceRoots | None = None,
+) -> QualityRunEnvelope | EvaluationReport:
+    """Run the frozen gate in isolated roots and return truthful readiness.
+
+    The optional legacy path exists only for historical reset tests.  The
+    public reset CLI always supplies an admitted ``AcceptanceRoots`` object.
+    """
+    if acceptance_roots is None:
+        # Compatibility-only path: no production roots are read, and the
+        # temporary tree is still isolated before the old report is returned.
+        with temporary_acceptance_roots() as roots:
+            report, raw = _run_quality_gate_impl(
+                corpus_path, questions_path,
+                output_path=roots.output_root / "quality.json",
+                acceptance_roots=roots,
+            )
+        legacy_output = Path(output_path).expanduser()
+        legacy_output.parent.mkdir(parents=True, exist_ok=True)
+        legacy_output.write_text(
+            json.dumps(_jsonable(raw), ensure_ascii=False, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return report
+
+    report, raw = _run_quality_gate_impl(
+        corpus_path, questions_path, output_path=output_path, acceptance_roots=acceptance_roots
+    )
+    readiness_payload = raw.get("quality_evidence_readiness") or {}
+    fields = (
+        "import_audit", "promotion_provenance", "gateway_selection", "production_sentinel",
+        "mcp_parity", "qdrant_degradation", "corruption_isolation", "context_baseline",
+        "scale", "owner_review", "reboot_recovery", "mac_release", "windows_release",
+    )
+    readiness = QualityEvidenceReadiness(**{
+        field: (
+            readiness_payload.get(field).value
+            if isinstance(readiness_payload.get(field), EvidenceState)
+            else str(readiness_payload.get(field, EvidenceState.NOT_MEASURED.value)).removeprefix("EvidenceState.").lower()
+        )
+        for field in fields
+    })
+    envelope = finalize_quality_envelope(
+        readiness=readiness,
+        production_pollution=raw.get("production_pollution"),
+        evaluation_report=report,
+        acceptance_gate=AutomaticMemoryAcceptanceGate,
+        blocked_reasons=tuple(raw.get("blocked_physical_evidence") or ()),
+    )
+    # The temporary machine report is deliberately written beneath the
+    # acceptance output root; the caller publishes it only after cleanup.
+    payload = dict(raw)
+    payload.update(_jsonable(asdict(envelope)))
+    _atomic_json(Path(output_path), payload)
+    return envelope
 
 
 def _git_commit() -> str:
@@ -763,7 +827,13 @@ def generate_100k_history(path: Path, *, count: int = 100_000, seed: int = 20260
 
 
 def run_100k_benchmark(*, output_path: Path) -> dict[str, Any]:
-    """Opt-in bounded 100k benchmark; never runs as part of focused tests."""
+    """Opt-in bounded benchmark, unavailable until Task 4R2 readiness."""
+    values = {field: EvidenceState.NOT_MEASURED for field in (
+        "import_audit", "promotion_provenance", "gateway_selection", "production_sentinel",
+        "mcp_parity", "qdrant_degradation", "corruption_isolation", "context_baseline",
+        "scale", "owner_review", "reboot_recovery", "mac_release", "windows_release",
+    )}
+    ensure_4r2_ready_for_scale(QualityEvidenceReadiness(**values))
     output_path = Path(output_path)
     _reject_protected_output(output_path)
     started = time.perf_counter()
@@ -834,7 +904,9 @@ def run_100k_benchmark(*, output_path: Path) -> dict[str, Any]:
 
 
 __all__ = [
-    "AutomaticMemoryFunctionalGate",
+    "AcceptanceCleanupError",
+    "AcceptanceRoots",
+    "AutomaticMemoryAcceptanceGate",
     "EvidenceState",
     "ExpectedImportedRow",
     "QualityEvidenceReadiness",
@@ -847,5 +919,10 @@ __all__ = [
     "generate_100k_history",
     "run_100k_benchmark",
     "run_quality_gate",
+    "temporary_acceptance_roots",
+    "publish_quality_envelope",
+    "cleanup_failure_envelope",
+    "ensure_4r2_ready_for_scale",
+    "QualityScaleBlockedError",
     "validate_selected_evidence",
 ]
