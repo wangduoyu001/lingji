@@ -4,7 +4,7 @@ Date: 2026-08-27
 Branch: `codex/phase1-automatic-memory`
 Base: `3edbfc8`
 Product/test commit: `7058da0`
-Evidence artifact commit: pending (to be replaced by the completed docs artifact SHA)
+Evidence artifact commit: `b83232d`
 
 ## Verdict
 

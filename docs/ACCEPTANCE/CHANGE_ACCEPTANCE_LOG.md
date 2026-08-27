@@ -1732,7 +1732,7 @@ Windows 重启后恢复 = 100%
 
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 3 Repair Round 2 FINAL · four Important findings
 
-- 基线/审查：`3edbfc8` / Repair Round 1 review；产品/测试提交：`7058da0`；报告/文档提交：evidence artifact SHA will be recorded by metadata-only follow-up；分支：`codex/phase1-automatic-memory`。
+- 基线/审查：`3edbfc8` / Repair Round 1 review；产品/测试提交：`7058da0`；报告/文档提交：`b83232d`；分支：`codex/phase1-automatic-memory`。
 - 影响模块：bounded Obsidian frontmatter reader, existing Generic AI History adapter identity material, automatic-memory Work Fact projection, and Task 3 evidence metadata。
 - 本轮仅修复四项最终 Important：LF/CRLF 与 BOM frontmatter 显式拒绝、自动 Generic AI 跨授权 source identity namespace、30%/70% pause-resume truthful Work Fact total、Round 1 三提交身份补全。无第三轮修复。
 - 安全边界：不修改 Task 2 lifecycle/timing edge，不调用 promotion seams，不新增 parser/store/queue/API/indexer/UI，不写 Vault Markdown，不执行 Artifact、live 8766、Production/Vault/owner 数据。
@@ -1754,4 +1754,4 @@ Windows 重启后恢复 = 100%
 
 - 完整报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-3-repair-2-report.md`
 - 产品/测试提交：`7058da0`
-- 报告/文档提交：evidence artifact SHA will be recorded by metadata-only follow-up
+- 报告/文档提交：`b83232d`
