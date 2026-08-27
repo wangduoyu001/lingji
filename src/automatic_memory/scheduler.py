@@ -67,6 +67,7 @@ class AutomaticMemoryScheduler:
         self._scheduler_owner = f"automatic-memory-scheduler-{uuid4().hex}"
         self._scheduler_lease_seconds = 30.0
         self._source_cleanup_errors: dict[str, str] = {}
+        self._stop_lock = threading.Lock()
 
     @property
     def source_cleanup_errors(self) -> dict[str, str]:
@@ -91,60 +92,68 @@ class AutomaticMemoryScheduler:
             self.cron.start(self._run_cron_job)
 
     def stop(self) -> None:
-        with self._lock:
-            if not self._running:
-                result = self.watcher.stop() or {}
+        # Serialize retries so one stop cannot clear cleanup evidence while a
+        # concurrent stop is still measuring the same watcher generation.
+        with self._stop_lock:
+            with self._lock:
+                if not self._running:
+                    result = self.watcher.stop() or {}
+                    self._lifecycle_generation += 1
+                    callback = self._listener_callback
+                    if callback is not None:
+                        self.registry.remove_lifecycle_listener(callback)
+                    self._listener_callback = None
+                    self._listener_registered = False
+                    if result.get("surviving_threads"):
+                        self._source_cleanup_errors["__scheduler__"] = (
+                            "automatic-memory watcher threads survived stop: "
+                            + ", ".join(result["surviving_threads"])
+                        )
+                        raise RuntimeError(
+                            "automatic-memory watcher threads survived stop: "
+                            + ", ".join(result["surviving_threads"])
+                        )
+                    # A previous bounded stop may have recorded cleanup errors
+                    # for a watcher that exited naturally after the join.  An
+                    # empty survivor set is the authoritative reconciliation
+                    # point: all watcher-owned resources are now gone.
+                    self._source_cleanup_errors.clear()
+                    return
+                self._running = False
                 self._lifecycle_generation += 1
                 callback = self._listener_callback
                 if callback is not None:
                     self.registry.remove_lifecycle_listener(callback)
                 self._listener_callback = None
                 self._listener_registered = False
-                if result.get("surviving_threads"):
-                    self._source_cleanup_errors["__scheduler__"] = (
+            watcher_result: dict[str, object] = {}
+            watcher_error: BaseException | None = None
+            try:
+                watcher_result = self.watcher.stop() or {}
+            except BaseException as exc:
+                watcher_error = exc
+            cron_error: BaseException | None = None
+            try:
+                self.cron.stop()
+            except BaseException as exc:
+                cron_error = exc
+            errors = [error for error in (watcher_error, cron_error) if error is not None]
+            survivors = watcher_result.get("surviving_threads") or []
+            if survivors:
+                errors.append(
+                    RuntimeError(
                         "automatic-memory watcher threads survived stop: "
-                        + ", ".join(result["surviving_threads"])
+                        + ", ".join(str(item) for item in survivors)
                     )
-                    raise RuntimeError(
-                        "automatic-memory watcher threads survived stop: "
-                        + ", ".join(result["surviving_threads"])
-                    )
-                return
-            self._running = False
-            self._lifecycle_generation += 1
-            callback = self._listener_callback
-            if callback is not None:
-                self.registry.remove_lifecycle_listener(callback)
-            self._listener_callback = None
-            self._listener_registered = False
-        watcher_result: dict[str, object] = {}
-        watcher_error: BaseException | None = None
-        try:
-            watcher_result = self.watcher.stop() or {}
-        except BaseException as exc:
-            watcher_error = exc
-        cron_error: BaseException | None = None
-        try:
-            self.cron.stop()
-        except BaseException as exc:
-            cron_error = exc
-        errors = [error for error in (watcher_error, cron_error) if error is not None]
-        survivors = watcher_result.get("surviving_threads") or []
-        if survivors:
-            errors.append(
-                RuntimeError(
-                    "automatic-memory watcher threads survived stop: "
-                    + ", ".join(str(item) for item in survivors)
                 )
-            )
-        if errors:
+            if errors:
+                with self._lock:
+                    self._source_cleanup_errors["__scheduler__"] = "; ".join(
+                        str(error) for error in errors
+                    )
+                raise RuntimeError("; ".join(str(error) for error in errors))
             with self._lock:
-                self._source_cleanup_errors["__scheduler__"] = "; ".join(
-                    str(error) for error in errors
-                )
-            raise RuntimeError("; ".join(str(error) for error in errors))
-        with self._lock:
-            self._source_cleanup_errors.clear()
+                self._source_cleanup_errors.clear()
 
     def pause(self) -> None:
         with self._lock:

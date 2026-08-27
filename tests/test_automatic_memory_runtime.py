@@ -402,6 +402,104 @@ def test_revoke_linearizes_quickly_and_runtime_reports_survivor_until_retry(
     assert runtime.status()["state"] == "stopped"
 
 
+def test_late_watcher_exit_clears_scheduler_cleanup_error_on_second_stop(
+    tmp_path: Path,
+):
+    """A survivor must remain degraded until a later stop observes its exit."""
+    from src.automatic_memory.scheduler import AutomaticMemoryScheduler
+
+    release = threading.Event()
+    state = StateDatabase(tmp_path / "lingji_state.db")
+    registry = SourceRegistry(state)
+    source = registry.register(
+        AuthorizationScope(
+            "grant-late-stop",
+            ("generic_ai_history",),
+            (str(tmp_path),),
+            datetime.now(timezone.utc),
+            None,
+            True,
+        ),
+        "generic_ai_history",
+        str(tmp_path),
+    )
+
+    def backend(_root, **_kwargs):
+        while not release.is_set():
+            time.sleep(0.01)
+        yield set()
+
+    watcher = AutomaticMemoryWatcher(
+        source_provider=lambda source_id: next(
+            item for item in registry.list_sources() if item.source_id == source_id
+        ),
+        on_change=lambda _source_id: None,
+        watch_backend=backend,
+        stop_timeout_seconds=0.01,
+    )
+    scheduler = AutomaticMemoryScheduler(
+        state,
+        registry,
+        scan_runner=lambda *_args: None,
+        watcher=watcher,
+        poll_seconds=0.02,
+    )
+    queue = type("Queue", (), {"path": state.path})()
+    pipeline = type("Pipeline", (), {"queue": queue})()
+    runtime = AutomaticMemoryRuntime(
+        state_db=state,
+        queue=queue,
+        pipeline=pipeline,
+        registry=registry,
+        scheduler=scheduler,
+        worker=_Worker(),
+    )
+    runtime.start()
+    deadline = time.monotonic() + 1.0
+    while source.source_id not in watcher.running_sources() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert source.source_id in watcher.running_sources()
+
+    registry.revoke(source.source_id)
+    assert registry.list_sources()[0].status == "revoked"
+
+    with pytest.raises(RuntimeError, match="watcher threads survived stop"):
+        runtime.stop()
+    degraded = runtime.status()
+    assert degraded["state"] == "degraded"
+    assert degraded["cleanup_pending"] is True
+    assert source.source_id in watcher.running_sources()
+
+    release.set()
+    deadline = time.monotonic() + 1.0
+    while watcher.running_sources() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert watcher.running_sources() == ()
+
+    retry_errors: list[BaseException] = []
+
+    def retry_stop() -> None:
+        try:
+            runtime.stop()
+        except BaseException as exc:  # pragma: no cover - failure evidence
+            retry_errors.append(exc)
+
+    retries = [threading.Thread(target=retry_stop) for _ in range(2)]
+    for thread in retries:
+        thread.start()
+    for thread in retries:
+        thread.join(timeout=1.0)
+        assert not thread.is_alive()
+    assert retry_errors == []
+
+    stopped = runtime.status()
+    assert stopped["state"] == "stopped"
+    assert stopped["cleanup_pending"] is False
+    assert stopped["cleanup_error"] is None
+    assert stopped["source_cleanup_errors"] == {}
+    assert stopped["running"] is False
+
+
 def test_runtime_status_route_is_authenticated_and_truthful(tmp_path: Path):
     state = StateDatabase(tmp_path / "lingji_state.db")
     runtime = type(
