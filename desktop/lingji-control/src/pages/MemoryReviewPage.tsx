@@ -24,9 +24,13 @@ export default function MemoryReviewPage({ api, active, onOpenInspector }: PageP
   const [coreMemoryId, setCoreMemoryId] = useState("");
   const [integrity, setIntegrity] = useState<CoreIntegrity | null>(null);
   const [busy, setBusy] = useState("");
+  const [listLoading, setListLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const requestId = useRef(0);
+  const detailAbortRef = useRef<AbortController | null>(null);
+  const detailRequestId = useRef(0);
 
   const load = useCallback(async () => {
     if (!active) return;
@@ -34,6 +38,7 @@ export default function MemoryReviewPage({ api, active, onOpenInspector }: PageP
     const abort = new AbortController();
     const id = ++requestId.current;
     abortRef.current = abort;
+    setListLoading(true);
     try {
       const response = await client.candidates(filters, abort.signal);
       if (id === requestId.current) {
@@ -42,23 +47,36 @@ export default function MemoryReviewPage({ api, active, onOpenInspector }: PageP
       }
     } catch (reason) {
       if (id === requestId.current && reason instanceof ApiError && reason.code !== "REQUEST_CANCELLED") setError(reason);
+    } finally {
+      if (id === requestId.current) setListLoading(false);
     }
   }, [active, client, filters]);
 
   useEffect(() => { void load(); return () => abortRef.current?.abort(); }, [load]);
+  useEffect(() => () => detailAbortRef.current?.abort(), []);
 
   const openCandidate = async (row: MemoryCandidate) => {
+    detailAbortRef.current?.abort();
+    const abort = new AbortController();
+    const id = ++detailRequestId.current;
+    detailAbortRef.current = abort;
+    setDetailLoading(true);
     setBusy(`detail:${row.memory_id}`);
     try {
-      const detail = await client.candidate(row.memory_id);
-      setSelected(detail);
-      setEditContent(detail.content ?? "");
-      setRejectReason("");
-      setIntegrity(null);
+      const detail = await client.candidate(row.memory_id, abort.signal);
+      if (id === detailRequestId.current) {
+        setSelected(detail);
+        setEditContent(detail.content ?? "");
+        setRejectReason("");
+        setIntegrity(null);
+      }
     } catch (reason) {
-      if (reason instanceof ApiError) setError(reason);
+      if (id === detailRequestId.current && reason instanceof ApiError && reason.code !== "REQUEST_CANCELLED") setError(reason);
     } finally {
-      setBusy("");
+      if (id === detailRequestId.current) {
+        setDetailLoading(false);
+        setBusy("");
+      }
     }
   };
 
@@ -142,7 +160,7 @@ export default function MemoryReviewPage({ api, active, onOpenInspector }: PageP
       </div>
       <div className="workspace-hero-actions">
         <div className="workspace-counter"><strong>{items.length}</strong><span>当前页候选</span></div>
-        <button className="button secondary" disabled={Boolean(busy)} onClick={() => void load()}>刷新候选</button>
+        <button className="button secondary" disabled={listLoading || Boolean(busy)} onClick={() => void load()}>{listLoading ? "刷新中…" : "刷新候选"}</button>
       </div>
     </section>
 
@@ -164,7 +182,7 @@ export default function MemoryReviewPage({ api, active, onOpenInspector }: PageP
         </div>
 
         <div className="review-candidate-list">
-          {items.length ? items.map((item) => (
+          {listLoading && items.length === 0 ? <div className="loop-state">正在读取候选记忆…</div> : items.length ? items.map((item) => (
             <button
               className={`review-candidate-card ${selected?.memory_id === item.memory_id ? "active" : ""}`}
               key={item.memory_id}
@@ -181,25 +199,26 @@ export default function MemoryReviewPage({ api, active, onOpenInspector }: PageP
       </aside>
 
       <section className="loop-panel review-detail-panel">
-        {selected ? <>
+        {detailLoading ? <div className="workspace-empty-detail"><span className="desktop-eyebrow">CANDIDATE DETAIL</span><h2>正在读取候选详情…</h2><p>正在从本机服务读取这条候选记忆，请稍候。</p></div> : selected ? <>
           <header className="review-detail-header">
             <div><span className="desktop-eyebrow">CANDIDATE DETAIL</span><h2>{selected.title ?? selected.memory_id}</h2><small>{selected.memory_id}</small></div>
             <div className="review-detail-badges"><span className={`pill ${selected.importance === "high" ? "warning" : "neutral"}`}>{selected.importance ?? "未知重要性"}</span><span className="pill neutral">置信度 {confidenceLabel(selected.confidence)}</span></div>
           </header>
 
           <div className="review-fact-grid">
-            <div><strong>来源：{selected.source_name || "尚未获得"}</strong>{selected.source_session_id && onOpenInspector && <button className="text-button" onClick={() => onOpenInspector({ source_type: "codex_session", conversation_id: selected.source_session_id })}>打开来源检查</button>}</div>
-            <div><strong>对话：{selected.conversation_title || "尚未获得"}</strong>{selected.source_message_id && onOpenInspector && <button className="text-button" onClick={() => onOpenInspector({ message_id: selected.source_message_id })}>打开原文检查</button>}</div>
-            <div><strong>原文片段：{selected.message_excerpt || "尚未获得"}</strong></div>
-            <div><strong>时间：{dt(selected.provenance_at || selected.created_at)}</strong></div>
-            <div><strong>当前状态：{selected.current_state || "尚未获得"}</strong></div>
-            <div><strong>历史状态：{selected.history_state || "尚未获得"}</strong></div>
-            <div><span>影响 Agent</span><strong>{selected.affected_agents?.join("、") || "尚未获得"}</strong></div>
+            <div><strong>来源：{selected.relative_path || "尚未获得"}</strong></div>
+            <div><strong>来源引用：{selected.source_refs?.join("、") || "尚未获得"}</strong></div>
+            <div><strong>对话：尚未获得</strong></div>
+            <div><strong>原文片段：尚未获得</strong></div>
+            <div><strong>时间：{dt(selected.created_at)}</strong></div>
+            <div><strong>当前状态：尚未获得</strong></div>
+            <div><strong>历史状态：尚未获得</strong></div>
+            <div><strong>影响 Agent：尚未获得</strong></div>
             <div><span>当前 Hash</span><strong className="mono-truncate">{selected.current_hash ?? "尚未获得"}</strong></div>
           </div>
 
           <section className="review-provenance">
-            <div><p>为什么：{selected.proposal_reason ?? "尚未获得"}</p></div>
+            <div><p>为什么：尚未获得</p></div>
             <div><span>相似长期记忆</span><p>{selected.similar_core?.map((item) => item.title ?? item.memory_id).join("；") || "没有发现相似 Core Memory"}</p></div>
           </section>
 

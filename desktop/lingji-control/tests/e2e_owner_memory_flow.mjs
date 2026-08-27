@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, pendingResolved: false };
+const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, pendingResolved: false, reviewDelay: false, reviewRelease: true };
 const allStateDiscovered = [
   ["detected", "available"], ["consent", "consent_required"], ["unsupported", "unsupported"], ["authorized", "available"],
   ["scanning", "available"], ["current", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
@@ -63,11 +63,20 @@ const server = http.createServer((req, res) => {
     if (path === "/api/work/history") return json(res, 200, { items: [{ work: { work_id: "work-capture-1", title: "整理项目会议记录", status: "completed", source_id: "source-1", updated_at: "2026-08-28T08:00:00Z" }, events: [{ event_id: "event-1", event_type: "completed", detail: { internal: "not primary" } }], outcome: { status: "completed", summary: "已保存 1 条记忆" }, next_action: null, pending_actions: [], failure: null, summary: { source: "项目会议", phase: "已完成", result: "已保存 1 条记忆", next_actor: null, time: "2026-08-28T08:00:00Z", source_id: "source-1" } }], total: 1, has_more: false, limit: 20, offset: 0 });
     if (path === "/api/work/pending-actions") return json(res, 200, { pending_actions: state.pendingResolved ? [] : [{ action_id: "action-1", work_id: "work-capture-1", description: "确认这条会议决定是否进入长期记忆", actor: "owner", resolved: false, created_at: "2026-08-28T08:01:00Z" }] });
     if (path === "/api/work/pending-actions/action-1/resolve") { state.pendingResolved = true; return json(res, 200, { action_id: "action-1", work_id: "work-capture-1", resolved: true }); }
-    if (path === "/api/memory/review/candidates") return json(res, 200, { items: [{ memory_id: "mem-1", title: "会议决定：下周发布", content_preview: "下周三发布新版。", content: "下周三发布新版。", source_session_id: "session-1", source_message_id: "message-1", source_name: "Codex 工作会话", conversation_title: "发布计划讨论", message_excerpt: "我们确认下周三发布。", provenance_at: "2026-08-28T08:02:00Z", current_state: "待主人确认", history_state: "由自动提议产生", proposal_reason: "主人在会话中明确确认了发布时间。", current_hash: "hash-1", importance: "high", confidence: 0.9, project_ids: ["灵机"], proposed_by: "system", created_at: "2026-08-28T08:02:00Z" }], pagination: { total: 1, limit: 20, offset: 0, has_more: false } });
-    if (path === "/api/memory/review/candidates/mem-1") return json(res, 200, { memory_id: "mem-1", title: "会议决定：下周发布", content: "下周三发布新版。", source_session_id: "session-1", source_message_id: "message-1", source_name: "Codex 工作会话", conversation_title: "发布计划讨论", message_excerpt: "我们确认下周三发布。", provenance_at: "2026-08-28T08:02:00Z", current_state: "待主人确认", history_state: "由自动提议产生", proposal_reason: "主人在会话中明确确认了发布时间。", current_hash: "hash-1", importance: "high", confidence: 0.9, project_ids: ["灵机"], proposed_by: "system", created_at: "2026-08-28T08:02:00Z" });
+    if (path === "/api/memory/review/candidates" || path === "/api/memory/review/candidates/mem-1" || path === "/api/memory/review/candidates/mem-2") {
+      const response = () => path.endsWith("mem-1")
+        ? json(res, 200, { memory_id: "mem-1", title: "会议决定：下周发布", content: "下周三发布新版。", relative_path: "01-Inbox/AI-Memory/release.md", source_refs: ["message-1"], current_hash: "hash-1", importance: "high", confidence: 0.9, project_ids: ["灵机"], proposed_by: "system", created_at: "2026-08-28T08:02:00Z" })
+        : path.endsWith("mem-2")
+          ? json(res, 200, { memory_id: "mem-2", title: "另一条候选", content: "第二条候选内容。", relative_path: "01-Inbox/AI-Memory/second.md", source_refs: ["message-2"], current_hash: "hash-2", importance: "medium", confidence: 0.8, project_ids: ["灵机"], proposed_by: "system", created_at: "2026-08-28T08:03:00Z" })
+          : json(res, 200, { items: [{ memory_id: "mem-1", title: "会议决定：下周发布", content_preview: "下周三发布新版。", relative_path: "01-Inbox/AI-Memory/release.md", source_refs: ["message-1"], current_hash: "hash-1", importance: "high", confidence: 0.9, project_ids: ["灵机"], proposed_by: "system", created_at: "2026-08-28T08:02:00Z" }, { memory_id: "mem-2", title: "另一条候选", content_preview: "第二条候选内容。", relative_path: "01-Inbox/AI-Memory/second.md", source_refs: ["message-2"], current_hash: "hash-2", importance: "medium", confidence: 0.8, project_ids: ["灵机"], proposed_by: "system", created_at: "2026-08-28T08:03:00Z" }], pagination: { total: 2, limit: 20, offset: 0, has_more: false } });
+      if (state.reviewDelay && !state.reviewRelease) { const timer = setInterval(() => { if (state.reviewRelease) { clearInterval(timer); response(); } }, 20); return; }
+      return response();
+    }
     if (path === "/api/memory/inspector/status") return json(res, 200, { as_of: "2026-08-28T08:03:00Z", sources: { sources: 1, conversations: 1, messages: 1 }, memory: { documents: 1, chunks: 1 }, vector: { state: "available", coverage: 1, rebuild_required: false } });
     if (path === "/api/memory/inspector/sources" || path === "/api/memory/inspector/conversations" || path === "/api/memory/inspector/messages") return json(res, 200, { items: path.endsWith("sources") ? [{ source_id: "source-1", source_type: "codex_session", display_name: "Codex 工作会话", status: "active", updated_at: "2026-08-28T08:02:00Z" }] : path.endsWith("conversations") ? [{ conversation_id: "session-1", source_id: "source-1", title: "发布计划讨论", started_at: "2026-08-28T08:00:00Z", message_count: 1 }] : [{ message_id: "message-1", conversation_id: "session-1", source_id: "source-1", role: "user", author: "主人", occurred_at: "2026-08-28T08:02:00Z", content_preview: "我们确认下周三发布。" }], pagination: { total: 1, limit: 30, offset: 0, has_more: false } });
     if (path === "/api/memory/inspector/conversations/session-1") return json(res, 200, { item: { conversation_id: "session-1", source_id: "source-1", title: "发布计划讨论", started_at: "2026-08-28T08:00:00Z", message_count: 1 } });
+    if (path === "/__test/review-delay") { state.reviewDelay = body.includes("true"); state.reviewRelease = !state.reviewDelay; return json(res, 200, { ok: true }); }
+    if (path === "/__test/review-release") { state.reviewRelease = body.includes("true"); return json(res, 200, { ok: true }); }
     return json(res, 404, { detail: "not found" });
   });
 });
@@ -218,19 +227,27 @@ try {
 
   await page.locator(".desktop-nav-item").filter({ hasText: "高级诊断" }).click();
   await page.locator("details").filter({ hasText: "记忆与项目" }).locator("summary").click();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/review-delay`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
   await page.getByRole("button", { name: /人工记忆审核/ }).click();
   await page.getByRole("heading", { name: "人工记忆审核", exact: true }).waitFor();
+  await page.getByText("正在读取候选记忆…", { exact: true }).waitFor();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/review-release`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
+  await page.locator(".review-candidate-card").filter({ hasText: "会议决定：下周发布" }).waitFor();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/review-release`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
   await page.locator(".review-candidate-card").filter({ hasText: "会议决定：下周发布" }).click();
-  await page.getByText("来源：Codex 工作会话", { exact: true }).waitFor();
-  await page.getByText("对话：发布计划讨论", { exact: true }).waitFor();
-  await page.getByText("原文片段：我们确认下周三发布。", { exact: true }).waitFor();
-  await page.getByText("当前状态：待主人确认", { exact: true }).waitFor();
-  await page.getByText("历史状态：由自动提议产生", { exact: true }).waitFor();
-  await page.getByText("为什么：主人在会话中明确确认了发布时间。", { exact: true }).waitFor();
-  assert.equal(await page.getByText("source_session_id", { exact: false }).count(), 0, "technical IDs must not be the primary provenance copy");
-  await page.getByRole("button", { name: "打开来源检查", exact: true }).click();
-  await page.getByRole("heading", { name: "记忆检查器", exact: true }).waitFor();
-  await page.getByText("发布计划讨论", { exact: true }).waitFor();
+  await page.getByText("正在读取候选详情…", { exact: true }).waitFor();
+  await page.locator(".review-candidate-card").filter({ hasText: "另一条候选" }).click();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/review-release`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
+  await page.getByRole("heading", { name: "另一条候选", exact: true }).waitFor();
+  await page.locator(".review-candidate-card").filter({ hasText: "会议决定：下周发布" }).click();
+  await page.getByText("来源：01-Inbox/AI-Memory/release.md", { exact: true }).waitFor();
+  await page.getByText("来源引用：message-1", { exact: true }).waitFor();
+  await page.getByText("对话：尚未获得", { exact: true }).waitFor();
+  await page.getByText("原文片段：尚未获得", { exact: true }).waitFor();
+  await page.getByText("当前状态：尚未获得", { exact: true }).waitFor();
+  await page.getByText("历史状态：尚未获得", { exact: true }).waitFor();
+  await page.getByText("为什么：尚未获得", { exact: true }).waitFor();
+  assert.equal(await page.getByText("source_session_id", { exact: false }).count(), 0, "mock-only provenance IDs must not be used");
 
   await page.locator(".desktop-nav-item").filter({ hasText: "高级诊断" }).click();
   await page.locator("details").filter({ hasText: "采集与任务" }).locator("summary").click();
