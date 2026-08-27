@@ -8,6 +8,8 @@ const read = (path) => readFile(resolve(here, path), "utf8");
 
 const [
   entrypoint,
+  controlApi,
+  automaticMemoryRuntime,
   pythonTests,
   buildScript,
   sidecarConfigText,
@@ -25,6 +27,8 @@ const [
   hardwareRunner,
 ] = await Promise.all([
   read("../../../run_packaged_control_api.py"),
+  read("../../../run_control_api.py"),
+  read("../../../src/automatic_memory/runtime.py"),
   read("../../../tests/test_packaged_control_api.py"),
   read("../../../scripts/build_windows_sidecar.ps1"),
   read("../src-tauri/tauri.sidecar.conf.json"),
@@ -54,6 +58,19 @@ for (const token of [
   "system_drive_runtime_data_allowed", "sidecar-state.json", "sidecar-stop-request.json",
   "install_runtime_lifecycle", "instance_id",
 ]) assert.ok(entrypoint.includes(token), `Packaged entrypoint is missing ${token}`);
+for (const token of [
+  "AutomaticMemoryRuntime", "runtime.start()", "runtime.stop()", "on_event",
+  "build_extraction_pipeline", "control_api_port", "control_api_host",
+]) assert.ok(controlApi.includes(token), `Control API composition is missing ${token}`);
+for (const token of [
+  "class AutomaticMemoryRuntime", "SnapshotJobRunner", "AutomaticMemoryScheduler",
+  "ExtractionWorker", "scheduler_heartbeat_age", "authorized_watcher_count",
+]) assert.ok(automaticMemoryRuntime.includes(token), `Runtime contract is missing ${token}`);
+for (const forbidden of [
+  ".evaluate(", ".promote(", ".submit(",
+  ".reconcile_incomplete_projections(", ".rebuild_derived_projections(",
+]) assert.equal(automaticMemoryRuntime.includes(forbidden), false,
+  `Runtime must not call quarantined promotion seam ${forbidden}`);
 assert.equal(entrypoint.includes('"0.0.0.0"'), false);
 assert.match(entrypoint, /target\.setdefault\("VAULT_DIR"/);
 assert.match(pythonTests, /rejects_non_loopback_host/);

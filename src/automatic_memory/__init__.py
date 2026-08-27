@@ -6,6 +6,7 @@ from .snapshot import ConsistentSnapshot, FileStat, SnapshotResult
 from .checkpoint import CheckpointStore, ResumeToken, SnapshotJobRunner
 from .watcher import AutomaticMemoryWatcher
 from .scheduler import AutomaticMemoryScheduler, ReconciliationReport
+from .runtime import AutomaticMemoryRuntime
 from .evaluation import (
     AcceptanceGate,
     AutomaticMemoryAcceptanceGate,
@@ -72,6 +73,7 @@ __all__ = [
     "AutomaticMemoryWatcher",
     "AutomaticMemoryScheduler",
     "ReconciliationReport",
+    "AutomaticMemoryRuntime",
     "AcceptanceGate",
     "AutomaticMemoryAcceptanceGate",
     "CorpusRecord",

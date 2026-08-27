@@ -98,6 +98,24 @@ def register_automatic_memory_routes(
     def list_sources() -> list[dict[str, Any]]:
         return [asdict(item) for item in registry.list_sources()]
 
+    @app.get("/api/automatic-memory/runtime", dependencies=secured)
+    def runtime_status() -> dict[str, Any]:
+        runtime = getattr(control, "runtime", None)
+        if runtime is None:
+            return {
+                "state": "stopped",
+                "running": False,
+                "paused": False,
+                "scheduler_heartbeat_age": None,
+                "scheduler_heartbeat_reason": (
+                    "unavailable: automatic-memory runtime is not composed"
+                ),
+                "worker_state": None,
+                "authorized_watcher_count": None,
+                "last_global_error": None,
+            }
+        return dict(runtime.status())
+
     @app.get("/api/automatic-memory/scans/{scan_id}", dependencies=secured)
     def get_scan(scan_id: str) -> dict[str, Any]:
         result = call(lambda: registry.get_scan(scan_id))

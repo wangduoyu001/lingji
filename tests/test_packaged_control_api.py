@@ -271,3 +271,64 @@ def test_windowed_runtime_receives_devnull_standard_streams():
     assert streams.stderr is not None
     streams.stdout.close()
     streams.stderr.close()
+
+
+def test_control_main_composes_runtime_and_shutdown_order(
+    runtime_tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import run_control_api
+    from src.config import Settings
+
+    settings = Settings(
+        storage_dir=str(runtime_tmp_path / "storage"),
+        vault_dir=str(runtime_tmp_path / "vault"),
+        snapshot_dir=str(runtime_tmp_path / "snapshot"),
+        log_dir=str(runtime_tmp_path / "logs"),
+    )
+    events: list[str] = []
+
+    class App:
+        def on_event(self, event: str):
+            assert event == "shutdown"
+
+            def register(callback):
+                self.shutdown = callback
+                return callback
+
+            return register
+
+    app = App()
+    pipeline = SimpleNamespace(queue=SimpleNamespace(path=settings.state_db_path))
+
+    class Service:
+        automatic_memory_registry = object()
+
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def close(self):
+            events.append("service.close")
+
+    class Runtime:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start(self):
+            events.append("runtime.start")
+
+        def stop(self):
+            events.append("runtime.stop")
+
+    monkeypatch.setattr(run_control_api, "settings", settings)
+    monkeypatch.setattr(run_control_api, "GovernedLocalControlService", Service)
+    monkeypatch.setattr(run_control_api, "AutomaticMemoryRuntime", Runtime)
+    monkeypatch.setattr(run_control_api, "build_extraction_pipeline", lambda *_args: pipeline)
+    monkeypatch.setattr(run_control_api, "create_control_app", lambda *_args, **_kwargs: app)
+    monkeypatch.setattr(run_control_api, "register_p2_07_routes", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(run_control_api, "register_auto_review_routes", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(run_control_api, "register_settings_governance_routes", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("uvicorn.run", lambda *_args, **_kwargs: None)
+
+    run_control_api.main()
+
+    assert events == ["runtime.start", "runtime.stop", "service.close"]

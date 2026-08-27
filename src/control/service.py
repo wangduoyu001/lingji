@@ -38,17 +38,27 @@ class LocalControlService:
         model_inventory: LocalModelInventoryService | None = None,
         memory_gateway: Any | None = None,
         memory_statistics: MemoryStatisticsService | None = None,
+        queue: Any | None = None,
+        automatic_memory_registry: SourceRegistry | None = None,
+        runtime: Any | None = None,
     ):
         self.settings = settings
         self.state_db = state_db or StateDatabase(settings.state_db_path)
-        self.automatic_memory_registry = SourceRegistry(self.state_db)
+        self.automatic_memory_registry = automatic_memory_registry or SourceRegistry(self.state_db)
         self.runtime_settings = RuntimeSettingsStore(settings, state_db=self.state_db)
         self.obsidian = ObsidianService(
             settings, runtime_settings=self.runtime_settings, state_db=self.state_db
         )
         self.health_checker = StartupHealthChecker(settings)
-        self.queue = SQLiteExtractionQueue(settings.state_db_path)
         self.pipeline = pipeline
+        # The packaged runtime injects the pipeline's queue wrapper so service,
+        # worker and scheduler all share one logical extraction queue.  Keep
+        # the historical fallback for lightweight callers that have no
+        # pipeline yet.
+        if queue is None:
+            queue = getattr(pipeline, "queue", None)
+        self.queue = queue if queue is not None else SQLiteExtractionQueue(settings.state_db_path)
+        self.runtime = runtime
         self.storage = StorageLifecycleManager(settings, state_db=self.state_db)
         self.backups = BackupManager(settings, state_db=self.state_db)
         self.media_semantic = MediaSemanticService(settings.storage_path)
