@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import sqlite3
 import threading
@@ -607,11 +608,13 @@ class StateDatabase:
             return int(cursor.lastrowid)
 
     @staticmethod
-    def _promotion_json(payload: Any) -> str:
+    def _promotion_json(payload: Any, *, event_type: str | None = None) -> str:
         top_level = {"candidate_id", "decision_id", "memory_id", "content_hash", "policy_version", "state", "messages", "error_codes", "errors"}
         message_keys = {"message_id", "content_hash", "external_key"}
         external_keys = {"source_external_id", "conversation_external_id", "message_external_id"}
         forbidden = re.compile(r"(?:sk-[a-z0-9]|api[_ -]?key|token|secret|password|authorization|fixture|evaluator|exception|traceback)", re.I)
+
+        string_fields = {"candidate_id", "decision_id", "memory_id", "content_hash", "policy_version", "state", "message_id", "source_external_id", "conversation_external_id", "message_external_id"}
 
         def check(value: Any, context: str = "top") -> None:
             if isinstance(value, Mapping):
@@ -625,6 +628,10 @@ class StateDatabase:
                     raise ValueError("promotion_payload_schema_invalid")
                 if any(str(name) not in allowed for name in value):
                     raise ValueError("promotion_payload_schema_invalid")
+                if context == "message" and set(value) != message_keys:
+                    raise ValueError("promotion_payload_schema_invalid")
+                if context == "external" and set(value) != external_keys:
+                    raise ValueError("promotion_payload_schema_invalid")
                 for name, item in value.items():
                     if context == "top" and name == "messages":
                         child = "messages"
@@ -632,8 +639,12 @@ class StateDatabase:
                         child = "external"
                     else:
                         child = "scalar"
+                    if child == "scalar" and str(name) in string_fields and not isinstance(item, str):
+                        raise ValueError("promotion_payload_schema_invalid")
                     check(item, child)
             elif isinstance(value, (list, tuple)):
+                if context == "messages" and any(not isinstance(item, Mapping) for item in value):
+                    raise ValueError("promotion_payload_schema_invalid")
                 child = "message" if context == "messages" else "scalar"
                 for item in value:
                     check(item, child)
@@ -641,6 +652,8 @@ class StateDatabase:
                 normalized_path = value.replace("\\/", "/").replace("\\\\", "\\")
                 if forbidden.search(value) or normalized_path.startswith(("/", "\\")) or re.match(r"^[a-z]:[\\/]", normalized_path, re.I):
                     raise ValueError("promotion_payload_forbidden_content")
+            elif isinstance(value, float) and not math.isfinite(value):
+                raise ValueError("promotion_payload_schema_invalid")
             elif value is not None and not isinstance(value, (bool, int, float)):
                 raise ValueError("promotion_payload_schema_invalid")
         if isinstance(payload, Mapping):
@@ -649,8 +662,71 @@ class StateDatabase:
             for field in ("error_codes", "errors"):
                 if field in payload and (not isinstance(payload[field], (list, tuple)) or any(not isinstance(item, str) for item in payload[field])):
                     raise ValueError("promotion_payload_schema_invalid")
+            if event_type in {
+                "memory_promotion_preparing", "memory_projection_activated",
+                "memory_projection_rolled_back", "memory_projection_repair_required",
+            } and any(not isinstance(payload.get(field), str) or not str(payload.get(field)).strip() for field in ("decision_id", "memory_id", "state")):
+                raise ValueError("promotion_payload_schema_invalid")
         check(payload, "top")
         return json.dumps(payload if payload is not None else {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+    @classmethod
+    def _safe_promotion_payload(cls, payload: Any) -> dict[str, Any]:
+        """Return the allowlisted, owner-safe shape used by ordinary audit events."""
+        allowed = {
+            "candidate_id", "decision_id", "memory_id", "title", "content", "memory_type",
+            "importance", "privacy", "project_ids", "proposed_by", "source_refs", "evidence_refs",
+            "content_hash", "metadata", "confidence", "authority", "source_kind", "extractor_version",
+            "structured_content", "risk_flags", "provenance_errors", "status", "reason_codes",
+            "policy_version", "mutation_performed", "error", "promotion_evidence", "state",
+        }
+        redacted = False
+        forbidden = re.compile(r"(?:sk-[a-z0-9]|api[_ -]?key|token|secret|password|authorization|fixture|evaluator|exception|traceback)", re.I)
+
+        def clean(value: Any, key: str = "") -> Any:
+            nonlocal redacted
+            key_text = str(key)
+            if key_text.lower() in {"error", "errors", "exception", "traceback"}:
+                redacted = True
+                return None
+            if re.search(r"token|secret|password|authorization|api[_ -]?key|fixture|path", key_text, re.I):
+                redacted = True
+                return None
+            if isinstance(value, Mapping):
+                output: dict[str, Any] = {}
+                for name, item in value.items():
+                    cleaned = clean(item, str(name))
+                    if cleaned is not None:
+                        output[str(name)] = cleaned
+                return output
+            if isinstance(value, (list, tuple, set)):
+                return [item for item in (clean(item, key) for item in value) if item is not None]
+            if isinstance(value, str):
+                normalized = value.replace("\\/", "/").replace("\\\\", "\\")
+                if forbidden.search(value) or normalized.startswith(("/", "\\")) or re.match(r"^[a-z]:[\\/]", normalized, re.I):
+                    redacted = True
+                    return "[redacted]"
+                return value
+            if value is None or isinstance(value, (bool, int, float)):
+                return value
+            redacted = True
+            return None
+
+        source = payload if isinstance(payload, Mapping) else {}
+        output = {str(name): clean(item, str(name)) for name, item in source.items() if str(name) in allowed}
+        output = {name: item for name, item in output.items() if item is not None}
+        if redacted:
+            codes = output.get("reason_codes")
+            if not isinstance(codes, list):
+                codes = list(codes) if isinstance(codes, tuple) else []
+            if "promotion_payload_redacted" not in codes:
+                codes.append("promotion_payload_redacted")
+            output["reason_codes"] = codes
+            output.pop("error", None)
+        return output
+
+    def append_promotion_event(self, event_type: str, entity_id: str | None, payload: Any) -> int:
+        return self.append_event(event_type, "memory_candidate", entity_id, self._safe_promotion_payload(payload))
 
     def get_event(self, event_id: int | str) -> dict[str, Any] | None:
         with self._connection() as connection:
@@ -668,7 +744,10 @@ class StateDatabase:
         if not decision or not selected_type:
             raise ValueError("promotion event identity is required")
         stable_id = f"promotion:{decision}:{selected_type}"
-        body = self._promotion_json(payload)
+        if selected_type in {"memory_projection_activated", "memory_projection_rolled_back", "memory_projection_repair_required"} and isinstance(payload, Mapping) and not payload.get("memory_id") and entity_id:
+            payload = dict(payload)
+            payload["memory_id"] = str(entity_id)
+        body = self._promotion_json(payload, event_type=selected_type)
         terminal = {"memory_projection_activated", "memory_projection_rolled_back", "memory_projection_repair_required"}
         with self._lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")

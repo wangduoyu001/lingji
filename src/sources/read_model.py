@@ -439,8 +439,12 @@ class SourceReadModel:
         self, messages: Iterable[ResolvedMessageRef], memory_id: str, *, relation_type: str = "derived_from",
         decision_id: str | None = None,
     ) -> bool:
-        expected_refs = {ref.message_id: ref for ref in messages}
-        expected = {ref.message_id: ref.content_hash for ref in messages}
+        selected = tuple(messages)
+        message_ids = [str(ref.message_id) for ref in selected]
+        if len(message_ids) != len(set(message_ids)):
+            return False
+        expected_refs = {ref.message_id: ref for ref in selected}
+        expected = {ref.message_id: ref.content_hash for ref in selected}
         with self._connection() as connection:
             rows = connection.execute(
                 """SELECT l.message_id,l.relation_type,m.content_hash,m.external_id AS message_external_id,

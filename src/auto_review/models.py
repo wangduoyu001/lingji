@@ -125,9 +125,27 @@ class ReviewCandidate:
     extractor_version: str = ""
     structured_content: Mapping[str, Any] = field(default_factory=dict)
     risk_flags: tuple[str, ...] = ()
+    provenance_errors: tuple[str, ...] = ()
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "ReviewCandidate":
+        provenance_errors: list[str] = []
+
+        def typed_ref(item: Mapping[str, Any]) -> ProvenanceRef | None:
+            kind = item.get("kind")
+            raw_value = item.get("value")
+            content_hash = item.get("content_hash")
+            if not isinstance(kind, str) or kind not in {"message", "event", "source", "conversation", "evidence"}:
+                provenance_errors.append("provenance_typed_invalid")
+                return None
+            if not isinstance(raw_value, str) or not raw_value.strip():
+                provenance_errors.append("provenance_typed_invalid")
+                return None
+            if content_hash is not None and (not isinstance(content_hash, str) or not content_hash.strip()):
+                provenance_errors.append("provenance_typed_invalid")
+                return None
+            return ProvenanceRef(kind=kind, value=raw_value, content_hash=content_hash)
+
         def values(name: str, fallback: str = "") -> tuple[Any, ...]:
             raw = value.get(name)
             if raw in (None, ""):
@@ -143,11 +161,9 @@ class ReviewCandidate:
                 if isinstance(item, ProvenanceRef):
                     result.append(item)
                 elif isinstance(item, Mapping):
-                    result.append(ProvenanceRef(
-                        kind=str(item.get("kind") or "evidence"),
-                        value=str(item.get("value") or ""),
-                        content_hash=item.get("content_hash"),
-                    ))
+                    ref = typed_ref(item)
+                    if ref is not None:
+                        result.append(ref)
                 elif str(item).strip():
                     result.append(str(item).strip())
             return tuple(result)
@@ -185,6 +201,7 @@ class ReviewCandidate:
             extractor_version=str(value.get("extractor_version") or "").strip(),
             structured_content=dict(structured),
             risk_flags=tuple(str(item).strip().lower() for item in raw_flags if str(item).strip()),
+            provenance_errors=tuple(dict.fromkeys(provenance_errors)),
         )
 
 

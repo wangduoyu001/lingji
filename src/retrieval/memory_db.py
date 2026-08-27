@@ -8,7 +8,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable, Iterator, Mapping
 
 from src.retrieval.chunker import MarkdownChunk, MarkdownChunker
 from src.retrieval.temporal import ALL_LIFECYCLE_STATUSES, TemporalQuery, parse_instant, temporal_fields
@@ -378,23 +378,70 @@ class MemoryDatabase:
         source_kind: str, policy_version: str, decision_id: str,
         candidate_metadata: dict[str, Any] | None = None,
     ) -> Any:
-        from src.auto_review.models import ProjectionWriteResult, PromotionProjectionState
+        from src.auto_review.models import ProjectionWriteResult, PromotionProjectionState, ProvenanceRef
+        from src.sources import ResolvedMessageRef
+        import math
         normalized_id = str(memory_id or "").strip()
         owner = str(decision_id or "").strip()
         body = str(content or "").strip()
         if not normalized_id or not owner or not body:
             raise ValueError("memory_id, decision_id and content are required")
-        metadata = dict(candidate_metadata or {})
+        if not isinstance(candidate_metadata, Mapping):
+            raise ValueError("promotion_metadata_invalid")
+        metadata = dict(candidate_metadata)
+        allowed_metadata = {
+            "memory_type", "privacy", "importance", "project_ids", "project", "agent_scope",
+            "modified_at", "valid_from", "valid_to", "recall_weight", "pin_to_context",
+            "direct_user_evidence", "user_authored", "owner_confirmed_evidence", "current_authoritative",
+            "memory_tier",
+        }
+        forbidden_key = re.compile(r"token|secret|password|authorization|api[_ -]?key|fixture|path", re.I)
+        if any(forbidden_key.search(str(key)) for key in metadata):
+            raise ValueError("promotion_metadata_forbidden")
+        if any(str(key) not in allowed_metadata for key in metadata):
+            raise ValueError("promotion_metadata_invalid")
+
+        forbidden_value = re.compile(r"(?:sk-[a-z0-9]|api[_ -]?key|token|secret|password|authorization|fixture|evaluator|exception|traceback)", re.I)
+
+        def valid_metadata_value(value: Any) -> bool:
+            if value is None or isinstance(value, (bool, int, float, str)):
+                if isinstance(value, float) and not math.isfinite(value):
+                    return False
+                if isinstance(value, str):
+                    normalized = value.replace("\\/", "/").replace("\\\\", "\\")
+                    return not forbidden_value.search(value) and not normalized.startswith(("/", "\\")) and not re.match(r"^[a-z]:[\\/]", normalized, re.I)
+                return True
+            if isinstance(value, Mapping):
+                return all(isinstance(key, str) and not forbidden_key.search(key) and valid_metadata_value(item) for key, item in value.items())
+            if isinstance(value, (list, tuple, set)):
+                return all(valid_metadata_value(item) for item in value)
+            return False
+
+        if not all(valid_metadata_value(value) for value in metadata.values()):
+            raise ValueError("promotion_metadata_invalid")
         refs = []
+        seen_refs: set[tuple[str, str, str | None]] = set()
         for item in evidence_refs or ():
-            if hasattr(item, "to_dict"):
-                refs.append(item.to_dict())
-            elif hasattr(item, "message_id"):
-                refs.append({"kind": "message", "value": str(item.message_id), "content_hash": str(item.content_hash or "")})
-            elif isinstance(item, dict):
-                refs.append(dict(item))
+            if isinstance(item, ProvenanceRef):
+                ref = item.to_dict()
+                if item.kind == "message" and (not isinstance(item.content_hash, str) or not item.content_hash.strip()):
+                    raise ValueError("promotion_evidence_ref_invalid")
+            elif isinstance(item, ResolvedMessageRef):
+                ref = {"kind": "message", "value": str(item.message_id), "content_hash": item.content_hash}
+            elif isinstance(item, Mapping):
+                if set(item) - {"kind", "value", "content_hash"}:
+                    raise ValueError("promotion_evidence_ref_invalid")
+                kind, value, content_hash = item.get("kind"), item.get("value"), item.get("content_hash")
+                if not isinstance(kind, str) or kind not in {"message", "event", "source", "conversation", "evidence"} or not isinstance(value, str) or not value.strip() or (content_hash is not None and (not isinstance(content_hash, str) or not content_hash.strip())) or (kind == "message" and (not isinstance(content_hash, str) or not content_hash.strip())):
+                    raise ValueError("promotion_evidence_ref_invalid")
+                ref = {"kind": kind, "value": value, "content_hash": content_hash}
             else:
-                refs.append({"kind": "evidence", "value": str(item)})
+                raise ValueError("promotion_evidence_ref_invalid")
+            ref_key = (str(ref.get("kind")), str(ref.get("value")), ref.get("content_hash"))
+            if ref_key in seen_refs:
+                raise ValueError("promotion_evidence_ref_invalid")
+            seen_refs.add(ref_key)
+            refs.append(ref)
         refs.sort(key=lambda item: (str(item.get("kind") or ""), str(item.get("value") or ""), str(item.get("content_hash") or "")))
         relationships = {
             "evidence_refs": refs, "authority": str(authority or ""),

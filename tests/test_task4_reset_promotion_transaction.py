@@ -367,3 +367,90 @@ def test_promotion_payload_scanner_rejects_nested_or_nonfinite_data(tmp_path: Pa
     state = StateDatabase(tmp_path / "state.db")
     with pytest.raises(ValueError):
         state.record_promotion_event_once("decision-1", "memory_promotion_preparing", "memory-1", payload)
+
+
+def test_duplicate_canonical_message_refs_fail_closed_before_projection(tmp_path: Path) -> None:
+    state, memory, source = _stores(tmp_path)
+    message = _message(source)
+    candidate = ReviewCandidate(
+        memory_id="memory-duplicate", title="fact", content="fact",
+        source_refs=(message["message_id"], message["message_id"]),
+        confidence=0.9, authority="direct_user", source_kind="chat",
+    )
+    result = __import__("src.auto_review", fromlist=["AutoMemoryPromotionService"]).AutoMemoryPromotionService(
+        state_db=state, memory_db=memory, evidence_store=source
+    ).evaluate(candidate)
+    assert result["status"] == "pending_owner_review"
+    assert "provenance_duplicate_message" in result["reason_codes"]
+    assert memory.fetch_memory("memory-duplicate") is None
+
+
+def test_malformed_canonical_message_payload_is_rejected(tmp_path: Path) -> None:
+    state = StateDatabase(tmp_path / "state.db")
+    with pytest.raises(ValueError, match="promotion_payload_schema_invalid"):
+        state.record_promotion_event_once(
+            "decision-1", "memory_promotion_preparing", "memory-1",
+            {"decision_id": "decision-1", "memory_id": "memory-1", "state": "preparing",
+             "messages": ["message-1"]},
+        )
+
+
+def test_malformed_typed_provenance_returns_owner_safe_result(tmp_path: Path) -> None:
+    state, memory, source = _stores(tmp_path)
+    result = __import__("src.auto_review", fromlist=["AutoMemoryPromotionService"]).AutoMemoryPromotionService(
+        state_db=state, memory_db=memory, evidence_store=source
+    ).evaluate({
+        "memory_id": "memory-malformed", "title": "fact", "content": "fact",
+        "source_refs": [{"kind": "message", "value": 42, "content_hash": []}],
+        "confidence": 0.9, "authority": "direct_user", "source_kind": "chat",
+    })
+    assert result["status"] == "pending_owner_review"
+    assert "provenance_typed_invalid" in result["reason_codes"]
+
+
+def test_ordinary_promotion_audit_redacts_forbidden_metadata(tmp_path: Path) -> None:
+    state, memory, source = _stores(tmp_path)
+    message = _message(source)
+    candidate = ReviewCandidate(
+        memory_id="memory-safe-audit", title="fact", content="fact",
+        source_refs=(message["message_id"],), confidence=0.5,
+        authority="direct_user", source_kind="chat",
+        metadata={"token": "sk-live-secret", "path": "/Users/private/fixture"},
+    )
+    service = __import__("src.auto_review", fromlist=["AutoMemoryPromotionService"]).AutoMemoryPromotionService(
+        state_db=state, memory_db=memory, evidence_store=source
+    )
+    service.evaluate(candidate)
+    payloads = [row["payload_json"] for row in state.recent_events(100)]
+    assert all("sk-live-secret" not in payload and "/Users/private/fixture" not in payload for payload in payloads)
+
+
+def test_direct_prepare_rejects_noncanonical_refs_and_secret_metadata(tmp_path: Path) -> None:
+    _, memory, _ = _stores(tmp_path)
+    with pytest.raises(ValueError, match="promotion_evidence_ref_invalid"):
+        memory.prepare_derived_projection(
+            memory_id="memory-1", title="fact", content="fact", content_hash="hash",
+            evidence_refs=["message-1"], confidence=0.9, authority="direct_user",
+            source_kind="chat", policy_version="memory-promotion-1", decision_id="decision-1",
+            candidate_metadata={},
+        )
+    with pytest.raises(ValueError, match="promotion_metadata_forbidden"):
+        memory.prepare_derived_projection(
+            memory_id="memory-2", title="fact", content="fact", content_hash="hash",
+            evidence_refs=(), confidence=0.9, authority="direct_user", source_kind="chat",
+            policy_version="memory-promotion-1", decision_id="decision-2",
+            candidate_metadata={"token": "sk-live-secret"},
+        )
+
+
+def test_verify_duplicate_expected_message_refs_fails_closed(tmp_path: Path) -> None:
+    _, memory, source = _stores(tmp_path)
+    message = _message(source)
+    memory.prepare_derived_projection(
+        memory_id="memory-1", title="fact", content="fact", content_hash="hash",
+        evidence_refs=(), confidence=0.9, authority="direct_user", source_kind="chat",
+        policy_version="memory-promotion-1", decision_id="decision-1", candidate_metadata={},
+    )
+    actual = source.resolve_exact_message_ref(message["message_id"])
+    source.link_message_memory_batch((actual,), "memory-1", decision_id="decision-1")
+    assert source.verify_message_memory_links((actual, actual), "memory-1", decision_id="decision-1") is False
