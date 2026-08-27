@@ -202,6 +202,8 @@ def enumerate_authorized_files(source: SourceRecord) -> tuple[Path, ...]: ...
 
 **Acceptance:** A supported file placed in an authorized root reaches a truthful terminal outcome without a manual API call; unsupported/malformed data fails closed; ordinary Obsidian notes remain unread; source failure does not block another authorized source.
 
+**Task 3 Repair Round 1 ruling (2026-08-27):** Independent review at `0d7bb84` returned Spec FAIL / Quality Needs fixes with eight Important findings. The repair is limited to: terminal quarantine/failure for revoked or invalid internal jobs; zero full-body reads of ordinary Obsidian notes; robust sensitive filename exclusion; a real two-scan idempotency proof with truthful inserted/reused counts; scheduler-backed immediate scan API behavior; consistent source identity and terminal Work Fact status; exact evidence Commit metadata; and removal of automatic AI-chat Markdown publishing into the configured Obsidian Vault. The product boundary is binding: automatic chat ingestion persists the existing content-addressed raw evidence and structured read model only. It must not call the Vault document sink or create/update chat archive Markdown in the owner's configured Vault. Managed Obsidian memory input remains a separate explicitly authorized source. This repair must not add another store, parser, queue, API, indexer or UI, and must not change Task 2 lifecycle, promotion, retrieval/vector or release paths.
+
 ### Task 4: Deliver the One-Time Chinese Onboarding and Source Page
 
 **Purpose:** 首次打开时让主人只需一次中文授权，并持续看见“发现了什么、是否授权、是否接管、正在扫描什么、失败后怎么办”。
