@@ -1679,7 +1679,7 @@ Windows 重启后恢复 = 100%
 
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 3 · Authorized discovery → extraction → Work Fact
 
-- 基线：`b36c597`；产品/测试提交：`bc3636a`；分支：`codex/phase1-automatic-memory`。
+- 基线：`b36c597`；产品/测试提交：`bc3636a`；报告/文档提交：`0d7bb84`；分支：`codex/phase1-automatic-memory`。
 - 影响模块：`src/automatic_memory/discovery.py`, `src/automatic_memory/path_policy.py`, `src/automatic_memory/checkpoint.py`, `src/automatic_memory/runtime.py`, `src/extraction/queue.py`, `src/extraction/pipeline.py`, `src/control/automatic_memory_api.py` 及 Task 3 focused tests。
 - 用户可感知变化：在明确授权与 allowlist 内元数据发现来源，安全枚举受支持文件；通过既有 extraction registry/queue/pipeline/adapters 消费 internal snapshot，写入结构化 source/conversation/message 行，并暴露可追踪的 terminal Work Fact 与认证 8766 读取/动作接口。
 - 安全边界：发现阶段不读聊天正文；拒绝 filesystem root、whole home、凭证/token/cookie/private DB、symlink escape、无界递归与未知格式；Obsidian 仅复用 managed-path/frontmatter discovery；不调用任何自动晋级 seam；不接触 Production/Vault/owner data。
@@ -1695,10 +1695,36 @@ Windows 重启后恢复 = 100%
 ### 清理与回滚
 
 - 临时数据：仅 pytest `tmp_path` synthetic source files/SQLite/Vault；测试自动清理，未接触主人数据。
-- 回滚：分别回退产品/测试提交 `bc3636a` 与本条 evidence/docs 提交；不触碰正式记忆、raw evidence、Qdrant、主人设置或第三方软件。
+- 回滚：分别回退产品/测试提交 `bc3636a` 与本条 evidence/docs 提交 `0d7bb84`；不触碰正式记忆、raw evidence、Qdrant、主人设置或第三方软件。
 
 ### 最终报告
 
 - 完整报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-3-report.md`
 - 产品/测试提交：`bc3636a`
+- 报告/文档提交：`0d7bb84`
+
+## 2026-08-27 · Phase 1 Automatic Memory · Task 3 Repair Round 1 · eight Important findings
+
+- 基线/审查：`53c4ce0` / review `0d7bb84`；产品/测试提交：`f2f7312`；报告/文档提交：待提交；分支：`codex/phase1-automatic-memory`。
+- 影响模块：existing extraction queue/pipeline, SnapshotJobRunner/ScanRun/ReconciliationReport, bounded Obsidian memory scope, automatic-memory path policy/runtime/API, existing WorkStore, and repair regression tests。
+- 本轮仅修复 I1–I8：内部未授权快照终态失败并通知生命周期；Obsidian 只读有界 frontmatter 且保留 managed `lingji_memory:false` 优先级；敏感文件名大小写/分隔符变体排除；两次扫描新增/复用计数与结构化身份真实；scan API 通过已组合 runtime；WorkItem source/status 与 Outcome 一致；修正历史证据 SHA；automatic AI-chat snapshot 不调用 Vault 文档 sink、不改配置 Vault。
+- 安全边界：不修改 Task 2 lifecycle/timing edge，不调用 promotion seams，不新增 store/parser/queue/API/indexer/UI/retrieval/vector/quality/release/100k，不执行 Artifact、live 8766、Production/Vault/owner 数据。
+
+### 增量自动验收
+
+- [x] 修复 RED：`./.venv/bin/python -m pytest -q tests/test_automatic_memory_repair_round1.py --tb=short` → `8 failed, 1 warning`，八项失败分别对应 I1–I8。
+- [x] Repair focused GREEN：`./.venv/bin/python -m pytest -q tests/test_automatic_memory_repair_round1.py tests/test_automatic_memory_control_api.py tests/test_extraction_worker.py tests/test_automatic_memory_runtime_flow.py tests/test_automatic_memory_work_fact.py tests/test_automatic_memory_discovery.py tests/test_automatic_memory_obsidian.py tests/test_obsidian_memory_scope.py --tb=short` → `22 passed, 1 warning`。
+- [x] Direct runtime/scheduler/snapshot/queue/worker/adapters/structured/Work Fact/API/Obsidian regression excluding only preserved Task 2 timing test → `209 passed, 1 deselected, 7 warnings`；unfiltered run remains `209 passed, 1 failed, 7 warnings`, failure is `test_daily_integrity_job_runs_without_event` due existing one-second clamp and is not hidden or changed。
+- [x] `compileall`, `git diff --check` over repair range, `check_acceptance_sync.py`, and `check_local_execution_handoff.py` required before docs commit；handoff remains `IDLE`。
+- [ ] 不执行 Artifact、真实 UI、Production/Vault、8766 live server、owner acceptance；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。
+
+### 清理与回滚
+
+- 临时数据：仅 pytest `tmp_path` synthetic files/SQLite/Vault; 自动清理，未接触主人数据。
+- 回滚：回退产品/测试提交 `f2f7312` 与本条 evidence/docs 提交；不触碰正式记忆、raw evidence、Qdrant、主人设置或第三方软件。
+
+### 最终报告
+
+- 完整报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-3-repair-1-report.md`
+- 产品/测试提交：`f2f7312`
 - 报告/文档提交：待提交

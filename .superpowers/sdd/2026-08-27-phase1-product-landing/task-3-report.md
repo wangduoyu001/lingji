@@ -1,9 +1,9 @@
 # Phase 1 Product Landing — Task 3 Report
 
-Date: 2026-08-27  
-Branch: `codex/phase1-automatic-memory`  
-Product/test commit: `bc3636a` (`feat: connect automatic memory ingestion to work facts`)  
-Evidence/docs commit: pending
+Date: 2026-08-27
+Branch: `codex/phase1-automatic-memory`
+Product/test commit: `bc3636a` (`feat: connect automatic memory ingestion to work facts`)
+Evidence/docs commit: `0d7bb84`
 
 ## Verdict
 
