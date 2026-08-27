@@ -7,6 +7,8 @@ from .checkpoint import CheckpointStore, ResumeToken, SnapshotJobRunner
 from .watcher import AutomaticMemoryWatcher
 from .scheduler import AutomaticMemoryScheduler, ReconciliationReport
 from .runtime import AutomaticMemoryRuntime
+from .discovery import DiscoveredSource, discover_source_metadata
+from .path_policy import enumerate_authorized_files
 from .evaluation import (
     AcceptanceGate,
     AutomaticMemoryAcceptanceGate,
@@ -74,6 +76,9 @@ __all__ = [
     "AutomaticMemoryScheduler",
     "ReconciliationReport",
     "AutomaticMemoryRuntime",
+    "DiscoveredSource",
+    "discover_source_metadata",
+    "enumerate_authorized_files",
     "AcceptanceGate",
     "AutomaticMemoryAcceptanceGate",
     "CorpusRecord",

@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from src.automatic_memory import AuthorizationScope, SourceRegistry
+from src.automatic_memory import AuthorizationScope, SourceRegistry, discover_source_metadata
 
 
 class AutomaticMemoryAuthorizationRequest(BaseModel):
@@ -29,6 +29,10 @@ class AutomaticMemoryScanRequest(BaseModel):
 
 class AutomaticMemoryScanActionRequest(BaseModel):
     scan_id: str = Field(min_length=1)
+
+
+class AutomaticMemoryRuntimeActionRequest(BaseModel):
+    confirmation: bool = True
 
 
 def register_automatic_memory_routes(
@@ -94,9 +98,44 @@ def register_automatic_memory_routes(
         result = call(lambda: registry.retry_scan(request.scan_id))
         return asdict(result)
 
+    @app.post("/api/automatic-memory/resume", dependencies=secured)
+    def resume_scan(request: AutomaticMemoryScanActionRequest) -> dict[str, Any]:
+        # Resume is the durable retry transition for a paused scan.
+        result = call(lambda: registry.retry_scan(request.scan_id))
+        return asdict(result)
+
     @app.get("/api/automatic-memory/sources", dependencies=secured)
     def list_sources() -> list[dict[str, Any]]:
         return [asdict(item) for item in registry.list_sources()]
+
+    @app.get("/api/automatic-memory/discovered", dependencies=secured)
+    def discovered_sources() -> list[dict[str, Any]]:
+        settings = getattr(control, "settings", control)
+        return [asdict(item) for item in discover_source_metadata(settings)]
+
+    @app.get("/api/automatic-memory/scans", dependencies=secured)
+    def list_scans(limit: int = 50) -> list[dict[str, Any]]:
+        return [dict(item) for item in registry.state_db.list_automatic_memory_scans()[: min(max(int(limit), 1), 200)]]
+
+    @app.get("/api/automatic-memory/summary", dependencies=secured)
+    def scan_summary() -> dict[str, Any]:
+        scans = registry.state_db.list_automatic_memory_scans()
+        counts: dict[str, int] = {}
+        for scan in scans:
+            status = str(scan.get("status") or "unknown")
+            counts[status] = counts.get(status, 0) + 1
+        latest = scans[0] if scans else None
+        return {
+            "counts": counts,
+            "total": len(scans),
+            "latest": dict(latest) if latest else None,
+            "progress": {
+                "current": int((latest or {}).get("progress") or 0),
+                "total": (latest or {}).get("total"),
+            },
+            "last_error": (latest or {}).get("last_error"),
+            "next_action": "retry failed scan" if latest and latest.get("status") == "failed" else "wait for watcher or scheduled reconciliation",
+        }
 
     @app.get("/api/automatic-memory/runtime", dependencies=secured)
     def runtime_status() -> dict[str, Any]:
@@ -115,6 +154,22 @@ def register_automatic_memory_routes(
                 "last_global_error": None,
             }
         return dict(runtime.status())
+
+    @app.post("/api/automatic-memory/pause-runtime", dependencies=secured)
+    def pause_runtime(request: AutomaticMemoryRuntimeActionRequest) -> dict[str, Any]:
+        del request
+        runtime = getattr(control, "runtime", None)
+        if runtime is None:
+            raise HTTPException(status_code=409, detail="automatic-memory runtime is not composed")
+        return dict(runtime.pause())
+
+    @app.post("/api/automatic-memory/resume-runtime", dependencies=secured)
+    def resume_runtime(request: AutomaticMemoryRuntimeActionRequest) -> dict[str, Any]:
+        del request
+        runtime = getattr(control, "runtime", None)
+        if runtime is None:
+            raise HTTPException(status_code=409, detail="automatic-memory runtime is not composed")
+        return dict(runtime.resume())
 
     @app.get("/api/automatic-memory/scans/{scan_id}", dependencies=secured)
     def get_scan(scan_id: str) -> dict[str, Any]:

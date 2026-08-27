@@ -145,3 +145,24 @@ def test_automatic_memory_authorize_scan_pause_retry_and_reopen(tmp_path: Path):
         )
         assert persisted.status_code == 200
         assert persisted.json()["status"] == "cancelled"
+
+
+def test_automatic_memory_discovery_scan_summary_and_runtime_actions_are_secured(tmp_path: Path):
+    settings = SimpleNamespace(storage_path=tmp_path / "storage", vault_path=tmp_path / "vault", generic_history_dir=tmp_path / "history")
+    settings.storage_path.mkdir()
+    settings.generic_history_dir.mkdir()
+    control = LocalControlService.__new__(LocalControlService)
+    control.settings = settings
+    control.state_db = StateDatabase(settings.storage_path / "lingji_state.db")
+    app = create_control_app(settings, service=control, token="local-secret")
+    with TestClient(app) as client:
+        assert client.get("/api/automatic-memory/discovered").status_code == 401
+        headers = {"X-LingJi-Token": "local-secret"}
+        discovered = client.get("/api/automatic-memory/discovered", headers=headers)
+        assert discovered.status_code == 200
+        assert any(item["kind"] == "generic_ai_history" for item in discovered.json())
+        scans = client.get("/api/automatic-memory/scans", headers=headers)
+        assert scans.status_code == 200
+        summary = client.get("/api/automatic-memory/summary", headers=headers)
+        assert summary.status_code == 200
+        assert summary.json()["total"] == 0

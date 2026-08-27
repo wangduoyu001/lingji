@@ -27,6 +27,10 @@ def _canonical_root(root: str) -> str:
         raise ValueError("source root is required")
     candidate = Path(root).expanduser()
     absolute = Path(os.path.abspath(os.path.normpath(str(candidate))))
+    if absolute == Path(absolute.anchor) or absolute == Path.home().resolve(strict=False):
+        raise PermissionError("filesystem root and whole home directory are not valid source roots")
+    if absolute.name.casefold() in {".env", "credentials", "credential", "auth", "token", "cookie", "cookies", "private", "secret", "secrets"} or absolute.suffix.casefold() in {".db", ".sqlite", ".sqlite3"}:
+        raise PermissionError("credential, auth, token, cookie and private database roots are not allowed")
     current = absolute
     while current != current.parent:
         if current.is_symlink():

@@ -388,6 +388,7 @@ class _SQLiteExtractionQueueBase:
         worker_id: str | None = None,
         lease_token: str | None = None,
         retry_delay_seconds: int | None = None,
+        terminal: bool = False,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         now = now or datetime.now()
@@ -407,7 +408,7 @@ class _SQLiteExtractionQueueBase:
                 raise RuntimeError(f"Extraction lease lost before failure handling: {job_id}")
             attempts = int(row["attempts"])
             max_attempts = int(row["max_attempts"])
-            should_retry = attempts < max_attempts
+            should_retry = not terminal and attempts < max_attempts
             delay = retry_delay_seconds
             if delay is None:
                 delay = min(60 * (2 ** max(attempts - 1, 0)), 3600)
@@ -429,6 +430,20 @@ class _SQLiteExtractionQueueBase:
                     job_id,
                 ),
             )
+        return self.get(job_id)
+
+    def release_claim(self, job_id: str, *, worker_id: str, lease_token: str) -> dict[str, Any]:
+        """Return a claimed job to queued when admission is temporarily absent."""
+        now = datetime.now()
+        with self._lock, self._connection() as connection:
+            updated = connection.execute(
+                """UPDATE extraction_jobs SET status='queued', locked_at=NULL, locked_by=NULL,
+                   lease_token=NULL, heartbeat_at=NULL, progress_message='awaiting authorization', updated_at=?
+                   WHERE job_id=? AND status='running' AND locked_by=? AND lease_token=?""",
+                (self._iso(now), job_id, worker_id, lease_token),
+            )
+            if updated.rowcount != 1:
+                raise RuntimeError(f"Extraction lease lost before release: {job_id}")
         return self.get(job_id)
 
     def release_stale(
@@ -602,6 +617,7 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
         raw_id: str,
         sha256: str,
         input_path: Path | str,
+        source_type: str = "",
     ) -> dict[str, Any]:
         """Insert a snapshot job while serializing against source revoke."""
 
@@ -612,10 +628,12 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
         job_id = f"LJ-JOB-{uuid4().hex[:12].upper()}"
         normalized_path = str(Path(input_path).expanduser())
         payload = {
+            "scan_id": scan_id,
             "source_id": source_id,
             "relative_path": relative_path,
             "raw_id": raw_id,
             "sha256": sha256,
+            "source_type": str(source_type or ""),
         }
         with self._lock, self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -653,7 +671,7 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
                     automatic_memory_source_id,
                     payload_json, options_json, idempotency_key, status, priority,
                     max_attempts, next_run_at, created_at, updated_at
-                ) VALUES (?, 'automatic_memory_snapshot', 'automatic_memory_snapshot', '1', ?, ?, ?, ?, ?, 'queued', 100, 3, ?, ?, ?)
+                ) VALUES (?, 'automatic_memory_snapshot', 'automatic_memory_snapshot', '1', ?, ?, ?, ?, ?, 'queued', 100, 1, ?, ?, ?)
                 """,
                 (
                     job_id,

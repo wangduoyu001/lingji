@@ -18,6 +18,12 @@ from .checkpoint import SnapshotJobRunner
 from .scheduler import AutomaticMemoryScheduler
 from .snapshot import ConsistentSnapshot
 from .source_registry import SourceRegistry
+from .models import SourceRecord
+from .path_policy import enumerate_authorized_files
+from src.work.capture_bridge import CaptureWorkBridge
+from src.work.models import ExecutionEvent, WorkItem
+from src.work.projector import WorkProjector
+from src.work.store import WorkStore
 
 
 class AutomaticMemoryRuntime:
@@ -77,12 +83,12 @@ class AutomaticMemoryRuntime:
                 self.state_db,
                 # File enumeration is intentionally not part of Task 2.
                 # Task 3 supplies the authorized path policy.
-                path_provider=path_provider or (lambda _scan, _source: ()),
+                path_provider=path_provider or self._authorized_paths,
             )
             scheduler = AutomaticMemoryScheduler(
                 self.state_db,
                 self.registry,
-                scan_runner=self.runner.run,
+                scan_runner=self._run_scan,
                 poll_seconds=float(getattr(settings, "scheduler_poll_seconds", 60.0)),
                 debounce_seconds=float(
                     getattr(settings, "automatic_memory_debounce_seconds", 5.0)
@@ -110,6 +116,11 @@ class AutomaticMemoryRuntime:
         self._paused = False
         self._cleanup_pending = False
         self._cleanup_errors: list[str] = []
+        self.work_store = WorkStore(state_db)
+        self.work_projector = WorkProjector(self.work_store)
+        self.work_bridge = CaptureWorkBridge(self.work_store)
+        if hasattr(self.pipeline, "add_lifecycle_callback"):
+            self.pipeline.add_lifecycle_callback(self._on_extraction_lifecycle)
 
     def _validate_canonical_state_path(self) -> None:
         def verified_path(value: Any, label: str) -> Path:
@@ -272,10 +283,74 @@ class AutomaticMemoryRuntime:
     def scan_now(self, source_id: str) -> dict[str, object]:
         result = self.scheduler.reconcile(source_id, reason="manual")
         if is_dataclass(result):
-            return asdict(result)
+            value = asdict(result)
+            value.update({"source_id": source_id, "work_id": self._scan_work_id_from_source(source_id)})
+            return value
         if isinstance(result, dict):
-            return dict(result)
+            value = dict(result)
+            value.setdefault("source_id", source_id)
+            value.setdefault("work_id", self._scan_work_id_from_source(source_id))
+            return value
         return {"source_id": source_id, "result": result}
+
+    def _scan_work_id_from_source(self, source_id: str) -> str | None:
+        scans = self.state_db.list_automatic_memory_scans(source_id)
+        return f"automatic-memory:{scans[0]['scan_id']}" if scans else None
+
+    def _authorized_paths(self, _scan: Any, source: Any) -> tuple[Path, ...]:
+        if isinstance(source, SourceRecord):
+            record = source
+        else:
+            record = SourceRecord(
+                source_id=str(source["source_id"]), kind=str(source["kind"]), root=str(source["root"]),
+                status=str(source["status"]), capability=str(source.get("capability") or "metadata_discovery"),
+                policy_version=str(source.get("policy_version") or "automatic-memory-source-v1"),
+            )
+        return enumerate_authorized_files(record)
+
+    def _run_scan(self, scan_id: str, source_id: str, reason: str = "scheduled") -> Any:
+        work_id = f"automatic-memory:{scan_id}"
+        source = next((item for item in self.registry.list_sources() if item.source_id == source_id), None)
+        title = f"扫描 {source.kind if source else source_id}"
+        work = self.work_store.get_work(work_id)
+        if work is None:
+            work = self.work_store.create_work(WorkItem(work_id=work_id, title=title, source_id=scan_id, status="accepted", owner_approved=True))
+            self.work_store.append_event(ExecutionEvent(work_id=work_id, event_id=f"scan:{scan_id}:started", event_type="scan.started", detail={"scan_id": scan_id, "source_id": source_id, "reason": reason}))
+        try:
+            result = self.runner.run(scan_id)
+            status = getattr(result, "status", None) or (result.get("status") if isinstance(result, dict) else None)
+            self.work_store.append_event(ExecutionEvent(work_id=work_id, event_id=f"scan:{scan_id}:{status or 'progress'}", event_type="scan.completed" if status == "completed" else "scan.progress", detail={"scan_id": scan_id, "status": status, "progress": getattr(result, "progress", None)}))
+            if status == "failed":
+                self.work_bridge.record_failure(work_id, stage="snapshot", reason=str(getattr(result, "last_error", None) or "automatic-memory snapshot failed"), retryable=True, evidence={"scan_id": scan_id})
+            else:
+                self._maybe_finalize_scan_work(scan_id)
+            return result
+        except Exception as exc:
+            self.work_bridge.record_failure(work_id, stage="snapshot", reason=str(exc)[:2000], retryable=True, evidence={"scan_id": scan_id})
+            raise
+
+    def _on_extraction_lifecycle(self, phase: str, job: Any, result: Any, error: str | None) -> None:
+        if str(job.get("source_type") or "") != "automatic_memory_snapshot":
+            return
+        payload = job.get("payload") if isinstance(job, dict) else None
+        if not isinstance(payload, dict) or not payload.get("scan_id"):
+            return
+        scan_id = str(payload["scan_id"])
+        work_id = f"automatic-memory:{scan_id}"
+        self.work_store.append_event(ExecutionEvent(work_id=work_id, event_id=f"extraction:{job.get('job_id')}:{phase}", event_type=f"extraction.{phase}", detail={"job_id": job.get("job_id"), "error": error, "source_type": payload.get("source_type")}))
+        self._maybe_finalize_scan_work(scan_id)
+
+    def _maybe_finalize_scan_work(self, scan_id: str) -> None:
+        work_id = f"automatic-memory:{scan_id}"
+        if self.work_store.get_work(work_id) is None:
+            return
+        jobs = [item for item in self.queue.list_page(source_type="automatic_memory_snapshot", limit=200) if str((item.get("payload") or {}).get("scan_id") or "") == scan_id]
+        if any(item.get("status") not in {"completed", "failed", "cancelled"} for item in jobs):
+            return
+        if any(item.get("status") in {"failed", "cancelled"} for item in jobs):
+            self.work_bridge.record_failure(work_id, stage="extraction", reason="一个或多个来源文件提取失败，其他来源仍可继续", retryable=False, evidence={"scan_id": scan_id, "failed_jobs": [item.get("job_id") for item in jobs if item.get("status") in {"failed", "cancelled"}]})
+            return
+        self.work_bridge.complete_extraction(work_id, f"扫描完成，已处理 {len(jobs)} 个来源文件", evidence={"scan_id": scan_id, "jobs": len(jobs), "next_actor": "system"})
 
     def pause(self) -> dict[str, object]:
         self.scheduler.pause()

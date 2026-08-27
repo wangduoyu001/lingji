@@ -340,6 +340,7 @@ class SnapshotJobRunner:
                         raw_id=result.raw_id,
                         sha256=result.sha256,
                         input_path=raw_path,
+                        source_type=str(source.get("kind") or ""),
                     )
                 except Exception as exc:
                     raise RuntimeError(

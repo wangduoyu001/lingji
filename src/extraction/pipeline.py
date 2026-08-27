@@ -15,6 +15,7 @@ from .queue import SQLiteExtractionQueue
 from .registry import AdapterRegistry
 from .sink import VaultExtractionSink
 from .structured_sink import StructuredReadModelSink
+from src.storage import StateDatabase
 
 logger = logging.getLogger("lingji.extraction")
 
@@ -389,7 +390,9 @@ class ExtractionPipeline:
             "jobs": [],
         }
         for _ in range(max(int(limit), 1)):
-            outcome = self.process_next(worker_id=worker_id)
+            outcome = self.process_internal_next(worker_id=worker_id)
+            if outcome is None:
+                outcome = self.process_next(worker_id=worker_id)
             if outcome is None:
                 break
             summary["processed"] += 1
@@ -406,10 +409,114 @@ class ExtractionPipeline:
         summary["queue"] = self.queue.stats()
         return summary
 
+    def process_internal_next(self, *, worker_id: str | None = None) -> dict[str, Any] | None:
+        """Consume one content-addressed automatic-memory snapshot."""
+        worker_id = worker_id or self._worker_id()
+        job = self.queue.claim(worker_id, allowed_source_types={"automatic_memory_snapshot"})
+        if not job:
+            return None
+        lease_token = str(job.get("lease_token") or "")
+        try:
+            result = self._execute_internal_snapshot(job)
+            completed = self.queue.complete(job["job_id"], result, worker_id=worker_id, lease_token=lease_token)
+            self._notify_lifecycle("completed", {**job, "status": "completed"}, result, None)
+            return {"job": completed, "result": result}
+        except PermissionError as exc:
+            released = self.queue.release_claim(job["job_id"], worker_id=worker_id, lease_token=lease_token)
+            return {"job": released, "error": str(exc)}
+        except Exception as exc:
+            logger.exception("Automatic-memory snapshot job failed: %s", job["job_id"])
+            failed = self.queue.fail(job["job_id"], str(exc), worker_id=worker_id, lease_token=lease_token, terminal=True)
+            self._notify_lifecycle("failed", {**job, **failed}, None, str(exc))
+            return {"job": failed, "error": str(exc)}
+
+    def _execute_internal_snapshot(self, job: Mapping[str, Any]) -> dict[str, Any]:
+        payload = job.get("payload")
+        if not isinstance(payload, Mapping):
+            raise ValueError("malformed automatic-memory snapshot payload")
+        source_id = str(payload.get("source_id") or "").strip()
+        if source_id:
+            state_db = StateDatabase(self.queue.path)
+            if not state_db.is_automatic_memory_source_authorized(source_id):
+                raise PermissionError("automatic-memory source authorization is no longer active")
+        source_type = str(payload.get("source_type") or "").strip()
+        raw_id = str(payload.get("raw_id") or "").strip()
+        expected_sha = str(payload.get("sha256") or "").strip().lower()
+        if not source_id or source_type in {"", "automatic_memory_snapshot"} or not raw_id or len(expected_sha) != 64 or any(char not in "0123456789abcdef" for char in expected_sha):
+            raise ValueError("malformed automatic-memory snapshot metadata")
+        state_db = StateDatabase(self.queue.path)
+        source = state_db.get_automatic_memory_source(source_id)
+        if source is None or str(source.get("kind") or "") != source_type:
+            raise ValueError("automatic-memory snapshot source type does not match authorization")
+        raw_path = Path(str(job.get("input_path") or "")).expanduser()
+        if not raw_path.is_file() or raw_path.is_symlink():
+            raise FileNotFoundError("automatic-memory raw snapshot is unavailable")
+        if raw_path.name != raw_id:
+            raise ValueError("automatic-memory raw snapshot identity mismatch")
+        actual_sha = sha256_file(raw_path)
+        if actual_sha != expected_sha:
+            raise ValueError("automatic-memory raw snapshot hash mismatch")
+        relative_path = str(payload.get("relative_path") or "")
+        if not relative_path or Path(relative_path).is_absolute() or ".." in Path(relative_path).parts:
+            raise ValueError("malformed automatic-memory relative path")
+        request_path = raw_path
+        temporary_path: Path | None = None
+        original_suffix = Path(relative_path).suffix.lower()
+        if original_suffix and raw_path.suffix.lower() != original_suffix:
+            temporary_path = raw_path.parent / f".automatic-memory-{uuid4().hex}{original_suffix}"
+            try:
+                os.link(raw_path, temporary_path)
+            except OSError as exc:
+                raise ValueError(f"unable to stage raw snapshot for adapter dispatch: {exc}") from exc
+            request_path = temporary_path
+        request = ExtractionRequest(job_id=str(job["job_id"]), source_type=source_type, input_path=request_path,
+                                    payload={"source_id": source_id, "relative_path": relative_path},
+                                    options={"automatic_memory": True})
+        try:
+            adapter = self.registry.resolve(source_type, request_path, request.payload)
+            batch = adapter.extract(request)
+            raw_snapshot = {"raw_path": str(raw_path), "sha256": actual_sha, "size": raw_path.stat().st_size, "kind": source_type}
+            vault_result = self.sink.write_batch(batch, adapter_name=adapter.name, adapter_version=adapter.version, raw_snapshot=raw_snapshot)
+            result: dict[str, Any] = {"execution_id": request.job_id, "source_type": source_type, "adapter": adapter.name, "adapter_version": adapter.version, **vault_result}
+            indexing_succeeded = self.on_documents_written is None
+            if self.on_documents_written:
+                try:
+                    self.on_documents_written(result)
+                    result["indexed"] = True
+                    indexing_succeeded = True
+                except Exception as exc:
+                    result["indexed"] = False
+                    result["index_error"] = safe_extraction_error(exc, message="Post-extraction index synchronization failed; see local logs")
+            result["structured_read_model"] = self._write_structured(batch=batch, raw_snapshot=raw_snapshot, vault_results=vault_result,
+                                                                      execution_id=request.job_id, adapter_name=adapter.name,
+                                                                      adapter_version=adapter.version, indexing_succeeded=indexing_succeeded)
+            return result
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+
     def process_job(self, job_id: str, *, worker_id: str | None = None) -> dict[str, Any]:
         current = self.queue.get(job_id)
         if current["status"] == "completed":
             return {"job": current, "result": current.get("result") or {}}
+        if current.get("source_type") == "automatic_memory_snapshot":
+            claimed = self.queue.claim(worker_id or self._worker_id(), job_id=job_id,
+                                       allowed_source_types={"automatic_memory_snapshot"})
+            if claimed is None:
+                return {"job": self.queue.get(job_id), "result": {}}
+            lease_token = str(claimed.get("lease_token") or "")
+            try:
+                result = self._execute_internal_snapshot(claimed)
+                completed = self.queue.complete(job_id, result, worker_id=worker_id or self._worker_id(), lease_token=lease_token)
+                self._notify_lifecycle("completed", {**claimed, "status": "completed"}, result, None)
+                return {"job": completed, "result": result}
+            except PermissionError as exc:
+                released = self.queue.release_claim(job_id, worker_id=worker_id or self._worker_id(), lease_token=lease_token)
+                return {"job": released, "error": str(exc)}
+            except Exception as exc:
+                failed = self.queue.fail(job_id, str(exc), worker_id=worker_id or self._worker_id(), lease_token=lease_token, terminal=True)
+                self._notify_lifecycle("failed", {**claimed, **failed}, None, str(exc))
+                return {"job": failed, "error": str(exc)}
         outcome = self.process_next(worker_id=worker_id, job_id=job_id)
         if outcome is None:
             return {"job": self.queue.get(job_id), "result": {}}
