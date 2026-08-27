@@ -1630,3 +1630,28 @@ Windows 重启后恢复 = 100%
 - 完整报告：`.superpowers/sdd/2026-08-27-promotion-safety-closeout/task-0-report.md`
 - 产品提交：`22be155e30279fdd43384a02cc2a456efb805144`（`fix: close promotion safety boundary`）
 - 报告/文档提交：待提交（`docs: record promotion safety closeout`）
+
+## 2026-08-27 · Phase 1 Automatic Memory · Task 1 · Thin quality runner and authority boundary
+
+- 基线：`5c3bed8f8a4fb77632b41ec7e0c23c8ebeb72a78`
+- 影响模块：`src/automatic_memory/quality_gate.py`, `src/automatic_memory/quality_evidence.py`, quality CLI/validation wiring and reset runner tests
+- 风险等级：P0
+- 用户可感知变化：无新的产品能力；质量报告仅发布真实、可重算的本地证据，并在 4R2 readiness 前保持 `functional_status=NOT_EVALUATED` / `phase_status=NOT_EVALUATED`。
+- 数据与安全边界：质量运行只使用临时 Acceptance roots 和仓库冻结 synthetic fixtures；禁止读取或写入 Production/Vault，禁止触碰真实聊天、凭证、Qdrant、Desktop 或 100k 规模数据。
+
+### 增量自动验收
+
+- [ ] Task 6 RED/GREEN runner boundary tests：缺失/无效 evidence 不进入 `EvaluationReport`，measured failure 保持 `FAIL`，cleanup failure 覆盖 pre-cleanup 结论，release 在 4R2 readiness 前以 `BLOCKED_4R2_REQUIRED` 拒绝 100k。
+- [ ] Task 1–5 reset regressions、冻结 corpus/questions SHA-256、`py_compile`、`git diff --check`、acceptance sync、local handoff。
+- [ ] 不执行 Artifact、真实 UI、主人观察、Production/Vault、4R2 或 100k；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。
+
+### 清理与回滚
+
+- 临时数据：仅 pytest `tmp_path` / OS temporary Acceptance roots，测试完成自动清理；不接触主人数据。
+- 回滚：分别回退 Task 1 产品/测试提交与本条文档提交；不触碰 Vault、raw evidence、正式记忆、Qdrant、主人设置或第三方软件。
+
+### 最终报告
+
+- 完整报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-1-report.md`
+- 产品/测试提交：待提交
+- 文档提交：待提交

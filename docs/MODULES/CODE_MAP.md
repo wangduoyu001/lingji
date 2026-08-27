@@ -396,7 +396,19 @@ src/retrieval/context_pack.py
 src/gateway/memory_gateway.py
 src/mcp_server.py
 src/automatic_memory/evaluation.py
-= existing RAG/ContextPack/MCP extension and separate 100-question quality gate
+= existing RAG/ContextPack/MCP extension and frozen 100-question evaluator
+
+src/automatic_memory/quality_gate.py::AcceptanceRoots / run_quality_gate
+= thin Task 4R reset orchestration over existing contracts; temporary Acceptance
+  roots only, no Production/Vault settings access, nullable unmeasured evidence
+  and `NOT_EVALUATED` before 4R2 readiness. `publish_quality_envelope` is the
+  only repository report writer; `run_100k_benchmark` is blocked until 4R2.
+
+Focused validation:
+
+```powershell
+python -m pytest -q tests/evaluation/test_task4_reset_runner.py tests/test_task4_reset_validation_guard.py
+```
 
 Tasks 10–11:
 scripts/validate.ps1

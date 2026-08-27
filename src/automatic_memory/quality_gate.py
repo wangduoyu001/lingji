@@ -103,15 +103,18 @@ class AcceptanceRoots:
     lease_marker: Path
 
     def validate_temporary_isolation(self) -> None:
-        root = self.root.expanduser().resolve(strict=False)
-        if not root.is_absolute() or not root.name.startswith("lingji-task4r-"):
+        declared_root = self.root.expanduser()
+        if not declared_root.is_absolute() or declared_root.is_symlink():
+            raise ValueError("invalid acceptance root")
+        root = declared_root.resolve(strict=False)
+        if not root.name.startswith("lingji-task4r-"):
             raise ValueError("invalid acceptance root")
         if not root.exists() or not root.is_dir() or root.is_symlink():
             raise ValueError("acceptance root unavailable")
         children = (self.storage_root, self.vault_root, self.output_root, self.lease_marker)
         for child in children:
             path = child.expanduser()
-            if path.is_symlink():
+            if any(part.is_symlink() for part in (Path(path.anchor), *path.parents, path) if part.exists()):
                 raise ValueError("acceptance path cannot be a symlink")
             resolved = path.resolve(strict=False)
             try:
