@@ -1579,3 +1579,36 @@ Windows 重启后恢复 = 100%
 - 仓库报告：`docs/TEST_REPORTS/PHASE1_TASK8_WORK_TRANSITION_CLOSEOUT.md`
 - 产品提交：`31a14a4`
 - 报告/文档提交：待提交
+
+## 2026-08-27 · Phase 1 Automatic Memory · Promotion safety closeout
+
+- 基线：`a2023dc9bdc5e4036f9dfbd128e71494e89a4660`
+- 影响模块：`src/auto_review/promotion.py`, `src/storage/state_db.py`, promotion transaction/recovery tests
+- 风险等级：P0
+- 用户可感知变化：普通晋级审计事件必须经过 `append_promotion_event`; 缺少安全记录器时 fail-closed；递归非有限数值在 SQLite 写入前拒绝；候选/结果序列化对非有限值保持 owner-safe。
+- 数据与安全边界：不新增事实源、数据库、队列或服务；事件 payload 继续 allowlist/redact，禁止 token、owner path、fixture/evaluator label 与 exception 文本；仅 pytest `tmp_path` SQLite、synthetic Vault 与真实 MemoryGateway 读取链路。
+
+### 新增或修改的自动验收
+
+- [x] RED serialization：`./.venv/bin/python -m pytest -q tests/test_task4_reset_promotion_transaction.py -k 'safe_promotion_event_boundary or non_finite_nested_values'` → `4 failed, 48 deselected`。
+- [x] GREEN serialization：同一命令 → `4 passed, 48 deselected`。
+- [x] RED recovery matrix：新增 `tests/test_promotion_recovery_matrix.py`；12 个命名案例（case 11 含四种 temporal mode）均运行真实 SQLite durable rows、reopen、trigger/race、raw retrieval 与 Gateway 证据；已有行为记录为 baseline，不据此修改 recovery 代码。
+- [x] GREEN focused：Task 4 promotion/recovery 与 Task 1–7 temporal/context 回归 → `150 passed, 2 existing warnings`。
+- [ ] 未执行 Artifact、真实 UI、主人观察、Production/Vault 数据或本机 ACTIVE 验收任务；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。
+
+### 回归项
+
+- [x] 12-case durable recovery matrix：second-link rollback；activation retry；独立连接竞争；start/prepare/link/activation 各重启边界；repair-required 单调性；NULL/foreign link ownership；authoritative SQLite temporal filter；raw/Gateway identity parity；promotion audit missing/extra/duplicate 计数。
+- [x] 固定 Task 2 fixture SHA 未改变：corpus `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94`；questions `338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612`。
+- [x] `py_compile`、`git diff --check`、acceptance sync、local handoff 均纳入本轮完成门禁。
+
+### 清理与回滚
+
+- 临时数据：仅 pytest `tmp_path` synthetic SQLite/Vault；测试结束自动清理，未接触 Production、Vault、Qdrant 或主人配置。
+- 回滚：分别回退本轮产品/测试提交与本条文档提交；不触碰正式记忆、原始证据、主人配置或第三方软件。
+
+### 最终报告
+
+- 完整报告：`.superpowers/sdd/2026-08-27-promotion-safety-closeout/task-0-report.md`
+- 产品提交：`22be155e30279fdd43384a02cc2a456efb805144`（`fix: close promotion safety boundary`）
+- 报告/文档提交：待提交（`docs: record promotion safety closeout`）
