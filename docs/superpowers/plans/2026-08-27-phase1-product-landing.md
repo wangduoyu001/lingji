@@ -152,6 +152,23 @@ class AutomaticMemoryRuntime:
 
 **Final Task 2 disposition (2026-08-27):** The packaged runtime now owns one canonical state database/queue, starts the real scheduler, worker and watcher, attaches newly authorized sources without restart, exposes authenticated truthful runtime state, and passes its focused and broader runtime regressions. The final independent review retained one Important lifecycle edge: after an initially uncooperative watcher later exits, a stale scheduler cleanup error can keep the reported state at `degraded/cleanup_pending` instead of returning to `stopped`. The two-repair cap is exhausted. Task 2 is therefore accepted only as a development dependency for Tasks 3–5, not as release evidence. Those tasks must preserve truthful degraded/needs-restart presentation and must never translate this state to “已停止”. Exact sidecar process exit is the terminal cleanup boundary for this rare path. Task 6, release and Artifact acceptance remain blocked until a narrowly scoped lifecycle follow-up proves stale cleanup state is cleared or the shutdown contract is independently revised. Task 3 may continue because normal start, live authorization, scanning ownership and ordinary shutdown are verified; it must not modify this lifecycle edge or claim packaged shutdown acceptance.
 
+### Task 6A: Close the Late Watcher Cleanup Lifecycle
+
+**Boundary:** This is the separately approved, bounded closeout for the single Task 2 final-review lifecycle blocker. It is not Task 2 Repair Round 3 and does not reopen runtime composition, discovery, adapters, snapshot consumption, Work Fact, UI, promotion, retrieval/vector, data models or API families.
+
+**Files:**
+- Modify: `src/automatic_memory/scheduler.py`
+- Test: `tests/test_automatic_memory_runtime.py`
+- Docs/evidence: `docs/PROJECT_STATUS.md`, `docs/MODULES/CODE_MAP.md`, `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`, `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6a-report.md`
+
+- [x] Write and run a real-thread RED: bounded first stop/revoke observes a surviving watcher and reports `degraded/cleanup_pending`; after the event seam releases and the thread exits naturally, retry remains stale `degraded` before the fix.
+- [x] Implement the smallest ownership correction: serialize concurrent scheduler cleanup retries and clear source/scheduler cleanup errors only after an empty survivor observation; preserve degraded status while any watcher survives.
+- [x] Run focused Task 2 lifecycle/packaged composition, Task 3 admission/runtime, Task 4/5 API-contract regressions, packaged smoke, compileall, diff-check, acceptance sync and local handoff. Keep Task6/release/Artifact unclaimed.
+
+**Acceptance:** Real watcher threads cannot be reported stopped while alive; a later stop/retry after their natural exit clears stale cleanup state and reports `stopped` consistently across runtime, scheduler and source registry. Process-exit cleanup remains covered by the existing packaged-wrapper subprocess boundary; no live service or Artifact is run.
+
+**Status (2026-08-28):** Implementation/focused evidence `IMPLEMENTED_FOCUSED_PASS`, product/tests `15eb4433c9d6c3ba218e89d50bec84987ad35915`, independent Task6A review pending. Task 2's single lifecycle blocker is closed in code/tests for Task6 composition only; Task 6/release/Artifact/owner acceptance are not complete.
+
 ### Task 3: Connect Authorized Discovery, Snapshot and Extraction to Work Fact
 
 **Purpose:** 让已有来源适配器从授权目录完成“发现 → 快照 → 队列 → 解析 → 索引/记忆候选 → Work Fact”，而不是只停留在 raw/job。

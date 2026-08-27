@@ -337,8 +337,8 @@ run_control_api.py
 src/control/service.py
 src/control/api.py
 src/control/automatic_memory_api.py
-= packaged worker/scheduler/watcher/checkpoint composition, exact-instance lifecycle and authenticated runtime status; snapshot admission reuses the existing checkpoint/queue path and terminal consumer remains Task 3
-Focused tests: `tests/test_automatic_memory_runtime.py`, `tests/test_packaged_control_api.py`, `tests/test_automatic_memory_scheduler.py`; Desktop smoke: `desktop/lingji-control/scripts/runtime-sidecar-smoke.mjs`
+= packaged worker/scheduler/watcher/checkpoint composition, exact-instance lifecycle and authenticated runtime status; snapshot admission reuses the existing checkpoint/queue path and terminal consumer remains Task 3. Task 6A closes the bounded late-watcher cleanup retry lifecycle in `src/automatic_memory/scheduler.py` without changing the API/state family.
+Focused tests: `tests/test_automatic_memory_runtime.py`, `tests/test_packaged_control_api.py`, `tests/test_automatic_memory_scheduler.py`, `tests/test_automatic_memory_watcher.py`; Desktop smoke: `desktop/lingji-control/scripts/runtime-sidecar-smoke.mjs`
 
 Task 3:
 src/automatic_memory/discovery.py

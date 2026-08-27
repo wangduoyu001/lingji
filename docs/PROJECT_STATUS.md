@@ -38,7 +38,7 @@ Phase 1 PASS 后，Phase 2 第一优先级固定为 **Opportunity Center / 机�
 
 当前 `LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。在 Work Fact 收口、固定 100 问评测、统一 RAG、质量/规模门禁和同 SHA Artifact 锁定之前，不执行新的真实安装或 M5 主人验收。
 
-Task 3 Repair Round 1 已在本分支产品提交 `f2f7312` 完成八项重要缺口修复；最终 Repair Round 2 产品提交 `7058da0` 补齐 BOM/CRLF frontmatter、自动 Generic AI 跨来源身份命名空间和暂停恢复 Work Fact 计数。该状态仅表示代码与合成 fixture 验证通过；不表示 Artifact、真实 UI、主人观察或 Production/Vault 验收完成。Task 2 的 stale scheduler cleanup-state 边界保持不变，自动晋级 seam 仍禁止调用。
+Task 3 Repair Round 1 已在本分支产品提交 `f2f7312` 完成八项重要缺口修复；最终 Repair Round 2 产品提交 `7058da0` 补齐 BOM/CRLF frontmatter、自动 Generic AI 跨来源身份命名空间和暂停恢复 Work Fact 计数。该状态仅表示代码与合成 fixture 验证通过；不表示 Artifact、真实 UI、主人观察或 Production/Vault 验收完成。Task 2 的 stale scheduler cleanup-state 边界已由 Task 6A 产品/测试提交 `15eb4433c9d6c3ba218e89d50bec84987ad35915` 收口；自动晋级 seam 仍禁止调用。
 
 Task 4C 已完成一个有界的 Home 事实显示收口：在不改后端的前提下，首页现在明确显示本次更新、本次跳过；后端缺失时保持“尚未获得”，未知队列活动不再伪装为“后台自动运行”。产品/测试提交为 `4aa0b7841dab76fed5c784008c2449808e3648f2`，它只表示确定性 UI/build/E2E 证据通过，不表示真实 8766、Artifact、主人观察或发布验收通过。该收口依据 Task 4 最终审查 `f3d70084e8dfb8a07e2fe46f7e1008e11cdf7c2d`，不扩大到后端、CurrentWorkPanel 或新功能。
 
@@ -47,6 +47,10 @@ Task 5A 已完成 Owner Work API 基础收口（代码/测试已通过 focused �
 Task 5A Repair Round 1 已完成最后授权修复，等待独立终审：解决主人待办后不再残留旧的主人下一步，且不会删除更新的系统下一步；来源摘要来自现有工作标题并保留精确来源 ID 作为次要诊断。产品/测试提交为 `5e71cda68edfb86eac99804bc66fbfb6540bcb9c`，自动验证聚焦 40 passed、广义 Work/Task8/Capture/自动记忆回归 102 passed；不代表真实服务、UI、Artifact 或主人验收完成。
 
 Task 5B UI 已完成本地 focused 实现：Activity 读取认证 `/api/work/history` 分页并以中文摘要为主，Attention 通过既有 resolve 路由完成真实待办，Memory Review/Inspector 显示现有字段可提供的可读 provenance 并保留真实检查入口，导航隐藏重复 legacy Capture，900px 与复制反馈有确定性覆盖。产品/测试与验收报告待独立审查；未启动 live 8766、Sidecar、Artifact，未访问 Production/Vault 或主人数据，`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。
+
+Task 5B final review disposition: ACCEPTED_FOR_TASK6 / ACCEPT_FOR_TASK6; review head `8136374`, Critical=0, Important=0, Minor=3 non-blocking evidence gaps. No live 8766, Sidecar, Artifact, Production/Vault or owner data was run.
+
+Task 6A Lifecycle Closeout: implementation/focused evidence `IMPLEMENTED_FOCUSED_PASS`; product/tests `15eb4433c9d6c3ba218e89d50bec84987ad35915`. A real watcher thread can remain `degraded/cleanup_pending` while alive, then a later retry after natural exit clears stale scheduler cleanup state and reaches `stopped`. Independent Task6A review is pending; Task 6/release/Artifact/owner acceptance remain unclaimed.
 
 ## 1B. 自动化第二大脑的锁定方向
 

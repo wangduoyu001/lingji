@@ -1,5 +1,14 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Phase 1 Product Landing · Task 6A Lifecycle Closeout
+
+- 本次是 Task 2 final disposition 批准的独立 bounded lifecycle closeout，目标仅关闭 watcher 在 stop/revoke 时迟到退出后残留 scheduler cleanup error 的唯一阻塞；不是 Task 2 Repair Round 3，不新增功能或第二套生命周期/队列/服务。
+- 允许产品修改严格限制为现有 `src/automatic_memory/scheduler.py`、`src/automatic_memory/watcher.py`、`src/automatic_memory/source_registry.py` 中证明必要的 cleanup ownership；测试仅补充真实线程/event seam 的 lifecycle 回归；不得修改 discovery、adapter、snapshot consumer、Work Fact、UI、promotion、retrieval/vector、数据模型或 API family。
+- RED 必须真实复现：首次 stop/revoke 的 bounded cleanup 观察到 watcher 仍存活并报告 `degraded/cleanup_pending`；线程随后自然退出；第二次 stop/retry/reconcile 清除 stale scheduler cleanup error，并使 runtime、registry、scheduler 对同一 source 一致收敛到 stopped（或当前权威等价终态）。仍存活时不得伪装 stopped；重复 stop/retry 必须幂等且不得创建第二 watcher。
+- 自动/集成边界：覆盖迟到自然退出、第二次 cleanup、并发 retry/stop、revoke、scheduler shutdown、process-exit boundary 以及 truthful 状态/心跳/错误原因；使用真实 watcher thread 与 `threading.Event` seam，不以 mock return-value 自证；promotion forbidden background seams 必须保持未调用。
+- 失败/清理边界：仅使用 pytest `tmp_path` 与测试线程；不启动 live 8766/8767、Sidecar、Artifact，不访问 Production/Vault/主人数据；每次测试释放事件并等待受管线程退出，验证无 LingJi owned watcher/worker/scheduler 残留；失败保持最小证据，不降低断言或隐藏已知基线。
+- 计划验证：Task 6A focused lifecycle tests、Task 2 runtime/scheduler/watcher/packaged composition 回归、Task 3 admission/runtime、Task 4/5 API contract、packaged composition smoke、`compileall`、`git diff --check`、acceptance sync、local handoff；不得宣称 Task 6 或 release 完成。
+
 ## 2026-08-28 · Phase 1 Product Landing · Task 5B Repair Round 1 follow-up · list error/empty distinction
 
 - 在最终 I1 修复中增加 Memory Review `listError` 分支：初次候选请求失败且没有旧数据时显示明确错误，不显示“没有待审核记忆”空态；保留既有错误提示与可重试刷新入口。未变更 backend/API；该补丁后的 Memory Review smoke、全 UI smokes、build、rendered E2E、compile/diff/handoff 均通过。
