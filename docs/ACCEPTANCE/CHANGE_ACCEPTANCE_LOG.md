@@ -1666,3 +1666,13 @@ Windows 重启后恢复 = 100%
 - 产品/测试提交：`2b99cc53d493929a0e2e75c0f79d6834355fb7dc`、`50cc0e0`、`5f75e3af9b2269519337de68db6a688bd4e654f0`
 - 权威文档提交：`3414101d8fe30033aaea66eaa2cf615d580ad515`；先前报告证据：`d1c0185887e450945c5eb607aa7199b835cd2483`
 - 独立报告提交：`3590c285ef586d028e23cfc5df78357630a91557`、`4201ab9fdd9a28ee0d90c057f66bd2ed99d43e55`
+## 2026-08-27 · Phase 1 Automatic Memory · Task 2 Repair Round 2 (final)
+
+- 基线：`5510b4f27b8fd0567f4fd89a7f5ba2f65635bb77`；影响模块：packaged runtime canonical composition, automatic-memory scheduler revocation lifecycle, runtime/packaged subprocess tests。
+- 本轮仅修 I5/I3：撤销先禁用 scheduler jobs，再以 100ms bounded watcher stop 保留 survivor/stopping 状态并由 runtime status 暴露 cleanup pending；runtime fail-closed 校验 state_db、queue、pipeline.queue、registry.state_db、scheduler.state_db 必须解析到同一 canonical path。
+- [x] Round2 focused：`./.venv/bin/python -m pytest -q tests/test_automatic_memory_runtime.py tests/test_packaged_control_api.py` → `32 passed, 6 warnings`。
+- [x] Runtime/scheduler/watcher/state/worker/promotion sentinel：对应矩阵 → `167 passed, 6 warnings`。
+- [x] Packaged wrapper subprocess：真实 `run_packaged_control_api.main()` 正常/启动失败清理、real jobs/thread ownership、one DB/queue assertions；仅 uvicorn network boundary stubbed。
+- [x] Desktop smoke：`npm run test:runtime` → `runtime-sidecar-smoke: PASS`；compileall 与 `git diff --check` → PASS。
+- [ ] broader promotion recovery matrix has one unrelated baseline failure (`test_recovery_case_06_restart_after_link_commit_activates_after_verification`: rolled_back vs VISIBLE_ACTIVE); no promotion code/seams were changed in Task2 Round2。
+- [ ] 不执行 Artifact、真实 UI、Production/Vault、8766 live server、Task3 snapshot consumer/adapter/terminal extraction 或 owner acceptance；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。Round2 后停止，不开启第三轮。
