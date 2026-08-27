@@ -229,12 +229,12 @@ def enumerate_authorized_files(source: SourceRecord) -> tuple[Path, ...]: ...
 - The main button set is fixed: `授权`, `撤销`, `立即扫描`, `暂停`, `继续`, `重试`, `查看结果`.
 - Detection never appears as completed takeover.
 
-- [ ] **Step 1: Write RED contract tests for every source state and action.** Assert Chinese primary copy, a visible next step, disabled impossible actions, and no success copy before terminal backend evidence.
-- [ ] **Step 2: Write a RED rendered flow with a fake 8766 server.** First run must open source onboarding, authorize one candidate, show scanning progress, show completion counts, simulate one failure and retry it.
-- [ ] **Step 3: Implement the page using only existing 8766 endpoints from Task 3.** Do not add manual path text fields for detected sources; explicit folder selection remains available only for Generic Inbox/ChatGPT export location and must pass through authorization.
-- [ ] **Step 4: Make Home answer five questions in plain Chinese.** Show discovered sources, authorized/current sources, current activity, this-run added/updated/skipped/failed counts, and active/pending memories. Move model/vector/dimension details to Advanced Diagnostics.
-- [ ] **Step 5: Verify empty, loading, offline, expired authorization, unsupported Claude, revoked and failed states.** Unknown values display `尚未获得` or a specific reason, not `0` or `正常`.
-- [ ] **Step 6: Run TypeScript build, source-page smoke and rendered e2e, then independent review.**
+- [x] **Step 1: Write RED contract tests for every source state and action.** Assert Chinese primary copy, a visible next step, disabled impossible actions, and no success copy before terminal backend evidence.
+- [x] **Step 2: Write a RED rendered flow with a fake 8766 server.** First run must open source onboarding, authorize one candidate, show scanning progress, show completion counts, simulate one failure and retry it.
+- [x] **Step 3: Implement the page using only existing 8766 endpoints from Task 3.** Do not add manual path text fields for detected sources; explicit folder selection remains available only for Generic Inbox/ChatGPT export location and must pass through authorization.
+- [x] **Step 4: Make Home answer five questions in plain Chinese.** Show discovered sources, authorized/current sources, current activity, this-run added/updated/skipped/failed counts, and active/pending memories. Move model/vector/dimension details to Advanced Diagnostics.
+- [x] **Step 5: Verify empty, loading, offline, expired authorization, unsupported Claude, revoked and failed states.** Unknown values display `尚未获得` or a specific reason, not `0` or `正常`.
+- [x] **Step 6: Run TypeScript build, source-page smoke and rendered e2e, then independent review.**
 
 **Acceptance:** A nontechnical user can finish first-run authorization and explain which sources are detected, authorized, current, unsupported or failed without reading IDs, JSON, logs or command output.
 
@@ -248,6 +248,8 @@ def enumerate_authorized_files(source: SourceRecord) -> tuple[Path, ...]: ...
 - [x] Run focused UI/source/runtime/inspector/work-fact checks, build, rendered E2E, diff-check, acceptance sync and local handoff. Preserve the unchanged legacy smoke baseline failure in the evidence.
 
 **Task 4C acceptance:** Home visibly asks both update/skip questions, never invents missing counts or queue activity, and the rendered fake-server flow proves both numeric and unavailable branches. Product/test commit and evidence are recorded in the Task 4 report; this follow-up remains deterministic/local evidence only and does not authorize Artifact, release, live 8766, Production/Vault or owner acceptance.
+
+**Final Task 4 disposition (2026-08-28):** Task 4C independent review `3eaefc807402cc7bda8cc2e999189b6b483d5434` returned Spec PASS / Quality PASS with no findings. Task 4 is accepted for Task 5 composition. This ruling covers deterministic UI/build/fake-server evidence only; it does not authorize release, Artifact, live 8766, Production/Vault, real installation or owner acceptance, and it does not lift the Task 1/Task 2 quarantines.
 
 ### Task 5: Make the Existing Owner Workflow Understandable
 
