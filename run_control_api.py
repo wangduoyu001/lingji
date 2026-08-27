@@ -70,12 +70,17 @@ def main() -> None:
         shutdown_done = True
         # Runtime owns the background worker/scheduler.  Close the service
         # only after those components have released their resources.
-        runtime.stop()
-        service.close()
+        try:
+            runtime.stop()
+        finally:
+            # Service resources must still be closed when runtime cleanup
+            # reports a surviving component; the runtime error is propagated
+            # after this ordering guarantee has been honored.
+            service.close()
 
     app.on_event("shutdown")(shutdown_runtime)
-    runtime.start()
     try:
+        runtime.start()
         uvicorn.run(
             app,
             host=settings.control_api_host,

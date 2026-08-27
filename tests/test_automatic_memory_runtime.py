@@ -4,9 +4,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 import time
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from src.automatic_memory import AuthorizationScope, SourceRegistry
+from src.automatic_memory.watcher import AutomaticMemoryWatcher
 from src.auto_review.promotion import AutoMemoryPromotionService
 from src.automatic_memory.runtime import AutomaticMemoryRuntime
 from src.control.api import create_control_app
@@ -69,6 +72,28 @@ class _Worker:
         return {"running": self.running, "queue": {"queued": 0}}
 
 
+class _PartiallyStartingScheduler(_Scheduler):
+    def start(self) -> None:
+        self.calls.append("scheduler.start")
+        self.running = True
+        raise RuntimeError("scheduler start failed after acquiring resources")
+
+
+class _RetryingStopScheduler(_Scheduler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.stop_attempts = 0
+
+    def stop(self) -> None:
+        self.stop_attempts += 1
+        self.calls.append("scheduler.stop")
+        if self.stop_attempts == 1:
+            self.running = True
+            raise RuntimeError("scheduler stop timed out")
+        self.running = False
+        self.watcher.started = False
+
+
 def _runtime(tmp_path: Path):
     state = StateDatabase(tmp_path / "lingji_state.db")
     queue = type("Queue", (), {"path": state.path})()
@@ -116,7 +141,7 @@ def test_scan_pause_resume_delegate_to_existing_scheduler(tmp_path: Path):
     runtime, scheduler, _worker = _runtime(tmp_path)
 
     assert runtime.scan_now("source-1")["source_id"] == "source-1"
-    assert runtime.pause()["state"] == "paused"
+    assert runtime.pause()["state"] == "stopped"
     assert runtime.resume()["state"] == "stopped"
     assert scheduler.calls == [
         "scheduler.reconcile:source-1:manual",
@@ -129,6 +154,142 @@ def test_runtime_uses_canonical_state_and_queue_path(tmp_path: Path):
     runtime, _scheduler, _worker = _runtime(tmp_path)
     assert Path(runtime.state_db.path).resolve() == Path(runtime.queue.path).resolve()
     assert Path(runtime.pipeline.queue.path).resolve() == Path(runtime.state_db.path).resolve()
+
+
+def test_start_failure_retries_cleanup_for_partially_started_scheduler(tmp_path: Path):
+    state = StateDatabase(tmp_path / "lingji_state.db")
+    queue = type("Queue", (), {"path": state.path})()
+    pipeline = type("Pipeline", (), {"queue": queue})()
+    scheduler = _PartiallyStartingScheduler()
+    worker = _Worker()
+    runtime = AutomaticMemoryRuntime(
+        state_db=state, queue=queue, pipeline=pipeline, scheduler=scheduler, worker=worker
+    )
+
+    try:
+        runtime.start()
+    except RuntimeError as exc:
+        assert "scheduler start failed" in str(exc)
+    else:
+        raise AssertionError("start should fail")
+
+    assert scheduler.calls == ["scheduler.start", "scheduler.stop"]
+    assert worker.calls == ["worker.start", "worker.stop"]
+
+
+def test_stop_error_keeps_cleanup_pending_and_allows_retry(tmp_path: Path):
+    runtime, scheduler, worker = _runtime(tmp_path)
+    scheduler = _RetryingStopScheduler()
+    runtime.scheduler = scheduler
+    runtime.start()
+
+    with pytest.raises(RuntimeError, match="scheduler stop timed out"):
+        runtime.stop()
+    first = runtime.status()
+    assert first["state"] == "degraded"
+    assert first["cleanup_pending"] is True
+    assert first["running"] is True
+    assert "scheduler stop timed out" in first["cleanup_error"]
+    assert "scheduler stop timed out" in first["last_global_error"]
+
+    runtime.stop()
+    second = runtime.status()
+    assert second["state"] == "stopped"
+    assert second["cleanup_pending"] is False
+    assert second["running"] is False
+    assert scheduler.calls == ["scheduler.start", "scheduler.stop", "scheduler.stop"]
+
+
+def test_never_started_pause_remains_stopped(tmp_path: Path):
+    runtime, _scheduler, _worker = _runtime(tmp_path)
+    result = runtime.pause()
+    assert result["state"] == "stopped"
+    assert result["paused"] is True
+
+
+def test_running_scheduler_attaches_newly_authorized_source(tmp_path: Path):
+    from src.automatic_memory.scheduler import AutomaticMemoryScheduler
+
+    state = StateDatabase(tmp_path / "lingji_state.db")
+    registry = SourceRegistry(state)
+    queue = type("Queue", (), {"path": state.path})()
+    pipeline = type("Pipeline", (), {"queue": queue})()
+    settings = type(
+        "Settings",
+        (),
+        {
+            "storage_path": tmp_path,
+            "scheduler_poll_seconds": 0.02,
+            "automatic_memory_debounce_seconds": 1,
+            "automatic_memory_reconciliation_seconds": 60,
+            "automatic_memory_integrity_seconds": 3600,
+            "extraction_poll_seconds": 0.2,
+            "extraction_batch_size": 1,
+        },
+    )()
+    scheduler = AutomaticMemoryScheduler(
+        state, registry, scan_runner=lambda *_args: None, poll_seconds=0.02
+    )
+    runtime = AutomaticMemoryRuntime(
+        state_db=state,
+        queue=queue,
+        pipeline=pipeline,
+        settings=settings,
+        registry=registry,
+        scheduler=scheduler,
+        worker=_Worker(),
+    )
+    runtime.start()
+    source = registry.register(
+        AuthorizationScope(
+            "grant-live",
+            ("generic_ai_history",),
+            (str(tmp_path),),
+            datetime.now(timezone.utc),
+            None,
+            True,
+        ),
+        "generic_ai_history",
+        str(tmp_path),
+    )
+
+    deadline = time.monotonic() + 1.0
+    while source.source_id not in scheduler.watcher.running_sources() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert source.source_id in scheduler.watcher.running_sources()
+    names = {row["name"] for row in state.list_scheduler_jobs()}
+    assert f"automatic_memory:{source.source_id}:reconciliation" in names
+    assert f"automatic_memory:{source.source_id}:integrity" in names
+    runtime.stop()
+
+
+def test_watcher_reports_surviving_thread_after_bounded_stop(tmp_path: Path):
+    release = __import__("threading").Event()
+    source = {
+        "source_id": "source-1",
+        "root": str(tmp_path),
+        "status": "authorized",
+    }
+
+    def backend(_root, **_kwargs):
+        while not release.is_set():
+            time.sleep(0.02)
+        yield set()
+
+    watcher = AutomaticMemoryWatcher(
+        source_provider=lambda _source_id: source,
+        on_change=lambda _source_id: None,
+        watch_backend=backend,
+    )
+    watcher.start("source-1", debounce_seconds=1)
+    result = watcher.stop(timeout_seconds=0.01)
+    assert result["stopped"] is False
+    assert result["surviving_threads"] == ["lingji-memory-watch-source-1"]
+    assert watcher.running_sources() == ("source-1",)
+
+    release.set()
+    watcher.stop(timeout_seconds=1)
+    assert watcher.running_sources() == ()
 
 
 def test_runtime_status_route_is_authenticated_and_truthful(tmp_path: Path):

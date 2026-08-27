@@ -27,6 +27,7 @@ class ExtractionWorker:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_result: dict[str, Any] | None = None
+        self._stop_outcome: dict[str, Any] = {"stopped": True, "thread_alive": False}
 
     @property
     def running(self) -> bool:
@@ -36,6 +37,7 @@ class ExtractionWorker:
         if self.running:
             return
         self._stop_event.clear()
+        self._stop_outcome = {"stopped": False, "thread_alive": True}
         self._thread = threading.Thread(
             target=self._loop,
             name="lingji-extraction-worker",
@@ -44,17 +46,26 @@ class ExtractionWorker:
         self._thread.start()
         logger.info("Extraction worker started")
 
-    def stop(self, timeout: float = 10.0) -> None:
+    def stop(self, timeout: float = 10.0) -> dict[str, Any]:
         self._stop_event.set()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=max(float(timeout), 0.1))
+        alive = bool(self._thread and self._thread.is_alive())
+        self._stop_outcome = {
+            "stopped": not alive,
+            "thread_alive": alive,
+            "outcome": "timeout" if alive else "stopped",
+        }
         logger.info("Extraction worker stopped")
+        return dict(self._stop_outcome)
 
     def status(self) -> dict[str, Any]:
         return {
             "running": self.running,
             "poll_seconds": self.poll_seconds,
             "batch_size": self.batch_size,
+            "thread_alive": self.running,
+            "stop_outcome": dict(self._stop_outcome),
             "queue": self.pipeline.queue.stats(),
             "last_result": self._last_result or {},
         }

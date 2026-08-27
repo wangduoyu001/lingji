@@ -80,37 +80,24 @@ class AutomaticMemoryScheduler:
             self._running = True
             sources = self.registry.list_sources()
             for source in sources:
-                if source.status != "authorized":
-                    continue
-                prefix = self._source_prefix(source.source_id)
-                self.cron.add_job(
-                    f"{prefix}reconciliation",
-                    self.reconciliation_seconds / 3600.0,
-                    run_on_start=True,
-                )
-                self.cron.add_job(
-                    f"{prefix}integrity",
-                    self.integrity_seconds / 3600.0,
-                    run_on_start=False,
-                )
-                try:
-                    self.watcher.start(
-                        source.source_id, debounce_seconds=self.debounce_seconds
-                    )
-                except Exception as exc:
-                    self._watch_error(source.source_id, str(exc)[:2000])
+                self._attach_source(source)
             self.cron.start(self._run_cron_job)
 
     def stop(self) -> None:
         with self._lock:
             if not self._running:
-                self.watcher.stop()
+                result = self.watcher.stop() or {}
                 self._lifecycle_generation += 1
                 callback = self._listener_callback
                 if callback is not None:
                     self.registry.remove_lifecycle_listener(callback)
                 self._listener_callback = None
                 self._listener_registered = False
+                if result.get("surviving_threads"):
+                    raise RuntimeError(
+                        "automatic-memory watcher threads survived stop: "
+                        + ", ".join(result["surviving_threads"])
+                    )
                 return
             self._running = False
             self._lifecycle_generation += 1
@@ -119,8 +106,28 @@ class AutomaticMemoryScheduler:
                 self.registry.remove_lifecycle_listener(callback)
             self._listener_callback = None
             self._listener_registered = False
-        self.watcher.stop()
-        self.cron.stop()
+        watcher_result: dict[str, object] = {}
+        watcher_error: BaseException | None = None
+        try:
+            watcher_result = self.watcher.stop() or {}
+        except BaseException as exc:
+            watcher_error = exc
+        cron_error: BaseException | None = None
+        try:
+            self.cron.stop()
+        except BaseException as exc:
+            cron_error = exc
+        errors = [error for error in (watcher_error, cron_error) if error is not None]
+        survivors = watcher_result.get("surviving_threads") or []
+        if survivors:
+            errors.append(
+                RuntimeError(
+                    "automatic-memory watcher threads survived stop: "
+                    + ", ".join(str(item) for item in survivors)
+                )
+            )
+        if errors:
+            raise RuntimeError("; ".join(str(error) for error in errors))
 
     def pause(self) -> None:
         with self._lock:
@@ -331,6 +338,28 @@ class AutomaticMemoryScheduler:
         self.watcher.stop_source(source_id)
         self.cron.set_jobs_enabled(self._source_prefix(source_id), False)
 
+    def _attach_source(self, source) -> None:
+        """Attach one newly authorized source to this scheduler instance."""
+        if source.status != "authorized":
+            return
+        prefix = self._source_prefix(source.source_id)
+        self.cron.add_job(
+            f"{prefix}reconciliation",
+            self.reconciliation_seconds / 3600.0,
+            run_on_start=True,
+        )
+        self.cron.add_job(
+            f"{prefix}integrity",
+            self.integrity_seconds / 3600.0,
+            run_on_start=False,
+        )
+        try:
+            self.watcher.start(source.source_id, debounce_seconds=self.debounce_seconds)
+        except Exception as exc:
+            self._watch_error(source.source_id, str(exc)[:2000])
+        if self._paused:
+            self.cron.set_jobs_enabled(prefix, False)
+
     def _on_source_lifecycle(self, source, generation: int | None = None) -> None:
         with self._lock:
             if (
@@ -345,6 +374,8 @@ class AutomaticMemoryScheduler:
             # disabling a newly-started scheduler's jobs.
             if source.status != "authorized":
                 self._disable_source(source.source_id)
+            else:
+                self._attach_source(source)
 
     def _scheduler_lease_heartbeat(
         self, scan_id: str, lease_id: str, stop: threading.Event

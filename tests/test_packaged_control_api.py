@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -332,3 +333,71 @@ def test_control_main_composes_runtime_and_shutdown_order(
     run_control_api.main()
 
     assert events == ["runtime.start", "runtime.stop", "service.close"]
+
+
+def test_real_control_main_composes_and_cleans_real_runtime(
+    runtime_tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Exercise packaged composition with only uvicorn's network boundary replaced."""
+    import run_control_api
+    from src.config import Settings
+
+    root = runtime_tmp_path / "real-runtime"
+    settings = Settings(
+        storage_dir=str(root / "storage"),
+        vault_dir=str(root / "vault"),
+        snapshot_dir=str(root / "snapshot"),
+        log_dir=str(root / "logs"),
+        scheduler_poll_seconds=0.02,
+        extraction_poll_seconds=0.2,
+    )
+    uvicorn_calls: list[dict[str, object]] = []
+
+    def fake_uvicorn(app, **kwargs):
+        uvicorn_calls.append({"app": app, **kwargs})
+
+    monkeypatch.setattr(run_control_api, "settings", settings)
+    monkeypatch.setattr("uvicorn.run", fake_uvicorn)
+
+    run_control_api.main()
+
+    assert len(uvicorn_calls) == 1
+    assert uvicorn_calls[0]["host"] == "127.0.0.1"
+    assert uvicorn_calls[0]["port"] == 8766
+    storage_files = {path.name for path in (root / "storage").glob("*.db")}
+    assert storage_files == {"lingji_state.db", "lingji_memory.db"}
+    assert not list(root.rglob("automatic_memory.db"))
+
+
+def test_real_control_main_cleans_runtime_when_scheduler_start_fails(
+    runtime_tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import run_control_api
+    from src.automatic_memory.scheduler import AutomaticMemoryScheduler
+    from src.config import Settings
+
+    root = runtime_tmp_path / "real-start-failure"
+    settings = Settings(
+        storage_dir=str(root / "storage"),
+        vault_dir=str(root / "vault"),
+        snapshot_dir=str(root / "snapshot"),
+        log_dir=str(root / "logs"),
+        scheduler_poll_seconds=0.02,
+        extraction_poll_seconds=0.2,
+    )
+    original_start = AutomaticMemoryScheduler.start
+
+    def start_then_fail(scheduler):
+        original_start(scheduler)
+        raise RuntimeError("injected scheduler startup failure")
+
+    monkeypatch.setattr(run_control_api, "settings", settings)
+    monkeypatch.setattr(AutomaticMemoryScheduler, "start", start_then_fail)
+    monkeypatch.setattr("uvicorn.run", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(RuntimeError, match="injected scheduler startup failure"):
+        run_control_api.main()
+
+    names = {thread.name for thread in threading.enumerate()}
+    assert "lingji-scheduler" not in names
+    assert "lingji-extraction-worker" not in names

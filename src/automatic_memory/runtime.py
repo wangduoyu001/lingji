@@ -108,6 +108,8 @@ class AutomaticMemoryRuntime:
         self._lock = RLock()
         self._started = False
         self._paused = False
+        self._cleanup_pending = False
+        self._cleanup_errors: list[str] = []
 
     def _validate_canonical_state_path(self) -> None:
         state_path = Path(self.state_db.path).expanduser().resolve(strict=False)
@@ -128,30 +130,57 @@ class AutomaticMemoryRuntime:
             if self._started:
                 return
             self._paused = False
-            self.worker.start()
             try:
+                self.worker.start()
                 # Scheduler owns watcher and CronScheduler; do not start either
                 # child directly here.
                 self.scheduler.start()
-            except BaseException:
-                self.worker.stop()
+            except BaseException as start_error:
+                errors = [f"start failed: {start_error}"]
+                for component in (self.scheduler, self.worker):
+                    try:
+                        result = component.stop()
+                        if self._component_alive(component, result):
+                            errors.append(
+                                f"{component.__class__.__name__} remained alive after start cleanup"
+                            )
+                    except BaseException as cleanup_error:
+                        errors.append(f"cleanup failed: {cleanup_error}")
+                self._cleanup_errors = errors
+                self._cleanup_pending = any(
+                    self._component_alive(component)
+                    for component in (self.scheduler, self.worker)
+                ) or len(errors) > 1
+                self._started = self._cleanup_pending
                 raise
             self._started = True
+            self._cleanup_pending = False
+            self._cleanup_errors = []
 
     def stop(self) -> None:
         with self._lock:
-            if not self._started:
+            if not self._started and not self._cleanup_pending:
                 # Keep stop idempotent but release a scheduler that may have
                 # been supplied already running by an embedding test/host.
                 return
         # Stop admission first.  CronScheduler.stop waits for in-flight
         # reconciliation before the extraction consumer is stopped.
-        try:
-            self.scheduler.stop()
-        finally:
-            self.worker.stop()
-            with self._lock:
-                self._started = False
+        errors: list[str] = []
+        for component in (self.scheduler, self.worker):
+            try:
+                result = component.stop()
+                if self._component_alive(component, result):
+                    errors.append(
+                        f"{component.__class__.__name__} remained alive after stop"
+                    )
+            except BaseException as exc:
+                errors.append(f"{component.__class__.__name__} stop failed: {exc}")
+        with self._lock:
+            self._cleanup_errors = errors
+            self._cleanup_pending = bool(errors)
+            self._started = bool(errors)
+        if errors:
+            raise RuntimeError("; ".join(errors))
 
     def status(self) -> dict[str, object]:
         worker_status: dict[str, Any] = {}
@@ -170,10 +199,14 @@ class AutomaticMemoryRuntime:
         with self._lock:
             started = self._started
             paused = self._paused
-        if paused:
-            state = "paused"
-        elif not started:
+            cleanup_pending = self._cleanup_pending
+            cleanup_error = "; ".join(self._cleanup_errors) if self._cleanup_errors else None
+        if not started and not cleanup_pending:
             state = "stopped"
+        elif cleanup_pending:
+            state = "degraded"
+        elif paused:
+            state = "paused"
         elif scheduler_running and worker_running is True:
             state = "running"
         else:
@@ -185,8 +218,10 @@ class AutomaticMemoryRuntime:
             sources = None
         return {
             "state": state,
-            "running": started,
+            "running": bool(started or cleanup_pending or scheduler_running or worker_running),
             "paused": paused,
+            "cleanup_pending": cleanup_pending,
+            "cleanup_error": cleanup_error,
             "scheduler_state": "running" if scheduler_running else "stopped",
             "scheduler_heartbeat_age": None,
             "scheduler_heartbeat_reason": self.HEARTBEAT_UNAVAILABLE_REASON,
@@ -194,7 +229,7 @@ class AutomaticMemoryRuntime:
             "worker": worker_status,
             "authorized_watcher_count": len(sources) if sources is not None else None,
             "watcher_sources": list(sources) if sources is not None else None,
-            "last_global_error": self._last_global_error(),
+            "last_global_error": self._last_global_error() or cleanup_error,
         }
 
     def scan_now(self, source_id: str) -> dict[str, object]:
@@ -235,3 +270,31 @@ class AutomaticMemoryRuntime:
         except Exception:
             return None
         return None
+
+    @staticmethod
+    def _component_alive(component: Any, result: Any | None = None) -> bool:
+        if isinstance(result, dict):
+            if result.get("thread_alive") is True or result.get("running") is True:
+                return True
+            if result.get("stopped") is False:
+                return True
+        running = getattr(component, "running", None)
+        if running is True:
+            return True
+        try:
+            status = component.status()
+        except Exception:
+            status = None
+        if isinstance(status, dict):
+            if status.get("thread_alive") is True or status.get("running") is True:
+                return True
+            worker_stop = status.get("stop_outcome")
+            if isinstance(worker_stop, dict) and worker_stop.get("thread_alive") is True:
+                return True
+        watcher = getattr(component, "watcher", None)
+        try:
+            if watcher is not None and watcher.running_sources():
+                return True
+        except Exception:
+            return True
+        return False

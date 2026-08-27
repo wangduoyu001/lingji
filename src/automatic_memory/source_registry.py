@@ -121,7 +121,12 @@ class SourceRegistry:
             raise PermissionError(str(exc)) from exc
         if existing_source["status"] == "revoked":
             raise PermissionError("source authorization has been revoked")
-        return self._source(existing_source)
+        result = self._source(existing_source)
+        # Registration is a lifecycle transition too.  A running scheduler
+        # attaches the source immediately; a stopped scheduler simply ignores
+        # this notification and will attach it during its next start.
+        self._notify_lifecycle(result)
+        return result
 
     def revoke(self, source_id: str) -> SourceRecord:
         revoked_at = _iso(datetime.now(timezone.utc))

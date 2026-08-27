@@ -26,12 +26,14 @@ class AutomaticMemoryWatcher:
         on_error: Callable[[str, str], object] | None = None,
         clock: Callable[[], float] | None = None,
         watch_backend: Callable[..., Iterable[set[tuple[object, str]]]] | None = None,
+        stop_timeout_seconds: float = 2.0,
     ) -> None:
         self._source_provider = source_provider
         self._on_change = on_change
         self._on_error = on_error or (lambda source_id, error: None)
         self._clock = clock or time.monotonic
         self._watch_backend = watch_backend or watch
+        self.stop_timeout_seconds = max(float(stop_timeout_seconds), 0.01)
         self._lock = threading.RLock()
         self._sources: dict[str, dict[str, object]] = {}
         self._threads: dict[str, threading.Thread] = {}
@@ -72,32 +74,57 @@ class AutomaticMemoryWatcher:
             self._threads[source_id] = thread
             thread.start()
 
-    def stop(self) -> None:
+    def stop(self, *, timeout_seconds: float | None = None) -> dict[str, object]:
         with self._lock:
             stops = list(self._stops.values())
             threads = list(self._threads.values())
-            self._stops.clear()
-            self._threads.clear()
-            self._sources.clear()
         for stop in stops:
             stop.set()
         for thread in threads:
             if thread is not threading.current_thread():
-                thread.join(timeout=2.0)
+                thread.join(timeout=max(
+                    float(timeout_seconds)
+                    if timeout_seconds is not None
+                    else self.stop_timeout_seconds,
+                    0.01,
+                ))
+        surviving: list[str] = []
+        with self._lock:
+            for source_id, thread in tuple(self._threads.items()):
+                if thread.is_alive():
+                    surviving.append(thread.name)
+                else:
+                    self._threads.pop(source_id, None)
+                    self._stops.pop(source_id, None)
+                    self._sources.pop(source_id, None)
+        return {"stopped": not surviving, "surviving_threads": sorted(surviving)}
 
-    def stop_source(self, source_id: str) -> None:
+    def stop_source(
+        self, source_id: str, *, timeout_seconds: float | None = None
+    ) -> dict[str, object]:
         """Stop one OS watcher after a source leaves the authorized set."""
         with self._lock:
-            stop = self._stops.pop(source_id, None)
+            stop = self._stops.get(source_id)
             thread = self._threads.get(source_id)
-            # Remove the visible state immediately.  Lifecycle callbacks must
-            # not block on an uncooperative watch backend; the old thread's
-            # finally block is generation/identity guarded below.
-            self._sources.pop(source_id, None)
-            if thread is not None:
-                self._threads.pop(source_id, None)
         if stop is not None:
             stop.set()
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=max(
+                float(timeout_seconds)
+                if timeout_seconds is not None
+                else self.stop_timeout_seconds,
+                0.01,
+            ))
+        surviving = bool(thread is not None and thread.is_alive())
+        if not surviving:
+            with self._lock:
+                self._threads.pop(source_id, None)
+                self._stops.pop(source_id, None)
+                self._sources.pop(source_id, None)
+        return {
+            "stopped": not surviving,
+            "surviving_threads": [thread.name] if surviving and thread else [],
+        }
 
     def running_sources(self) -> tuple[str, ...]:
         with self._lock:
