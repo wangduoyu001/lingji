@@ -1,9 +1,9 @@
 # Task 6L — Structured Evidence Lexical Wiring
 
-日期：2026-08-28  
-工作树：`/Users/wuhanwangduoyu/Documents/ChatGPT/灵机/.worktrees/phase1-automatic-memory`  
-分支：`codex/phase1-automatic-memory`  
-基线：`81ffaec967cf65a55ea692161b3c16ecd7d6d6e0`  
+日期：2026-08-28
+工作树：`/Users/wuhanwangduoyu/Documents/ChatGPT/灵机/.worktrees/phase1-automatic-memory`
+分支：`codex/phase1-automatic-memory`
+基线：`81ffaec967cf65a55ea692161b3c16ecd7d6d6e0`
 状态：`IMPLEMENTED_FOCUSED_PASS / WAITING_FOR_INDEPENDENT_REVIEW`
 
 产品/测试提交：`9ced68b` (`fix: index structured chat evidence for lexical retrieval`)
@@ -66,7 +66,7 @@ structured read-model 状态同步的实时闭环仍是残余限制，交由根�
 
 ## 修改与提交边界
 
-产品/测试文件：`src/extraction/structured_sink.py`、`src/retrieval/{memory_db.py,incremental_sync.py,index_coordinator.py,hybrid.py,context_pack.py}`、`tests/test_structured_evidence_lexical.py`。  
+产品/测试文件：`src/extraction/structured_sink.py`、`src/retrieval/{memory_db.py,incremental_sync.py,index_coordinator.py,hybrid.py,context_pack.py}`、`tests/test_structured_evidence_lexical.py`。
 文档/证据文件：`docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`、`docs/PROJECT_STATUS.md`、`docs/MODULES/CODE_MAP.md`、本报告。
 
 未执行 Artifact、release、live service、Production/Vault、owner acceptance；Task 6
