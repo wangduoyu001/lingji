@@ -1641,8 +1641,8 @@ Windows 重启后恢复 = 100%
 
 ### 增量自动验收
 
-- [ ] Task 6 RED/GREEN runner boundary tests：缺失/无效 evidence 不进入 `EvaluationReport`，measured failure 保持 `FAIL`，cleanup failure 覆盖 pre-cleanup 结论，release 在 4R2 readiness 前以 `BLOCKED_4R2_REQUIRED` 拒绝 100k。
-- [ ] Task 1–5 reset regressions、冻结 corpus/questions SHA-256、`py_compile`、`git diff --check`、acceptance sync、local handoff。
+- [x] Task 6 RED/GREEN runner boundary tests：缺失/无效 evidence 不进入 `EvaluationReport`，measured failure 保持 `FAIL`，cleanup failure 覆盖 pre-cleanup 结论，release 在 4R2 readiness 前以 `BLOCKED_4R2_REQUIRED` 拒绝 100k。
+- [x] Task 1–5 reset regressions、冻结 corpus/questions SHA-256、`py_compile`、`git diff --check`、acceptance sync、local handoff。
 - [ ] 不执行 Artifact、真实 UI、主人观察、Production/Vault、4R2 或 100k；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。
 
 ### 清理与回滚
@@ -1653,5 +1653,5 @@ Windows 重启后恢复 = 100%
 ### 最终报告
 
 - 完整报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-1-report.md`
-- 产品/测试提交：待提交
-- 文档提交：待提交
+- 产品/测试提交：`2b99cc53d493929a0e2e75c0f79d6834355fb7dc`
+- 文档/报告提交：产品提交后分离提交；报告不自引用其自身 SHA，最终 SHA 以 `git log` 为准。

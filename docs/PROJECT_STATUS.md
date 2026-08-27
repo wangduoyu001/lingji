@@ -46,7 +46,7 @@ Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明
 
 所有聊天先进入原始证据和可检索层。Automatic archival and candidate generation continue; automatic activation is quarantined; owner approval is required until a future independently approved recovery gate exists. Derived current memory 仍只是可重建投影；Core、身份、高风险和正式永久知识仍需主人明确确认。`superseded`、`invalidated`、`archived` 历史保留审计，但 current lexical/Qdrant/hybrid/Core/ContextPack/MCP 默认排除。Opportunity Center 在 Phase 1 PASS 前保持冻结。
 
-当前 thin quality runner 已按 Task 4R-Reset Task 6 收口：仅在临时 Acceptance roots 编排现有导入、Work/Memory/Gateway contracts；不可用证据保持 nullable/`NOT_MEASURED`，实测失败保持 `FAIL`，清理失败覆盖预清理结论。MCP parity、Qdrant degradation、corruption isolation、context baseline、scale 与 owner/reboot evidence 仍未测量，因此官方 functional/phase 状态保持 `NOT_EVALUATED`；release 在 4R2 readiness 前以 `BLOCKED_4R2_REQUIRED` 停在 100k 之前。历史 automatic-activation 断言继续作为拒绝证据，不得为绿灯自动批准 fixture 候选或绕过 owner review。
+当前 thin quality runner 已按 Task 4R-Reset Task 6 收口：仅在带精确 lease token/owner 校验的临时 Acceptance roots 编排现有导入、Work/Memory/Gateway contracts；不可用证据保持 nullable/`NOT_MEASURED`，不进入 `EvaluationReport`，实测失败保持 `FAIL`，清理失败覆盖预清理结论并由 CLI 复核完整清理库存。MCP parity、Qdrant degradation、corruption isolation、context baseline、scale 与 owner/reboot evidence 仍未测量，因此官方 functional/phase 状态保持 `NOT_EVALUATED`；release 在 4R2 readiness 前以 `BLOCKED_4R2_REQUIRED` 停在 100k 之前。历史 automatic-activation 断言继续作为拒绝证据，不得为绿灯自动批准 fixture 候选或绕过 owner review。
 
 ## 2. 最近一次主人验收结论
 

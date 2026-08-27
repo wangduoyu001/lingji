@@ -400,9 +400,11 @@ src/automatic_memory/evaluation.py
 
 src/automatic_memory/quality_gate.py::AcceptanceRoots / run_quality_gate
 = thin Task 4R reset orchestration over existing contracts; temporary Acceptance
-  roots only, no Production/Vault settings access, nullable unmeasured evidence
-  and `NOT_EVALUATED` before 4R2 readiness. `publish_quality_envelope` is the
-  only repository report writer; `run_100k_benchmark` is blocked until 4R2.
+  roots only (resolved OS-temp ancestry, exact lease token and owner), no
+  Production/Vault settings access, nullable unmeasured evidence that never
+  enters `EvaluationReport`, and `NOT_EVALUATED` before 4R2 readiness.
+  `publish_quality_envelope` is the only repository report writer;
+  `run_100k_benchmark` is blocked until 4R2.
 
 Focused validation:
 
