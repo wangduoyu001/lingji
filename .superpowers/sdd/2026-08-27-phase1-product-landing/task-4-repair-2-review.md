@@ -133,4 +133,3 @@ metrics with truthful `尚未获得` fallbacks, replace the unmeasured `后台�
 fallback, add rendered assertions for both, and rerun the Task 4 focused matrix
 plus the unchanged smoke baseline. Do not reopen Task 4 Repair Round 2 or expand
 backend scope without a new authorized boundary.
-
