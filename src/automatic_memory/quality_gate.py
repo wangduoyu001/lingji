@@ -719,9 +719,13 @@ def run_quality_gate(
     )
     readiness = QualityEvidenceReadiness(**{
         field: (
-            readiness_payload.get(field).value
+            readiness_payload.get(field)
             if isinstance(readiness_payload.get(field), EvidenceState)
-            else str(readiness_payload.get(field, EvidenceState.NOT_MEASURED.value)).removeprefix("EvidenceState.").lower()
+            else EvidenceState(
+                str(readiness_payload.get(field, EvidenceState.NOT_MEASURED.value))
+                .removeprefix("EvidenceState.")
+                .lower()
+            )
         )
         for field in fields
     })
