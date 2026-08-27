@@ -164,6 +164,37 @@ class ExtractionPipeline:
             retry_delay_seconds=0,
         )
 
+    def replay_automatic_snapshots(
+        self,
+        source_type: str,
+        snapshot_paths: list[Path | str] | tuple[Path | str, ...],
+        *,
+        source_id: str,
+        execution_id_prefix: str = "automatic-replay",
+    ) -> list[dict[str, Any]]:
+        """Replay ordered raw snapshots through the formal extraction path.
+
+        The structured read model is intentionally not treated as a history
+        authority: each snapshot is executed in order so the existing lexical
+        projection can retain content-hash versions and their supersession
+        links.  This is a synchronous rebuild seam for isolated maintenance
+        and acceptance callers; it creates no queue or database.
+        """
+        if not str(source_id or "").strip():
+            raise ValueError("source_id is required for automatic snapshot replay")
+        if not snapshot_paths:
+            return []
+        return [
+            self.execute(
+                source_type,
+                input_path=Path(path),
+                payload={"source_id": str(source_id)},
+                options={"automatic_memory": True},
+                execution_id=f"{execution_id_prefix}-{index}",
+            )
+            for index, path in enumerate(snapshot_paths, 1)
+        ]
+
     def execute(
         self,
         source_type: str,

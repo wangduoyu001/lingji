@@ -44,6 +44,7 @@ class HybridRetriever(BaseHybridRetriever):
             filters,
             diagnostics=diagnostics,
             attach_why=False,
+            apply_source_authority=False,
         )
         if len(primary) >= limit:
             output = primary
@@ -71,6 +72,11 @@ class HybridRetriever(BaseHybridRetriever):
             )
             output = self._dedupe(combined)[:limit]
         normalized = (filters or SearchFilters()).normalized()
+        if normalized.mode in {"current", "why"}:
+            output, authority_state = self.source_authority.filter_current(output)
+            diagnostics_state["source_authority"] = authority_state.get("source_authority", "available")
+            if authority_state.get("reason_code") != "none" or diagnostics_state.get("reason_code") == "none":
+                diagnostics_state["reason_code"] = authority_state.get("reason_code", "none")
         if normalized.mode == "why":
             self._attach_why(query, output, normalized)
         return output, diagnostics_state

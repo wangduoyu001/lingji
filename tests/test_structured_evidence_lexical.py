@@ -406,7 +406,9 @@ def test_automatic_content_update_replaces_current_evidence_version(tmp_path: Pa
             execution_id="exec-automatic-replay",
         )
         docs = [item for item in gateway.database.list_documents() if item["memory_type"] == "structured_evidence"]
-        assert len(docs) == 1
+        assert len(docs) == 2
+        assert len([item for item in docs if item["status"] == "active"]) == 1
+        assert gateway.search_memory("chatgpt", "ORIGINAL automatic evidence", mode="history")["results"]
         assert {
             key: docs[0]["relationships"][key]
             for key in ("source_id", "conversation_id", "message_id")

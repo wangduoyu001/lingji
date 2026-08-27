@@ -318,7 +318,8 @@ class MemoryDatabase:
                     m.message_id, m.external_id AS message_external_id,
                     m.role, m.author, m.occurred_at, m.sequence, m.content,
                     m.content_hash, m.raw_reference, m.privacy,
-                    m.projects_json, m.agent_scope_json, m.updated_at
+                    m.projects_json, m.agent_scope_json, m.updated_at,
+                    s.metadata_json AS source_metadata_json
                 FROM message_records m
                 JOIN conversation_records c ON c.conversation_id = m.conversation_id
                 JOIN source_records s ON s.source_id = m.source_id
@@ -335,7 +336,15 @@ class MemoryDatabase:
                     continue
                 source_status = str(row["source_status"] or "").strip().lower()
                 document_status = "active" if source_status == "active" else "archived"
-                memory_id = f"LJ-EVIDENCE-{str(row['message_id']).upper()}"
+                source_metadata = self._loads(row["source_metadata_json"], {})
+                automatic_source_id = str(source_metadata.get("automatic_memory_source_id") or "").strip()
+                version_key = "|".join(
+                    str(row[key] or "")
+                    for key in ("source_id", "conversation_id", "message_id", "content_hash")
+                )
+                version_digest = hashlib.sha256(version_key.encode("utf-8")).hexdigest()[:24].upper()
+                memory_id = f"LJ-EVIDENCE-{version_digest}"
+                version_started = datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
                 entry = {
                     "id": memory_id,
                     "relative_path": f"__structured__/evidence/{memory_id}.md",
@@ -356,7 +365,10 @@ class MemoryDatabase:
                     ],
                     "properties": {
                         "memory_tier": "evidence",
-                        "valid_from": row["occurred_at"],
+                        # Version validity is ingestion time, not message event
+                        # time: one message may receive a changed snapshot while
+                        # retaining its original occurred_at.
+                        "valid_from": version_started,
                         "agent_scope": self._loads(row["agent_scope_json"], []),
                         "recall_weight": 1.0,
                     },
@@ -367,6 +379,7 @@ class MemoryDatabase:
                     "source_id": str(row["source_id"] or ""),
                     "source_external_id": str(row["source_external_id"] or ""),
                     "source_status": source_status,
+                    "automatic_memory_source_id": automatic_source_id,
                     "raw_reference": str(row["raw_reference"] or ""),
                     "conversation_id": str(row["conversation_id"] or ""),
                     "conversation_external_id": str(row["conversation_external_id"] or ""),
@@ -377,30 +390,78 @@ class MemoryDatabase:
                     "sequence": int(row["sequence"] or 0),
                     "occurred_at": row["occurred_at"],
                     "content_hash": str(row["content_hash"] or self.content_hash(content)),
+                    "valid_from": version_started,
                 }
                 body = f"[{entry['role']}] {content}"
                 entries.append((entry, chunker.chunk(memory_id, body)))
 
-            target_ids = {entry["id"] for entry, _ in entries}
-            existing = connection.execute(
-                "SELECT memory_id FROM memory_documents WHERE memory_type = 'structured_evidence'"
-            ).fetchall()
-            removed = 0
-            for row in existing:
-                memory_id = str(row["memory_id"])
-                if memory_id in target_ids:
-                    continue
-                connection.execute("DELETE FROM memory_fts WHERE memory_id = ?", (memory_id,))
-                connection.execute("DELETE FROM memory_documents WHERE memory_id = ?", (memory_id,))
-                removed += 1
-
             added = 0
             updated = 0
+            removed = 0
             for entry, chunks in entries:
+                identity = (
+                    str(entry.get("source_id") or ""),
+                    str(entry.get("conversation_id") or ""),
+                    str(entry.get("message_id") or ""),
+                )
+                prior_rows = connection.execute(
+                    """
+                    SELECT memory_id, content_hash, status, valid_from
+                    FROM memory_documents
+                    WHERE memory_type = 'structured_evidence'
+                      AND json_extract(relationships_json, '$.source_id') = ?
+                      AND json_extract(relationships_json, '$.conversation_id') = ?
+                      AND json_extract(relationships_json, '$.message_id') = ?
+                    ORDER BY valid_from, memory_id
+                    """,
+                    identity,
+                ).fetchall()
                 prior = connection.execute(
-                    "SELECT content_hash FROM memory_documents WHERE memory_id = ?",
+                    "SELECT content_hash, status, valid_from, valid_to FROM memory_documents WHERE memory_id = ?",
                     (entry["id"],),
                 ).fetchone()
+                if prior is not None and str(prior["content_hash"] or "") == str(entry["content_hash"]):
+                    # Byte-identical replay is a true no-op. Preserve the
+                    # original validity interval and avoid rewriting FTS or
+                    # updated_at; lifecycle transitions are handled by the
+                    # existing StateDB projection bridge.
+                    if str(prior["status"] or "") == str(entry["status"] or ""):
+                        continue
+                    entry["valid_from"] = prior["valid_from"]
+                    entry.setdefault("properties", {})["valid_from"] = prior["valid_from"]
+                    entry["valid_to"] = prior["valid_to"]
+                if prior is None and prior_rows:
+                    now = str(entry["valid_from"])
+                    for old in prior_rows:
+                        if str(old["status"] or "") != "active":
+                            continue
+                        old_id = str(old["memory_id"])
+                        old_relationships = self._loads(
+                            connection.execute(
+                                "SELECT relationships_json FROM memory_documents WHERE memory_id = ?",
+                                (old_id,),
+                            ).fetchone()["relationships_json"],
+                            {},
+                        )
+                        old_relationships.update({
+                            "superseded_by": entry["id"],
+                            "supersession_reason": "content_hash_changed",
+                        })
+                        connection.execute(
+                            """
+                            UPDATE memory_documents
+                            SET status = 'superseded', valid_to = ?, superseded_by = ?,
+                                relationships_json = ?, pin_to_context = 0, updated_at = ?
+                            WHERE memory_id = ?
+                            """,
+                            (now, entry["id"], self._json(old_relationships), now, old_id),
+                        )
+                        updated += 1
+                    entry.setdefault("properties", {})["supersedes"] = [
+                        str(old["memory_id"]) for old in prior_rows if str(old["status"] or "") == "active"
+                    ]
+                    entry["supersedes"] = entry["properties"]["supersedes"]
+                    entry["supersession_reason"] = "content_hash_changed"
                 self._upsert_document(connection, entry, chunks)
                 if prior is None:
                     added += 1
@@ -737,10 +798,11 @@ class MemoryDatabase:
             )
         }
         for key in (
-            "authority", "evidence_refs", "supersession_reason", "invalidating_reason",
+            "authority", "evidence_refs", "supersession_reason", "invalidating_reason", "supersedes",
             "created_by", "confirmed_by", "policy_version", "extractor_version",
             "conflict_key", "topic_key", "decision_key",
             "structured_source_type", "source_id", "source_external_id", "source_status",
+            "automatic_memory_source_id",
             "conversation_id", "conversation_external_id", "message_id",
             "message_external_id", "role", "author", "sequence", "occurred_at",
             "content_hash", "raw_reference",

@@ -58,26 +58,33 @@ class MemoryGateway:
         as_of: str | None = None,
     ) -> dict[str, Any]:
         profile = self.profiles.require_tool(agent_id, "search_memory")
-        results = self.retriever.search(
-            query,
-            limit=min(max(int(limit), 1), 50),
-            filters=SearchFilters(
-                project=project,
-                memory_types=tuple(memory_types or ()),
-                privacy=profile.allowed_privacy,
-                agent_id=profile.agent_id,
-                tags=tuple(tags or ()),
-                include_archived=include_archived,
-                mode=mode,
-                as_of=as_of,
-            ),
+        filters = SearchFilters(
+            project=project,
+            memory_types=tuple(memory_types or ()),
+            privacy=profile.allowed_privacy,
+            agent_id=profile.agent_id,
+            tags=tuple(tags or ()),
+            include_archived=include_archived,
+            mode=mode,
+            as_of=as_of,
         )
+        search_with_diagnostics = getattr(self.retriever, "search_with_diagnostics", None)
+        outcome = (
+            search_with_diagnostics(
+                query, limit=min(max(int(limit), 1), 50), filters=filters
+            )
+            if callable(search_with_diagnostics)
+            else {"results": self.retriever.search(query, limit=min(max(int(limit), 1), 50), filters=filters), "diagnostics": {}}
+        )
+        results = list(outcome.get("results") or [])
+        diagnostics = dict(outcome.get("diagnostics") or {})
         self._event("memory_searched", profile.agent_id, {"query": query, "count": len(results)})
         return {
             "query": query,
             "agent_id": profile.agent_id,
             "memory_revision": self.database.revision,
             "results": results,
+            "diagnostics": diagnostics,
             "query_mode": mode,
             "as_of": as_of,
         }
@@ -100,6 +107,13 @@ class MemoryGateway:
         )
         if not memory:
             return None
+        if str(mode or "current").strip().lower() in {"current", "why"}:
+            authority = getattr(self.retriever, "source_authority", None)
+            allows_current = getattr(authority, "allows_current", None)
+            if callable(allows_current):
+                allowed_current, _diagnostics = allows_current(memory)
+                if not allowed_current:
+                    return None
         allowed, _ = TemporalQuery.from_values(mode, as_of).allows(memory)
         if not allowed:
             return None

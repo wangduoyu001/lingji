@@ -18,6 +18,7 @@ from src.retrieval import (
     MemoryIndexCoordinator,
     QdrantSemanticProvider,
 )
+from src.retrieval.source_authority import SourceAuthorityResolver
 from src.retrieval.context_pack import ContextPackBuilder
 from src.runtime.workspace import (
     WorkspaceContext,
@@ -122,6 +123,7 @@ def build_memory_gateway(
     retriever = HybridRetriever(
         memory_db,
         semantic_provider=semantic_provider,
+        source_authority=SourceAuthorityResolver(state_db),
         cache_size=settings.memory_search_cache_size,
         cache_ttl_seconds=settings.memory_search_cache_ttl_seconds,
     )

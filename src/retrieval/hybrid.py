@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from src.retrieval.memory_db import MemoryDatabase
+from src.retrieval.source_authority import SourceAuthorityResolver
 from src.retrieval.temporal import ALL_LIFECYCLE_STATUSES, TemporalQuery, temporal_fields
 
 
@@ -72,12 +73,17 @@ class HybridRetriever:
         cache_size: int = 256,
         cache_ttl_seconds: float = 120.0,
         rrf_k: int = 60,
+        source_authority: SourceAuthorityResolver | None = None,
     ):
         self.database = database
         self.semantic_provider = semantic_provider
         self.cache_size = max(int(cache_size), 0)
         self.cache_ttl_seconds = max(float(cache_ttl_seconds), 0.0)
         self.rrf_k = max(int(rrf_k), 1)
+        # Direct retrievers have no authority context and therefore fail closed
+        # for automatic structured evidence. Formal composition injects the
+        # StateDB-backed resolver.
+        self.source_authority = source_authority or SourceAuthorityResolver(None)
         self._cache: OrderedDict[str, tuple[float, list[dict[str, Any]]]] = OrderedDict()
         self._lock = threading.RLock()
 
@@ -112,6 +118,7 @@ class HybridRetriever:
         *,
         diagnostics: bool,
         attach_why: bool = True,
+        apply_source_authority: bool = True,
     ) -> tuple[list[dict[str, Any]], dict[str, str]]:
         clean_query = " ".join(str(query or "").split())
         channel_state = {
@@ -157,6 +164,11 @@ class HybridRetriever:
         )
         channel_state.update(semantic_state)
         fused = self._fuse(clean_query, lexical, semantic, evaluation_filters)
+        if apply_source_authority and normalized.mode in {"current", "why"}:
+            fused, authority_state = self.source_authority.filter_current(fused)
+            channel_state["source_authority"] = authority_state.get("source_authority", "available")
+            if authority_state.get("reason_code") != "none" or channel_state.get("reason_code") == "none":
+                channel_state["reason_code"] = authority_state.get("reason_code", "none")
         output = fused[:limit]
         if normalized.mode == "why" and attach_why:
             self._attach_why(clean_query, output, evaluation_filters)

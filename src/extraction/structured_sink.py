@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -65,6 +66,32 @@ class StructuredReadModelSink:
                     ingestion_batch_id=execution_id,
                     ingestion_ordinal_start=next_ingestion_ordinal,
                 )
+                # Re-check the sole authorization authority after the write.
+                # This closes the revoke-vs-upsert window: a write that was
+                # admitted before revoke is immediately projected archived and
+                # can never become current again.
+                automatic_source_id = str(
+                    (source.metadata or {}).get("automatic_memory_source_id") or ""
+                ).strip()
+                if automatic_source_id and self.state_db is not None:
+                    lifecycle = getattr(self.read_model, "sync_automatic_source_lifecycle", None)
+                    if callable(lifecycle):
+                        try:
+                            current = self.state_db.get_automatic_memory_source(
+                                automatic_source_id,
+                                now=datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+                            )
+                            lifecycle(
+                                automatic_source_id,
+                                str((current or {}).get("status") or "unknown"),
+                            )
+                        except Exception as exc:
+                            warnings.append(
+                                safe_extraction_error(
+                                    exc,
+                                    message="automatic source authority re-check failed; see local logs",
+                                )
+                            )
                 next_ingestion_ordinal = int(
                     counts.get("next_ingestion_ordinal", next_ingestion_ordinal)
                 )

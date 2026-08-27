@@ -372,12 +372,18 @@ class SourceReadModel:
                     (source_id,),
                 ).fetchall()
                 documents += len(rows)
+                lifecycle_filter = (
+                    "AND status IN ('active', 'archived')"
+                    if projected_status == "active"
+                    else "AND status NOT IN ('superseded', 'invalidated')"
+                )
                 connection.execute(
-                    """
+                    f"""
                     UPDATE memory_documents
                     SET status = ?, review_status = 'evidence', updated_at = ?
                     WHERE memory_type = 'structured_evidence'
                       AND json_extract(relationships_json, '$.source_id') = ?
+                      {lifecycle_filter}
                     """,
                     (projected_status, timestamp, source_id),
                 )
