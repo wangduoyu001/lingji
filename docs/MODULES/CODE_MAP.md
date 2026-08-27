@@ -410,6 +410,22 @@ desktop/lingji-control/scripts/automatic-memory-smoke.mjs
 desktop/lingji-control/package.json
 = real Work Fact, Python/TypeScript DTO and 8766-backed Desktop onboarding
 
+Task 5A Work API additions:
+
+```text
+src/work/store.py::count_work/list_work/list_events/resolve_pending_action
+src/work/projector.py::history/timeline/resolve_pending
+src/control/work_service.py::work_history/resolve_pending
+src/control/work_routes.py
+= authenticated bounded work history, chronological timeline and idempotent pending-action resolution; all reuse lingji_state.db Work Fact persistence
+```
+
+Focused validation:
+
+```powershell
+./.venv/bin/python -m pytest -q tests/test_work_control_api.py tests/test_task8_work_fact.py tests/test_work_store.py tests/test_work_control_service.py tests/test_task8_extraction_work_lifecycle.py tests/test_task8_work_transition_matrix.py
+```
+
 Task 9:
 src/retrieval/context_pack.py
 src/gateway/memory_gateway.py

@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Phase 1 Product Landing · Task 5A · Owner Work API foundation
+
+- 基线：`7d4e4e1bbeeaf24f5000bac2944a1e6c3502bc48`。本轮仅扩展既有 `WorkStore`、`WorkProjector`、`WorkControlService` 与认证 8766 Work Fact 路由：历史分页、稳定时间线投影和 pending action resolve；不得新增任务状态源/API、修改 UI、记忆/RAG/向量、Task 2/3 runtime、Artifact、真实 8766、Production/Vault 或主人数据。
+- RED 必须先由 `tests/test_work_control_api.py` 与 `tests/test_task8_work_fact.py` 覆盖分页边界、重启持久化、时间线顺序/身份、resolve 成功/重放/不存在/非法和 current/history/pending 一致性；GREEN 需运行对应 focused backend matrix、`py_compile`、`git diff --check`、acceptance sync 与 local handoff。
+- API 成功只代表真实持久事实已读取或变更；未知数量、时间、来源和下一执行者保持 `null`/“尚未获得”，不得用静态或聚合猜测填充。所有新增路由必须沿用现有认证依赖并复用 `WorkStore`。
+- 本轮完成后由独立 Luna 审查；最多一次修复。未执行真实服务、发布版或主人验收，不得宣称产品发布完成。
+
 ## 2026-08-28 · Phase 1 Product Landing · Task 4C · Home fact closure
 
 - 基准/触发审查：Task 4 final independent review `f3d70084e8dfb8a07e2fe46f7e1008e11cdf7c2d`；本轮是独立的 bounded follow-up，不是 Repair Round 3。仅修改 Home DTO/UI 与既有静态/渲染测试，不改后端/API、队列、CurrentWorkPanel、其他页面、检索/向量、发布或本机任务。
