@@ -49,9 +49,9 @@
 
 ---
 
-### Task 0: Close the Current Reset Boundary Once
+### Task 0: Close the Promotion Boundary Once
 
-**Purpose:** 结束当前 Task 4R-Reset Task 5 的 Repair Round 2 和 Task 6 thin-runner 收口；完成后不再扩展证据框架，立即转入产品接线。
+**Purpose:** 只完成当前 Task 4R-Reset Task 5 的 Repair Round 2，关闭已经明确列出的 promotion provenance/state-machine 缺口；不进入 Task 6 runner。
 
 **Files:**
 - Modify: `src/auto_review/promotion.py`
@@ -59,30 +59,48 @@
 - Modify: `src/storage/state_db.py`
 - Modify: `src/retrieval/memory_db.py`
 - Modify: `src/sources/read_model.py`
-- Modify: `src/automatic_memory/quality_gate.py`
-- Modify: `src/automatic_memory/quality_evidence.py`
 - Test: `tests/test_task4_reset_promotion_transaction.py`
-- Test: `tests/evaluation/test_task4_reset_readiness.py`
-- Test: reset runner tests selected by `docs/superpowers/plans/2026-08-26-task4r-reset.md`
 - Docs: `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`
-- Docs: `docs/PROJECT_STATUS.md`
 
 **Interfaces:**
 - Preserve all public evaluator thresholds and frozen corpus/question hashes.
 - `AutoMemoryPromotionService.evaluate(...)` must return stable fail-closed outcomes for malformed provenance; it must not raise raw constructor errors.
-- `run_quality_gate(...)` remains a thin orchestrator and may publish only measured evidence.
 
 - [ ] **Step 1: Write RED tests for the six open Repair Round 2 findings.** Cover duplicate canonical message refs, malformed `messages` payload shapes, malformed typed provenance, secret/path/fixture leakage through ordinary promotion events, noncanonical direct prepare calls, and the named crash/reconcile/rollback matrix.
 - [ ] **Step 2: Run `./.venv/bin/python -m pytest -q tests/test_task4_reset_promotion_transaction.py`; require behavioral failures, not collection errors.**
 - [ ] **Step 3: Implement only the boundary repairs required by those failing tests.** Do not modify retrieval ranking, frozen fixtures, Desktop, Production/Vault, Task 4R2, 100k or release code.
 - [ ] **Step 4: Run the Task 5 focused matrix, Task 1–4 reset regressions, direct source/memory/lifecycle/timeline regressions, fixture hash checks, `py_compile`, `git diff --check`, acceptance sync and local handoff.**
 - [ ] **Step 5: Dispatch a fresh Luna review.** Acceptance requires `Spec PASS`, `Quality APPROVED`, zero Critical and zero Important. If Repair Round 2 fails, stop and re-plan; do not authorize Repair Round 3.
-- [ ] **Step 6: Implement Task 6 exactly as the existing reset plan specifies.** Delete duplicate runner policy, reconcile current docs, prove missing evidence cannot become zero/PASS, and keep full phase `NOT_EVALUATED` or `BLOCKED` until real external evidence exists.
-- [ ] **Step 7: Run the whole-reset review.** Acceptance requires all six reset tasks reviewed cleanly, frozen hashes unchanged, worktree clean and no product claim beyond the measured result.
+**Acceptance:** Task 5 promotion boundary has no open Critical/Important; no retrieval, runner, Desktop, Production/Vault, 100k or release scope is touched; Repair Round 2 is the final authorized repair round.
 
-**Acceptance:** Current evidence architecture is closed with no open Critical/Important; no new product capability is introduced; docs show exact current head and no obsolete PASS/FAIL claim; further work moves to runtime/UI.
+### Task 1: Close the Thin Runner and Authority Boundary
 
-### Task 1: Compose One Real Packaged Automatic-Memory Runtime
+**Purpose:** 完成现有 Task 4R-Reset Task 6 thin-runner 收口和 whole-reset review；完成后不再扩展证据框架，立即转入产品接线。
+
+**Files:**
+- Modify only the Task 6 files authorized by `docs/superpowers/plans/2026-08-26-task4r-reset.md`
+- Modify: `src/automatic_memory/quality_gate.py`
+- Modify: `src/automatic_memory/quality_evidence.py`
+- Test: reset runner tests selected by `docs/superpowers/plans/2026-08-26-task4r-reset.md`
+- Docs: `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`
+- Docs: `docs/PROJECT_STATUS.md`
+- Docs: `docs/MODULES/CODE_MAP.md`
+
+**Interfaces:**
+- `run_quality_gate(...)` remains a thin orchestrator and may publish only measured evidence.
+- Missing or invalid evidence cannot become numeric zero, PASS or a synthetic boolean.
+- Frozen evaluator thresholds, questions, corpus and retrieval behavior remain unchanged.
+
+- [ ] **Step 1: Write RED tests for the Task 6 runner boundary.** Prove unavailable evidence never enters `EvaluationReport`, measured failures remain FAIL, cleanup failure replaces pre-cleanup verdict, and release refuses 100k before Task 4R2 readiness.
+- [ ] **Step 2: Run the exact RED command recorded in the Task 6 brief and require behavioral failures.**
+- [ ] **Step 3: Delete duplicate runner policy and reduce orchestration to existing product contracts.** Do not modify promotion, retrieval, fixtures, Desktop, Production/Vault, Task 4R2, 100k or release product behavior.
+- [ ] **Step 4: Reconcile current authority docs.** Preserve rejected historical evidence as history, show the exact current head and keep functional status `NOT_EVALUATED` until Task 4R2 supplies real evidence.
+- [ ] **Step 5: Run Task 6 focused tests, Tasks 1–5 reset regressions, fixture hashes, `py_compile`, `git diff --check`, acceptance sync and local handoff.**
+- [ ] **Step 6: Dispatch a fresh Luna task review followed by a whole-reset review.** Both require zero Critical/Important. If the second repair round fails, stop and re-plan rather than authorizing another round.
+
+**Acceptance:** Current evidence architecture is closed with no open Critical/Important; no new product capability is introduced; current docs are truthful; further work moves to runtime/UI.
+
+### Task 2: Compose One Real Packaged Automatic-Memory Runtime
 
 **Purpose:** 让正式 Sidecar 启动时真正启动现有 Extraction Worker、AutomaticMemory Scheduler、watcher 和 checkpoint runner，关闭时按同一实例停止。
 
@@ -123,7 +141,7 @@ class AutomaticMemoryRuntime:
 
 **Acceptance:** Launching the packaged Sidecar is sufficient to run the existing automatic-memory backend; no terminal or command line is needed; closing/stopping the instance leaves no watcher/worker thread owned by that instance.
 
-### Task 2: Connect Authorized Discovery, Snapshot and Extraction to Work Fact
+### Task 3: Connect Authorized Discovery, Snapshot and Extraction to Work Fact
 
 **Purpose:** 让已有来源适配器从授权目录完成“发现 → 快照 → 队列 → 解析 → 索引/记忆候选 → Work Fact”，而不是只停留在 raw/job。
 
@@ -172,7 +190,7 @@ def enumerate_authorized_files(source: SourceRecord) -> tuple[Path, ...]: ...
 
 **Acceptance:** A supported file placed in an authorized root reaches a truthful terminal outcome without a manual API call; unsupported/malformed data fails closed; ordinary Obsidian notes remain unread; source failure does not block another authorized source.
 
-### Task 3: Deliver the One-Time Chinese Onboarding and Source Page
+### Task 4: Deliver the One-Time Chinese Onboarding and Source Page
 
 **Purpose:** 首次打开时让主人只需一次中文授权，并持续看见“发现了什么、是否授权、是否接管、正在扫描什么、失败后怎么办”。
 
@@ -195,14 +213,14 @@ def enumerate_authorized_files(source: SourceRecord) -> tuple[Path, ...]: ...
 
 - [ ] **Step 1: Write RED contract tests for every source state and action.** Assert Chinese primary copy, a visible next step, disabled impossible actions, and no success copy before terminal backend evidence.
 - [ ] **Step 2: Write a RED rendered flow with a fake 8766 server.** First run must open source onboarding, authorize one candidate, show scanning progress, show completion counts, simulate one failure and retry it.
-- [ ] **Step 3: Implement the page using only existing 8766 endpoints from Task 2.** Do not add manual path text fields for detected sources; explicit folder selection remains available only for Generic Inbox/ChatGPT export location and must pass through authorization.
+- [ ] **Step 3: Implement the page using only existing 8766 endpoints from Task 3.** Do not add manual path text fields for detected sources; explicit folder selection remains available only for Generic Inbox/ChatGPT export location and must pass through authorization.
 - [ ] **Step 4: Make Home answer five questions in plain Chinese.** Show discovered sources, authorized/current sources, current activity, this-run added/updated/skipped/failed counts, and active/pending memories. Move model/vector/dimension details to Advanced Diagnostics.
 - [ ] **Step 5: Verify empty, loading, offline, expired authorization, unsupported Claude, revoked and failed states.** Unknown values display `尚未获得` or a specific reason, not `0` or `正常`.
 - [ ] **Step 6: Run TypeScript build, source-page smoke and rendered e2e, then independent review.**
 
 **Acceptance:** A nontechnical user can finish first-run authorization and explain which sources are detected, authorized, current, unsupported or failed without reading IDs, JSON, logs or command output.
 
-### Task 4: Make the Existing Owner Workflow Understandable
+### Task 5: Make the Existing Owner Workflow Understandable
 
 **Purpose:** 修复上次 M5 失败的主人体验，不增加业务能力：能看见历史工作、处理真实待办、从候选记忆跳到可读证据，并只保留一个正式手动采集入口。
 
@@ -246,7 +264,7 @@ POST /api/work/pending-actions/{action_id}/resolve
 
 **Acceptance:** The owner can answer: what happened, whether it succeeded, what needs action, what was remembered and which original content proves it. No primary page requires reading technical IDs or JSON.
 
-### Task 5: Prove Automation, Recovery and Non-Interference End to End
+### Task 6: Prove Automation, Recovery and Non-Interference End to End
 
 **Purpose:** 在隔离验收目录中验证自动化长期运行，而不是只验证组件单元测试。
 
@@ -273,14 +291,14 @@ POST /api/work/pending-actions/{action_id}/resolve
 
 - [ ] **Step 1: Write the failing packaged-flow integration test against an Acceptance-only root.** It must launch the same packaged composition as release, not instantiate isolated classes directly.
 - [ ] **Step 2: Add a recursive file-tree sentinel.** Record relative path, content hash, size, mtime and mode for third-party fixtures and Vault; compare before/after with only declared fixture writes excluded.
-- [ ] **Step 3: Make the smallest wiring fixes exposed by the integration test.** Product changes outside Tasks 1–4 require a new root-approved brief; do not tune retrieval or add features under an acceptance label.
+- [ ] **Step 3: Make the smallest wiring fixes exposed by the integration test.** Product changes outside Tasks 2–5 require a new root-approved brief; do not tune retrieval or add features under an acceptance label.
 - [ ] **Step 4: Register `focused -Area automatic-memory-landing` and one Desktop rendered test command.** A skipped core scenario is a failure, not PASS.
 - [ ] **Step 5: Run the ten scenarios twice from clean Acceptance roots.** Second run must produce zero duplicate source/conversation/message/memory rows and zero third-party mutation.
 - [ ] **Step 6: Dispatch independent security/quality review and record raw counts in the single test report.**
 
 **Acceptance:** All ten scenarios execute with real evidence; no permanent queued job, no hidden failure, no production pollution, no third-party mutation, zero duplicates, Work Fact heartbeat age at most 10 seconds.
 
-### Task 6: Run the Existing Quality and Scale Gate Without Expanding Product Scope
+### Task 7: Run the Existing Quality and Scale Gate Without Expanding Product Scope
 
 **Purpose:** 恢复 Task 4R2/100-question/100k 门禁，只评价已有产品，不把门禁继续发展成产品子系统。
 
@@ -298,7 +316,7 @@ POST /api/work/pending-actions/{action_id}/resolve
 
 **Acceptance:** Quality and scale pass with real production-path measurements, or the phase remains honestly FAIL/BLOCKED with a finite defect list. No synthetic evidence may unlock release.
 
-### Task 7: Build and Perform macOS M5 Release Acceptance
+### Task 8: Build and Perform macOS M5 Release Acceptance
 
 **Purpose:** 交付同一 SHA 的真实发布版，并以主人是否看懂、是否无需代码操作作为最终产品门槛。
 
@@ -320,7 +338,7 @@ POST /api/work/pending-actions/{action_id}/resolve
 
 **Acceptance:** Automatic gates PASS; every visible control has a real effect; no Production/Vault pollution; no third-party mutation; hot retrieval P95 `<=3s`; idle CPU average `<=3%`; owner explicitly confirms the UI is understandable and the one-time authorization flow is usable. Otherwise result is FAIL/BLOCKED, never partial PASS.
 
-### Task 8: Windows Parity Only After macOS PASS
+### Task 9: Windows Parity Only After macOS PASS
 
 **Purpose:** 在不改变产品语义的前提下完成 Windows 等价运行与发布。
 
@@ -381,7 +399,7 @@ External `research` is not part of this plan because no dependency or architectu
 
 ## Self-Review
 
-- Spec coverage: Task 0 closes the current evidence blocker; Tasks 1–2 make existing automation real; Tasks 3–4 make it understandable; Task 5 proves stability/non-interference; Task 6 proves memory/RAG quality; Tasks 7–8 complete release acceptance.
+- Spec coverage: Tasks 0–1 close the current evidence blocker; Tasks 2–3 make existing automation real; Tasks 4–5 make it understandable; Task 6 proves stability/non-interference; Task 7 proves memory/RAG quality; Tasks 8–9 complete release acceptance.
 - Scope check: no new product capability, database, queue, API service, retrieval algorithm, vector provider, cloud service or third-party scraping was added to the plan.
 - Truth check: the plan explicitly corrects the current mismatch where scheduler/watcher/adapters exist but the packaged runtime and Desktop do not use them.
 - Loop prevention: maximum two repair rounds per unit; unresolved important defects cause boundary re-plan rather than repeated patches.
