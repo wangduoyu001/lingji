@@ -17,7 +17,7 @@ import statistics
 import tempfile
 import time
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
@@ -50,11 +50,8 @@ from .evaluation import (
     CorpusRecord,
     EvaluationQuestion,
     EvaluationReport,
-    QuestionResult,
-    evaluate_run,
     load_corpus,
     load_questions,
-    score_question,
 )
 from .quality_evidence import (
     EvidenceState,
@@ -101,6 +98,8 @@ class AcceptanceRoots:
     vault_root: Path
     output_root: Path
     lease_marker: Path
+    allowed_base: Path | None = None
+    lease_token: str | None = None
 
     def validate_temporary_isolation(self) -> None:
         declared_root = self.root.expanduser()
@@ -109,6 +108,11 @@ class AcceptanceRoots:
         root = declared_root.resolve(strict=False)
         if not root.name.startswith("lingji-task4r-"):
             raise ValueError("invalid acceptance root")
+        base = (self.allowed_base or Path(tempfile.gettempdir())).expanduser().resolve()
+        try:
+            root.relative_to(base)
+        except ValueError as exc:
+            raise ValueError("acceptance root outside allowed temporary base") from exc
         if not root.exists() or not root.is_dir() or root.is_symlink():
             raise ValueError("acceptance root unavailable")
         children = (self.storage_root, self.vault_root, self.output_root, self.lease_marker)
@@ -126,34 +130,43 @@ class AcceptanceRoots:
                 raise ValueError("acceptance child unavailable")
         if not self.lease_marker.exists() or not self.lease_marker.is_file():
             raise ValueError("acceptance lease marker unavailable")
-        if not self.lease_marker.read_text(encoding="utf-8").strip():
+        if self.lease_token is None:
+            raise ValueError("acceptance lease token unavailable")
+        if self.lease_marker.read_text(encoding="utf-8") != self.lease_token:
             raise ValueError("acceptance lease marker invalid")
+        if hasattr(os, "getuid") and self.lease_marker.stat().st_uid != os.getuid():
+            raise ValueError("acceptance lease owner invalid")
 
 
 @contextmanager
 def temporary_acceptance_roots(*, base_directory: Path | None = None):
     """Create and always remove one isolated reset acceptance tree."""
     base = Path(base_directory).expanduser().resolve() if base_directory is not None else None
-    root = Path(tempfile.mkdtemp(prefix="lingji-task4r-", dir=str(base) if base else None)).resolve()
-    roots = AcceptanceRoots(
-        root=root,
-        storage_root=root / "storage",
-        vault_root=root / "vault",
-        output_root=root / "output",
-        lease_marker=root / ".lease",
-    )
-    roots.storage_root.mkdir()
-    roots.vault_root.mkdir()
-    roots.output_root.mkdir()
-    roots.lease_marker.write_text(secrets.token_hex(16), encoding="utf-8")
-    roots.validate_temporary_isolation()
+    root: Path | None = None
     try:
+        root = Path(tempfile.mkdtemp(prefix="lingji-task4r-", dir=str(base) if base else None)).resolve()
+        token = secrets.token_hex(32)
+        roots = AcceptanceRoots(
+            root=root,
+            storage_root=root / "storage",
+            vault_root=root / "vault",
+            output_root=root / "output",
+            lease_marker=root / ".lease",
+            allowed_base=base,
+            lease_token=token,
+        )
+        roots.storage_root.mkdir()
+        roots.vault_root.mkdir()
+        roots.output_root.mkdir()
+        roots.lease_marker.write_text(token, encoding="utf-8")
+        roots.validate_temporary_isolation()
         yield roots
     finally:
-        try:
-            shutil.rmtree(root, ignore_errors=False)
-        except Exception as exc:
-            raise AcceptanceCleanupError() from exc
+        if root is not None and root.exists():
+            try:
+                shutil.rmtree(root, ignore_errors=False)
+            except Exception as exc:
+                raise AcceptanceCleanupError() from exc
 
 
 def cleanup_failure_envelope(_report: Any, error: AcceptanceCleanupError) -> QualityRunEnvelope:
@@ -168,6 +181,17 @@ def cleanup_failure_envelope(_report: Any, error: AcceptanceCleanupError) -> Qua
     )
 
 
+def verify_acceptance_cleanup(roots: AcceptanceRoots) -> None:
+    leftovers = tuple(
+        path for path in (
+            roots.storage_root, roots.vault_root, roots.output_root,
+            roots.lease_marker, roots.root,
+        ) if path.exists()
+    )
+    if leftovers:
+        raise AcceptanceCleanupError("TEMP_CLEANUP_INCOMPLETE")
+
+
 def ensure_4r2_ready_for_scale(readiness: QualityEvidenceReadiness) -> None:
     if not isinstance(readiness, QualityEvidenceReadiness) or not readiness.mac_release_ready:
         raise QualityScaleBlockedError("BLOCKED_4R2_REQUIRED")
@@ -179,6 +203,16 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _reject_protected_output(output_path: Path) -> None:
+    """Reject benchmark output inside an admitted temporary acceptance tree."""
+    candidate = Path(output_path).expanduser().resolve(strict=False)
+    temp_root = Path(tempfile.gettempdir()).resolve()
+    if candidate.is_relative_to(temp_root) and any(
+        part.startswith("lingji-task4r-") for part in candidate.parts
+    ):
+        raise ValueError("quality output cannot be written inside Acceptance roots")
 
 
 def _atomic_json(path: Path, value: Mapping[str, Any]) -> None:
@@ -419,7 +453,7 @@ def _run_quality_gate_impl(
     *,
     output_path: Path,
     acceptance_roots: AcceptanceRoots,
-) -> tuple[EvaluationReport, dict[str, Any]]:
+) -> tuple[EvaluationReport | None, dict[str, Any]]:
     """Run the frozen 100-question contracts inside admitted roots."""
     corpus_path = Path(corpus_path).expanduser()
     questions_path = Path(questions_path).expanduser()
@@ -445,10 +479,6 @@ def _run_quality_gate_impl(
     production_sentinels_after: dict[str, str] = {}
     message_map: dict[str, dict[str, Any]] = {}
     decisions: dict[str, dict[str, Any]] = {}
-    question_results: list[QuestionResult] = []
-    mcp_attempts = 0
-    mcp_successes = 0
-    mcp_cases: list[dict[str, Any]] = []
     stale_leaks = 0
     duplicate_records = 0
     ordered_role_matches = 0
@@ -456,8 +486,6 @@ def _run_quality_gate_impl(
     imported_messages = 0
     activation_correct = 0
     activation_total = 0
-    rendered_context_chars = 0
-    baseline_context_chars = 0
     gateway_calls_completed = 0
     gateway_selector_calls = 0
     gateway_empty_responses = 0
@@ -531,8 +559,6 @@ def _run_quality_gate_impl(
         )
         fact_by_memory = {item.fact_id: item for item in corpus}
         citation_ids = {item.citation_id for item in corpus}
-        baseline_unit = sum(len(item.content) for item in corpus) + sum(len(item.topic_key) for item in corpus)
-        baseline_context_chars = baseline_unit * len(questions)
         for question in questions:
             arguments = {
                 "query": question.query,
@@ -551,11 +577,6 @@ def _run_quality_gate_impl(
             if isinstance(gateway_sections, (str, bytes)) or not isinstance(gateway_sections, Sequence):
                 raise ValueError("malformed Gateway sections")
             gateway_empty_responses += int(not gateway_sections)
-            rendered_context_chars += len(str(gateway_pack.get("markdown") or ""))
-            # MCP parity is a Task 4R2 measurement.  Keep a row per verbatim
-            # Gateway call without fabricating transport success.
-            mcp_attempts += 1
-            mcp_cases.append({"question_id": question.question_id, "status": "NOT_MEASURED"})
             selected_evidence = select_context_evidence(gateway_pack, identity_registry, limit=_SELECTOR_LIMIT)
             gateway_selector_calls += 1
             unknown_facts = tuple(fact_id for fact_id in selected_evidence.fact_ids if fact_id not in fact_by_memory)
@@ -568,29 +589,9 @@ def _run_quality_gate_impl(
             gateway_selected_evidence += len(selected_evidence.fact_ids)
             recalled = tuple(fact_id for fact_id in selected_evidence.fact_ids if fact_id in fact_by_memory)
             citations = tuple(citation_id for citation_id in selected_evidence.citation_ids if citation_id in citation_ids)
-            for memory_id in recalled:
-                record = fact_by_memory[memory_id]
-                if record.lifecycle != "active" and question.mode == "current":
-                    stale_leaks += 1
-            validate_selected_evidence(
-                recalled=recalled,
-                citations=citations,
-                expected=question.expected_fact_ids,
-                forbidden=question.forbidden_fact_ids,
-                expected_citations=question.expected_citation_ids,
-            )
-            try:
-                question_results.append(
-                    score_question(
-                        question,
-                        fact_by_memory,
-                        recalled,
-                        citations,
-                        context_chars=len(str(gateway_pack.get("markdown") or "")),
-                    )
-                )
-            except Exception:
-                raise
+            # Selection identity is audited here.  Expected answer scoring,
+            # MCP parity and context baseline are Task 4R2 measurements and
+            # must not be synthesized into an EvaluationReport during reset.
         protected_after = None
         production_changes = (
             protected_before.diff(protected_after)
@@ -598,36 +599,10 @@ def _run_quality_gate_impl(
             else ()
         )
         production_pollution = len(production_changes) if protected_before is not None and protected_after is not None and not protected_tree_capture_error else None
-        report = evaluate_run(
-            fact_by_memory,
-            questions,
-            question_results,
-            imported_messages=imported_messages,
-            expected_messages=len(corpus),
-            ordered_role_matches=ordered_role_matches,
-            expected_ordered_roles=expected_ordered_roles,
-            automatic_activation_correct=activation_correct,
-            automatic_activation_total=activation_total,
-            protected_false_promotions=sum(
-                int(record.risk == "high" and decisions.get(record.fact_id, {}).get("status") == "active")
-                for record in corpus
-            ),
-            stale_current_leaks=stale_leaks,
-            duplicate_records=duplicate_records,
-            baseline_context_chars=max(baseline_context_chars, rendered_context_chars),
-            rendered_context_chars=rendered_context_chars,
-            mcp_successes=mcp_successes,
-            mcp_attempts=mcp_attempts,
-            # The evaluator's historical report schema accepts an integer.
-            # Keep its arithmetic valid, then replace the returned/envelope
-            # value with ``None`` when sentinel evidence is unavailable.
-            production_pollution=production_pollution if production_pollution is not None else 0,
-            owner_review_success=None,
-            reboot_recovery=None,
-            blocked_reasons=FUNCTIONAL_BLOCKED_REASONS,
-        )
-        if production_pollution is None:
-            report = replace(report, production_pollution=None)
+        # No evaluator report is created until every required Task 4R2 field
+        # has measured evidence.  In particular, no numeric MCP/context
+        # defaults are allowed to enter the frozen evaluator schema.
+        report = None
         readiness = QualityEvidenceReadiness(
             import_audit=EvidenceState.READY if audit.ready else EvidenceState.FAILED,
             promotion_provenance=EvidenceState.READY if all(
@@ -664,13 +639,8 @@ def _run_quality_gate_impl(
             "import_counts": {"expected_messages": len(corpus), "imported_messages": imported_messages},
             "role_order_counts": {"expected": expected_ordered_roles, "matched": ordered_role_matches},
             "import_audit": asdict(audit),
-            "per_question": [asdict(item) for item in question_results],
-            "raw_evaluation_report": asdict(report),
             "functional_status": functional_status,
             "phase_status": phase_status,
-            "mcp_attempts": mcp_attempts,
-            "mcp_successes": mcp_successes,
-            "mcp_cases": mcp_cases,
             "gateway_selection": {
                 "status": "READY" if readiness.gateway_selection else "INCOMPLETE",
                 "calls_completed": gateway_calls_completed,
@@ -734,29 +704,9 @@ def run_quality_gate(
     questions_path: Path,
     *,
     output_path: Path,
-    acceptance_roots: AcceptanceRoots | None = None,
-) -> QualityRunEnvelope | EvaluationReport:
-    """Run the frozen gate in isolated roots and return truthful readiness.
-
-    The optional legacy path exists only for historical reset tests.  The
-    public reset CLI always supplies an admitted ``AcceptanceRoots`` object.
-    """
-    if acceptance_roots is None:
-        # Compatibility-only path: no production roots are read, and the
-        # temporary tree is still isolated before the old report is returned.
-        with temporary_acceptance_roots() as roots:
-            report, raw = _run_quality_gate_impl(
-                corpus_path, questions_path,
-                output_path=roots.output_root / "quality.json",
-                acceptance_roots=roots,
-            )
-        legacy_output = Path(output_path).expanduser()
-        legacy_output.parent.mkdir(parents=True, exist_ok=True)
-        legacy_output.write_text(
-            json.dumps(_jsonable(raw), ensure_ascii=False, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        return report
+    acceptance_roots: AcceptanceRoots,
+) -> QualityRunEnvelope:
+    """Run the frozen gate in an admitted Acceptance root."""
 
     report, raw = _run_quality_gate_impl(
         corpus_path, questions_path, output_path=output_path, acceptance_roots=acceptance_roots

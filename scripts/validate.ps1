@@ -345,9 +345,13 @@ function Invoke-FullValidation {
 
 function Invoke-ReleaseValidation {
     # Task 4R2 owns MCP/Qdrant degradation, corruption isolation, measured
-    # context baseline and scale readiness.  The release path must stop before
-    # constructing a 100k command or exporting its opt-in environment.
-    throw "BLOCKED_4R2_REQUIRED"
+    # context baseline and scale readiness. The executable preflight must fail
+    # before a scale command or its opt-in environment is constructed.
+    Invoke-ValidationStep `
+        -Name "automatic-memory-4r2-readiness" `
+        -WorkingDirectory $repoRoot `
+        -Command $PythonCommand `
+        -Arguments @("scripts/automatic_memory_quality_gate.py", "--check-4r2")
 }
 
 $scopeText = ""

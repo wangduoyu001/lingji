@@ -1022,12 +1022,22 @@ def finalize_quality_envelope(
         functional_report = replace(evaluation_report, owner_review_success=100.0, reboot_recovery=100.0, blocked_reasons=())
         functional_verdict = acceptance_gate.evaluate(functional_report)
     except Exception:
+        if any(getattr(readiness, field) is EvidenceState.FAILED for field in QualityEvidenceReadiness._FUNCTIONAL_FIELDS):
+            return QualityRunEnvelope(
+                readiness, production_pollution, evaluation_report, "FAIL", "FAIL", "BLOCKED",
+                _reason_codes(tuple(blocked_reasons) + ("GATE_EXCEPTION", "WINDOWS_AFTER_MAC")),
+            )
         return _closed_envelope(readiness, production_pollution, ("GATE_EXCEPTION",))
     if type(functional_verdict) is not str or functional_verdict not in ("PASS", "FAIL"):
         return _closed_envelope(readiness, production_pollution, ("MALFORMED_GATE_RESULT",))
     try:
         frozen_verdict = acceptance_gate.evaluate(evaluation_report)
     except Exception:
+        if any(getattr(readiness, field) is EvidenceState.FAILED for field in QualityEvidenceReadiness._FUNCTIONAL_FIELDS):
+            return QualityRunEnvelope(
+                readiness, production_pollution, evaluation_report, "FAIL", "FAIL", "BLOCKED",
+                _reason_codes(tuple(blocked_reasons) + ("GATE_EXCEPTION", "WINDOWS_AFTER_MAC")),
+            )
         return _closed_envelope(readiness, production_pollution, ("GATE_EXCEPTION",))
     if type(frozen_verdict) is not str or frozen_verdict not in ("PASS", "FAIL", "BLOCKED"):
         return _closed_envelope(readiness, production_pollution, ("MALFORMED_GATE_RESULT",))

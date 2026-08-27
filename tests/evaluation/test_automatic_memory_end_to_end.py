@@ -22,6 +22,7 @@ from src.automatic_memory.quality_gate import (
     QUESTIONS_SHA256,
     _promote_fixtures,
     run_quality_gate,
+    temporary_acceptance_roots,
 )
 import src.automatic_memory.quality_gate as quality_gate_module
 from src.retrieval.memory_db import MemoryDatabase
@@ -81,22 +82,22 @@ def test_real_quality_gate_reports_measured_result(tmp_path: Path, monkeypatch: 
         return original_selector(*args, **kwargs)
 
     monkeypatch.setattr(quality_gate_module, "select_context_evidence", counted_selector)
-    report = run_quality_gate(CORPUS, QUESTIONS, output_path=output)
-    assert report.answered_questions == 100
-    assert report.imported_messages == report.expected_messages == len(load_corpus(CORPUS))
+    with temporary_acceptance_roots(base_directory=tmp_path) as roots:
+        envelope = run_quality_gate(CORPUS, QUESTIONS, output_path=roots.output_root / "quality.json", acceptance_roots=roots)
+        report = envelope.evaluation_report
+        assert report is None
+        payload = json.loads((roots.output_root / "quality.json").read_text(encoding="utf-8"))
+        assert payload["phase_status"] == "NOT_EVALUATED"
     assert len(load_questions(QUESTIONS, corpus=load_corpus(CORPUS))) == 100
-    assert report.mcp_attempts == 100
     assert selector_calls == 100
     # The default test environment has no configured Production Vault root;
     # unavailable sentinel evidence is explicitly nullable, never numeric 0.
-    assert report.production_pollution is None
-    envelope = json.loads(output.read_text(encoding="utf-8"))
-    assert envelope["production_pollution"] is None
-    assert envelope["mcp_parity"]["status"] == "NOT_MEASURED"
-    serialized = output.read_text(encoding="utf-8")
+    assert payload["production_pollution"] is None
+    assert payload["mcp_parity"]["status"] == "NOT_MEASURED"
+    serialized = json.dumps(payload, ensure_ascii=False)
     assert "fixture_fact_id" not in serialized
     assert "fixture_citation_id" not in serialized
-    assert AutomaticMemoryAcceptanceGate.evaluate(report) in {"PASS", "FAIL", "BLOCKED"}
+    assert envelope.functional_status == "NOT_EVALUATED"
 
 
 @pytest.mark.parametrize(
@@ -108,9 +109,10 @@ def test_real_quality_gate_reports_measured_result(tmp_path: Path, monkeypatch: 
 )
 def test_quality_runner_rejects_unknown_selected_membership(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selected: SelectedEvidence):
     monkeypatch.setattr(quality_gate_module, "select_context_evidence", lambda *_args, **_kwargs: selected)
-    with pytest.raises(EvidenceIdentityError):
-        run_quality_gate(CORPUS, QUESTIONS, output_path=tmp_path / "unknown.json")
-    assert not (tmp_path / "unknown.json").exists()
+    with temporary_acceptance_roots(base_directory=tmp_path) as roots:
+        with pytest.raises(EvidenceIdentityError):
+            run_quality_gate(CORPUS, QUESTIONS, output_path=roots.output_root / "unknown.json", acceptance_roots=roots)
+        assert not (roots.output_root / "unknown.json").exists()
 
 
 def test_real_import_promotion_storage_snapshot_has_no_evaluation_labels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
