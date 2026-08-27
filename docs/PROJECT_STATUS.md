@@ -239,6 +239,8 @@ desktop/lingji-control/src/pages/AttentionPage.tsx
 
 当前必须先完成一个明确门禁：独立审查确认 `2f833aa` 的 callback/replay/restart/重复/乱序矩阵及指定回归，再调度固定 100 问评测；在此之前不调度 RAG，也不继续视觉扩展。
 
+Task 4 Product Landing UI 已接入 Desktop：新增“记忆来源”观察页与一次性后端事实 onboarding，使用既有认证 8766 discovered/sources/scans/summary/runtime 读写接口；Home 现在投影来源、活动、本次扫描计数与记忆状态。契约 smoke、Playwright/系统 Chrome 渲染 harness、TypeScript build 已通过；真实打包版与主人验收仍未执行，且当前 UI 独立审查待完成。
+
 ## 5. Phase 1 重新规划后的开发顺序
 
 ### 5.0 Automatic Memory Tasks 1–11（Task 0 封板后按依赖顺序执行）

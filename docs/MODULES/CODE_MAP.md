@@ -362,6 +362,14 @@ src/automatic_memory/scheduler.py
 src/scheduler/cron.py
 src/config.py
 = watchfiles debounce, persistent scheduler lifecycle, 15-minute reconciliation and daily integrity
+desktop/lingji-control/src/pages/MemorySourcesPage.tsx
+desktop/lingji-control/src/pages/memorySourcesApi.ts
+desktop/lingji-control/src/pages/memorySourcesTypes.ts
+desktop/lingji-control/src/App.tsx
+desktop/lingji-control/src/AppPages.tsx
+desktop/lingji-control/src/navigation.ts
+desktop/lingji-control/src/pages/OverviewPage.tsx
+= first-run Chinese source discovery/authorization/scan status projection using the authenticated Task 3 endpoints; one-time onboarding and Home source/activity/memory summary. UI smoke: `cd desktop/lingji-control && npm run test:memory-sources`; rendered harness: `npm run test:e2e:memory`.
 
 Task 5:
 src/obsidian/memory_scope.py

@@ -1,5 +1,15 @@
 # 验收要求变更记录
 
+## 2026-08-27 · Phase 1 Product Landing · Task 4 · Chinese automatic-memory source onboarding
+
+- 基线：`8f94a1e`（当前 `codex/phase1-automatic-memory`）；本轮仅修改 Desktop UI、UI DTO/API 投影、既有 observation smoke、package scripts 与 deterministic tests。后端/API、数据库、队列、检索、promotion、Task 2/3 代码均未修改。
+- 用户可感知变化：运行观察区新增“记忆来源”；首次成功连接后，若没有已授权来源且后端发现可行动来源，只在本次 App 会话导航一次到来源页。来源页合并 discovered/sources/scans，并将 `available` 显示为“已发现”，只有完成终态扫描才显示“已接管”；过期授权、降级、失败、撤销、不支持和 consent_required 均给出中文下一步。授权严格提交后端需要的 `grant_id/source_kinds/roots/granted_at/owner_confirmed/kind/root`，Generic Inbox/ChatGPT 使用 Tauri 文件夹选择器，不提供自由路径输入。Home 投影发现、授权/当前、活动、本次新增/复用/失败（后端缺少时为“尚未获得”）和记忆状态，技术细节仍留在高级诊断。
+- 自动验收：先执行真实 RED `npm exec -- tsx scripts/automatic-memory-sources-smoke.mjs`，因 `memorySourcesApi.ts` 尚不存在而失败（`ERR_MODULE_NOT_FOUND`）；实现后 `npm run test:memory-sources` PASS。该 smoke 运行 DTO 合并、canonical source、所有九种 UI 状态、未知计数、过期授权、action payload、终态证据与无提前成功断言，不是源码 grep。
+- 渲染验收：`npm run test:e2e:memory` 使用本地 fake 8766-like HTTP server、Vite 与已安装系统 Chrome，覆盖一次性 onboarding、文件夹选择授权、扫描中进度且无终态成功、完成、失败和重试；PASS。未下载浏览器、未启动真实 8766/Sidecar、未访问 Production/Vault、未执行 Artifact 或主人验收。`npm run build`、`npm run test:work-fact`、`npm run test:runtime`、`npm run test:inspector` PASS。
+- 既有 smoke：`npm run test:smoke` 在新增来源 smoke 与 observation smoke 均通过，但既有 `codex-workspace-smoke.mjs` 仍因基线 `CurrentWorkPanel.tsx` 缺少“当前项目”文案而失败；本轮未修改该 Task 3/Work Fact 页面，不将该失败改写为通过。
+- 真机/主人确认：`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`；按规则不启动打包版、8766、Artifact，不接触主人数据。真实 UI、窄窗口主人观察和发布验收待根代理安排；本条不构成产品验收或合并结论。
+- 清理/回滚：fake server/Vite/Chrome 测试进程在 finally 退出；测试只使用临时 fixture 状态。回滚本轮产品/tests 提交与本条文档提交，不触碰正式 Vault、raw、memory、Qdrant 或主人设置。
+
 ## 2026-08-27 · Phase 1 Automatic Memory · Task 2 · Packaged runtime composition
 
 - 基线：`5510b4f27b8fd0567f4fd89a7f5ba2f65635bb77`；产品范围为一个 packaged Python 进程内的 `AutomaticMemoryRuntime` 组合、既有 Extraction Worker/Scheduler/Watcher/Checkpoint 生命周期、认证 8766 runtime status 读取和 exact-instance shutdown 接线。
