@@ -14,6 +14,7 @@ from src.automatic_memory.snapshot import ConsistentSnapshot
 from src.extraction.queue import SQLiteExtractionQueue
 from src.automatic_memory.source_registry import SourceRegistry
 from src.automatic_memory.scheduler import AutomaticMemoryScheduler, ReconciliationReport
+from src.automatic_memory.watcher import AutomaticMemoryWatcher
 from src.storage.state_db import StateDatabase
 
 
@@ -61,6 +62,175 @@ def test_start_stop_pause_resume_and_restart_use_persisted_cron_jobs(tmp_path: P
     # admitted a scan before the assertion.
     assert all(item.source_id == source_id for item in restarted.status())
     restarted.stop()
+
+
+def test_cleanup_retry_retries_cron_and_preserves_unrelated_error(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+    release = threading.Event()
+    stop_seen = threading.Event()
+
+    def backend(_root, **_kwargs):
+        while not release.is_set():
+            if _kwargs["stop_event"].is_set():
+                stop_seen.set()
+            time.sleep(0.01)
+        yield set()
+
+    class RetryingCron:
+        def __init__(self):
+            self.state_db = db
+            self.running = False
+            self.stop_calls = 0
+            self._thread = None
+
+        def add_job(self, *_args, **_kwargs):
+            return None
+
+        def set_jobs_enabled(self, *_args, **_kwargs):
+            return None
+
+        def start(self, _runner):
+            self.running = True
+            self._thread = threading.Thread(target=self._loop, daemon=True)
+            self._thread.start()
+
+        def _loop(self):
+            while self.running:
+                time.sleep(0.005)
+
+        def stop(self):
+            self.stop_calls += 1
+            if self.stop_calls == 1:
+                raise RuntimeError("cron cleanup failed")
+            self.running = False
+            if self._thread is not None:
+                self._thread.join(timeout=1)
+
+    watcher = AutomaticMemoryWatcher(
+        source_provider=lambda source_id: next(
+            item for item in registry.list_sources() if item.source_id == source_id
+        ),
+        on_change=lambda _source_id: None,
+        watch_backend=backend,
+        stop_timeout_seconds=0.01,
+    )
+    cron = RetryingCron()
+    scheduler = AutomaticMemoryScheduler(
+        db,
+        registry,
+        scan_runner=lambda *_args: ReconciliationReport(0, 0, 0, (), True),
+        watcher=watcher,
+        cron=cron,
+        poll_seconds=0.01,
+    )
+    scheduler.start()
+    assert source_id in watcher.running_sources()
+    assert stop_seen.is_set() is False
+    scheduler._source_cleanup_errors["other-source"] = "unrelated source error"
+
+    with pytest.raises(RuntimeError, match="cron cleanup failed"):
+        scheduler.stop()
+    assert cron.stop_calls == 1
+    assert cron.running is True
+    assert "other-source" in scheduler.source_cleanup_errors
+
+    release.set()
+    deadline = time.monotonic() + 1.0
+    while watcher.running_sources() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert watcher.running_sources() == ()
+
+    scheduler.stop()
+    assert cron.stop_calls == 2
+    assert cron.running is False
+    assert scheduler.source_cleanup_errors == {"other-source": "unrelated source error"}
+
+
+def test_scheduler_start_waits_for_inflight_stop_cleanup(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+    release = threading.Event()
+    stop_seen = threading.Event()
+    backend_calls = 0
+
+    def backend(_root, **kwargs):
+        nonlocal backend_calls
+        backend_calls += 1
+        if backend_calls > 1:
+            while not kwargs["stop_event"].wait(0.01):
+                yield set()
+            return
+        while not release.is_set():
+            if kwargs["stop_event"].is_set():
+                stop_seen.set()
+            time.sleep(0.01)
+        yield set()
+
+    watcher = AutomaticMemoryWatcher(
+        source_provider=lambda source_id: next(
+            item for item in registry.list_sources() if item.source_id == source_id
+        ),
+        on_change=lambda _source_id: None,
+        watch_backend=backend,
+        stop_timeout_seconds=0.2,
+    )
+    scheduler = AutomaticMemoryScheduler(
+        db,
+        registry,
+        scan_runner=lambda *_args: ReconciliationReport(0, 0, 0, (), True),
+        watcher=watcher,
+        poll_seconds=0.01,
+    )
+    scheduler.start()
+    stop_thread = threading.Thread(target=scheduler.stop)
+    stop_thread.start()
+    assert stop_seen.wait(1)
+
+    start_returned = threading.Event()
+
+    def restart():
+        scheduler.start()
+        start_returned.set()
+
+    start_thread = threading.Thread(target=restart)
+    start_thread.start()
+    assert not start_returned.wait(0.05)
+
+    release.set()
+    stop_thread.join(timeout=2)
+    start_thread.join(timeout=2)
+    assert not stop_thread.is_alive()
+    assert not start_thread.is_alive()
+    assert scheduler._running is True
+    assert scheduler.cron.running is True
+    deadline = time.monotonic() + 1.0
+    while watcher.running_sources() != (source_id,) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert watcher.running_sources() == (source_id,)
+
+    scheduler.stop()
+
+
+def test_scheduler_stop_after_start_is_serialized_and_idempotent(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+    scheduler = AutomaticMemoryScheduler(
+        db,
+        registry,
+        scan_runner=lambda *_args: ReconciliationReport(0, 0, 0, (), True),
+        poll_seconds=0.01,
+    )
+    started = threading.Event()
+    start_thread = threading.Thread(target=lambda: (scheduler.start(), started.set()))
+    start_thread.start()
+    assert started.wait(1)
+    start_thread.join(timeout=1)
+
+    stop_thread = threading.Thread(target=scheduler.stop)
+    stop_thread.start()
+    stop_thread.join(timeout=2)
+    assert not stop_thread.is_alive()
+    assert scheduler._running is False
+    assert scheduler.watcher.running_sources() == ()
+    scheduler.stop()
 
 
 def test_restart_marks_incremental_job_due_and_reuses_running_scan(tmp_path: Path):
