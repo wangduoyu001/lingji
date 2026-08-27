@@ -44,6 +44,8 @@ Task 4C 已完成一个有界的 Home 事实显示收口：在不改后端的前
 
 Task 5A 已完成 Owner Work API 基础收口（代码/测试已通过 focused 验证，等待独立审查）：复用现有 `WorkStore` 与认证 8766，提供有界工作历史分页、重启可恢复的按时间线读取，以及按稳定 `action_id` 幂等解决主人待办。当前不代表 UI、真实 8766、Artifact、Production/Vault 或主人验收完成。
 
+Task 5A Repair Round 1 已完成最后授权修复，等待独立终审：解决主人待办后不再残留旧的主人下一步，且不会删除更新的系统下一步；来源摘要来自现有工作标题并保留精确来源 ID 作为次要诊断。产品/测试提交为 `5e71cda68edfb86eac99804bc66fbfb6540bcb9c`，自动验证聚焦 40 passed、广义 Work/Task8/Capture/自动记忆回归 102 passed；不代表真实服务、UI、Artifact 或主人验收完成。
+
 ## 1B. 自动化第二大脑的锁定方向
 
 Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明确 allowlist 内自动发现并持续接管官方支持或明确授权的 AI 记录，保存完整本地原始证据、来源链和可重建 RAG 投影，并在 Desktop 真实显示发现、处理、结果、失败、下一动作与执行者。

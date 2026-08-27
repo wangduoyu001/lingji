@@ -284,7 +284,7 @@ POST /api/work/pending-actions/{action_id}/resolve
 - The resolve route calls the existing `WorkStore.resolve_pending()` through `WorkControlService`; it does not invent a second task state.
 - Capture Center remains the sole visible manual capture surface; the old `CapturePage` is removed from navigation or redirects to it.
 
-- [x] **Step 1: Write RED API tests for work history pagination, friendly event summaries and pending-action resolution.** Assert stable `work_id`/`action_id`, restart persistence and no mismatch between current/history/pending projections. Task 5A product/tests commit: `f799b8aed526b52b259a360b7162ceef9b86b0a3`; initial RED: 4 failed behavioral tests.
+- [x] **Step 1: Write RED API tests for work history pagination, friendly event summaries and pending-action resolution.** Assert stable `work_id`/`action_id`, restart persistence and no mismatch between current/history/pending projections. Task 5A initial product/tests commit: `f799b8aed526b52b259a360b7162ceef9b86b0a3`; initial RED: 4 failed behavioral tests. Repair Round 1 product/tests: `5e71cda68edfb86eac99804bc66fbfb6540bcb9c`; repair RED: 3 failed behavioral tests.
 - [ ] **Step 2: Write RED rendered tests for completed work, failed work, actionable pending item and readable memory provenance.**
 - [ ] **Step 3: Implement Activity as real recent history.** Replace raw `event_type + JSON` primary display with Chinese phase, result, time, source and next actor; keep technical codes in an expandable diagnostic area.
 - [ ] **Step 4: Implement Attention completion/jump behavior.** Every visible item must resolve through the backend or navigate to its related Work/Memory; no dead-end card is permitted.

@@ -7,6 +7,12 @@
 - API 成功只代表真实持久事实已读取或变更；未知数量、时间、来源和下一执行者保持 `null`/“尚未获得”，不得用静态或聚合猜测填充。所有新增路由必须沿用现有认证依赖并复用 `WorkStore`。
 - 本轮完成后由独立 Luna 审查；最多一次修复。未执行真实服务、发布版或主人验收，不得宣称产品发布完成。
 
+### Repair Round 1（独立审查 `522d41ba42534ea9c00992acf20e6980ad28b454` 后）
+
+- 仅修复两项 Important：resolve 在同一既有 WorkStore 事务中标记 action 并按 `work_id/action_id/actor=owner` 清理过期主人下一步；来源摘要使用已有工作标题作为可读来源并保留精确 `source_id` 次要诊断，无来源保持 null。并发/重放/重启和不同来源差异均有真实 SQLite 测试。
+- RED：`tests/test_work_control_api.py` 修复前 3 个行为测试失败；GREEN：聚焦 Task 5A 矩阵 40 passed、2 warnings；Work/Task8/Capture/automatic-memory Work Fact 回归 102 passed、2 warnings。
+- 产品/测试提交：`5e71cda68edfb86eac99804bc66fbfb6540bcb9c`。本轮为最后一次授权修复，不扩大到 UI、记忆/RAG/向量、Task 2/3、Artifact、真实 8766、Production/Vault 或主人数据。
+
 ## 2026-08-28 · Phase 1 Product Landing · Task 4C · Home fact closure
 
 - 基准/触发审查：Task 4 final independent review `f3d70084e8dfb8a07e2fe46f7e1008e11cdf7c2d`；本轮是独立的 bounded follow-up，不是 Repair Round 3。仅修改 Home DTO/UI 与既有静态/渲染测试，不改后端/API、队列、CurrentWorkPanel、其他页面、检索/向量、发布或本机任务。
