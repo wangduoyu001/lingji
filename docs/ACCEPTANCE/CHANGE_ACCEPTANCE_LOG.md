@@ -1856,3 +1856,33 @@ Windows 重启后恢复 = 100%
 - 自动化边界：真实 `run_packaged_control_api.py` subprocess、loopback authenticated API、StateDB/queue/raw/structured/Work Fact/lexical reads；每个 root 保存脱敏 stdout/stderr、PID/port/child inventory，并验证实例退出和端口重新 bind。启动前递归 sentinel 基线仅允许显式 VaultLayout bootstrap directory paths，第三方树零排除。
 - 失败/阻塞边界：Qdrant 必须在 packaged ingestion 产生的正式 lexical record 上执行正式 retrieval orchestration；当前 automatic-memory ingestion 仅写 raw/structured read model、不产生 lexical `memory_documents`，预置 Vault fact 不计证据，scenario 8 保持 `BLOCKED`。现有 scheduler idle heartbeat 为 nullable/诚实 `NOT_MEASURED/BLOCKED`，不以终态 Work Fact 时间冒充，需另开 Task6H。
 - 清理/回滚：仅清理本轮 pytest/`/private/tmp` Acceptance roots、logs 和 fixtures；按 PID/实例停止，端口重新绑定确认；代码/测试和报告文档分离提交。回滚本轮仅回退 `04eb1d3`、`b6e8c77`、`31f40a3` 及对应文档，不触碰主人数据。
+
+## 2026-08-28 · Task 6L · Structured evidence lexical wiring
+
+- 基线：`81ffaec967cf65a55ea692161b3c16ecd7d6d6e0`; bounded landing task only. The
+  existing StructuredReadModel rows remain evidence authority; this change adds
+  only a rebuildable `memory_documents`/FTS projection consumed by the existing
+  HybridRetriever/Gateway/MCP/ContextPack paths.
+- 边界：automatic imports never write Obsidian/Core Memory/candidates and never
+  call promotion seams. Each valid message gets a deterministic evidence
+  projection carrying source/conversation/message IDs, external identities,
+  role/order/content hash, raw reference and occurred time. Empty/unsupported
+  message bodies are not indexed; source identities remain namespaced.
+- RED: add a real Generic AI History `ExtractionPipeline.execute()` test and
+  prove formal lexical Gateway search is empty before the bridge. No direct
+  `memory_documents` fixture seeding is used.
+- Required GREEN/regression: same pipeline must yield an evidence lexical hit;
+  Gateway, MCP and ContextPack must cite the same message identity; semantic
+  client failures must preserve the lexical result with degraded diagnostics;
+  repeated import must not add documents/chunks; deleting/rebuilding the
+  rebuildable projection must restore it from structured rows. Run focused
+  structured/extraction/retrieval/context/provenance/promotion regression plus
+  compileall, diff-check, acceptance sync and local handoff checks.
+- Explicit limitation to report: authorization registry revocation lives in
+  `lingji_state.db`, while structured read-model source status is in
+  `lingji_memory.db`; this task must not invent a second state bridge. If the
+  current retrieval filters cannot observe revocation, leave it as a bounded
+  blocker rather than expanding the state model.
+- Safety: pytest temporary roots only; no live 8766/8767, Artifact,
+  Production/Vault, owner data, Qdrant or UI acceptance. Product/tests and
+  docs/evidence are separate commits.

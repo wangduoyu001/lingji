@@ -95,7 +95,9 @@ tests/test_runtime_truth.py
 
 ```text
 src/retrieval/memory_db.py
-= 可重建 Lexical/Metadata Index
+= 可重建 Lexical/Metadata Index；`sync_structured_evidence()` 将已落库的
+  structured source/conversation/message 正文投影为 `structured_evidence`
+  文档，保留来源身份与时态字段，不写入 Vault
 
 src/retrieval/qdrant_provider.py::QdrantSemanticProvider
 = 可重建 Semantic Index Provider
@@ -156,6 +158,7 @@ src/extraction/queue.py::SQLiteExtractionQueue
 src/extraction/worker.py
 src/extraction/sink.py
 src/extraction/structured_sink.py
+= StructuredReadModel 写入后接入上述可重建 structured evidence lexical projection
 ```
 
 正式数据处理链：
