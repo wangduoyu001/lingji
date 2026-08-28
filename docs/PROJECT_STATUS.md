@@ -9,6 +9,7 @@
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
 > Current engineering gate: `TASK 7 — MEASUREMENT CONTRACT CAP / BLOCKED`
+> Mac owner experience: `TASK8E CANDIDATE ACTIVE / NOT_FINAL_RELEASE`
 > Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
@@ -36,7 +37,9 @@ Phase 1 PASS 后，Phase 2 第一优先级固定为 **Opportunity Center / 机�
 
 此前唯一已复现的 P0 缺口是：一次终态失败已经产生主人待办后，实时生命周期 callback 随即成功时，成功 Outcome 会立即写入，但旧 PendingAction 要等后续 `WorkStore` 重放/读取才被解决。Task 1 已通过单一事务转换和 callback/replay/restart/乱序矩阵修复并回归验证；剩余执行权威为 `docs/superpowers/plans/2026-08-26-phase1-automatic-memory-followup.md`。
 
-当前 `LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。在 Work Fact 收口、固定 100 问评测、统一 RAG、质量/规模门禁和同 SHA Artifact 锁定之前，不执行新的真实安装或 M5 主人验收。
+当前 `LOCAL_EXECUTION_TASK.md` 已由主人明确授权切换为 `TASK8E-MAC-EXPERIENCE-FFC2D885` 的
+`ACTIVE` 体验候选任务。该任务只准备真实 macOS arm64 发布候选并保持 UI 供主人观察，
+不绕过 Task7 质量测量阻塞，不宣称 memory quality、100k、release gate、Phase 1 或最终发布。
 
 Task 3 Repair Round 1 已在本分支产品提交 `f2f7312` 完成八项重要缺口修复；最终 Repair Round 2 产品提交 `7058da0` 补齐 BOM/CRLF frontmatter、自动 Generic AI 跨来源身份命名空间和暂停恢复 Work Fact 计数。该状态仅表示代码与合成 fixture 验证通过；不表示 Artifact、真实 UI、主人观察或 Production/Vault 验收完成。Task 2 的 stale scheduler cleanup-state 边界已由 Task 6A 产品/测试提交 `15eb4433c9d6c3ba218e89d50bec84987ad35915` 收口；自动晋级 seam 仍禁止调用。
 

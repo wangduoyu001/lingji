@@ -2453,3 +2453,19 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 本条仅为现有权威文档事实对齐，不修改 `src/`、Desktop、tests 或 scripts；完成后必须
   运行 `./.venv/bin/python scripts/check_acceptance_sync.py`、
   `./.venv/bin/python scripts/check_local_execution_handoff.py`、diff-check，并远程复读提交。
+
+## 2026-08-28 · Task8E · Mac Experience Candidate preparation
+
+- 主人明确要求尽快进入 Mac 发布版和实际体验验收；本轮激活唯一 ACTIVE 本机任务
+  `TASK8E-MAC-EXPERIENCE-FFC2D885`，精确产品 Head 为
+  `ffc2d8851dc91b5f09b14d31a34c1e6988358933`。
+- 本轮只在 Apple Silicon macOS 上构建真实 sidecar/Tauri app/DMG 候选，使用任务根
+  `/tmp/LingJiAcceptance/TASK8E-ffc2d8851` 与 Acceptance workspace 隔离运行；覆盖安装不
+  卸载、不删除主人数据，启动后保持 UI 打开等待主人观察。产品代码、测试、Task7 质量/
+  100k/release gate、Production/Vault 与真实第三方 AI 数据均不在范围内。
+- 允许的自动证据：`npm run test:macos-release`、Desktop build、Work Fact/source/rendered
+  smoke、`build:sidecar:macos`、Tauri arm64 app/DMG build、metadata/hash/arm64/codesign/
+  8766 health/进程与 DataRoot 隔离检查。未亲点的可见控件必须保持 `NOT_TESTED`。
+- Task7 仍为 `BLOCKED_AT_MEASUREMENT_CAP`；本候选是 `Mac Experience Candidate /
+  NOT_FINAL_RELEASE`。只有主人确认体验后，回执才可进入 `READY_FOR_OWNER_EXPERIENCE`
+  之后的最终判断；不得写 `COMPLETED` 或 `PASS`。
