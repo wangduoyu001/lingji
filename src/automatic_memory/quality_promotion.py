@@ -13,7 +13,7 @@ from src.auto_review.models import ProvenanceRef, ReviewCandidate
 from src.auto_review.promotion import AutoMemoryPromotionService
 
 
-_PROTECTED_CATEGORIES = frozenset({"core/protected", "authority-conflict", "assistant-only"})
+_PROTECTED_CATEGORIES = frozenset({"core/protected", "high-risk", "authority-conflict", "assistant-only"})
 _STATUSES = frozenset({"active", "pending_owner_review", "rejected", "error"})
 
 
@@ -23,8 +23,10 @@ def promotion_category(record: Any) -> str:
     risk = str(getattr(record, "risk", "") or "").strip().lower()
     privacy = str(getattr(record, "privacy", "") or "").strip().lower()
     authority = str(getattr(record, "authority", "") or "").strip().lower()
-    if memory_kind in {"core", "core_memory", "protected_candidate"} or risk in {"high", "critical"} or privacy in {"restricted", "sensitive", "secret"}:
+    if memory_kind in {"core", "core_memory", "protected_candidate"} or privacy in {"restricted", "sensitive", "secret"}:
         return "core/protected"
+    if risk in {"high", "critical"}:
+        return "high-risk"
     if memory_kind in {"authority_conflict", "conflict"}:
         return "authority-conflict"
     if authority in {"assistant", "assistant-suggestion", "assistant_inference", "assistant-inference", "ai_inference", "ai-inference"}:

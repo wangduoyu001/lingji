@@ -17,6 +17,7 @@ def test_promotion_category_comes_from_explicit_fixture_fields():
 
     assert promotion_category(_record(memory_kind="protected_candidate", risk="high")) == "core/protected"
     assert promotion_category(_record(memory_kind="authority_conflict", authority="assistant-suggestion")) == "authority-conflict"
+    assert promotion_category(_record(memory_kind="knowledge", risk="high", privacy="synthetic")) == "high-risk"
     assert promotion_category(_record(authority="assistant-suggestion")) == "assistant-only"
     assert promotion_category(_record()) == "low-risk-user"
 
