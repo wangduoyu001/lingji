@@ -579,7 +579,7 @@ src/automatic_memory/quality_gate.py::AcceptanceRoots / run_quality_gate
 Focused validation:
 
 ```powershell
-python -m pytest -q tests/evaluation/test_task4_reset_runner.py tests/test_task4_reset_validation_guard.py
+python -m pytest -q tests/evaluation/test_task4_reset_runner.py tests/test_00_task4_reset_validation_guard.py
 ```
 
 Tasks 10–11:

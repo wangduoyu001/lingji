@@ -97,6 +97,13 @@ Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明
 
 当前 thin quality runner 已按 Task 4R-Reset Task 6 收口：仅在带精确 lease token/owner 校验的临时 Acceptance roots 编排现有导入、Work/Memory/Gateway contracts；不可用证据保持 nullable/`NOT_MEASURED`，不进入 `EvaluationReport`，实测失败保持 `FAIL`，清理失败覆盖预清理结论并由 CLI 复核完整清理库存。MCP parity、Qdrant degradation、corruption isolation、context baseline、scale 与 owner/reboot evidence 仍未测量，因此官方 functional/phase 状态保持 `NOT_EVALUATED`；release 在 4R2 readiness 前以 `BLOCKED_4R2_REQUIRED` 停在 100k 之前。历史 automatic-activation 断言继续作为拒绝证据，不得为绿灯自动批准 fixture 候选或绕过 owner review。
 
+Task7E 的 PowerShell executable-entry 证据已通过真实 Windows runner 取得：现有
+`p0-windows-gate.yml` 的 full pytest artifact 在 `33153622216` 明确记录真实
+`scripts/validate.ps1` 调用成功进入、非零阻断和 `preflight` 唯一 hook；因此
+`scale-env=0`、`scale-command=0`。P0 总体仍因既有 Windows full 测试和 Desktop
+smoke 失败，不能视为 release、4R2、100k 或 Phase 1 通过；Task7 的正式质量评测
+仍保持 `NOT_EVALUATED`。
+
 ## 2. 最近一次主人验收结论
 
 最后一次真实 M5 验收仍然是：

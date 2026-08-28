@@ -5,7 +5,7 @@
 - 本轮只补齐 Task7E release entry 的真实 Windows 执行证据，不修改
   `.github/workflows/**`、4R2/100k、retrieval、产品数据或本机服务。由于仓库
   workflow 文件不可由当前 OAuth token 推送，复用既有 `p0-windows-gate.yml`
-  的依赖安装后 full pytest 路径，由 `tests/test_task4_reset_validation_guard.py`
+  的依赖安装后 full pytest 路径，由 `tests/test_00_task4_reset_validation_guard.py`
   在发现真实 `pwsh`/`powershell(.exe)` 时调用
   `scripts/run_powershell_validation.py --mode release --entry-only --hook`。
 - Windows 运行必须真实进入 `scripts/validate.ps1`，返回非零并包含
@@ -13,9 +13,25 @@
   `scale-env=0`、`scale-command=0`。Windows 平台不得因缺少 runtime 而返回；
   无 PowerShell 的本机仅允许得到 `BLOCKED_POWERSHELL_RUNTIME_UNAVAILABLE`。
 - `--entry-only` 仍是测试专用双重 opt-in（参数、环境标记和 hook 同时存在），
-  默认 release/full 行为不改变。当前 CI 远程 run、PowerShell 步骤和
-  `git ls-remote` 复读结果待本轮完成后追加；在此之前不得标记 executable entry
-  passed。相关报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-7e-ci-report.md`。
+  默认 release/full 行为不改变。远程 run、PowerShell 测试 marker 和
+  `git ls-remote` 复读结果记录在
+  `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7e-report.md`。
+
+## 2026-08-28 · Task 7E-CI Repair 1 · remote result
+
+- 分支 `codex/phase1-automatic-memory` 已复读为
+  `e145dbe4b6642723d0e63821dcb137af83a5fe1b`；workflow
+  [`33153622216`](https://github.com/wangduoyu001/lingji/actions/runs/33153622216)
+  的 Windows Python job `98791162437` 真实执行了重命名后的 guard 测试。
+- pytest artifact 中出现唯一明确 marker：
+  `TASK7E_REAL_POWERSHELL_RELEASE_ENTRY PASS events=preflight scale-env=0 scale-command=0`。
+  该测试通过真实 PowerShell 进入 `scripts/validate.ps1`，非零返回并命中
+  `BLOCKED_4R2_REQUIRED`；scale-env/scale-command 均未发生。此前无 runtime 的本机
+  结果仍为 `BLOCKED_POWERSHELL_RUNTIME_UNAVAILABLE`。
+- Workflow 总体 `failure` 不得改写：Python full suite 约 35% 处有既有 Windows
+  测试失败；Desktop smoke 失败于 `Navigation is missing 主动投喂`。Task7E entry
+  证据单独结论为 `EXECUTABLE_ENTRY_EVIDENCE_PASS`，不代表 P0、release、4R2、100k、
+  Mac、Artifact 或 Phase 1 通过。详见上述 Task7E 报告。
 
 ## 2026-08-28 · Task 6V · packaged automatic-memory closeout
 

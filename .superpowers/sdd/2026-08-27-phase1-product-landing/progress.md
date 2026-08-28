@@ -27,6 +27,15 @@ Task 1 FINAL BLOCKED — Repair Round 2 product/tests 5f75e3af9b2269519337de68db
 Task 1 verified strengths — complete reset matrix 336 passed; admission/cleanup/measured-failure/history/evidence findings closed.
 Task 1 remaining Important — actual PowerShell release entry not executable/instrumented on this host; runner-stage exceptions do not always publish fresh truthful NOT_EVALUATED envelopes.
 Task 1 final disposition — repair cap exhausted. Quality runner, 4R2, release, 100k and Artifact remain composition-quarantined. Tasks 2–6 runtime/ingestion/Work Fact/UI may proceed without using or claiming this gate. Task 7/8 remain blocked pending a later independent runner-error-envelope/release-entry task.
+
+Task7E-CI Repair 1 已完成远程 Windows 可执行入口取证：产品/测试提交
+`c47911e`，测试排序/marker 修复 `e145dbe`。现有 `p0-windows-gate.yml` 未修改；
+Windows full suite 的 pytest artifact（workflow `33153622216`）明确记录
+`TASK7E_REAL_POWERSHELL_RELEASE_ENTRY PASS events=preflight scale-env=0
+scale-command=0`，证明真实 PowerShell release entry 在 4R2 readiness 前非零
+阻断且未构造 scale/100k。P0 总体因既有 Windows full 测试和 Desktop
+`主动投喂` smoke 失败，不能视为全门禁通过；Task7/4R2/100k/release/Artifact/
+主人验收仍未执行。
 Task 2 root decisions — heartbeat age is null with explicit unavailable reason (no fake timestamp/daemon); one DB means one canonical state DB path plus one shared queue wrapper, multiple connections to that file allowed; snapshot terminal consumption remains Task 3.
 Task 2: REPAIR_ROUND_1 — implementation cbee300f519f66a2a090561a71ea4c21fb1057d7..2200c52c5d0a0d764e4545e25bd29c7431a61ffb; review Spec FAIL / Quality Needs fixes (0 Critical, 4 Important, 1 Minor).
 Task 2 repair scope: start/stop exception cleanup and truthful surviving-thread state; live authorized-source attach; executable real packaged composition test; watcher exit verification; never-started pause status.

@@ -35,10 +35,10 @@ RED：新增 stage-hook matrix 首次运行因 `run_quality_gate()` 不接受 st
 ./.venv/bin/python -m pytest -q tests/evaluation/test_task4_reset_runner.py
 25 passed in 25.28s
 
-./.venv/bin/python -m pytest -q tests/test_task4_reset_validation_guard.py tests/evaluation/test_task4_reset_runner.py
+./.venv/bin/python -m pytest -q tests/test_00_task4_reset_validation_guard.py tests/evaluation/test_task4_reset_runner.py
 28 passed in 25.13s
 
-./.venv/bin/python -m pytest -q tests/evaluation/test_task4_reset_readiness.py tests/test_task4_reset_validation_guard.py
+./.venv/bin/python -m pytest -q tests/evaluation/test_task4_reset_readiness.py tests/test_00_task4_reset_validation_guard.py
 112 passed in 1.00s
 ```
 
@@ -81,3 +81,32 @@ environment/command marker 为零。
   owner acceptance。
 - 测试仅使用 pytest temporary roots；不得据此宣称 Task 7/Phase 1 或 release
   acceptance 已通过。PowerShell 真实执行证据留待具备 runtime 的 Windows CI/主机。
+
+## Task7E-CI Repair 1 — Windows executable-entry evidence
+
+本轮将 PowerShell 行为测试放入现有 Windows full-suite 的最早收集文件
+`tests/test_00_task4_reset_validation_guard.py`，未修改 `.github/workflows/**`。
+测试在检测到真实 `pwsh`/`powershell(.exe)` 时使用 `sys.executable` 调用
+`scripts/run_powershell_validation.py --mode release --entry-only --hook <tmp>`；
+在无 runtime 的本机仍只保留 `BLOCKED_POWERSHELL_RUNTIME_UNAVAILABLE` 诚实结果，
+不以条件 skip 伪造 Windows 通过。
+
+远程验证：
+
+- 分支复读：`codex/phase1-automatic-memory` →
+  `e145dbe4b6642723d0e63821dcb137af83a5fe1b`。
+- Workflow：[`33153622216`](https://github.com/wangduoyu001/lingji/actions/runs/33153622216)，
+  Python job `98791162437`；原生 PowerShell focused、依赖安装、clean-install 和
+  compile 步骤均通过。
+- Windows pytest artifact `pytest-windows.log` 明确包含：
+  `TASK7E_REAL_POWERSHELL_RELEASE_ENTRY PASS events=preflight scale-env=0 scale-command=0`。
+  这证明测试确实进入真实 PowerShell release 入口，返回非零并命中
+  `BLOCKED_4R2_REQUIRED`，且只产生 `preflight`，未构造或调用 scale/100k。
+- P0 整体为 `failure`：Python full suite 在约 35% 处复现既有 Windows 测试失败，
+  Desktop smoke 失败于既有 `Navigation is missing 主动投喂`；二者均不是 Task7E
+  测试失败。故本轮结论为 `EXECUTABLE_ENTRY_EVIDENCE_PASS / P0_UNRELATED_FAILURE`，
+  不等同于 release、4R2、100k、Mac 或 Phase 1 通过。
+
+本轮本地验证：Task7E guard + runner `31 passed`，compileall、diff-check、
+acceptance sync、local handoff 通过；工作树已清理。未运行 4R2、100k、release、
+Artifact、Production/Vault、8766/8767 或主人验收。
