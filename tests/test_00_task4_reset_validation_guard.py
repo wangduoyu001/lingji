@@ -53,7 +53,7 @@ def test_release_entry_exposes_opt_in_order_hook_without_scale_side_effects() ->
 
 def test_windows_full_suite_collects_the_real_release_runtime_guard() -> None:
     workflow = Path(".github/workflows/p0-windows-gate.yml").read_text(encoding="utf-8")
-    test_source = Path("tests/test_task4_reset_validation_guard.py").read_text(encoding="utf-8")
+    test_source = Path("tests/test_00_task4_reset_validation_guard.py").read_text(encoding="utf-8")
     assert "- name: Run full repository test suite" in workflow
     assert "python -m pytest -q --tb=short" in workflow
     assert "test_release_entry_executes_real_powershell_when_available" in test_source
@@ -61,7 +61,7 @@ def test_windows_full_suite_collects_the_real_release_runtime_guard() -> None:
     assert "sys.platform == \"win32\"" in test_source
 
 
-def test_release_entry_executes_real_powershell_when_available(tmp_path: Path) -> None:
+def test_release_entry_executes_real_powershell_when_available(tmp_path: Path, capsys) -> None:
     executable = next(
         (shutil.which(candidate) for candidate in ("pwsh", "powershell", "powershell.exe") if shutil.which(candidate)),
         None,
@@ -90,6 +90,8 @@ def test_release_entry_executes_real_powershell_when_available(tmp_path: Path) -
     assert "BLOCKED_4R2_REQUIRED" in (result.stdout + result.stderr)
     events = [line.strip() for line in hook.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert events == ["preflight"]
+    with capsys.disabled():
+        print("TASK7E_REAL_POWERSHELL_RELEASE_ENTRY PASS events=preflight scale-env=0 scale-command=0", flush=True)
 
 
 def test_release_entry_only_is_double_opt_in_and_launcher_passes_real_switch() -> None:
