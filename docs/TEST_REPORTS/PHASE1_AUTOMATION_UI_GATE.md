@@ -212,3 +212,44 @@ adjustment; the attempted uncommitted harness repair was discarded.
 Current authority is therefore `IN_PROGRESS / NOT_ACCEPTED` with I1 blocked.
 I2–I6 are not claimed as accepted by this report. No product change, release,
 Artifact, live service, Production/Vault, or owner acceptance is claimed.
+
+## Task 6V packaged closeout (2026-08-28, current)
+
+Task6R product HEAD `684398e2b56447203ff6b77b4e93cae2c07b38f2` adds terminal
+snapshot-owned temporary cleanup through the existing `ConsistentSnapshot`
+reconcile seam. Task6R focused lifecycle coverage is `6 passed`.
+
+The existing packaged harness was tightened only in integration/acceptance
+tests: transient marker inventory now classifies complete snapshot-owned names;
+raw evidence is restricted to verified 64-hex content-addressed objects;
+cross-root parity compares normalized natural identity/status sets plus message
+and version hashes; cleanup receipts use measured child/PID/port evidence; and
+crash recovery waits for the measured durable lease barrier before production
+startup reconciliation. Desktop rendered readiness uses DOM load plus the
+existing landing heading rather than `networkidle` because authenticated
+polling keeps network activity open.
+
+Fresh complete packaged invocations from independent temporary roots:
+
+```text
+./.venv/bin/pytest -q tests/integration/test_automatic_memory_packaged_flow.py --tb=short -x
+2 passed, 1 warning, 294.47s
+2 passed, 1 warning, 295.59s
+```
+
+Both invocations cover ten scenarios and 30%/70% real sidecar crash/restart;
+the original durable scan reaches `20/20`, transient inventory is zero,
+raw hashes and logical source/scan/job/Work Fact/structured identities have
+exact parity, fallback is false, duplicate/queued counts are zero, and child,
+port, log and temporary cleanup are measured. Packaged Gateway/Hybrid, formal
+MCP/ContextPack, lexical semantic-degradation, revoke/expiry current
+fail-closed, history/as-of, evidence version supersession, and heartbeat
+instance/generation evidence pass. Focused Task6H covers active Work Fact
+failure/degraded/recovery.
+
+The Task6V focused matrix is `376 passed, 3 warnings`; Desktop build, runtime,
+source/repair, Work Fact, memory-review smokes and rendered E2E pass. Compile,
+diff, acceptance-sync and local-handoff checks pass. Current automated
+disposition is `AUTOMATED_ACCEPTED / READY_FOR_TASK7` only. This does not claim
+release, Artifact, live 8766/8767, Production/Vault, or owner acceptance;
+`LOCAL_EXECUTION_TASK.md` remains `IDLE`.

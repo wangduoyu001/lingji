@@ -688,3 +688,25 @@ pipeline `process_next/process_internal_next/process_job` 的 lifecycle callback
 显式嵌套 lease key。仅授权一轮有界 lifecycle projection repair；Task6P 保持
 `NOT_ACCEPTED`，Task6 保持 `IN_PROGRESS / NOT_ACCEPTED`。Task6L/M 历史结论、
 Task6V packaged 30/70、live/Artifact/Production/Vault/owner acceptance 均不改写。
+
+### Task 6V packaged closeout（2026-08-28，当前自动化状态）
+
+Task6R 产品 HEAD `684398e2b56447203ff6b77b4e93cae2c07b38f2` 已修复
+`snapshot-owned` terminal cleanup。Task6V 仅在现有 integration harness 内补齐
+transient/raw 分类、跨 root 自然身份与状态 parity、实测 PID/child/port cleanup
+receipt、lease barrier 后 startup recovery，以及 Desktop rendered 的确定性就绪等待；
+没有修改 `src/` 或 Desktop 产品代码。
+
+完整 packaged gate 从独立临时 roots 连续两次 GREEN：
+`2 passed, 1 warning, 294.47s` 与 `2 passed, 1 warning, 295.59s`。每次覆盖十个
+场景、30%/70% 真实 sidecar crash/restart、原 scan `20/20`、transient=0、raw 64hex
+hash、自然身份/状态 parity、fallback=false、queued/duplicates=0、PID/child/port/log
+清理、Gateway/Hybrid/MCP/ContextPack lexical fallback、revoke/expiry current/history/
+as_of/version、heartbeat instance/generation。Task6H active Work Fact degraded/recovery
+由 focused 套件覆盖。
+
+Task6V focused matrix `376 passed, 3 warnings`；Desktop build、runtime、source/repair、
+Work Fact、memory-review smokes 与 rendered E2E 均通过；compileall、diff-check、
+acceptance-sync、local-handoff 通过。当前自动化 disposition 为
+`AUTOMATED_ACCEPTED / READY_FOR_TASK7`，不代表 release、Artifact、live 8766/8767、
+Production/Vault 或 owner acceptance；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。

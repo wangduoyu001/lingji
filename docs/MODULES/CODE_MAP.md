@@ -767,3 +767,24 @@ desktop/lingji-control/scripts/windows-release-smoke.mjs
 ```
 
 成功时只读取 `output/validation/.../summary.json` 或 `summary.md`；失败时再读取对应日志。历史通过结果只记录在 `docs/TEST_REPORTS/`，当前结论只记录在 `docs/PROJECT_STATUS.md`。
+
+### Task 6V 当前自动化验收映射（2026-08-28）
+
+`tests/integration/test_automatic_memory_packaged_flow.py` 是 Task6V 的唯一
+packaged composition gate：它使用正式 packaged Control sidecar、既有 StateDB、
+ExtractionPipeline、AutomaticMemoryScheduler/Watcher、Gateway/Hybrid、生产 MCP
+注册与 ContextPack。验收 helper 只做证据编排，不新增产品 runner、数据库、队列、
+检索器或 API。
+
+当前 gate 已覆盖 transient 与 content-addressed raw inventory、跨 root 自然
+identity/status parity、30%/70% crash/restart 原 scan recovery、Work Fact、
+PID/child/port/log cleanup、lexical semantic degradation、current/history/as_of
+authority、evidence version supersession、heartbeat instance/generation 和
+recursive non-interference。Task6H active heartbeat failure/degraded/recovery
+仍由 `tests/test_task6h_heartbeat.py` focused contract 覆盖。
+
+Task6V 两次独立 packaged invocation 均为 `2 passed, 1 warning`；focused backend
+matrix 为 `376 passed, 3 warnings`；Desktop build、runtime/source/Work Fact/
+memory-review smokes 与 rendered E2E 均通过。当前仅可标记
+`AUTOMATED_ACCEPTED / READY_FOR_TASK7`，不可据此宣称 release、Artifact、live
+8766/8767、Production/Vault 或 owner acceptance。

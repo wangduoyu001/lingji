@@ -204,3 +204,17 @@ handoff pass. I1: arbitrary unbounded explicit lease-key values are collected
 and globally substituted in callback正文, so `lease_token: "a"` over-redacts
 ordinary text. Task6P remains `NOT_ACCEPTED`; Task6 remains
 `IN_PROGRESS / NOT_ACCEPTED`; no further repair is authorized.
+
+Task 6V packaged closeout (2026-08-28): after product HEAD
+`684398e2b56447203ff6b77b4e93cae2c07b38f2` fixed terminal
+`snapshot-owned` cleanup, the existing acceptance harness was tightened for
+transient/raw inventory, natural identity/status parity, measured process and
+port cleanup, lease-barrier startup recovery, and deterministic rendered
+readiness. No `src/` or Desktop product code changed. Two independent complete
+packaged invocations each passed `2 passed, 1 warning` (294.47s and 295.59s),
+covering ten scenarios and real 30%/70% crash/restart roots. Task6Q/H/S/A plus
+Task2–5 focused regression passed `376 passed, 3 warnings`; Desktop build,
+smokes, rendered E2E, compile, diff, acceptance sync and local handoff passed.
+Task6 automated disposition is now `AUTOMATED_ACCEPTED / READY_FOR_TASK7` only;
+release, Artifact, live 8766/8767, Production/Vault and owner acceptance are
+not run, and `LOCAL_EXECUTION_TASK.md` remains `IDLE`.

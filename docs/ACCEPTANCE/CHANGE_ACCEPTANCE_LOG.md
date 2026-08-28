@@ -1,5 +1,28 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Task 6V · packaged automatic-memory closeout
+
+- Task6R 产品 HEAD `684398e2b56447203ff6b77b4e93cae2c07b38f2` 已修复
+  terminal `snapshot-owned` temporary cleanup；Task6R focused `6 passed`。
+  Task6V 仅修改现有 integration/acceptance harness 与 E2E 测试等待，不改
+  `src/`、Desktop 产品、数据库、队列、API、检索或数据权威。
+- Packaged gate `./.venv/bin/pytest -q tests/integration/test_automatic_memory_packaged_flow.py --tb=short -x`
+  从独立临时 roots 连续两次 GREEN：`2 passed, 1 warning, 294.47s` 与
+  `2 passed, 1 warning, 295.59s`。每次覆盖十场景、30%/70% 真实 crash/restart、
+  原 scan `20/20`、transient=0、raw 64hex hash、自然 identity/status parity、
+  fallback=false、queued/duplicates=0、PID/child/port/log cleanup、Gateway/
+  Hybrid/MCP/ContextPack lexical degradation、revoke/expiry current/history/as_of/
+  version 与 heartbeat instance/generation。
+- Task6Q/H/S/A、Task6L/M/P/R、automatic-memory runtime/scheduler/snapshot/resume/
+  source/watcher/adapter/Control/MCP/context/Work Fact 与 Task4 reset focused
+  matrix：`376 passed, 3 warnings`。Desktop build、runtime/source/repair/Work Fact/
+  memory-review smokes 与 rendered E2E 通过；compileall、diff-check、acceptance
+  sync、local handoff 通过。E2E 仅将 `networkidle` 改为 DOM load + 既有 heading
+  readiness，因认证轮询使 network-idle 不具确定性。
+- 当前自动化 disposition：`AUTOMATED_ACCEPTED / READY_FOR_TASK7`。仍不得宣称
+  release、Artifact、live 8766/8767、Production/Vault 或 owner acceptance；
+  `LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。
+
 ## 2026-08-28 · Task 6Q · Trusted lifecycle projection correctness
 
 - Task6P final review 的唯一 Important 已复现并收口：callback lifecycle projection 不再从
