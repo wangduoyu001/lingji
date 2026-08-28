@@ -33,8 +33,8 @@ WorkStore 与 StructuredReadModel。
    readiness、measured quality、MCP 100/100、baseline payload 及详细证据一致性；scale
    只要求功能质量字段，Production sentinel 仍可为 nullable，owner/Mac/Windows 不参与
    scale admission。
-5. 质量 runner 的 corruption 实现移至 `quality_degradation`；quality_gate 仅保留旧私有
-   helper 的兼容 shim，实际路径不再调用它。
+5. 质量 runner 的 corruption 实现移至 `quality_degradation`；quality_gate 只调用该
+   单一正式测量入口，不再保留旧的 callback 计数实现。
 
 ## 当前真实结果
 
