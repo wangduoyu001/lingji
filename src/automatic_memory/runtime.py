@@ -185,6 +185,22 @@ class AutomaticMemoryRuntime:
                 "automatic-memory runtime requires one canonical state database and queue path"
             )
 
+    def _reconcile_snapshot_cleanup(self) -> str | None:
+        snapshot = self.snapshot or getattr(self.runner, "snapshot", None)
+        reconcile = getattr(snapshot, "reconcile_temporary_snapshots", None)
+        if not callable(reconcile):
+            return None
+        try:
+            result = reconcile()
+        except Exception:
+            return "snapshot temporary cleanup failed: snapshot_reconcile_failed"
+        errors = tuple(
+            str(error) for error in (result.get("errors") or ()) if str(error)
+        ) if isinstance(result, dict) else ("snapshot_reconcile_failed",)
+        if not errors:
+            return None
+        return "snapshot temporary cleanup failed: " + ",".join(dict.fromkeys(errors))
+
     def start(self) -> None:
         with self._lock:
             if self._started:
@@ -199,6 +215,9 @@ class AutomaticMemoryRuntime:
                 # project those states on every restart before serving queries.
                 for source in self.registry.list_sources():
                     self._on_source_lifecycle_projection(source)
+                snapshot_error = self._reconcile_snapshot_cleanup()
+                self._cleanup_errors = [snapshot_error] if snapshot_error else []
+                self._cleanup_pending = bool(snapshot_error)
             except BaseException as start_error:
                 errors = [f"start failed: {start_error}"]
                 for component in (self.scheduler, self.worker):
@@ -226,6 +245,10 @@ class AutomaticMemoryRuntime:
             if not self._started and not self._cleanup_pending:
                 # Keep stop idempotent but release a scheduler that may have
                 # been supplied already running by an embedding test/host.
+                snapshot_error = self._reconcile_snapshot_cleanup()
+                if snapshot_error:
+                    self._cleanup_errors = [snapshot_error]
+                    self._cleanup_pending = True
                 return
         # Stop admission first.  CronScheduler.stop waits for in-flight
         # reconciliation before the extraction consumer is stopped.
@@ -239,6 +262,9 @@ class AutomaticMemoryRuntime:
                     )
             except BaseException as exc:
                 errors.append(f"{component.__class__.__name__} stop failed: {exc}")
+        snapshot_error = self._reconcile_snapshot_cleanup()
+        if snapshot_error:
+            errors.append(snapshot_error)
         with self._lock:
             self._cleanup_errors = errors
             self._cleanup_pending = bool(errors)
@@ -414,8 +440,12 @@ class AutomaticMemoryRuntime:
             self._scan_reports[scan_id] = result
             status = getattr(result, "status", None) or (result.get("status") if isinstance(result, dict) else None)
             self.work_store.append_event(ExecutionEvent(work_id=work_id, event_id=f"scan:{scan_id}:{status or 'progress'}", event_type="scan.completed" if status == "completed" else "scan.progress", detail={"scan_id": scan_id, "status": status, "progress": getattr(result, "progress", None)}))
-            if status == "failed":
-                self.work_bridge.record_failure(work_id, stage="snapshot", reason=str(getattr(result, "last_error", None) or "automatic-memory snapshot failed"), retryable=True, evidence={"scan_id": scan_id})
+            last_error = getattr(result, "last_error", None)
+            cleanup_failed = isinstance(last_error, str) and last_error.startswith(
+                "snapshot temporary cleanup failed:"
+            )
+            if status == "failed" or cleanup_failed:
+                self.work_bridge.record_failure(work_id, stage="snapshot", reason=str(last_error or "automatic-memory snapshot failed"), retryable=True, evidence={"scan_id": scan_id})
             else:
                 self._maybe_finalize_scan_work(scan_id, result)
             return result
@@ -444,6 +474,19 @@ class AutomaticMemoryRuntime:
             # A paused/resumable scan may already have terminal extraction
             # jobs from its first checkpoint.  Do not turn those jobs into a
             # terminal Work Fact until the durable scan itself completes.
+            return
+        cleanup_error = scan.get("last_error")
+        if isinstance(cleanup_error, str) and cleanup_error.startswith(
+            "snapshot temporary cleanup failed:"
+        ):
+            self.work_bridge.record_failure(
+                work_id,
+                stage="snapshot",
+                reason=cleanup_error,
+                retryable=True,
+                evidence={"scan_id": scan_id},
+            )
+            self._scan_reports.pop(scan_id, None)
             return
         jobs = [item for item in self.queue.list_page(source_type="automatic_memory_snapshot", limit=200) if str((item.get("payload") or {}).get("scan_id") or "") == scan_id]
         if any(item.get("status") not in {"completed", "failed", "cancelled"} for item in jobs):

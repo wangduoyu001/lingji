@@ -2236,3 +2236,25 @@ Production/Vault 或主人数据。Task6M 历史结论不改写；本轮不再�
 为 `354 passed, 2 deselected, 6 warnings`。Desktop source/repair/rendered/build、compile/
 diff/sync/handoff 均通过；不执行 live/Artifact/release/
   Production/Vault/owner acceptance。Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`。
+
+## 2026-08-28 · Task 6R · Snapshot-owned terminal cleanup
+
+- 本轮是有界 Crash Snapshot Terminal Cleanup，基线为 `adb42d6710d286be0b7b930aba3cab6e9f6be7e9`。
+  仅修改现有 `src/automatic_memory/snapshot.py`、`checkpoint.py`、`runtime.py` 与 focused
+  lifecycle tests；不修改 `.automatic-memory-v1` transient、检索/UI、queue schema 或永久 raw。
+- `ConsistentSnapshot.reconcile_temporary_snapshots()` 取代一次性 startup-only 清理为明确、幂等、
+  machine-readable seam；只扫描 raw root direct child 的 exact bounded `.snapshot-owned-*`/legacy
+  `.snapshot-*` grammar，`lstat` regular/no-symlink，二次 identity 校验后 unlink。活跃/未过期 lease、
+  running mismatch、unknown/malformed、symlink、目录保留；terminal/paused/stopped 可清理；raw
+  content-addressed 对象不受影响。旧 `_cleanup_temporary_snapshots()` 保留兼容 wrapper。
+- SnapshotJobRunner 在 lease 更新后、pause/release、failure/lease-loss、terminal/finally 以及
+  completed retry 路径调用 reconcile；unlink/StateDB/root/stat 错误 fail closed，receipt 仅含稳定
+  generic codes 并通过 scan `last_error`/runtime cleanup 状态可见、可重试。Runtime stop 复用相同 seam；
+  cleanup failure 不把已完成扫描投影成干净 Work Fact。
+- RED：新增恢复测试在旧实现真实复现 `completed` 但旧 snapshot-owned marker 残留；GREEN：Task6R
+  focused `6 passed`，含真实子进程 SIGKILL/restart、active preserve、completed/paused/failed cleanup、
+  retry、StateDB/root error sanitization。扩展 snapshot/resume/checkpoint/scheduler/runtime、Task6H/L/M/P/S
+  回归 `179 passed, 2 warnings`；compileall、diff-check PASS。
+- 所有测试仅使用 pytest 临时 roots、临时 SQLite/raw/source；未启动 live 8766/8767、Artifact/release、
+  Production/Vault 或 owner 数据。Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`，Task6V packaged 30/70 待重跑。
+  报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6r-report.md`。

@@ -52,6 +52,9 @@ _OWNED_TEMP_PATTERN = re.compile(
     rf"([A-Za-z0-9_-]{{1,{_OWNER_SEGMENT_MAX_LENGTH}}})\."
     rf"([A-Za-z0-9_-]{{1,{_TEMP_TOKEN_MAX_LENGTH}}})\.tmp$"
 )
+_LEGACY_TEMP_PATTERN = re.compile(
+    rf"^\.snapshot-[A-Za-z0-9][A-Za-z0-9._-]{{0,{_OWNER_ID_MAX_LENGTH - 1}}}\.tmp$"
+)
 
 
 class ConsistentSnapshot:
@@ -88,18 +91,109 @@ class ConsistentSnapshot:
             self._sink = VaultExtractionSink.__new__(VaultExtractionSink)
             self._sink.raw_root = self.raw_root
         self.raw_root.mkdir(parents=True, exist_ok=True)
-        self._cleanup_temporary_snapshots()
+        self._last_cleanup_result = self._cleanup_temporary_snapshots()
         self.before_raw_commit = before_raw_commit
         self._copy_source_fd: int | None = None
 
-    def _cleanup_temporary_snapshots(self) -> None:
-        """Reclaim only provably dead or explicitly stale staging files."""
-        for temporary in self.raw_root.glob(".snapshot-*.tmp"):
+    def _cleanup_temporary_snapshots(self) -> dict[str, Any]:
+        """Compatibility wrapper for the explicit temporary-file reconcile."""
+        return self.reconcile_temporary_snapshots()
+
+    def reconcile_temporary_snapshots(self) -> dict[str, Any]:
+        """Reconcile direct-child snapshot staging files conservatively.
+
+        The receipt is deliberately machine-readable and contains only stable
+        error codes.  Unknown names, symlinks, directories, malformed owner
+        segments and active leases are preserved without being reported as
+        failures.
+        """
+        result: dict[str, Any] = {
+            "scanned": 0,
+            "removed": 0,
+            "preserved": 0,
+            "scanned_count": 0,
+            "removed_count": 0,
+            "preserved_count": 0,
+            "errors": [],
+            "clean": True,
+        }
+        errors: list[str] = result["errors"]
+        try:
+            root_stat = self.raw_root.lstat()
+            if stat_module.S_ISLNK(root_stat.st_mode) or not stat_module.S_ISDIR(root_stat.st_mode):
+                errors.append("raw_root_invalid")
+                result["clean"] = False
+                result["errors"] = tuple(errors)
+                return result
+            entries = tuple(self.raw_root.iterdir())
+        except Exception:
+            errors.append("raw_root_scan_failed")
+            result["clean"] = False
+            result["errors"] = tuple(errors)
+            return result
+
+        for temporary in entries:
+            if temporary.name.startswith(".snapshot-owned-"):
+                recognized = _OWNED_TEMP_PATTERN.fullmatch(temporary.name) is not None
+            else:
+                recognized = _LEGACY_TEMP_PATTERN.fullmatch(temporary.name) is not None
+            if not recognized:
+                continue
+            result["scanned"] += 1
+            result["scanned_count"] += 1
             try:
-                if self._temporary_is_reclaimable(temporary):
-                    temporary.unlink()
+                initial = temporary.lstat()
             except FileNotFoundError:
-                pass
+                continue
+            except Exception:
+                result["preserved"] += 1
+                result["preserved_count"] += 1
+                errors.append("temporary_stat_failed")
+                continue
+            if stat_module.S_ISLNK(initial.st_mode) or not stat_module.S_ISREG(initial.st_mode):
+                result["preserved"] += 1
+                result["preserved_count"] += 1
+                continue
+
+            reclaimable, decision_error = self._temporary_reclaim_decision(temporary, initial)
+            if decision_error:
+                errors.append(decision_error)
+            if not reclaimable:
+                result["preserved"] += 1
+                result["preserved_count"] += 1
+                continue
+            try:
+                # Re-check pathname identity immediately before unlinking so a
+                # concurrent replacement cannot redirect cleanup.
+                current = temporary.lstat()
+                if (
+                    current.st_dev != initial.st_dev
+                    or current.st_ino != initial.st_ino
+                    or current.st_size != initial.st_size
+                    or current.st_mtime_ns != initial.st_mtime_ns
+                    or current.st_mode != initial.st_mode
+                ):
+                    result["preserved"] += 1
+                    result["preserved_count"] += 1
+                    errors.append("temporary_identity_changed")
+                    continue
+                if stat_module.S_ISLNK(current.st_mode) or not stat_module.S_ISREG(current.st_mode):
+                    result["preserved"] += 1
+                    result["preserved_count"] += 1
+                    continue
+                temporary.unlink()
+                result["removed"] += 1
+                result["removed_count"] += 1
+            except FileNotFoundError:
+                # Idempotent: another reconciler may have removed it first.
+                continue
+            except Exception:
+                result["preserved"] += 1
+                result["preserved_count"] += 1
+                errors.append("temporary_unlink_failed")
+        result["errors"] = tuple(dict.fromkeys(errors))
+        result["clean"] = not result["errors"]
+        return result
 
     @staticmethod
     def _encode_owner(value: str) -> str:
@@ -147,39 +241,56 @@ class ConsistentSnapshot:
         return parsed.astimezone(timezone.utc)
 
     def _temporary_is_reclaimable(self, temporary: Path) -> bool:
+        try:
+            current = temporary.lstat()
+        except Exception:
+            return False
+        if not stat_module.S_ISREG(current.st_mode):
+            return False
+        reclaimable, _ = self._temporary_reclaim_decision(temporary, current)
+        return reclaimable
+
+    def _temporary_reclaim_decision(
+        self, temporary: Path, file_stat: os.stat_result | None = None
+    ) -> tuple[bool, str | None]:
         if temporary.name.startswith(".snapshot-owned-"):
-            match = _OWNED_TEMP_PATTERN.match(temporary.name)
+            match = _OWNED_TEMP_PATTERN.fullmatch(temporary.name)
             if not match:
-                return False
+                return False, None
             try:
                 scan_id = self._decode_owner(match.group(1))
                 lease_id = self._decode_owner(match.group(2))
                 scan = self.state_db.get_automatic_memory_scan(scan_id)
             except Exception:
-                return False
+                return False, "state_read_failed"
             if scan is None:
-                return False
+                return False, None
             try:
                 current_lease = scan.get("lease_id")
                 status = scan.get("status")
                 if not isinstance(status, str):
-                    return False
-                if status in {"completed", "cancelled", "failed", "paused"}:
-                    return True
+                    return False, None
+                if status in {"completed", "cancelled", "failed", "paused", "stopped"}:
+                    return True, None
                 if status != "running" or not isinstance(current_lease, str):
-                    return False
+                    return False, None
                 if current_lease != lease_id:
-                    return False
+                    return False, None
                 expiry = self._parse_lease_expiry(scan.get("lease_expires_at"))
                 if expiry is None:
-                    return False
-                return expiry <= datetime.now(timezone.utc)
+                    return False, None
+                return expiry <= datetime.now(timezone.utc), None
             except Exception:
-                return False
+                return False, "state_read_failed"
+        if _LEGACY_TEMP_PATTERN.fullmatch(temporary.name) is None:
+            return False, None
         try:
-            return time.time() - temporary.stat().st_mtime >= _TEMP_RETENTION_SECONDS
+            stat = file_stat or temporary.lstat()
+            return time.time() - stat.st_mtime >= _TEMP_RETENTION_SECONDS, None
         except FileNotFoundError:
-            return False
+            return False, None
+        except Exception:
+            return False, "temporary_stat_failed"
 
     def capture(
         self,

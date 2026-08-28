@@ -188,6 +188,49 @@ class SnapshotJobRunner:
         if self._heartbeat_error is not None:
             raise LeaseLostError(f"automatic-memory lease heartbeat failed: {self._heartbeat_error}")
 
+    def _reconcile_snapshot_temporary_files(self, scan_id: str | None = None) -> dict[str, Any]:
+        """Run snapshot cleanup and persist only a generic retryable error."""
+        try:
+            result = self.snapshot.reconcile_temporary_snapshots()
+        except Exception:
+            result = {
+                "scanned": 0,
+                "removed": 0,
+                "preserved": 0,
+                "errors": ("snapshot_reconcile_failed",),
+                "clean": False,
+            }
+        errors = tuple(
+            str(error)
+            for error in (result.get("errors") or ())
+            if str(error)
+        ) if isinstance(result, dict) else ("snapshot_reconcile_failed",)
+        if errors and scan_id:
+            try:
+                row = self.state_db.get_automatic_memory_scan(scan_id)
+                existing = row.get("last_error") if row else None
+                detail = "snapshot temporary cleanup failed: " + ",".join(
+                    dict.fromkeys(errors)
+                )
+                if isinstance(existing, str) and existing and existing != detail:
+                    detail = f"{existing[:1600]}; {detail}"
+                self.state_db.update_automatic_memory_scan(
+                    scan_id,
+                    last_error=detail[:2000],
+                    updated_at=self._updated_at(),
+                )
+            except Exception:
+                # The receipt remains available to the caller; never turn a
+                # cleanup observation into a false successful scan.
+                pass
+        return result if isinstance(result, dict) else {
+            "scanned": 0,
+            "removed": 0,
+            "preserved": 0,
+            "errors": ("snapshot_reconcile_failed",),
+            "clean": False,
+        }
+
     def _handle_lease_loss(self, scan_id: str, lease_id: str) -> ScanRun:
         heartbeat_error = self._heartbeat_error
         self._stop_heartbeat()
@@ -207,6 +250,7 @@ class SnapshotJobRunner:
             self._release(scan_id, lease_id)
         except LeaseLostError:
             pass
+        self._reconcile_snapshot_temporary_files(scan_id)
         return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
 
     def run(
@@ -221,9 +265,11 @@ class SnapshotJobRunner:
         if row is None:
             raise LookupError(f"scan not found: {scan_id}")
         if row["status"] == "cancelled":
+            self._reconcile_snapshot_temporary_files(scan_id)
             return self._scan(row)
         if row["status"] == "completed" and crash_at == "none":
-            return self._scan(row)
+            self._reconcile_snapshot_temporary_files(scan_id)
+            return self._scan(self.state_db.get_automatic_memory_scan(scan_id) or row)
         source_id = str(row["source_id"])
         source = self.state_db.get_automatic_memory_source(
             source_id, now=self._updated_at()
@@ -240,6 +286,7 @@ class SnapshotJobRunner:
                 last_error="source authorization is not active",
                 updated_at=self._updated_at(),
             )
+            self._reconcile_snapshot_temporary_files(scan_id)
             return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
 
         paths = self._paths(row, source)
@@ -282,6 +329,7 @@ class SnapshotJobRunner:
             last_error=None,
             updated_at=self._updated_at(),
         )
+        self._reconcile_snapshot_temporary_files(scan_id)
         self._start_heartbeat(scan_id, lease_id)
         try:
             initial = ResumeToken(scan_id, cursor, source_sentinel, lease_id, attempt)
@@ -304,6 +352,7 @@ class SnapshotJobRunner:
                     updated_at=self._updated_at(),
                 )
                 self._release(scan_id, lease_id)
+                self._reconcile_snapshot_temporary_files(scan_id)
             except LeaseLostError:
                 pass
             return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
@@ -402,6 +451,7 @@ class SnapshotJobRunner:
                     updated_at=self._updated_at(),
                 )
                 self._release(scan_id, lease_id)
+                self._reconcile_snapshot_temporary_files(scan_id)
             except LeaseLostError:
                 return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
             return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
@@ -416,10 +466,12 @@ class SnapshotJobRunner:
                 last_error=None,
                 updated_at=self._updated_at(),
             )
+            self._reconcile_snapshot_temporary_files(scan_id)
         except LeaseLostError:
             self._stop_heartbeat()
             return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
-        return replace(self._scan(finalized), queued=queued_count, reused=reused_count)
+        final_row = self.state_db.get_automatic_memory_scan(scan_id) or finalized
+        return replace(self._scan(final_row), queued=queued_count, reused=reused_count)
 
     def _pause(self, scan_id: str, token: ResumeToken) -> ScanRun:
         self._stop_heartbeat()
@@ -433,6 +485,7 @@ class SnapshotJobRunner:
             updated_at=self._updated_at(),
         )
         self._release(scan_id, token.lease_id)
+        self._reconcile_snapshot_temporary_files(scan_id)
         return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
 
     def _release(self, scan_id: str, lease_id: str) -> None:
