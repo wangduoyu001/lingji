@@ -27,7 +27,7 @@
   handoff 需在文档同步后复核。
 - 失败/限制：未执行 packaged 30/70（延期 Task6V）、release、live、Artifact、真实
   8766/8767、Production/Vault、主人观察；Task6 保持 `IN_PROGRESS / NOT_ACCEPTED`。
-  产品/测试 commit `4fd2386`；报告 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6l-report.md`。
+  产品/测试 commits `4fd2386`, `382091b`；报告 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6l-report.md`。
 
 ## 2026-08-28 · Task 6C Repair Round 1 · blocked cleanup receipt
 

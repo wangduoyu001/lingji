@@ -575,7 +575,7 @@ packaged 30/70 延期至 Task6V，不计为本轮产品失败；Task 6M 保持 `
 `IN_PROGRESS / NOT_ACCEPTED`，不再授权本轮修复。
 
 Task 6L Durable Lease Ownership Receipt 已完成有界架构补齐（产品/测试
-`4fd2386`）：在现有 `extraction_jobs` 增加 nullable
+`4fd2386`, `382091b`）：在现有 `extraction_jobs` 增加 nullable
 `last_claim_lease_fingerprint`，claim 同事务写入 SHA-256 lease receipt，终态与
 release 清当前 lease 但保留最近 claim 指纹，retry/force generation reset 清除旧指纹。
 v1 transient marker 现在必须同时满足 marker lease hash、durable ownership、raw

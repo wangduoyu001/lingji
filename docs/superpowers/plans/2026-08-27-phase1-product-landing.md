@@ -524,7 +524,7 @@ authorized.
 
 Task 6L Durable Lease Ownership Receipt (2026-08-28) is a new bounded
 architecture completion after the Task6M repair cap, not a Task6M repair. Product
-and tests commit `4fd2386` adds nullable `extraction_jobs.last_claim_lease_fingerprint`,
+and tests commits `4fd2386`, `382091b` add nullable `extraction_jobs.last_claim_lease_fingerprint`,
 writes its SHA-256 lease receipt atomically on claim, preserves it through
 complete/fail/release/stale-release, and clears it on retry/force generation
 reset. v1 cleanup now requires marker lease hash + durable ownership + raw

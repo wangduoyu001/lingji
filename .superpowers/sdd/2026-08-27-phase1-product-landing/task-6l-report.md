@@ -3,7 +3,7 @@
 Date: 2026-08-28 (Asia/Shanghai)
 Worktree: `/Users/wuhanwangduoyu/Documents/ChatGPT/灵机/.worktrees/phase1-automatic-memory`
 Base: `3fadc0996915d1e57e57f717f27b620df86318e6`
-Product/tests commit: `4fd2386`
+Product/tests commits: `4fd2386`, `382091b`
 
 ## 1. Status
 
@@ -95,7 +95,7 @@ Production/Vault or owner acceptance result. Task6M's final review remains
 
 ## 5. Changed files
 
-Product/tests commit `4fd2386`:
+Product/tests commits `4fd2386`, `382091b`:
 
 ```text
 src/extraction/queue.py
