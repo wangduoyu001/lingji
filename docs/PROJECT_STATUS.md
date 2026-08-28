@@ -587,3 +587,13 @@ pending retry 与 public queue/service/MCP DTO 脱敏保持。Task6L focused `11
 notice recovery 通过。Task6M 历史 `FAIL / BLOCKED_AT_REPAIR_CAP` 不改写；Task6 仍
 `IN_PROGRESS / NOT_ACCEPTED`，Task6V fresh packaged 30/70、live/Artifact/Production/
 Vault/owner acceptance 均未执行。
+
+Task 6L independent review (2026-08-28)：报告
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6l-review.md` 审查
+`880bd8c1beeddfda0b0c76752038ca7da521adfe`（产品/测试 `4fd2386`、`382091b`）结论为
+`FAIL / NEEDS_FIXES`，Critical=0、Important=1、Minor=0。现有 focused/regression
+`218 passed, 2 warnings`，Desktop static/build/rendered、compile、diff、sync、handoff
+均通过；但普通低层 queue `get/list` 及等价 raw read 仍返回 plaintext
+`lease_token` 与 `last_claim_lease_fingerprint`，不满足 Task6L 明确的普通 queue read
+脱敏边界。Task6L 保持 `NOT_ACCEPTED`，仅授权一轮有界 Repair Round 1；Task6M 历史
+`FAIL / BLOCKED_AT_REPAIR_CAP` 不变，Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`。

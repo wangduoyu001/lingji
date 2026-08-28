@@ -1,95 +1,121 @@
-# Task 6L Structured Evidence Lexical Wiring — Independent Final Review
+# Task 6L Independent Review — Durable Lease Ownership Receipt
 
-- Review date: 2026-08-28 (Asia/Shanghai)
-- Review worktree: `/Users/wuhanwangduoyu/Documents/ChatGPT/灵机/.worktrees/phase1-automatic-memory`
-- Product HEAD reviewed: `54fce7e` (`docs: normalize Task 6L report formatting`)
-- Product/test baseline: `9ced68b` (`fix: index structured chat evidence for lexical retrieval`)
-- Product documentation: `8983d20` (`docs: record structured evidence lexical wiring`)
-- Previous repair review: `81ffaec`
-- Scope: read-only product review; no live, Artifact, Production, or Vault data used
+- Date: 2026-08-28 (Asia/Shanghai)
+- Worktree: `/Users/wuhanwangduoyu/Documents/ChatGPT/灵机/.worktrees/phase1-automatic-memory`
+- Reviewed HEAD: `880bd8c1beeddfda0b0c76752038ca7da521adfe`
+- Product/tests: `4fd2386`, `382091b`
+- Prior context: `3fadc09`, `task-6m-final-review.md`
+- Scope: read-only product/test review; only docs are deliverables
 
 ## Verdict
 
-- Spec: **FAIL**
-- Quality: **NEEDS_FIXES**
-- Critical: **0**
-- Important: **2**
-- Minor: **2**
-- Disposition: **REPAIR_ROUND_1**
-- Acceptance: **NOT ACCEPTED**; `ACCEPT_FOR_TASK6` requires zero Critical and Important findings.
-
-The lexical bridge is real and uses the existing structured read model, `lingji_memory.db` FTS, Hybrid retrieval, Gateway, ContextPack, and MCP seams. It does not create candidates, active/Core/current memory, promotion calls, or Vault documents. However, the current-query authorization boundary is not closed, and changed automatic snapshots can leave stale active evidence beside the new version. Both are correctness/security blockers for Task 6L.
-
-## Evidence reviewed
-
-The real path was exercised as:
-
-`ConsistentSnapshot -> SnapshotJobRunner -> ExtractionPipeline.process_internal_next -> StructuredReadModelSink -> existing MemoryDatabase.sync_structured_evidence -> MemoryGateway/Hybrid/ContextPack/MCP`.
-
-The implementation stores evidence projections in the existing `memory_documents`/FTS schema with `memory_type=structured_evidence` and `memory_tier=evidence`. The focused lexical tests, extraction/idempotency/retrieval/indexing/context/MCP matrix, runtime/discovery/Obsidian/control-API/worker regression, and direct Gateway/MCP/ContextPack/Obsidian/promotion-quarantine suites were run. Empty/unsupported inputs, role/sequence/time fields, same-source rescan behavior, cross-source identity separation, normal Obsidian rebuild preservation, semantic-provider degradation with lexical results retained, and promotion quarantine were covered by passing tests.
-
-## Important findings
-
-### I1 — Revoke/expired authorization leaks into current retrieval
-
-**Severity:** Important — blocks acceptance.
-
-The automatic authorization registry writes lifecycle state to `lingji_state.db`: `SourceRegistry.revoke()` delegates to `StateDatabase.revoke_automatic_memory_source_atomic()` (`src/automatic_memory/source_registry.py:135-147`, `src/storage/state_db.py:1253-1287`). The structured lexical projection reads lifecycle only from `memory_db.source_records.status` (`src/retrieval/memory_db.py:311-338`), and the automatic adapter creates its structured source with the default active status while carrying the authorized source ID only in metadata (`src/extraction/adapters/generic_ai_history.py:105-113,177-186`). There is no state-to-memory lifecycle bridge or current-query authorization join.
-
-Fresh real-pipeline repro, using a temporary isolated database and formal Gateway, produced one current structured-evidence result before revoke and **one result after revoke**. The StateDB source was `revoked` while the memory source remained `active`. The same repro after setting the StateDB source to `expired` again returned **one current result** while the memory source remained `active`. This is not a test-only row insertion: the message was admitted through the actual snapshot runner and extraction pipeline, then queried through the production Gateway/Hybrid path.
-
-Expected: current retrieval and current ContextPack/MCP responses must exclude revoked/expired source messages (history may retain them with an explicit lifecycle explanation). Actual: the revoked/expired message remains eligible as active current evidence. This is an authorization/data-isolation failure, not a missing-new-feature test gap; the absence of a bridge is the defect.
-
-**Minimum repair boundary:** use the existing StateDB source identity already propagated in structured metadata to update/resolve the existing memory read-model source status at the lifecycle transition, or enforce the existing formal current-query seam against StateDB status. Keep one rebuildable memory index; do not add a second store. Add real-pipeline Gateway, ContextPack, and MCP revoke and expiry regressions, including semantic-degraded retrieval.
-
-### I2 — Content update leaves two active current evidence versions
-
-**Severity:** Important — blocks acceptance unless immutable-snapshot semantics are explicitly changed and tested.
-
-`GenericAIHistoryAdapter` derives `source_scope` from the raw payload digest (`src/extraction/adapters/generic_ai_history.py:104-123`) and consequently derives source, conversation, and message external IDs from that digest (`:119-123,167-185`). A changed file therefore creates a new active structured source/message identity. The existing structured sync marks every active source as an active lexical document (`src/retrieval/memory_db.py:311-345`) and has no supersession/validity transition for the prior payload.
-
-Fresh real-pipeline repro with the same authorized source and one message changed from `ORIGINAL` to `UPDATED` yielded two documents and one FTS hit for each old and new content. The second sync reported the new document as added while the old document remained current. This is distinct from the correctly idempotent byte-identical rescan.
-
-Expected for the requested content-update behavior: stable source/conversation/message provenance with the message updated, or an explicit old-version archival/validity transition so current retrieval cannot return stale content. Actual: both versions are active and current. This can produce stale answers and duplicate current citations.
-
-**Minimum repair boundary:** stabilize automatic snapshot identity independently of payload bytes and upsert changed message content, or explicitly archive/supersede the prior projection within the existing source/read-model/index transaction. Add a real automatic snapshot content-update test covering current and history modes, without introducing another index.
-
-## Minor findings
-
-### M1 — Raw reference is not carried into formal citation relationships
-
-The structured sync entry includes `raw_reference` only inside the list-valued `sources` field (`src/retrieval/memory_db.py:352-355`). `_upsert_document()` copies a fixed scalar relationship set that omits `raw_reference` (`src/retrieval/memory_db.py:724-751`). Hybrid and ContextPack citation builders look for `relationships["raw_reference"]` (`src/retrieval/context_pack.py:155-163`), so formal Gateway/ContextPack citations expose source/conversation/message IDs and hash but not the explicit raw reference. The raw reference remains in the authoritative message row; this is provenance presentation loss, not a new data source or authorization leak.
-
-### M2 — Structured ContextPack section omits role and sequence fields
-
-The lexical result retains role/sequence and the linked raw-evidence path exposes role (`src/retrieval/context_pack.py:217-240`), but the direct structured projection section only copies IDs, hash, and optional raw reference (`:155-178`). A direct structured-evidence ContextPack therefore does not expose the message role/order at the selected section level even though those fields remain in the database and result relationships. Add the fields to the existing citation/section mapping if the public ContextPack contract requires the full message provenance tuple.
-
-## Test and gate results
-
-All commands were run in the review worktree against isolated test fixtures. Exact requested focused aggregate:
-
 ```text
-55 passed, 1 warning in 0.92s
+Spec Compliance: FAIL
+Task Quality: NEEDS_FIXES
+Task 6L: NOT_ACCEPTED
+Task 6: IN_PROGRESS / NOT_ACCEPTED
+Critical: 0
+Important: 1 (I1)
+Minor: 0
+Disposition: one bounded Repair Round 1 required
+Task6M: FAIL / BLOCKED_AT_REPAIR_CAP (unchanged)
 ```
 
-Additional runs:
+Task6L closes durable ownership proof, strict transient cleanup identity, and
+receipt redaction for the formal Control/MCP/UI paths. It does not satisfy the
+explicit requirement that ordinary queue reads hide plaintext lease tokens and
+durable fingerprints: low-level `get()` and `list()` still return both fields.
+
+## Fresh verification
+
+All commands ran against the exact reviewed HEAD. No product or test file was
+modified.
 
 ```text
-structured lexical tests: 7 passed, 1 warning
-candidate regression matrix: 46 passed
-runtime/discovery/Obsidian/control API/worker: 36 passed, 1 warning
-direct Gateway/MCP/ContextPack/Obsidian/promotion quarantine: 75 passed
+Task6L + Task6M/runtime/snapshot/resume/queue/worker/scheduler/6H/6S/Task8/structured regression:
+218 passed, 2 warnings
+Task6L focused subset: 11 passed
+Desktop test:memory-sources-repair: PASS
+Desktop test:memory-sources: PASS
+Desktop build (tsc/vite): PASS (existing dynamic-import warnings)
+Desktop rendered test:e2e:memory: PASS
 compileall: PASS
-git diff --check 81ffaec..HEAD: PASS
-python scripts/check_acceptance_sync.py: PASS (report-only current diff)
-python scripts/check_local_execution_handoff.py: PASS
+git diff --check 3fadc09..HEAD: PASS
+check_acceptance_sync.py: PASS
+check_local_execution_handoff.py: PASS
 ```
 
-The passing matrix does not override I1: existing tests exercise read-model status transitions and do not connect StateDB revoke/expiry to the formal current-query path. No live UI or production acceptance task was started; `LOCAL_EXECUTION_TASK.md` remained IDLE. Temporary repro directories were moved to Trash after the repros.
+## Requirement matrix
 
-## Required repair-round exit criteria
+| Requirement | Result | Evidence |
+|---|---|---|
+| Nullable old-DB migration/idempotence/default-null | PASS | Focused migration test and static `_ensure_columns` review |
+| Claim + SHA-256 receipt same transaction | PASS | `BEGIN IMMEDIATE`, claim update and digest assertion |
+| Claim failure no receipt; concurrent single winner | PASS | Conditional update/rollback; two queue-instance thread probe: one claim, one `None` |
+| Complete/fail/release/release-stale/cancel semantics | PASS | Focused and affected queue/worker lifecycle matrix |
+| Retry/force/re-enqueue/generation cannot authorize old marker | PASS | Reset tests; old generation marker survives new claim |
+| Ordinary queue `get/list/stats` hide lease material | **FAIL — I1** | `get/list` expose both fields; `stats` is safe |
+| Control API/Capture/MCP/logs/Work Fact/Desktop hide lease material | PASS for tested public paths | Public DTO wrappers and rendered DOM checks |
+| Minimal parameterized internal ownership API | PASS | `ownership_receipt(job_id, fingerprint)`, `WHERE job_id = ?`, booleans/timing/path only |
+| Strict job + marker hash + raw hardlink proof | PASS | SHA-256 marker, durable receipt, direct-child content-addressed raw identity |
+| Wrong lease same inode terminal/queued/retrying/running preserved | PASS | Fresh four-status probe: all four preserved as `lease_mismatch` |
+| Matching released/terminal delete; NULL preserve | PASS | Fresh matching probe removes; NULL fingerprint gives `lease_unverifiable` |
+| Dead/expired, same-raw multi-job and reclaim isolation | PASS | Existing lifecycle suite and fresh affected regression |
+| Root/iterdir/lstat/open/hash/queue/unlink Exception failures | PASS | Fresh secret-path probes return generic receipt and preserve safely; no new BaseException catch |
+| Allowlisted, path/name/job/lease/token-free receipt | PASS | `PermissionError('/private/secret/token=abc')` probe produces reason/count only |
+| Pipeline/worker/runtime degraded + recovery | PASS | Runtime regression and rendered notice appears/disappears |
+| Legacy/TOCTOU/raw/source/Vault safety | PASS | Legacy hardlink, identity swap, SIGKILL/restart, raw hash tests; no live/Vault data |
+| Rendered UI cleanup pending and fixture DTO consistency | PASS | Fake-8766 rendered flow drives on/off notice and DOM redaction |
+| No second DB/queue/fact source or scope expansion | PASS | Existing queue column and bounded reconciliation only |
 
-1. Re-run the real automatic snapshot pipeline and prove revoke and expiry remove affected evidence from current Gateway, ContextPack, and MCP results while preserving explicitly requested history behavior.
-2. Prove changed content cannot leave stale and new active current documents for one source/message identity; verify same-source byte-idempotency and cross-source isolation remain green.
-3. Preserve the existing `lingji_memory.db`/FTS and semantic snapshot seams, evidence-only tier/type, no candidate/Core/promotion/Vault writes, and transaction/rebuild behavior.
-4. Add/update the Task6L acceptance report and tests with the above real-path evidence, then rerun focused, regression, compile, diff, acceptance-sync, and handoff gates.
+## I1 — Ordinary queue reads expose lease token and fingerprint
+
+**Severity:** Important; blocks Task6L acceptance.
+
+`_SQLiteExtractionQueueBase.get()` and `.list()` return `_parse_row()` from
+`SELECT *` (`src/extraction/queue.py:525-547`), including
+`lease_token` and `last_claim_lease_fingerprint`. `list_page()` and
+`get_by_idempotency_key()` have the same raw shape. Control `jobs/job/status`,
+Capture DTOs and MCP `durable_job_response` strip these keys, but ordinary queue
+reads remain unsafe under the locked Task6L requirement.
+
+Fresh probe against a claimed temporary job:
+
+```text
+queue.get():  ["last_claim_lease_fingerprint", "lease_token"]
+queue.list(): ["last_claim_lease_fingerprint", "lease_token"]
+queue.stats(): []
+```
+
+Expected: ordinary queue projections expose public job facts only; lease
+material stays in worker/pipeline internals and the minimal ownership predicate.
+Actual: direct queue reads expose both plaintext and durable lease material.
+
+Required repair boundary: provide a clearly private raw-read seam for worker
+lease operations and make ordinary `get`, `list`, `list_page` and equivalent
+queue projections omit both fields, including nested public projections where
+applicable. Preserve worker claim/complete/fail behavior; add direct queue and
+API/MCP regressions. Do not add another queue/database or weaken ownership.
+
+## Security and scope
+
+- No live 8766/8767, release, Artifact, Production/Vault, owner data or real
+  credentials were accessed. `LOCAL_EXECUTION_TASK.md` remained `IDLE`.
+- The Desktop fake server used a fixture token only for local authenticated test
+  calls; rendered body excluded `secret` and `cleanup_scan_failed`.
+- Product/tests remain unchanged after verification. Task6M remains
+  `FAIL / BLOCKED_AT_REPAIR_CAP`; this review does not reopen it.
+
+## Final disposition
+
+```text
+Reviewed HEAD: 880bd8c1beeddfda0b0c76752038ca7da521adfe
+Product/tests: 4fd2386, 382091b
+Verdict: FAIL / NEEDS_FIXES
+Task 6L: NOT_ACCEPTED
+Critical: 0
+Important: 1 (I1 ordinary queue get/list leak)
+Minor: 0
+Repair authorization: one bounded Repair Round 1 only
+Task 6: IN_PROGRESS / NOT_ACCEPTED
+```

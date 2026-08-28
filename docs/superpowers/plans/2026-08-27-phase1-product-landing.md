@@ -538,3 +538,12 @@ recovery without fixture secrets. Focused Task6L tests: `11 passed`; required
 backend regression: `218 passed, 2 warnings`; Desktop static/build/rendered
 checks pass. Task6M remains `FAIL / BLOCKED_AT_REPAIR_CAP`, Task6 remains
 `IN_PROGRESS / NOT_ACCEPTED`, and Task6V fresh packaged 30/70 remains deferred.
+
+Task 6L independent review at HEAD `880bd8c1beeddfda0b0c76752038ca7da521adfe`
+(`task-6l-review.md`) is `FAIL / NEEDS_FIXES`: Critical=0, Important=1,
+Minor=0. Ordinary low-level queue `get()`/`list()` (and equivalent raw queue
+reads) still return plaintext `lease_token` and
+`last_claim_lease_fingerprint`, although Control/Capture/MCP DTOs redact them.
+Task6L remains `NOT_ACCEPTED`; one bounded Repair Round 1 is authorized. Task6M
+historical `FAIL / BLOCKED_AT_REPAIR_CAP` and Task6 `IN_PROGRESS / NOT_ACCEPTED`
+remain unchanged.

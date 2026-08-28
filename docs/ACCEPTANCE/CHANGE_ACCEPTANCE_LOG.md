@@ -29,6 +29,22 @@
   8766/8767、Production/Vault、主人观察；Task6 保持 `IN_PROGRESS / NOT_ACCEPTED`。
   产品/测试 commits `4fd2386`, `382091b`；报告 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6l-report.md`。
 
+## 2026-08-28 · Task 6L · Independent review
+
+- Review report：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6l-review.md`，审查
+  HEAD `880bd8c1beeddfda0b0c76752038ca7da521adfe`、产品/测试 `4fd2386`、`382091b`。
+  结论 `FAIL / NEEDS_FIXES`，Critical=0、Important=1、Minor=0；Task6L
+  `NOT_ACCEPTED`，Task6M 历史 `FAIL / BLOCKED_AT_REPAIR_CAP` 不变，Task6 仍
+  `IN_PROGRESS / NOT_ACCEPTED`。
+- I1：普通低层 queue `get/list` 与等价 raw reads 仍暴露 plaintext `lease_token` 和
+  `last_claim_lease_fingerprint`；Control/Capture/MCP DTO 已脱敏但不能替代普通 queue
+  read 边界。仅授权一轮有界 Repair Round 1，要求保留 worker 内部 lease 行为且补 direct
+  queue/API/MCP 回归，不新增第二 DB/queue/fact source。
+- Fresh evidence：Task6L focused `11 passed`；受影响 backend `218 passed, 2 warnings`；
+  Desktop static/build/rendered、compile、diff-check、acceptance sync、local handoff 均
+  PASS。未执行 live/Artifact/release/8766/8767/Production/Vault/owner；
+  `LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。
+
 ## 2026-08-28 · Task 6C Repair Round 1 · blocked cleanup receipt
 
 - Fresh review `3fd8059da4ed10b8a1fcd0581793bd0fb2d177ee` 要求 I1–I6 修复。

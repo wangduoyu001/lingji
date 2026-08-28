@@ -131,3 +131,14 @@ maintained rendered flow pass. I4 packaged 30/70 remains explicitly deferred to
 a new Task6V and is not scored as a repair-product failure. Task 6M remains
 `NOT_ACCEPTED`; Task6 remains `IN_PROGRESS / NOT_ACCEPTED`; no further repair is
 authorized.
+
+Task 6L independent review (2026-08-28): report
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6l-review.md` at
+`880bd8c1beeddfda0b0c76752038ca7da521adfe` is `FAIL / NEEDS_FIXES` with
+Critical=0, Important=1, Minor=0. Fresh focused/regression is `218 passed, 2
+warnings`; Desktop static/build/rendered, compile, diff, sync and handoff pass.
+I1: ordinary low-level queue `get()`/`list()` (plus equivalent raw reads) still
+expose plaintext `lease_token` and durable `last_claim_lease_fingerprint`, even
+though public Control/Capture/MCP DTOs redact them. Task6L is `NOT_ACCEPTED`;
+one bounded Repair Round 1 is authorized. Task6M remains
+`FAIL / BLOCKED_AT_REPAIR_CAP`; Task6 remains `IN_PROGRESS / NOT_ACCEPTED`.
