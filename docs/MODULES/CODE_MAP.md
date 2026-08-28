@@ -568,7 +568,13 @@ src/automatic_memory/quality_gate.py::AcceptanceRoots / run_quality_gate
   Production/Vault settings access, nullable unmeasured evidence that never
   enters `EvaluationReport`, and `NOT_EVALUATED` before 4R2 readiness.
   `publish_quality_envelope` is the only repository report writer;
-  `run_100k_benchmark` is blocked until 4R2.
+  `run_100k_benchmark` is blocked until 4R2. Runner-stage exceptions publish a
+  sanitized fresh `QualityRunEnvelope` with path-free cleanup inventory;
+  `scripts/run_powershell_validation.py` invokes the real PowerShell
+  `scripts/validate.ps1` when available and otherwise reports
+  `BLOCKED_POWERSHELL_RUNTIME_UNAVAILABLE`. The release entry's opt-in
+  `LINGJI_VALIDATE_TEST_HOOK` records preflight/scale ordering without changing
+  normal release behavior.
 
 Focused validation:
 

@@ -2281,3 +2281,25 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 所有测试仅使用 pytest 临时 roots、临时 SQLite/raw/source；未启动 live 8766/8767、Artifact/release、
   Production/Vault 或 owner 数据。Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`，Task6V packaged 30/70 待重跑。
   报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6r-report.md`。
+
+## 2026-08-28 · Task 7E · Runner error envelope and release-entry instrumentation
+
+- 基线：Task 1 Repair Round 2 final review `956483b2655fca4a386f9a21bf1a3a46c09d2862`；
+  当前产品树 `0047d75795d255b2c9a36217784751ec8fde8f4d`。本轮只关闭 I4/I7，
+  不修改 retrieval/ranking、fixtures/evaluator、promotion、runtime、Desktop、
+  4R2、100k、Artifact、Production/Vault 或主人数据。
+- RED/GREEN：stage-hook adversarial matrix 覆盖 admission/root/sentinel/fixture/
+  import/gateway/promotion/audit/scoring/evaluator/publication_pre，runner 异常均
+  发布 fresh `QualityRunEnvelope`（report=None、三状态 NOT_EVALUATED、allowlisted
+  reason、无路径 machine cleanup inventory）；旧 PASS 替换、publication failure
+  与 cleanup/measured-failure 合同保持。相关测试 `28 passed`，Task4 readiness/
+  validation guard `112 passed`。
+- Release entry：`scripts/validate.ps1` 增加仅测试 opt-in 的
+  `LINGJI_VALIDATE_TEST_HOOK`，按 preflight→scale-env→scale-command 记录顺序；
+  当前 preflight 的 `BLOCKED_4R2_REQUIRED` 使后二者计数为零。新增 Python launcher
+  仅探测并调用真实 PowerShell，不安装或用 Python 冒充执行。
+- 本机只读搜索未找到 `pwsh`、`powershell` 或 `powershell.exe`（PATH、
+  `/usr/local`、`/opt/homebrew`、`/Applications`、`/Library`、开发者目录均无匹配），
+  故标记 `BLOCKED_POWERSHELL_RUNTIME_UNAVAILABLE`；未执行 release/100k/4R2/Artifact、
+  live 8766/8767、Production/Vault 或 owner acceptance。`LOCAL_EXECUTION_TASK.md`
+  保持 `IDLE`。详见 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7e-report.md`。
