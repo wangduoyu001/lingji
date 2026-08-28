@@ -15,74 +15,236 @@ from .quality_evidence import EvidenceState, QualityEvidenceReadiness
 from src.extraction.adapters.generic_ai_history import HISTORY_SCHEMA, HISTORY_VERSION
 
 
+# These are the only fixtures admitted by the frozen Task 7 quality gate.
+# Keeping the identity contract here avoids making the scale loader depend on
+# the runner module (which imports this module).
+CORPUS_SHA256 = "bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94"
+QUESTIONS_SHA256 = "338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612"
+
+
+def build_quality_run_id(code_commit: str, corpus_hash: str, questions_hash: str) -> str:
+    """Build the stable identity used by the frozen quality runner."""
+    return f"quality:{corpus_hash[:16]}:{questions_hash[:16]}:{code_commit[:16]}"
+
+
+_READINESS_FIELDS = QualityEvidenceReadiness._FUNCTIONAL_FIELDS + QualityEvidenceReadiness._MAC_FIELDS + ("windows_release",)
+_STATUS_VALUES = {state.value for state in EvidenceState}
+
+
+def _require_mapping(value: Any, label: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{label} must be an object")
+    if any(not isinstance(key, str) for key in value):
+        raise ValueError(f"{label} has a non-string key")
+    return value
+
+
+def _require_keys(value: Mapping[str, Any], required: set[str], label: str, *, allow: set[str] = frozenset()) -> None:
+    keys = set(value)
+    if not required <= keys or keys - required - allow:
+        raise ValueError(f"{label} schema mismatch")
+
+
+def _counter(value: Any, label: str, *, positive: bool = False) -> int:
+    if type(value) is not int or value < 0 or (positive and value <= 0):
+        raise ValueError(f"{label} must be a measured integer")
+    return value
+
+
+def _percentage(value: Any, label: str) -> float:
+    import math
+    if type(value) not in (int, float) or not math.isfinite(float(value)) or not 0 <= float(value) <= 100:
+        raise ValueError(f"{label} must be a finite percentage")
+    return float(value)
+
+
+def _detail(payload: Mapping[str, Any], details: Mapping[str, Any], *names: str) -> Mapping[str, Any]:
+    for name in names:
+        value = payload.get(name)
+        if value is None:
+            value = details.get(name)
+        if value is not None:
+            return _require_mapping(value, name)
+    raise ValueError(f"missing evidence detail: {names[0]}")
+
+
+def _validate_import(payload: Mapping[str, Any], details: Mapping[str, Any]) -> None:
+    audit = _detail(payload, details, "import_audit")
+    _require_keys(audit, {
+        "expected_rows", "actual_rows", "missing_external_keys", "extra_external_keys",
+        "stable_duplicates", "ordered_external_key_matches", "role_matches", "sequence_matches",
+        "timestamp_matches", "content_hash_matches", "source_matches", "conversation_matches",
+        "intentional_content_hash_groups",
+    }, "import_audit")
+    expected = _counter(audit["expected_rows"], "import_audit.expected_rows", positive=True)
+    if _counter(audit["actual_rows"], "import_audit.actual_rows") != expected:
+        raise ValueError("import audit count mismatch")
+    for field in ("missing_external_keys", "extra_external_keys"):
+        value = audit[field]
+        if not isinstance(value, list) or value:
+            raise ValueError("import audit has missing or extra rows")
+    duplicates = _require_mapping(audit["stable_duplicates"], "import_audit.stable_duplicates")
+    _require_keys(duplicates, {"source_records", "conversation_records", "message_records", "memory_records"}, "stable_duplicates")
+    if any(_counter(duplicates[field], f"stable_duplicates.{field}") != 0 for field in duplicates):
+        raise ValueError("import audit duplicate records")
+    for field in ("ordered_external_key_matches", "role_matches", "sequence_matches", "timestamp_matches", "content_hash_matches", "source_matches", "conversation_matches"):
+        if _counter(audit[field], f"import_audit.{field}") != expected:
+            raise ValueError("import audit field mismatch")
+    if not isinstance(audit["intentional_content_hash_groups"], list):
+        raise ValueError("import audit duplicate groups malformed")
+    counts = _require_mapping(payload.get("import_counts"), "import_counts")
+    _require_keys(counts, {"expected_messages", "imported_messages"}, "import_counts")
+    if _counter(counts["expected_messages"], "import_counts.expected_messages") != expected or _counter(counts["imported_messages"], "import_counts.imported_messages") != expected:
+        raise ValueError("import count projection mismatch")
+    order = _require_mapping(payload.get("role_order_counts"), "role_order_counts")
+    _require_keys(order, {"expected", "matched"}, "role_order_counts")
+    if _counter(order["expected"], "role_order_counts.expected") != expected or _counter(order["matched"], "role_order_counts.matched") != expected:
+        raise ValueError("role/order count projection mismatch")
+
+
+def _validate_promotion(payload: Mapping[str, Any], details: Mapping[str, Any], expected: int) -> None:
+    outcomes = _require_mapping(payload.get("promotion_outcomes"), "promotion_outcomes")
+    _require_keys(outcomes, {"active", "pending_owner_review", "rejected", "error"}, "promotion_outcomes")
+    outcome_total = sum(_counter(value, f"promotion_outcomes.{key}") for key, value in outcomes.items())
+    if outcome_total != expected or outcomes["error"] != 0:
+        raise ValueError("promotion outcomes are incomplete")
+    provenance = _detail(payload, details, "promotion_provenance")
+    _require_keys(provenance, {
+        "status", "expected", "actual", "links_expected", "links_actual", "missing_links",
+        "extra_links", "duplicate_links", "duplicate_records",
+    }, "promotion_provenance")
+    if provenance["status"] != EvidenceState.READY.value:
+        raise ValueError("promotion provenance is not ready")
+    if _counter(provenance["expected"], "promotion_provenance.expected") != expected or _counter(provenance["actual"], "promotion_provenance.actual") != expected:
+        raise ValueError("promotion provenance count mismatch")
+    if _counter(provenance["links_expected"], "promotion_provenance.links_expected") != expected or _counter(provenance["links_actual"], "promotion_provenance.links_actual") != expected:
+        raise ValueError("promotion link count mismatch")
+    for field in ("missing_links", "extra_links", "duplicate_links", "duplicate_records"):
+        if _counter(provenance[field], f"promotion_provenance.{field}") != 0:
+            raise ValueError("promotion provenance has invalid links")
+
+
+def _validate_gateway(payload: Mapping[str, Any], details: Mapping[str, Any]) -> None:
+    gateway = _detail(payload, details, "gateway_selection")
+    _require_keys(gateway, {"status", "calls_completed", "selector_calls", "unknown", "duplicates"}, "gateway_selection",
+                  allow={"empty_responses", "selected_evidence", "empty_response_is_retrieval_miss"})
+    if gateway["status"] != EvidenceState.READY.value:
+        raise ValueError("gateway selection is not ready")
+    if _counter(gateway["calls_completed"], "gateway calls") != 100 or _counter(gateway["selector_calls"], "gateway selectors") != 100:
+        raise ValueError("gateway counts are incomplete")
+    if _counter(gateway["unknown"], "gateway unknown") != 0 or _counter(gateway["duplicates"], "gateway duplicates") != 0:
+        raise ValueError("gateway evidence is contaminated")
+
+
+def _validate_mcp(payload: Mapping[str, Any], details: Mapping[str, Any]) -> None:
+    mcp = _detail(payload, details, "mcp_parity")
+    _require_keys(mcp, {"status", "attempts", "successes", "strict_rate"}, "mcp_parity", allow={"failures"})
+    if mcp["status"] != EvidenceState.READY.value:
+        raise ValueError("MCP parity is not ready")
+    attempts = _counter(mcp["attempts"], "MCP attempts", positive=True)
+    successes = _counter(mcp["successes"], "MCP successes")
+    if attempts != 100 or successes != 100 or _percentage(mcp["strict_rate"], "MCP strict rate") < 95 or float(mcp["strict_rate"]) != 100.0 * successes / attempts:
+        raise ValueError("strict MCP measurement is incomplete")
+
+
+def _validate_qdrant(payload: Mapping[str, Any], details: Mapping[str, Any]) -> None:
+    qdrant = _detail(payload, details, "qdrant_degradation", "semantic_degradation")
+    _require_keys(qdrant, {"status", "semantic", "lexical", "lexical_ids", "degraded_ids"}, "qdrant_degradation",
+                  allow={"diagnostics", "lexical_results", "degraded_results"})
+    if qdrant["status"] != EvidenceState.READY.value or qdrant["semantic"] != "degraded" or qdrant["lexical"] != "available":
+        raise ValueError("Qdrant degradation evidence is incomplete")
+    lexical_ids, degraded_ids = qdrant["lexical_ids"], qdrant["degraded_ids"]
+    if not isinstance(lexical_ids, list) or not lexical_ids or lexical_ids != degraded_ids or any(not isinstance(item, str) or not item for item in lexical_ids):
+        raise ValueError("Qdrant lexical fallback identity is incomplete")
+
+
+def _validate_corruption(payload: Mapping[str, Any], details: Mapping[str, Any]) -> None:
+    corruption = _detail(payload, details, "corruption_isolation")
+    _require_keys(corruption, {
+        "status", "terminal_tasks", "attempted", "completed", "failed", "continued", "retrievable",
+        "bad_source_messages", "bad_source_leaks", "queue_status_counts",
+    }, "corruption_isolation", allow={"other_source_completed", "valid_source_messages", "scan_ids", "source_statuses", "scan_statuses", "work_outcomes", "read_model_messages", "reasons"})
+    if corruption["status"] != EvidenceState.READY.value:
+        raise ValueError("corruption isolation is not ready")
+    expected = {"terminal_tasks": 2, "attempted": 2, "completed": 1, "failed": 1, "continued": 1, "retrievable": 1, "bad_source_messages": 0, "bad_source_leaks": 0}
+    if any(_counter(corruption[field], f"corruption.{field}") != value for field, value in expected.items()):
+        raise ValueError("corruption terminal counts mismatch")
+    queue = _require_mapping(corruption["queue_status_counts"], "corruption.queue_status_counts")
+    if set(queue) != {"completed", "failed"} or _counter(queue["completed"], "queue.completed") != 1 or _counter(queue["failed"], "queue.failed") != 1:
+        raise ValueError("corruption queue terminal set mismatch")
+
+
+def _validate_context(payload: Mapping[str, Any], details: Mapping[str, Any]) -> None:
+    context = _detail(payload, details, "context_baseline")
+    _require_keys(context, {"status", "baseline_chars", "rendered_chars", "reduction"}, "context_baseline")
+    if context["status"] != EvidenceState.READY.value:
+        raise ValueError("context baseline is not ready")
+    baseline = _counter(context["baseline_chars"], "context baseline", positive=True)
+    rendered = _counter(context["rendered_chars"], "rendered context")
+    reduction = _percentage(context["reduction"], "context reduction")
+    if rendered > baseline or abs(reduction - (1 - rendered / baseline) * 100) > 1e-9:
+        raise ValueError("context reduction is not reproducible")
+    measured = _require_mapping(payload.get("measured_quality"), "measured_quality")
+    if measured.get("status") != "PASS":
+        raise ValueError("measured quality is not passing")
+    if _counter(measured.get("mcp_attempts"), "measured MCP attempts") != 100 or _counter(measured.get("mcp_successes"), "measured MCP successes") != 100:
+        raise ValueError("measured MCP counts disagree")
+    if measured.get("baseline_context_chars") != baseline or measured.get("rendered_context_chars") != rendered or measured.get("context_reduction") != context["reduction"]:
+        raise ValueError("measured context baseline disagrees")
+
+
 def readiness_from_envelope(path: Path) -> QualityEvidenceReadiness:
     try:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
-        if not isinstance(payload, Mapping):
-            raise ValueError
-        run_id = payload.get("run_id")
-        fixture_hashes = payload.get("fixture_hashes")
-        if fixture_hashes is None and isinstance(payload.get("evidence_details"), Mapping):
-            fixture_hashes = payload.get("evidence_details", {}).get("fixture_hashes")
-        if not isinstance(run_id, str) or not run_id.strip():
-            raise ValueError("missing run identity")
-        if not isinstance(fixture_hashes, Mapping) or any(
-            not isinstance(fixture_hashes.get(key), str) or not fixture_hashes.get(key).strip()
-            for key in ("corpus", "questions")
-        ):
-            raise ValueError("missing fixture hashes")
+        payload = _require_mapping(payload, "quality envelope")
+        code_commit = payload.get("code_commit")
+        if not isinstance(code_commit, str) or len(code_commit) != 40 or any(char not in "0123456789abcdefABCDEF" for char in code_commit):
+            raise ValueError("invalid code commit")
+        fixture_hashes = _require_mapping(payload.get("fixture_hashes"), "fixture_hashes")
+        _require_keys(fixture_hashes, {"corpus", "questions"}, "fixture_hashes")
+        if fixture_hashes != {"corpus": CORPUS_SHA256, "questions": QUESTIONS_SHA256}:
+            raise ValueError("frozen fixture hashes do not match")
+        if payload.get("run_id") != build_quality_run_id(code_commit, CORPUS_SHA256, QUESTIONS_SHA256):
+            raise ValueError("run identity does not match code and fixtures")
         functional_status = payload.get("functional_status")
         phase_status = payload.get("phase_status")
-        if functional_status not in {"PASS", "FAIL"} or phase_status not in {"PASS", "FAIL", "BLOCKED", "NOT_EVALUATED"}:
-            raise ValueError("missing run verdict")
+        if functional_status != "PASS" or phase_status not in {"BLOCKED", "NOT_EVALUATED"}:
+            raise ValueError("scale verdict is not admissible")
         raw = payload.get("quality_evidence_readiness")
         if raw is None:
             raw = payload.get("readiness")
-        if not isinstance(raw, Mapping):
-            raise ValueError
+        raw = _require_mapping(raw, "quality_evidence_readiness")
+        _require_keys(raw, set(_READINESS_FIELDS), "quality_evidence_readiness", allow={"functional_status", "should_run_acceptance_gate"})
         values: dict[str, EvidenceState] = {}
-        fields = QualityEvidenceReadiness._FUNCTIONAL_FIELDS + QualityEvidenceReadiness._MAC_FIELDS + ("windows_release",)
-        for field in fields:
+        for field in _READINESS_FIELDS:
             value = raw.get(field)
-            if isinstance(value, EvidenceState):
-                values[field] = value
-            elif isinstance(value, str):
-                values[field] = EvidenceState(value.removeprefix("EvidenceState.").lower())
-            else:
+            if not isinstance(value, str) or value.removeprefix("EvidenceState.").lower() not in _STATUS_VALUES:
                 raise ValueError
+            values[field] = EvidenceState(value.removeprefix("EvidenceState.").lower())
         result = QualityEvidenceReadiness(**values)
         persisted = payload.get("readiness")
         if persisted is not None:
-            if not isinstance(persisted, Mapping) or any(persisted.get(field) != raw.get(field) for field in fields):
+            persisted = _require_mapping(persisted, "readiness")
+            if any(persisted.get(field) not in (raw.get(field), EvidenceState(str(raw.get(field)).removeprefix("EvidenceState.").lower())) for field in _READINESS_FIELDS):
                 raise ValueError("readiness projections disagree")
-        details = payload.get("evidence_details") if isinstance(payload.get("evidence_details"), Mapping) else {}
-        measured = payload.get("measured_quality") or details.get("measured_quality")
-        if not isinstance(measured, Mapping) or measured.get("status") != "PASS":
-            raise ValueError("measured quality is not passing")
-        attempts = measured.get("mcp_attempts")
-        successes = measured.get("mcp_successes")
-        if type(attempts) is not int or type(successes) is not int or attempts != 100 or successes != 100:
-            raise ValueError("strict MCP measurement is incomplete")
-        baseline = payload.get("context_baseline") or details.get("context_baseline")
-        if not isinstance(baseline, Mapping) or baseline.get("status") != EvidenceState.READY.value:
-            raise ValueError("context baseline is not measured")
-        if type(baseline.get("baseline_chars")) is not int or baseline.get("baseline_chars") <= 0:
-            raise ValueError("context baseline has no payload")
-        detail_fields = {
-            "import_audit": "import_audit", "mcp_parity": "mcp_parity",
-            "qdrant_degradation": "semantic_degradation",
-            "corruption_isolation": "corruption_isolation",
-            "context_baseline": "context_baseline",
-        }
-        for readiness_field, detail_key in detail_fields.items():
-            detail = payload.get(detail_key) or details.get(detail_key)
-            if detail is not None and (
-                not isinstance(detail, Mapping)
-                or detail.get("status") != EvidenceState.READY.value
-            ) and getattr(result, readiness_field) is EvidenceState.READY:
-                raise ValueError(f"{readiness_field} readiness disagrees with measurement")
-        if functional_status != "PASS" or phase_status == "FAIL":
-            raise ValueError("run verdict blocks scale")
+        details = _require_mapping(payload.get("evidence_details", {}), "evidence_details")
+        if result.production_sentinel not in {EvidenceState.NOT_MEASURED, EvidenceState.READY}:
+            raise ValueError("production sentinel is not admissible for scale")
+        if result.production_sentinel is EvidenceState.NOT_MEASURED and payload.get("production_pollution") is not None:
+            raise ValueError("unmeasured production sentinel must remain null")
+        if result.production_sentinel is EvidenceState.READY and payload.get("production_pollution") != 0:
+            raise ValueError("production sentinel count mismatch")
+        for field in QualityEvidenceReadiness._FUNCTIONAL_FIELDS:
+            if field != "production_sentinel" and getattr(result, field) is not EvidenceState.READY:
+                raise ValueError(f"functional evidence is not ready: {field}")
+        _validate_import(payload, details)
+        expected = _counter(_require_mapping(payload["import_counts"], "import_counts")["expected_messages"], "expected import count", positive=True)
+        _validate_promotion(payload, details, expected)
+        _validate_gateway(payload, details)
+        _validate_mcp(payload, details)
+        _validate_qdrant(payload, details)
+        _validate_corruption(payload, details)
+        _validate_context(payload, details)
         if not result.scale_ready:
             raise ValueError("functional readiness is incomplete")
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
@@ -155,4 +317,7 @@ def validate_history_fixture(path: Path, *, expected_count: int, expected_seed: 
             "seed": expected_seed}
 
 
-__all__ = ["readiness_from_envelope", "generate_history_fixture", "validate_history_fixture"]
+__all__ = [
+    "CORPUS_SHA256", "QUESTIONS_SHA256", "build_quality_run_id",
+    "readiness_from_envelope", "generate_history_fixture", "validate_history_fixture",
+]

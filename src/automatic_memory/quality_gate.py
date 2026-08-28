@@ -984,12 +984,22 @@ def _run_quality_gate_impl(
         valid_fact_total = sum(int(item.expected_fact_count) for item in question_results)
         citation_hits = sum(int(item.correct_citation_count) for item in question_results)
         citation_total = sum(int(item.expected_citation_count) for item in question_results)
-        context_reduction = (1 - rendered_context_chars / baseline_context_chars) * 100 if baseline_context_chars else 0.0
+        # A missing selection-before-bound observation is not a zero-length
+        # baseline.  Keep the unavailable measurement nullable all the way to
+        # the persisted envelope so downstream admission cannot mistake it
+        # for a measured result.
+        measured_baseline_chars = baseline_context_chars if baseline_available and baseline_context_chars > 0 else None
+        measured_rendered_chars = rendered_context_chars if measured_baseline_chars is not None else None
+        context_reduction = (
+            (1 - measured_rendered_chars / measured_baseline_chars) * 100
+            if measured_baseline_chars is not None and measured_rendered_chars is not None
+            else None
+        )
         measured_quality_failure = (
             valid_fact_total <= 0 or 100 * valid_fact_hits / valid_fact_total < 90
             or citation_total <= 0 or 100 * citation_hits / citation_total < 95
             or mcp_attempts <= 0 or 100 * mcp_successes / mcp_attempts < 95
-            or context_reduction < 90
+            or context_reduction is None or context_reduction < 90
         )
         # EvaluationReport deliberately requires a production integer.  Since
         # production is not measurable from this isolated run, preserve the
@@ -1061,8 +1071,8 @@ def _run_quality_gate_impl(
             "mcp_parity": {"status": readiness.mcp_parity.value, "attempts": mcp_attempts, "successes": mcp_successes, "failures": mcp_parity_failures},
             "context_baseline": {
                 "status": readiness.context_baseline.value,
-                "baseline_chars": baseline_context_chars,
-                "rendered_chars": rendered_context_chars,
+                "baseline_chars": measured_baseline_chars,
+                "rendered_chars": measured_rendered_chars,
                 "reduction": context_reduction,
             },
             "semantic_degradation": semantic_degradation,
@@ -1092,8 +1102,8 @@ def _run_quality_gate_impl(
                 "citation_hits": citation_hits, "citation_total": citation_total,
                 "automatic_activation_correct": activation_correct, "automatic_activation_total": activation_total,
                 "mcp_successes": mcp_successes, "mcp_attempts": mcp_attempts,
-                "baseline_context_chars": baseline_context_chars,
-                "rendered_context_chars": rendered_context_chars,
+                "baseline_context_chars": measured_baseline_chars,
+                "rendered_context_chars": measured_rendered_chars,
                 "context_reduction": context_reduction,
                 "status": "FAIL" if measured_quality_failure else "PASS",
             },

@@ -108,7 +108,10 @@ def test_scale_readiness_is_loaded_from_persisted_envelope(tmp_path: Path) -> No
         "measured_quality": {"status": "PASS", "mcp_successes": 100, "mcp_attempts": 100},
         "context_baseline": {"status": "ready", "baseline_chars": 100},
     }), encoding="utf-8")
-    assert load_quality_readiness(path).scale_ready
+    # The old compact envelope is intentionally rejected: scale admission now
+    # requires the complete persisted evidence composition.
+    with pytest.raises(QualityScaleBlockedError, match="BLOCKED_4R2_REQUIRED"):
+        load_quality_readiness(path)
     path.write_text(json.dumps({"quality_evidence_readiness": {}}), encoding="utf-8")
     with pytest.raises(QualityScaleBlockedError, match="BLOCKED_4R2_REQUIRED"):
         load_quality_readiness(path)

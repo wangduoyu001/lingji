@@ -51,7 +51,10 @@ def test_readiness_loader_rejects_missing_or_contradictory_run_contract(tmp_path
         "quality_evidence_readiness": _readiness(),
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
-    assert readiness_from_envelope(path).scale_ready
+    # A verdict and two counters alone are no longer scale evidence.  The
+    # complete schema is exercised by test_task7n1_scale_admission.
+    with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
+        readiness_from_envelope(path)
     payload["functional_status"] = "FAIL"
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
