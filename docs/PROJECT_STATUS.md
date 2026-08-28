@@ -636,3 +636,16 @@ structured、Work 矩阵为 `241 passed, 2 warnings`。Desktop memory source sta
 rendered checks pass；compile、diff-check、acceptance sync、local handoff pass。Task6 仍
 `IN_PROGRESS / NOT_ACCEPTED`，Task6V packaged 30/70、live/Artifact/Production/Vault/
 owner acceptance 未执行。
+
+Task 6P independent review (2026-08-28)：报告
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-review.md` 审查
+HEAD `815a3bb5c0d245f6f33a984e7349e927b0090418` 与产品/测试
+`19525638ba3f33223fac005aa258f33dd2eb6091`，结论为 `FAIL /
+REPAIR_ROUND_1_AUTHORIZED`，Critical=0、Important=1、Minor=0。Fresh
+Task6P focused `5 passed`，expanded backend `279 passed, 3 warnings`，Desktop
+source/rendered/build、compile、acceptance sync、local handoff 通过；但
+pipeline `process_next/process_internal_next/process_job` 的 lifecycle callback
+仍收到带明文 `lease_token` 的 claimed job，direct `execute` callback 仍透传
+显式嵌套 lease key。仅授权一轮有界 lifecycle projection repair；Task6P 保持
+`NOT_ACCEPTED`，Task6 保持 `IN_PROGRESS / NOT_ACCEPTED`。Task6L/M 历史结论、
+Task6V packaged 30/70、live/Artifact/Production/Vault/owner acceptance 均不改写。

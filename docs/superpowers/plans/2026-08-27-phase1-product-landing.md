@@ -548,6 +548,19 @@ Task6L remains `NOT_ACCEPTED`; one bounded Repair Round 1 is authorized. Task6M
 historical `FAIL / BLOCKED_AT_REPAIR_CAP` and Task6 `IN_PROGRESS / NOT_ACCEPTED`
 remain unchanged.
 
+Task 6P Queue Persistence Lease Redaction (new bounded task) is implemented in
+product/tests `19525638ba3f33223fac005aa258f33dd2eb6091`; its independent review
+at HEAD `815a3bb5c0d245f6f33a984e7349e927b0090418` is recorded in
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-review.md` and returns
+`FAIL / REPAIR_ROUND_1_AUTHORIZED` (Critical=0, Important=1, Minor=0). Queue
+terminal/payload/error redaction, bounded scrubber behavior, ordinary
+projections and worker ownership remain verified, but lifecycle callbacks still
+receive plaintext internal claim tokens and direct execute callbacks can pass
+explicit lease keys. At most one bounded lifecycle projection repair is
+authorized. Task6P remains `NOT_ACCEPTED`; Task6 remains `IN_PROGRESS /
+NOT_ACCEPTED`; Task6L/M history and Task6V packaged/live/Artifact gates remain
+unchanged.
+
 Task 6L Repair Round 1 (review record `9edb9eab98b5abf58999b0e16d09ece729c2e45e`,
 reviewed product baseline `880bd8c1beeddfda0b0c76752038ca7da521adfe`) was limited
 to I1 public queue projection leakage. Product/tests commit `2daac07` adds the

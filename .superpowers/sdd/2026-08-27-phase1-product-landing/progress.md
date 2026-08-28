@@ -170,3 +170,17 @@ Task6P focused is `5 passed`; queue/worker/pipeline regressions are `77 passed,
 diff-check, acceptance sync, and local handoff pass. Task6L/M dispositions are
 preserved; independent review remains required and Task6 stays
 `IN_PROGRESS / NOT_ACCEPTED`.
+
+Task 6P independent review (2026-08-28): report
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-review.md` against
+reviewed HEAD `815a3bb5c0d245f6f33a984e7349e927b0090418` and product/tests
+`19525638ba3f33223fac005aa258f33dd2eb6091` is `FAIL / REPAIR_ROUND_1_AUTHORIZED`,
+Critical=0, Important=1, Minor=0. Fresh Task6P focused is `5 passed`; expanded
+backend is `279 passed, 3 warnings`; Desktop source/rendered/build, compile,
+acceptance sync and local handoff pass. I1 remains: pipeline lifecycle callbacks
+receive the internal claimed job with plaintext `lease_token`; direct execute
+callbacks also pass explicit nested lease keys unchanged. At most one bounded
+lifecycle projection repair is authorized. Task6P remains `NOT_ACCEPTED` and
+Task6 remains `IN_PROGRESS / NOT_ACCEPTED`; Task6L/M historical dispositions,
+packaged 30/70, live, Artifact, release, Production/Vault and owner acceptance
+are unchanged.

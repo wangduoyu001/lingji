@@ -22,6 +22,21 @@
   `IN_PROGRESS / NOT_ACCEPTED`，Task6V packaged 30/70、live/Artifact/Production/Vault/owner
   acceptance 仍待后续。
 
+## 2026-08-28 · Task 6P · Independent review disposition
+
+- 独立审查报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-review.md`；审查
+  HEAD `815a3bb5c0d245f6f33a984e7349e927b0090418`，产品/测试
+  `19525638ba3f33223fac005aa258f33dd2eb6091`。结论 `FAIL /
+  REPAIR_ROUND_1_AUTHORIZED`，Critical=0、Important=1、Minor=0。
+- Fresh Task6P focused `5 passed`；expanded backend `279 passed, 3 warnings`；Desktop
+  source/rendered/build、compile、acceptance sync、local handoff 通过。I1：pipeline
+  lifecycle callbacks 仍接收带 plaintext `lease_token` 的内部 claimed job；direct
+  `execute` callback 仍透传显式嵌套 lease key。仅授权最多一轮 bounded lifecycle
+  projection repair，保留内部 worker lease seam 与 ordinary chat text 行为。
+- Task6P 保持 `NOT_ACCEPTED`，Task6 保持 `IN_PROGRESS / NOT_ACCEPTED`；Task6L/M 历史
+  disposition、Task6V packaged 30/70、live/Artifact/Production/Vault/owner acceptance
+  均不改写或提前宣称。
+
 ## 2026-08-28 · Task 6L · Durable Lease Ownership Receipt
 
 - 本轮是 Task6M `FAIL / BLOCKED_AT_REPAIR_CAP` 之后的新有界架构任务，不改写
