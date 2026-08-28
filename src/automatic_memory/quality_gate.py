@@ -41,6 +41,7 @@ from src.memory.vault_layout import VaultLayout
 from src.retrieval.context_pack import ContextPackBuilder, ContextPackRequest
 from src.retrieval.hybrid import HybridRetriever
 from src.retrieval.memory_db import MemoryDatabase
+from src.retrieval.source_authority import SourceAuthorityResolver
 from src.sources.read_model import SourceReadModel
 from src.sources.service import SourceQueryService
 from src.storage.state_db import StateDatabase
@@ -427,7 +428,11 @@ def _build_gateway(
         local_only=True,
     )
     profiles = AIProfileRegistry([profile])
-    retriever = HybridRetriever(memory_db, semantic_provider=semantic_provider)
+    retriever = HybridRetriever(
+        memory_db,
+        semantic_provider=semantic_provider,
+        source_authority=SourceAuthorityResolver(state_db),
+    )
     source_service = SourceQueryService(
         read_model,
         workspace="acceptance",
@@ -958,9 +963,10 @@ def _run_quality_gate_impl(
         semantic_degradation = _measure_semantic_degradation(
             temporary_root, memory_db, read_model, state_db, questions[0].query,
         )
-        corruption_isolation = measure_corruption_isolation_from_runtime(
-            temporary_root, pipeline, read_model, state_db,
+        corruption_measurement = measure_corruption_isolation_from_runtime(
+            temporary_root, pipeline, read_model, state_db, gateway=gateway,
         )
+        corruption_isolation = asdict(corruption_measurement)
         protected_after = ProtectedTreeSentinel.capture((protected_root,))
         acceptance_sentinels_before = {
             key: asdict(value) for key, value in protected_before.entries.items()
