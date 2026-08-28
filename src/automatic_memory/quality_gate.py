@@ -15,17 +15,13 @@ import os
 import re
 import secrets
 import shutil
-import statistics
 import tempfile
-import time
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Literal, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
-from src.auto_review.models import ReviewCandidate
-from src.auto_review.promotion import AutoMemoryPromotionService
 from src.extraction.adapters.generic_ai_history import HISTORY_SCHEMA, HISTORY_VERSION
 from src.extraction.adapters.generic_ai_history import GenericAIHistoryAdapter
 from src.extraction.models import ExtractionRequest
@@ -54,7 +50,6 @@ from .evaluation import (
     EvaluationReport,
     load_corpus,
     load_questions,
-    evaluate_run,
     score_question,
 )
 from .quality_evidence import (
@@ -62,9 +57,9 @@ from .quality_evidence import (
     ExpectedImportedRow,
     QualityRunEnvelope,
     ImportedEvidenceAudit,
+    QualityPublicationError,
     ProtectedTreeSentinel,
     QualityEvidenceReadiness,
-    QualityPublicationError,
     finalize_quality_envelope,
     write_quality_json_atomic,
     _read_ingestion_rows,
@@ -73,8 +68,9 @@ from .quality_evidence import (
     cleanup_inventory_after_delete,
     count_memory_projection_duplicates,
 )
-from .quality_degradation import measure_context_baseline, measure_mcp_parity, measure_corruption_isolation_from_runtime
-from .scale_benchmark import readiness_from_envelope, generate_history_fixture, validate_history_fixture
+from .quality_degradation import measure_context_baseline, measure_mcp_parity, measure_corruption_isolation_from_runtime, measure_semantic_degradation
+from .quality_promotion import measure_promotion_fixtures
+from .scale_benchmark import readiness_from_envelope, generate_history_fixture
 
 
 FUNCTIONAL_BLOCKED_REASONS = (
@@ -502,75 +498,6 @@ def _call_formal_mcp(server: Any, arguments: Mapping[str, Any]) -> Mapping[str, 
     raise ValueError("formal MCP returned no structured context pack")
 
 
-class _InjectedSemanticOutage:
-    """Acceptance-only Qdrant client failure, behind the real adapter."""
-
-    def collection_exists(self, _collection: str) -> bool:
-        raise OSError("injected qdrant outage")
-
-
-class _StaticEmbeddingProvider:
-    active_model = "quality-fault-injection"
-
-    def embed(self, _text: str) -> list[float]:
-        return [1.0, 0.0]
-
-    def embed_many(self, texts: Sequence[str]) -> list[list[float]]:
-        return [self.embed(text) for text in texts]
-
-    def status(self) -> dict[str, Any]:
-        return {"active_model": self.active_model, "dimension": 2, "available": True}
-
-
-def _measure_semantic_degradation(
-    root: Path,
-    memory_db: MemoryDatabase,
-    read_model: SourceReadModel,
-    state_db: StateDatabase,
-    query: str,
-) -> dict[str, Any]:
-    """Prove lexical fallback survives a failing semantic channel."""
-    lexical_gateway, _ = _build_gateway(root, memory_db, read_model, state_db)
-    from src.retrieval.qdrant_provider import QdrantSemanticProvider
-    from src.runtime.workspace import WorkspaceContext, WorkspaceName
-
-    qdrant_workspace = WorkspaceContext(
-        name=WorkspaceName.ACCEPTANCE,
-        vault_path=root / "vault", raw_path=root / "storage" / "raw",
-        storage_path=root / "storage", state_db_path=root / "storage" / "state" / "lingji_state.db",
-        memory_db_path=root / "storage" / "index" / "lingji_memory.db", qdrant_mode="memory",
-        qdrant_path=None, qdrant_url=None, qdrant_collection="quality-outage",
-        log_path=root / "storage" / "logs", cache_path=root / "storage" / "cache",
-        runtime_settings_path=root / "storage" / "runtime.json", queue_db_path=root / "storage" / "state" / "lingji_state.db",
-        backup_path=root / "storage" / "backups", derived_path=root / "storage" / "derived",
-        temp_path=root / "storage" / "temp", reports_path=root / "storage" / "reports",
-    )
-    qdrant = QdrantSemanticProvider(
-        qdrant_workspace, _StaticEmbeddingProvider(), client=_InjectedSemanticOutage(),
-    )
-    degraded_gateway, _ = _build_gateway(
-        root, memory_db, read_model, state_db,
-        semantic_provider=qdrant,
-    )
-    lexical = lexical_gateway.search_memory("agent-synthetic", query, limit=10)
-    degraded = degraded_gateway.search_memory("agent-synthetic", query, limit=10)
-    lexical_ids = [str(item.get("memory_id") or "") for item in lexical.get("results") or []]
-    degraded_ids = [str(item.get("memory_id") or "") for item in degraded.get("results") or []]
-    diagnostics = degraded.get("diagnostics") or {}
-    return {
-        "status": "ready" if (
-            bool(lexical_ids)
-            and
-            lexical_ids == degraded_ids
-            and diagnostics.get("semantic") == "degraded"
-            and diagnostics.get("lexical") == "available"
-        ) else "failed",
-        "lexical_results": len(lexical_ids),
-        "degraded_results": len(degraded_ids),
-        "diagnostics": diagnostics,
-    }
-
-
 def _match_persisted_messages(
     corpus: Sequence[CorpusRecord],
     read_model: SourceReadModel,
@@ -621,92 +548,25 @@ def _promote_fixtures(
     read_model: SourceReadModel,
     state_db: StateDatabase,
 ) -> tuple[dict[str, dict[str, Any]], int, int, dict[str, str], dict[str, int]]:
-    promotion_plan: list[tuple[CorpusRecord, str]] = []
-    promotion_bindings: dict[str, str] = {}
-    bound_facts: set[str] = set()
-    for record in corpus:
-        memory_id = _opaque_memory_id(record)
-        fact_id = str(record.fact_id or "").strip()
-        if not fact_id:
-            raise ValueError("promotion fact binding requires a fact ID")
-        if memory_id in promotion_bindings:
-            raise ValueError(f"opaque memory ID collision: {memory_id}")
-        if fact_id in bound_facts:
-            raise ValueError(f"promotion fact binding collision: {fact_id}")
-        promotion_bindings[memory_id] = fact_id
-        bound_facts.add(fact_id)
-        promotion_plan.append((record, memory_id))
-    if len(promotion_bindings) != len(corpus):
-        raise ValueError("promotion identity bindings are not one-to-one")
-
-    service = AutoMemoryPromotionService(
-        state_db=state_db,
-        memory_db=memory_db,
-        evidence_store=read_model,
-    )
-    decisions: dict[str, dict[str, Any]] = {}
-    activation_total = 0
-    activation_correct = 0
-    outcomes: dict[str, int] = {}
-    for record, memory_id in promotion_plan:
-        message = message_map.get(record.fact_id)
-        if message is None:
-            continue
-        is_eligible = record.risk != "high" and record.authority == "owner-confirmed"
-        if is_eligible:
-            activation_total += 1
-        candidate = ReviewCandidate(
-            memory_id=memory_id,
-            title=record.topic_key,
-            content=record.content,
-            memory_type=record.memory_kind,
-            privacy=record.privacy,
-            project_ids=(record.project_id,),
-            source_refs=(str(message["message_id"]),),
-            confidence=0.99 if is_eligible else 0.80,
-            authority="user_explicit" if record.authority == "owner-confirmed" else "assistant_suggestion",
-            source_kind="current_project_document" if record.authority == "owner-confirmed" else "assistant_inference",
-            extractor_version="automatic-memory-v1",
-            metadata={
-                "direct_user_evidence": record.authority == "owner-confirmed",
-                "memory_type": record.memory_kind,
-                "project_ids": [record.project_id],
-                "privacy": record.privacy,
-                "agent_scope": list(record.agent_scope),
-                "valid_from": record.occurred_at,
-                "modified_at": record.occurred_at,
-            },
-        )
-        decision = service.evaluate(candidate)
-        # The quality fixture deliberately carries owner-confirmed authority.
-        # The current promotion API records an automatic candidate as pending
-        # first; use its explicit approval path to exercise the real durable
-        # projection and link persistence without weakening the quarantine
-        # default for ordinary candidates.
-        if is_eligible and decision.get("status") == "pending_owner_review":
-            recorded = service.candidate(memory_id)
-            if not isinstance(recorded, Mapping):
-                raise ValueError("promotion candidate was not durably recorded")
-            # StateDatabase intentionally redacts evaluator/path-like body
-            # text.  Such a candidate remains quarantined; trying to approve
-            # the redacted replay would be a content-hash mismatch, not a
-            # reason to weaken the persistence contract.
-            if "promotion_payload_redacted" not in (recorded.get("reason_codes") or []):
-                decision = service.approve(
-                    memory_id,
-                    expected_content_hash=recorded.get("content_hash", ""),
-                    owner_confirmed=True,
-                )
-        decisions[record.fact_id] = decision
-        status = str(decision.get("status") or "error")
+    bindings = {_opaque_memory_id(record): str(record.fact_id) for record in corpus}
+    if len(bindings) != len(corpus):
+        raise ValueError("opaque memory ID collision")
+    fact_ids = [str(record.fact_id or "").strip() for record in corpus]
+    if any(not value for value in fact_ids) or len(fact_ids) != len(set(fact_ids)):
+        raise ValueError("promotion fact binding collision")
+    measured_map = {
+        str(record.fact_id): {**dict(message_map.get(str(record.fact_id)) or {}), "promotion_memory_id": _opaque_memory_id(record)}
+        for record in corpus
+    }
+    measurement = measure_promotion_fixtures(corpus, measured_map, memory_db, read_model, state_db)
+    decisions = {item["fact_id"]: item for item in measurement.outcomes}
+    activation_total = sum(item["expected_status"] == "active" for item in measurement.outcomes)
+    activation_correct = sum(item["expected_status"] == "active" and item["status"] == "active" for item in measurement.outcomes)
+    outcomes: dict[str, int] = {"active": 0, "pending_owner_review": 0, "rejected": 0, "error": 0}
+    for item in measurement.outcomes:
+        status = str(item.get("status") or "error")
         outcomes[status] = outcomes.get(status, 0) + 1
-        if is_eligible and decision.get("status") == "active":
-            activation_correct += 1
-
-    # Lifecycle replacement links are owned by the real application workflow.
-    # The evaluation fixture remains process-local and must not write
-    # fixture-driven supersession or other lifecycle overrides to storage.
-    return decisions, activation_correct, activation_total, promotion_bindings, outcomes
+    return decisions, activation_correct, activation_total, bindings, outcomes
 
 
 def validate_selected_evidence(
@@ -831,33 +691,26 @@ def _run_quality_gate_impl(
         imported_messages = audit.actual_rows
         ordered_role_matches = audit.role_matches
         tracker.mark("promotion")
-        decisions, activation_correct, activation_total, promotion_bindings, promotion_outcomes = _promote_fixtures(
-            corpus, message_map, memory_db, read_model, state_db
+        promotion_map = {
+            str(record.fact_id): {**dict(message_map.get(str(record.fact_id)) or {}), "promotion_memory_id": _opaque_memory_id(record)}
+            for record in corpus
+        }
+        promotion_measurement = measure_promotion_fixtures(
+            corpus, promotion_map, memory_db, read_model, state_db
         )
-        promotion_category_outcomes: dict[str, dict[str, int]] = {}
-        for record in corpus:
-            memory_kind = str(record.memory_kind or "").lower()
-            if memory_kind in {"core", "core_memory"}:
-                category = "core/protected"
-            elif str(record.risk or "").lower() in {"high", "critical"}:
-                category = "high-risk"
-            elif str(record.authority or "").lower() in {"assistant", "assistant_inference", "ai_inference"}:
-                category = "assistant-only"
-            elif str(record.lifecycle or "").lower() in {"conflict", "superseded"}:
-                category = "conflict"
-            else:
-                category = "low-risk user"
-            status = str((decisions.get(record.fact_id) or {}).get("status") or "error")
-            bucket = promotion_category_outcomes.setdefault(category, {"expected": 0, "actual": 0, "pending": 0, "rejected": 0, "error": 0})
-            bucket["expected"] += 1
-            if status == "active":
-                bucket["actual"] += 1
-            elif status == "pending_owner_review":
-                bucket["pending"] += 1
-            elif status == "rejected":
-                bucket["rejected"] += 1
-            else:
-                bucket["error"] += 1
+        decisions = {item["fact_id"]: item for item in promotion_measurement.outcomes}
+        activation_total = sum(item["expected_status"] == "active" for item in promotion_measurement.outcomes)
+        activation_correct = sum(item["expected_status"] == "active" and item["status"] == "active" for item in promotion_measurement.outcomes)
+        promotion_outcomes: dict[str, int] = {"active": 0, "pending_owner_review": 0, "rejected": 0, "error": 0}
+        for item in promotion_measurement.outcomes:
+            status = str(item.get("status") or "error")
+            promotion_outcomes[status] = promotion_outcomes.get(status, 0) + 1
+        promotion_category_outcomes = dict(promotion_measurement.category_outcomes)
+        promotion_provenance = dict(promotion_measurement.provenance)
+        promotion_bindings = {
+            _opaque_memory_id(record): str(record.fact_id)
+            for record in corpus
+        }
         duplicate_records = audit.stable_duplicates.total + count_memory_projection_duplicates(memory_db)
         tracker.mark("gateway")
         gateway, _profiles = _build_gateway(temporary_root, memory_db, read_model, state_db)
@@ -960,8 +813,9 @@ def _run_quality_gate_impl(
                 mcp_selected.citation_ids,
                 context_chars=mcp_used,
             ))
-        semantic_degradation = _measure_semantic_degradation(
+        semantic_degradation = measure_semantic_degradation(
             temporary_root, memory_db, read_model, state_db, questions[0].query,
+            gateway_builder=_build_gateway,
         )
         corruption_measurement = measure_corruption_isolation_from_runtime(
             temporary_root, pipeline, read_model, state_db, gateway=gateway,
@@ -1004,6 +858,7 @@ def _run_quality_gate_impl(
         measured_quality_failure = (
             valid_fact_total <= 0 or 100 * valid_fact_hits / valid_fact_total < 90
             or citation_total <= 0 or 100 * citation_hits / citation_total < 95
+            or (activation_total > 0 and 100 * activation_correct / activation_total < 95)
             or mcp_attempts <= 0 or 100 * mcp_successes / mcp_attempts < 95
             or context_reduction is None or context_reduction < 90
         )
@@ -1013,10 +868,7 @@ def _run_quality_gate_impl(
         report = None
         readiness = QualityEvidenceReadiness(
             import_audit=EvidenceState.READY if audit.ready else EvidenceState.FAILED,
-            promotion_provenance=EvidenceState.READY if all(
-                decision.get("status") != "active" or bool(read_model.memory_links(decision.get("candidate_id", "")))
-                for decision in decisions.values()
-            ) else EvidenceState.FAILED,
+            promotion_provenance=EvidenceState.READY if promotion_measurement.status == "ready" else EvidenceState.FAILED,
             gateway_selection=EvidenceState.READY if (
                 gateway_calls_completed == EXPECTED_QUESTION_COUNT
                 and gateway_selector_calls == EXPECTED_QUESTION_COUNT
@@ -1064,6 +916,7 @@ def _run_quality_gate_impl(
             "import_audit": asdict(audit),
             "promotion_outcomes": promotion_outcomes,
             "promotion_category_outcomes": promotion_category_outcomes,
+            "promotion_provenance": promotion_provenance,
             "functional_status": "FAIL" if measured_quality_failure else "NOT_EVALUATED",
             "phase_status": "FAIL" if measured_quality_failure else "NOT_EVALUATED",
             "gateway_selection": {
@@ -1107,6 +960,7 @@ def _run_quality_gate_impl(
                 "valid_fact_hits": valid_fact_hits, "valid_fact_total": valid_fact_total,
                 "citation_hits": citation_hits, "citation_total": citation_total,
                 "automatic_activation_correct": activation_correct, "automatic_activation_total": activation_total,
+                "automatic_activation_accuracy": (100 * activation_correct / activation_total) if activation_total else None,
                 "mcp_successes": mcp_successes, "mcp_attempts": mcp_attempts,
                 "baseline_context_chars": measured_baseline_chars,
                 "rendered_context_chars": measured_rendered_chars,
@@ -1145,7 +999,7 @@ def publish_quality_envelope(envelope: QualityRunEnvelope, *, repository_output_
         # while retaining one authoritative envelope and one evidence map.
         for key in ("semantic_degradation", "corruption_isolation", "context_baseline",
                     "mcp_parity", "promotion_outcomes", "promotion_category_outcomes",
-                    "import_audit", "acceptance_boundary", "measured_quality"):
+                    "promotion_provenance", "import_audit", "acceptance_boundary", "measured_quality"):
             if key in details:
                 payload[key] = details[key]
         payload["quality_evidence_readiness"] = payload.get("quality_evidence_readiness") or payload.get("readiness", {})
@@ -1201,6 +1055,7 @@ def run_quality_gate(
             "mcp_parity": raw.get("mcp_parity"),
             "promotion_outcomes": raw.get("promotion_outcomes"),
             "promotion_category_outcomes": raw.get("promotion_category_outcomes"),
+            "promotion_provenance": raw.get("promotion_provenance"),
             "import_audit": raw.get("import_audit"),
             "acceptance_boundary": raw.get("acceptance_boundary"),
             "measured_quality": raw.get("measured_quality"),
@@ -1236,152 +1091,10 @@ def _git_commit() -> str:
         return "unknown"
 
 
-def generate_100k_history(path: Path, *, count: int = 100_000, seed: int = 41041) -> dict[str, Any]:
-    """Create deterministic unique History Inbox messages without Production writes.
-
-    The benchmark itself requires 100,000 rows; a smaller count is permitted
-    only as a deterministic unit-test seam and is rejected by the benchmark
-    admission path.
-    """
-    return generate_history_fixture(path, count=count, seed=seed)
+generate_100k_history = generate_history_fixture
 
 
-def _validate_scale_fixture(path: Path, *, expected_count: int, expected_seed: int) -> dict[str, Any]:
-    """Re-read the generated fixture and measure identities from persisted bytes."""
-    return validate_history_fixture(path, expected_count=expected_count, expected_seed=expected_seed)
-
-
-def run_100k_benchmark(*, output_path: Path, readiness_path: Path | None = None) -> dict[str, Any]:
-    """Run the opt-in scale benchmark in an isolated Acceptance root."""
-    if readiness_path is None:
-        readiness_path = Path(__file__).resolve().parents[2] / "output" / "validation" / "automatic-memory-quality.json"
-    readiness = load_quality_readiness(Path(readiness_path))
-    ensure_4r2_ready_for_scale(readiness)
-    output_path = Path(output_path)
-    _reject_protected_output(output_path)
-    started = time.perf_counter()
-    root = Path(tempfile.mkdtemp(prefix="lingji-acceptance-scale-", dir=str(output_path.parent)))
-    try:
-        generated = generate_100k_history(root / "generic-history-scale.jsonl")
-        input_path = Path(generated["path"])
-        generated.update(_validate_scale_fixture(
-            input_path, expected_count=100_000, expected_seed=int(generated["seed"]),
-        ))
-        memory_db = MemoryDatabase(root / "storage" / "index" / "lingji_memory.db")
-        state_db = StateDatabase(root / "storage" / "state" / "lingji_state.db")
-        read_model = SourceReadModel(memory_db)
-        pipeline = _build_pipeline(root, memory_db, read_model, state_db)
-        protected = root / "protected-boundary"
-        protected.mkdir()
-        (protected / "sentinel.txt").write_text("scale-boundary\n", encoding="utf-8")
-        protected_before = ProtectedTreeSentinel.capture((protected,))
-        result = pipeline.execute(
-            "generic_ai_history",
-            input_path=input_path,
-            adapter_name="generic_ai_history",
-            execution_id="LJ-SCALE-100K",
-        )
-        replay = pipeline.execute(
-            "generic_ai_history",
-            input_path=input_path,
-            adapter_name="generic_ai_history",
-            execution_id="LJ-SCALE-100K",
-        )
-        indexer_class = __import__("src.indexer.index", fromlist=["PEMISIndex"]).PEMISIndex
-        indexer = indexer_class(root / "vault", root / "storage")
-        indexer.build_index()
-        index_stats = memory_db.rebuild_from_index(indexer.get_all(), root / "vault")
-        ingestion_rows = _read_ingestion_rows(read_model, "LJ-SCALE-100K")
-        identity_keys = {
-            (
-                str(row.get("source_external_id") or ""),
-                str(row.get("conversation_external_id") or ""),
-                str(row.get("message_external_id") or ""),
-            )
-            for row in ingestion_rows
-        }
-        identity_hashes = {str(row.get("content_hash") or "") for row in ingestion_rows}
-        imported_count = len(ingestion_rows)
-        replay_rows = _read_ingestion_rows(read_model, "LJ-SCALE-100K")
-        replay_identity_keys = {
-            (
-                str(row.get("source_external_id") or ""),
-                str(row.get("conversation_external_id") or ""),
-                str(row.get("message_external_id") or ""),
-            )
-            for row in replay_rows
-        }
-        if (
-            imported_count != 100_000
-            or len(identity_keys) != 100_000
-            or len(identity_hashes) != 100_000
-            or identity_keys != replay_identity_keys
-        ):
-            raise ValueError("scale import/replay identity parity failed")
-        gateway, _profiles = _build_gateway(root, memory_db, read_model, state_db)
-        latencies: list[float] = []
-        context_sizes: list[int] = []
-        resident_samples: list[int] = []
-        try:
-            import resource
-            resident_samples.append(int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss))
-        except (ImportError, AttributeError, OSError):
-            resident_samples = []
-        for _ in range(10):
-            before = time.perf_counter()
-            pack = gateway.build_context_pack(
-                "agent-synthetic",
-                query="Deterministic scale message",
-                project=None,
-                max_chars=4000,
-                include_core=False,
-            )
-            latencies.append((time.perf_counter() - before) * 1000)
-            context_sizes.append(len(str(pack.get("markdown") or "")))
-            if resident_samples:
-                resident_samples.append(int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss))
-        elapsed = time.perf_counter() - started
-        ordered = sorted(latencies)
-        protected_after = ProtectedTreeSentinel.capture((protected,))
-        protected_changes = protected_before.diff(protected_after)
-        cleanup_before = cleanup_inventory_before_delete(root)
-        report = {
-            **generated,
-            "imported_messages": imported_count,
-            "pipeline_result": {
-                "documents": int(result.get("documents") or 0),
-                "structured_messages": int((result.get("structured_read_model") or {}).get("messages") or 0),
-                "index_documents": int(index_stats.get("documents") or 0),
-                "index_chunks": int(index_stats.get("chunks") or 0),
-            },
-            "elapsed_seconds": elapsed,
-            "p50_ms": ordered[len(ordered) // 2],
-            "p95_ms": ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))],
-            "hot_retrieval_ms": latencies,
-            "context_pack_sizes": context_sizes,
-            "resident_rss_samples": resident_samples,
-            "resident_rss_max": max(resident_samples) if resident_samples else None,
-            "resident_rss_unit": "kilobytes on macOS/Linux resource.getrusage",
-            "replay": {
-                "documents": int(replay.get("documents") or 0),
-                "structured_messages": int((replay.get("structured_read_model") or {}).get("messages") or 0),
-                "identity_stable": identity_keys == replay_identity_keys,
-            },
-            "production_pollution": None,
-            "protected_tree_changes": [asdict(change) for change in protected_changes],
-            "vault_mutation": None,
-            "cleanup_result": "pending",
-            "cleanup_inventory": cleanup_before,
-        }
-        shutil.rmtree(root, ignore_errors=False)
-        report["cleanup_result"] = "cleaned"
-        report["cleanup_inventory"].update(cleanup_inventory_after_delete(root))
-        report["cleanup_inventory"]["cleaned"] = not bool(report["cleanup_inventory"].get("root_exists"))
-        _atomic_json(output_path, report)
-        return report
-    except Exception:
-        shutil.rmtree(root, ignore_errors=True)
-        raise
+from .scale_benchmark import run_100k_benchmark
 
 
 __all__ = [

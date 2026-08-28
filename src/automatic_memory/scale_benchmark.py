@@ -7,6 +7,10 @@ from __future__ import annotations
 
 import json
 import hashlib
+import shutil
+import tempfile
+import time
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -317,7 +321,93 @@ def validate_history_fixture(path: Path, *, expected_count: int, expected_seed: 
             "seed": expected_seed}
 
 
+def run_100k_benchmark(*, output_path: Path, readiness_path: Path | None = None) -> dict[str, Any]:
+    """Run the opt-in scale benchmark; quality_gate keeps only a compatibility alias."""
+    # Delayed imports keep this isolated helper free of runner import cycles.
+    from .quality_gate import (
+        _atomic_json, _build_gateway, _build_pipeline, _read_ingestion_rows,
+        _reject_protected_output, ensure_4r2_ready_for_scale, load_quality_readiness,
+    )
+    from src.retrieval.memory_db import MemoryDatabase
+    from src.sources.read_model import SourceReadModel
+    from src.storage.state_db import StateDatabase
+    from .quality_evidence import ProtectedTreeSentinel, cleanup_inventory_after_delete, cleanup_inventory_before_delete
+    if readiness_path is None:
+        readiness_path = Path(__file__).resolve().parents[2] / "output" / "validation" / "automatic-memory-quality.json"
+    ensure_4r2_ready_for_scale(load_quality_readiness(Path(readiness_path)))
+    output_path = Path(output_path)
+    _reject_protected_output(output_path)
+    started = time.perf_counter()
+    root = Path(tempfile.mkdtemp(prefix="lingji-acceptance-scale-", dir=str(output_path.parent)))
+    try:
+        generated = generate_history_fixture(root / "generic-history-scale.jsonl")
+        input_path = Path(generated["path"])
+        generated.update(validate_history_fixture(input_path, expected_count=100_000, expected_seed=int(generated["seed"])))
+        memory_db = MemoryDatabase(root / "storage" / "index" / "lingji_memory.db")
+        state_db = StateDatabase(root / "storage" / "state" / "lingji_state.db")
+        read_model = SourceReadModel(memory_db)
+        pipeline = _build_pipeline(root, memory_db, read_model, state_db)
+        protected = root / "protected-boundary"
+        protected.mkdir()
+        (protected / "sentinel.txt").write_text("scale-boundary\n", encoding="utf-8")
+        protected_before = ProtectedTreeSentinel.capture((protected,))
+        result = pipeline.execute("generic_ai_history", input_path=input_path, adapter_name="generic_ai_history", execution_id="LJ-SCALE-100K")
+        replay = pipeline.execute("generic_ai_history", input_path=input_path, adapter_name="generic_ai_history", execution_id="LJ-SCALE-100K")
+        indexer_class = __import__("src.indexer.index", fromlist=["PEMISIndex"]).PEMISIndex
+        indexer = indexer_class(root / "vault", root / "storage")
+        indexer.build_index()
+        index_stats = memory_db.rebuild_from_index(indexer.get_all(), root / "vault")
+        ingestion_rows = _read_ingestion_rows(read_model, "LJ-SCALE-100K")
+        identity_keys = {(str(row.get("source_external_id") or ""), str(row.get("conversation_external_id") or ""), str(row.get("message_external_id") or "")) for row in ingestion_rows}
+        identity_hashes = {str(row.get("content_hash") or "") for row in ingestion_rows}
+        replay_rows = _read_ingestion_rows(read_model, "LJ-SCALE-100K")
+        replay_identity_keys = {(str(row.get("source_external_id") or ""), str(row.get("conversation_external_id") or ""), str(row.get("message_external_id") or "")) for row in replay_rows}
+        imported_count = len(ingestion_rows)
+        if imported_count != 100_000 or len(identity_keys) != 100_000 or len(identity_hashes) != 100_000 or identity_keys != replay_identity_keys:
+            raise ValueError("scale import/replay identity parity failed")
+        gateway, _profiles = _build_gateway(root, memory_db, read_model, state_db)
+        latencies: list[float] = []
+        context_sizes: list[int] = []
+        resident_samples: list[int] = []
+        try:
+            import resource
+            resident_samples.append(int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss))
+        except (ImportError, AttributeError, OSError):
+            resource = None
+        for _ in range(10):
+            before = time.perf_counter()
+            pack = gateway.build_context_pack("agent-synthetic", query="Deterministic scale message", project=None, max_chars=4000, include_core=False)
+            latencies.append((time.perf_counter() - before) * 1000)
+            context_sizes.append(len(str(pack.get("markdown") or "")))
+            if resource is not None:
+                resident_samples.append(int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss))
+        ordered = sorted(latencies)
+        protected_changes = protected_before.diff(ProtectedTreeSentinel.capture((protected,)))
+        cleanup_before = cleanup_inventory_before_delete(root)
+        report = {
+            **generated, "imported_messages": imported_count,
+            "pipeline_result": {"documents": int(result.get("documents") or 0), "structured_messages": int((result.get("structured_read_model") or {}).get("messages") or 0), "index_documents": int(index_stats.get("documents") or 0), "index_chunks": int(index_stats.get("chunks") or 0)},
+            "elapsed_seconds": time.perf_counter() - started,
+            "p50_ms": ordered[len(ordered) // 2], "p95_ms": ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))],
+            "hot_retrieval_ms": latencies, "context_pack_sizes": context_sizes,
+            "resident_rss_samples": resident_samples, "resident_rss_max": max(resident_samples) if resident_samples else None,
+            "resident_rss_unit": "kilobytes on macOS/Linux resource.getrusage",
+            "replay": {"documents": int(replay.get("documents") or 0), "structured_messages": int((replay.get("structured_read_model") or {}).get("messages") or 0), "identity_stable": identity_keys == replay_identity_keys},
+            "production_pollution": None, "protected_tree_changes": [asdict(change) for change in protected_changes], "vault_mutation": None,
+            "cleanup_result": "pending", "cleanup_inventory": cleanup_before,
+        }
+        shutil.rmtree(root, ignore_errors=False)
+        report["cleanup_result"] = "cleaned"
+        report["cleanup_inventory"].update(cleanup_inventory_after_delete(root))
+        report["cleanup_inventory"]["cleaned"] = not bool(report["cleanup_inventory"].get("root_exists"))
+        _atomic_json(output_path, report)
+        return report
+    except Exception:
+        shutil.rmtree(root, ignore_errors=True)
+        raise
+
+
 __all__ = [
     "CORPUS_SHA256", "QUESTIONS_SHA256", "build_quality_run_id",
-    "readiness_from_envelope", "generate_history_fixture", "validate_history_fixture",
+    "readiness_from_envelope", "generate_history_fixture", "validate_history_fixture", "run_100k_benchmark",
 ]

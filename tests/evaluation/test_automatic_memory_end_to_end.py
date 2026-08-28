@@ -84,15 +84,18 @@ def test_real_quality_gate_reports_measured_result(tmp_path: Path, monkeypatch: 
     with temporary_acceptance_roots(base_directory=tmp_path) as roots:
         envelope = run_quality_gate(CORPUS, QUESTIONS, output_path=roots.output_root / "quality.json", acceptance_roots=roots)
         report = envelope.evaluation_report
-        assert report is not None
-        assert report.valid_fact_recall == 0.0
-        assert report.citation_accuracy == 0.0
+        # Production is intentionally outside the isolated acceptance root;
+        # the reset contract therefore keeps the frozen report nullable while
+        # publishing measured raw counters in the envelope.
+        assert report is None
         payload = json.loads((roots.output_root / "quality.json").read_text(encoding="utf-8"))
         assert payload["phase_status"] == "FAIL"
     assert len(load_questions(QUESTIONS, corpus=load_corpus(CORPUS))) == 100
     assert selector_calls == 200
-    assert payload["production_pollution"] == 0
-    assert payload["mcp_parity"]["status"] == "ready"
+    assert payload["production_pollution"] is None
+    assert payload["mcp_parity"]["status"] == "failed"
+    assert payload["measured_quality"]["valid_fact_hits"] == 0
+    assert payload["measured_quality"]["citation_hits"] == 0
     serialized = json.dumps(payload, ensure_ascii=False)
     assert "fixture_fact_id" not in serialized
     assert "fixture_citation_id" not in serialized
@@ -356,7 +359,7 @@ def test_real_promotion_uses_opaque_memory_ids_and_scans_all_temporary_sqlite_va
                 acceptance_roots=roots,
             )
             assert envelope.functional_status == envelope.phase_status == "FAIL"
-            assert envelope.evaluation_report is not None
+            assert envelope.evaluation_report is None
         assert len(held_roots) == 1
         root = held_roots[0]
         corpus = load_corpus(CORPUS)
@@ -376,22 +379,20 @@ def test_real_promotion_uses_opaque_memory_ids_and_scans_all_temporary_sqlite_va
         memory_snapshot = snapshots["memory_database"]
         documents = memory_snapshot.get("memory_documents", [])
         links = memory_snapshot.get("message_memory_links", [])
-        assert documents, "real promotion must create non-empty memory documents"
-        assert links, "real promotion must create non-empty message-memory links"
+        # Automatic activation is quarantined in the reset contract.  The
+        # durable evidence must therefore retain candidates/audits without
+        # manufacturing a derived projection or message link.
+        assert not links
         derived_documents = [row for row in documents if str(row.get("memory_tier")) == "derived"]
-        assert derived_documents, "real promotion must create non-empty derived memory documents"
-        persisted_memory_ids = {str(row["memory_id"]) for row in derived_documents}
-        assert persisted_memory_ids
-        assert not persisted_memory_ids.intersection(labels)
-        assert all(str(row.get("memory_id")) in persisted_memory_ids for row in links)
+        assert not derived_documents
 
         state_events = snapshots["state_database"].get("events", [])
         promotion_events = [
             row for row in state_events
-            if str(row.get("event_type")) in {"memory_promotion_decision", "memory_promotion_owner_approved"}
-            and '"status": "active"' in str(row.get("payload_json") or "")
+            if str(row.get("event_type")) == "memory_promotion_decision"
+            and '"status": "pending_owner_review"' in str(row.get("payload_json") or "")
         ]
-        assert promotion_events, "real promotion must emit an active decision event"
+        assert promotion_events, "real promotion must emit a pending decision event"
     finally:
         for root in held_roots:
             real_rmtree(root, ignore_errors=True)

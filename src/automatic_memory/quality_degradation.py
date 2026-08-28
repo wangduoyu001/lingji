@@ -71,6 +71,60 @@ _IDENTITY_FIELDS = (
 )
 
 
+class _InjectedSemanticOutage:
+    def collection_exists(self, _collection: str) -> bool:
+        raise OSError("injected qdrant outage")
+
+
+class _StaticEmbeddingProvider:
+    active_model = "quality-fault-injection"
+
+    def embed(self, _text: str) -> list[float]:
+        return [1.0, 0.0]
+
+    def embed_many(self, texts: Sequence[str]) -> list[list[float]]:
+        return [self.embed(text) for text in texts]
+
+    def status(self) -> dict[str, Any]:
+        return {"active_model": self.active_model, "dimension": 2, "available": True}
+
+
+def measure_semantic_degradation(
+    root: Path, memory_db: Any, read_model: Any, state_db: Any, query: str,
+    *, gateway_builder: Any,
+) -> dict[str, Any]:
+    """Measure lexical fallback through a failing semantic provider."""
+    lexical_gateway, _ = gateway_builder(root, memory_db, read_model, state_db)
+    from src.retrieval.qdrant_provider import QdrantSemanticProvider
+    from src.runtime.workspace import WorkspaceContext, WorkspaceName
+
+    qdrant_workspace = WorkspaceContext(
+        name=WorkspaceName.ACCEPTANCE,
+        vault_path=root / "vault", raw_path=root / "storage" / "raw",
+        storage_path=root / "storage", state_db_path=root / "storage" / "state" / "lingji_state.db",
+        memory_db_path=root / "storage" / "index" / "lingji_memory.db", qdrant_mode="memory",
+        qdrant_path=None, qdrant_url=None, qdrant_collection="quality-outage",
+        log_path=root / "storage" / "logs", cache_path=root / "storage" / "cache",
+        runtime_settings_path=root / "storage" / "runtime.json", queue_db_path=root / "storage" / "state" / "lingji_state.db",
+        backup_path=root / "storage" / "backups", derived_path=root / "storage" / "derived",
+        temp_path=root / "storage" / "temp", reports_path=root / "storage" / "reports",
+    )
+    qdrant = QdrantSemanticProvider(qdrant_workspace, _StaticEmbeddingProvider(), client=_InjectedSemanticOutage())
+    degraded_gateway, _ = gateway_builder(root, memory_db, read_model, state_db, semantic_provider=qdrant)
+    lexical = lexical_gateway.search_memory("agent-synthetic", query, limit=10)
+    degraded = degraded_gateway.search_memory("agent-synthetic", query, limit=10)
+    lexical_ids = [str(item.get("memory_id") or "") for item in lexical.get("results") or []]
+    degraded_ids = [str(item.get("memory_id") or "") for item in degraded.get("results") or []]
+    diagnostics = degraded.get("diagnostics") or {}
+    return {
+        "status": "ready" if bool(lexical_ids) and lexical_ids == degraded_ids
+        and diagnostics.get("semantic") == "degraded"
+        and diagnostics.get("lexical") == "available" else "failed",
+        "lexical_results": len(lexical_ids), "degraded_results": len(degraded_ids),
+        "diagnostics": diagnostics,
+    }
+
+
 def _section_identity(section: Any) -> tuple[Any, ...]:
     if not isinstance(section, Mapping):
         raise ValueError("MCP section is not an object")
@@ -425,5 +479,5 @@ def measure_corruption_isolation_from_runtime(
 
 __all__ = [
     "ContextBaselineMeasurement", "CorruptionIsolationMeasurement", "MCPParityMeasurement",
-    "measure_context_baseline", "measure_corruption_isolation", "measure_corruption_isolation_from_runtime", "measure_mcp_parity",
+    "measure_context_baseline", "measure_corruption_isolation", "measure_corruption_isolation_from_runtime", "measure_mcp_parity", "measure_semantic_degradation",
 ]
