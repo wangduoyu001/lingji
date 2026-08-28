@@ -1,5 +1,13 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Phase 1 Product Landing · Task 6H Repair Round 1 (final)
+
+- 独立审查 `8daf700f4dd5dbea90e32305a67c764420b147d7` 保留 Task6H I2：active Work Fact heartbeat touch/write 失败曾被吞掉并继续报告 running；本轮是 Task6H 唯一授权修复，不修改 packaged crash 30/70 matrix、scan identity harness 或其他 Task6 产品边界，之后不再修复。
+- heartbeat callback 现在按 source/work 隔离尝试刷新所有 running scan；任一失败都会在同一现有 `automatic_memory_heartbeats` 行写入 `degraded`、UTC timestamp、reason 与 last_error，调度线程和扫描继续运行；下一次全量刷新成功后自动恢复 running 并清除错误。idle 无 active Work Fact 不误报，事件表不增长。
+- Runtime/API/UI 继续使用同一真实 heartbeat 来源；DTO 携带 timestamp、instance、generation、state、last_error，来源页对 degraded、stopped、paused、running、unknown 分别显示检查/已停止/已暂停/持续更新/尚未获得，不把未知状态伪装成健康运行。
+- RED：新增 active touch failure 首次为 `running` 而非 `degraded`；GREEN：Task6H focused `8 passed`，覆盖错误持久化、恢复、source 隔离与原有 idle/pause/stop/restart/clock-jump/cadence。Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`；crash 30/70 为外部 Task6 阻塞，不归入本轮产品修复。
+- 未执行 live 8766/8767、Artifact、Production/Vault、主人数据或 owner acceptance；报告 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6h-report.md`。
+
 ## 2026-08-28 · Phase 1 Product Landing · Task 6H · durable runtime heartbeat
 
 - 本轮是独立 bounded observability closeout，不修复 Task6S、不启动 live/Artifact/Production/Vault，`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。在既有 `StateDatabase` 内增加可重建 `automatic_memory_heartbeats` 表；每个 AutomaticMemoryScheduler 实例以 `instance_id + generation` 写入一行，状态包含 `running/paused/stopping/degraded/stopped`、UTC `heartbeat_at`、`reason` 与 `last_error`。

@@ -181,7 +181,7 @@ class AutomaticMemoryRuntime:
 - [x] Keep reconciliation polling independent from heartbeat wakeups; touch active scan Work Facts directly and never append heartbeat event rows or touch terminal/idle work.
 - [x] Run focused heartbeat, Task2 lifecycle/API, compile/diff/sync/handoff checks. Do not run live 8766/8767, Artifact, Production/Vault or owner acceptance.
 
-**Status (2026-08-28):** Focused `tests/test_task6h_heartbeat.py` `6 passed`; Task2 lifecycle/API `50 passed, 1 warning`; packaged/control `21 passed, 6 warnings`. Measured idle age remained `<=1s`; a `0.05s` heartbeat cadence produced one scheduler claim in `0.25s`, proving reconciliation is not heartbeat-frequency work. Task6 remains `IN_PROGRESS / NOT_ACCEPTED` pending packaged crash and full independent review.
+**Status (2026-08-28):** Focused `tests/test_task6h_heartbeat.py` `6 passed`; Task6H Repair Round 1 after independent review `8daf700f4dd5dbea90e32305a67c764420b147d7` adds source-isolated active Work Fact failure persistence/recovery and truthful UI fallback (`8 passed`). Task2 lifecycle/API `50 passed, 1 warning`; packaged/control `21 passed, 6 warnings`. Measured idle age remained `<=1s`; a `0.05s` heartbeat cadence produced one scheduler claim in `0.25s`, proving reconciliation is not heartbeat-frequency work. Task6 remains `IN_PROGRESS / NOT_ACCEPTED`; packaged crash 30/70 identity mismatch is an external Task6 gate and is not changed by this repair.
 
 ### Task 3: Connect Authorized Discovery, Snapshot and Extraction to Work Fact
 

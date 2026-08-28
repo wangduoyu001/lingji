@@ -115,16 +115,23 @@ absent (`3 failed`). GREEN is:
 
 ```text
 ./.venv/bin/python -m pytest -q tests/test_task6h_heartbeat.py
-6 passed
+8 passed
 ```
 
 Measured focused evidence: idle heartbeat age stayed `<=1s` with a `0.1s`
 test cadence; the same instance row was updated in place; active Work Fact
-event count did not change. With a `0.05s` heartbeat cadence and the normal
-reconciliation poll set to 60s, a 0.25s run made one scheduler claim (asserted
-`<=2`), demonstrating that heartbeat wakeups do not run reconciliation at high
-frequency. Task2 lifecycle/API regression was `50 passed, 1 warning`; control /
-packaged API regression was `21 passed, 6 warnings`.
+event count did not change. Active touch/write failures now persist heartbeat
+`degraded` with reason and last error, do not terminate scheduler/scans, and
+recover on the next successful refresh; idle runtimes with no active Work Fact
+do not report this failure. The Desktop DTO carries heartbeat timestamp,
+instance, generation, state and last error, while source-page copy distinguishes
+degraded/stopped/paused/running/unknown. With a `0.05s` heartbeat cadence and
+the normal reconciliation poll set to 60s, a 0.25s run made one scheduler claim
+(asserted `<=2`), demonstrating that heartbeat wakeups do not run
+reconciliation at high frequency. Task2 lifecycle/API regression was `50
+passed, 1 warning`; control / packaged API regression was `21 passed, 6
+warnings`. The packaged crash 30/70 terminal scan identity mismatch is an
+external Task6 gate and was not changed by this Task6H repair.
 
 This does not change the authority's `IN_PROGRESS / NOT_ACCEPTED` status:
 packaged crash matrix, full two-run evidence, live/Artifact/owner acceptance
