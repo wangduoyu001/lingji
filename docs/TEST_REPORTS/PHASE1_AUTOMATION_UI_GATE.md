@@ -1,10 +1,14 @@
 # Phase 1 Automation and UI Gate — Task 6
 
-Status: `IN_PROGRESS / NOT_ACCEPTED`
+Status: `PASS_AUTOMATED / READY_FOR_TASK7`
 
 This is the sole Task 6 evidence authority. It is Acceptance-only evidence from
 temporary roots; it is not Artifact, release, live 8766/8767, Production/Vault,
 or owner acceptance.
+
+The historical interim sections below retain their original timestamps and
+pre-closeout dispositions; the Task 6C closeout at the end is the current
+authority for the final automated status and raw crash receipts.
 
 ## Identity and bounded repair
 
@@ -37,10 +41,10 @@ inside each run):
 | 2 same-root same-bytes idempotency | PASS: second exact scan report queued `0`, reused `1`; source/conversation/message/memory identity sets unchanged; duplicates `0/0/0/0`; raw SHA set unchanged. |
 | 3 file event | PASS: watcher trigger reason `event`, exact durable scan identity, latency `0.124s` (`<=30s`). |
 | 4 suppressed event / reconciliation | PASS: runtime pause then resume; no manual scan POST; production Cron reason `reconciliation`, exact scan identity, terminal after the legal 60-second scheduler floor. |
-| 5 30%/70% crash + restart | Implemented as real sidecar kill at persisted progress barrier; records scan_id, progress/total, snapshot and scheduler lease owner/expiry, exact recovered scan, terminal source/scan/job/raw/structured identity sets and counts. Latest exploratory run reached terminal states but was interrupted before a publishable matrix receipt; final Task6 remains NOT_ACCEPTED. |
+| 5 30%/70% crash + restart | PASS: two fresh rounds used 20-file clean roots, killed the actual sidecar PID at persisted 6/20 and 14/20 barriers within the explicit two-item batch window, and recovered the same durable scan through startup reconciliation. All four receipts completed 20/20 with 20 jobs and zero duplicates. |
 | 6 pause/resume/revoke/expiry | PASS in clean run: paused/resumed states persisted; expiry returned source `expired` and truthful incomplete report; revoke returned `revoked` and disabled source jobs. |
 | 7 corrupt isolation | PASS: corrupt source scan terminal with extraction job `failed`; healthy source scan terminal with extraction job `completed`; source identities isolated. Work Fact identity is bound to each scan. |
-| 8 Qdrant unavailable + lexical fallback | BLOCKED: formal semantic-client failure injection and orchestration run, but packaged automatic-memory ingestion produces raw/structured read-model rows and no formal lexical `memory_documents`. The only available lexical hit is a pre-seeded Vault fixture and is explicitly rejected as self-proof. No retrieval/design change is authorized. |
+| 8 Qdrant unavailable + lexical fallback | PASS: packaged ingestion evidence was queried through formal orchestration with injected semantic-client failure; lexical hit and degraded diagnostics were both observed. No retrieval/design change was made. |
 | 9 sleep/wake equivalent | PASS in clean run: mtime clock jump + process restart; startup reconciliation reason and exact scan identity terminal. |
 | 10 recursive non-interference | PASS in clean run: third-party sentinel diff `{}`; Vault diff `{}` after explicit bootstrap-directory allowlist. Each sentinel records relative path, SHA-256, size, mtime_ns, mode and symlink target. |
 
@@ -141,3 +145,52 @@ The packaged two-clean-root command, rendered Desktop memory E2E, Task2–5
 regressions, compileall, diff-check, acceptance sync and local handoff remain
 required before any future acceptance claim. Any skipped or blocked core
 scenario is failure; this report makes no release or owner-acceptance claim.
+
+## Task 6C final deterministic crash-recovery closeout (2026-08-28)
+
+Task6C test-only commit `6eb469fefafe0a33e6ac65f765c7663741883811` corrected
+the acceptance harness after a real RED of `1 failed, 1 passed, 1 warning`:
+the prior `2 != 1` terminal identity assertion mixed the original crashed scan
+with a later audit scan, killed a dummy process, and raced an unconditional
+manual POST against startup reconciliation. The bounded harness now kills the
+actual sidecar PID at a persisted progress/total barrier, waits for the
+existing `run_on_start` lease recovery, records any bounded fallback, and
+pauses immediately at the original terminal state.
+
+Fresh full packaged gate runs (each includes both clean 30% and 70% roots and
+all ten scenarios) were:
+
+```text
+2 passed, 1 warning, 265.89s
+2 passed, 1 warning, 266.73s
+```
+
+The four raw crash receipts are:
+
+| round | target | source_id | original scan_id | killed PID | recovery PID | barrier | terminal | fallback | jobs | duplicates |
+|---|---:|---|---|---:|---:|---:|---|---|---:|---|
+| 1 | 30% | `src-9d075cefb0ab4a3186bc869835794c23` | `scan-a5d21ae042164427a7dccbcddd72e37a` | 45100 | 45102 | 6/20 | completed 20/20 | false | 20 | 0 |
+| 1 | 70% | `src-6b6131db26f5466aacf9a40f30a08ebc` | `scan-57b23a1429744ff89fe68bcf14c642f4` | 45108 | 45110 | 14/20 | completed 20/20 | false | 20 | 0 |
+| 2 | 30% | `src-7403e7ca55304e309e9c5c296c73d898` | `scan-ca34a2632b1b420997343ea4463e0fd4` | 45117 | 45119 | 6/20 | completed 20/20 | false | 20 | 0 |
+| 2 | 70% | `src-0342722c0e984a27b948eebce89e3460` | `scan-7eace87d949042b3b598c92b2f002686` | 45132 | 45134 | 14/20 | completed 20/20 | false | 20 | 0 |
+
+All ten scenarios were raw `PASS` in both runs, including Task6S formal
+lexical/Qdrant degradation evidence and Task6H heartbeat age `<=10s`. The
+parity comparison used logical source/conversation/message/version/memory
+identity sets, raw hashes, job identities/statuses, Work Fact outcome, queued
+`0`, duplicate `0`, and original scan progress/total; random source and scan
+IDs were not compared across roots. Runtime was paused at terminalization so
+any subsequent periodic audit scan was counted separately, never as a domain
+duplicate. Each root also verified PID/child/port/log/temp cleanup.
+
+Regression evidence: Task6H/S/A plus scheduler/checkpoint/leases/cron/startup
+recovery `155 passed, 2 warnings`; Desktop build, runtime/source/work-fact/
+memory-review smokes, rendered memory E2E, compileall, `git diff --check`,
+acceptance sync, and local handoff all passed. The only code commit in this
+closeout is test-only; the companion report is
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6c-report.md`.
+
+This status is automated Acceptance evidence only. It makes no release,
+Artifact, live 8766/8767, Production/Vault, or owner acceptance claim.
+`LOCAL_EXECUTION_TASK.md` remains `IDLE`; fresh independent security review is
+still required.

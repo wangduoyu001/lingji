@@ -405,6 +405,10 @@ Packaged automation E2E evidence:
 control-api composition in isolated Acceptance roots; the single authority is
 `docs/TEST_REPORTS/PHASE1_AUTOMATION_UI_GATE.md`. Repair Round 1 adds durable
 reconciliation scan/work identity only in the existing scheduler/runtime.
+Task 6C additionally records deterministic real-sidecar crash/restart receipts
+at persisted 30%/70% progress barriers, startup lease recovery of the same
+scan identity, logical parity, and cleanup; its handoff report is
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6c-report.md`.
 
 Task 7:
 src/retrieval/temporal.py

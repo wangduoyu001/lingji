@@ -60,6 +60,18 @@ Task 6L Structured Evidence Lexical Wiring（Repair Round 1 已实现，待独�
 
 Task 6S Query-Time Source Authority + Evidence Versions（Repair Round 1 已实现，待全新独立终审）：正式 Gateway composition 注入 `SourceAuthorityResolver`，current/why structured automatic evidence 每次查询批量读取现有 StateDB SourceRegistry authority；unknown、expired/revoked、StateDB unavailable/locked 一律 fail closed，普通非自动记忆不受影响。structured evidence 使用 `(source_id, conversation_id, message_id, content_hash)` 版本身份，旧 active 原子 supersede 并保留 history/as_of；same-byte replay 不改写，`ExtractionPipeline.replay_automatic_snapshots()` 按序重放正式 pipeline。Repair Round 1 product/tests 为 `9692cf7`，补齐 current/why cache re-check、read-model orphan archive、ContextPack linked-evidence authority guard。Task6 权威报告仍 `IN_PROGRESS / NOT_ACCEPTED`，不改变 Task6H/crash/live/Artifact/主人验收状态。
 
+Task 6C Deterministic Crash-Recovery Receipt 已完成自动化收口：测试提交
+`6eb469fefafe0a33e6ac65f765c7663741883811`，唯一权威报告已更新为
+`PASS_AUTOMATED / READY_FOR_TASK7`。两次 fresh packaged gate 均为 `2 passed,
+1 warning`（每次包含 30%/70% 两个 clean roots 与十场景）；四个真实 sidecar
+PID crash receipts 均在 6/20 或 14/20 barrier 后由 startup reconciliation
+恢复原 scan，终态 20/20 completed、jobs 20、duplicates 0、fallback false。
+Task6S lexical/Qdrant 与 Task6H heartbeat age `<=10s` 纳入并通过 packaged
+flow；focused scheduler/checkpoint/lease/cron/startup 回归 `155 passed, 2
+warnings`，Desktop/build/rendered E2E、compile/diff/sync/handoff 通过。该结论
+仅是临时 Acceptance 自动证据，不是 release、Artifact、live 8766/8767、
+Production/Vault 或 owner PASS；fresh security review 仍待执行。
+
 ## 1B. 自动化第二大脑的锁定方向
 
 Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明确 allowlist 内自动发现并持续接管官方支持或明确授权的 AI 记录，保存完整本地原始证据、来源链和可重建 RAG 投影，并在 Desktop 真实显示发现、处理、结果、失败、下一动作与执行者。

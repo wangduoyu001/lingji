@@ -1,5 +1,43 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Phase 1 Product Landing · Task 6C Deterministic Crash-Recovery Receipt
+
+- 本轮是 Task6 最终独立 bounded Acceptance gate，基线为 Task6H accepted
+  head `c1cd4453e407afc160e509c9fb1e165845577872`；测试提交
+  `6eb469fefafe0a33e6ac65f765c7663741883811`。先保留真实 RED：旧 packaged
+  crash matrix `1 failed, 1 passed, 1 warning`，终态 identity `2 != 1`，诊断为
+  crashed scan 与后续 audit scan 混淆、dummy PID 和 restart 后 unconditional
+  manual POST race，不据此归因产品重复。
+- 允许范围仅为随机 loopback 临时 Acceptance roots、真实
+  `run_packaged_control_api.py` sidecar、持久 StateDB/queue/raw/structured/read
+  model 与现有 retrieval；30%/70% 各 20+ 文件，按持久 progress/total 与真实
+  sidecar PID kill，restart 优先等待 `run_on_start` lease recovery，manual
+  POST 仅作 bounded fallback 且必须复用原 scan_id。终态立即 pause runtime 以
+  隔离正常周期 audit；不改 production default、DB lease、schema、API、
+  scheduler/job system、retrieval/promotion/UI。
+- GREEN：两次 fresh 完整 packaged 命令均 `2 passed, 1 warning`（265.89s、
+  266.73s），每次执行十场景与双 crash roots；Task6H/S/A 及
+  scheduler/checkpoint/lease/cron/startup recovery `155 passed, 2 warnings`。
+  Desktop build、runtime/source/work-fact/memory-review smokes、rendered E2E、
+  compileall、diff-check、acceptance sync、local handoff 均通过。
+- 四个 raw receipts：round1 30% `src-9d075cefb0ab4a3186bc869835794c23` /
+  `scan-a5d21ae042164427a7dccbcddd72e37a`，PID `45100→45102`，barrier
+  `6/20`；round1 70% `src-6b6131db26f5466aacf9a40f30a08ebc` /
+  `scan-57b23a1429744ff89fe68bcf14c642f4`，PID `45108→45110`，barrier
+  `14/20`；round2 30% `src-7403e7ca55304e309e9c5c296c73d898` /
+  `scan-ca34a2632b1b420997343ea4463e0fd4`，PID `45117→45119`，barrier
+  `6/20`；round2 70% `src-0342722c0e984a27b948eebce89e3460` /
+  `scan-7eace87d949042b3b598c92b2f002686`，PID `45132→45134`，barrier
+  `14/20`。四者均 fallback `false`、terminal `completed 20/20`、jobs `20`、
+  duplicates `0`，逻辑 identity/raw hash parity、Work Fact、queued `0`、
+  cleanup receipt 均通过。
+- Task6 authority 更新为 `PASS_AUTOMATED / READY_FOR_TASK7`；唯一详细报告为
+  `docs/TEST_REPORTS/PHASE1_AUTOMATION_UI_GATE.md`，Task6C SDD 仅作交接引用：
+  `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6c-report.md`。
+  `LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。本条不构成 release、Artifact、live
+  8766/8767、Production/Vault、owner 或主人验收；fresh security review
+  仍需执行，且本 gate 不再授权 repair。
+
 ## 2026-08-28 · Phase 1 Product Landing · Task 6H Repair Round 1 (final)
 
 - 独立审查 `8daf700f4dd5dbea90e32305a67c764420b147d7` 保留 Task6H I2：active Work Fact heartbeat touch/write 失败曾被吞掉并继续报告 running；本轮是 Task6H 唯一授权修复，不修改 packaged crash 30/70 matrix、scan identity harness 或其他 Task6 产品边界，之后不再修复。

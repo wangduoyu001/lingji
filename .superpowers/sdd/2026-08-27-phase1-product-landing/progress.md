@@ -60,3 +60,21 @@ Task 6A Lifecycle Closeout: IMPLEMENTED_FOCUSED_PASS — bounded Task2 final-dis
 Task 6A Repair Round 1 (final authorized repair): IMPLEMENTED_FOCUSED_PASS — independent review `9ed229461165b748066b9cba3d2ed169af43db56` I1/I2 addressed in product/tests `efde650e77a4ecda7f7266aefe48b29b9e8712de`. Real thread/Cron seams prove failed Cron cleanup is retried, unrelated source errors survive, and start/stop share lifecycle serialization. Repair seams `3 passed`; Task2 broader matrix `171 passed, 6 warnings`; Task3/4/5 matrix `77 passed, 2 warnings`; smoke/static/sync/handoff PASS. This is the final repair; remaining Critical/Important after fresh review means `BLOCKED_AT_REPAIR_CAP`. No live 8766/8767, Sidecar, Artifact, Production/Vault or owner data.
 Task 6H Durable Heartbeat: IMPLEMENTED_FOCUSED_PASS — existing StateDB now holds one mutable heartbeat row per scheduler `instance_id + generation`; existing Cron loop wakes at a bounded <=5s heartbeat cadence while reconciliation polling/claim remains on its original cadence. Runtime/API exposes UTC `scheduler_heartbeat_at`, computed age, reason, instance, generation and state; pause continues heartbeat, stop writes stopped, stale/clock-jump/read-write failure is degraded. Active scan Work Facts refresh directly without event rows. RED `3 failed`; GREEN `tests/test_task6h_heartbeat.py` `6 passed`; Task2 lifecycle/API `50 passed, 1 warning`; control/packaged `21 passed, 6 warnings`. Idle measured age <=1s; 0.05s heartbeat over 0.25s produced one claim; Task6 remains NOT_ACCEPTED pending packaged crash matrix and fresh review. No live 8766/8767, Sidecar, Artifact, Production/Vault or owner data.
 Task 6H Repair Round 1 (final): IMPLEMENTED_FOCUSED_PASS — independent review `8daf700f4dd5dbea90e32305a67c764420b147d7` I2 closed. Active Work Fact touch failures are isolated per source, persisted as degraded heartbeat reason/last_error, do not kill scheduler/scans, and recover with the next successful refresh; UI DTO/status copy distinguishes degraded/stopped/paused/running/unknown. New RED reproduced false running; GREEN focused `8 passed`, including source isolation and unchanged event count. Packaged crash 30/70 terminal identity mismatch remains an external Task6 gate and was not changed. No live 8766/8767, Sidecar, Artifact, Production/Vault or owner data.
+
+Task 6C Deterministic Crash-Recovery Receipt: PASS_AUTOMATED / READY_FOR_TASK7 —
+test-only commit `6eb469fefafe0a33e6ac65f765c7663741883811`; report
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6c-report.md`. The
+required RED was `1 failed, 1 passed, 1 warning` from the old `2 != 1` terminal
+identity race; diagnosis separated the original crash scan from a normal audit
+scan and removed dummy-PID/manual-POST race. Two fresh complete packaged runs
+were `2 passed, 1 warning` in `265.89s` and `2 passed, 1 warning` in `266.73s`.
+All ten scenarios passed raw in both runs. Four dedicated crash receipts (two
+clean roots per round) used real sidecar PID kills at 6/20 and 14/20; each
+recovered the same scan by startup reconciliation, completed 20/20, had 20 jobs,
+zero duplicates, zero queued residue, matching logical identity/raw-hash parity,
+and verified process/port/log/temp cleanup. Task6S lexical/Qdrant and Task6H
+heartbeat age `<=10s` are included. Focused Task6H/S/A plus scheduler,
+checkpoint, lease, cron, startup recovery was `155 passed, 2 warnings`; Desktop,
+compile, diff, sync and handoff gates passed. Acceptance-only evidence only:
+no release, Artifact, live service, Production/Vault, owner PASS; fresh security
+review remains required.
