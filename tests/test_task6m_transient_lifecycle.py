@@ -262,7 +262,7 @@ def test_pipeline_dispatch_uses_queue_identity_and_leaves_durable_raw_unchanged(
     def inspect(request):
         assert request.input_path is not None
         observed.append(request.input_path)
-        claimed = queue.get(job["job_id"])
+        claimed = queue._get_claimed_job_internal(job["job_id"])
         assert request.input_path.name.startswith(
             f".automatic-memory-v1-{job['job_id']}.{claimed['lease_token']}"
         )
@@ -371,7 +371,7 @@ ExtractionPipeline(queue, registry, sink).process_internal_next()
         while not barrier.exists() and time.monotonic() < deadline:
             time.sleep(0.05)
         assert barrier.exists(), "adapter did not reach the dispatch barrier"
-        claimed = queue.get(job["job_id"])
+        claimed = queue._get_claimed_job_internal(job["job_id"])
         marker = automatic_memory_dispatch_path(raw_root, job["job_id"], claimed["lease_token"], ".json")
         assert marker.exists()
         os.kill(process.pid, 9)

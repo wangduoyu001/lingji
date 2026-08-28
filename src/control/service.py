@@ -8,7 +8,7 @@ from src.acceptance import AcceptanceChecker
 from src.acceptance_reports import AcceptanceReportStore
 from src.automatic_memory import SourceRegistry
 from src.extraction.bootstrap import build_extraction_pipeline
-from src.extraction.queue import SQLiteExtractionQueue
+from src.extraction.queue import SQLiteExtractionQueue, _without_lease_material
 from src.gateway.memory_statistics import MemoryStatisticsService
 from src.hardware import HardwareCapabilityService
 from src.health import StartupHealthChecker
@@ -377,10 +377,12 @@ class LocalControlService:
 
     @staticmethod
     def _public_job(row: Mapping[str, Any]) -> dict[str, Any]:
-        result = dict(row)
-        result.pop("lease_token", None)
-        result.pop("last_claim_lease_fingerprint", None)
-        return result
+        raw = dict(row)
+        lease_values = tuple(
+            str(raw.get(key) or "")
+            for key in ("lease_token", "last_claim_lease_fingerprint")
+        )
+        return _without_lease_material(raw, redact_values=lease_values)
 
     def recent_events(self, limit: int = 100) -> list[dict[str, Any]]:
         rows = self.state_db.recent_events(limit=max(min(int(limit), 1000), 1))

@@ -87,7 +87,8 @@ class SQLiteExtractionQueueTests(unittest.TestCase):
         cancelled = self.queue.cancel(queued["job_id"])
         self.assertEqual(cancelled["status"], "cancelled")
         self.assertIsNotNone(cancelled["completed_at"])
-        self.assertIsNone(cancelled["lease_token"])
+        self.assertNotIn("lease_token", cancelled)
+        self.assertNotIn("last_claim_lease_fingerprint", cancelled)
         with self.assertRaises(RuntimeError):
             self.queue.cancel(queued["job_id"])
 

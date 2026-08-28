@@ -16,6 +16,29 @@ from src.storage.state_db import LeaseLostError
 TERMINAL_STATUSES = ("completed", "failed", "cancelled")
 CANCELLABLE_STATUSES = ("queued", "retrying")
 RETRYABLE_STATUSES = ("failed", "cancelled")
+_LEASE_SENSITIVE_KEYS = frozenset({"lease_token", "last_claim_lease_fingerprint"})
+
+
+def _without_lease_material(value: Any, *, redact_values: tuple[str, ...] = ()) -> Any:
+    """Recursively remove lease credentials from public projections."""
+
+    if isinstance(value, str):
+        redacted = value
+        for secret in redact_values:
+            if secret:
+                redacted = redacted.replace(secret, "[redacted]")
+        return redacted
+    if isinstance(value, Mapping):
+        return {
+            key: _without_lease_material(item, redact_values=redact_values)
+            for key, item in value.items()
+            if str(key).strip().lower() not in _LEASE_SENSITIVE_KEYS
+        }
+    if isinstance(value, list):
+        return [_without_lease_material(item, redact_values=redact_values) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_without_lease_material(item, redact_values=redact_values) for item in value)
+    return value
 
 
 class _SQLiteExtractionQueueBase:
@@ -118,20 +141,37 @@ class _SQLiteExtractionQueueBase:
         return json.dumps(value if value is not None else {}, ensure_ascii=False, sort_keys=True)
 
     @staticmethod
-    def _parse_row(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    def _parse_row(
+        row: sqlite3.Row | None,
+        *,
+        include_lease: bool = False,
+    ) -> dict[str, Any] | None:
         if row is None:
             return None
         result = dict(row)
+        lease_values = tuple(
+            str(result.get(key) or "")
+            for key in ("lease_token", "last_claim_lease_fingerprint")
+        )
         for key in ("payload_json", "options_json", "result_json"):
             raw = result.pop(key, None)
             target = key.removesuffix("_json")
             if raw:
                 try:
-                    result[target] = json.loads(raw)
+                    result[target] = _without_lease_material(
+                        json.loads(raw), redact_values=lease_values
+                    )
                 except json.JSONDecodeError:
                     result[target] = {}
             else:
                 result[target] = {}
+        if not include_lease:
+            result.pop("lease_token", None)
+            result.pop("last_claim_lease_fingerprint", None)
+        else:
+            # The current plaintext token is needed only by the worker claim
+            # path. Durable fingerprints stay inside ownership_receipt().
+            result.pop("last_claim_lease_fingerprint", None)
         return result
 
     @staticmethod
@@ -322,7 +362,7 @@ class _SQLiteExtractionQueueBase:
             claimed = connection.execute(
                 "SELECT * FROM extraction_jobs WHERE job_id = ?", (row["job_id"],)
             ).fetchone()
-            return self._parse_row(claimed)
+            return self._parse_row(claimed, include_lease=True)
 
     def heartbeat(
         self,
@@ -403,6 +443,23 @@ class _SQLiteExtractionQueueBase:
             "durable_lease_matches": bool(durable and durable == candidate),
             "durable_lease_present": bool(durable),
         }
+
+    def _get_claimed_job_internal(self, job_id: str) -> dict[str, Any]:
+        """Read one job for internal lease-owner operations only.
+
+        This intentionally private seam is not used by public projections. It
+        returns the existing plaintext current lease token, but never the
+        durable fingerprint or any new sensitive field.
+        """
+
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM extraction_jobs WHERE job_id = ?", (job_id,)
+            ).fetchone()
+        parsed = self._parse_row(row, include_lease=True)
+        if parsed is None:
+            raise LookupError(f"Unknown extraction job: {job_id}")
+        return parsed
 
     def complete(
         self,

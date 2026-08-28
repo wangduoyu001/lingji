@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from src.extraction.queue import _without_lease_material
+
 _SENSITIVE_KEY_FRAGMENTS = (
     "api_key",
     "apikey",
@@ -66,7 +68,12 @@ def find_sensitive_key(value: Any, *, path: str = "report") -> str | None:
 def durable_job_response(job: Mapping[str, Any], *, message: str | None = None) -> dict[str, Any]:
     """Return a truthful queue DTO while preserving backwards-compatible job fields."""
 
-    payload = dict(job)
+    raw_payload = dict(job)
+    lease_values = tuple(
+        str(raw_payload.get(key) or "")
+        for key in ("lease_token", "last_claim_lease_fingerprint")
+    )
+    payload = _without_lease_material(raw_payload, redact_values=lease_values)
     # Queue internals may include the current plaintext lease and its durable
     # fingerprint for worker/pipeline coordination. Neither is an API fact.
     payload.pop("lease_token", None)

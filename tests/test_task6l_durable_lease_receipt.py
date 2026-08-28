@@ -47,6 +47,15 @@ def _marker(raw: Path, claimed: dict, suffix: str = ".json") -> Path:
     return marker
 
 
+def _stored_fingerprint(queue: SQLiteExtractionQueue, job_id: str) -> str | None:
+    with queue._connection() as connection:
+        row = connection.execute(
+            "SELECT last_claim_lease_fingerprint FROM extraction_jobs WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+    return row["last_claim_lease_fingerprint"] if row else None
+
+
 def test_existing_db_migrates_nullable_last_claim_fingerprint_idempotently(tmp_path: Path) -> None:
     db = tmp_path / "legacy.db"
     SQLiteExtractionQueue(db)
@@ -70,8 +79,8 @@ def test_claim_persists_hash_atomically_and_terminal_lifecycle_keeps_receipt(tmp
     assert row["last_claim_lease_fingerprint"] == expected
     queue.complete(claimed["job_id"], {}, worker_id="worker", lease_token=claimed["lease_token"])
     final = queue.get(claimed["job_id"])
-    assert final["lease_token"] is None
-    assert final["last_claim_lease_fingerprint"] == expected
+    assert "lease_token" not in final
+    assert _stored_fingerprint(queue, claimed["job_id"]) == expected
 
 
 def test_release_and_stale_keep_last_fingerprint_but_retry_and_force_reset_generation(tmp_path: Path) -> None:
@@ -80,18 +89,19 @@ def test_release_and_stale_keep_last_fingerprint_but_retry_and_force_reset_gener
     claimed = _claim(queue, raw, "release")
     queue.release_claim(claimed["job_id"], worker_id="worker", lease_token=claimed["lease_token"])
     expected = hashlib.sha256(claimed["lease_token"].encode()).hexdigest()
-    assert queue.get(claimed["job_id"])["last_claim_lease_fingerprint"] == expected
+    assert _stored_fingerprint(queue, claimed["job_id"]) == expected
     claimed_again = queue.claim("worker-2", job_id=claimed["job_id"], allowed_source_types={"automatic_memory_snapshot"})
     assert claimed_again is not None
     old = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(timespec="seconds")
     with queue._connection() as connection:
         connection.execute("UPDATE extraction_jobs SET heartbeat_at = ?, locked_at = ? WHERE job_id = ?", (old, old, claimed["job_id"]))
     queue.release_stale(30)
-    assert queue.get(claimed["job_id"])["last_claim_lease_fingerprint"] == hashlib.sha256(claimed_again["lease_token"].encode()).hexdigest()
+    assert _stored_fingerprint(queue, claimed["job_id"]) == hashlib.sha256(claimed_again["lease_token"].encode()).hexdigest()
     retried_job = _claim(queue, raw, "retry", worker="worker-3")
     queue.fail(retried_job["job_id"], "terminal", worker_id="worker-3", lease_token=retried_job["lease_token"], terminal=True)
     retried = queue.retry(retried_job["job_id"])
-    assert retried["last_claim_lease_fingerprint"] is None
+    assert "last_claim_lease_fingerprint" not in retried
+    assert _stored_fingerprint(queue, retried["job_id"]) is None
 
 
 def test_force_reenqueue_clears_old_fingerprint(tmp_path: Path) -> None:
@@ -100,7 +110,8 @@ def test_force_reenqueue_clears_old_fingerprint(tmp_path: Path) -> None:
     claimed = _claim(queue, raw, "force")
     queue.complete(claimed["job_id"], {}, worker_id="worker", lease_token=claimed["lease_token"])
     reset = queue.enqueue("automatic_memory_snapshot", input_path=raw, payload={"source_id": "source", "raw_id": raw.name}, idempotency_key="force", force=True)
-    assert reset["last_claim_lease_fingerprint"] is None
+    assert "last_claim_lease_fingerprint" not in reset
+    assert _stored_fingerprint(queue, reset["job_id"]) is None
 
 
 def test_terminal_wrong_lease_same_raw_hardlink_is_preserved(tmp_path: Path) -> None:
@@ -203,3 +214,45 @@ def test_public_job_response_does_not_expose_lease_or_fingerprint(tmp_path: Path
     assert "lease_token" not in response
     assert "last_claim_lease_fingerprint" not in response
     assert claimed["lease_token"] not in encoded
+
+    nested = durable_job_response(
+        {
+            "job_id": claimed["job_id"],
+            "lease_token": claimed["lease_token"],
+            "last_claim_lease_fingerprint": "fingerprint-secret",
+            "result": {
+                "lease_token": claimed["lease_token"],
+                "last_claim_lease_fingerprint": "fingerprint-secret",
+            },
+            "error": [
+                {"lease_token": claimed["lease_token"]},
+                {"message": f"failure-{claimed['lease_token']}"},
+            ],
+        }
+    )
+    nested_encoded = json.dumps(nested, ensure_ascii=False)
+    assert claimed["lease_token"] not in nested_encoded
+    assert "fingerprint-secret" not in nested_encoded
+
+
+def test_ordinary_queue_reads_hide_lease_material_but_private_seam_supports_worker_lifecycle(tmp_path: Path) -> None:
+    queue = _queue(tmp_path)
+    raw = _raw(tmp_path / "raw")
+    claimed = _claim(queue, raw, "safe-reads")
+    reads = [
+        queue.get(claimed["job_id"]),
+        queue.list()[0],
+        queue.list_page(limit=10)[0],
+        queue.get_by_idempotency_key("safe-reads"),
+    ]
+    for value in reads:
+        assert value is not None
+        assert "lease_token" not in value
+        assert "last_claim_lease_fingerprint" not in value
+    internal = queue._get_claimed_job_internal(claimed["job_id"])
+    assert internal["lease_token"] == claimed["lease_token"]
+    assert "last_claim_lease_fingerprint" not in internal
+    assert queue.heartbeat(claimed["job_id"], "worker", internal["lease_token"])
+    completed = queue.complete(claimed["job_id"], {}, worker_id="worker", lease_token=internal["lease_token"])
+    assert "lease_token" not in completed
+    assert "last_claim_lease_fingerprint" not in completed
