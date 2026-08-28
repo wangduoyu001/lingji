@@ -456,8 +456,15 @@ boundary: ordinary queue reads and existing Control/MCP DTOs recursively omit
 lease token/fingerprint material, while `_get_claimed_job_internal()` is the
 private current-token seam for internal worker operations. Durable ownership
 continues through the existing boolean `ownership_receipt()` predicate; no new
-queue, database, API, or UI contract is introduced. Task6L remains pending
-fresh review and NOT_ACCEPTED.
+queue, database, API, or UI contract is introduced. Task6L was pending the
+fresh review below and NOT_ACCEPTED at this point in the repair record.
+
+Task 6L Repair Round 1 final review at HEAD `d328e58` found Important=1:
+ordinary queue field names are hidden and claim callers remain internal, but
+terminal ordinary projections can still retain old lease-token values inside
+arbitrary nested results or `last_error` after the current token is cleared.
+Task6L is `FAIL / BLOCKED_AT_REPAIR_CAP` and remains NOT_ACCEPTED; Task6 remains
+IN_PROGRESS / NOT_ACCEPTED.
 
 Task 8:
 src/work/models.py

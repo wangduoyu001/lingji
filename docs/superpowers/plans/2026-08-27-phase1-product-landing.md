@@ -560,3 +560,16 @@ matrix is `219 passed, 2 warnings`. Desktop static/build/rendered checks and
 compile/diff checks pass. Task6L remains `NOT_ACCEPTED` pending fresh review;
 Task6M remains historical `FAIL / BLOCKED_AT_REPAIR_CAP`, Task6 remains
 `IN_PROGRESS / NOT_ACCEPTED`, and Task6V packaged 30/70 remains deferred.
+
+Task 6L Repair Round 1 final independent review (2026-08-28) is recorded in
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6l-final-review.md`
+against HEAD `d328e58926e0466a912bde8c73fbaa5f64633cf5` and repair product/tests
+`2daac0733495798f3e576363a885c28e8c4ce392`: `FAIL / BLOCKED_AT_REPAIR_CAP`,
+Critical=0, Important=1, Minor=0. The queue field names are now absent from
+ordinary projections and all claim callers are pipeline-internal, but terminal
+ordinary results can retain old lease-token values in arbitrary nested result
+strings or `last_error` after the current lease is cleared. Fresh backend is
+`219 passed, 2 warnings`; Task6L focused is `12 passed`; Desktop,
+compile/diff/sync/handoff all pass. Task6L remains NOT_ACCEPTED and Task6
+remains IN_PROGRESS / NOT_ACCEPTED; Task6M history and the Task6V deferral are
+unchanged.

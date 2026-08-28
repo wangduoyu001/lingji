@@ -2141,3 +2141,19 @@ Windows 重启后恢复 = 100%
 - I4 packaged 30/70 明确属于后续 Task6V，不因未运行单独判本轮产品失败；Task 6M 保持
   `NOT_ACCEPTED`，Task6 保持 `IN_PROGRESS / NOT_ACCEPTED`，不再授权本轮修复，不得宣称
   release、Artifact、live、Production/Vault、owner 或 Phase 1 PASS。
+
+## 2026-08-28 · Task 6L · Repair Round 1 final independent review
+
+- 审查报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6l-final-review.md`；精确 HEAD
+  `d328e58926e0466a912bde8c73fbaa5f64633cf5`，repair product/tests
+  `2daac0733495798f3e576363a885c28e8c4ce392`，前审查记录
+  `9edb9eab98b5abf58999b0e16d09ece729c2e45e`。
+- 结论：`FAIL / BLOCKED_AT_REPAIR_CAP`，Critical=0、Important=1、Minor=0；Task6L
+  `NOT_ACCEPTED`，Task6 `IN_PROGRESS / NOT_ACCEPTED`。字段名边界、private current-token
+  seam、ownership predicate、worker lifecycle 和 Control/MCP 路由均复核通过，但
+  terminal `complete/fail` 清除当前 token 后，普通 queue projection 的任意嵌套 result
+  字符串与 `last_error` 仍可携带旧 plaintext lease token，I1 继续阻塞。
+- Fresh evidence：required backend matrix `219 passed, 2 warnings`，Task6L focused `12 passed`；
+  Desktop repair/source smoke、build、rendered flow、compileall、diff-check、acceptance sync、
+  local handoff 全部 PASS。只使用临时 SQLite/fixture；未启动 live 8766/8767、Artifact、release、
+  Production/Vault 或主人数据。Task6M 历史结论不改写；本轮不再授权新的产品修复。

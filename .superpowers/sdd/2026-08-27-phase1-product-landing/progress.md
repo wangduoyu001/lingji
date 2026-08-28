@@ -142,3 +142,17 @@ expose plaintext `lease_token` and durable `last_claim_lease_fingerprint`, even
 though public Control/Capture/MCP DTOs redact them. Task6L is `NOT_ACCEPTED`;
 one bounded Repair Round 1 is authorized. Task6M remains
 `FAIL / BLOCKED_AT_REPAIR_CAP`; Task6 remains `IN_PROGRESS / NOT_ACCEPTED`.
+
+Task 6L Repair Round 1 final independent review (2026-08-28): report
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6l-final-review.md`
+against reviewed HEAD `d328e58926e0466a912bde8c73fbaa5f64633cf5` and repair
+product/tests `2daac0733495798f3e576363a885c28e8c4ce392` is `FAIL /
+BLOCKED_AT_REPAIR_CAP`, Critical=0, Important=1, Minor=0. Fresh backend matrix
+is `219 passed, 2 warnings`; Task6L focused is `12 passed`; Desktop
+static/build/rendered, compile, diff, acceptance sync and local handoff pass.
+The field names are absent from ordinary `get/list/list_page/get_by_idempotency_key`
+and claim has no public Control/MCP route, but after complete/fail clears the
+current token, arbitrary nested result values and `last_error` can still carry
+the old plaintext lease token. Task6L remains `NOT_ACCEPTED`; Task6 remains
+`IN_PROGRESS / NOT_ACCEPTED`; Task6M historical `FAIL / BLOCKED_AT_REPAIR_CAP`
+is unchanged and no further repair is authorized in this round.

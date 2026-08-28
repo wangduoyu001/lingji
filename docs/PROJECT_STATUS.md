@@ -608,3 +608,18 @@ required backend matrix `219 passed, 2 warnings`；Desktop static/build/rendered
 compile、diff 均通过。Task6L 等待新鲜独立复审，仍 `NOT_ACCEPTED`；Task6M 历史
 `FAIL / BLOCKED_AT_REPAIR_CAP` 不改写，Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`，Task6V
 packaged 30/70、live/Artifact/Production/Vault/owner acceptance 均未执行。
+
+Task 6L Repair Round 1 final independent review (2026-08-28)：报告
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6l-final-review.md`
+审查 HEAD `d328e58926e0466a912bde8c73fbaa5f64633cf5`、repair 产品/测试
+`2daac0733495798f3e576363a885c28e8c4ce392`，结论为 `FAIL /
+BLOCKED_AT_REPAIR_CAP`，Critical=0、Important=1、Minor=0。Fresh required
+backend matrix `219 passed, 2 warnings`，Task6L focused `12 passed`；Desktop
+static/build/rendered、compile、diff、acceptance sync、local handoff 均通过。
+修复后普通 queue projection 的 lease 字段名已递归移除，claim 仅由
+pipeline 内部调用且没有 Control/MCP 直出；但 complete/fail 清除当前 token
+后，任意嵌套 result 字符串及 `last_error` 仍可能原样保留旧 plaintext
+lease token，故 I1 仍阻塞 Task6L。Task6L 保持 `NOT_ACCEPTED`，Task6 保持
+`IN_PROGRESS / NOT_ACCEPTED`；Task6M 历史 `FAIL / BLOCKED_AT_REPAIR_CAP`
+不改写，Task6V packaged 30/70、live/Artifact/Production/Vault/owner
+acceptance 均未执行。
