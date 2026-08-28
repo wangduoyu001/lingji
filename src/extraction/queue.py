@@ -35,7 +35,50 @@ _LEASE_SCRUB_MAX_NODES = 10_000
 _LEASE_SCRUB_MAX_STRING = 1_000_000
 
 
-def _without_lease_material(value: Any, *, redact_values: tuple[str, ...] = ()) -> Any:
+def _lease_material_from_explicit_keys(value: Any) -> tuple[str, ...]:
+    """Collect explicit lease-key values for a later sibling-safe scrub."""
+
+    found: set[str] = set()
+    state = {"nodes": 0}
+
+    def collect(item: Any, *, depth: int, active: set[int]) -> None:
+        if depth > _LEASE_SCRUB_MAX_DEPTH or state["nodes"] >= _LEASE_SCRUB_MAX_NODES:
+            return
+        state["nodes"] += 1
+        if isinstance(item, Mapping):
+            identity = id(item)
+            if identity in active:
+                return
+            active.add(identity)
+            try:
+                for key, child in item.items():
+                    normalized_key = str(key).strip().lower().replace("-", "_")
+                    if normalized_key in _LEASE_SENSITIVE_KEYS and isinstance(child, str):
+                        found.add(child)
+                    collect(child, depth=depth + 1, active=active)
+            finally:
+                active.remove(identity)
+        elif isinstance(item, (list, tuple)):
+            identity = id(item)
+            if identity in active:
+                return
+            active.add(identity)
+            try:
+                for child in item:
+                    collect(child, depth=depth + 1, active=active)
+            finally:
+                active.remove(identity)
+
+    collect(value, depth=0, active=set())
+    return tuple(sorted(found, key=len, reverse=True))
+
+
+def _without_lease_material(
+    value: Any,
+    *,
+    redact_values: tuple[str, ...] = (),
+    fail_closed_unknown: bool = False,
+) -> Any:
     """Recursively scrub explicit lease material without serializing by repr.
 
     This is shared by persistence and public DTO boundaries.  Traversal is
@@ -79,7 +122,10 @@ def _without_lease_material(value: Any, *, redact_values: tuple[str, ...] = ()) 
                     normalized_key = str(key).strip().lower().replace("-", "_")
                     if normalized_key in _LEASE_SENSITIVE_KEYS:
                         continue
-                    output[key] = scrub(child, depth=depth + 1, active=active)
+                    safe_key = key
+                    if fail_closed_unknown and not isinstance(key, (str, int, float, bool, type(None))):
+                        safe_key = "[REDACTED]"
+                    output[safe_key] = scrub(child, depth=depth + 1, active=active)
                 return output
             finally:
                 active.remove(identity)
@@ -113,6 +159,10 @@ def _without_lease_material(value: Any, *, redact_values: tuple[str, ...] = ()) 
                 return tuple(output)
             finally:
                 active.remove(identity)
+        if item is None or isinstance(item, (bool, int, float)):
+            return item
+        if fail_closed_unknown:
+            return "[REDACTED]"
         # Keep the existing json serializer boundary for unknown objects; in
         # particular, never call repr() and accidentally persist a secret.
         return item

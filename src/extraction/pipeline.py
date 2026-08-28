@@ -11,7 +11,11 @@ from uuid import uuid4
 from .errors import safe_extraction_error
 from .idempotency import directory_manifest, extraction_key_for_request, sha256_file
 from .models import ExtractionRequest
-from .queue import SQLiteExtractionQueue, _without_lease_material
+from .queue import (
+    SQLiteExtractionQueue,
+    _lease_material_from_explicit_keys,
+    _without_lease_material,
+)
 from .registry import AdapterRegistry
 from .sink import VaultExtractionSink
 from .structured_sink import StructuredReadModelSink
@@ -322,11 +326,60 @@ class ExtractionPipeline:
         result: Mapping[str, Any] | None,
         error: str | None,
     ) -> None:
+        # Keep the claimed worker object private.  Every callback receives a
+        # fresh bounded projection, including direct execute() callbacks where
+        # no queue lease is available but nested explicit lease keys may exist.
+        try:
+            known_material = tuple(
+                sorted(
+                    {
+                        *(_lease_material_from_explicit_keys(job)),
+                        *(_lease_material_from_explicit_keys(result)),
+                        *(_lease_material_from_explicit_keys(error)),
+                        *(
+                            str(job.get(key) or "")
+                            for key in ("lease_token", "last_claim_lease_fingerprint")
+                            if isinstance(job, Mapping) and str(job.get(key) or "")
+                        ),
+                        *(
+                            (SQLiteExtractionQueue.lease_fingerprint(str(job.get("lease_token"))),)
+                            if isinstance(job, Mapping) and str(job.get("lease_token") or "")
+                            else ()
+                        ),
+                    },
+                    key=len,
+                    reverse=True,
+                )
+            )
+            safe_job = _without_lease_material(
+                job, redact_values=known_material, fail_closed_unknown=True
+            )
+            safe_result = _without_lease_material(
+                result, redact_values=known_material, fail_closed_unknown=True
+            )
+            safe_error = _without_lease_material(
+                error, redact_values=known_material, fail_closed_unknown=True
+            )
+        except Exception:
+            # A malformed callback payload must never roll back an already
+            # committed terminal queue state or leak an exception repr.  Send
+            # only a minimal, stable event envelope instead.
+            safe_job = {}
+            if isinstance(job, Mapping):
+                try:
+                    for key in ("job_id", "status", "source_type"):
+                        value = job.get(key)
+                        if isinstance(value, (str, int, float, bool)):
+                            safe_job[key] = value
+                except Exception:
+                    safe_job = {}
+            safe_result = None
+            safe_error = "Lifecycle event payload redacted"
         for callback in tuple(self._lifecycle_callbacks):
             try:
-                callback(phase, job, result, error)
+                callback(phase, safe_job, safe_result, safe_error)
             except Exception:
-                logger.exception("Extraction lifecycle callback failed")
+                logger.error("Extraction lifecycle callback failed")
 
     def _write_structured(
         self,

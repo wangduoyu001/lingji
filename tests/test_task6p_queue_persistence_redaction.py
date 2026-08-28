@@ -5,6 +5,12 @@ import sqlite3
 from pathlib import Path
 
 from src.extraction.queue import SQLiteExtractionQueue, _without_lease_material
+from src.extraction.base import ExtractionAdapter
+from src.extraction.models import ExtractedDocument, ExtractionBatch
+from src.extraction.pipeline import ExtractionPipeline
+from src.extraction.registry import AdapterRegistry
+from src.extraction.sink import VaultExtractionSink
+from src.memory import VaultLayout
 from src.mcp.extraction_submission import durable_job_response
 
 
@@ -152,3 +158,142 @@ def test_persistence_scrubber_is_bounded_and_does_not_use_repr_or_generic_token_
     assert _without_lease_material({"message": "token and secret are ordinary words"})["message"] == (
         "token and secret are ordinary words"
     )
+
+
+class _CallbackAdapter(ExtractionAdapter):
+    name = "callback"
+    version = "1"
+    source_types = ("callback",)
+
+    def extract(self, request):
+        return ExtractionBatch(
+            documents=(
+                ExtractedDocument(
+                    stable_id="callback-doc",
+                    title="callback",
+                    body="# callback",
+                    source_type="callback",
+                ),
+            )
+        )
+
+
+def _pipeline(tmp_path: Path) -> ExtractionPipeline:
+    layout = VaultLayout(tmp_path / "vault")
+    layout.ensure()
+    registry = AdapterRegistry()
+    registry.register(_CallbackAdapter())
+    return ExtractionPipeline(
+        SQLiteExtractionQueue(tmp_path / "state.db"),
+        registry,
+        VaultExtractionSink(layout, tmp_path / "storage"),
+    )
+
+
+def _assert_callback_safe(callback_value: tuple, token: str, fingerprint: str) -> None:
+    encoded = json.dumps(callback_value, ensure_ascii=False, default=str)
+    assert token not in encoded
+    assert fingerprint not in encoded
+    assert "lease_token" not in encoded
+    assert "last_claim_lease_fingerprint" not in encoded
+
+
+def test_process_next_success_callback_receives_safe_job_and_nested_result_copy(tmp_path: Path) -> None:
+    pipeline = _pipeline(tmp_path)
+    job = pipeline.enqueue("callback", payload={"message": "token is ordinary text"})
+    seen: list[tuple] = []
+    pipeline.add_lifecycle_callback(lambda phase, callback_job, result, error: seen.append((phase, callback_job, result, error)))
+    original_execute = pipeline.execute
+    materials: list[str] = []
+
+    def execute_with_material(*args, **kwargs):
+        del args, kwargs
+        claimed = pipeline.queue._get_claimed_job_internal(job["job_id"])
+        token = claimed["lease_token"]
+        fingerprint = pipeline.queue.lease_fingerprint(token)
+        materials.extend((token, fingerprint))
+        return {"nested": [{"lease_token": token, "message": f"{token} {fingerprint}"}]}
+
+    pipeline.execute = execute_with_material
+    outcome = pipeline.process_job(job["job_id"], worker_id="callback-worker")
+    pipeline.execute = original_execute
+
+    assert outcome["job"]["status"] == "completed"
+    assert len(seen) == 1
+    _assert_callback_safe(seen[0], materials[0], materials[1])
+    assert seen[0][0] == "completed"
+    assert seen[0][1]["payload"]["message"] == "token is ordinary text"
+
+
+def test_process_next_failure_callback_redacts_known_token_and_error(tmp_path: Path) -> None:
+    pipeline = _pipeline(tmp_path)
+    job = pipeline.enqueue("callback", payload={})
+    seen: list[tuple] = []
+    pipeline.add_lifecycle_callback(lambda phase, callback_job, result, error: seen.append((phase, callback_job, result, error)))
+    claimed_token: list[str] = []
+
+    def execute_with_failure(*args, **kwargs):
+        del args, kwargs
+        token = pipeline.queue._get_claimed_job_internal(job["job_id"])["lease_token"]
+        claimed_token.append(token)
+        raise RuntimeError(f"failed with {token}")
+
+    pipeline.execute = execute_with_failure
+    outcome = pipeline.process_job(job["job_id"], worker_id="callback-worker")
+
+    assert outcome["job"]["status"] in {"retrying", "failed"}
+    assert len(seen) == 1
+    token = claimed_token[0]
+    _assert_callback_safe(seen[0], token, pipeline.queue.lease_fingerprint(token))
+    assert seen[0][3] == "failed with [REDACTED]"
+
+
+def test_direct_execute_callback_scrubs_nested_explicit_lease_payload(tmp_path: Path) -> None:
+    pipeline = _pipeline(tmp_path)
+    seen: list[tuple] = []
+    pipeline.add_lifecycle_callback(lambda phase, callback_job, result, error: seen.append((phase, callback_job, result, error)))
+    pipeline.execute(
+        "callback",
+        payload={"nested": [{"lease_token": "direct-token", "message": "token is ordinary text"}]},
+        execution_id="direct-execute",
+    )
+    assert len(seen) == 1
+    encoded = json.dumps(seen[0], ensure_ascii=False, default=str)
+    assert "direct-token" not in encoded
+    assert "lease_token" not in encoded
+    assert seen[0][1]["payload"]["nested"][0]["message"] == "token is ordinary text"
+
+
+def test_automatic_snapshot_callback_scrubs_claimed_job_without_rolling_back_terminal_state(tmp_path: Path) -> None:
+    pipeline = _pipeline(tmp_path)
+    job = pipeline.queue.enqueue("automatic_memory_snapshot", payload={"message": "token is ordinary text"})
+    seen: list[tuple] = []
+    pipeline.add_lifecycle_callback(lambda phase, callback_job, result, error: seen.append((phase, callback_job, result, error)))
+    materials: list[str] = []
+
+    def execute_snapshot(claimed):
+        token = claimed["lease_token"]
+        materials.extend((token, pipeline.queue.lease_fingerprint(token)))
+        return {"message": f"completed {token}"}
+
+    pipeline._execute_internal_snapshot = execute_snapshot
+    outcome = pipeline.process_internal_next(worker_id="automatic-worker")
+    assert outcome is not None
+    assert outcome["job"]["status"] == "completed"
+    assert len(seen) == 1
+    _assert_callback_safe(seen[0], materials[0], materials[1])
+
+
+def test_callback_projection_custom_object_fails_closed_with_minimal_event(tmp_path: Path) -> None:
+    pipeline = _pipeline(tmp_path)
+    seen: list[tuple] = []
+    pipeline.add_lifecycle_callback(lambda phase, callback_job, result, error: seen.append((phase, callback_job, result, error)))
+
+    pipeline._notify_lifecycle(
+        "completed",
+        {"job_id": "job-1", "status": "completed", "source_type": "callback"},
+        object(),
+        None,
+    )
+
+    assert seen == [("completed", {"job_id": "job-1", "status": "completed", "source_type": "callback"}, "[REDACTED]", None)]
