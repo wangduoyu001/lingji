@@ -37,7 +37,7 @@ def test_round5_report_keeps_unmeasured_4r2_fields_explicit(tmp_path: Path) -> N
         run_quality_gate(CORPUS, QUESTIONS, output_path=roots.output_root / "quality.json", acceptance_roots=roots)
         payload = json.loads((roots.output_root / "quality.json").read_text(encoding="utf-8"))
         assert payload["mcp_parity"]["status"] == "ready"
-        assert payload["semantic_degradation"]["status"] == "ready"
+        assert payload["semantic_degradation"]["status"] == "failed"
         assert payload["phase_status"] == "FAIL"
 
 

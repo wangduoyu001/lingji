@@ -1040,12 +1040,12 @@ def test_release_preflight_blocks_before_scale_callbacks_and_orders_success() ->
         prepare_scale_environment=lambda: calls.append("env"),
         run_scale_command=lambda: calls.append("command"),
     )
-    assert calls == ["env", "command", "env", "command"]
+    assert calls == ["env", "command"]
     run_release_preflight(
         readiness(), prepare_scale_environment=lambda: calls.append("env"),
         run_scale_command=lambda: calls.append("command"),
     )
-    assert calls == ["env", "command"]
+    assert calls == ["env", "command", "env", "command"]
 
 
 def test_release_validation_entry_calls_python_preflight_before_scale() -> None:

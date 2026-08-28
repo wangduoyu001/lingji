@@ -1,6 +1,6 @@
 # Task 7 — Existing Quality and Scale Gate
 
-日期：2026-08-28  
+日期：2026-08-28
 状态：`FAIL_MEASURED_QUALITY`
 
 ## 范围
