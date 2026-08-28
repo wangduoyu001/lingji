@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Task 6P · Repair Round 1 final independent review
+
+- 独立终审报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-final-review.md`；审查 tree `33f6ffa407badda2531228a651aea6762dd4cfac`、repair product/tests `924ac0c433a5d1029cce456cec1e6f24ef7dc7ba`，结论 `FAIL / BLOCKED_AT_REPAIR_CAP`，Critical=0、Important=1、Minor=0。Task6P 保持 `NOT_ACCEPTED`，Task6 保持 `IN_PROGRESS / NOT_ACCEPTED`。
+- Fresh focused `10 passed`；affected backend matrix `266 passed, 7 warnings`；完整无筛选 pytest `1359 passed, 11 skipped, 7 failed`。两项既有 `structured_evidence_lexical` 的 `SimpleNamespace` 缺 `vault_path` failure 在 repair tree 与 base `d61acdf` 均独立复现，未通过 deselect 掩盖；其余 full-suite failures 均为既有无关边界。
+- Desktop `test:memory-sources-repair`、`test:memory-sources`、build、rendered `test:e2e:memory`、compileall、diff-check、acceptance sync、local handoff 均 PASS。未执行 live 8766/8767、Artifact、release、Production/Vault 或主人验收。
+- I1：`_lease_material_from_explicit_keys()` 收集任意显式 lease-key 字符串，未限制值的格式、大小或数量，随后 callback projection 对 job/result/error 做全局替换；攻击者提供 `lease_token: "a"` 会把普通正文 `a cat...` 过度替换。该 Important 违反 ordinary text 保持与合理 bounded material 边界；Repair Round 1 已用尽，故 `BLOCKED_AT_REPAIR_CAP`。Task6L/M blocked 历史、Task6V packaged 30/70 及 live/Artifact/Production/Vault/owner 边界不改写。
+
 ## 2026-08-28 · Task 6P · Queue persistence lease-material redaction
 
 - 本轮是全新有界 Task6P，不改写 Task6M `FAIL / BLOCKED_AT_REPAIR_CAP` 或

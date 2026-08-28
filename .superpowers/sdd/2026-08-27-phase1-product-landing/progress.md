@@ -192,3 +192,15 @@ Ordinary, automatic, direct execute success/failure callbacks are covered. Task6
 focused is `10 passed`; expanded matrix is `354 passed, 2 deselected, 6 warnings`
 after excluding two pre-existing structured-evidence fixture failures. Task6
 remains `IN_PROGRESS / NOT_ACCEPTED` pending fresh independent review.
+
+Task 6P Repair Round 1 final independent review (2026-08-28) is recorded in
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-final-review.md`:
+`FAIL / BLOCKED_AT_REPAIR_CAP`, Critical=0, Important=1, Minor=0. Fresh focused
+is `10 passed`; affected backend is `266 passed, 7 warnings`; complete pytest
+without deselection is `1359 passed, 11 skipped, 7 failed`. The two existing
+structured-evidence `vault_path` fixture failures reproduce on both repair tree
+and base `d61acdf`. Desktop source/repair/build/rendered, compile, diff, sync and
+handoff pass. I1: arbitrary unbounded explicit lease-key values are collected
+and globally substituted in callback正文, so `lease_token: "a"` over-redacts
+ordinary text. Task6P remains `NOT_ACCEPTED`; Task6 remains
+`IN_PROGRESS / NOT_ACCEPTED`; no further repair is authorized.

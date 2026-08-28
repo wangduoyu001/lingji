@@ -653,6 +653,20 @@ compileall、diff-check、acceptance sync、local handoff 均通过。Task6P 等
 复审，Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`，不改变 Task6L/M blocked 历史或 Task6V
 外部验收边界。
 
+Task 6P Repair Round 1 final independent review (2026-08-28)：报告
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-final-review.md` 审查
+tree `33f6ffa407badda2531228a651aea6762dd4cfac` 与 repair product/tests
+`924ac0c433a5d1029cce456cec1e6f24ef7dc7ba`，结论为 `FAIL /
+BLOCKED_AT_REPAIR_CAP`，Critical=0、Important=1、Minor=0。Fresh focused
+`10 passed`，affected backend `266 passed, 7 warnings`；完整无筛选 pytest 为
+`1359 passed, 11 skipped, 7 failed`。两项既有 `structured_evidence_lexical`
+`vault_path` failures 在 repair tree 与 base `d61acdf` 均独立复现，未被
+deselect。Desktop source/repair/build/rendered、compile、diff、acceptance sync、
+local handoff 均通过。I1：scrubber 收集任意显式 lease-key 字符串且不限制值大小/数量，
+随后全局替换 callback 正文；`lease_token: "a"` 会破坏普通正文，违反 ordinary
+text 与合理边界要求。Task6P 与 Task6 继续 `NOT_ACCEPTED` / `IN_PROGRESS`；Task6L/M
+历史 blocked 结论及 Task6V/live/Artifact/Production/Vault/owner 边界不改写。
+
 Task 6P independent review (2026-08-28)：报告
 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-review.md` 审查
 HEAD `815a3bb5c0d245f6f33a984e7349e927b0090418` 与产品/测试

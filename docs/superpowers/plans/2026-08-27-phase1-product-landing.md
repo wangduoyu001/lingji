@@ -593,3 +593,14 @@ single callback boundary; it sends fresh bounded safe job/result/error copies,
 collects explicit lease-key values for sibling-string redaction, and falls back
 to a minimal event on scrub failure without undoing committed terminal state.
 Task6 remains `IN_PROGRESS / NOT_ACCEPTED`; Task6L/M blocked history is unchanged.
+
+Task 6P Repair Round 1 final independent review (2026-08-28) is recorded in
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-final-review.md`:
+`FAIL / BLOCKED_AT_REPAIR_CAP`, Critical=0, Important=1, Minor=0. The callback
+boundary now hides generated claimed leases, but its explicit-key collector
+accepts arbitrary unbounded values and globally substitutes them, allowing
+`lease_token: "a"` to corrupt ordinary callback正文. Fresh focused `10 passed`,
+affected backend `266 passed, 7 warnings`, and full no-deselect `1359 passed,
+11 skipped, 7 failed`; the two existing `vault_path` failures match base
+`d61acdf`. Task6P remains NOT_ACCEPTED and Task6 remains IN_PROGRESS /
+NOT_ACCEPTED; no further repair is authorized.

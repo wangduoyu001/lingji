@@ -487,6 +487,14 @@ bounded safe projection，收集显式 lease key 值后递归脱敏，并在 scr
 普通、automatic、direct execute 的 success/failure callbacks 均经该边界；callback
 失败不回滚已提交 terminal 状态。Task6L/M blocked 历史不改写。
 
+Task 6P Repair Round 1 final review `task-6p-final-review.md` 保留一项 Important：
+显式 lease-key collector 接受任意未验证、未限制大小/数量的字符串，并将其作为全局
+substring replacement material；攻击者可用 `lease_token: "a"` 让 callback 普通正文
+过度变为 `[REDACTED]`。因此 Task6P 为 `FAIL / BLOCKED_AT_REPAIR_CAP`，Task6 仍
+`IN_PROGRESS / NOT_ACCEPTED`；无进一步 Task6P repair 授权。既有 generated-token
+callback 防泄漏、custom-object fail-closed、callback 异常不回滚 terminal state 和
+Desktop/compile/sync/handoff 证据均保留。
+
 Task 8:
 src/work/models.py
 src/work/store.py
