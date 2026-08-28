@@ -545,3 +545,11 @@ src/opportunities/
 ```
 
 当前没有 ACTIVE 本机验收任务。旧 Artifact 不得因为仍可下载而重跑。
+Task 6M 独立审查（当前 disposition）：报告
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6m-review.md` 在审查
+HEAD `b65f81d659f787e349d545f51c4ddb94af770d4b` 给出 `Spec Compliance FAIL /
+Task Quality NEEDS_FIXES`，Critical=0、Important=5、Minor=2。旧版
+`.automatic-memory-{uuid}.json` 残留没有兼容回收；lease mismatch 与 queue/DB
+error 未完全 fail-closed/可观察，且 cleanup inventory 尚未由 Desktop 消费；修复后 packaged 30/70 crash/restart/stop 尚未
+fresh 复验。已授权且最多一轮 `REPAIR_ROUND_1`；Task6 继续
+`IN_PROGRESS / NOT_ACCEPTED`，不得标记 `Task6M ACCEPTED_FOR_FINAL_VALIDATION`。

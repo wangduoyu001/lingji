@@ -386,6 +386,17 @@ Task6M `8 passed`; affected regression `150 passed, 3 warnings`. The Task6C
 transient marker defect is closed in code/tests for later independent review;
 Task6 packaged final validation and release/owner acceptance remain unclaimed.
 
+**Independent review disposition (2026-08-28):** Review report
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6m-review.md` at reviewed
+HEAD `b65f81d659f787e349d545f51c4ddb94af770d4b` is `Spec Compliance FAIL / Task
+Quality NEEDS_FIXES` with 0 Critical, 5 Important and 2 Minor findings. The
+authorized `REPAIR_ROUND_1` is limited to legacy-marker compatibility, complete
+job/lease fail-closed proof, queue-error receipt visibility, cleanup inventory
+Desktop visibility, TOCTOU hardening if needed, and a fresh packaged 30/70
+crash/restart/stop receipt. Task 6 remains
+`IN_PROGRESS / NOT_ACCEPTED`; do not mark `Task6M ACCEPTED_FOR_FINAL_VALIDATION`
+or advance Task 6 to READY.
+
 ### Task 7: Run the Existing Quality and Scale Gate Without Expanding Product Scope
 
 **Purpose:** 恢复 Task 4R2/100-question/100k 门禁，只评价已有产品，不把门禁继续发展成产品子系统。

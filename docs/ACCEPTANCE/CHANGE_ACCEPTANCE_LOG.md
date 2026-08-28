@@ -2021,3 +2021,21 @@ Windows 重启后恢复 = 100%
 - RED/GREEN：新增 `tests/test_task6m_transient_lifecycle.py`，初始缺少 transient production boundary 时收集失败；实现后 Task6M `8 passed`，runtime receipt RED 为 stopped/期望 degraded 后 GREEN。覆盖 bounded job/lease identity、success/terminal/idempotent cleanup、active/expired lease、unknown/malformed/symlink/directory preservation、PermissionError visibility/retry、two-worker isolation、真实 pipeline adapter marker、真实 subprocess SIGKILL 后 restart pipeline cleanup、durable raw hash preservation 与 runtime error exposure。
 - 回归：受影响 snapshot/resume/adapter/worker/runtime/scheduler matrix `150 passed, 3 warnings`；`.venv/bin/python -m compileall`、`git diff --check`、acceptance sync、local handoff 必须复跑。仅 pytest `tmp_path` synthetic roots；不启动 8766/8767，不访问 Artifact、Production/Vault、主人数据。
 - 明确限制：Task 6 仍 `IN_PROGRESS / NOT_ACCEPTED`；本条仅关闭 Task 6C transient marker 产品缺口，不宣称 packaged/release/Artifact/owner acceptance 或 Task6 final validation。
+
+## 2026-08-28 · Task 6M · Independent review disposition
+
+- 审查报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6m-review.md`；审查
+  HEAD `b65f81d659f787e349d545f51c4ddb94af770d4b`，产品/测试基线
+  `1901628eee197e3d71d7e070c41c9e586d5468de`。结论为 `Spec Compliance FAIL /
+  Task Quality NEEDS_FIXES`，Critical=0、Important=5、Minor=2。
+- 关键阻塞：旧 `.automatic-memory-{uuid}.json` 已知残留只会被分类为
+  `unknown_marker` 并永久保留；queued/retrying/terminal 分支未证明 lease
+  ownership；queue/DB error 会在 pipeline startup 前逃逸，不能形成现有 runtime
+  的 `cleanup_pending/cleanup_error` receipt；Task6C 修复后的 packaged 30/70
+  crash/restart/stop 尚未 fresh 复验；runtime 字段虽由 API 返回但 Desktop 未消费具体
+  cleanup 错误/残留。path-swap 与 failure cleanup 是 Minor 覆盖缺口。
+- 已授权且最多一轮 `REPAIR_ROUND_1`：只允许同一 transient/现有 pipeline-worker-runtime
+  边界内的 legacy 兼容策略、统一 lease/DB fail-closed receipt、必要的路径身份保护和
+  packaged fresh gate；不得新增数据库/队列/API/UI/事实源，不得降低断言或由 harness
+  直接 unlink。Task6 保持 `IN_PROGRESS / NOT_ACCEPTED`，不宣称
+  `Task6M ACCEPTED_FOR_FINAL_VALIDATION`、release、Artifact、live 或 owner PASS。

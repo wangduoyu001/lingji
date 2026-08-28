@@ -97,3 +97,12 @@ SIGKILL and restart reconciliation; affected snapshot/resume/adapter/worker/runt
 scheduler regressions are `150 passed, 3 warnings`. No live 8766/8767, Artifact,
 Production/Vault or owner data; Task6 remains `IN_PROGRESS / NOT_ACCEPTED` pending
 fresh independent review and final validation.
+Task 6M independent review: `Spec Compliance FAIL / Task Quality NEEDS_FIXES`,
+0 Critical, 5 Important, 2 Minor. Findings: legacy unversioned markers are
+permanently preserved (including the known Task6C residue), queued/retrying and
+terminal branches delete lease-mismatched markers, queue/DB errors escape before
+an existing runtime receipt is exposed, cleanup inventory is not consumed by
+Desktop, and the post-fix packaged 30/70 crash gate is not fresh. Path-swap and
+failure-cleanup coverage remain Minor evidence gaps. `REPAIR_ROUND_1 authorized`;
+Task6 stays `IN_PROGRESS / NOT_ACCEPTED` and
+must not be marked `ACCEPTED_FOR_FINAL_VALIDATION`.
