@@ -84,19 +84,19 @@ def test_real_quality_gate_reports_measured_result(tmp_path: Path, monkeypatch: 
     with temporary_acceptance_roots(base_directory=tmp_path) as roots:
         envelope = run_quality_gate(CORPUS, QUESTIONS, output_path=roots.output_root / "quality.json", acceptance_roots=roots)
         report = envelope.evaluation_report
-        assert report is None
+        assert report is not None
+        assert report.valid_fact_recall == 0.0
+        assert report.citation_accuracy == 0.0
         payload = json.loads((roots.output_root / "quality.json").read_text(encoding="utf-8"))
-        assert payload["phase_status"] == "NOT_EVALUATED"
+        assert payload["phase_status"] == "FAIL"
     assert len(load_questions(QUESTIONS, corpus=load_corpus(CORPUS))) == 100
-    assert selector_calls == 100
-    # The default test environment has no configured Production Vault root;
-    # unavailable sentinel evidence is explicitly nullable, never numeric 0.
-    assert payload["production_pollution"] is None
-    assert payload["mcp_parity"]["status"] == "NOT_MEASURED"
+    assert selector_calls == 200
+    assert payload["production_pollution"] == 0
+    assert payload["mcp_parity"]["status"] == "ready"
     serialized = json.dumps(payload, ensure_ascii=False)
     assert "fixture_fact_id" not in serialized
     assert "fixture_citation_id" not in serialized
-    assert envelope.functional_status == "NOT_EVALUATED"
+    assert envelope.functional_status == "FAIL"
 
 
 @pytest.mark.parametrize(
@@ -124,7 +124,7 @@ def test_real_import_promotion_storage_snapshot_has_no_evaluation_labels(tmp_pat
             CORPUS, QUESTIONS, output_path=output, acceptance_roots=roots
         )
         payload = json.loads(output.read_text(encoding="utf-8"))
-        assert envelope.phase_status == payload["phase_status"] == "NOT_EVALUATED"
+        assert envelope.phase_status == payload["phase_status"] == "FAIL"
         serialized = output.read_text(encoding="utf-8")
         assert "fixture_fact_id" not in serialized
         assert "fixture_citation_id" not in serialized
@@ -355,8 +355,8 @@ def test_real_promotion_uses_opaque_memory_ids_and_scans_all_temporary_sqlite_va
                 output_path=roots.output_root / "quality.json",
                 acceptance_roots=roots,
             )
-            assert envelope.functional_status == envelope.phase_status == "NOT_EVALUATED"
-            assert envelope.evaluation_report is None
+            assert envelope.functional_status == envelope.phase_status == "FAIL"
+            assert envelope.evaluation_report is not None
         assert len(held_roots) == 1
         root = held_roots[0]
         corpus = load_corpus(CORPUS)

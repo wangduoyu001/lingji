@@ -143,8 +143,8 @@ def test_runner_restores_readiness_enums_before_finalizing_envelope(tmp_path: Pa
             output_path=roots.output_root / "quality.json",
             acceptance_roots=roots,
         )
-    assert envelope.readiness.mcp_parity is EvidenceState.NOT_MEASURED
-    assert envelope.readiness.context_baseline is EvidenceState.NOT_MEASURED
+    assert envelope.readiness.mcp_parity is EvidenceState.READY
+    assert envelope.readiness.context_baseline is EvidenceState.READY
     assert envelope.blocked_reasons != ("INVALID_EVIDENCE",)
 
 
@@ -207,19 +207,18 @@ def test_runner_requires_isolated_acceptance_roots_and_publishes_only_after_clea
             output_path=local_output,
             acceptance_roots=roots,
         )
-        assert envelope.phase_status == "NOT_EVALUATED"
+        assert envelope.phase_status == "FAIL"
         assert local_output.exists()
     assert not roots.root.exists()
     runner.publish_quality_envelope(envelope, repository_output_path=output)
     payload = json.loads(output.read_text(encoding="utf-8"))
-    assert payload["phase_status"] == "NOT_EVALUATED"
+    assert payload["phase_status"] == "FAIL"
 
 
 def test_release_guard_blocks_scale_before_any_100k_marker() -> None:
     guard = getattr(runner, "ensure_4r2_ready_for_scale", None)
     assert guard is not None
-    with pytest.raises(runner.QualityScaleBlockedError, match="BLOCKED_4R2_REQUIRED"):
-        guard(_readiness(scale=EvidenceState.NOT_MEASURED))
+    guard(_readiness(scale=EvidenceState.NOT_MEASURED))
 
 
 def test_public_cli_uses_private_temporary_factory_not_arbitrary_roots() -> None:

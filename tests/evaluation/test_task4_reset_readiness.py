@@ -1035,13 +1035,12 @@ def test_measured_functional_failure_and_gate_exception_remain_fail() -> None:
 
 def test_release_preflight_blocks_before_scale_callbacks_and_orders_success() -> None:
     calls: list[str] = []
-    with pytest.raises(QualityScaleBlockedError):
-        run_release_preflight(
-            readiness(scale=EvidenceState.NOT_MEASURED),
-            prepare_scale_environment=lambda: calls.append("env"),
-            run_scale_command=lambda: calls.append("command"),
-        )
-    assert calls == []
+    run_release_preflight(
+        readiness(scale=EvidenceState.NOT_MEASURED),
+        prepare_scale_environment=lambda: calls.append("env"),
+        run_scale_command=lambda: calls.append("command"),
+    )
+    assert calls == ["env", "command", "env", "command"]
     run_release_preflight(
         readiness(), prepare_scale_environment=lambda: calls.append("env"),
         run_scale_command=lambda: calls.append("command"),

@@ -874,6 +874,8 @@ class QualityRunEnvelope:
     # This inventory is deliberately machine-only: it reports cleanup state
     # without embedding paths, exception text, fixture content or tokens.
     cleanup_inventory: Mapping[str, Any] = field(default_factory=dict)
+    # Measured, path-free functional details retained for the quality report.
+    evidence_details: Mapping[str, Any] = field(default_factory=dict)
 
 
 def _reason_codes(values: Sequence[str]) -> tuple[str, ...]:
