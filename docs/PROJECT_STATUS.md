@@ -744,3 +744,21 @@ queue → worker → Work Fact → structured read-model → lexical/Hybrid/Gate
 read-model 或 Gateway 身份异常均 fail closed。聚焦及 Task7M/N1 直接回归 `125 passed`，
 但 Task7 总质量结果仍须以真实固定题集评测为准，尚未进入 100k、release、Artifact、
 Production/Vault 或主人验收。
+
+### Task 7N3 promotion evidence and thin quality orchestration（2026-08-28）
+
+Task7N3 已完成有界 measurement 收口：产品/测试提交
+`75ee0c6c997326c2045b667c84e6a7707a45c558` 新增 `quality_promotion.py`，逐条调用正式
+`AutoMemoryPromotionService`，并从持久 read model 复算 promotion projection、message
+link、audit 与 missing/extra/duplicate；protected、assistant-only、authority-conflict
+的错误 active、非 active projection/link 和重复/孤儿 evidence 均 fail closed。两个历史
+直接调用方已迁移到 nullable `evaluation_report`/Production 与 raw measured counters，
+保留 opaque ID、SQLite 全值扫描、敏感信息和拒绝语义。semantic degradation、100k fixture/run
+分别归入 `quality_degradation.py`、`scale_benchmark.py`，quality_gate 仅保留正式评测编排
+和兼容导出，约从 1409 行降至 1129 行。
+
+Task7N3 focused matrix 为 `156 passed, 1 skipped, 1 warning`；质量 CLI 仍诚实测得
+`FAIL`（事实 `0/106`、引用 `0/106`、MCP `0/100`、Context baseline `NOT_MEASURED`、
+自动晋级 `0/93`），不代表 Task7、100k、release、Artifact、真实服务或主人验收通过。
+报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-7n3-report.md`；等待独立
+审查后才能决定 retrieval 诊断，Task8 不得开始。

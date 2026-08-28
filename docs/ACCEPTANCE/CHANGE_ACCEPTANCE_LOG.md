@@ -2403,3 +2403,19 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   Task7M/N1/quality runtime/Work/Gateway 直接回归 `125 passed`，compileall、diff-check
   通过。未运行 100 题 CLI、100k、release、Artifact、live 8766/8767、Production/Vault
   或主人验收。报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-7n2-report.md`。
+## 2026-08-28 · Task 7N3 · Promotion evidence and thin quality orchestration
+
+- 本轮只拆出 `quality_promotion.py`、`quality_degradation.measure_semantic_degradation` 和
+  `scale_benchmark.run_100k_benchmark` 的单一职责实现；`quality_gate.py` 保留冻结题集加载、
+  正式组合、逐题调用和 envelope 编排。不修改 retrieval/ranking、向量算法、UI、运行时或真实数据。
+- Promotion 测量必须逐条调用正式 `AutoMemoryPromotionService`，按冻结 Corpus 的显式字段记录
+  category、expected/actual status、reason；从持久 read model 复算 active projection、message link、
+  audit、missing/extra/duplicate，不以 runner 自己的 eligibility 判定或固定 0 代替。
+- RED/GREEN：`tests/test_task7n3_promotion_thin.py` 覆盖 protected/assistant/conflict active、缺 link/audit、
+  pending projection、重复/孤儿 evidence 的 fail-closed 合同；历史 end-to-end 两个直接调用方迁移到
+  `evaluation_report=None`、`production_pollution=null` 和 raw measured counters，同时保留 opaque ID、
+  SQLite 全值扫描、敏感信息与拒绝语义。 focused 命令：
+  `./.venv/bin/pytest -q tests/test_task7n3_promotion_thin.py tests/test_task7n1_scale_admission.py tests/test_task7n2_corruption_retrieval.py tests/test_task7m_reset.py tests/test_task7_measurement_repair.py tests/evaluation/test_task4_reset_readiness.py tests/evaluation/test_task4r1_round5_final_red.py tests/evaluation/test_automatic_memory_end_to_end.py tests/performance/test_automatic_memory_100k.py --tb=short`。
+- 质量 CLI 允许执行一次，仅用于确认当前测量仍诚实失败；禁止 100k、release、Artifact、live
+  8766/8767、Production/Vault、真实主人数据。完成前需运行 compileall、diff-check、acceptance sync、
+  local handoff，并写入 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7n3-report.md`。

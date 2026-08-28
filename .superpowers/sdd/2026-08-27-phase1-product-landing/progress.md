@@ -241,3 +241,16 @@ smokes, rendered E2E, compile, diff, acceptance sync and local handoff passed.
 Task6 automated disposition is now `AUTOMATED_ACCEPTED / READY_FOR_TASK7` only;
 release, Artifact, live 8766/8767, Production/Vault and owner acceptance are
 not run, and `LOCAL_EXECUTION_TASK.md` remains `IDLE`.
+
+Task 7N3：promotion 证据已从 quality_gate 拆入 `quality_promotion.py`，逐条使用正式
+AutoMemoryPromotionService，按冻结 record 的 category 和实际 outcome/status/reason
+记录，并由持久 projection、message links、audit 复算 duplicate/missing/extra；
+protected/assistant/conflict 错误 active、非 active projection/link、重复/孤儿 evidence
+均 fail closed。semantic degradation 已归入 `quality_degradation.py`，100k fixture/run
+已归入 `scale_benchmark.py`，quality_gate 从约 1409 行降至约 1129 行并保留兼容导出。
+两个历史 end-to-end 直接测试已迁移到 nullable Production/report 与 raw counters，保留
+opaque ID、SQLite 全值扫描、敏感信息和拒绝语义。RED 为 4 failed，GREEN 为 `156 passed,
+1 skipped, 1 warning`；质量 CLI 仍实测 FAIL（事实 0/106、引用 0/106、MCP 0/100、baseline
+NOT_MEASURED、自动晋级 0/93）。产品/测试提交 `75ee0c6c997326c2045b667c84e6a7707a45c558`，
+报告 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7n3-report.md`，等待独立审查；
+未运行 100k/release/Artifact/live/Production/Vault/主人数据。
