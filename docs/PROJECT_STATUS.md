@@ -637,6 +637,22 @@ rendered checks pass；compile、diff-check、acceptance sync、local handoff pa
 `IN_PROGRESS / NOT_ACCEPTED`，Task6V packaged 30/70、live/Artifact/Production/Vault/
 owner acceptance 未执行。
 
+Task 6P Repair Round 1（review `d61acdf39eefca8870b46b7a3172fe8ce20d5d6f`）仅修复
+lifecycle callback I1：现有 `_notify_lifecycle` 对 callback job/result/error 统一使用
+bounded scrubber，callback 接收安全 projection；claimed private job 仍只供 worker
+complete/fail/heartbeat 使用。普通、automatic、direct execute success/failure 及
+custom-object fail-closed 均有回归，业务 terminal commit 不因观察回调失败回滚。
+Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`；Task6L/M 历史 `FAIL / BLOCKED_AT_REPAIR_CAP`
+与 Task6V/live/Artifact/Production/Vault/owner 边界保持不变。
+
+Task 6P Repair Round 1 产品/tests commit `924ac0c433a5d1029cce456cec1e6f24ef7dc7ba`
+已完成：Task6P focused `10 passed`；expanded fresh matrix 原始结果为 `354 passed,
+2 failed`，两项均为既有 structured-evidence fixture 缺少 `vault_path`，排除后为
+`354 passed, 2 deselected, 6 warnings`。Desktop source/repair/build/rendered、
+compileall、diff-check、acceptance sync、local handoff 均通过。Task6P 等待新鲜独立
+复审，Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`，不改变 Task6L/M blocked 历史或 Task6V
+外部验收边界。
+
 Task 6P independent review (2026-08-28)：报告
 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-review.md` 审查
 HEAD `815a3bb5c0d245f6f33a984e7349e927b0090418` 与产品/测试

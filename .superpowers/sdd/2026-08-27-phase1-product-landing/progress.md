@@ -184,3 +184,11 @@ lifecycle projection repair is authorized. Task6P remains `NOT_ACCEPTED` and
 Task6 remains `IN_PROGRESS / NOT_ACCEPTED`; Task6L/M historical dispositions,
 packaged 30/70, live, Artifact, release, Production/Vault and owner acceptance
 are unchanged.
+Task 6P Repair Round 1: product/tests `924ac0c433a5d1029cce456cec1e6f24ef7dc7ba`
+closes review I1 at the sole `_notify_lifecycle` boundary. Callback job/result/error
+now receive fresh bounded safe projections with explicit lease-key value collection;
+custom-object scrub failures fail closed without rolling back terminal queue state.
+Ordinary, automatic, direct execute success/failure callbacks are covered. Task6P
+focused is `10 passed`; expanded matrix is `354 passed, 2 deselected, 6 warnings`
+after excluding two pre-existing structured-evidence fixture failures. Task6
+remains `IN_PROGRESS / NOT_ACCEPTED` pending fresh independent review.

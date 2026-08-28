@@ -586,3 +586,10 @@ strings or `last_error` after the current lease is cleared. Fresh backend is
 compile/diff/sync/handoff all pass. Task6L remains NOT_ACCEPTED and Task6
 remains IN_PROGRESS / NOT_ACCEPTED; Task6M history and the Task6V deferral are
 unchanged.
+Task 6P Repair Round 1 (review `d61acdf39eefca8870b46b7a3172fe8ce20d5d6f`):
+product/tests `924ac0c433a5d1029cce456cec1e6f24ef7dc7ba` applies the only
+authorized lifecycle callback projection repair. `_notify_lifecycle` is the
+single callback boundary; it sends fresh bounded safe job/result/error copies,
+collects explicit lease-key values for sibling-string redaction, and falls back
+to a minimal event on scrub failure without undoing committed terminal state.
+Task6 remains `IN_PROGRESS / NOT_ACCEPTED`; Task6L/M blocked history is unchanged.

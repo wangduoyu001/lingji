@@ -477,8 +477,15 @@ over-size values fail closed without `repr()`; the existing worker private seam,
 durable ownership predicate, queue and database remain unchanged. Focused tests:
 `tests/test_task6p_queue_persistence_redaction.py` plus the existing queue,
 worker, runtime, Control/MCP and structured/work matrices. Task6L and Task6M
-historical dispositions remain unchanged; Task6 remains NOT_ACCEPTED and
+historical dispositions remain unchanged; Task6 remains NOT_ACCEPTED.
 packaged Task6V is deferred.
+
+Task 6P Repair Round 1（独立 review `d61acdf`）在唯一
+`ExtractionPipeline._notify_lifecycle()` 边界对 callback 的 job/result/error 生成
+bounded safe projection，收集显式 lease key 值后递归脱敏，并在 scrub 异常时发送
+最小稳定 event；不修改 queue schema、private claimed-job seam 或 durable ownership。
+普通、automatic、direct execute 的 success/failure callbacks 均经该边界；callback
+失败不回滚已提交 terminal 状态。Task6L/M blocked 历史不改写。
 
 Task 8:
 src/work/models.py

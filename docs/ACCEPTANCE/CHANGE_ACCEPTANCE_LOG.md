@@ -2193,4 +2193,21 @@ Windows 重启后恢复 = 100%
 - Fresh evidence：required backend matrix `219 passed, 2 warnings`，Task6L focused `12 passed`；
   Desktop repair/source smoke、build、rendered flow、compileall、diff-check、acceptance sync、
   local handoff 全部 PASS。只使用临时 SQLite/fixture；未启动 live 8766/8767、Artifact、release、
-  Production/Vault 或主人数据。Task6M 历史结论不改写；本轮不再授权新的产品修复。
+Production/Vault 或主人数据。Task6M 历史结论不改写；本轮不再授权新的产品修复。
+
+## 2026-08-28 · Task 6P · Repair Round 1 lifecycle callback projection
+
+- 独立审查记录 `d61acdf39eefca8870b46b7a3172fe8ce20d5d6f` 对产品/tests
+  `19525638ba3f33223fac005aa258f33dd2eb6091` 发现 I1：`process_next`、automatic
+  `process_internal_next`/`process_job` 和 direct `execute` 的 lifecycle callback 仍能收到
+  claimed job plaintext lease 或 nested explicit lease key。仅授权一轮有界 lifecycle repair，
+  不改写 Task6L/M blocked 历史，不新增 schema/API/UI，LOCAL task 继续 IDLE。
+- Repair 在唯一 `_notify_lifecycle` 边界对 job/result/error 使用现有 bounded scrubber，先收集
+  explicit lease-key 值以覆盖 direct payload sibling strings，生成 callback 专用安全副本；
+  scrub 失败时发送最小稳定 job envelope、`[REDACTED]`/generic error，不回滚已经完成的 queue
+  terminal write。private claimed object 仍只供 worker lease 操作。
+- RED 为普通 process success/failure callback 两项失败；新增 automatic/direct/custom-object
+回归后 GREEN Task6P focused 为 `10 passed`；expanded matrix 排除两个既有 fixture failures 后
+为 `354 passed, 2 deselected, 6 warnings`。Desktop source/repair/rendered/build、compile/
+diff/sync/handoff 均通过；不执行 live/Artifact/release/
+  Production/Vault/owner acceptance。Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`。
