@@ -135,7 +135,7 @@ def test_runtime_surfaces_transient_cleanup_errors_from_existing_worker_status(t
         "running": False,
         "queue": {"queued": 0},
         "transient_cleanup": {
-            "errors": [{"name": ".automatic-memory-v1-job.lease.json", "reason": "unlink_failed"}]
+            "errors": [{"name": ".automatic-memory-v1-job.lease.json", "reason": "unlink_failed", "error": "/private/secret/token=abc"}]
         },
     }
 
@@ -144,6 +144,8 @@ def test_runtime_surfaces_transient_cleanup_errors_from_existing_worker_status(t
     assert status["state"] == "degraded"
     assert status["cleanup_pending"] is True
     assert "unlink_failed" in (status["cleanup_error"] or "")
+    assert "secret" not in (status["cleanup_error"] or "")
+    assert "token=abc" not in (status["cleanup_error"] or "")
 
 
 def test_status_does_not_fabricate_scheduler_heartbeat(tmp_path: Path):

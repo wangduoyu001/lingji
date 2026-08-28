@@ -285,7 +285,7 @@ class AutomaticMemoryRuntime:
         if transient_errors:
             cleanup_pending = True
             details = "; ".join(
-                str(item.get("error") or item.get("reason") or "cleanup failed")
+                str(item.get("reason") or "cleanup_failed")
                 for item in transient_errors
                 if isinstance(item, dict)
             )
