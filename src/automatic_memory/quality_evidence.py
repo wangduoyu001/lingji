@@ -291,13 +291,27 @@ def _validate_canonical_details(data: Mapping[str, Any]) -> None:
             raise ValueError("BLOCKED_4R2_REQUIRED")
     numeric_fields = {
         "import_audit": ("expected_rows", "actual_rows", "ordered_external_key_matches", "role_matches", "sequence_matches", "timestamp_matches", "content_hash_matches", "source_matches", "conversation_matches"),
-        "promotion_provenance": ("expected", "actual", "links_expected", "links_actual"),
-        "gateway_selection": ("calls_completed", "selector_calls"),
+        "promotion_provenance": ("expected", "actual", "active", "pending", "rejected", "error", "links_expected", "links_actual", "missing_projection", "extra_projection", "missing_audit", "extra_audit", "duplicate_records", "duplicate_audits", "duplicate_links"),
+        "gateway_selection": ("calls_completed", "selector_calls", "empty_responses", "selected_evidence", "unknown", "duplicates"),
         "mcp_parity": ("attempts", "successes"),
-        "corruption_isolation": ("terminal_tasks", "attempted", "completed", "failed", "continued", "retrievable", "bad_source_messages", "bad_source_leaks"),
+        "qdrant_degradation": ("lexical_results", "degraded_results"),
+        "corruption_isolation": ("terminal_tasks", "attempted", "completed", "failed", "continued", "retrievable", "bad_source_messages", "bad_source_leaks", "bad_leakage_count"),
     }
     for section, fields in numeric_fields.items():
-        if any(type(data[section].get(field)) is not int or data[section][field] < 0 for field in fields):
+        if any(field in data[section] and (type(data[section].get(field)) is not int or data[section][field] < 0) for field in fields):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    for value in data["promotion_outcomes"].values():
+        if type(value) is not int or value < 0:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    for category in data["promotion_category_outcomes"].values():
+        if any(type(category.get(field)) is not int or category[field] < 0 for field in category):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    measured = data["measured_quality"]
+    for field in ("answered_questions", "valid_fact_hits", "valid_fact_total", "citation_hits", "citation_total", "mcp_successes", "mcp_attempts"):
+        if field in measured and (type(measured[field]) is not int or measured[field] < 0):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    for field in ("automatic_activation_correct", "automatic_activation_total"):
+        if field in measured and measured[field] is not None and (type(measured[field]) is not int or measured[field] < 0):
             raise ValueError("BLOCKED_4R2_REQUIRED")
     context = data["context_baseline"]
     readiness = data["quality_evidence_readiness"]
