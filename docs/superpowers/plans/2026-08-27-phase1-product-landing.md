@@ -521,3 +521,20 @@ fail-closed/sanitization remain open. I4 packaged 30/70 is explicitly deferred
 to a new Task6V and is not scored as a repair-product failure. Task6M remains
 `NOT_ACCEPTED`; Task6 remains `IN_PROGRESS / NOT_ACCEPTED`; no further repair is
 authorized.
+
+Task 6L Durable Lease Ownership Receipt (2026-08-28) is a new bounded
+architecture completion after the Task6M repair cap, not a Task6M repair. Product
+and tests commit `4fd2386` adds nullable `extraction_jobs.last_claim_lease_fingerprint`,
+writes its SHA-256 lease receipt atomically on claim, preserves it through
+complete/fail/release/stale-release, and clears it on retry/force generation
+reset. v1 cleanup now requires marker lease hash + durable ownership + raw
+hard-link identity (and current lease for running); NULL, wrong-generation and
+foreign markers remain preserved. Reconciliation catches expected root,
+iteration, lstat, raw-hash, queue and unlink failures at its boundary with
+allowlisted codes only, while existing pipeline/worker/runtime cleanup pending
+retry remains intact. Public service/MCP queue DTOs omit lease token/fingerprint,
+and the existing Desktop rendered flow proves cleanup notice appearance and
+recovery without fixture secrets. Focused Task6L tests: `11 passed`; required
+backend regression: `218 passed, 2 warnings`; Desktop static/build/rendered
+checks pass. Task6M remains `FAIL / BLOCKED_AT_REPAIR_CAP`, Task6 remains
+`IN_PROGRESS / NOT_ACCEPTED`, and Task6V fresh packaged 30/70 remains deferred.

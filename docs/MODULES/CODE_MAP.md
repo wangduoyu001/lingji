@@ -435,6 +435,22 @@ Focused tests are `tests/test_task6m_transient_lifecycle.py`; Desktop source/bui
 smoke is `cd desktop/lingji-control && npm run test:memory-sources && npm run build`.
 I4 packaged 30/70 remains a separate Task6V gate; Task6 is NOT_ACCEPTED.
 
+Task 6L Durable Lease Ownership Receipt uses the same
+`src/extraction/queue.py` `extraction_jobs` table and
+`src/extraction/transient.py` reconciliation boundary. Claim writes the
+nullable `last_claim_lease_fingerprint` (SHA-256 of the existing random lease
+token) atomically; terminal/release/stale transitions retain the last receipt,
+while retry/force generation reset clears it. v1 marker removal requires marker
+lease hash, durable queue ownership and content-addressed raw hard-link proof;
+running jobs additionally require current lease equality. Filesystem/queue
+errors are fail-closed with allowlisted receipt codes, and service/MCP public
+DTOs remove lease token/fingerprint fields. Focused tests are
+`tests/test_task6l_durable_lease_receipt.py` plus the Task6M lifecycle suite;
+Desktop cleanup visibility is covered by the existing
+`desktop/lingji-control/tests/e2e_owner_memory_flow.mjs` rendered harness.
+Task6L does not add a database, queue, ledger, API, UI page, retrieval or memory
+fact source; Task6M remains blocked and Task6V packaged 30/70 remains deferred.
+
 Task 8:
 src/work/models.py
 src/work/store.py

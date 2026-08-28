@@ -573,3 +573,17 @@ Task 6M Repair Round 1 final independent review (2026-08-28)：报告
 legacy proof、正常 finally、inline SIGKILL/restart、lstat guard 与有界 UI 实现已复核。I4
 packaged 30/70 延期至 Task6V，不计为本轮产品失败；Task 6M 保持 `NOT_ACCEPTED`，Task6 保持
 `IN_PROGRESS / NOT_ACCEPTED`，不再授权本轮修复。
+
+Task 6L Durable Lease Ownership Receipt 已完成有界架构补齐（产品/测试
+`4fd2386`）：在现有 `extraction_jobs` 增加 nullable
+`last_claim_lease_fingerprint`，claim 同事务写入 SHA-256 lease receipt，终态与
+release 清当前 lease 但保留最近 claim 指纹，retry/force generation reset 清除旧指纹。
+v1 transient marker 现在必须同时满足 marker lease hash、durable ownership、raw
+hard-link identity；running 还须 current lease 匹配，NULL/wrong-generation/foreign
+marker fail closed。reconcile 的 root/iterdir/lstat/raw-hash/queue/unlink 异常只输出
+allowlist code，不带 path/job/lease/token；现有 pipeline/worker/runtime cleanup
+pending retry 与 public queue/service/MCP DTO 脱敏保持。Task6L focused `11 passed`，
+相关 backend regression `218 passed, 2 warnings`，Desktop static/build/rendered cleanup
+notice recovery 通过。Task6M 历史 `FAIL / BLOCKED_AT_REPAIR_CAP` 不改写；Task6 仍
+`IN_PROGRESS / NOT_ACCEPTED`，Task6V fresh packaged 30/70、live/Artifact/Production/
+Vault/owner acceptance 均未执行。

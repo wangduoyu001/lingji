@@ -1,5 +1,34 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Task 6L · Durable Lease Ownership Receipt
+
+- 本轮是 Task6M `FAIL / BLOCKED_AT_REPAIR_CAP` 之后的新有界架构任务，不改写
+  Task6M 历史、不增加用户功能，不新增数据库/队列/ledger/API/UI/检索/记忆事实源。
+  `LOCAL_EXECUTION_TASK.md` 保持 `IDLE`；不启动 live 8766/8767、Artifact、
+  Production、Vault 或主人数据。
+- 在现有 `extraction_jobs` 做向后兼容的 nullable
+  `last_claim_lease_fingerprint` migration。claim 与现有随机 lease token 同事务写入
+  SHA-256 指纹；complete/fail/release/release_stale 仅清 current lease，保留最近 claim
+  指纹；retry/force re-enqueue 的新 generation 清理旧指纹，防旧 lease 授权新 marker。
+- v1 marker 删除须同时证明 job id、marker lease hash、durable last-claim fingerprint
+  与同目录 content-addressed raw hard-link identity；running 还须 current lease 匹配。
+  terminal/queued/retrying/dead/expired 的 WRONG lease、NULL fingerprint、旧 generation
+  和 foreign marker 均保留；legacy UUID marker 继续使用 Task6M 的严格 raw proof。
+- root exists/is_dir/is_symlink、iterdir、lstat、raw hash/open、queue read、unlink 等
+  reconcile 边界异常 catch `Exception` 并 fail closed；receipt 仅允许通用错误码，不含
+  exception string、path、marker、job、lease 或 token。pipeline/worker/runtime 继续通过
+  既有 cleanup_pending/cleanup_error 可重试；service/MCP/public queue DTO 不暴露 lease
+  token 或 fingerprint。
+- RED：`tests/test_task6l_durable_lease_receipt.py` 首轮 `8 failed`；GREEN：Task6L
+  focused `11 passed`。Required backend regression：Task6L/6M/runtime、queue/worker/
+  snapshot/resume/scheduler/Task6H/Task6S/structured/work 共 `218 passed, 2 warnings`。
+  Desktop `npm run test:memory-sources-repair`、`test:memory-sources`、`build` 与
+  rendered `test:e2e:memory` 均 PASS；compileall、diff-check、acceptance sync、local
+  handoff 需在文档同步后复核。
+- 失败/限制：未执行 packaged 30/70（延期 Task6V）、release、live、Artifact、真实
+  8766/8767、Production/Vault、主人观察；Task6 保持 `IN_PROGRESS / NOT_ACCEPTED`。
+  产品/测试 commit `4fd2386`；报告 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6l-report.md`。
+
 ## 2026-08-28 · Task 6C Repair Round 1 · blocked cleanup receipt
 
 - Fresh review `3fd8059da4ed10b8a1fcd0581793bd0fb2d177ee` 要求 I1–I6 修复。
