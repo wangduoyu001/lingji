@@ -890,6 +890,20 @@ class QualityEvidenceReadiness:
         return all(self._state(field) is EvidenceState.READY for field in self._FUNCTIONAL_FIELDS)
 
     @property
+    def scale_ready(self) -> bool:
+        """Measured functional quality required before the isolated scale run.
+
+        Production/Vault sentinels are deliberately outside the Acceptance
+        scale fixture.  They remain nullable and gate the later full phase,
+        rather than making the Task7 scale admission circular.
+        """
+        return all(
+            self._state(field) is EvidenceState.READY
+            for field in self._FUNCTIONAL_FIELDS
+            if field != "production_sentinel"
+        )
+
+    @property
     def mac_release_ready(self) -> bool:
         return self.functional_ready and all(self._state(field) is EvidenceState.READY for field in self._MAC_FIELDS)
 
@@ -929,11 +943,15 @@ class QualityRunEnvelope:
     cleanup_inventory: Mapping[str, Any] = field(default_factory=dict)
     # Measured, path-free functional details retained for the quality report.
     evidence_details: Mapping[str, Any] = field(default_factory=dict)
+    run_id: str | None = None
+    fixture_hashes: Mapping[str, str] = field(default_factory=dict)
+    quality_evidence_readiness: Mapping[str, Any] = field(default_factory=dict)
 
 
 def _reason_codes(values: Sequence[str]) -> tuple[str, ...]:
     allowed = {
         "WINDOWS_AFTER_MAC", "INVALID_EVIDENCE", "PRODUCTION_SENTINEL_MISMATCH",
+        "PRODUCTION_SENTINEL_NOT_MEASURED",
         "MALFORMED_EVALUATION_REPORT", "GATE_EXCEPTION", "MALFORMED_GATE_RESULT",
         "CONTRADICTORY_FUNCTIONAL_EVIDENCE", "CONTRADICTORY_GATE_RESULT",
         "TEMP_CLEANUP_FAILED", "TEMP_CLEANUP_INCOMPLETE",
@@ -1077,6 +1095,11 @@ def finalize_quality_envelope(
     if not pollution_valid:
         return _closed_envelope(readiness, None, ("PRODUCTION_SENTINEL_MISMATCH",))
     if not readiness.functional_measured:
+        if readiness.scale_ready and readiness.production_sentinel is EvidenceState.NOT_MEASURED and not measured_failure:
+            return QualityRunEnvelope(
+                readiness, production_pollution, None, "PASS", "BLOCKED", "BLOCKED",
+                _reason_codes(tuple(blocked_reasons) + ("PRODUCTION_SENTINEL_NOT_MEASURED",)),
+            )
         return _closed_envelope(readiness, production_pollution, blocked_reasons, measured_failure=measured_failure)
     if type(evaluation_report) is not EvaluationReport:
         return _closed_envelope(readiness, production_pollution, ("MALFORMED_EVALUATION_REPORT",))

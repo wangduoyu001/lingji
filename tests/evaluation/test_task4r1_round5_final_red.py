@@ -29,14 +29,14 @@ def test_round5_rejected_activation_is_not_current_truth(tmp_path: Path) -> None
     with temporary_acceptance_roots(base_directory=tmp_path) as roots:
         envelope = run_quality_gate(CORPUS, QUESTIONS, output_path=roots.output_root / "quality.json", acceptance_roots=roots)
         assert envelope.functional_status == envelope.phase_status == "FAIL"
-        assert envelope.evaluation_report is not None
+        assert envelope.evaluation_report is None
 
 
 def test_round5_report_keeps_unmeasured_4r2_fields_explicit(tmp_path: Path) -> None:
     with temporary_acceptance_roots(base_directory=tmp_path) as roots:
         run_quality_gate(CORPUS, QUESTIONS, output_path=roots.output_root / "quality.json", acceptance_roots=roots)
         payload = json.loads((roots.output_root / "quality.json").read_text(encoding="utf-8"))
-        assert payload["mcp_parity"]["status"] == "ready"
+        assert payload["mcp_parity"]["status"] == "failed"
         assert payload["semantic_degradation"]["status"] == "failed"
         assert payload["phase_status"] == "FAIL"
 
@@ -85,8 +85,8 @@ def test_round5_missing_production_sentinel_is_nullable_not_zero(tmp_path: Path)
     with temporary_acceptance_roots(base_directory=tmp_path) as roots:
         run_quality_gate(CORPUS, QUESTIONS, output_path=roots.output_root / "quality.json", acceptance_roots=roots)
         payload = json.loads((roots.output_root / "quality.json").read_text(encoding="utf-8"))
-        assert payload["production_pollution"] == 0
-        assert payload["quality_evidence_readiness"]["production_sentinel"] == "ready"
+        assert payload["production_pollution"] is None
+        assert payload["quality_evidence_readiness"]["production_sentinel"] == "not_measured"
 
 
 def test_round5_promotion_evidence_and_non_active_results_do_not_leak(tmp_path: Path) -> None:

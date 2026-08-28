@@ -250,9 +250,14 @@ def test_every_functional_unavailable_state_is_not_evaluated(field: str, state: 
     )
     assert not gate.calls
     assert result.evaluation_report is None
-    assert (result.functional_status, result.phase_status, result.windows_status) == (
-        "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED"
-    )
+    if field == "production_sentinel" and state is EvidenceState.NOT_MEASURED:
+        assert (result.functional_status, result.phase_status, result.windows_status) == (
+            "PASS", "BLOCKED", "BLOCKED"
+        )
+    else:
+        assert (result.functional_status, result.phase_status, result.windows_status) == (
+            "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED"
+        )
 
 
 @pytest.mark.parametrize("field", [

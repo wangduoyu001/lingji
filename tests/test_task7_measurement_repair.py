@@ -45,7 +45,8 @@ def test_production_unavailable_is_nullable_and_never_enters_frozen_report() -> 
     )
     assert envelope.production_pollution is None
     assert envelope.evaluation_report is None
-    assert envelope.functional_status == "NOT_EVALUATED"
+    assert envelope.functional_status == "PASS"
+    assert envelope.phase_status == envelope.windows_status == "BLOCKED"
 
 
 def test_cleanup_inventory_captures_machine_counts_and_post_delete_state(tmp_path: Path) -> None:
@@ -96,11 +97,18 @@ def test_baseline_rejects_bounded_context_as_baseline() -> None:
 def test_scale_readiness_is_loaded_from_persisted_envelope(tmp_path: Path) -> None:
     path = tmp_path / "quality.json"
     fields = QualityEvidenceReadiness._FUNCTIONAL_FIELDS + QualityEvidenceReadiness._MAC_FIELDS + ("windows_release",)
-    path.write_text(json.dumps({"quality_evidence_readiness": {
-        field: ("ready" if field in QualityEvidenceReadiness._FUNCTIONAL_FIELDS else "not_measured")
+    readiness = {
+        field: ("ready" if field != "production_sentinel" and field in QualityEvidenceReadiness._FUNCTIONAL_FIELDS else "not_measured")
         for field in fields
-    }}), encoding="utf-8")
-    assert load_quality_readiness(path).functional_ready
+    }
+    path.write_text(json.dumps({
+        "run_id": "quality-test", "fixture_hashes": {"corpus": "c", "questions": "q"},
+        "functional_status": "PASS", "phase_status": "NOT_EVALUATED",
+        "quality_evidence_readiness": readiness,
+        "measured_quality": {"status": "PASS", "mcp_successes": 100, "mcp_attempts": 100},
+        "context_baseline": {"status": "ready", "baseline_chars": 100},
+    }), encoding="utf-8")
+    assert load_quality_readiness(path).scale_ready
     path.write_text(json.dumps({"quality_evidence_readiness": {}}), encoding="utf-8")
     with pytest.raises(QualityScaleBlockedError, match="BLOCKED_4R2_REQUIRED"):
         load_quality_readiness(path)

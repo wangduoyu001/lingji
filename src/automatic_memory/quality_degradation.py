@@ -6,6 +6,10 @@ produced product payloads into immutable, auditable measurements.
 from __future__ import annotations
 
 import json
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+from types import SimpleNamespace
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -91,12 +95,21 @@ def measure_mcp_parity(gateway_pack: Mapping[str, Any], mcp_pack: Mapping[str, A
             return MCPParityMeasurement(False, "bounds_unmeasured", gateway_identity, mcp_identity, None, None, None)
         if gateway_max != mcp_max or gateway_used > gateway_max or mcp_used > mcp_max:
             return MCPParityMeasurement(False, "bounds_mismatch", gateway_identity, mcp_identity, gateway_used, mcp_used, gateway_max)
-        top_fields = ("query_mode", "mode", "as_of", "scope", "lifecycle")
+        # A declared bound is only evidence when the rendered payload agrees
+        # with it.  This catches adapters that report a bound without actually
+        # returning the bounded representation.
+        for pack in (gateway_pack, mcp_pack):
+            markdown = pack.get("markdown")
+            if markdown is not None and (not isinstance(markdown, str) or len(markdown) != pack.get("used_chars")):
+                return MCPParityMeasurement(False, "bounds_mismatch", gateway_identity, mcp_identity, gateway_used, mcp_used, gateway_max)
+        if not gateway_identity and not mcp_identity:
+            return MCPParityMeasurement(False, "retrieval_empty", gateway_identity, mcp_identity, gateway_used, mcp_used, gateway_max)
+        top_fields = ("schema_version", "agent_id", "query", "project", "query_mode", "mode", "as_of", "scope", "lifecycle", "request")
         for field in top_fields:
             if gateway_pack.get(field) != mcp_pack.get(field):
-                return MCPParityMeasurement(False, f"top_level_{field}_mismatch", gateway_identity, mcp_identity, gateway_used, mcp_used, gateway_max)
+                return MCPParityMeasurement(False, "schema_mismatch", gateway_identity, mcp_identity, gateway_used, mcp_used, gateway_max)
         if not gateway_identity or gateway_identity != mcp_identity:
-            return MCPParityMeasurement(False, "ordered_identity_mismatch", gateway_identity, mcp_identity, gateway_used, mcp_used, gateway_max)
+            return MCPParityMeasurement(False, "schema_mismatch", gateway_identity, mcp_identity, gateway_used, mcp_used, gateway_max)
         return MCPParityMeasurement(True, "identity_and_bounds_equal", gateway_identity, mcp_identity, gateway_used, mcp_used, gateway_max)
     except (TypeError, ValueError, AttributeError):
         return MCPParityMeasurement(False, "malformed_payload", (), (), None, None, None)
@@ -143,7 +156,100 @@ def measure_corruption_isolation(*, valid_source_id: str, corrupt_source_id: str
     return CorruptionIsolationMeasurement(status, attempted, completed, failed, continued, retrievable, tuple(reasons))
 
 
+def measure_corruption_isolation_from_runtime(
+    root: Path, pipeline: Any, read_model: Any, state_db: Any,
+) -> dict[str, Any]:
+    """Compose two authorized sources through scan admission and worker terminal state.
+
+    This is measurement orchestration around the existing runtime contracts;
+    it never calls the synchronous pipeline execute API and does not invent a
+    queue, WorkStore, or read model.
+    """
+    from src.automatic_memory.models import AuthorizationScope
+    from src.automatic_memory.runtime import AutomaticMemoryRuntime
+    from src.automatic_memory.source_registry import SourceRegistry
+    valid_root = Path(root) / "authorized-valid-source"
+    corrupt_root = Path(root) / "authorized-corrupt-source"
+    valid_root.mkdir()
+    corrupt_root.mkdir()
+    shutil.copyfile(Path(root) / "generic-history-inbox.json", valid_root / "history.json")
+    (corrupt_root / "history.json").write_text("{ not a supported history export }\\n", encoding="utf-8")
+    registry = SourceRegistry(state_db)
+    now = datetime.now(timezone.utc)
+    scope = AuthorizationScope(
+        grant_id="quality-corruption-isolation", source_kinds=("generic_ai_history",),
+        roots=(str(valid_root), str(corrupt_root)), granted_at=now,
+        expires_at=None, owner_confirmed=True,
+    )
+    valid_source = registry.register(scope, "generic_ai_history", str(valid_root))
+    corrupt_source = registry.register(scope, "generic_ai_history", str(corrupt_root))
+    settings = SimpleNamespace(
+        storage_path=Path(root) / "storage", scheduler_poll_seconds=60.0,
+        automatic_memory_debounce_seconds=5.0, automatic_memory_reconciliation_seconds=900.0,
+        automatic_memory_integrity_seconds=86400.0, automatic_memory_heartbeat_seconds=5.0,
+        extraction_poll_seconds=60.0, extraction_batch_size=5,
+    )
+    runtime = AutomaticMemoryRuntime(state_db=state_db, queue=pipeline.queue, pipeline=pipeline,
+                                     settings=settings, registry=registry)
+    scan_ids: list[str] = []
+    for source in (valid_source, corrupt_source):
+        scan = registry.start_scan(source.source_id)
+        scan_ids.append(scan.scan_id)
+        runtime._run_scan(scan.scan_id, source.source_id, reason="quality-corruption")
+    for _ in range(4):
+        if pipeline.process_pending(limit=10, worker_id="quality-corruption-worker")["processed"] == 0:
+            break
+    jobs = [item for item in pipeline.queue.list_page(source_type="automatic_memory_snapshot", limit=100)
+            if str((item.get("payload") or {}).get("scan_id") or "") in scan_ids]
+    status_counts: dict[str, int] = {}
+    for job in jobs:
+        status = str(job.get("status") or "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+    outcomes = [runtime.work_store.get_outcome(f"automatic-memory:{scan_id}") for scan_id in scan_ids]
+    scans = [state_db.get_automatic_memory_scan(scan_id) for scan_id in scan_ids]
+    source_rows = {
+        str(source.source_id): source
+        for source in registry.list_sources()
+        if str(source.source_id) in {valid_source.source_id, corrupt_source.source_id}
+    }
+    messages = []
+    offset = 0
+    while True:
+        page = read_model.list_messages(owner=True, limit=200, offset=offset)
+        messages.extend(page.get("items") or [])
+        if not page.get("next_offset"):
+            break
+        offset = int(page["next_offset"])
+    sources = read_model.list_sources(owner=True, limit=100).get("items") or []
+    valid_read_model_ids = {
+        str(item.get("source_id") or "") for item in sources
+        if str((item.get("metadata") or {}).get("automatic_memory_source_id") or "") == valid_source.source_id
+    }
+    valid_messages = [item for item in messages if str(item.get("source_id") or "") in valid_read_model_ids]
+    attempted, completed, failed = len(scan_ids), status_counts.get("completed", 0), status_counts.get("failed", 0)
+    continued = int(outcomes[0] is not None and outcomes[0].status == "completed")
+    retrievable = int(bool(valid_messages))
+    durable_sources = len(source_rows) == 2
+    durable_scans = len(scans) == 2 and all(scan is not None for scan in scans)
+    terminal_work = [outcome.status if outcome else None for outcome in outcomes]
+    return {
+        "status": "ready" if (
+            durable_sources and durable_scans and attempted == 2 and completed >= 1
+            and failed >= 1 and continued == 1 and retrievable == 1
+            and terminal_work == ["completed", "failed"]
+        ) else "failed",
+        "attempted": attempted, "completed": completed, "failed": failed,
+        "continued": continued, "other_source_completed": continued,
+        "retrievable": retrievable, "valid_source_messages": len(valid_messages),
+        "queue_status_counts": status_counts, "scan_ids": scan_ids,
+        "source_statuses": {source_id: str(source.status) for source_id, source in source_rows.items()},
+        "scan_statuses": [str(scan.get("status")) if scan else None for scan in scans],
+        "work_outcomes": terminal_work,
+        "read_model_messages": len(messages),
+    }
+
+
 __all__ = [
     "ContextBaselineMeasurement", "CorruptionIsolationMeasurement", "MCPParityMeasurement",
-    "measure_context_baseline", "measure_corruption_isolation", "measure_mcp_parity",
+    "measure_context_baseline", "measure_corruption_isolation", "measure_corruption_isolation_from_runtime", "measure_mcp_parity",
 ]

@@ -18,7 +18,26 @@ from src.extraction.adapters.generic_ai_history import HISTORY_SCHEMA, HISTORY_V
 def readiness_from_envelope(path: Path) -> QualityEvidenceReadiness:
     try:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(payload, Mapping):
+            raise ValueError
+        run_id = payload.get("run_id")
+        fixture_hashes = payload.get("fixture_hashes")
+        if fixture_hashes is None and isinstance(payload.get("evidence_details"), Mapping):
+            fixture_hashes = payload.get("evidence_details", {}).get("fixture_hashes")
+        if not isinstance(run_id, str) or not run_id.strip():
+            raise ValueError("missing run identity")
+        if not isinstance(fixture_hashes, Mapping) or any(
+            not isinstance(fixture_hashes.get(key), str) or not fixture_hashes.get(key).strip()
+            for key in ("corpus", "questions")
+        ):
+            raise ValueError("missing fixture hashes")
+        functional_status = payload.get("functional_status")
+        phase_status = payload.get("phase_status")
+        if functional_status not in {"PASS", "FAIL"} or phase_status not in {"PASS", "FAIL", "BLOCKED", "NOT_EVALUATED"}:
+            raise ValueError("missing run verdict")
         raw = payload.get("quality_evidence_readiness")
+        if raw is None:
+            raw = payload.get("readiness")
         if not isinstance(raw, Mapping):
             raise ValueError
         values: dict[str, EvidenceState] = {}
@@ -32,9 +51,43 @@ def readiness_from_envelope(path: Path) -> QualityEvidenceReadiness:
             else:
                 raise ValueError
         result = QualityEvidenceReadiness(**values)
+        persisted = payload.get("readiness")
+        if persisted is not None:
+            if not isinstance(persisted, Mapping) or any(persisted.get(field) != raw.get(field) for field in fields):
+                raise ValueError("readiness projections disagree")
+        details = payload.get("evidence_details") if isinstance(payload.get("evidence_details"), Mapping) else {}
+        measured = payload.get("measured_quality") or details.get("measured_quality")
+        if not isinstance(measured, Mapping) or measured.get("status") != "PASS":
+            raise ValueError("measured quality is not passing")
+        attempts = measured.get("mcp_attempts")
+        successes = measured.get("mcp_successes")
+        if type(attempts) is not int or type(successes) is not int or attempts != 100 or successes != 100:
+            raise ValueError("strict MCP measurement is incomplete")
+        baseline = payload.get("context_baseline") or details.get("context_baseline")
+        if not isinstance(baseline, Mapping) or baseline.get("status") != EvidenceState.READY.value:
+            raise ValueError("context baseline is not measured")
+        if type(baseline.get("baseline_chars")) is not int or baseline.get("baseline_chars") <= 0:
+            raise ValueError("context baseline has no payload")
+        detail_fields = {
+            "import_audit": "import_audit", "mcp_parity": "mcp_parity",
+            "qdrant_degradation": "semantic_degradation",
+            "corruption_isolation": "corruption_isolation",
+            "context_baseline": "context_baseline",
+        }
+        for readiness_field, detail_key in detail_fields.items():
+            detail = payload.get(detail_key) or details.get(detail_key)
+            if detail is not None and (
+                not isinstance(detail, Mapping)
+                or detail.get("status") != EvidenceState.READY.value
+            ) and getattr(result, readiness_field) is EvidenceState.READY:
+                raise ValueError(f"{readiness_field} readiness disagrees with measurement")
+        if functional_status != "PASS" or phase_status == "FAIL":
+            raise ValueError("run verdict blocks scale")
+        if not result.scale_ready:
+            raise ValueError("functional readiness is incomplete")
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         raise ValueError("BLOCKED_4R2_REQUIRED") from exc
-    if not result.functional_ready:
+    if not result.scale_ready:
         raise ValueError("BLOCKED_4R2_REQUIRED")
     return result
 
@@ -80,9 +133,12 @@ def generate_history_fixture(path: Path, *, count: int = 100_000, seed: int = 41
 
 def validate_history_fixture(path: Path, *, expected_count: int, expected_seed: int) -> dict[str, Any]:
     digest = hashlib.sha256(); ids: set[str] = set(); hashes: set[str] = set(); rows = 0
+    observed_seed: int | None = None
     with Path(path).open("rb") as stream:
         for raw in stream:
             digest.update(raw); value = json.loads(raw.decode("utf-8"))
+            if value.get("type") == "header":
+                observed_seed = value.get("seed")
             if value.get("type") != "message":
                 continue
             rows += 1; message_id = value.get("message_id"); content = value.get("content")
@@ -92,7 +148,7 @@ def validate_history_fixture(path: Path, *, expected_count: int, expected_seed: 
             if content_hash != hashlib.sha256(content.encode("utf-8")).hexdigest():
                 raise ValueError("scale fixture content hash mismatch")
             ids.add(message_id); hashes.add(content_hash)
-    if rows != expected_count or len(ids) != expected_count or len(hashes) != expected_count:
+    if observed_seed != expected_seed or rows != expected_count or len(ids) != expected_count or len(hashes) != expected_count:
         raise ValueError("scale fixture persisted identity counts do not match")
     return {"message_rows": rows, "unique_message_ids": len(ids),
             "unique_content_hashes": len(hashes), "fixture_sha256": digest.hexdigest(),

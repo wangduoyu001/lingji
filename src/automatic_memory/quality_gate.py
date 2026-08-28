@@ -20,7 +20,6 @@ import tempfile
 import time
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
-from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Sequence
@@ -39,9 +38,8 @@ from src.gateway.memory_gateway import MemoryGateway
 from src.gateway.profiles import AIClientProfile, AIProfileRegistry, PROPOSAL_TOOLS
 from src.memory.lifecycle import MemoryLifecycleService
 from src.memory.vault_layout import VaultLayout
-from src.retrieval.context_pack import ContextPackBuilder
+from src.retrieval.context_pack import ContextPackBuilder, ContextPackRequest
 from src.retrieval.hybrid import HybridRetriever
-from src.retrieval.hybrid import SearchFilters
 from src.retrieval.memory_db import MemoryDatabase
 from src.sources.read_model import SourceReadModel
 from src.sources.service import SourceQueryService
@@ -74,7 +72,7 @@ from .quality_evidence import (
     cleanup_inventory_after_delete,
     count_memory_projection_duplicates,
 )
-from .quality_degradation import measure_context_baseline, measure_mcp_parity
+from .quality_degradation import measure_context_baseline, measure_mcp_parity, measure_corruption_isolation_from_runtime
 from .scale_benchmark import readiness_from_envelope, generate_history_fixture, validate_history_fixture
 
 
@@ -302,7 +300,7 @@ def ensure_4r2_ready_for_scale(readiness: QualityEvidenceReadiness) -> None:
     evidence belong to the later Task8/Mac gates and must not be part of this
     admission check (otherwise the release gate becomes circular).
     """
-    if not isinstance(readiness, QualityEvidenceReadiness) or not readiness.functional_ready:
+    if not isinstance(readiness, QualityEvidenceReadiness) or not readiness.scale_ready:
         raise QualityScaleBlockedError("BLOCKED_4R2_REQUIRED")
 
 
@@ -565,71 +563,6 @@ def _measure_semantic_degradation(
         "lexical_results": len(lexical_ids),
         "degraded_results": len(degraded_ids),
         "diagnostics": diagnostics,
-    }
-
-
-def _measure_corruption_isolation(
-    root: Path,
-    pipeline: ExtractionPipeline,
-    read_model: SourceReadModel,
-    valid_count: int,
-    *,
-    ingestion_batch_id: str,
-    state_db: StateDatabase,
-) -> dict[str, Any]:
-    """Run two separately registered sources and derive counts from outcomes."""
-    from datetime import datetime, timezone
-    from src.automatic_memory.models import AuthorizationScope
-    from src.automatic_memory.source_registry import SourceRegistry
-    valid_root = root / "authorized-valid-source"
-    corrupt_root = root / "authorized-corrupt-source"
-    valid_root.mkdir()
-    corrupt_root.mkdir()
-    valid_path = valid_root / "history.json"
-    shutil.copyfile(root / "generic-history-inbox.json", valid_path)
-    corrupt_path = corrupt_root / "history.json"
-    corrupt_path.write_text("{ not a supported history export }\\n", encoding="utf-8")
-    registry = SourceRegistry(state_db)
-    now = datetime.now(timezone.utc)
-    scope = AuthorizationScope(
-        grant_id="quality-corruption-isolation",
-        source_kinds=("generic_ai_history",),
-        roots=(str(valid_root), str(corrupt_root)),
-        granted_at=now, expires_at=None, owner_confirmed=True,
-    )
-    valid_source = registry.register(scope, "generic_ai_history", str(valid_root))
-    corrupt_source = registry.register(scope, "generic_ai_history", str(corrupt_root))
-    attempted = completed = failed = continued = valid_rows = 0
-    attempted += 1
-    try:
-        result = pipeline.execute(
-            "generic_ai_history", input_path=valid_path,
-            payload={"source_id": valid_source.source_id},
-            options={"automatic_memory": True}, adapter_name="generic_ai_history",
-            execution_id="quality-valid-source",
-        )
-        valid_rows = len(_read_ingestion_rows(read_model, "quality-valid-source"))
-        if result and valid_rows > 0:
-            completed += 1
-            continued += 1
-    except (OSError, ValueError, RuntimeError):
-        pass
-    attempted += 1
-    try:
-        pipeline.execute(
-            "generic_ai_history", input_path=corrupt_path,
-            payload={"source_id": corrupt_source.source_id},
-            options={"automatic_memory": True}, adapter_name="generic_ai_history",
-            execution_id="quality-corrupt-source",
-        )
-    except (OSError, ValueError, RuntimeError):
-        failed += 1
-    return {
-        "status": "ready" if attempted == 2 and completed == 1 and failed == 1 and continued == 1 and valid_rows > 0 else "failed",
-        "attempted": attempted, "completed": completed, "failed": failed,
-        "other_source_completed": continued, "retrievable": int(valid_rows > 0),
-        "valid_source_messages": valid_rows,
-        "authorized_source_ids": [valid_source.source_id, corrupt_source.source_id],
     }
 
 
@@ -896,6 +829,30 @@ def _run_quality_gate_impl(
         decisions, activation_correct, activation_total, promotion_bindings, promotion_outcomes = _promote_fixtures(
             corpus, message_map, memory_db, read_model, state_db
         )
+        promotion_category_outcomes: dict[str, dict[str, int]] = {}
+        for record in corpus:
+            memory_kind = str(record.memory_kind or "").lower()
+            if memory_kind in {"core", "core_memory"}:
+                category = "core/protected"
+            elif str(record.risk or "").lower() in {"high", "critical"}:
+                category = "high-risk"
+            elif str(record.authority or "").lower() in {"assistant", "assistant_inference", "ai_inference"}:
+                category = "assistant-only"
+            elif str(record.lifecycle or "").lower() in {"conflict", "superseded"}:
+                category = "conflict"
+            else:
+                category = "low-risk user"
+            status = str((decisions.get(record.fact_id) or {}).get("status") or "error")
+            bucket = promotion_category_outcomes.setdefault(category, {"expected": 0, "actual": 0, "pending": 0, "rejected": 0, "error": 0})
+            bucket["expected"] += 1
+            if status == "active":
+                bucket["actual"] += 1
+            elif status == "pending_owner_review":
+                bucket["pending"] += 1
+            elif status == "rejected":
+                bucket["rejected"] += 1
+            else:
+                bucket["error"] += 1
         duplicate_records = audit.stable_duplicates.total + count_memory_projection_duplicates(memory_db)
         tracker.mark("gateway")
         gateway, _profiles = _build_gateway(temporary_root, memory_db, read_model, state_db)
@@ -936,36 +893,16 @@ def _run_quality_gate_impl(
                 "mode": question.mode,
                 "as_of": question.as_of,
             }
-            # Capture the formal retriever's complete pre-bound selection
-            # before asking the ContextPack builder to enforce max_chars.
-            prebound = gateway.retriever.search_with_diagnostics(
-                question.query,
-                limit=40,
-                filters=SearchFilters(
-                    project=question.project if hasattr(question, "project") else "project-lingji",
-                    privacy=("public", "private", "restricted", "synthetic"),
-                    agent_id="agent-synthetic", mode=question.mode, as_of=question.as_of,
-                ),
-            )
-            prebound_results = list(prebound.get("results") or []) if isinstance(prebound, Mapping) else []
-            baseline_payload: list[Mapping[str, Any]] = []
-            for result in prebound_results:
-                memory_id = str(result.get("memory_id") or "")
-                full = memory_db.fetch_memory(memory_id, include_chunks=True) if memory_id else None
-                if full:
-                    section = gateway.context_builder._memory_section(full, "retrieved_memory", result=result)
-                    if section:
-                        baseline_payload.append(section)
-                    source_service = gateway.context_builder.source_query_service
-                    if source_service is not None:
-                        for item in source_service.memory_evidence(
-                            memory_id,
-                            viewer=source_service.owner_viewer(),
-                            project="project-lingji",
-                        ).get("items") or ():
-                            baseline_payload.append(dict(item))
-                else:
-                    baseline_payload.append(result)
+            # Capture the formal builder's selection-before-bound seam.  This
+            # is the same query/filter path used by build_context_pack and is
+            # intentionally observed before render_markdown applies max_chars.
+            observation = gateway.context_builder.observe_candidates(ContextPackRequest(
+                agent_id=str(arguments["agent_id"]), query=str(arguments["query"]),
+                project=arguments.get("project"), max_chars=int(arguments["max_chars"]),
+                privacy=("public", "private", "restricted", "synthetic"), include_core=False,
+                mode=str(arguments.get("mode") or "current"), as_of=arguments.get("as_of"),
+            ))
+            baseline_payload = list(observation.get("sections") or []) if isinstance(observation, Mapping) else []
             if not baseline_payload:
                 baseline_available = False
             else:
@@ -1021,10 +958,8 @@ def _run_quality_gate_impl(
         semantic_degradation = _measure_semantic_degradation(
             temporary_root, memory_db, read_model, state_db, questions[0].query,
         )
-        corruption_isolation = _measure_corruption_isolation(
-            temporary_root, pipeline, read_model, len(expected_rows),
-            ingestion_batch_id=ingestion_batch_id,
-            state_db=state_db,
+        corruption_isolation = measure_corruption_isolation_from_runtime(
+            temporary_root, pipeline, read_model, state_db,
         )
         protected_after = ProtectedTreeSentinel.capture((protected_root,))
         acceptance_sentinels_before = {
@@ -1076,7 +1011,10 @@ def _run_quality_gate_impl(
             # Keep the legacy readiness field as transport/readability status;
             # strict identity parity is separately measured below and only its
             # successes may enter the frozen quality counters.
-            mcp_parity=EvidenceState.READY if mcp_attempts == EXPECTED_QUESTION_COUNT else EvidenceState.FAILED,
+            mcp_parity=EvidenceState.READY if (
+                mcp_attempts == EXPECTED_QUESTION_COUNT
+                and mcp_successes == EXPECTED_QUESTION_COUNT
+            ) else EvidenceState.FAILED,
             qdrant_degradation=(
                 EvidenceState.READY if semantic_degradation.get("status") == "ready"
                 else EvidenceState.FAILED
@@ -1089,7 +1027,7 @@ def _run_quality_gate_impl(
             # actual selection-before-bound measurement remains explicit in
             # evidence_details and is NOT_MEASURED when the product returned
             # no complete pre-bound session.
-            context_baseline=EvidenceState.READY if gateway_calls_completed == EXPECTED_QUESTION_COUNT else EvidenceState.FAILED,
+            context_baseline=EvidenceState.READY if baseline_available and gateway_calls_completed == EXPECTED_QUESTION_COUNT else EvidenceState.NOT_MEASURED,
             scale=EvidenceState.NOT_MEASURED,
             owner_review=EvidenceState.NOT_MEASURED,
             reboot_recovery=EvidenceState.NOT_MEASURED,
@@ -1101,6 +1039,7 @@ def _run_quality_gate_impl(
         functional_status = readiness.functional_status
         phase_status = "NOT_EVALUATED"
         envelope = {
+            "run_id": f"quality:{fixture_hashes['corpus'][:16]}:{fixture_hashes['questions'][:16]}:{_git_commit()[:16]}",
             "fixture_hashes": fixture_hashes,
             "code_commit": _git_commit(),
             "acceptance_root": "isolated_acceptance_root",
@@ -1108,6 +1047,7 @@ def _run_quality_gate_impl(
             "role_order_counts": {"expected": expected_ordered_roles, "matched": ordered_role_matches},
             "import_audit": asdict(audit),
             "promotion_outcomes": promotion_outcomes,
+            "promotion_category_outcomes": promotion_category_outcomes,
             "functional_status": "FAIL" if measured_quality_failure else "NOT_EVALUATED",
             "phase_status": "FAIL" if measured_quality_failure else "NOT_EVALUATED",
             "gateway_selection": {
@@ -1183,6 +1123,16 @@ def publish_quality_envelope(envelope: QualityRunEnvelope, *, repository_output_
     if not isinstance(envelope, QualityRunEnvelope):
         raise TypeError("quality publication requires QualityRunEnvelope")
     payload = _jsonable(asdict(envelope))
+    details = payload.get("evidence_details")
+    if isinstance(details, Mapping):
+        # Keep the machine-readable report convenient for existing consumers
+        # while retaining one authoritative envelope and one evidence map.
+        for key in ("semantic_degradation", "corruption_isolation", "context_baseline",
+                    "mcp_parity", "promotion_outcomes", "promotion_category_outcomes",
+                    "import_audit", "acceptance_boundary", "measured_quality"):
+            if key in details:
+                payload[key] = details[key]
+        payload["quality_evidence_readiness"] = payload.get("quality_evidence_readiness") or payload.get("readiness", {})
     _atomic_json(Path(repository_output_path), payload)
 
 
@@ -1232,10 +1182,14 @@ def run_quality_gate(
             "semantic_degradation": raw.get("semantic_degradation"),
             "corruption_isolation": raw.get("corruption_isolation"),
             "context_baseline": raw.get("context_baseline"),
+            "mcp_parity": raw.get("mcp_parity"),
+            "promotion_outcomes": raw.get("promotion_outcomes"),
+            "promotion_category_outcomes": raw.get("promotion_category_outcomes"),
             "import_audit": raw.get("import_audit"),
             "acceptance_boundary": raw.get("acceptance_boundary"),
             "measured_quality": raw.get("measured_quality"),
-        })
+        }, run_id=raw.get("run_id"), fixture_hashes=raw.get("fixture_hashes") or {},
+        quality_evidence_readiness=asdict(readiness))
         # The temporary machine report is deliberately written beneath the
         # acceptance output root; the caller publishes it only after cleanup.
         payload = dict(raw)
@@ -1274,95 +1228,11 @@ def generate_100k_history(path: Path, *, count: int = 100_000, seed: int = 41041
     admission path.
     """
     return generate_history_fixture(path, count=count, seed=seed)
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    digest = hashlib.sha256()
-    message_ids: set[str] = set()
-    content_hashes: set[str] = set()
-    message_rows = 0
-    with path.open("w", encoding="utf-8", newline="\n") as stream:
-        header = {"schema": HISTORY_SCHEMA, "schema_version": HISTORY_VERSION, "type": "header", "seed": seed}
-        header_bytes = (json.dumps(header, sort_keys=True) + "\n").encode("utf-8")
-        conversation_bytes = (
-            json.dumps(
-                {"type": "conversation", "conversation_id": "scale-conversation", "title": "Scale benchmark"},
-                sort_keys=True,
-            ) + "\n"
-        ).encode("utf-8")
-        digest.update(header_bytes)
-        digest.update(conversation_bytes)
-        stream.write(header_bytes.decode("utf-8"))
-        stream.write(conversation_bytes.decode("utf-8"))
-        for index in range(count):
-            message_id = f"scale-message-{index:06d}"
-            content = f"Deterministic scale message {index:06d} seed {seed}."
-            content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-            occurred_at = (datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=index)).isoformat().replace("+00:00", "Z")
-            row = {
-                "type": "message",
-                "conversation_id": "scale-conversation",
-                "message_id": message_id,
-                "role": "user" if index % 2 == 0 else "assistant",
-                "content": content,
-                "content_hash": content_hash,
-                "timestamp": occurred_at,
-            }
-            encoded = (json.dumps(row, sort_keys=True) + "\n").encode("utf-8")
-            digest.update(encoded)
-            stream.write(encoded.decode("utf-8"))
-            message_rows += 1
-            message_ids.add(message_id)
-            content_hashes.add(content_hash)
-    if message_rows != count or len(message_ids) != count or len(content_hashes) != count:
-        raise ValueError("scale fixture identity validation failed during generation")
-    return {
-        "seed": seed,
-        "messages": count,
-        "message_rows": message_rows,
-        "unique_message_ids": len(message_ids),
-        "unique_content_hashes": len(content_hashes),
-        "fixture_sha256": digest.hexdigest(),
-        # Preserve the old field for consumers that only display the digest.
-        "content_hash": digest.hexdigest(),
-        "path": str(path),
-    }
 
 
 def _validate_scale_fixture(path: Path, *, expected_count: int, expected_seed: int) -> dict[str, Any]:
     """Re-read the generated fixture and measure identities from persisted bytes."""
     return validate_history_fixture(path, expected_count=expected_count, expected_seed=expected_seed)
-    digest = hashlib.sha256()
-    ids: set[str] = set()
-    hashes: set[str] = set()
-    rows = 0
-    with Path(path).open("rb") as stream:
-        for raw in stream:
-            digest.update(raw)
-            value = json.loads(raw.decode("utf-8"))
-            if value.get("type") != "message":
-                continue
-            rows += 1
-            message_id = value.get("message_id")
-            content = value.get("content")
-            content_hash = value.get("content_hash")
-            if not isinstance(message_id, str) or not message_id:
-                raise ValueError("scale fixture contains an invalid message ID")
-            if not isinstance(content, str) or not content:
-                raise ValueError("scale fixture contains invalid content")
-            expected_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-            if content_hash != expected_hash:
-                raise ValueError("scale fixture content hash mismatch")
-            ids.add(message_id)
-            hashes.add(content_hash)
-    if rows != expected_count or len(ids) != expected_count or len(hashes) != expected_count:
-        raise ValueError("scale fixture persisted identity counts do not match")
-    return {
-        "message_rows": rows,
-        "unique_message_ids": len(ids),
-        "unique_content_hashes": len(hashes),
-        "fixture_sha256": digest.hexdigest(),
-        "seed": expected_seed,
-    }
 
 
 def run_100k_benchmark(*, output_path: Path, readiness_path: Path | None = None) -> dict[str, Any]:

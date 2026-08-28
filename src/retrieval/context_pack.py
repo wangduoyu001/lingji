@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -43,7 +44,50 @@ class ContextPackBuilder:
         self.source_query_service = source_query_service
 
     def build(self, request: ContextPackRequest) -> dict[str, Any]:
+        sections, diagnostics = self._collect_sections(request)
         max_chars = min(max(int(request.max_chars), 1000), 12000)
+        pack = {
+            "schema_version": 2,
+            "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "agent_id": request.agent_id,
+            "query": request.query,
+            "project": request.project,
+            "max_chars": max_chars,
+            "used_chars": 0,
+            "memory_revision": self.database.revision,
+            "query_mode": request.mode,
+            "as_of": request.as_of,
+            "request": asdict(request),
+            "diagnostics": diagnostics,
+            "sections": sections,
+        }
+        pack["markdown"] = self.render_markdown(pack)
+        pack["used_chars"] = len(pack["markdown"])
+        return pack
+
+    def observe_candidates(self, request: ContextPackRequest) -> dict[str, Any]:
+        """Return the exact candidates selected before ContextPack bounding.
+
+        This is an internal, read-only measurement seam.  It deliberately
+        shares the same collection path as :meth:`build`, so it cannot invent
+        a second ranking/filtering policy or alter the final pack.
+        """
+        sections, diagnostics = self._collect_sections(request)
+        payload = {
+            "schema_version": 2,
+            "agent_id": request.agent_id,
+            "query": request.query,
+            "project": request.project,
+            "query_mode": request.mode,
+            "as_of": request.as_of,
+            "request": asdict(request),
+            "diagnostics": diagnostics,
+            "sections": sections,
+        }
+        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return {**payload, "candidate_chars": len(encoded), "candidate_sha256": hashlib.sha256(encoded.encode("utf-8")).hexdigest()}
+
+    def _collect_sections(self, request: ContextPackRequest) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         sections: list[dict[str, Any]] = []
         used_memory_ids: set[str] = set()
         diagnostics = {
@@ -51,15 +95,10 @@ class ContextPackBuilder:
             "semantic": "unavailable",
             "reason_code": "semantic_not_queried",
         }
-
         if request.include_core:
             for memory in self.database.list_core_memories(
-                agent_id=request.agent_id,
-                project=request.project,
-                privacy=request.privacy,
-                limit=100,
-                mode=request.mode,
-                as_of=request.as_of,
+                agent_id=request.agent_id, project=request.project,
+                privacy=request.privacy, limit=100, mode=request.mode, as_of=request.as_of,
             ):
                 if not self._matches_memory_filters(memory, request):
                     continue
@@ -68,17 +107,11 @@ class ContextPackBuilder:
                 if section:
                     sections.append(section)
                     used_memory_ids.add(str(section["memory_id"]))
-
         if request.query:
             filters = SearchFilters(
-                project=request.project,
-                memory_types=request.memory_types,
-                privacy=request.privacy,
-                agent_id=request.agent_id,
-                tags=request.tags,
-                include_archived=request.include_archived,
-                mode=request.mode,
-                as_of=request.as_of,
+                project=request.project, memory_types=request.memory_types,
+                privacy=request.privacy, agent_id=request.agent_id, tags=request.tags,
+                include_archived=request.include_archived, mode=request.mode, as_of=request.as_of,
             )
             search_with_diagnostics = getattr(self.retriever, "search_with_diagnostics", None)
             if callable(search_with_diagnostics):
@@ -100,44 +133,20 @@ class ContextPackBuilder:
                 full = self.database.fetch_memory(memory_id, include_chunks=True)
                 section = self._memory_section(
                     full or result,
-                    "structured_message_evidence"
-                    if str((result or full or {}).get("memory_type") or "") == "structured_evidence"
-                    else (
-                        "project_authority_memory"
-                        if self._authority(result or full or {}) == "current_project_authority"
-                        else "retrieved_memory"
-                    ),
+                    "structured_message_evidence" if str((result or full or {}).get("memory_type") or "") == "structured_evidence"
+                    else ("project_authority_memory" if self._authority(result or full or {}) == "current_project_authority" else "retrieved_memory"),
                     result=result,
                 )
                 if section:
                     sections.append(section)
                     used_memory_ids.add(memory_id)
-
         sections = self._ordered_sections(sections)
         linked_evidence, linked_diagnostics = self._linked_evidence(sections, request)
         sections.extend(linked_evidence)
         diagnostics["source_authority"] = linked_diagnostics.get("source_authority", "available")
         if linked_diagnostics.get("reason_code") != "none" or diagnostics.get("reason_code") == "none":
             diagnostics["reason_code"] = linked_diagnostics.get("reason_code", "none")
-        sections = self._ordered_sections(sections)
-        pack = {
-            "schema_version": 2,
-            "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "agent_id": request.agent_id,
-            "query": request.query,
-            "project": request.project,
-            "max_chars": max_chars,
-            "used_chars": 0,
-            "memory_revision": self.database.revision,
-            "query_mode": request.mode,
-            "as_of": request.as_of,
-            "request": asdict(request),
-            "diagnostics": diagnostics,
-            "sections": sections,
-        }
-        pack["markdown"] = self.render_markdown(pack)
-        pack["used_chars"] = len(pack["markdown"])
-        return pack
+        return self._ordered_sections(sections), diagnostics
 
     def _memory_section(self, memory: dict[str, Any], kind: str, *, result: dict[str, Any] | None = None) -> dict[str, Any] | None:
         memory_id = str(memory.get("memory_id") or "")
