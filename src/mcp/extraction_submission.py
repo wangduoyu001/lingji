@@ -67,6 +67,10 @@ def durable_job_response(job: Mapping[str, Any], *, message: str | None = None) 
     """Return a truthful queue DTO while preserving backwards-compatible job fields."""
 
     payload = dict(job)
+    # Queue internals may include the current plaintext lease and its durable
+    # fingerprint for worker/pipeline coordination. Neither is an API fact.
+    payload.pop("lease_token", None)
+    payload.pop("last_claim_lease_fingerprint", None)
     status = str(payload.get("status") or "unknown")
     existing_job = bool(payload.get("existing_job"))
     attempts = max(int(payload.get("attempts") or 0), 0)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -74,6 +75,11 @@ class _SQLiteExtractionQueueBase:
                     completed_at TEXT
                 );
 
+                """
+            )
+            self._ensure_columns(connection)
+            connection.executescript(
+                """
                 CREATE INDEX IF NOT EXISTS idx_extraction_jobs_due
                     ON extraction_jobs(status, next_run_at, priority, created_at);
                 CREATE INDEX IF NOT EXISTS idx_extraction_jobs_source
@@ -82,7 +88,6 @@ class _SQLiteExtractionQueueBase:
                     ON extraction_jobs(status, heartbeat_at, locked_at);
                 """
             )
-            self._ensure_columns(connection)
 
     @staticmethod
     def _ensure_columns(connection: sqlite3.Connection) -> None:
@@ -94,6 +99,7 @@ class _SQLiteExtractionQueueBase:
             "automatic_memory_source_id": "TEXT",
             "adapter_version": "TEXT NOT NULL DEFAULT ''",
             "lease_token": "TEXT",
+            "last_claim_lease_fingerprint": "TEXT",
             "heartbeat_at": "TEXT",
             "progress_current": "INTEGER NOT NULL DEFAULT 0",
             "progress_total": "INTEGER NOT NULL DEFAULT 0",
@@ -198,7 +204,7 @@ class _SQLiteExtractionQueueBase:
                         automatic_memory_source_id = ?,
                         payload_json = ?, options_json = ?, status = 'queued', priority = ?,
                         attempts = 0, max_attempts = ?, next_run_at = ?, locked_at = NULL,
-                        locked_by = NULL, lease_token = NULL, heartbeat_at = NULL,
+                        locked_by = NULL, lease_token = NULL, last_claim_lease_fingerprint = NULL, heartbeat_at = NULL,
                         progress_current = 0, progress_total = 0, progress_message = NULL,
                         last_error = NULL, result_json = NULL, completed_at = NULL, updated_at = ?
                     WHERE job_id = ?
@@ -257,6 +263,7 @@ class _SQLiteExtractionQueueBase:
     ) -> dict[str, Any] | None:
         now = now or datetime.now()
         lease_token = uuid4().hex
+        lease_fingerprint = self.lease_fingerprint(lease_token)
         if allowed_source_types is None:
             source_filter = "source_type <> 'automatic_memory_snapshot'"
             source_params: tuple[Any, ...] = ()
@@ -296,13 +303,15 @@ class _SQLiteExtractionQueueBase:
                 """
                 UPDATE extraction_jobs
                 SET status = 'running', attempts = attempts + 1, locked_at = ?, locked_by = ?,
-                    lease_token = ?, heartbeat_at = ?, progress_message = 'started', updated_at = ?
+                    lease_token = ?, last_claim_lease_fingerprint = ?, heartbeat_at = ?,
+                    progress_message = 'started', updated_at = ?
                 WHERE job_id = ? AND status IN ('queued', 'retrying')
                 """,
                 (
                     self._iso(now),
                     worker_id,
                     lease_token,
+                    lease_fingerprint,
                     self._iso(now),
                     self._iso(now),
                     row["job_id"],
@@ -348,6 +357,52 @@ class _SQLiteExtractionQueueBase:
                 tuple(values),
             )
             return cursor.rowcount == 1
+
+    @staticmethod
+    def lease_fingerprint(lease_token: str) -> str:
+        """Return the non-reversible durable receipt for a random lease token."""
+
+        return hashlib.sha256(str(lease_token).encode("utf-8")).hexdigest()
+
+    def ownership_receipt(self, job_id: str, marker_lease_fingerprint: str) -> dict[str, Any]:
+        """Read non-secret facts needed by transient cleanup."""
+
+        candidate = str(marker_lease_fingerprint or "").lower()
+        empty = {
+            "status": "unknown",
+            "input_path": None,
+            "locked_by": None,
+            "heartbeat_at": None,
+            "locked_at": None,
+            "current_lease_matches": False,
+            "durable_lease_matches": False,
+            "durable_lease_present": False,
+        }
+        if len(candidate) != 64 or any(char not in "0123456789abcdef" for char in candidate):
+            return empty
+        try:
+            with self._connection() as connection:
+                row = connection.execute(
+                    "SELECT status, input_path, locked_by, heartbeat_at, locked_at, lease_token, "
+                    "last_claim_lease_fingerprint FROM extraction_jobs WHERE job_id = ?",
+                    (job_id,),
+                ).fetchone()
+        except Exception:
+            raise
+        if row is None:
+            return empty
+        current = str(row["lease_token"] or "")
+        durable = str(row["last_claim_lease_fingerprint"] or "").lower()
+        return {
+            "status": str(row["status"] or ""),
+            "input_path": row["input_path"],
+            "locked_by": row["locked_by"],
+            "heartbeat_at": row["heartbeat_at"],
+            "locked_at": row["locked_at"],
+            "current_lease_matches": bool(current and self.lease_fingerprint(current) == candidate),
+            "durable_lease_matches": bool(durable and durable == candidate),
+            "durable_lease_present": bool(durable),
+        }
 
     def complete(
         self,
@@ -589,7 +644,7 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
                 UPDATE extraction_jobs
                 SET status = 'queued', attempts = 0, last_error = NULL, result_json = NULL,
                     completed_at = NULL, next_run_at = ?, locked_at = NULL, locked_by = NULL,
-                    lease_token = NULL, heartbeat_at = NULL, progress_current = 0,
+                    lease_token = NULL, last_claim_lease_fingerprint = NULL, heartbeat_at = NULL, progress_current = 0,
                     progress_total = 0, progress_message = NULL, updated_at = ?
                 WHERE job_id = ? AND status IN ('failed', 'cancelled')
                 """,

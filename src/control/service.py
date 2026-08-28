@@ -202,7 +202,7 @@ class LocalControlService:
             warnings.append(self._status_warning("compute_policy_unavailable", "hardware", exc))
 
         try:
-            recent_tasks = self.queue.list(limit=10)
+            recent_tasks = [self._public_job(item) for item in self.queue.list(limit=10)]
         except Exception as exc:
             recent_tasks = []
             warnings.append(self._status_warning("queue_status_unavailable", "extraction", exc))
@@ -342,7 +342,7 @@ class LocalControlService:
             "vector_coverage": dict(memory_runtime.get("coverage") or {}),
             "queue": {
                 "stats": self.queue.stats(),
-                "recent": self.queue.list(limit=20),
+                "recent": [self._public_job(item) for item in self.queue.list(limit=20)],
             },
             "storage": {
                 **inventory,
@@ -370,10 +370,17 @@ class LocalControlService:
         }
 
     def jobs(self, *, status: str | None = None, limit: int = 100) -> dict[str, Any]:
-        return {"stats": self.queue.stats(), "jobs": self.queue.list(status=status, limit=limit)}
+        return {"stats": self.queue.stats(), "jobs": [self._public_job(item) for item in self.queue.list(status=status, limit=limit)]}
 
     def job(self, job_id: str) -> dict[str, Any]:
-        return self.queue.get(job_id)
+        return self._public_job(self.queue.get(job_id))
+
+    @staticmethod
+    def _public_job(row: Mapping[str, Any]) -> dict[str, Any]:
+        result = dict(row)
+        result.pop("lease_token", None)
+        result.pop("last_claim_lease_fingerprint", None)
+        return result
 
     def recent_events(self, limit: int = 100) -> list[dict[str, Any]]:
         rows = self.state_db.recent_events(limit=max(min(int(limit), 1000), 1))
@@ -537,14 +544,14 @@ class LocalControlService:
             priority = self.runtime_settings.priority_for_source(source_type)
             return {
                 "mode": "queued",
-                "job": pipeline.enqueue(
+                "job": self._public_job(pipeline.enqueue(
                     source_type,
                     input_path=path,
                     payload={"title": title, **dict(payload.get("payload") or {})},
                     options=options,
                     priority=priority,
                     adapter_name=str(payload.get("adapter_name") or "") or None,
-                ),
+                )),
             }
         capture_payload = {
             "url": payload.get("url") or payload.get("source_url") or "",

@@ -435,7 +435,7 @@ def test_v1_terminal_marker_requires_job_raw_hardlink_identity(tmp_path: Path) -
     report = reconcile_automatic_memory_transients(raw_root, queue)
     assert not valid.exists()
     assert wrong.exists()
-    assert report["preserved"][0]["reason"] in {"lease_unverifiable", "identity_mismatch"}
+    assert report["preserved"][0]["reason"] in {"lease_unverifiable", "lease_mismatch", "identity_mismatch"}
     assert raw.exists() and hashlib.sha256(raw.read_bytes()).hexdigest() == raw.name
 
 

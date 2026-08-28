@@ -66,9 +66,28 @@ def _parse_timestamp(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _queue_job(queue: Any, job_id: str) -> dict[str, Any] | None:
+def _queue_ownership(queue: Any, job_id: str, marker_lease_fingerprint: str) -> dict[str, Any] | None:
+    """Read a queue ownership predicate without exposing lease material."""
     try:
-        value = queue.get(job_id)
+        reader = getattr(queue, "ownership_receipt", None)
+        if callable(reader):
+            value = reader(job_id, marker_lease_fingerprint)
+        else:
+            value = queue.get(job_id)
+            if not isinstance(value, dict):
+                return None
+            current = str(value.get("lease_token") or "")
+            durable = str(value.get("last_claim_lease_fingerprint") or "").lower()
+            value = {
+                "status": value.get("status"),
+                "input_path": value.get("input_path"),
+                "locked_by": value.get("locked_by"),
+                "heartbeat_at": value.get("heartbeat_at"),
+                "locked_at": value.get("locked_at"),
+                "current_lease_matches": bool(current and hashlib.sha256(current.encode()).hexdigest() == marker_lease_fingerprint),
+                "durable_lease_matches": bool(durable and durable == marker_lease_fingerprint),
+                "durable_lease_present": bool(durable),
+            }
     except (LookupError, KeyError):
         return None
     except Exception as exc:
@@ -86,7 +105,7 @@ def _sha256(path: Path) -> str | None:
         with path.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                 digest.update(chunk)
-    except (OSError, ValueError):
+    except Exception:
         return None
     return digest.hexdigest()
 
@@ -97,7 +116,7 @@ def _content_addressed_raw(root: Path, raw_path: Path) -> os.stat_result | None:
         return None
     try:
         info = raw_path.lstat()
-    except OSError:
+    except Exception:
         return None
     if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
         return None
@@ -111,7 +130,7 @@ def _legacy_proof(root: Path, marker: Path, marker_info: os.stat_result) -> str 
     content_match = False
     try:
         candidates = tuple(root.iterdir())
-    except OSError:
+    except Exception:
         return "legacy_hardlink_proof_missing"
     for candidate in candidates:
         if candidate == marker or _RAW_NAME_RE.fullmatch(candidate.name) is None:
@@ -129,8 +148,11 @@ def _v1_raw_proof(root: Path, marker_info: os.stat_result, job: dict[str, Any]) 
     raw_value = job.get("input_path")
     if not isinstance(raw_value, (str, Path)) or not str(raw_value).strip():
         return "lease_unverifiable"
-    raw_path = Path(raw_value).expanduser()
-    raw_info = _content_addressed_raw(root, raw_path)
+    try:
+        raw_path = Path(raw_value).expanduser()
+        raw_info = _content_addressed_raw(root, raw_path)
+    except Exception:
+        return "lease_unverifiable"
     if raw_info is None:
         return "lease_unverifiable"
     if _identity(marker_info) != _identity(raw_info):
@@ -149,20 +171,20 @@ def _remove_if_unchanged(
         current_info = entry.lstat()
     except FileNotFoundError:
         return False
-    except OSError:
-        report["preserved"].append({"name": entry.name, "reason": "identity_changed"})
+    except Exception:
+        report["preserved"].append({"reason": "identity_changed"})
         return False
     if _identity(current_info) != _identity(initial_info):
-        report["preserved"].append({"name": entry.name, "reason": "identity_changed"})
+        report["preserved"].append({"reason": "identity_changed"})
         return False
     try:
         entry.unlink()
     except FileNotFoundError:
         return False
-    except OSError:
-        report["errors"].append({"reason": "unlink_failed", "error": "unlink_failed"})
+    except Exception:
+        report["errors"].append({"reason": "unlink_failed"})
         return False
-    report["removed"].append({"name": entry.name, "reason": reason})
+    report["removed"].append({"reason": reason})
     return True
 
 
@@ -203,7 +225,6 @@ def reconcile_automatic_memory_transients(
 
     root = Path(raw_root).expanduser()
     report: dict[str, Any] = {
-        "root": root.name,
         "scanned_count": 0,
         "removed_count": 0,
         "preserved_count": 0,
@@ -211,14 +232,21 @@ def reconcile_automatic_memory_transients(
         "preserved": [],
         "errors": [],
     }
-    if not root.exists() or root.is_symlink() or not root.is_dir():
+    try:
+        root_exists = root.exists()
+        root_symlink = root.is_symlink()
+        root_directory = root.is_dir()
+    except Exception:
+        report["errors"].append({"reason": "root_unavailable"})
+        return report
+    if not root_exists or root_symlink or not root_directory:
         return report
     current_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     stale_after = timedelta(seconds=max(float(stale_after_seconds), 0.0))
     try:
         entries = tuple(root.iterdir())
-    except OSError as exc:
-        report["errors"].append({"name": root.name, "reason": "scan_failed", "error": str(exc)[:500]})
+    except Exception:
+        report["errors"].append({"reason": "scan_failed"})
         return report
 
     for entry in entries:
@@ -229,49 +257,50 @@ def reconcile_automatic_memory_transients(
             info = entry.lstat()
         except FileNotFoundError:
             continue
-        except OSError:
-            report["preserved"].append({"name": entry.name, "reason": "unreadable"})
+        except Exception:
+            report["preserved"].append({"reason": "lstat_failed"})
             continue
         if stat.S_ISLNK(info.st_mode):
-            report["preserved"].append({"name": entry.name, "reason": "symlink"})
+            report["preserved"].append({"reason": "symlink"})
             continue
         if not stat.S_ISREG(info.st_mode):
-            report["preserved"].append({"name": entry.name, "reason": "not_regular_file"})
+            report["preserved"].append({"reason": "not_regular_file"})
             continue
         legacy = _LEGACY_MARKER_RE.fullmatch(entry.name)
         matched = _MARKER_RE.fullmatch(entry.name)
         if legacy is not None:
             proof_reason = _legacy_proof(root, entry, info)
             if proof_reason is not None:
-                report["preserved"].append({"name": entry.name, "reason": proof_reason})
+                report["preserved"].append({"reason": proof_reason})
                 continue
             _remove_if_unchanged(entry, info, report, "legacy_hardlink")
             continue
         if matched is None:
-            report["preserved"].append({"name": entry.name, "reason": "unknown_marker"})
+            report["preserved"].append({"reason": "unknown_marker"})
             continue
         job_id, lease_token, _suffix = matched.groups()
+        marker_fingerprint = hashlib.sha256(lease_token.encode("utf-8")).hexdigest()
         try:
-            job = _queue_job(queue, job_id)
+            job = _queue_ownership(queue, job_id, marker_fingerprint)
         except _QueueReadFailure:
-            report["preserved"].append({"name": entry.name, "reason": "queue_read_failed"})
-            report["errors"].append({"reason": "queue_read_failed", "error": "queue_unavailable"})
+            report["preserved"].append({"reason": "queue_read_failed"})
+            report["errors"].append({"reason": "queue_read_failed"})
             continue
         if job is None:
-            report["preserved"].append({"name": entry.name, "reason": "unknown_job"})
+            report["preserved"].append({"reason": "unknown_job"})
             continue
         status = str(job.get("status") or "")
         reason: str | None = None
+        if not job.get("durable_lease_matches"):
+            report["preserved"].append({"reason": "lease_unverifiable" if not job.get("durable_lease_present") else "lease_mismatch"})
+            continue
         if status in {"completed", "failed", "cancelled"}:
             reason = "terminal_job"
         elif status in {"queued", "retrying"}:
-            # A marker is only made after claim.  A released lease is therefore
-            # no longer an active dispatch and can be rebuilt from durable raw.
             reason = "lease_released"
         elif status == "running":
-            current_lease = str(job.get("lease_token") or "")
-            if current_lease != lease_token:
-                report["preserved"].append({"name": entry.name, "reason": "lease_mismatch"})
+            if not job.get("current_lease_matches"):
+                report["preserved"].append({"reason": "lease_mismatch"})
                 continue
             if _worker_is_provably_dead(job.get("locked_by")):
                 reason = "dead_worker"
@@ -280,15 +309,15 @@ def reconcile_automatic_memory_transients(
                 locked = _parse_timestamp(job.get("locked_at"))
                 lease_anchor = heartbeat or locked
                 if lease_anchor is None or lease_anchor + stale_after > current_time:
-                    report["preserved"].append({"name": entry.name, "reason": "active_lease"})
+                    report["preserved"].append({"reason": "active_lease"})
                     continue
                 reason = "expired_lease"
         else:
-            report["preserved"].append({"name": entry.name, "reason": "unknown_job_status"})
+            report["preserved"].append({"reason": "unknown_job_status"})
             continue
         proof_reason = _v1_raw_proof(root, info, job)
         if proof_reason is not None:
-            report["preserved"].append({"name": entry.name, "reason": proof_reason})
+            report["preserved"].append({"reason": proof_reason})
             continue
         _remove_if_unchanged(entry, info, report, reason or "lease_released")
 
