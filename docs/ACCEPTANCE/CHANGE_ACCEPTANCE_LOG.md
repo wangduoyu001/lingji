@@ -2011,3 +2011,13 @@ Windows 重启后恢复 = 100%
 - 最小范围：只改现有 `HybridRetriever` cache、`MemoryDatabase.sync_structured_evidence`、`ContextPackBuilder` 与同一 resolver 注入/测试；不新增 DB/API/retriever/服务/表，不改 history 语义、promotion、Vault/Core、ranking/vector。
 - RED：新增 warm-cache→revoke、rebuild([])→sync orphan、ordinary anchor linked automatic message revoke 三项真实测试，修复前 `3 failed`。GREEN：每次 current/why（含显式 as_of）不缓存或重新授权检查；孤儿 active 版本原子 archived 并保留 history；linked message 批量 authority check 后才追加，普通 linked evidence 保留。
 - 自动验收：Task6S/Task6L/context focused、Task2/3 lifecycle+ingestion、Task6 packaged lexical/Qdrant、compile、diff-check、acceptance sync、local handoff；仅 pytest 临时 roots。Task6 权威仍 `IN_PROGRESS / NOT_ACCEPTED`，Task6H heartbeat、crash、live/Artifact/owner acceptance 未执行。
+
+## 2026-08-28 · Task 6M · Automatic-memory adapter transient lifecycle
+
+- 基线：Task 6C Repair Round 1 blocker review `3fd8059da4ed10b8a1fcd0581793bd0fb2d177ee`；产品/测试提交 `1901628eee197e3d71d7e070c41c9e586d5468de`。
+- 范围：仅修复 `src/extraction/pipeline.py` 解析 adapter dispatch 硬链接、`src/extraction/worker.py` stop/status receipt，以及新增 `src/extraction/transient.py`；复用现有 `extraction_jobs` 的 job/status/lease_token/locked_by/heartbeat_at，不新增数据库、队列、API、UI、检索或 Work Fact 事实源。
+- 所有权：marker 为 `.automatic-memory-v1-{job_id}.{lease_token}{suffix}`，每段限 64 个安全字符，始终是 raw root 直接子 regular file；terminal 或已释放/过期/dead local worker lease 可清理，活跃同 lease 保留，unknown/malformed/foreign/mismatch/symlink/目录保留；未来版本保留。
+- 可观测性：reconciliation 返回 machine-readable inventory，挂载到现有 pipeline process summary、worker status/stop outcome 与 runtime `cleanup_error/cleanup_pending`；unlink 失败计入 `errors` 且不计为 removed，下一次 start/worker reconciliation 可重试。
+- RED/GREEN：新增 `tests/test_task6m_transient_lifecycle.py`，初始缺少 transient production boundary 时收集失败；实现后 Task6M `8 passed`，runtime receipt RED 为 stopped/期望 degraded 后 GREEN。覆盖 bounded job/lease identity、success/terminal/idempotent cleanup、active/expired lease、unknown/malformed/symlink/directory preservation、PermissionError visibility/retry、two-worker isolation、真实 pipeline adapter marker、真实 subprocess SIGKILL 后 restart pipeline cleanup、durable raw hash preservation 与 runtime error exposure。
+- 回归：受影响 snapshot/resume/adapter/worker/runtime/scheduler matrix `150 passed, 3 warnings`；`.venv/bin/python -m compileall`、`git diff --check`、acceptance sync、local handoff 必须复跑。仅 pytest `tmp_path` synthetic roots；不启动 8766/8767，不访问 Artifact、Production/Vault、主人数据。
+- 明确限制：Task 6 仍 `IN_PROGRESS / NOT_ACCEPTED`；本条仅关闭 Task 6C transient marker 产品缺口，不宣称 packaged/release/Artifact/owner acceptance 或 Task6 final validation。

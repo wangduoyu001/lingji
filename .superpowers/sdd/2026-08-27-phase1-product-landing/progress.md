@@ -85,3 +85,15 @@ crash/recovery/stop 后发现 `.automatic-memory-*.json` transient marker 仍在
 raw 目录（2,640,287 bytes）。现有产品 cleanup 只回收 `.snapshot-owned-*`；
 测试 harness 不得 unlink 该 marker 伪造 PASS。未授权产品扩展，未提交未验证
 harness 改动，已恢复测试至 `6eb469f`；Task6 不能进入 READY_FOR_TASK7。
+
+Task 6M: IMPLEMENTED_FOCUSED_PASS — new bounded product fix (not Task6C Repair 2).
+Product/tests `1901628eee197e3d71d7e070c41c9e586d5468de` bind adapter dispatch markers to existing
+extraction queue `job_id + lease_token`, reconcile direct-child
+raw regular files at pipeline startup/process/worker stop, preserve active or
+unprovable files, and expose cleanup inventory through existing pipeline/worker
+status. RED collected before the transient production boundary existed; GREEN
+`tests/test_task6m_transient_lifecycle.py` is `8 passed`, including real subprocess
+SIGKILL and restart reconciliation; affected snapshot/resume/adapter/worker/runtime/
+scheduler regressions are `150 passed, 3 warnings`. No live 8766/8767, Artifact,
+Production/Vault or owner data; Task6 remains `IN_PROGRESS / NOT_ACCEPTED` pending
+fresh independent review and final validation.

@@ -360,6 +360,32 @@ POST /api/work/pending-actions/{action_id}/resolve
 
 **Acceptance:** All ten scenarios execute with real evidence; no permanent queued job, no hidden failure, no production pollution, no third-party mutation, zero duplicates, Work Fact heartbeat age at most 10 seconds.
 
+### Task 6M: Close Adapter Dispatch Transient Lifecycle
+
+**Boundary:** This is a new bounded product fix for the Task 6C Repair Round 1
+transient-marker blocker. It is not a second Task 6C repair and does not reopen
+the packaged harness, UI, retrieval, quality gate, promotion, discovery or API
+surface.
+
+- [x] Write RED behavior tests for bounded job/lease marker ownership, terminal/
+  expired cleanup, active lease preservation, malformed/foreign/symlink/directory
+  preservation, unlink-error receipts/retry, concurrent worker isolation and a
+  real subprocess SIGKILL through `_execute_internal_snapshot`.
+- [x] Bind adapter dispatch links to the existing extraction queue `job_id` and
+  `lease_token`; reconcile only raw-root direct-child regular files and preserve
+  durable content-addressed raw objects.
+- [x] Reconcile at pipeline startup, process batch boundaries and worker stop;
+  expose the existing machine-readable inventory through pipeline/worker status
+  and stop outcomes, with no second observability store.
+- [x] Run Task6M focused tests, affected snapshot/resume/adapter/worker/runtime/
+  scheduler regressions, compileall and diff-check. Keep Task6 `IN_PROGRESS /
+  NOT_ACCEPTED`; do not run live 8766/8767, Artifact, release or owner data.
+
+**Status (2026-08-28):** Product/tests `1901628eee197e3d71d7e070c41c9e586d5468de`;
+Task6M `8 passed`; affected regression `150 passed, 3 warnings`. The Task6C
+transient marker defect is closed in code/tests for later independent review;
+Task6 packaged final validation and release/owner acceptance remain unclaimed.
+
 ### Task 7: Run the Existing Quality and Scale Gate Without Expanding Product Scope
 
 **Purpose:** 恢复 Task 4R2/100-question/100k 门禁，只评价已有产品，不把门禁继续发展成产品子系统。

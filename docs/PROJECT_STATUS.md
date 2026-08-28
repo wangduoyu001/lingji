@@ -78,6 +78,15 @@ I1 terminal/stop cleanup receipt。现有 harness 修补未提交并已恢复至
 `6eb469f`；该项需要最小产品 cleanup 授权，当前 Task6 保持
 `IN_PROGRESS / NOT_ACCEPTED`，不得宣称 READY_FOR_TASK7。
 
+Task 6M 已在产品/测试提交 `1901628eee197e3d71d7e070c41c9e586d5468de` 完成有界
+transient lifecycle 修复：adapter dispatch 硬链接现在携带受限的现有 queue
+`job_id + lease_token`，启动、worker process/stop reconciliation 只处理 raw root
+直接子 regular file，并将 terminal、释放、过期或可证明死亡的本机 worker marker
+清理；活跃 lease、未知/畸形/foreign、symlink、目录保留。清理 inventory 复用现有
+pipeline/worker/runtime status 暴露，unlink 失败可重试且不伪报成功。Task6M focused
+用例 `8 passed`，runtime receipt 断言纳入回归后受影响回归 `150 passed, 3 warnings`；Task 6 总状态仍
+`IN_PROGRESS / NOT_ACCEPTED`，未执行 live/Artifact/release/主人验收。
+
 ## 1B. 自动化第二大脑的锁定方向
 
 Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明确 allowlist 内自动发现并持续接管官方支持或明确授权的 AI 记录，保存完整本地原始证据、来源链和可重建 RAG 投影，并在 Desktop 真实显示发现、处理、结果、失败、下一动作与执行者。

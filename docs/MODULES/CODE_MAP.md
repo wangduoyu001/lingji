@@ -166,6 +166,11 @@ src/extraction/sink.py
 src/extraction/structured_sink.py
 = StructuredReadModel 写入后接入上述可重建 structured evidence lexical projection
 
+src/extraction/transient.py
+= adapter dispatch 临时硬链接的 queue job/lease 绑定命名、启动/worker reconciliation
+  与 machine-readable cleanup inventory；仅处理 raw root 直接子 regular file，不改变
+  durable content-addressed raw
+
 src/extraction/pipeline.py::ExtractionPipeline.replay_automatic_snapshots
 = Ordered raw snapshot replay through the formal extraction path so the
   existing memory_documents projection can rebuild content-hash evidence history
