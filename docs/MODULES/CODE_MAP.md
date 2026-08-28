@@ -1,6 +1,6 @@
 # CODE_MAP.md — LingJi 代码地图
 
-> Updated: 2026-08-25
+> Updated: 2026-08-28
 > Scope: code entry points, ownership and focused validation only
 > Architecture: `docs/ARCHITECTURE.md`
 > Current status and development order: `docs/PROJECT_STATUS.md`
@@ -583,9 +583,12 @@ src/automatic_memory/quality_gate.py::AcceptanceRoots / run_quality_gate
   normal release behavior.
 
 `src/automatic_memory/quality_degradation.py` contains fail-closed measurement-only
-primitives for corruption isolation, MCP ordered identity/bounds parity and selection-before-
-bound baseline evidence. `src/automatic_memory/scale_benchmark.py` owns persisted readiness
-loading and deterministic scale-fixture generation/validation (default seed `41041`). These
+composition for corruption isolation through the formal scan/queue/worker/Work Fact/read-model
+path, MCP ordered identity/bounds parity and selection-before-bound baseline evidence.
+`ContextPackBuilder.observe_candidates` is a read-only seam shared with final pack construction.
+`src/automatic_memory/scale_benchmark.py` owns persisted readiness loading and deterministic
+scale-fixture generation/validation (default seed `41041`), and admits only a consistent
+functional envelope; Production/Vault remains nullable for this isolated gate. These
 modules do not implement a second retriever, importer, evaluator, MCP server or promotion
 policy. Current Task7 measurement remains `FAIL/NOT_ACCEPTED`; Production/Vault pollution is
 nullable because this isolated runner cannot safely read that boundary.

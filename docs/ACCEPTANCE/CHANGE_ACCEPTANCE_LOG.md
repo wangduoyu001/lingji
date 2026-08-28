@@ -1,5 +1,20 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Task 7M-Reset · Runtime Evidence Composition
+
+- 本轮只重置 Task7 measurement composition：corruption 必须经过正式
+  SourceRegistry/scan/Snapshot/SQLiteExtractionQueue/ExtractionWorker/WorkStore/read-model
+  组合；ContextPack baseline 必须来自正式选择前只读 observation seam；MCP 必须严格比较
+  有序完整身份、scope/lifecycle/mode 与 bounds；scale admission 必须校验同一 run identity、
+  fixture hashes、verdict、measured quality 与 readiness 一致性。
+- Production/Vault sentinel 继续 nullable/`NOT_MEASURED`；scale 只依赖功能质量，不要求
+  owner/Mac/Windows。当前质量 CLI 仍必须诚实返回 `FAIL`（MCP `0/100`、baseline
+  `NOT_MEASURED` 等），本轮不运行 100k、release、Artifact、live 服务、Production/Vault
+  或主人验收。
+- RED/GREEN、命令和未关闭项记录在
+  `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7m-reset-report.md`；该记录
+  不代表 Task7、Task8 或 Phase1 已接受，须由全新独立审查确认 Critical/Important 均为 0。
+
 ## 2026-08-28 · Task 7E-CI Repair 1 · Windows PowerShell entry evidence
 
 - 本轮只补齐 Task7E release entry 的真实 Windows 执行证据，不修改

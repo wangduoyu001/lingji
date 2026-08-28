@@ -3,12 +3,12 @@
 > Updated: 2026-08-28
 > Formal/default branch: `master`
 > Phase 1 implementation base: `d12c1fb837257e83835a7cdb899bb29a9c675c3d`
-> Current Phase 1 product head: `4aa0b7841dab76fed5c784008c2449808e3648f2` (Task 4C)
+> Current Phase 1 product head: `b43401c2f241820e6ebf5d89b31dad8638224751` (Task 7M-Reset product/tests)
 > Current implementation branch: `codex/phase1-automatic-memory`
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
-> Current engineering gate: `TASK 8 CLOSEOUT — WORK FACT LIFECYCLE CONSISTENCY`
+> Current engineering gate: `TASK 7M-RESET — RUNTIME EVIDENCE COMPOSITION`
 > Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
@@ -105,6 +105,14 @@ MCP strict parity、选择前 baseline、清理前后机器库存与持久 4R2 r
 因无完整选择前会话而 NOT_MEASURED），因此 100k/release/Artifact/Production/Vault/
 主人验收仍未执行。当前状态是 `MEASUREMENT_NOT_ACCEPTED`，等待独立审查；不得把修复
 误报为质量通过或进入 Task8。
+
+Task7M-Reset 已完成新的运行证据组合（代码/测试待独立审查）：corruption 使用两个真实
+授权来源的正式 scan→queue→worker→Work Fact→read-model 路径；ContextPack 提供与正式
+构建共用的选择前只读观测；MCP 空包、身份/边界错配和严格 100/100 准入均 fail-closed；
+scale envelope 校验 run identity、fixture、verdict、测量字段和 readiness 一致性，并允许
+Production nullable 时仅以功能质量准入 scale。当前 CLI 实测仍为 `FAIL`，MCP `0/100`、
+baseline `NOT_MEASURED`，未运行 100k/release/Artifact/主人验收；需要独立审查为零
+Critical/Important 后才可进入一次有界 retrieval 诊断。
 
 Task7E 的 PowerShell executable-entry 证据已通过真实 Windows runner 取得：现有
 `p0-windows-gate.yml` 的 full pytest artifact 在 `33153622216` 明确记录真实
