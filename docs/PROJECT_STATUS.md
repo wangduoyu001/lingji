@@ -734,3 +734,13 @@ Work Fact、memory-review smokes 与 rendered E2E 均通过；compileall、diff-
 acceptance-sync、local-handoff 通过。当前自动化 disposition 为
 `AUTOMATED_ACCEPTED / READY_FOR_TASK7`，不代表 release、Artifact、live 8766/8767、
 Production/Vault 或 owner acceptance；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。
+
+### Task 7N2 corruption retrieval evidence（2026-08-28）
+
+Task7N2 已将 corruption isolation 测量收口为真实的授权 source → scan → durable
+queue → worker → Work Fact → structured read-model → lexical/Hybrid/Gateway 检索链。
+测量现在发布精确 source/scan/job 身份、队列和 Work Fact 终态计数、适配器期望复合
+身份与 content hash、有效检索身份及坏源泄漏数；任何目标集合、终态、Work Fact、
+read-model 或 Gateway 身份异常均 fail closed。聚焦及 Task7M/N1 直接回归 `125 passed`，
+但 Task7 总质量结果仍须以真实固定题集评测为准，尚未进入 100k、release、Artifact、
+Production/Vault 或主人验收。

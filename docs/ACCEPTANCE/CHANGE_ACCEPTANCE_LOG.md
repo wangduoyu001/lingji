@@ -2388,3 +2388,18 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 未测量 Context baseline 在 runner 输出与 envelope round-trip 保持 `null`，不再使用
   0 表示未执行测量。聚焦回归 `128 passed, 1 warning`；未运行 100k、release、Artifact、
   live 服务、Production/Vault 或主人验收。Task 7 质量结果仍按真实测量保持未通过。
+
+## 2026-08-28 · Task 7N2 · Corruption isolation retrieval evidence
+
+- 本轮只收口 corruption isolation 的真实证据链：两个真实授权来源分别完成正式
+  scan admission、durable queue、worker、Work Fact 和 structured read-model 路径；
+  通过同一正式 `MemoryDatabase`/`HybridRetriever`/`MemoryGateway` 执行 lexical 与
+  Gateway 检索。未修改 scale admission、promotion、baseline、检索算法、UI 或真实数据。
+- 新测量发布精确 target source/scan/job 身份、队列终态计数、Work outcome/event 关联、
+  适配器期望复合身份与 content hash、有效检索身份和坏源泄漏数。目标集合非恰好两个、
+  任一非终态、Work Fact 缺失/错误/重复、read-model 坏源行、Gateway 空/错源/泄漏均为
+  `failed`，reason 为稳定码，不包含正文、路径或异常文本。
+- RED 为旧函数缺少 Gateway 参数且仅按 read-model 消息数报告可检索；GREEN 聚焦与
+  Task7M/N1/quality runtime/Work/Gateway 直接回归 `125 passed`，compileall、diff-check
+  通过。未运行 100 题 CLI、100k、release、Artifact、live 8766/8767、Production/Vault
+  或主人验收。报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-7n2-report.md`。
