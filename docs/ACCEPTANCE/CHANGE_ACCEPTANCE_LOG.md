@@ -1,5 +1,22 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Task 7E-CI Repair 1 · Windows PowerShell entry evidence
+
+- 本轮只补齐 Task7E release entry 的真实 Windows 执行证据，不修改
+  `.github/workflows/**`、4R2/100k、retrieval、产品数据或本机服务。由于仓库
+  workflow 文件不可由当前 OAuth token 推送，复用既有 `p0-windows-gate.yml`
+  的依赖安装后 full pytest 路径，由 `tests/test_task4_reset_validation_guard.py`
+  在发现真实 `pwsh`/`powershell(.exe)` 时调用
+  `scripts/run_powershell_validation.py --mode release --entry-only --hook`。
+- Windows 运行必须真实进入 `scripts/validate.ps1`，返回非零并包含
+  `BLOCKED_4R2_REQUIRED`；hook 规范化后必须严格为 `preflight` 一项，证明
+  `scale-env=0`、`scale-command=0`。Windows 平台不得因缺少 runtime 而返回；
+  无 PowerShell 的本机仅允许得到 `BLOCKED_POWERSHELL_RUNTIME_UNAVAILABLE`。
+- `--entry-only` 仍是测试专用双重 opt-in（参数、环境标记和 hook 同时存在），
+  默认 release/full 行为不改变。当前 CI 远程 run、PowerShell 步骤和
+  `git ls-remote` 复读结果待本轮完成后追加；在此之前不得标记 executable entry
+  passed。相关报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-7e-ci-report.md`。
+
 ## 2026-08-28 · Task 6V · packaged automatic-memory closeout
 
 - Task6R 产品 HEAD `684398e2b56447203ff6b77b4e93cae2c07b38f2` 已修复
