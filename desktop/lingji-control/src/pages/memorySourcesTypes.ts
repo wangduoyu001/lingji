@@ -61,8 +61,13 @@ export type RuntimeSummary = {
   state?: string | null;
   running?: boolean | null;
   paused?: boolean | null;
+  scheduler_heartbeat_at?: string | null;
   scheduler_heartbeat_age?: number | null;
   scheduler_heartbeat_reason?: string | null;
+  scheduler_heartbeat_instance?: string | null;
+  scheduler_heartbeat_generation?: number | null;
+  scheduler_heartbeat_state?: string | null;
+  scheduler_heartbeat_last_error?: string | null;
   worker_state?: boolean | null;
   authorized_watcher_count?: number | null;
   last_global_error?: string | null;

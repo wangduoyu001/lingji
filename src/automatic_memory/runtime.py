@@ -349,9 +349,15 @@ class AutomaticMemoryRuntime:
 
     def _touch_active_scan_work(self) -> None:
         """Refresh active scan Work Facts without appending event rows."""
+        failures: list[str] = []
         for scan in self.state_db.list_automatic_memory_scans():
             if scan.get("status") == "running":
-                self.work_store.touch_work(f"automatic-memory:{scan['scan_id']}")
+                try:
+                    self.work_store.touch_work(f"automatic-memory:{scan['scan_id']}")
+                except Exception as exc:
+                    failures.append(f"{scan.get('source_id') or scan.get('scan_id')}: {exc}")
+        if failures:
+            raise RuntimeError("; ".join(failures)[:2000])
 
     def scan_now(self, source_id: str) -> dict[str, object]:
         result = self.scheduler.reconcile(source_id, reason="manual")

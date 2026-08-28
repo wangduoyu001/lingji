@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, type LingJiApi } from "../api";
 import { actionAvailability, actionEvidence, authorizationEvidence, MemorySourcesApi, scanStatusLabel, sourceStateLabel } from "./memorySourcesApi";
-import type { MemorySourcesSnapshot, SourceFact, SourceState } from "./memorySourcesTypes";
+import type { MemorySourcesSnapshot, RuntimeSummary, SourceFact, SourceState } from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 import { Empty, Notice } from "../components/ui";
 
@@ -125,7 +125,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
       <section className="memory-sources-summary" aria-label="来源总览">
         <div><span>已发现来源</span><strong>{snapshot.discovered.length}</strong><small>已授权 {snapshot.authorized.length} 个</small></div>
         <div><span>当前接管</span><strong>{snapshot.sources.filter((item) => item.state === "current").length}</strong><small>扫描完成后才算接管</small></div>
-        <div><span>最近活动</span><strong>{snapshot.summary?.latest?.status ? scanStatusLabel(snapshot.summary.latest.status) : "尚未获得"}</strong><small>{snapshot.runtime?.state === "degraded" ? "需要重启/检查" : "后台状态持续更新"}</small></div>
+        <div><span>最近活动</span><strong>{snapshot.summary?.latest?.status ? scanStatusLabel(snapshot.summary.latest.status) : "尚未获得"}</strong><small>{runtimeHeartbeatLabel(snapshot.runtime)}</small></div>
       </section>
       {snapshot.sources.length === 0 ? <Empty text="尚未发现可接入的来源。可以稍后重新读取；灵机不会自行扩大读取范围。" /> : (
         <section className="memory-source-list" aria-label="记忆来源列表">
@@ -135,6 +135,17 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
       {detail && <section className="panel memory-scan-detail" aria-live="polite"><h2>扫描结果</h2><div className="panel-body"><p>这是后端返回的本次扫描结果，可用于核对新增、复用和错误。</p><dl className="memory-detail-grid">{Object.entries(detail).filter(([key]) => ["status", "progress", "total", "queued", "reused", "last_error"].includes(key)).map(([key, value]) => <div key={key}><dt>{key === "status" ? "状态" : key === "progress" ? "进度" : key === "total" ? "总数" : key === "queued" ? "新增" : key === "reused" ? "复用" : "错误"}</dt><dd>{value == null || value === "" ? "尚未获得" : String(value)}</dd></div>)}</dl><details><summary>技术详情</summary><pre className="json-panel">{JSON.stringify(detail, null, 2)}</pre></details></div></section>}
     </div>
   );
+}
+
+function runtimeHeartbeatLabel(runtime: RuntimeSummary | null): string {
+  if (!runtime) return "尚未获得后台状态";
+  if (runtime.state === "degraded" || runtime.scheduler_heartbeat_state === "degraded") {
+    return runtime.scheduler_heartbeat_reason || runtime.scheduler_heartbeat_last_error || "需要检查后台状态";
+  }
+  if (runtime.state === "stopped" || runtime.scheduler_heartbeat_state === "stopped") return "后台已停止";
+  if (runtime.state === "paused" || runtime.scheduler_heartbeat_state === "paused") return "后台已暂停，仍在确认状态";
+  if (runtime.state === "running" && runtime.scheduler_heartbeat_age != null) return "后台状态持续更新";
+  return "尚未获得后台状态";
 }
 
 function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }: { source: SourceFact; busy: string | null; onAuthorize: () => void; onAction: (key: string, operation: () => Promise<unknown>, verify: (next: MemorySourcesSnapshot) => boolean, success?: string) => Promise<void>; sourceApi: MemorySourcesApi; onDetail: (detail: Record<string, unknown>) => void }) {

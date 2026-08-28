@@ -237,12 +237,15 @@ class AutomaticMemoryScheduler:
             # publish ``stopped`` and then lose the race to a tick that had
             # already observed ``_running``.
             self._write_heartbeat(state)
-        callback = self.heartbeat_work_callback
-        if callback is not None:
-            try:
-                callback()
-            except Exception as exc:
-                self._heartbeat_reason = f"active work heartbeat failed: {exc}"
+            callback = self.heartbeat_work_callback
+            if callback is not None:
+                try:
+                    callback()
+                except Exception as exc:
+                    error = str(exc)[:2000] or exc.__class__.__name__
+                    reason = f"active work heartbeat failed: {error}"
+                    self._heartbeat_last_error = error
+                    self._write_heartbeat("degraded", reason=reason)
 
     def _write_heartbeat(self, state: str, *, reason: str | None = None) -> None:
         timestamp = datetime.now(timezone.utc).isoformat(timespec="microseconds")

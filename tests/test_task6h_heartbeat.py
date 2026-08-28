@@ -186,3 +186,64 @@ def test_heartbeat_cadence_does_not_run_reconciliation_at_heartbeat_frequency(
         assert calls <= 2
     finally:
         runtime.stop()
+
+
+def test_active_work_heartbeat_failure_is_persisted_degraded_and_recovers(
+    tmp_path: Path,
+):
+    runtime, _state, scheduler = _runtime(tmp_path)
+    runtime.start()
+    try:
+        _wait_for_heartbeat(runtime)
+        failures = 0
+
+        def failing_touch():
+            nonlocal failures
+            failures += 1
+            raise OSError("work fact database locked")
+
+        scheduler.heartbeat_work_callback = failing_touch
+        scheduler._heartbeat_tick()
+        failed = runtime.status()
+        assert failed["state"] == "degraded"
+        assert "active work heartbeat" in (failed["scheduler_heartbeat_reason"] or "")
+        assert "locked" in (failed["scheduler_heartbeat_last_error"] or "")
+        assert failures == 1
+
+        scheduler.heartbeat_work_callback = lambda: None
+        scheduler._heartbeat_tick()
+        recovered = runtime.status()
+        assert recovered["state"] == "running"
+        assert recovered["scheduler_heartbeat_state"] == "running"
+        assert recovered["scheduler_heartbeat_last_error"] is None
+    finally:
+        runtime.stop()
+
+
+def test_active_work_heartbeat_failure_isolated_per_source(tmp_path: Path):
+    runtime, state, scheduler = _runtime(tmp_path)
+    runtime.work_store.create_work(WorkItem(work_id="automatic-memory:scan-a", title="a", status="running"))
+    runtime.work_store.create_work(WorkItem(work_id="automatic-memory:scan-b", title="b", status="running"))
+    now = datetime.now(timezone.utc).isoformat()
+    with state._lock, state._connection() as connection:
+        for scan_id, source_id in (("scan-a", "source-a"), ("scan-b", "source-b")):
+            connection.execute(
+                "INSERT INTO automatic_memory_scans(scan_id, source_id, status, updated_at) VALUES (?, ?, 'running', ?)",
+                (scan_id, source_id, now),
+            )
+    original = runtime.work_store.touch_work
+
+    def isolated_touch(work_id: str, *, updated_at: str | None = None):
+        if work_id.endswith("scan-a"):
+            raise OSError("source-a locked")
+        return original(work_id, updated_at=updated_at)
+
+    runtime.work_store.touch_work = isolated_touch
+    runtime.start()
+    try:
+        scheduler._heartbeat_tick()
+        assert runtime.status()["state"] == "degraded"
+        assert runtime.work_store.get_work("automatic-memory:scan-b").updated_at
+    finally:
+        runtime.work_store.touch_work = original
+        runtime.stop()
