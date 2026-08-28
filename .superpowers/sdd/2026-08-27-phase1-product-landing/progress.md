@@ -37,7 +37,7 @@ scale-command=0`，证明真实 PowerShell release entry 在 4R2 readiness 前�
 `主动投喂` smoke 失败，不能视为全门禁通过；Task7/4R2/100k/release/Artifact/
 主人验收仍未执行。
 
-Task 7 真实冻结质量门禁已执行：正式 Gateway 与 `create_mcp_server` 注册工具逐题运行
+Task 7 旧测量结果（已被 Measurement Repair supersede）：正式 Gateway 与 `create_mcp_server` 注册工具逐题运行
 原始 100 问；导入 145/145、角色顺序 145/145、重复 0、自动激活 96.80%、MCP
 100/100、lexical fallback 与损坏源隔离证据通过。事实召回 0.00%、引用准确率 0.00%、
 上下文压缩 55.28%，正式门禁为 `FAIL_MEASURED_QUALITY`。按规则停止后续产品修改，
