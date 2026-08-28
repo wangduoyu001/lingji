@@ -2342,3 +2342,22 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 本轮只修改既有 quality evidence/runner 与对应测试，不改变 retrieval、ranking、冻结题集、promotion、runtime、UI 或数据模型。
 - 原始 100 问通过正式 `create_mcp_server` 注册路径逐题运行；导入 145/145、角色顺序 145/145、重复 0、自动激活 121/125、MCP 100/100。Qdrant 真实适配器故障注入记录 degraded，但探针题无 lexical 结果，故不计降级通过；单源损坏隔离真实注入并记录计数。
 - 事实召回 0/106、引用准确率 0/106、ContextPack 压缩 55.28%（65990→29512），冻结门禁为 `FAIL_MEASURED_QUALITY`。按计划停止，100k、release、Artifact、live 服务、Production/Vault 和主人验收均未执行；Task8 不得开始。
+
+## 2026-08-28 · Task 7 Measurement Repair · bounded measurement architecture
+
+- 本轮只修复 measurement boundary：新增 `quality_degradation.py` 与
+  `scale_benchmark.py`，不改变 retrieval/ranking/query/filter、冻结 evaluator/questions/
+  thresholds、promotion policy、runtime/UI、向量 provider 或 MCP 工具语义。
+- RED：新 measurement contract 首次收集失败 `ModuleNotFoundError: quality_degradation`。
+  GREEN：measurement-focused 6 passed；Task4R reset/readiness/runner/scale/history 回归
+  146 passed、1 warning；compileall/diff-check 通过。
+- 生产/Vault 不可安全读取，故只记录 `production_pollution=null` 与
+  `production_sentinel=NOT_MEASURED`；Acceptance protected boundary 单独记录，不映射为
+  生产污染 0。清理库存采集文件/目录/字节/剩余数量，失败覆盖成功。
+- 双授权临时来源实际执行损坏隔离：`attempted=2, completed=1, failed=1,
+  continued=1, retrievable=1`。严格 MCP parity 只在完整 ordered identity、bounds、scope/
+  lifecycle/mode 相等时计成功；本轮 `0/100`。选择前正式 baseline 无完整相关会话，保持
+  `NOT_MEASURED`，不从 bounded ContextPack 反推。
+- 修复后质量仍 `FAIL`（事实召回 0/106、引用 0/106、自动激活 121/125），100k、
+  release、Artifact、live 8766/8767、Production/Vault 和主人验收均未执行。当前
+  `MEASUREMENT_NOT_ACCEPTED`，等待全新独立审查，不得进入诊断或 Task8。

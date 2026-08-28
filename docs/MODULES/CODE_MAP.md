@@ -582,6 +582,14 @@ src/automatic_memory/quality_gate.py::AcceptanceRoots / run_quality_gate
   `LINGJI_VALIDATE_TEST_HOOK` records preflight/scale ordering without changing
   normal release behavior.
 
+`src/automatic_memory/quality_degradation.py` contains fail-closed measurement-only
+primitives for corruption isolation, MCP ordered identity/bounds parity and selection-before-
+bound baseline evidence. `src/automatic_memory/scale_benchmark.py` owns persisted readiness
+loading and deterministic scale-fixture generation/validation (default seed `41041`). These
+modules do not implement a second retriever, importer, evaluator, MCP server or promotion
+policy. Current Task7 measurement remains `FAIL/NOT_ACCEPTED`; Production/Vault pollution is
+nullable because this isolated runner cannot safely read that boundary.
+
 Focused validation:
 
 ```powershell

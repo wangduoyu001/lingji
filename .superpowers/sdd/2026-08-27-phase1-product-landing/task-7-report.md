@@ -1,9 +1,33 @@
 # Task 7 — Existing Quality and Scale Gate
 
 日期：2026-08-28
-状态：`FAIL_MEASURED_QUALITY`
+状态：`MEASUREMENT_REPAIR_COMPLETE / QUALITY_FAIL_NOT_ACCEPTED`
+
+## Task7 Measurement Repair（本轮）
+
+本轮修复了质量测量边界，不重写质量结果：新增 `quality_degradation.py` 与
+`scale_benchmark.py`，并让 runner 使用选择前正式检索结果、MCP 完整身份/边界比较、
+两个实际授权来源的损坏隔离计数、真实清理库存和持久 readiness 文件。Acceptance-only
+保护树明确标记为隔离证据；本轮无法安全读取 Production/Vault，因此
+`production_pollution=null`、生产哨兵为 `NOT_MEASURED`，不会伪造进入冻结
+`EvaluationReport`。
+
+修复后质量 CLI 仍诚实失败：原始 100 问执行 100/100，导入 145/145，自动激活
+121/125；严格 MCP parity `0/100`，损坏隔离 `attempted=2, completed=1, failed=1,
+continued=1, retrievable=1`；选择前 baseline 因正式检索没有完整相关会话而为
+`NOT_MEASURED`；事实召回与引用仍为 `0/106`。状态为 `FAIL`，未执行 100k、release、
+Artifact、Production/Vault 或主人验收。
+
+TDD RED：新增测量契约首次收集失败 `ModuleNotFoundError: quality_degradation`；GREEN：
+测量修复聚焦 `6 passed`，Task4R reset/readiness/runner/scale 及历史回归 `146 passed,
+1 warning`，compileall 与 diff-check 通过。该报告只记录 measurement repair 完成，
+不代表 Task7 quality accepted；须经独立审查 Critical/Important 均为 0 后，才允许一次
+既有 retrieval/structured-evidence 绑定失败诊断。
 
 ## 范围
+
+下方“结果”段为 measurement repair 前的历史记录，已被本报告后续修复段落 supersede，
+不得作为当前 MCP/baseline/生产污染证据；冻结问题、质量失败与未执行 100k 的结论仍然保留。
 
 本轮只运行冻结 corpus/questions 的既有质量门禁，未修改 retrieval、ranking、evaluator、promotion policy、runtime、UI 或数据模型。问题原文逐题执行，正式 MCP 通过 `src.mcp_server.create_mcp_server` 注册路径调用。
 

@@ -97,6 +97,15 @@ Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明
 
 当前 thin quality runner 已按 Task 4R-Reset Task 6 收口：仅在带精确 lease token/owner 校验的临时 Acceptance roots 编排现有导入、Work/Memory/Gateway contracts；不可用证据保持 nullable/`NOT_MEASURED`，不进入 `EvaluationReport`，实测失败保持 `FAIL`，清理失败覆盖预清理结论并由 CLI 复核完整清理库存。Task7 已真实运行原始 100 问：导入、角色顺序、MCP 和损坏源隔离可测；Qdrant 适配器故障状态可测但探针无 lexical 结果；事实召回 0.00%、引用准确率 0.00%、ContextPack 压缩 55.28%，官方 functional/phase 状态为 `FAIL_MEASURED_QUALITY`；release、100k、Artifact、Production/Vault 和主人验收保持未执行，Task8 不得开始。
 
+Task7 Measurement Repair 已完成有界测量架构修复但未通过质量门禁：生产污染保持
+`null/NOT_MEASURED`，Acceptance protected boundary 单独记录；两个真实授权临时来源
+执行损坏隔离并得到 `attempted=2/completed=1/failed=1/continued=1/retrievable=1`；
+MCP strict parity、选择前 baseline、清理前后机器库存与持久 4R2 readiness 均已接入。
+修复后原始质量仍为 `FAIL`（事实召回 0/106、引用 0/106、strict MCP 0/100，baseline
+因无完整选择前会话而 NOT_MEASURED），因此 100k/release/Artifact/Production/Vault/
+主人验收仍未执行。当前状态是 `MEASUREMENT_NOT_ACCEPTED`，等待独立审查；不得把修复
+误报为质量通过或进入 Task8。
+
 Task7E 的 PowerShell executable-entry 证据已通过真实 Windows runner 取得：现有
 `p0-windows-gate.yml` 的 full pytest artifact 在 `33153622216` 明确记录真实
 `scripts/validate.ps1` 调用成功进入、非零阻断和 `preflight` 唯一 hook；因此

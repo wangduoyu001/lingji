@@ -424,6 +424,18 @@ were measured. Per the stop rule, 100k scale and Task 8 release are not run unti
 existing retrieval/evidence binding and context-size boundaries are diagnosed and repaired
 under a separately authorized brief.
 
+**Task 7 measurement repair disposition (2026-08-28):** The bounded repair added pure
+measurement modules and closed the runner's false-evidence boundaries: Production/Vault is
+nullable `NOT_MEASURED`, Acceptance-only sentinels are separate, corruption isolation uses two
+registered temporary sources, MCP parity compares ordered identity/bounds, baseline refuses a
+bounded pack, cleanup inventory is measured before/after deletion, and scale readiness is read
+from the persisted quality envelope with seed `41041`. The repaired run remains
+`FAIL / MEASUREMENT_NOT_ACCEPTED` (facts 0/106, citations 0/106, strict MCP 0/100, baseline
+`NOT_MEASURED`; corruption isolation 2 attempted/1 completed/1 failed/1 continued/1
+retrievable). 100k, release, Production/Vault and Task 8 remain prohibited until a fresh
+independent review reports zero Critical/Important findings. This repair does not authorize a
+retrieval diagnosis or any product feature expansion.
+
 ### Task 8: Build and Perform macOS M5 Release Acceptance
 
 **Purpose:** 交付同一 SHA 的真实发布版，并以主人是否看懂、是否无需代码操作作为最终产品门槛。

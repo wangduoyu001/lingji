@@ -42,6 +42,14 @@ Task 7 真实冻结质量门禁已执行：正式 Gateway 与 `create_mcp_server
 100/100、lexical fallback 与损坏源隔离证据通过。事实召回 0.00%、引用准确率 0.00%、
 上下文压缩 55.28%，正式门禁为 `FAIL_MEASURED_QUALITY`。按规则停止后续产品修改，
 未运行 100k、release、Artifact、live、Production/Vault 或主人验收；Task8 不得开始。
+
+Task7 Measurement Repair（当前）：已按独立审查 C1–C4/I1–I5 进行有界测量修复：
+`quality_degradation.py` 与 `scale_benchmark.py` 承担纯测量，生产污染保持 nullable，
+Acceptance boundary 与 Production 明确分离；MCP 完整 ordered identity/bounds、选择前
+baseline、双授权源损坏隔离、机器清理库存、持久 readiness 与默认 seed=41041 均有测试。
+修复后原始质量仍为 `FAIL`（事实召回 0/106、引用 0/106、strict MCP 0/100、baseline
+NOT_MEASURED），100k 仍按停止规则未执行。自动矩阵 146 passed/1 warning；独立审查未
+完成前，Task7 仍 `MEASUREMENT_NOT_ACCEPTED`，不得进入诊断或 Task8。
 Task 2 root decisions — heartbeat age is null with explicit unavailable reason (no fake timestamp/daemon); one DB means one canonical state DB path plus one shared queue wrapper, multiple connections to that file allowed; snapshot terminal consumption remains Task 3.
 Task 2: REPAIR_ROUND_1 — implementation cbee300f519f66a2a090561a71ea4c21fb1057d7..2200c52c5d0a0d764e4545e25bd29c7431a61ffb; review Spec FAIL / Quality Needs fixes (0 Critical, 4 Important, 1 Minor).
 Task 2 repair scope: start/stop exception cleanup and truthful surviving-thread state; live authorized-source attach; executable real packaged composition test; watcher exit verification; never-started pause status.
