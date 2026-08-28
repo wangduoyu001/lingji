@@ -35,44 +35,6 @@ _LEASE_SCRUB_MAX_NODES = 10_000
 _LEASE_SCRUB_MAX_STRING = 1_000_000
 
 
-def _lease_material_from_explicit_keys(value: Any) -> tuple[str, ...]:
-    """Collect explicit lease-key values for a later sibling-safe scrub."""
-
-    found: set[str] = set()
-    state = {"nodes": 0}
-
-    def collect(item: Any, *, depth: int, active: set[int]) -> None:
-        if depth > _LEASE_SCRUB_MAX_DEPTH or state["nodes"] >= _LEASE_SCRUB_MAX_NODES:
-            return
-        state["nodes"] += 1
-        if isinstance(item, Mapping):
-            identity = id(item)
-            if identity in active:
-                return
-            active.add(identity)
-            try:
-                for key, child in item.items():
-                    normalized_key = str(key).strip().lower().replace("-", "_")
-                    if normalized_key in _LEASE_SENSITIVE_KEYS and isinstance(child, str):
-                        found.add(child)
-                    collect(child, depth=depth + 1, active=active)
-            finally:
-                active.remove(identity)
-        elif isinstance(item, (list, tuple)):
-            identity = id(item)
-            if identity in active:
-                return
-            active.add(identity)
-            try:
-                for child in item:
-                    collect(child, depth=depth + 1, active=active)
-            finally:
-                active.remove(identity)
-
-    collect(value, depth=0, active=set())
-    return tuple(sorted(found, key=len, reverse=True))
-
-
 def _without_lease_material(
     value: Any,
     *,

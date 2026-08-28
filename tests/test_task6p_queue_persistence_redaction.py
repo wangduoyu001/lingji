@@ -4,6 +4,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from src.extraction.queue import SQLiteExtractionQueue, _without_lease_material
 from src.extraction.base import ExtractionAdapter
 from src.extraction.models import ExtractedDocument, ExtractionBatch
@@ -248,20 +250,90 @@ def test_process_next_failure_callback_redacts_known_token_and_error(tmp_path: P
     assert seen[0][3] == "failed with [REDACTED]"
 
 
-def test_direct_execute_callback_scrubs_nested_explicit_lease_payload(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "untrusted_lease_value",
+    (
+        "a",
+        "not-a-real-token",
+        "x" * 128,
+        "0123456789abcdef0123456789abcdef",
+    ),
+)
+def test_direct_execute_callback_keeps_untrusted_explicit_material_out_of_global_replacement(
+    tmp_path: Path, untrusted_lease_value: str
+) -> None:
     pipeline = _pipeline(tmp_path)
     seen: list[tuple] = []
     pipeline.add_lifecycle_callback(lambda phase, callback_job, result, error: seen.append((phase, callback_job, result, error)))
     pipeline.execute(
         "callback",
-        payload={"nested": [{"lease_token": "direct-token", "message": "token is ordinary text"}]},
+        payload={
+            "nested": [
+                {
+                    "lease_token": untrusted_lease_value,
+                    "message": f"ordinary text contains {untrusted_lease_value} exactly",
+                },
+                (
+                    {"claim-lease-fingerprint": untrusted_lease_value},
+                    f"tuple text contains {untrusted_lease_value} exactly",
+                ),
+            ]
+        },
         execution_id="direct-execute",
     )
     assert len(seen) == 1
+    callback_payload = seen[0][1]["payload"]
     encoded = json.dumps(seen[0], ensure_ascii=False, default=str)
-    assert "direct-token" not in encoded
+    assert untrusted_lease_value in encoded
     assert "lease_token" not in encoded
-    assert seen[0][1]["payload"]["nested"][0]["message"] == "token is ordinary text"
+    assert "claim-lease-fingerprint" not in encoded
+    assert callback_payload["nested"][0]["message"] == (
+        f"ordinary text contains {untrusted_lease_value} exactly"
+    )
+    assert callback_payload["nested"][1][1] == (
+        f"tuple text contains {untrusted_lease_value} exactly"
+    )
+
+
+def test_callback_projection_uses_only_explicitly_supplied_trusted_material(tmp_path: Path) -> None:
+    pipeline = _pipeline(tmp_path)
+    seen: list[tuple] = []
+    pipeline.add_lifecycle_callback(lambda phase, callback_job, result, error: seen.append((phase, callback_job, result, error)))
+    trusted_token = "0123456789abcdef0123456789abcdef"
+    trusted_fingerprint = pipeline.queue.lease_fingerprint(trusted_token)
+    pipeline._notify_lifecycle(
+        "completed",
+        {
+            "job_id": "trusted-job",
+            "status": "completed",
+            "payload": {
+                "lease_token": trusted_token,
+                "message": f"ordinary {trusted_token} text",
+            },
+        },
+        {
+            "nested": [
+                {
+                    "last_claim_lease_fingerprint": trusted_fingerprint,
+                    "message": f"result {trusted_fingerprint}",
+                }
+            ]
+        },
+        f"error {trusted_token}",
+        trusted_known_materials=(trusted_token, trusted_fingerprint),
+    )
+    assert seen == [
+        (
+            "completed",
+            {
+                "job_id": "trusted-job",
+                "status": "completed",
+                "payload": {"message": "ordinary [REDACTED] text"},
+            },
+            {"nested": [{"message": "result [REDACTED]"}]},
+            "error [REDACTED]",
+        )
+    ]
 
 
 def test_automatic_snapshot_callback_scrubs_claimed_job_without_rolling_back_terminal_state(tmp_path: Path) -> None:

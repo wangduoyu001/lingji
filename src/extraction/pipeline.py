@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import socket
 import threading
 from pathlib import Path
@@ -13,7 +14,6 @@ from .idempotency import directory_manifest, extraction_key_for_request, sha256_
 from .models import ExtractionRequest
 from .queue import (
     SQLiteExtractionQueue,
-    _lease_material_from_explicit_keys,
     _without_lease_material,
 )
 from .registry import AdapterRegistry
@@ -28,6 +28,44 @@ DocumentsWrittenCallback = Callable[[dict[str, Any]], None]
 LifecycleCallback = Callable[[str, Mapping[str, Any], Mapping[str, Any] | None, str | None], None]
 DefaultOptionsProvider = Callable[[str], Mapping[str, Any]]
 DefaultPriorityProvider = Callable[[str], int]
+_LEASE_TOKEN_PATTERN = re.compile(r"[0-9a-f]{32}")
+_LEASE_FINGERPRINT_PATTERN = re.compile(r"[0-9a-f]{64}")
+
+
+def _trusted_claim_materials(lease_token: Any) -> tuple[str, ...]:
+    """Return scrub material only for a validated queue-generated claim."""
+
+    if not isinstance(lease_token, str) or _LEASE_TOKEN_PATTERN.fullmatch(lease_token) is None:
+        return ()
+    fingerprint = SQLiteExtractionQueue.lease_fingerprint(lease_token)
+    if _LEASE_FINGERPRINT_PATTERN.fullmatch(fingerprint) is None:
+        return ()
+    return (lease_token, fingerprint)
+
+
+def _validated_trusted_materials(materials: tuple[str, ...]) -> tuple[str, ...]:
+    """Bound and validate the callback projection's trusted material input."""
+
+    try:
+        values = tuple(materials)
+    except Exception:
+        return ()
+    if len(values) > 2:
+        return ()
+    if any(not isinstance(value, str) for value in values):
+        return ()
+    if any(
+        _LEASE_TOKEN_PATTERN.fullmatch(value) is None
+        and _LEASE_FINGERPRINT_PATTERN.fullmatch(value) is None
+        for value in values
+    ):
+        return ()
+    if len(values) == 2:
+        token = next((value for value in values if _LEASE_TOKEN_PATTERN.fullmatch(value)), None)
+        fingerprint = next((value for value in values if _LEASE_FINGERPRINT_PATTERN.fullmatch(value)), None)
+        if token is None or fingerprint is None or SQLiteExtractionQueue.lease_fingerprint(token) != fingerprint:
+            return ()
+    return tuple(sorted(set(values), key=len, reverse=True))
 
 
 class ExtractionPipeline:
@@ -325,32 +363,14 @@ class ExtractionPipeline:
         job: Mapping[str, Any],
         result: Mapping[str, Any] | None,
         error: str | None,
+        *,
+        trusted_known_materials: tuple[str, ...] = (),
     ) -> None:
         # Keep the claimed worker object private.  Every callback receives a
-        # fresh bounded projection, including direct execute() callbacks where
-        # no queue lease is available but nested explicit lease keys may exist.
+        # fresh bounded projection.  Explicit lease-key values in payloads are
+        # untrusted and are removed, never promoted to global replacements.
         try:
-            known_material = tuple(
-                sorted(
-                    {
-                        *(_lease_material_from_explicit_keys(job)),
-                        *(_lease_material_from_explicit_keys(result)),
-                        *(_lease_material_from_explicit_keys(error)),
-                        *(
-                            str(job.get(key) or "")
-                            for key in ("lease_token", "last_claim_lease_fingerprint")
-                            if isinstance(job, Mapping) and str(job.get(key) or "")
-                        ),
-                        *(
-                            (SQLiteExtractionQueue.lease_fingerprint(str(job.get("lease_token"))),)
-                            if isinstance(job, Mapping) and str(job.get("lease_token") or "")
-                            else ()
-                        ),
-                    },
-                    key=len,
-                    reverse=True,
-                )
-            )
+            known_material = _validated_trusted_materials(trusted_known_materials)
             safe_job = _without_lease_material(
                 job, redact_values=known_material, fail_closed_unknown=True
             )
@@ -452,6 +472,7 @@ class ExtractionPipeline:
                 {**job, "status": "completed"},
                 safe_result,
                 None,
+                trusted_known_materials=_trusted_claim_materials(lease_token),
             )
             return {"job": completed, "result": safe_result}
         except Exception as exc:
@@ -471,7 +492,13 @@ class ExtractionPipeline:
                     "error": safe_error,
                     "lease_error": self._scrub_lease_value(str(lease_error), lease_token),
                 }
-            self._notify_lifecycle("failed", {**job, **failed}, None, safe_error)
+            self._notify_lifecycle(
+                "failed",
+                {**job, **failed},
+                None,
+                safe_error,
+                trusted_known_materials=_trusted_claim_materials(lease_token),
+            )
             return {"job": failed, "error": safe_error}
         finally:
             stop_heartbeat.set()
@@ -543,7 +570,13 @@ class ExtractionPipeline:
             result = self._execute_internal_snapshot(job)
             completed = self.queue.complete(job["job_id"], result, worker_id=worker_id, lease_token=lease_token)
             safe_result = self._scrub_lease_value(result, lease_token)
-            self._notify_lifecycle("completed", {**job, "status": "completed"}, safe_result, None)
+            self._notify_lifecycle(
+                "completed",
+                {**job, "status": "completed"},
+                safe_result,
+                None,
+                trusted_known_materials=_trusted_claim_materials(lease_token),
+            )
             return {"job": completed, "result": safe_result}
         except PermissionError as exc:
             safe_error = self._scrub_lease_value(str(exc), lease_token)
@@ -554,13 +587,25 @@ class ExtractionPipeline:
                 lease_token=lease_token,
                 terminal=True,
             )
-            self._notify_lifecycle("failed", {**job, **failed}, None, safe_error)
+            self._notify_lifecycle(
+                "failed",
+                {**job, **failed},
+                None,
+                safe_error,
+                trusted_known_materials=_trusted_claim_materials(lease_token),
+            )
             return {"job": failed, "error": safe_error}
         except Exception as exc:
             safe_error = self._scrub_lease_value(str(exc), lease_token)
             logger.error("Automatic-memory snapshot job failed: %s: %s", job["job_id"], safe_error)
             failed = self.queue.fail(job["job_id"], safe_error, worker_id=worker_id, lease_token=lease_token, terminal=True)
-            self._notify_lifecycle("failed", {**job, **failed}, None, safe_error)
+            self._notify_lifecycle(
+                "failed",
+                {**job, **failed},
+                None,
+                safe_error,
+                trusted_known_materials=_trusted_claim_materials(lease_token),
+            )
             return {"job": failed, "error": safe_error}
 
     def _execute_internal_snapshot(self, job: Mapping[str, Any]) -> dict[str, Any]:
@@ -647,18 +692,36 @@ class ExtractionPipeline:
                 result = self._execute_internal_snapshot(claimed)
                 completed = self.queue.complete(job_id, result, worker_id=worker_id or self._worker_id(), lease_token=lease_token)
                 safe_result = self._scrub_lease_value(result, lease_token)
-                self._notify_lifecycle("completed", {**claimed, "status": "completed"}, safe_result, None)
+                self._notify_lifecycle(
+                    "completed",
+                    {**claimed, "status": "completed"},
+                    safe_result,
+                    None,
+                    trusted_known_materials=_trusted_claim_materials(lease_token),
+                )
                 return {"job": completed, "result": safe_result}
             except PermissionError as exc:
                 safe_error = self._scrub_lease_value(str(exc), lease_token)
                 failed = self.queue.fail(job_id, safe_error, worker_id=worker_id or self._worker_id(), lease_token=lease_token, terminal=True)
-                self._notify_lifecycle("failed", {**claimed, **failed}, None, safe_error)
+                self._notify_lifecycle(
+                    "failed",
+                    {**claimed, **failed},
+                    None,
+                    safe_error,
+                    trusted_known_materials=_trusted_claim_materials(lease_token),
+                )
                 return {"job": failed, "error": safe_error}
             except Exception as exc:
                 safe_error = self._scrub_lease_value(str(exc), lease_token)
                 logger.error("Automatic-memory snapshot job failed: %s: %s", job_id, safe_error)
                 failed = self.queue.fail(job_id, safe_error, worker_id=worker_id or self._worker_id(), lease_token=lease_token, terminal=True)
-                self._notify_lifecycle("failed", {**claimed, **failed}, None, safe_error)
+                self._notify_lifecycle(
+                    "failed",
+                    {**claimed, **failed},
+                    None,
+                    safe_error,
+                    trusted_known_materials=_trusted_claim_materials(lease_token),
+                )
                 return {"job": failed, "error": safe_error}
         outcome = self.process_next(worker_id=worker_id, job_id=job_id)
         if outcome is None:
