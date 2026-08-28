@@ -604,3 +604,17 @@ affected backend `266 passed, 7 warnings`, and full no-deselect `1359 passed,
 11 skipped, 7 failed`; the two existing `vault_path` failures match base
 `d61acdf`. Task6P remains NOT_ACCEPTED and Task6 remains IN_PROGRESS /
 NOT_ACCEPTED; no further repair is authorized.
+
+Task 6Q Trusted Lifecycle Projection Correctness is a new bounded follow-up to
+the Task6P final-review I1; Task6P's historical `FAIL / BLOCKED_AT_REPAIR_CAP`
+disposition is preserved. Product/tests commit
+`de412d52df3478c9cfa09b11572cb3841095d897` removes the unsafe explicit-key
+collector and routes the single callback projection API through explicitly
+provided `trusted_known_materials`. Internal claimed paths pass only a
+validated 32hex queue lease and its corresponding 64hex fingerprint (maximum
+two materials); direct execute passes an empty list and only removes explicit
+lease-key fields. RED covers malicious short/long/32hex payload values,
+nested/list/tuple values, ordinary text preservation, trusted internal success/
+failure, automatic paths, and direct execute. Task6 remains IN_PROGRESS /
+NOT_ACCEPTED; Task6V packaged 30/70 and live/Artifact/owner acceptance remain
+deferred.

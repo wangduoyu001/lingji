@@ -495,6 +495,16 @@ substring replacement material；攻击者可用 `lease_token: "a"` 让 callback
 callback 防泄漏、custom-object fail-closed、callback 异常不回滚 terminal state 和
 Desktop/compile/sync/handoff 证据均保留。
 
+Task 6Q Trusted Lifecycle Projection Correctness 收口上述 I1：
+`ExtractionPipeline._notify_lifecycle()` 接收内部 claim 调用链显式提供的
+`trusted_known_materials`，只接受严格格式/关联的 32hex 当前 lease 与 64hex
+fingerprint，最多两项；direct execute 传空 trusted list。显式 payload/result/error
+敏感键仍递归移除，但其值绝不成为全局 replacement；ordinary text 与短值保持。
+`_lease_material_from_explicit_keys` 已删除，Task6P/Task6L/M 历史 disposition 不变。
+产品/测试 commit `de412d52df3478c9cfa09b11572cb3841095d897`；focused 与
+Task6 相关矩阵沿用 `tests/test_task6p_queue_persistence_redaction.py` 及上述 queue/
+worker/runtime/Control/MCP/structured/work 测试，Task6 仍 NOT_ACCEPTED。
+
 Task 8:
 src/work/models.py
 src/work/store.py

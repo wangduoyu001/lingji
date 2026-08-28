@@ -1,5 +1,23 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Task 6Q · Trusted lifecycle projection correctness
+
+- Task6P final review 的唯一 Important 已复现并收口：callback lifecycle projection 不再从
+  payload/result/error 的显式 lease 敏感键值收集 replacement。移除
+  `_lease_material_from_explicit_keys()` 旁路；单一 `_notify_lifecycle()` projection API
+  仅接收内部 claim 调用链显式传入的 trusted material。
+- trusted material 仅接受当前 queue claim 的 32 位小写 hex lease token 及其对应 64 位
+  SHA-256 fingerprint，最多 2 项且格式/关联严格校验；direct execute 无 claim，trusted list
+  为空，只递归移除 allowlist 敏感键，不替换普通正文。cycle/depth/node/string fail-closed
+  边界保持不变。
+- RED 覆盖恶意 short/long/合法形状但不受信的 payload lease 值、nested/list/tuple、direct
+  execute、可信 internal token 及普通 token 文本；产品/测试 commit `de412d5`。Task6P
+  历史 `FAIL / BLOCKED_AT_REPAIR_CAP` 保留，Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`，Task6V
+  packaged 30/70、live/Artifact/Production/Vault/owner acceptance 仍未执行。
+- 本轮回归要求：Task6P/L/M、pipeline/queue/worker/runtime、Control/MCP、Work Fact、
+  structured 矩阵；Desktop static/source/build/rendered；compileall、diff-check、acceptance
+  sync、local handoff。任何 full/release 或 rendered 环境失败须如实记录，不得改写历史结论。
+
 ## 2026-08-28 · Task 6P · Repair Round 1 final independent review
 
 - 独立终审报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-final-review.md`；审查 tree `33f6ffa407badda2531228a651aea6762dd4cfac`、repair product/tests `924ac0c433a5d1029cce456cec1e6f24ef7dc7ba`，结论 `FAIL / BLOCKED_AT_REPAIR_CAP`，Critical=0、Important=1、Minor=0。Task6P 保持 `NOT_ACCEPTED`，Task6 保持 `IN_PROGRESS / NOT_ACCEPTED`。

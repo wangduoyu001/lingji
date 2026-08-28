@@ -667,6 +667,15 @@ local handoff 均通过。I1：scrubber 收集任意显式 lease-key 字符串�
 text 与合理边界要求。Task6P 与 Task6 继续 `NOT_ACCEPTED` / `IN_PROGRESS`；Task6L/M
 历史 blocked 结论及 Task6V/live/Artifact/Production/Vault/owner 边界不改写。
 
+Task 6Q Trusted Lifecycle Projection Correctness 已在产品/测试 commit
+`de412d52df3478c9cfa09b11572cb3841095d897` 收口该 I1：callback projection 的
+`_notify_lifecycle()` 只接受内部 claim 调用链显式提供、严格验证的 32hex lease token
+及对应 64hex fingerprint（最多两项），不再从 payload/result/error 显式敏感键值派生
+replacement。direct execute 的 trusted list 为空，仅递归移除 allowlist 敏感键；普通
+正文、短值和任意 `a` 保持。Task6P 历史 `FAIL / BLOCKED_AT_REPAIR_CAP` 保留，Task6
+仍 `IN_PROGRESS / NOT_ACCEPTED`，Task6V packaged 30/70、live/Artifact/Production/
+Vault/owner acceptance 仍未执行。
+
 Task 6P independent review (2026-08-28)：报告
 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-review.md` 审查
 HEAD `815a3bb5c0d245f6f33a984e7349e927b0090418` 与产品/测试
