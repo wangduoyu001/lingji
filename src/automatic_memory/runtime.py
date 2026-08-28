@@ -276,6 +276,22 @@ class AutomaticMemoryRuntime:
             cleanup_error = "; ".join(
                 value for value in (cleanup_error, source_error) if value
             )
+        transient_cleanup = worker_status.get("transient_cleanup")
+        transient_errors = (
+            transient_cleanup.get("errors")
+            if isinstance(transient_cleanup, dict)
+            else None
+        )
+        if transient_errors:
+            cleanup_pending = True
+            details = "; ".join(
+                str(item.get("error") or item.get("reason") or "cleanup failed")
+                for item in transient_errors
+                if isinstance(item, dict)
+            )
+            cleanup_error = "; ".join(
+                value for value in (cleanup_error, f"automatic-memory transient cleanup: {details}") if value
+            )
         if not started and not cleanup_pending:
             state = "stopped"
         elif cleanup_pending:

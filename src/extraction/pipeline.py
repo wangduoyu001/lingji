@@ -15,6 +15,7 @@ from .queue import SQLiteExtractionQueue
 from .registry import AdapterRegistry
 from .sink import VaultExtractionSink
 from .structured_sink import StructuredReadModelSink
+from .transient import automatic_memory_dispatch_path, reconcile_automatic_memory_transients
 from src.storage import StateDatabase
 
 logger = logging.getLogger("lingji.extraction")
@@ -54,6 +55,33 @@ class ExtractionPipeline:
             self._lifecycle_callbacks.append(on_lifecycle_event)
         self.default_options_provider = default_options_provider
         self.default_priority_provider = default_priority_provider
+        self._transient_cleanup_inventory: dict[str, Any] = self.reconcile_transient_files()
+
+    @property
+    def transient_cleanup_inventory(self) -> dict[str, Any]:
+        return dict(self._transient_cleanup_inventory)
+
+    def reconcile_transient_files(self) -> dict[str, Any]:
+        """Reconcile adapter-dispatch links through the existing queue lease."""
+        raw_root = getattr(self.sink, "raw_root", None)
+        if raw_root is None:
+            empty = {
+                "scanned_count": 0,
+                "removed_count": 0,
+                "preserved_count": 0,
+                "removed": [],
+                "preserved": [],
+                "errors": [],
+            }
+            self._transient_cleanup_inventory = empty
+            return dict(empty)
+        report = reconcile_automatic_memory_transients(
+            raw_root,
+            self.queue,
+            stale_after_seconds=self.stale_after_seconds,
+        )
+        self._transient_cleanup_inventory = report
+        return dict(report)
 
     def enqueue(
         self,
@@ -420,6 +448,7 @@ class ExtractionPipeline:
             "failed": 0,
             "jobs": [],
         }
+        self.reconcile_transient_files()
         for _ in range(max(int(limit), 1)):
             outcome = self.process_internal_next(worker_id=worker_id)
             if outcome is None:
@@ -437,7 +466,9 @@ class ExtractionPipeline:
                     "error": outcome.get("error", ""),
                 }
             )
+        self.reconcile_transient_files()
         summary["queue"] = self.queue.stats()
+        summary["transient_cleanup"] = self.transient_cleanup_inventory
         return summary
 
     def process_internal_next(self, *, worker_id: str | None = None) -> dict[str, Any] | None:
@@ -501,7 +532,12 @@ class ExtractionPipeline:
         temporary_path: Path | None = None
         original_suffix = Path(relative_path).suffix.lower()
         if original_suffix and raw_path.suffix.lower() != original_suffix:
-            temporary_path = raw_path.parent / f".automatic-memory-{uuid4().hex}{original_suffix}"
+            temporary_path = automatic_memory_dispatch_path(
+                self.sink.raw_root,
+                str(job.get("job_id") or ""),
+                str(job.get("lease_token") or ""),
+                original_suffix,
+            )
             try:
                 os.link(raw_path, temporary_path)
             except OSError as exc:

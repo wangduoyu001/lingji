@@ -129,6 +129,23 @@ def test_start_stop_are_idempotent_and_worker_precedes_scheduler(tmp_path: Path)
     assert runtime.status()["state"] == "stopped"
 
 
+def test_runtime_surfaces_transient_cleanup_errors_from_existing_worker_status(tmp_path: Path):
+    runtime, _scheduler, worker = _runtime(tmp_path)
+    worker.status = lambda: {
+        "running": False,
+        "queue": {"queued": 0},
+        "transient_cleanup": {
+            "errors": [{"name": ".automatic-memory-v1-job.lease.json", "reason": "unlink_failed"}]
+        },
+    }
+
+    status = runtime.status()
+
+    assert status["state"] == "degraded"
+    assert status["cleanup_pending"] is True
+    assert "unlink_failed" in (status["cleanup_error"] or "")
+
+
 def test_status_does_not_fabricate_scheduler_heartbeat(tmp_path: Path):
     runtime, _scheduler, _worker = _runtime(tmp_path)
 

@@ -51,15 +51,19 @@ class ExtractionWorker:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=max(float(timeout), 0.1))
         alive = bool(self._thread and self._thread.is_alive())
+        reconcile = getattr(self.pipeline, "reconcile_transient_files", None)
+        transient_cleanup = reconcile() if callable(reconcile) else {}
         self._stop_outcome = {
             "stopped": not alive,
             "thread_alive": alive,
             "outcome": "timeout" if alive else "stopped",
+            "transient_cleanup": transient_cleanup,
         }
         logger.info("Extraction worker stopped")
         return dict(self._stop_outcome)
 
     def status(self) -> dict[str, Any]:
+        inventory = getattr(self.pipeline, "transient_cleanup_inventory", {})
         return {
             "running": self.running,
             "poll_seconds": self.poll_seconds,
@@ -68,6 +72,7 @@ class ExtractionWorker:
             "stop_outcome": dict(self._stop_outcome),
             "queue": self.pipeline.queue.stats(),
             "last_result": self._last_result or {},
+            "transient_cleanup": dict(inventory) if isinstance(inventory, dict) else {},
         }
 
     def _loop(self) -> None:
