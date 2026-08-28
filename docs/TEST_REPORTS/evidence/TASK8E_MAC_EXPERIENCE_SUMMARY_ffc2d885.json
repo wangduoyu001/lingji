@@ -1,0 +1,31 @@
+{
+  "task_id": "TASK8E-MAC-EXPERIENCE-FFC2D885",
+  "status": "BLOCKED_SUBMISSION",
+  "verdict": "BLOCKED",
+  "product_commit": "ffc2d8851dc91b5f09b14d31a34c1e6988358933",
+  "candidate_artifact_id": "LOCAL-TASK8E-FFC2D885",
+  "artifact_is_final_release": false,
+  "platform": "macOS 26.5.1 arm64",
+  "sidecar": {
+    "result": "PASS_DIRECT_ACCEPTANCE_ISOLATED",
+    "sha256": "8a7f41f6c019286e9a1b4dcd8baef168c03d05373cdbcd5ac70b98c0b6da75b4",
+    "bytes": 13404624,
+    "target": "aarch64-apple-darwin",
+    "control_host": "127.0.0.1",
+    "control_port": 8766
+  },
+  "desktop_bundle": {"result": "BLOCKED_CARGO_UNAVAILABLE", "owner_observation": "NOT_TESTED"},
+  "checks": {
+    "macos_release_smoke": "PASS",
+    "frontend_build": "PASS",
+    "work_fact_smoke": "PASS",
+    "memory_sources_smoke": "PASS",
+    "rendered_memory_e2e": "PASS",
+    "acceptance_sync": "PASS",
+    "local_handoff_prep": "PASS"
+  },
+  "quality_gate": "BLOCKED_AT_MEASUREMENT_CAP",
+  "production_pollution_count": 0,
+  "secret_export_count": 0,
+  "owner_next_action": "Provision Cargo/Rust, then rebuild exact product commit and perform owner UI observation"
+}

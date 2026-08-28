@@ -7,8 +7,8 @@
 
 ```yaml
 task_id: TASK8E-MAC-EXPERIENCE-FFC2D885
-status: RUNNING
-verdict: PENDING
+status: BLOCKED_SUBMISSION
+verdict: BLOCKED
 merge: DO NOT MERGE
 execution_mode: MACOS_ARM64_RELEASE_CANDIDATE_OWNER_EXPERIENCE
 repository: wangduoyu001/lingji
@@ -17,22 +17,23 @@ product_branch: codex/phase1-automatic-memory
 product_commit: ffc2d8851dc91b5f09b14d31a34c1e6988358933
 artifact_name: lingji-macos-arm64-local-task8e
 artifact_id: LOCAL-TASK8E-FFC2D885
-task_instruction_commit: PENDING
+task_instruction_commit: 2c2381f2ee502bbea51c95f2893e7b747baeea3f
 report_branch: acceptance/task8e-mac-experience-ffc2d885
 report_commit: PENDING
 acceptance_root: /tmp/LingJiAcceptance/TASK8E-ffc2d8851
 report_path: docs/TEST_REPORTS/MACOS_TASK8E_EXPERIENCE_CANDIDATE_ffc2d885.md
-started_at: 2026-08-28T00:00:00+08:00
-finished_at: null
+started_at: 2026-08-28T23:47:00+08:00
+finished_at: 2026-08-28T23:56:00+08:00
 cleanup_before: PASS
-cleanup_after: NOT_STARTED
-build_result: NOT_STARTED
-install_result: NOT_STARTED
-runtime_result: NOT_STARTED
-ui_self_check_result: NOT_STARTED
-owner_observation: NOT_STARTED
-production_pollution_count: NOT_MEASURED
-secret_export_count: NOT_MEASURED
+cleanup_after: PASS_MINIMAL_BLOCKED_EVIDENCE
+build_result: BLOCKED_CARGO_UNAVAILABLE
+install_result: NOT_TESTED_TAURI_APP_NOT_BUILT
+runtime_result: BLOCKED_DESKTOP_NOT_BUILT
+sidecar_runtime_result: PASS_DIRECT_ACCEPTANCE_ISOLATED
+ui_self_check_result: NOT_TESTED_TAURI_APP_NOT_BUILT
+owner_observation: NOT_TESTED
+production_pollution_count: 0
+secret_export_count: 0
 quality_gate: BLOCKED_AT_MEASUREMENT_CAP
 artifact_is_final_release: false
 public_summary_path: docs/TEST_REPORTS/evidence/TASK8E_MAC_EXPERIENCE_SUMMARY_ffc2d885.json
