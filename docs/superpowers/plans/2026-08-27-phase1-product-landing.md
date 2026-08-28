@@ -505,3 +505,9 @@ External `research` is not part of this plan because no dependency or architectu
 - Truth check: the plan explicitly corrects the current mismatch where scheduler/watcher/adapters exist but the packaged runtime and Desktop do not use them.
 - Loop prevention: maximum two repair rounds per unit; unresolved important defects cause boundary re-plan rather than repeated patches.
 - Owner burden: the owner performs only the one-time source authorization and final visual/usability judgment; agents perform code, commands, installation, verification, Git and cleanup.
+
+Task 6M Repair Round 1 closure (2026-08-28): authorized review I1/I2/I3/I5 and
+M1/M2 are closed by product/tests `4b51392fe448472e9099978ff2528f742dff887b`
+with strict legacy/v1 hardlink ownership proof, queue-error receipts, lstat
+identity protection and Desktop cleanup visibility. I4 fresh packaged 30/70 is
+explicitly deferred to a new Task6V; Task6 remains `IN_PROGRESS / NOT_ACCEPTED`.

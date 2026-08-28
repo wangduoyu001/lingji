@@ -106,3 +106,16 @@ Desktop, and the post-fix packaged 30/70 crash gate is not fresh. Path-swap and
 failure-cleanup coverage remain Minor evidence gaps. `REPAIR_ROUND_1 authorized`;
 Task6 stays `IN_PROGRESS / NOT_ACCEPTED` and
 must not be marked `ACCEPTED_FOR_FINAL_VALIDATION`.
+
+Task 6M Repair Round 1: IMPLEMENTED_FOCUSED_PASS — review `b65f81d` I1/I2/I3/I5
+and M1/M2 closed in product/tests `4b51392fe448472e9099978ff2528f742dff887b`.
+RED was `8 passed, 4 failed`; GREEN lifecycle/runtime was `31 passed, 1 warning`,
+Desktop source smoke PASS and Desktop TypeScript/Vite build PASS. Legacy markers
+now require exact grammar plus same-directory content-addressed raw hardlink
+proof; v1 deletions require queue job input/raw identity proof; queue/SQLite
+errors fail closed into existing cleanup receipts; pre-unlink identity changes
+are retained; Desktop shows the bounded Chinese cleanup retry notice and hides
+paths/job/lease tokens. Affected snapshot/resume/queue/worker/runtime/Work Fact/
+adapter/structured/Task6A/6H/6S/Task8 regression matrix is `250 passed, 3
+warnings`. I4 fresh packaged 30/70 remains deferred to new Task6V; Task6 stays
+`IN_PROGRESS / NOT_ACCEPTED`, with no live/Artifact/Production/Vault/owner data.

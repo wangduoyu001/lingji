@@ -553,3 +553,15 @@ Task Quality NEEDS_FIXES`，Critical=0、Important=5、Minor=2。旧版
 error 未完全 fail-closed/可观察，且 cleanup inventory 尚未由 Desktop 消费；修复后 packaged 30/70 crash/restart/stop 尚未
 fresh 复验。已授权且最多一轮 `REPAIR_ROUND_1`；Task6 继续
 `IN_PROGRESS / NOT_ACCEPTED`，不得标记 `Task6M ACCEPTED_FOR_FINAL_VALIDATION`。
+
+Task 6M Repair Round 1 已在独立审查 `b65f81d659f787e349d545f51c4ddb94af770d4b`
+后完成，产品/测试提交 `4b51392fe448472e9099978ff2528f742dff887b`。仅关闭
+I1/I2/I3/I5 与 M1/M2：legacy marker 需 exact grammar + 同目录 content-addressed
+raw 的 dev/ino/size hard-link 证明；v1 terminal/released/expired/dead cleanup
+需 queue input_path/raw/job identity 证明；queue/SQLite/stat/unlink 异常 fail-closed
+并进入既有 runtime cleanup receipt；unlink 前 lstat 变化保留；Desktop 现消费
+`cleanup_pending/cleanup_error` 并显示不含路径、job、lease 的中文可重试提示。
+focused lifecycle/runtime `31 passed, 1 warning`，受影响回归 `250 passed,
+3 warnings`，Desktop source smoke/build PASS。I4 fresh packaged 30/70 明确延期至
+全新 Task6V；Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`，不得宣称最终验收、live、
+Artifact、Production/Vault 或主人 PASS。

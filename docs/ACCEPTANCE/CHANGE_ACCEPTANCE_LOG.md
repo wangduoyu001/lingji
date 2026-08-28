@@ -2039,3 +2039,26 @@ Windows 重启后恢复 = 100%
   packaged fresh gate；不得新增数据库/队列/API/UI/事实源，不得降低断言或由 harness
   直接 unlink。Task6 保持 `IN_PROGRESS / NOT_ACCEPTED`，不宣称
   `Task6M ACCEPTED_FOR_FINAL_VALIDATION`、release、Artifact、live 或 owner PASS。
+
+## 2026-08-28 · Task 6M · Repair Round 1 — ownership proof and runtime visibility
+
+- 审查基线：独立审查 `b65f81d659f787e349d545f51c4ddb94af770d4b`；产品/测试修复提交
+  `4b51392fe448472e9099978ff2528f742dff887b`。本轮仅修复 I1/I2/I3/I5 与 M1/M2，
+  不是 Task6C 第 2 轮；Task6 继续 `IN_PROGRESS / NOT_ACCEPTED`。
+- RED：审查后行为矩阵 `8 passed, 4 failed`，失败为 legacy hardlink proof、v1 非同
+  inode lease proof、queue RuntimeError 外逸、unlink 前 identity swap。GREEN：Task6M
+  lifecycle/runtime `31 passed, 1 warning`；Desktop source smoke/build PASS；受影响
+  snapshot/resume/queue/worker/runtime/Work Fact/adapter/structured/Task6A/6H/6S/Task8
+  回归 `250 passed, 3 warnings`。
+- 所有权与安全：legacy 仅 exact `.automatic-memory-{32hex}{suffix}` 且与同目录
+  64hex、内容 hash=文件名 raw 证明同 dev/ino/size hardlink 才删；v1 terminal/
+  released/expired/dead cleanup 需 queue job input_path、job id 与合法 raw hardlink
+  proof；active/mismatch、unknown/future/malformed、copy、symlink、目录、DB/lease
+  不可验证一律保留。unlink 前 lstat identity 变化保留。raw、授权源与 Vault sentinel
+  不修改，重复 reconciliation 幂等，删除失败进入既有 machine-readable receipt 并可重试。
+- 可见性：复用 `/api/automatic-memory/runtime` 的 `cleanup_pending/cleanup_error`；
+  MemorySourcesPage 只显示“临时文件清理失败：灵机会自动重试，可重试。”，不显示路径、
+  job id、lease/token；恢复后 notice 消失。未新增 API、DB、队列或事实源。
+- I4 fresh packaged 30/70 crash/restart/stop 明确延期至全新 Task6V，本轮未伪造 packaged
+  PASS；不启动 live 8766/8767，不运行 Artifact/release，不接触 Production/Vault/主人数据。
+  报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6m-report.md`。

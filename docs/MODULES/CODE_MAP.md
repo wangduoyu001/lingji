@@ -426,6 +426,15 @@ src/mcp_server.py
 src/project_memory/context_service.py
 = one current/as_of/history/why predicate across every retrieval path
 
+Task 6M Repair Round 1 additionally uses `src/extraction/transient.py` for
+legacy/v1 adapter-dispatch hard-link reconciliation, reusing `extraction_jobs`
+queue status, input path and lease identity; `src/extraction/worker.py` keeps
+cleanup receipts visible while queue stats are unavailable. Desktop runtime
+summary fields are consumed by `MemorySourcesPage` with a bounded retry notice.
+Focused tests are `tests/test_task6m_transient_lifecycle.py`; Desktop source/build
+smoke is `cd desktop/lingji-control && npm run test:memory-sources && npm run build`.
+I4 packaged 30/70 remains a separate Task6V gate; Task6 is NOT_ACCEPTED.
+
 Task 8:
 src/work/models.py
 src/work/store.py
