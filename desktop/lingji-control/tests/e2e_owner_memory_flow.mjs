@@ -125,7 +125,10 @@ try {
   state.onboardingFailures = 7;
   const page = await browser.newPage();
   await installTauri(page);
-  await page.goto("http://127.0.0.1:4178", { waitUntil: "networkidle" });
+  // The app keeps authenticated polling connections open; network-idle is
+  // therefore not a meaningful readiness signal. Wait for DOM load and the
+  // rendered landing heading instead.
+  await page.goto("http://127.0.0.1:4178", { waitUntil: "domcontentloaded" });
   try {
     await page.getByRole("heading", { name: "让灵机知道哪些内容可以接管" }).waitFor({ timeout: 30_000 });
   } catch (reason) {

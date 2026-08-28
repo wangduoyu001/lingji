@@ -19,6 +19,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import re
 from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
@@ -45,7 +46,7 @@ def _process_inventory(pid: int) -> list[str]:
             ["ps", "-axo", "pid=,ppid=,command="], text=True, timeout=2
         )
     except (OSError, subprocess.SubprocessError):
-        return []
+        raise AssertionError("process inventory command failed; cleanup evidence is unavailable")
     rows = []
     for line in output.splitlines():
         fields = line.strip().split(None, 2)
@@ -268,6 +269,137 @@ def _identity_sets(root: Path, source_id: str) -> dict[str, Any]:
     return result
 
 
+_RAW_NAME = re.compile(r"^[0-9a-f]{64}$")
+_TRANSIENT_NAMES = (
+    re.compile(r"^\.automatic-memory-v1-[A-Za-z0-9_-]+\.[A-Za-z0-9][A-Za-z0-9._-]{0,31}$"),
+    re.compile(r"^\.automatic-memory-[0-9a-fA-F]{32}\.[A-Za-z0-9][A-Za-z0-9._-]{0,31}$"),
+    re.compile(r"^\.snapshot-owned-[A-Za-z0-9_-]+\.[A-Za-z0-9][A-Za-z0-9._-]{0,31}$"),
+    re.compile(r"^\.snapshot-owned-[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.tmp$"),
+)
+
+
+def _raw_inventory(root: Path) -> dict[str, Any]:
+    """Classify every raw-root entry; never mix transient markers with evidence."""
+    raw_root = root / "storage" / "raw"
+    permanent: dict[str, dict[str, int]] = {}
+    transient: list[str] = []
+    unexpected: list[str] = []
+    if not raw_root.exists():
+        return {"permanent": permanent, "transient": transient, "unexpected": unexpected}
+    for path in sorted(raw_root.rglob("*")):
+        relative = path.relative_to(raw_root).as_posix()
+        if not path.is_file() or path.is_symlink() or path.parent != raw_root:
+            unexpected.append(relative)
+            continue
+        if any(pattern.fullmatch(path.name) for pattern in _TRANSIENT_NAMES):
+            transient.append(relative)
+            continue
+        if not _RAW_NAME.fullmatch(path.name) or _sha256(path) != path.name:
+            unexpected.append(relative)
+            continue
+        info = path.stat()
+        permanent[path.name] = {"size": int(info.st_size), "mode": int(stat.S_IMODE(info.st_mode))}
+    return {"permanent": permanent, "transient": transient, "unexpected": unexpected}
+
+
+def _normal_id(value: Any) -> str:
+    """Normalize per-root UUID-derived IDs while retaining logical identity."""
+    text = str(value or "")
+    # Automatic-source external IDs include a 24-hex root discriminator;
+    # normalize it alongside UUID/hash-derived 32–64 hex IDs for cross-root
+    # parity without touching separately asserted content hashes.
+    return re.sub(r"[0-9a-f]{24,64}", "<random>", text, flags=re.IGNORECASE)
+
+
+def _logical_identity_snapshot(root: Path) -> dict[str, Any]:
+    """Return expectation-blind natural identity/status sets for parity."""
+    state_path = root / "storage" / "lingji_state.db"
+    output: dict[str, Any] = {
+        "sources": set(), "scans": set(), "jobs": set(), "work": set(),
+        "raw": set(), "structured": {"sources": set(), "conversations": set(), "messages": set(), "versions": set()},
+    }
+    if state_path.exists():
+        with sqlite3.connect(state_path) as connection:
+            connection.row_factory = sqlite3.Row
+            source_rows = connection.execute("SELECT source_id, kind, root, status FROM automatic_memory_sources").fetchall()
+            source_keys = {
+                str(row["source_id"]): (str(row["kind"]), Path(str(row["root"])).name)
+                for row in source_rows
+            }
+            output["sources"] = {
+                (str(row["kind"]), Path(str(row["root"])).name, str(row["status"]))
+                for row in source_rows
+            }
+            scans = connection.execute("SELECT * FROM automatic_memory_scans").fetchall()
+            output["scans"] = {
+                (source_keys.get(str(row["source_id"]), ("unknown", "unknown")), str(row["status"]), int(row["progress"] or 0), int(row["total"] or 0))
+                for row in scans
+            }
+            jobs = connection.execute("SELECT source_type, status, payload_json FROM extraction_jobs").fetchall()
+            for row in jobs:
+                payload = json.loads(row["payload_json"] or "{}")
+                source_key = source_keys.get(str(payload.get("source_id") or ""), ("unknown", "unknown"))
+                output["jobs"].add((source_key, str(row["source_type"]), str(payload.get("relative_path") or ""), str(payload.get("sha256") or ""), str(row["status"])))
+            if {str(row[0]) for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")} >= {"work_items", "work_outcomes", "work_next_actions"}:
+                rows = connection.execute("""
+                    SELECT w.source_id, w.status AS work_status, o.status AS outcome_status,
+                           o.summary, n.actor
+                    FROM work_items w LEFT JOIN work_outcomes o ON o.work_id = w.work_id
+                    LEFT JOIN work_next_actions n ON n.work_id = w.work_id
+                """).fetchall()
+                output["work"] = {
+                    (source_keys.get(str(row["source_id"]), ("unknown", "unknown")), str(row["work_status"]), str(row["outcome_status"] or ""), str(row["actor"] or ""))
+                    for row in rows
+                }
+    raw = _raw_inventory(root)
+    output["raw"] = {(digest, int(meta["size"])) for digest, meta in raw["permanent"].items()}
+    memory_path = root / "storage" / "lingji_memory.db"
+    if memory_path.exists():
+        with sqlite3.connect(memory_path) as connection:
+            connection.row_factory = sqlite3.Row
+            tables = {str(row[0]) for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if "source_records" in tables:
+                rows = connection.execute("SELECT source_type, external_id, status FROM source_records").fetchall()
+                output["structured"]["sources"] = {(_normal_id(row["source_type"]), _normal_id(row["external_id"]), str(row["status"])) for row in rows}
+            if "conversation_records" in tables:
+                rows = connection.execute("SELECT external_id, title FROM conversation_records").fetchall()
+                # Conversation content_hash incorporates the per-root source
+                # scope metadata. Natural identity parity is asserted here;
+                # message content hashes remain compared below.
+                output["structured"]["conversations"] = {(_normal_id(row["external_id"]), str(row["title"])) for row in rows}
+            if "message_records" in tables:
+                rows = connection.execute("SELECT external_id, role, sequence, content_hash FROM message_records").fetchall()
+                output["structured"]["messages"] = {(_normal_id(row["external_id"]), str(row["role"]), int(row["sequence"]), str(row["content_hash"])) for row in rows}
+            if "memory_documents" in tables:
+                rows = connection.execute("SELECT memory_id, memory_type, status, content_hash, valid_from, valid_to, superseded_by, relationships_json FROM memory_documents").fetchall()
+                for row in rows:
+                    rel = json.loads(row["relationships_json"] or "{}")
+                    if str(row["memory_type"] or "") != "structured_evidence":
+                        continue
+                    output["structured"]["versions"].add((
+                        _normal_id(rel.get("source_external_id")), _normal_id(rel.get("conversation_external_id")),
+                        _normal_id(rel.get("message_external_id")), str(row["content_hash"] or ""), str(row["status"] or ""),
+                        bool(row["valid_from"]), bool(row["valid_to"]), _normal_id(row["superseded_by"]),
+                    ))
+    return output
+
+
+def _structured_version_rows(root: Path) -> list[dict[str, Any]]:
+    path = root / "storage" / "lingji_memory.db"
+    if not path.exists():
+        return []
+    with sqlite3.connect(path) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute("""
+            SELECT memory_id, status, content_hash, valid_from, valid_to,
+                   superseded_by, relationships_json
+            FROM memory_documents
+            WHERE memory_type = 'structured_evidence'
+            ORDER BY valid_from, memory_id
+        """).fetchall()
+    return [dict(row) for row in rows]
+
+
 def _wait_until(predicate, *, timeout: float = 12.0, interval: float = 0.05):
     deadline = time.monotonic() + timeout
     latest = None
@@ -295,6 +427,7 @@ class PackagedSidecar:
         self.instance_id = ""
         self.child_inventory: list[str] = []
         self.started_pid: int | None = None
+        self.port_rebind_verified = False
 
     def start(self) -> None:
         env = os.environ.copy()
@@ -333,22 +466,39 @@ class PackagedSidecar:
         # Preserve the pre-crash diagnostics when a recovery instance starts.
         stdout = self.stdout_path.open("a", encoding="utf-8")
         stderr = self.stderr_path.open("a", encoding="utf-8")
-        self.process = subprocess.Popen(
-            [sys.executable, str(ENTRYPOINT), "--data-root", str(self.root), "--workspace", "acceptance", "--host", "127.0.0.1", "--port", str(self.port)],
-            cwd=REPO_ROOT,
-            env=env,
-            stdout=stdout,
-            stderr=stderr,
-        )
-        self.started_pid = int(self.process.pid)
-        stdout.close()
-        stderr.close()
-        token_path = self.root / "storage" / "control_api_token"
-        _wait_until(lambda: token_path.exists(), timeout=8.0)
-        self.token = token_path.read_text(encoding="utf-8-sig").strip()
-        assert self.token
-        status = _wait_until(lambda: _json_request(self.port, "/api/runtime/ping", token=self.token)[0] == 200, timeout=12.0)
-        assert status, self._output()
+        try:
+            self.process = subprocess.Popen(
+                [sys.executable, str(ENTRYPOINT), "--data-root", str(self.root), "--workspace", "acceptance", "--host", "127.0.0.1", "--port", str(self.port)],
+                cwd=REPO_ROOT,
+                env=env,
+                stdout=stdout,
+                stderr=stderr,
+            )
+            self.started_pid = int(self.process.pid)
+            token_path = self.root / "storage" / "control_api_token"
+            if not _wait_until(lambda: token_path.exists(), timeout=8.0):
+                raise AssertionError("packaged sidecar did not materialize its token")
+            self.token = token_path.read_text(encoding="utf-8-sig").strip()
+            if not self.token:
+                raise AssertionError("packaged sidecar materialized an empty token")
+            if not _wait_until(lambda: _json_request(self.port, "/api/runtime/ping", token=self.token)[0] == 200, timeout=12.0):
+                raise AssertionError(self._output())
+        except BaseException:
+            # A failed start occurs before the context manager can yield. Own
+            # and reap that PID here while preserving the original exception.
+            process = self.process
+            if process is not None and process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+            self.process = None
+            raise
+        finally:
+            stdout.close()
+            stderr.close()
 
     def stop(self, *, crash: bool = False) -> None:
         process = self.process
@@ -377,9 +527,13 @@ class PackagedSidecar:
                 process.kill()
                 process.wait(timeout=5)
         self.child_inventory = _process_inventory(process.pid)
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(("127.0.0.1", self.port))
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                sock.bind(("127.0.0.1", self.port))
+            self.port_rebind_verified = True
+        except OSError as exc:
+            raise AssertionError(f"sidecar port {self.port} was not released") from exc
         self.process = None
 
     def _output(self) -> str:
@@ -475,10 +629,9 @@ def _automatic_scan_until_terminal(
     return result
 
 
-def _formal_qdrant_fallback(root: Path, *, required_packaged_text: str | None = None) -> dict[str, Any]:
-    """Exercise HybridRetriever's production orchestration against persisted data."""
+def _build_packaged_gateway(root: Path):
+    """Build the same formal gateway composition against an Acceptance root."""
     from src.gateway.bootstrap import build_memory_gateway
-    from src.retrieval.hybrid import SearchFilters
     from src.runtime.workspace import WorkspaceContext, WorkspaceName
 
     vault = root / "vault"
@@ -493,7 +646,31 @@ def _formal_qdrant_fallback(root: Path, *, required_packaged_text: str | None = 
         index_private=False,
     )
     workspace = WorkspaceContext(WorkspaceName.ACCEPTANCE, vault, storage / "raw", storage, settings.state_db_path, settings.memory_db_path, "memory", None, None, "lingji_memory_acceptance", settings.log_path, storage / "cache", settings.runtime_settings_path, settings.state_db_path, storage / "backups", storage / "derived", storage / "temp", storage / "reports")
-    gateway = build_memory_gateway(settings, workspace=workspace)
+    return build_memory_gateway(settings, workspace=workspace)
+
+
+def _registered_mcp_functions(gateway):
+    """Return callable functions from the production FastMCP registration."""
+    from src.mcp_server import create_mcp_server
+
+    server = create_mcp_server(
+        gateway=gateway, codex_service=object(), project_context_service=object(),
+        extraction_pipeline=object(), default_agent_id="chatgpt",
+    )
+    tools = getattr(getattr(server, "_tool_manager", None), "_tools", None)
+    if not isinstance(tools, dict) or not callable(getattr(tools.get("search_memory"), "fn", None)):
+        raise AssertionError("production MCP search_memory registration is unavailable")
+    if not callable(getattr(tools.get("build_context_pack"), "fn", None)):
+        raise AssertionError("production MCP build_context_pack registration is unavailable")
+    return {name: tools[name].fn for name in ("search_memory", "build_context_pack")}
+
+
+def _formal_qdrant_fallback(root: Path, *, required_packaged_text: str | None = None) -> dict[str, Any]:
+    """Exercise Gateway, registered MCP and ContextPack with semantic outage."""
+    from src.retrieval.hybrid import SearchFilters
+
+    gateway = _build_packaged_gateway(root)
+    mcp = _registered_mcp_functions(gateway)
 
     class FailingVectorClient:
         def search(self, query: str, limit: int, filters: dict[str, Any] | None = None):
@@ -502,10 +679,25 @@ def _formal_qdrant_fallback(root: Path, *, required_packaged_text: str | None = 
     gateway.retriever.semantic_provider = FailingVectorClient()
     query = required_packaged_text or "Lexical fallback"
     result = gateway.retriever.search_with_diagnostics(query, 5, SearchFilters())
-    evidence = {"semantic": result["diagnostics"], "lexical_result_count": len(result["results"]), "lexical_texts": [item.get("text") for item in result["results"]]}
+    gateway_result = gateway.search_memory("chatgpt", query, limit=5)
+    mcp_result = mcp["search_memory"](query=query, agent_id="chatgpt", limit=5)
+    pack = gateway.build_context_pack("chatgpt", query=query, include_core=False, max_chars=12000)
+    mcp_pack = mcp["build_context_pack"](query=query, agent_id="chatgpt", include_core=False, max_chars=12000)
+    evidence = {"semantic": result["diagnostics"], "lexical_result_count": len(result["results"]), "lexical_texts": [item.get("text") for item in result["results"]], "gateway_count": len(gateway_result["results"]), "mcp_count": len(mcp_result["results"]), "context": {"used_chars": pack["used_chars"], "sections": len(pack["sections"]), "diagnostics": pack["diagnostics"]}, "mcp_context": {"used_chars": mcp_pack["used_chars"], "sections": len(mcp_pack["sections"]), "diagnostics": mcp_pack["diagnostics"]}}
     assert result["results"], evidence
     assert result["diagnostics"]["semantic"] == "degraded"
     assert result["diagnostics"]["reason_code"] in {"semantic_query_failed", "semantic_unavailable"}
+    assert gateway_result["results"] and mcp_result["results"], evidence
+    assert gateway_result["diagnostics"]["semantic"] == "degraded"
+    assert mcp_result["diagnostics"]["semantic"] == "degraded"
+    assert pack["used_chars"] <= 12000 and mcp_pack["used_chars"] <= 12000
+    for current_pack in (pack, mcp_pack):
+        for section in current_pack["sections"]:
+            if section.get("kind") != "structured_message_evidence":
+                continue
+            citation = section.get("citation") or {}
+            for field in ("source_id", "conversation_id", "message_id", "content_hash", "raw_reference", "role", "sequence"):
+                assert citation.get(field) not in (None, ""), (field, section)
     if required_packaged_text is not None:
         assert any(required_packaged_text in str(item.get("text") or item.get("content") or "") for item in result["results"]), {
             "blocked_reason": "formal lexical index contains no record produced by packaged automatic-memory ingestion",
@@ -518,6 +710,32 @@ def _formal_qdrant_fallback(root: Path, *, required_packaged_text: str | None = 
     return evidence
 
 
+def _assert_packaged_authority_paths(root: Path, query: str, *, as_of: str | None = None) -> dict[str, Any]:
+    """Check current fail-closed plus history/as_of through every read path."""
+    gateway = _build_packaged_gateway(root)
+    mcp = _registered_mcp_functions(gateway)
+    current = gateway.search_memory("chatgpt", query, limit=10)
+    why = gateway.search_memory("chatgpt", query, limit=10, mode="why")
+    mcp_current = mcp["search_memory"](query=query, agent_id="chatgpt", limit=10)
+    pack = gateway.build_context_pack("chatgpt", query=query, include_core=False, max_chars=12000)
+    mcp_pack = mcp["build_context_pack"](query=query, agent_id="chatgpt", include_core=False, max_chars=12000)
+    assert current["results"] == [] and why["results"] == [] and mcp_current["results"] == []
+    assert pack["sections"] == [] and mcp_pack["sections"] == []
+    historical = gateway.search_memory("chatgpt", query, limit=10, mode="history", include_archived=True)
+    historical_mcp = mcp["search_memory"](query=query, agent_id="chatgpt", limit=10, mode="history", include_archived=True)
+    assert historical["results"] and historical_mcp["results"]
+    as_of_result = None
+    if as_of:
+        as_of_result = gateway.search_memory("chatgpt", query, limit=10, mode="as_of", as_of=as_of, include_archived=True)
+        assert as_of_result["results"]
+    gateway.close()
+    return {
+        "current": 0, "why": 0, "mcp_current": 0, "context_current": 0,
+        "history": len(historical["results"]), "mcp_history": len(historical_mcp["results"]),
+        "as_of": len(as_of_result["results"]) if as_of_result else None,
+    }
+
+
 def _run_clean_acceptance(root: Path) -> dict[str, Any]:
     source_dir = root / "generic-history"
     third_party = root / "third-party"
@@ -525,7 +743,7 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
     source_dir.mkdir(parents=True)
     third_party.mkdir(parents=True)
     vault.mkdir(parents=True)
-    _fixture_history(source_dir / "history.json", conversation="initial", message="packaged acceptance fact")
+    _fixture_history(source_dir / "history.json", conversation="initial", message="packaged acceptance VERSION_ONE fact")
     (third_party / "unmanaged.ai").write_text("must remain byte-identical\n", encoding="utf-8")
     (third_party / "metadata.json").write_text('{"owner": "fixture", "keep": true}\n', encoding="utf-8")
     (vault / "OwnerNote.md").write_text("# Owner note\nDo not rewrite this fixture.\n", encoding="utf-8")
@@ -547,8 +765,12 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
         discovered = sidecar.get("/api/automatic-memory/discovered")
         assert any(item["kind"] == "generic_ai_history" for item in discovered)
         assert _sqlite_counts(root)["sources"] == 0
-        assert not list((root / "storage" / "raw").iterdir())
-        evidence["scenarios"]["1_metadata_only"] = {"discovered": len(discovered), "sources": _sqlite_counts(root)["sources"]}
+        metadata_stat = (source_dir / "history.json").stat()
+        raw_before_authorize = _raw_inventory(root)
+        assert not raw_before_authorize["permanent"] and not raw_before_authorize["transient"] and not raw_before_authorize["unexpected"]
+        assert (source_dir / "history.json").stat().st_size == metadata_stat.st_size
+        assert (source_dir / "history.json").stat().st_mtime_ns == metadata_stat.st_mtime_ns
+        evidence["scenarios"]["1_metadata_only"] = {"discovered": len(discovered), "sources": _sqlite_counts(root)["sources"], "body_guard": {"size": metadata_stat.st_size, "mtime_ns": metadata_stat.st_mtime_ns}, "raw": raw_before_authorize}
         timings["1_metadata_only"] = time.monotonic() - started
 
         # Keep authorization attach from racing a manual POST.  The first
@@ -557,6 +779,10 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
         source_before_ids = {str(row["scan_id"]) for row in _sqlite_counts(root)["scans"]}
         source = _authorize(sidecar, source_dir)
         source_id = str(source["source_id"])
+        # Reassert the paused admission barrier after source registration; the
+        # lifecycle listener may otherwise attach a due job between the first
+        # pause request and its persisted disable.
+        sidecar.post("/api/automatic-memory/pause-runtime", {"confirmation": True})
         sidecar.post("/api/automatic-memory/resume-runtime", {"confirmation": True})
         scan = _automatic_scan_until_terminal(
             sidecar,
@@ -567,8 +793,10 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
         )
         counts = _wait_until(lambda: _sqlite_counts(root) if _sqlite_counts(root)["queued"] == 0 else None, timeout=20.0) or _sqlite_counts(root)
         structured = _structured_counts(root)
+        raw_after_scan = _raw_inventory(root)
         assert scan["status"] == "completed"
         assert structured["sources"] >= 1 and structured["conversations"] >= 1 and structured["messages"] >= 1
+        assert not raw_after_scan["transient"] and not raw_after_scan["unexpected"] and raw_after_scan["permanent"]
         evidence["scenarios"]["2_authorize_startup"] = {"scan": scan, "structured": structured, "queue": counts["queued"]}
         work_id = str(scan["report"]["work_id"])
         work_fact = _wait_until(
@@ -580,13 +808,43 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
         )
         assert work_fact is not None and work_fact.get("outcome", {}).get("status") == "completed"
         evidence["scenarios"]["2_authorize_startup"]["work_fact"] = work_fact
+
+        # Replace the same logical message with a new body so Task6S version
+        # metadata and temporal retrieval are exercised by the packaged data.
+        before_version = _structured_version_rows(root)
+        old_valid_from = str(before_version[0].get("valid_from") or "") if before_version else ""
+        time.sleep(1.05)
+        _fixture_history(source_dir / "history.json", conversation="initial", message="packaged acceptance VERSION_TWO fact")
+        version_scan = _scan_until_terminal(sidecar, source_id)
+        assert version_scan["status"] == "completed"
+        _wait_until(lambda: _sqlite_counts(root) if _sqlite_counts(root)["queued"] == 0 else None, timeout=20.0)
+        after_version = _structured_version_rows(root)
+        assert len(after_version) >= 2
+        superseded_rows = [row for row in after_version if str(row["status"]) == "superseded"]
+        active_rows = [row for row in after_version if str(row["status"]) == "active"]
+        assert superseded_rows and active_rows
+        assert all(str(row["superseded_by"] or "") for row in superseded_rows)
+        assert all(not str(row["superseded_by"] or "") for row in active_rows)
+        version_gateway = _build_packaged_gateway(root)
+        assert version_gateway.search_memory("chatgpt", "VERSION_TWO")["results"]
+        assert not version_gateway.search_memory("chatgpt", "VERSION_ONE")["results"]
+        assert version_gateway.search_memory("chatgpt", "VERSION_ONE", mode="history", include_archived=True)["results"]
+        if old_valid_from:
+            assert version_gateway.search_memory("chatgpt", "VERSION_ONE", mode="as_of", as_of=old_valid_from, include_archived=True)["results"]
+        version_gateway.close()
+        evidence["scenarios"]["2_versioning"] = {"scan": version_scan, "before": before_version, "after": after_version, "old_valid_from": old_valid_from}
+        raw_before_idempotent = _raw_inventory(root)["permanent"]
         idempotency_before = _identity_sets(root, source_id)
         idempotent_scan = _scan_until_terminal(sidecar, source_id)
         idempotency_after = _identity_sets(root, source_id)
         assert idempotent_scan["status"] == "completed"
         assert int(idempotent_scan["report"].get("queued") or 0) == 0
         assert int(idempotent_scan["report"].get("reused") or 0) >= 1
-        assert idempotency_before["structured"] == idempotency_after["structured"]
+        # A manual audit creates a new scan envelope, but must not create any
+        # new source/job/raw/structured logical identity.
+        for key in ("source", "job", "raw", "structured"):
+            assert idempotency_before[key] == idempotency_after[key], key
+        assert _raw_inventory(root)["permanent"] == raw_before_idempotent
         assert all(value == 0 for value in _duplicate_counts(root).values())
         evidence["scenarios"]["2_idempotent_same_bytes"] = {
             "scan": idempotent_scan,
@@ -620,18 +878,21 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
 
         expiry_dir = root / "expiry-source"
         expiry_dir.mkdir()
-        expiring = _authorize(sidecar, expiry_dir, expires_at=datetime.now(timezone.utc) + timedelta(seconds=1), grant_id="expiry-grant")
+        _fixture_history(expiry_dir / "history.json", conversation="expiry", message="EXPIRY_EVIDENCE")
+        expiring = _authorize(sidecar, expiry_dir, expires_at=datetime.now(timezone.utc) + timedelta(seconds=3), grant_id="expiry-grant")
         runtime_paused = sidecar.post("/api/automatic-memory/pause-runtime", {"confirmation": True})
         assert runtime_paused["paused"] is True
         runtime_resumed = sidecar.post("/api/automatic-memory/resume-runtime", {"confirmation": True})
         assert runtime_resumed["paused"] is False
-        time.sleep(1.2)
+        expiry_scan = _scan_until_terminal(sidecar, expiring["source_id"], timeout=20.0)
+        time.sleep(3.2)
         expired_sources = sidecar.get("/api/automatic-memory/sources")
         assert next(item for item in expired_sources if item["source_id"] == expiring["source_id"])["status"] == "expired"
         expired_status, expired_body = _json_request(sidecar.port, "/api/automatic-memory/scan", token=sidecar.token, method="POST", payload={"source_id": expiring["source_id"]})
         assert expired_status == 200
         assert expired_body.get("complete") is False or expired_body.get("errors")
-        evidence["scenarios"]["6_lifecycle"] = {"paused": runtime_paused, "resumed": runtime_resumed, "expired": expired_body}
+        expiry_authority = _assert_packaged_authority_paths(root, "EXPIRY_EVIDENCE")
+        evidence["scenarios"]["6_lifecycle"] = {"paused": runtime_paused, "resumed": runtime_resumed, "expired": expired_body, "expiry_scan": expiry_scan, "expiry_authority": expiry_authority}
 
         # Corrupt and healthy sources are independently authorized and scanned
         # through the same scheduler/worker composition.
@@ -652,23 +913,36 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
 
         # A process restart after a source mtime jump is the sleep/wake
         # equivalent. The normal API reconciliation must remain idempotent.
+        heartbeat_before_restart = sidecar.get("/api/automatic-memory/runtime")
         sidecar.stop()
         os.utime(source_dir / "history.json", (time.time() + 3600, time.time() + 3600))
         restart_before_ids = {str(row["scan_id"]) for row in _sqlite_counts(root)["scans"]}
         sidecar.start()
         restarted = sidecar.get("/api/automatic-memory/runtime")
+        assert restarted.get("scheduler_heartbeat_instance") != heartbeat_before_restart.get("scheduler_heartbeat_instance")
+        assert (restarted.get("scheduler_heartbeat_instance"), restarted.get("scheduler_heartbeat_generation")) != (heartbeat_before_restart.get("scheduler_heartbeat_instance"), heartbeat_before_restart.get("scheduler_heartbeat_generation"))
         restarted_scan = _automatic_scan_until_terminal(sidecar, source_id, restart_before_ids, reasons={"reconciliation"}, timeout=30.0)
         assert restarted["running"] is True and restarted_scan["status"] == "completed"
         evidence["scenarios"]["9_sleep_wake_restart"] = {"runtime": restarted, "scan": restarted_scan, "clock_jump_seconds": 3600}
+        heartbeat_samples = []
+        for _ in range(3):
+            heartbeat = sidecar.get("/api/automatic-memory/runtime")
+            heartbeat_age = heartbeat.get("scheduler_heartbeat_age")
+            assert heartbeat.get("scheduler_heartbeat_state") == "running", heartbeat
+            assert heartbeat_age is not None and 0 <= float(heartbeat_age) <= 10.0, heartbeat
+            heartbeat_samples.append({"age": heartbeat_age, "instance": heartbeat.get("scheduler_heartbeat_instance"), "generation": heartbeat.get("scheduler_heartbeat_generation")})
+            time.sleep(0.15)
         heartbeat = sidecar.get("/api/automatic-memory/runtime")
         heartbeat_age = heartbeat.get("scheduler_heartbeat_age")
-        assert heartbeat_age is not None and float(heartbeat_age) <= 10.0, heartbeat
         evidence["heartbeat"] = {
             "status": heartbeat.get("scheduler_heartbeat_state"),
             "scheduler_heartbeat_age": heartbeat_age,
             "instance": heartbeat.get("scheduler_heartbeat_instance"),
             "generation": heartbeat.get("scheduler_heartbeat_generation"),
             "reason": heartbeat.get("scheduler_heartbeat_reason"),
+            "samples": heartbeat_samples,
+            "previous_instance": heartbeat_before_restart.get("scheduler_heartbeat_instance"),
+            "previous_generation": heartbeat_before_restart.get("scheduler_heartbeat_generation"),
         }
         # Exercise the formal Qdrant failure path while the packaged
         # automatic-memory evidence source is still authorized/current.  The
@@ -678,16 +952,23 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
         )
         revoked = sidecar.post("/api/automatic-memory/revoke", {"source_id": source_id})
         assert revoked["status"] == "revoked"
+        evidence["scenarios"]["6_lifecycle"]["authority"] = _assert_packaged_authority_paths(
+            root, "VERSION", as_of=old_valid_from or None
+        )
         evidence["scenarios"]["6_lifecycle"]["revoked"] = revoked
 
     protected_after = {"third_party": _tree_sentinel(third_party), "vault": _tree_sentinel(vault)}
+    raw_after_stop = _raw_inventory(root)
+    assert not raw_after_stop["transient"] and not raw_after_stop["unexpected"], raw_after_stop
     sidecar_receipt = {
         "port": sidecar.port,
         "stdout": str(sidecar.stdout_path.relative_to(root)),
         "stderr": str(sidecar.stderr_path.relative_to(root)),
         "child_inventory_after_exit": sidecar.child_inventory,
-        "rebind_verified": True,
+        "rebind_verified": sidecar.port_rebind_verified,
+        "raw_inventory_after_stop": raw_after_stop,
     }
+    assert sidecar_receipt["rebind_verified"] and not sidecar_receipt["child_inventory_after_exit"]
     evidence["protected_after"] = protected_after
     evidence["sentinel_diff"] = {
         "third_party": _sentinel_diff(protected_before["third_party"], protected_after["third_party"]),
@@ -752,6 +1033,11 @@ def _run_crash_restart_matrix(root: Path) -> dict[str, Any]:
             source = _authorize(
                 sidecar, source_dir, grant_id=f"acceptance-crash-{percentage}"
             )
+            # Source registration attaches its run-on-start job synchronously,
+            # but the lifecycle callback can race the first pause's persisted
+            # job disable. Reassert pause after authorization so that the
+            # production reconciliation job is admitted only by resume.
+            sidecar.post("/api/automatic-memory/pause-runtime", {"confirmation": True})
             sidecar.post("/api/automatic-memory/resume-runtime", {"confirmation": True})
             target_progress = max(
                 1, int(20 * (0.3 if percentage == "30%" else 0.7) + 0.999999)
@@ -783,26 +1069,32 @@ def _run_crash_restart_matrix(root: Path) -> dict[str, Any]:
             sidecar.stop(crash=True)
             assert sidecar.process is None and crashed_pid != os.getpid()
             assert not sidecar.child_inventory
+            assert sidecar.port_rebind_verified
+            # Wait for the measured crashed scan leases before starting the
+            # recovery instance. Otherwise its one-shot run-on-start job can
+            # observe "already being processed" and defer for 60 seconds.
+            crash_expiry_values = [
+                datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                for value in (
+                    crash_barrier.get("lease_expires_at"),
+                    crash_barrier.get("scheduler_lease_expires_at"),
+                )
+                if value
+            ]
+            recovery_wait_until = max(
+                crash_expiry_values, default=datetime.now(timezone.utc)
+            )
+            recovery_wait_seconds = max(
+                0.0,
+                (recovery_wait_until - datetime.now(timezone.utc)).total_seconds(),
+            ) + 0.5
+            if recovery_wait_seconds > 0:
+                time.sleep(recovery_wait_seconds)
             sidecar = PackagedSidecar(run_root, source_dir=source_dir)
             sidecar.start()
             recovery_pid = sidecar.started_pid
-            # Wait for both durable leases, then one bounded scheduler cadence.
             # Startup reconciliation is authoritative; manual POST is only a
             # last-resort fallback and must reuse the crashed scan identity.
-            lease_row = _wait_until(lambda: next((row for row in sidecar.get("/api/automatic-memory/scans") if row.get("scan_id") == progress.get("scan_id")), None), timeout=5.0)
-            expiries = [
-                lease_row.get("lease_expires_at") if lease_row else None,
-                lease_row.get("scheduler_lease_expires_at") if lease_row else None,
-            ]
-            expiry_values = [
-                datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-                for value in expiries if value
-            ]
-            recovery_deadline = max(expiry_values, default=datetime.now(timezone.utc))
-            wait_seconds = max(
-                0.0,
-                (recovery_deadline - datetime.now(timezone.utc)).total_seconds(),
-            ) + 6.0
             recovery_event = _wait_until(
                 lambda: next(
                     (
@@ -814,22 +1106,13 @@ def _run_crash_restart_matrix(root: Path) -> dict[str, Any]:
                     ),
                     None,
                 ),
-                timeout=wait_seconds,
+                timeout=45.0,
                 interval=0.1,
             )
             fallback_used = recovery_event is None
             if fallback_used:
-                recovery_status, recovery = _json_request(
-                    sidecar.port,
-                    "/api/automatic-memory/scan",
-                    token=sidecar.token,
-                    method="POST",
-                    payload={"source_id": source["source_id"]},
-                    timeout=5.0,
-                )
-                assert recovery_status == 200 and recovery.get("scan_id") == crash_barrier["scan_id"]
-            else:
-                recovery = {"scan_id": crash_barrier["scan_id"], "trigger": "run_on_start"}
+                raise AssertionError("startup reconciliation did not recover within the durable lease barrier; manual scan fallback is forbidden")
+            recovery = {"scan_id": crash_barrier["scan_id"], "trigger": "run_on_start"}
             terminal = _wait_until(lambda: next((row for row in sidecar.get("/api/automatic-memory/scans") if row.get("scan_id") == crash_barrier["scan_id"] and row.get("status") in {"completed", "failed", "cancelled"}), None), timeout=30.0)
             assert terminal is not None, sidecar.get("/api/automatic-memory/scans")
             counts = _wait_until(lambda: _sqlite_counts(run_root) if _sqlite_counts(run_root)["queued"] == 0 else None, timeout=30.0) or _sqlite_counts(run_root)
@@ -855,6 +1138,8 @@ def _run_crash_restart_matrix(root: Path) -> dict[str, Any]:
                     if row.get("source_id") == source["source_id"]
                 ]
             ) == 1
+            raw_after_terminal = _raw_inventory(run_root)
+            assert not raw_after_terminal["transient"] and not raw_after_terminal["unexpected"], raw_after_terminal
             results[percentage] = {
                 "crash_barrier": crash_barrier,
                 "terminal": terminal,
@@ -873,17 +1158,18 @@ def _run_crash_restart_matrix(root: Path) -> dict[str, Any]:
                     "recovery_pid": recovery_pid,
                     "recovery_log": str(sidecar.stdout_path.relative_to(run_root)),
                     "recovery_error_log": str(sidecar.stderr_path.relative_to(run_root)),
-                    "crashed_child_inventory": [],
-                    "port_rebind_verified": True,
+                    "crashed_child_inventory": list(sidecar.child_inventory),
+                    "port_rebind_verified": sidecar.port_rebind_verified,
+                    "raw_inventory_after_terminal": raw_after_terminal,
                 },
             }
         finally:
             sidecar.stop()
+            final_raw = _raw_inventory(run_root)
+            assert not final_raw["transient"] and not final_raw["unexpected"], final_raw
     assert results["30%"]["jobs"] == results["70%"]["jobs"] == 20
-    for key in ("source", "scan", "job", "raw"):
-        assert len(results["30%"]["terminal_after"][key]) == len(results["70%"]["terminal_after"][key])
-    for key in ("source", "conversation", "message", "version", "memory"):
-        assert len(results["30%"]["terminal_after"]["structured"][key]) == len(results["70%"]["terminal_after"]["structured"][key])
+    left, right = (_logical_identity_snapshot(root / key.replace("%", "pct")) for key in ("30%", "70%"))
+    assert left == right, {"30%": left, "70%": right}
     for percentage in ("30%", "70%"):
         receipt = results[percentage]
         assert receipt["terminal"]["status"] == "completed"
