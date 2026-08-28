@@ -748,7 +748,7 @@ Production/Vault 或主人验收。
 ### Task 7N3 promotion evidence and thin quality orchestration（2026-08-28）
 
 Task7N3 已完成有界 measurement 收口：产品/测试提交
-`75ee0c6c997326c2045b667c84e6a7707a45c558` 新增 `quality_promotion.py`，逐条调用正式
+`21e4db93a1cf63a709c831fdab7720f6e7845a47` 新增 `quality_promotion.py`，逐条调用正式
 `AutoMemoryPromotionService`，并从持久 read model 复算 promotion projection、message
 link、audit 与 missing/extra/duplicate；protected、assistant-only、authority-conflict
 的错误 active、非 active projection/link 和重复/孤儿 evidence 均 fail closed。两个历史

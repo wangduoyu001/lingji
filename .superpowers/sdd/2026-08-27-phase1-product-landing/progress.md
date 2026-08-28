@@ -251,6 +251,6 @@ protected/assistant/conflict 错误 active、非 active projection/link、重复
 两个历史 end-to-end 直接测试已迁移到 nullable Production/report 与 raw counters，保留
 opaque ID、SQLite 全值扫描、敏感信息和拒绝语义。RED 为 4 failed，GREEN 为 `156 passed,
 1 skipped, 1 warning`；质量 CLI 仍实测 FAIL（事实 0/106、引用 0/106、MCP 0/100、baseline
-NOT_MEASURED、自动晋级 0/93）。产品/测试提交 `75ee0c6c997326c2045b667c84e6a7707a45c558`，
+NOT_MEASURED、自动晋级 0/93）。产品/测试提交 `21e4db93a1cf63a709c831fdab7720f6e7845a47`，
 报告 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7n3-report.md`，等待独立审查；
 未运行 100k/release/Artifact/live/Production/Vault/主人数据。
