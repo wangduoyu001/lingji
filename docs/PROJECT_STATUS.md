@@ -565,3 +565,11 @@ focused lifecycle/runtime `31 passed, 1 warning`，受影响回归 `250 passed,
 3 warnings`，Desktop source smoke/build PASS。I4 fresh packaged 30/70 明确延期至
 全新 Task6V；Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`，不得宣称最终验收、live、
 Artifact、Production/Vault 或主人 PASS。
+Task 6M Repair Round 1 final independent review (2026-08-28)：报告
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6m-final-review.md` 针对 docs HEAD
+`28f798557459b7cd7a1187d462969e43c871450a` 与产品/测试 `4b51392fe448472e9099978ff2528f742dff887b`
+给出 `FAIL / BLOCKED_AT_REPAIR_CAP`，Critical=0、Important=2、Minor=2。terminal/queued/retrying
+的 WRONG lease marker 仍可被删除，raw-root scan error 仍有未捕获异常与未脱敏 receipt；其余
+legacy proof、正常 finally、inline SIGKILL/restart、lstat guard 与有界 UI 实现已复核。I4
+packaged 30/70 延期至 Task6V，不计为本轮产品失败；Task 6M 保持 `NOT_ACCEPTED`，Task6 保持
+`IN_PROGRESS / NOT_ACCEPTED`，不再授权本轮修复。

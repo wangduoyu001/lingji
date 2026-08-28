@@ -119,3 +119,15 @@ paths/job/lease tokens. Affected snapshot/resume/queue/worker/runtime/Work Fact/
 adapter/structured/Task6A/6H/6S/Task8 regression matrix is `250 passed, 3
 warnings`. I4 fresh packaged 30/70 remains deferred to new Task6V; Task6 stays
 `IN_PROGRESS / NOT_ACCEPTED`, with no live/Artifact/Production/Vault/owner data.
+Task 6M Repair Round 1 final independent review (2026-08-28): report
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6m-final-review.md`
+against docs HEAD `28f798557459b7cd7a1187d462969e43c871450a` and product/tests
+`4b51392fe448472e9099978ff2528f742dff887b` is `FAIL / BLOCKED_AT_REPAIR_CAP`
+with Critical=0, Important=2 (terminal/queued/retrying WRONG-lease markers can
+still be removed; filesystem scan errors are not fully fail-closed/sanitized),
+and Minor=2 evidence gaps. Fresh lifecycle/runtime is `31 passed, 1 warning`,
+affected regression is `250 passed, 3 warnings`, Desktop smoke/build and the
+maintained rendered flow pass. I4 packaged 30/70 remains explicitly deferred to
+a new Task6V and is not scored as a repair-product failure. Task 6M remains
+`NOT_ACCEPTED`; Task6 remains `IN_PROGRESS / NOT_ACCEPTED`; no further repair is
+authorized.

@@ -2062,3 +2062,19 @@ Windows 重启后恢复 = 100%
 - I4 fresh packaged 30/70 crash/restart/stop 明确延期至全新 Task6V，本轮未伪造 packaged
   PASS；不启动 live 8766/8767，不运行 Artifact/release，不接触 Production/Vault/主人数据。
   报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6m-report.md`。
+
+## 2026-08-28 · Task 6M · Repair Round 1 final independent review
+
+- 审查报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6m-final-review.md`；docs
+  HEAD `28f798557459b7cd7a1187d462969e43c871450a`，复核产品/测试
+  `4b51392fe448472e9099978ff2528f742dff887b`。Fresh lifecycle/runtime `31 passed, 1 warning`，
+  受影响回归 `250 passed, 3 warnings`，Desktop source smoke/build 与既有 rendered owner flow
+  通过；acceptance sync、local handoff、diff-check 通过。
+- 结论严格为 `FAIL / BLOCKED_AT_REPAIR_CAP`：Critical=0、Important=2、Minor=2。I2 仍发现
+  terminal/queued/retrying marker 未验证 lease 即可删除 WRONG lease hard-link；I3 仍发现
+  raw-root iteration 的非 OSError 会逃逸且 OSError 字符串未脱敏写入 receipt。I5/M1 与正常
+  finally/SIGKILL inline 证据实现通过；cleanup-specific rendered proof 与完整双 worker/source
+  sentinel 仅为 Minor evidence gaps。
+- I4 packaged 30/70 明确属于后续 Task6V，不因未运行单独判本轮产品失败；Task 6M 保持
+  `NOT_ACCEPTED`，Task6 保持 `IN_PROGRESS / NOT_ACCEPTED`，不再授权本轮修复，不得宣称
+  release、Artifact、live、Production/Vault、owner 或 Phase 1 PASS。

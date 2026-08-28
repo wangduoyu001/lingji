@@ -511,3 +511,13 @@ M1/M2 are closed by product/tests `4b51392fe448472e9099978ff2528f742dff887b`
 with strict legacy/v1 hardlink ownership proof, queue-error receipts, lstat
 identity protection and Desktop cleanup visibility. I4 fresh packaged 30/70 is
 explicitly deferred to a new Task6V; Task6 remains `IN_PROGRESS / NOT_ACCEPTED`.
+Task 6M Repair Round 1 final independent review (2026-08-28): report
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6m-final-review.md` at docs HEAD
+`28f798557459b7cd7a1187d462969e43c871450a` reviewed product/tests
+`4b51392fe448472e9099978ff2528f742dff887b` and returned
+`FAIL / BLOCKED_AT_REPAIR_CAP` (Critical=0, Important=2, Minor=2). Strict
+terminal/queued/retrying WRONG-lease ownership and full filesystem scan
+fail-closed/sanitization remain open. I4 packaged 30/70 is explicitly deferred
+to a new Task6V and is not scored as a repair-product failure. Task6M remains
+`NOT_ACCEPTED`; Task6 remains `IN_PROGRESS / NOT_ACCEPTED`; no further repair is
+authorized.
