@@ -78,3 +78,10 @@ checkpoint, lease, cron, startup recovery was `155 passed, 2 warnings`; Desktop,
 compile, diff, sync and handoff gates passed. Acceptance-only evidence only:
 no release, Artifact, live service, Production/Vault, owner PASS; fresh security
 review remains required.
+
+Task 6C Repair Round 1: BLOCKED / NOT_ACCEPTED — fresh review
+`3fd8059da4ed10b8a1fcd0581793bd0fb2d177ee` 的 `-x` packaged rerun 在真实
+crash/recovery/stop 后发现 `.automatic-memory-*.json` transient marker 仍在
+raw 目录（2,640,287 bytes）。现有产品 cleanup 只回收 `.snapshot-owned-*`；
+测试 harness 不得 unlink 该 marker 伪造 PASS。未授权产品扩展，未提交未验证
+harness 改动，已恢复测试至 `6eb469f`；Task6 不能进入 READY_FOR_TASK7。

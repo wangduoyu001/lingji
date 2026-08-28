@@ -1,6 +1,6 @@
 # Phase 1 Automation and UI Gate — Task 6
 
-Status: `PASS_AUTOMATED / READY_FOR_TASK7`
+Status: `IN_PROGRESS / NOT_ACCEPTED`
 
 This is the sole Task 6 evidence authority. It is Acceptance-only evidence from
 temporary roots; it is not Artifact, release, live 8766/8767, Production/Vault,
@@ -9,6 +9,10 @@ or owner acceptance.
 The historical interim sections below retain their original timestamps and
 pre-closeout dispositions; the Task 6C closeout at the end is the current
 authority for the final automated status and raw crash receipts.
+
+Task6C Repair Round 1 is currently blocked by the fresh failure recorded at the
+end of this report; the earlier Task6C PASS text is retained as historical
+evidence only and is superseded by that disposition.
 
 ## Identity and bounded repair
 
@@ -194,3 +198,17 @@ This status is automated Acceptance evidence only. It makes no release,
 Artifact, live 8766/8767, Production/Vault, or owner acceptance claim.
 `LOCAL_EXECUTION_TASK.md` remains `IDLE`; fresh independent security review is
 still required.
+
+## Task 6C Repair Round 1 disposition (current)
+
+The fresh review `3fd8059da4ed10b8a1fcd0581793bd0fb2d177ee` supersedes the
+historical closeout above. The first `-x` rerun failed after real sidecar crash,
+startup recovery, terminal `20/20`, runtime pause, and recovery-sidecar stop:
+`storage/raw/.automatic-memory-<random>.json` remained in the transient marker
+inventory (`2,640,287` bytes). Existing `ConsistentSnapshot` cleanup does not
+reclaim this marker. This is a product cleanup defect, not a safe parity-harness
+adjustment; the attempted uncommitted harness repair was discarded.
+
+Current authority is therefore `IN_PROGRESS / NOT_ACCEPTED` with I1 blocked.
+I2–I6 are not claimed as accepted by this report. No product change, release,
+Artifact, live service, Production/Vault, or owner acceptance is claimed.

@@ -1,5 +1,22 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Task 6C Repair Round 1 · blocked cleanup receipt
+
+- Fresh review `3fd8059da4ed10b8a1fcd0581793bd0fb2d177ee` 要求 I1–I6 修复。
+  已执行 packaged `-x`，首个真实失败发生在 crash/recovery matrix：原 sidecar
+  被真实 PID kill、recovery scan 完成 `20/20`、runtime pause 且 recovery
+  sidecar stop 后，`storage/raw/.automatic-memory-<random>.json` marker 仍为
+  `2,640,287` bytes，terminal/stop inventory 非空。
+- 这是现有产品 cleanup seam 缺陷：`ConsistentSnapshot` 只回收
+  `.snapshot-owned-*`，不回收该 automatic-memory marker。harness 不能直接
+  unlink 来掩盖真实进程清理问题；未授权产品修改，故 Task6 保持
+  `IN_PROGRESS / NOT_ACCEPTED`，先前 `PASS_AUTOMATED / READY_FOR_TASK7` 仅为
+  历史状态，已被当前 blocker supersede。
+- 本轮未提交未验证的 497 行 harness 改动，测试恢复到已知
+  `6eb469fefafe0a33e6ac65f765c7663741883811`。报告
+  `.superpowers/sdd/2026-08-27-phase1-product-landing/task-6c-report.md` 已补充
+  blocker；不宣称 release、Artifact、live、Production/Vault、owner PASS。
+
 ## 2026-08-28 · Phase 1 Product Landing · Task 6C Deterministic Crash-Recovery Receipt
 
 - 本轮是 Task6 最终独立 bounded Acceptance gate，基线为 Task6H accepted

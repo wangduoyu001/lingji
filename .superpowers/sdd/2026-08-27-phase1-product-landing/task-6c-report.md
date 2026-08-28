@@ -1,6 +1,6 @@
 # Task 6C — Deterministic Crash-Recovery Receipt
 
-Status: `PASS_AUTOMATED / READY_FOR_TASK7` in the sole authority
+Status: `IN_PROGRESS / NOT_ACCEPTED` in the sole authority
 `docs/TEST_REPORTS/PHASE1_AUTOMATION_UI_GATE.md`.
 
 This is an Acceptance-only bounded gate. It used isolated temporary roots and
@@ -91,3 +91,26 @@ removal. `LOCAL_EXECUTION_TASK.md` remains `IDLE`.
 This report does not claim release, Artifact readiness, live service readiness,
 Production/Vault safety approval, or owner acceptance. Fresh independent
 security review remains required; no further repair is authorized in this gate.
+
+## Repair Round 1 blocker (2026-08-28)
+
+The fresh review required I1–I6 repair. The first fresh `-x` packaged rerun
+reached the real crash/restart matrix and failed after recovery terminalization:
+
+```text
+AssertionError: transient marker inventory was not empty
+storage/raw/.automatic-memory-<random>.json (2,640,287 bytes)
+```
+
+The marker persisted after the original sidecar was killed, the recovery scan
+completed `20/20`, runtime was paused, and the recovery sidecar was stopped.
+The existing `ConsistentSnapshot` cleanup seam reclaims `.snapshot-owned-*`
+files but does not reclaim this `.automatic-memory-*.json` marker. Removing it
+from the harness would conceal a real cleanup defect and violate the required
+terminal/stop receipt semantics. No product change is authorized in this
+Task6C task, so the repair remains `NOT_ACCEPTED`; the authority must not be
+advanced to `READY_FOR_TASK7` until the product owner authorizes the minimal
+cleanup fix and a fresh packaged gate passes.
+
+The attempted uncommitted harness repair was discarded rather than committed.
+The known test baseline remains commit `6eb469fefafe0a33e6ac65f765c7663741883811`.

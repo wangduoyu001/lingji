@@ -72,6 +72,12 @@ warnings`，Desktop/build/rendered E2E、compile/diff/sync/handoff 通过。该�
 仅是临时 Acceptance 自动证据，不是 release、Artifact、live 8766/8767、
 Production/Vault 或 owner PASS；fresh security review 仍待执行。
 
+Task 6C Repair Round 1 fresh review 已将上述历史 PASS 置为 superseded：真实
+crash/recovery/stop 后仍残留 `.automatic-memory-*.json` transient marker，违反
+I1 terminal/stop cleanup receipt。现有 harness 修补未提交并已恢复至
+`6eb469f`；该项需要最小产品 cleanup 授权，当前 Task6 保持
+`IN_PROGRESS / NOT_ACCEPTED`，不得宣称 READY_FOR_TASK7。
+
 ## 1B. 自动化第二大脑的锁定方向
 
 Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明确 allowlist 内自动发现并持续接管官方支持或明确授权的 AI 记录，保存完整本地原始证据、来源链和可重建 RAG 投影，并在 Desktop 真实显示发现、处理、结果、失败、下一动作与执行者。
