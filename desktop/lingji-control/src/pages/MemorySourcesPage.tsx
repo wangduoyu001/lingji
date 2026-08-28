@@ -122,6 +122,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
       {resource.error && snapshot && <Notice kind="warning">暂时无法读取记忆来源：{resource.error.message}。已保留上一次成功结果，请点击“重新读取”恢复。</Notice>}
       {error && <Notice kind="error">{error}</Notice>}
       {message && <Notice kind="info">{message}</Notice>}
+      {snapshot.runtime?.cleanup_pending && <Notice kind="error">临时文件清理失败：灵机会自动重试，可重试。</Notice>}
       <section className="memory-sources-summary" aria-label="来源总览">
         <div><span>已发现来源</span><strong>{snapshot.discovered.length}</strong><small>已授权 {snapshot.authorized.length} 个</small></div>
         <div><span>当前接管</span><strong>{snapshot.sources.filter((item) => item.state === "current").length}</strong><small>扫描完成后才算接管</small></div>

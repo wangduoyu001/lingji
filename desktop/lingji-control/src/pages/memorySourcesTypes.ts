@@ -70,6 +70,8 @@ export type RuntimeSummary = {
   scheduler_heartbeat_last_error?: string | null;
   worker_state?: boolean | null;
   authorized_watcher_count?: number | null;
+  cleanup_pending?: boolean | null;
+  cleanup_error?: string | null;
   last_global_error?: string | null;
 };
 

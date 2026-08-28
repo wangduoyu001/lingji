@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import errno
+import hashlib
 import os
 import socket
 import stat
@@ -20,6 +21,12 @@ from typing import Any
 _SEGMENT_MAX_LENGTH = 64
 _SEGMENT = rf"[A-Za-z0-9][A-Za-z0-9_-]{{0,{_SEGMENT_MAX_LENGTH - 1}}}"
 _MARKER_RE = re.compile(rf"^\.automatic-memory-v1-({_SEGMENT})\.({_SEGMENT})(\.[A-Za-z0-9][A-Za-z0-9._-]{{0,31}})$")
+_LEGACY_MARKER_RE = re.compile(r"^\.automatic-memory-([0-9a-fA-F]{32})(\.[A-Za-z0-9][A-Za-z0-9._-]{0,31})$")
+_RAW_NAME_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+class _QueueReadFailure(RuntimeError):
+    """Internal sentinel used to keep queue/SQLite failures in the receipt."""
 
 
 def _safe_segment(value: str, label: str) -> str:
@@ -64,7 +71,99 @@ def _queue_job(queue: Any, job_id: str) -> dict[str, Any] | None:
         value = queue.get(job_id)
     except (LookupError, KeyError):
         return None
+    except Exception as exc:
+        raise _QueueReadFailure from exc
     return value if isinstance(value, dict) else None
+
+
+def _identity(info: os.stat_result) -> tuple[int, int, int, int]:
+    return (int(info.st_dev), int(info.st_ino), int(info.st_mode), int(info.st_size))
+
+
+def _sha256(path: Path) -> str | None:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except (OSError, ValueError):
+        return None
+    return digest.hexdigest()
+
+
+def _content_addressed_raw(root: Path, raw_path: Path) -> os.stat_result | None:
+    """Return raw identity only for a safe direct-child content-addressed file."""
+    if raw_path.parent != root or _RAW_NAME_RE.fullmatch(raw_path.name) is None:
+        return None
+    try:
+        info = raw_path.lstat()
+    except OSError:
+        return None
+    if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
+        return None
+    if _sha256(raw_path) != raw_path.name:
+        return None
+    return info
+
+
+def _legacy_proof(root: Path, marker: Path, marker_info: os.stat_result) -> str | None:
+    """Require a same-directory raw object to prove an old marker is derived."""
+    content_match = False
+    try:
+        candidates = tuple(root.iterdir())
+    except OSError:
+        return "legacy_hardlink_proof_missing"
+    for candidate in candidates:
+        if candidate == marker or _RAW_NAME_RE.fullmatch(candidate.name) is None:
+            continue
+        raw_info = _content_addressed_raw(root, candidate)
+        if raw_info is None:
+            continue
+        content_match = True
+        if _identity(marker_info) == _identity(raw_info):
+            return None
+    return "identity_mismatch" if content_match else "legacy_hardlink_proof_missing"
+
+
+def _v1_raw_proof(root: Path, marker_info: os.stat_result, job: dict[str, Any]) -> str | None:
+    raw_value = job.get("input_path")
+    if not isinstance(raw_value, (str, Path)) or not str(raw_value).strip():
+        return "lease_unverifiable"
+    raw_path = Path(raw_value).expanduser()
+    raw_info = _content_addressed_raw(root, raw_path)
+    if raw_info is None:
+        return "lease_unverifiable"
+    if _identity(marker_info) != _identity(raw_info):
+        return "identity_mismatch"
+    return None
+
+
+def _remove_if_unchanged(
+    entry: Path,
+    initial_info: os.stat_result,
+    report: dict[str, Any],
+    reason: str,
+) -> bool:
+    """Re-check identity immediately before unlinking (M1)."""
+    try:
+        current_info = entry.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        report["preserved"].append({"name": entry.name, "reason": "identity_changed"})
+        return False
+    if _identity(current_info) != _identity(initial_info):
+        report["preserved"].append({"name": entry.name, "reason": "identity_changed"})
+        return False
+    try:
+        entry.unlink()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        report["errors"].append({"reason": "unlink_failed", "error": "unlink_failed"})
+        return False
+    report["removed"].append({"name": entry.name, "reason": reason})
+    return True
 
 
 def _worker_is_provably_dead(worker_id: Any) -> bool:
@@ -130,18 +229,34 @@ def reconcile_automatic_memory_transients(
             info = entry.lstat()
         except FileNotFoundError:
             continue
+        except OSError:
+            report["preserved"].append({"name": entry.name, "reason": "unreadable"})
+            continue
         if stat.S_ISLNK(info.st_mode):
             report["preserved"].append({"name": entry.name, "reason": "symlink"})
             continue
         if not stat.S_ISREG(info.st_mode):
             report["preserved"].append({"name": entry.name, "reason": "not_regular_file"})
             continue
+        legacy = _LEGACY_MARKER_RE.fullmatch(entry.name)
         matched = _MARKER_RE.fullmatch(entry.name)
+        if legacy is not None:
+            proof_reason = _legacy_proof(root, entry, info)
+            if proof_reason is not None:
+                report["preserved"].append({"name": entry.name, "reason": proof_reason})
+                continue
+            _remove_if_unchanged(entry, info, report, "legacy_hardlink")
+            continue
         if matched is None:
             report["preserved"].append({"name": entry.name, "reason": "unknown_marker"})
             continue
         job_id, lease_token, _suffix = matched.groups()
-        job = _queue_job(queue, job_id)
+        try:
+            job = _queue_job(queue, job_id)
+        except _QueueReadFailure:
+            report["preserved"].append({"name": entry.name, "reason": "queue_read_failed"})
+            report["errors"].append({"reason": "queue_read_failed", "error": "queue_unavailable"})
+            continue
         if job is None:
             report["preserved"].append({"name": entry.name, "reason": "unknown_job"})
             continue
@@ -171,14 +286,11 @@ def reconcile_automatic_memory_transients(
         else:
             report["preserved"].append({"name": entry.name, "reason": "unknown_job_status"})
             continue
-        try:
-            entry.unlink()
-        except FileNotFoundError:
+        proof_reason = _v1_raw_proof(root, info, job)
+        if proof_reason is not None:
+            report["preserved"].append({"name": entry.name, "reason": proof_reason})
             continue
-        except OSError as exc:
-            report["errors"].append({"name": entry.name, "reason": "unlink_failed", "error": str(exc)[:500]})
-            continue
-        report["removed"].append({"name": entry.name, "reason": reason})
+        _remove_if_unchanged(entry, info, report, reason or "lease_released")
 
     report["removed_count"] = len(report["removed"])
     report["preserved_count"] = len(report["preserved"])

@@ -64,13 +64,19 @@ class ExtractionWorker:
 
     def status(self) -> dict[str, Any]:
         inventory = getattr(self.pipeline, "transient_cleanup_inventory", {})
+        try:
+            queue_status = self.pipeline.queue.stats()
+        except Exception:
+            # Keep the cleanup receipt visible while the durable queue is
+            # temporarily unavailable; the next worker cycle can retry it.
+            queue_status = {}
         return {
             "running": self.running,
             "poll_seconds": self.poll_seconds,
             "batch_size": self.batch_size,
             "thread_alive": self.running,
             "stop_outcome": dict(self._stop_outcome),
-            "queue": self.pipeline.queue.stats(),
+            "queue": queue_status,
             "last_result": self._last_result or {},
             "transient_cleanup": dict(inventory) if isinstance(inventory, dict) else {},
         }

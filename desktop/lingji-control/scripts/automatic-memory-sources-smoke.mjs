@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { actionEvidence, MemorySourcesApi, mergeSourceFacts, scanStatusLabel, scanTerminalEvidence, sourceStateLabel, countLabel } from "../src/pages/memorySourcesApi.ts";
 import { LingJiApi } from "../src/api.ts";
+import { readFileSync } from "node:fs";
 
 const calls = [];
 globalThis.window = globalThis;
@@ -32,6 +33,10 @@ const client = new LingJiApi();
 client.configure("http://127.0.0.1:8766", "test");
 const api = new MemorySourcesApi(client);
 const snapshot = await api.snapshot();
+const pageSource = readFileSync(new URL("../src/pages/MemorySourcesPage.tsx", import.meta.url), "utf8");
+assert.match(pageSource, /临时文件清理失败：灵机会自动重试，可重试/);
+assert.match(pageSource, /cleanup_pending/);
+assert.doesNotMatch(pageSource, /String\(snapshot\.runtime\?\.cleanup_error/);
 assert.equal(snapshot.sources.length, 2);
 assert.equal(snapshot.sources.find((item) => item.kind === "codex_transcript")?.state, "current");
 assert.equal(snapshot.sources.find((item) => item.kind === "claude_desktop")?.state, "unsupported");

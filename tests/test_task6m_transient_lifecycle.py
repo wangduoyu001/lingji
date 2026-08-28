@@ -24,6 +24,21 @@ from src.extraction.transient import (
     automatic_memory_dispatch_path,
     reconcile_automatic_memory_transients,
 )
+from src.extraction.worker import ExtractionWorker
+
+
+def _durable_raw(raw_root: Path, contents: bytes) -> Path:
+    raw_root.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256(contents).hexdigest()
+    path = raw_root / digest
+    path.write_bytes(contents)
+    return path
+
+
+def _link_marker(raw_path: Path, marker: Path) -> Path:
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    os.link(raw_path, marker)
+    return marker
 
 
 def _queue(tmp_path: Path) -> SQLiteExtractionQueue:
@@ -52,20 +67,20 @@ def test_dispatch_marker_is_bounded_and_carries_job_and_lease(tmp_path: Path) ->
 
 def test_terminal_marker_is_reconciled_and_repeat_is_idempotent(tmp_path: Path) -> None:
     queue = _queue(tmp_path)
+    raw_root = tmp_path / "raw"
+    raw = _durable_raw(raw_root, b"staging")
     job = queue.enqueue(
         "automatic_memory_snapshot",
-        input_path=tmp_path / ("b" * 64),
-        payload={"source_id": "source-1", "raw_id": "b" * 64},
+        input_path=raw,
+        payload={"source_id": "source-1", "raw_id": raw.name},
         idempotency_key="terminal-marker",
     )
     claimed = queue.claim("worker-1", job_id=job["job_id"], allowed_source_types={"automatic_memory_snapshot"})
     assert claimed is not None
-    raw_root = tmp_path / "raw"
-    raw_root.mkdir()
     marker = automatic_memory_dispatch_path(
         raw_root, claimed["job_id"], claimed["lease_token"], ".md"
     )
-    marker.write_text("staging", encoding="utf-8")
+    _link_marker(raw, marker)
     queue.complete(
         claimed["job_id"], {"ok": True}, worker_id="worker-1", lease_token=claimed["lease_token"]
     )
@@ -82,11 +97,11 @@ def test_terminal_marker_is_reconciled_and_repeat_is_idempotent(tmp_path: Path) 
 def test_active_lease_is_preserved_but_expired_lease_is_removed(tmp_path: Path) -> None:
     queue = _queue(tmp_path)
     raw_root = tmp_path / "raw"
-    raw_root.mkdir()
+    raw = _durable_raw(raw_root, b"staging")
     job = queue.enqueue(
         "automatic_memory_snapshot",
-        input_path=tmp_path / ("c" * 64),
-        payload={"source_id": "source-1", "raw_id": "c" * 64},
+        input_path=raw,
+        payload={"source_id": "source-1", "raw_id": raw.name},
         idempotency_key="lease-marker",
     )
     claimed = queue.claim("worker-1", job_id=job["job_id"], allowed_source_types={"automatic_memory_snapshot"})
@@ -94,7 +109,7 @@ def test_active_lease_is_preserved_but_expired_lease_is_removed(tmp_path: Path) 
     marker = automatic_memory_dispatch_path(
         raw_root, claimed["job_id"], claimed["lease_token"], ".json"
     )
-    marker.write_text("staging", encoding="utf-8")
+    _link_marker(raw, marker)
     active = reconcile_automatic_memory_transients(raw_root, queue)
     assert marker.exists()
     assert active["preserved_count"] == 1
@@ -142,17 +157,17 @@ def test_unknown_malformed_symlink_and_directory_are_preserved(tmp_path: Path) -
 def test_unlink_permission_error_is_reported_without_false_success(tmp_path: Path, monkeypatch) -> None:
     queue = _queue(tmp_path)
     raw_root = tmp_path / "raw"
-    raw_root.mkdir()
+    raw = _durable_raw(raw_root, b"staging")
     job = queue.enqueue(
         "automatic_memory_snapshot",
-        input_path=tmp_path / ("d" * 64),
-        payload={"source_id": "source-1", "raw_id": "d" * 64},
+        input_path=raw,
+        payload={"source_id": "source-1", "raw_id": raw.name},
         idempotency_key="unlink-error",
     )
     claimed = queue.claim("worker-1", job_id=job["job_id"], allowed_source_types={"automatic_memory_snapshot"})
     assert claimed is not None
     marker = automatic_memory_dispatch_path(raw_root, claimed["job_id"], claimed["lease_token"], ".jsonl")
-    marker.write_text("staging", encoding="utf-8")
+    _link_marker(raw, marker)
     queue.complete(claimed["job_id"], {}, worker_id="worker-1", lease_token=claimed["lease_token"])
     original_unlink = Path.unlink
 
@@ -178,9 +193,10 @@ def test_two_active_queue_leases_never_remove_each_other_markers(tmp_path: Path)
     raw_root.mkdir()
     markers = []
     for index in range(2):
+        raw = _durable_raw(raw_root, f"active-{index}".encode())
         job = queue.enqueue(
-            "automatic_memory_snapshot", input_path=tmp_path / (f"{index}" * 64),
-            payload={"source_id": f"source-{index}", "raw_id": f"{index}" * 64},
+            "automatic_memory_snapshot", input_path=raw,
+            payload={"source_id": f"source-{index}", "raw_id": raw.name},
             idempotency_key=f"concurrent-{index}",
         )
         claimed = queue.claim(
@@ -191,7 +207,7 @@ def test_two_active_queue_leases_never_remove_each_other_markers(tmp_path: Path)
         marker = automatic_memory_dispatch_path(
             raw_root, claimed["job_id"], claimed["lease_token"], ".jsonl"
         )
-        marker.write_text("staging", encoding="utf-8")
+        _link_marker(raw, marker)
         markers.append(marker)
     report = reconcile_automatic_memory_transients(raw_root, queue)
     assert report["removed_count"] == 0
@@ -258,6 +274,43 @@ def test_pipeline_dispatch_uses_queue_identity_and_leaves_durable_raw_unchanged(
     assert observed and not observed[0].exists()
     assert raw_path.exists()
     assert hashlib.sha256(raw_path.read_bytes()).hexdigest() == raw_id
+
+
+def test_adapter_exception_finally_removes_dispatch_marker(tmp_path: Path, monkeypatch) -> None:
+    state_path = tmp_path / "lingji_state.db"
+    state = __import__("src.storage", fromlist=["StateDatabase"]).StateDatabase(state_path)
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    registry = SourceRegistry(state)
+    source = registry.register(
+        AuthorizationScope("grant-failed", ("generic_ai_history",), (str(source_root),), datetime.now(timezone.utc), None, True),
+        "generic_ai_history", str(source_root),
+    )
+    raw_root = tmp_path / "storage" / "raw"
+    raw = _durable_raw(raw_root, b"failed durable raw")
+    queue = SQLiteExtractionQueue(state_path)
+    job = queue.enqueue(
+        "automatic_memory_snapshot", input_path=raw,
+        payload={"source_id": source.source_id, "source_type": "generic_ai_history", "raw_id": raw.name,
+                 "sha256": raw.name, "relative_path": "history.json"}, idempotency_key="adapter-failure-marker",
+    )
+    adapters = AdapterRegistry()
+    adapter = GenericAIHistoryAdapter()
+    adapters.register(adapter)
+    sink = VaultExtractionSink(VaultLayout(tmp_path / "vault"), tmp_path / "storage", state_db=state)
+    observed: list[Path] = []
+
+    def fail(request):
+        observed.append(request.input_path)
+        raise RuntimeError("adapter fixture failure")
+
+    monkeypatch.setattr(adapter, "extract", fail)
+    monkeypatch.setattr(adapters, "resolve", lambda *args, **kwargs: adapter)
+    pipeline = ExtractionPipeline(queue, adapters, sink)
+    result = pipeline.process_internal_next(worker_id="worker-failed")
+    assert result["job"]["status"] == "failed"
+    assert observed and not observed[0].exists()
+    assert raw.exists() and hashlib.sha256(raw.read_bytes()).hexdigest() == raw.name
 
 
 def test_real_killed_pipeline_leaves_marker_then_restart_reconciles_it(tmp_path: Path) -> None:
@@ -338,3 +391,110 @@ ExtractionPipeline(queue, registry, sink).process_internal_next()
         if process.poll() is None:
             process.kill()
             process.wait(timeout=10)
+
+
+def test_legacy_marker_requires_content_addressed_hardlink_proof(tmp_path: Path) -> None:
+    queue = _queue(tmp_path)
+    raw_root = tmp_path / "raw"
+    raw = _durable_raw(raw_root, b"legacy durable raw")
+    valid = _link_marker(raw, raw_root / f".automatic-memory-{'a' * 32}.json")
+    copy = raw_root / f".automatic-memory-{'b' * 32}.json"
+    copy.write_bytes(raw.read_bytes())
+    single = raw_root / f".automatic-memory-{'c' * 32}.json"
+    single.write_bytes(b"unrelated")
+    symlink = raw_root / f".automatic-memory-{'d' * 32}.json"
+    try:
+        symlink.symlink_to(raw)
+    except OSError:
+        pytest.skip("symlinks unavailable on this platform")
+
+    report = reconcile_automatic_memory_transients(raw_root, queue)
+    assert not valid.exists()
+    assert copy.exists() and single.exists() and symlink.is_symlink()
+    reasons = {item["reason"] for item in report["preserved"]}
+    assert reasons & {"legacy_hardlink_proof_missing", "identity_mismatch"}
+    assert "symlink" in reasons
+    assert raw.exists() and hashlib.sha256(raw.read_bytes()).hexdigest() == raw.name
+
+
+def test_v1_terminal_marker_requires_job_raw_hardlink_identity(tmp_path: Path) -> None:
+    queue = _queue(tmp_path)
+    raw_root = tmp_path / "raw"
+    raw = _durable_raw(raw_root, b"v1 durable raw")
+    job = queue.enqueue(
+        "automatic_memory_snapshot", input_path=raw,
+        payload={"source_id": "source-1", "raw_id": raw.name}, idempotency_key="v1-proof",
+    )
+    claimed = queue.claim("worker-1", job_id=job["job_id"], allowed_source_types={"automatic_memory_snapshot"})
+    assert claimed is not None
+    valid = _link_marker(raw, automatic_memory_dispatch_path(raw_root, claimed["job_id"], claimed["lease_token"], ".json"))
+    wrong = automatic_memory_dispatch_path(raw_root, claimed["job_id"], "wrong-lease", ".json")
+    wrong.write_bytes(raw.read_bytes())
+    queue.complete(claimed["job_id"], {}, worker_id="worker-1", lease_token=claimed["lease_token"])
+
+    report = reconcile_automatic_memory_transients(raw_root, queue)
+    assert not valid.exists()
+    assert wrong.exists()
+    assert report["preserved"][0]["reason"] in {"lease_unverifiable", "identity_mismatch"}
+    assert raw.exists() and hashlib.sha256(raw.read_bytes()).hexdigest() == raw.name
+
+
+def test_queue_read_failure_is_degraded_receipt_and_preserves_marker(tmp_path: Path) -> None:
+    raw_root = tmp_path / "raw"
+    marker = raw_root / ".automatic-memory-v1-LJ-JOB-ABCDEF.lease-token.json"
+    marker.parent.mkdir()
+    marker.write_bytes(b"marker")
+
+    class BrokenQueue:
+        def get(self, _job_id):
+            raise RuntimeError("sqlite /private/path/token=secret unavailable")
+
+    report = reconcile_automatic_memory_transients(raw_root, BrokenQueue())
+    assert marker.exists()
+    assert report["errors"]
+    serialized = json.dumps(report["errors"], ensure_ascii=False)
+    assert "/private/path" not in serialized and "secret" not in serialized
+
+
+def test_worker_status_keeps_cleanup_receipt_when_queue_stats_is_unavailable() -> None:
+    class BrokenQueue:
+        def stats(self):
+            raise RuntimeError("sqlite path/token unavailable")
+
+    class Pipeline:
+        queue = BrokenQueue()
+        transient_cleanup_inventory = {
+            "errors": [{"reason": "queue_read_failed", "error": "queue_unavailable"}],
+        }
+
+    status = ExtractionWorker(Pipeline()).status()
+    assert status["queue"] == {}
+    assert status["transient_cleanup"]["errors"][0]["reason"] == "queue_read_failed"
+
+
+def test_identity_change_between_scan_and_unlink_is_preserved(tmp_path: Path, monkeypatch) -> None:
+    queue = _queue(tmp_path)
+    raw_root = tmp_path / "raw"
+    raw = _durable_raw(raw_root, b"identity raw")
+    job = queue.enqueue("automatic_memory_snapshot", input_path=raw, payload={}, idempotency_key="identity-change")
+    claimed = queue.claim("worker-1", job_id=job["job_id"], allowed_source_types={"automatic_memory_snapshot"})
+    assert claimed is not None
+    marker = _link_marker(raw, automatic_memory_dispatch_path(raw_root, claimed["job_id"], claimed["lease_token"], ".json"))
+    queue.complete(claimed["job_id"], {}, worker_id="worker-1", lease_token=claimed["lease_token"])
+    original_lstat = Path.lstat
+    calls = {"count": 0}
+
+    def swapping_lstat(path: Path):
+        info = original_lstat(path)
+        if path == marker:
+            calls["count"] += 1
+            if calls["count"] == 2:
+                marker.unlink()
+                marker.write_bytes(b"replacement")
+                return original_lstat(path)
+        return info
+
+    monkeypatch.setattr(Path, "lstat", swapping_lstat)
+    report = reconcile_automatic_memory_transients(raw_root, queue)
+    assert marker.exists()
+    assert report["preserved"][0]["reason"] == "identity_changed"
