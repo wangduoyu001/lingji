@@ -466,6 +466,20 @@ arbitrary nested results or `last_error` after the current token is cleared.
 Task6L is `FAIL / BLOCKED_AT_REPAIR_CAP` and remains NOT_ACCEPTED; Task6 remains
 IN_PROGRESS / NOT_ACCEPTED.
 
+Task 6P Queue Persistence Lease Redaction extends the same
+`src/extraction/queue.py` boundary with one bounded recursive scrubber. It removes
+only explicit lease key spellings and replaces known current token/fingerprint
+values before durable result/error writes; ordinary reads retain the recursive
+projection defense. complete/fail/cancel-running scrub in the same transaction
+before clearing current lease state, while enqueue/force payload/options and
+pipeline/MCP/process summaries/logs reuse the seam. Cycles, over-depth and
+over-size values fail closed without `repr()`; the existing worker private seam,
+durable ownership predicate, queue and database remain unchanged. Focused tests:
+`tests/test_task6p_queue_persistence_redaction.py` plus the existing queue,
+worker, runtime, Control/MCP and structured/work matrices. Task6L and Task6M
+historical dispositions remain unchanged; Task6 remains NOT_ACCEPTED and
+packaged Task6V is deferred.
+
 Task 8:
 src/work/models.py
 src/work/store.py

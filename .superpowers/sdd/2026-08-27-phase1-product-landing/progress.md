@@ -156,3 +156,14 @@ current token, arbitrary nested result values and `last_error` can still carry
 the old plaintext lease token. Task6L remains `NOT_ACCEPTED`; Task6 remains
 `IN_PROGRESS / NOT_ACCEPTED`; Task6M historical `FAIL / BLOCKED_AT_REPAIR_CAP`
 is unchanged and no further repair is authorized in this round.
+
+Task 6P Queue Persistence Lease Redaction (new bounded task): the Task6L I1 root
+cause is addressed at the existing queue persistence seam. RED was `3 failed`;
+the shared scrubber now removes only explicit lease keys/aliases, replaces known
+token/fingerprint values, and fails closed on cycles, depth, node count, and
+oversize values without repr serialization. complete/fail/cancel-running scrub
+before clearing current lease in one transaction; enqueue/force payload/options
+and pipeline/MCP/process summaries, callbacks, and logs reuse the boundary.
+Task6P focused is `5 passed`; queue/worker/pipeline regressions are `77 passed,
+2 warnings`. Task6L/M dispositions are preserved; independent review remains
+required and Task6 stays `IN_PROGRESS / NOT_ACCEPTED`.

@@ -1,5 +1,27 @@
 # 验收要求变更记录
 
+## 2026-08-28 · Task 6P · Queue persistence lease-material redaction
+
+- 本轮是全新有界 Task6P，不改写 Task6M `FAIL / BLOCKED_AT_REPAIR_CAP` 或
+  Task6L `FAIL / BLOCKED_AT_REPAIR_CAP` 历史，不增加功能、数据库、队列、ledger、API、UI、
+  检索或记忆事实源；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`，不启动 live 8766/8767、Artifact、
+  Production、Vault 或主人数据。
+- 现有 `src/extraction/queue.py` 的单一递归 scrubber 作为持久化与 ordinary projection 边界：
+  仅移除明确 lease 键/别名，精确替换本次已知 token/fingerprint；mapping/list/tuple 循环、深度、
+  节点和超长字符串有界，未知对象继续遵循既有 JSON serializer 边界，不调用 `repr()`。complete/fail/
+  cancel-running 在同一事务读取当前 token 与 durable fingerprint，先 scrub result/error 再清 current
+  lease；enqueue/force/enqueue-authorized payload/options 复用同一边界。ownership receipt、private
+  worker seam、Task6L durable fingerprint 保持。
+- Extraction pipeline 的 complete/fail/process summary、lifecycle callback 与错误日志复用同一
+  known-material scrub，避免在 queue 写入已脱敏后由 MCP/process_pending/log 再次泄漏。
+- RED：新增 Task6P 用例在旧实现真实 `3 failed`；GREEN：`tests/test_task6p_queue_persistence_redaction.py`
+  目标覆盖 terminal complete/fail、retrying error、payload/options、cancel-running、循环/深度/节点
+  边界与普通含 `token` 文本。Task6L/queue/worker/runtime/Control/MCP/structured/work 及 Desktop
+  矩阵须在产品与文档提交后复读；未执行 live/Artifact/release/owner acceptance。
+- 报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-6p-report.md`；Task6 仍
+  `IN_PROGRESS / NOT_ACCEPTED`，Task6V packaged 30/70、live/Artifact/Production/Vault/owner
+  acceptance 仍待后续。
+
 ## 2026-08-28 · Task 6L · Durable Lease Ownership Receipt
 
 - 本轮是 Task6M `FAIL / BLOCKED_AT_REPAIR_CAP` 之后的新有界架构任务，不改写

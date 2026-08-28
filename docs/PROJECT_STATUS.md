@@ -623,3 +623,14 @@ lease token，故 I1 仍阻塞 Task6L。Task6L 保持 `NOT_ACCEPTED`，Task6 保
 `IN_PROGRESS / NOT_ACCEPTED`；Task6M 历史 `FAIL / BLOCKED_AT_REPAIR_CAP`
 不改写，Task6V packaged 30/70、live/Artifact/Production/Vault/owner
 acceptance 均未执行。
+
+Task 6P Queue Persistence Lease Redaction（新有界任务）：针对 Task6L final review
+I1 的 terminal `result`/`last_error` 旧 lease plaintext，现有 queue 持久化边界新增
+递归、循环/深度/节点/字符串有界 scrubber。complete/fail/cancel-running 在清 current
+lease 的同一事务先 scrub，enqueue/force payload/options 复用；ordinary queue reads、
+Control/MCP/process summary、lifecycle callback 和 extraction 错误日志均不重新暴露
+lease material。private worker seam、`ownership_receipt()` durable fingerprint、
+Task6L/Task6M 历史保持不变。RED `3 failed`、Task6P focused `5 passed`，受影响
+queue/worker/pipeline 回归 `77 passed, 2 warnings`（截至产品实现阶段）。Task6 仍
+`IN_PROGRESS / NOT_ACCEPTED`，Task6V packaged 30/70、live/Artifact/Production/Vault/
+owner acceptance 未执行。
