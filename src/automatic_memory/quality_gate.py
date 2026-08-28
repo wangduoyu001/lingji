@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Callable, Literal, Mapping, Sequence
 
 from src.auto_review.models import ReviewCandidate
 from src.auto_review.promotion import AutoMemoryPromotionService
@@ -60,6 +60,7 @@ from .quality_evidence import (
     ImportedEvidenceAudit,
     ProtectedTreeSentinel,
     QualityEvidenceReadiness,
+    QualityPublicationError,
     finalize_quality_envelope,
     write_quality_json_atomic,
     _read_ingestion_rows,
@@ -89,6 +90,27 @@ class AcceptanceCleanupError(RuntimeError):
 
 class QualityScaleBlockedError(RuntimeError):
     """The 100k scale benchmark is not available during the reset phase."""
+
+
+_RUNNER_STAGES = (
+    "admission", "root", "sentinel", "fixture", "import", "gateway",
+    "promotion", "audit", "scoring", "evaluator", "publication_pre", "cleanup",
+)
+
+
+class _RunnerStageTracker:
+    """Track the last bounded runner stage without retaining exception data."""
+
+    def __init__(self, hook: Callable[[str], None] | None = None) -> None:
+        self.current = "admission"
+        self._hook = hook
+
+    def mark(self, stage: str) -> None:
+        if stage not in _RUNNER_STAGES:
+            stage = "root"
+        self.current = stage
+        if self._hook is not None:
+            self._hook(stage)
 
 
 @dataclass(frozen=True)
@@ -187,7 +209,9 @@ def temporary_acceptance_roots(*, base_directory: Path | None = None):
                 raise AcceptanceCleanupError() from exc
 
 
-def cleanup_failure_envelope(_report: Any, error: AcceptanceCleanupError) -> QualityRunEnvelope:
+def cleanup_failure_envelope(
+    _report: Any, error: AcceptanceCleanupError, *, roots: AcceptanceRoots | None = None,
+) -> QualityRunEnvelope:
     values = {field: EvidenceState.NOT_MEASURED for field in (
         "import_audit", "promotion_provenance", "gateway_selection", "production_sentinel",
         "mcp_parity", "qdrant_degradation", "corruption_isolation", "context_baseline",
@@ -197,7 +221,44 @@ def cleanup_failure_envelope(_report: Any, error: AcceptanceCleanupError) -> Qua
     known_codes = {"TEMP_CLEANUP_FAILED", "TEMP_CLEANUP_INCOMPLETE"}
     code = error.code if type(error.code) is str and error.code in known_codes else "UNTRUSTED_BLOCKED_REASON"
     return QualityRunEnvelope(
-        readiness, None, None, "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED", (code,)
+        readiness, None, None, "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED", (code,),
+        _cleanup_inventory(roots),
+    )
+
+
+def _cleanup_inventory(roots: AcceptanceRoots | None) -> dict[str, bool]:
+    """Return path-free cleanup facts suitable for a failure envelope."""
+    if roots is None:
+        return {
+            "root_exists": False, "storage_exists": False, "vault_exists": False,
+            "output_exists": False, "lease_marker_exists": False, "cleaned": False,
+        }
+    return {
+        "root_exists": os.path.lexists(os.fspath(roots.root)),
+        "storage_exists": os.path.lexists(os.fspath(roots.storage_root)),
+        "vault_exists": os.path.lexists(os.fspath(roots.vault_root)),
+        "output_exists": os.path.lexists(os.fspath(roots.output_root)),
+        "lease_marker_exists": os.path.lexists(os.fspath(roots.lease_marker)),
+        "cleaned": False,
+    }
+
+
+def runner_failure_envelope(
+    stage: str = "root", *, roots: AcceptanceRoots | None = None,
+) -> QualityRunEnvelope:
+    """Build a sanitized fail-closed envelope for any runner-stage exception."""
+    normalized = stage.upper() if stage in _RUNNER_STAGES else "FAILED"
+    reason = f"RUNNER_{normalized}_FAILED"
+    readiness = QualityEvidenceReadiness(**{
+        field: EvidenceState.NOT_MEASURED for field in (
+            "import_audit", "promotion_provenance", "gateway_selection", "production_sentinel",
+            "mcp_parity", "qdrant_degradation", "corruption_isolation", "context_baseline",
+            "scale", "owner_review", "reboot_recovery", "mac_release", "windows_release",
+        )
+    })
+    return QualityRunEnvelope(
+        readiness, None, None, "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED",
+        (reason,), _cleanup_inventory(roots),
     )
 
 
@@ -511,16 +572,22 @@ def _run_quality_gate_impl(
     *,
     output_path: Path,
     acceptance_roots: AcceptanceRoots,
+    stage_tracker: _RunnerStageTracker | None = None,
 ) -> tuple[EvaluationReport | None, dict[str, Any]]:
     """Run the frozen 100-question contracts inside admitted roots."""
+    tracker = stage_tracker or _RunnerStageTracker()
     corpus_path = Path(corpus_path).expanduser()
     questions_path = Path(questions_path).expanduser()
     output_path = Path(output_path).expanduser()
+    tracker.mark("admission")
     acceptance_roots.validate_temporary_isolation()
     try:
         output_path.resolve(strict=False).relative_to(acceptance_roots.output_root.resolve())
     except ValueError as exc:
         raise ValueError("quality output must be inside Acceptance output root") from exc
+    tracker.mark("root")
+    tracker.mark("sentinel")
+    tracker.mark("fixture")
     corpus = load_corpus(corpus_path)
     questions = load_questions(questions_path, corpus=corpus)
     fixture_hashes = {"corpus": _sha256(corpus_path), "questions": _sha256(questions_path)}
@@ -549,6 +616,7 @@ def _run_quality_gate_impl(
     gateway_empty_responses = 0
     gateway_selected_evidence = 0
     try:
+        tracker.mark("fixture")
         fixture_input = temporary_root / "generic-history-inbox.json"
         _history_fixture(corpus, fixture_input)
         adapter_batch = GenericAIHistoryAdapter().extract(ExtractionRequest(
@@ -561,6 +629,7 @@ def _run_quality_gate_impl(
         memory_db = MemoryDatabase(temporary_root / "storage" / "index" / "lingji_memory.db")
         state_db = StateDatabase(temporary_root / "storage" / "state" / "lingji_state.db")
         read_model = SourceReadModel(memory_db)
+        tracker.mark("import")
         pipeline = _build_pipeline(temporary_root, memory_db, read_model, state_db)
         pipeline.execute(
             "generic_ai_history",
@@ -579,6 +648,7 @@ def _run_quality_gate_impl(
             ingestion_batch_id=ingestion_batch_id,
             expected_rows=expected_rows,
         )
+        tracker.mark("audit")
         audit = ImportedEvidenceAudit.from_read_model(
             read_model,
             ingestion_batch_id=ingestion_batch_id,
@@ -586,10 +656,12 @@ def _run_quality_gate_impl(
         )
         imported_messages = audit.actual_rows
         ordered_role_matches = audit.role_matches
+        tracker.mark("promotion")
         decisions, activation_correct, activation_total, promotion_bindings = _promote_fixtures(
             corpus, message_map, memory_db, read_model, state_db
         )
         duplicate_records = audit.stable_duplicates.total
+        tracker.mark("gateway")
         gateway, _profiles = _build_gateway(temporary_root, memory_db, read_model, state_db)
         persisted_identity_rows: list[dict[str, Any]] = []
         for record in corpus:
@@ -635,6 +707,7 @@ def _run_quality_gate_impl(
             if isinstance(gateway_sections, (str, bytes)) or not isinstance(gateway_sections, Sequence):
                 raise ValueError("malformed Gateway sections")
             gateway_empty_responses += int(not gateway_sections)
+            tracker.mark("scoring")
             selected_evidence = select_context_evidence(gateway_pack, identity_registry, limit=_SELECTOR_LIMIT)
             gateway_selector_calls += 1
             unknown_facts = tuple(fact_id for fact_id in selected_evidence.fact_ids if fact_id not in fact_by_memory)
@@ -660,6 +733,7 @@ def _run_quality_gate_impl(
         # No evaluator report is created until every required Task 4R2 field
         # has measured evidence.  In particular, no numeric MCP/context
         # defaults are allowed to enter the frozen evaluator schema.
+        tracker.mark("evaluator")
         report = None
         readiness = QualityEvidenceReadiness(
             import_audit=EvidenceState.READY if audit.ready else EvidenceState.FAILED,
@@ -733,6 +807,7 @@ def _run_quality_gate_impl(
             "blocked_physical_evidence": list(FUNCTIONAL_BLOCKED_REASONS),
         }
         envelope["cleanup_inventory"]["cleaned"] = False
+        tracker.mark("publication_pre")
         _atomic_json(output_path, envelope)
         return report, envelope
     except Exception:
@@ -763,43 +838,59 @@ def run_quality_gate(
     *,
     output_path: Path,
     acceptance_roots: AcceptanceRoots,
+    stage_hook: Callable[[str], None] | None = None,
 ) -> QualityRunEnvelope:
     """Run the frozen gate in an admitted Acceptance root."""
-
-    report, raw = _run_quality_gate_impl(
-        corpus_path, questions_path, output_path=output_path, acceptance_roots=acceptance_roots
-    )
-    readiness_payload = raw.get("quality_evidence_readiness") or {}
-    fields = (
-        "import_audit", "promotion_provenance", "gateway_selection", "production_sentinel",
-        "mcp_parity", "qdrant_degradation", "corruption_isolation", "context_baseline",
-        "scale", "owner_review", "reboot_recovery", "mac_release", "windows_release",
-    )
-    readiness = QualityEvidenceReadiness(**{
-        field: (
-            readiness_payload.get(field)
-            if isinstance(readiness_payload.get(field), EvidenceState)
-            else EvidenceState(
-                str(readiness_payload.get(field, EvidenceState.NOT_MEASURED.value))
-                .removeprefix("EvidenceState.")
-                .lower()
-            )
+    tracker = _RunnerStageTracker(stage_hook)
+    try:
+        report, raw = _run_quality_gate_impl(
+            corpus_path, questions_path, output_path=output_path,
+            acceptance_roots=acceptance_roots, stage_tracker=tracker,
         )
-        for field in fields
-    })
-    envelope = finalize_quality_envelope(
-        readiness=readiness,
-        production_pollution=raw.get("production_pollution"),
-        evaluation_report=report,
-        acceptance_gate=AutomaticMemoryAcceptanceGate,
-        blocked_reasons=tuple(raw.get("blocked_physical_evidence") or ()),
-    )
-    # The temporary machine report is deliberately written beneath the
-    # acceptance output root; the caller publishes it only after cleanup.
-    payload = dict(raw)
-    payload.update(_jsonable(asdict(envelope)))
-    _atomic_json(Path(output_path), payload)
-    return envelope
+        tracker.mark("evaluator")
+        readiness_payload = raw.get("quality_evidence_readiness") or {}
+        fields = (
+            "import_audit", "promotion_provenance", "gateway_selection", "production_sentinel",
+            "mcp_parity", "qdrant_degradation", "corruption_isolation", "context_baseline",
+            "scale", "owner_review", "reboot_recovery", "mac_release", "windows_release",
+        )
+        readiness = QualityEvidenceReadiness(**{
+            field: (
+                readiness_payload.get(field)
+                if isinstance(readiness_payload.get(field), EvidenceState)
+                else EvidenceState(
+                    str(readiness_payload.get(field, EvidenceState.NOT_MEASURED.value))
+                    .removeprefix("EvidenceState.")
+                    .lower()
+                )
+            )
+            for field in fields
+        })
+        envelope = finalize_quality_envelope(
+            readiness=readiness,
+            production_pollution=raw.get("production_pollution"),
+            evaluation_report=report,
+            acceptance_gate=AutomaticMemoryAcceptanceGate,
+            blocked_reasons=tuple(raw.get("blocked_physical_evidence") or ()),
+        )
+        # The temporary machine report is deliberately written beneath the
+        # acceptance output root; the caller publishes it only after cleanup.
+        payload = dict(raw)
+        payload.update(_jsonable(asdict(envelope)))
+        tracker.mark("publication_pre")
+        _atomic_json(Path(output_path), payload)
+        return envelope
+    except Exception:
+        # Never let a stage exception escape with a stale/partial report.  The
+        # CLI publishes this fresh envelope after the isolated tree exits.
+        failure = runner_failure_envelope(tracker.current, roots=acceptance_roots)
+        try:
+            _atomic_json(Path(output_path), _jsonable(asdict(failure)))
+        except Exception:
+            # The caller still receives a stable nonzero-producing envelope;
+            # publication failure is reported by the formal CLI boundary.
+            pass
+        return failure
 
 
 def _git_commit() -> str:

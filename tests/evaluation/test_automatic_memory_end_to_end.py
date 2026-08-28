@@ -11,7 +11,6 @@ import pytest
 
 from src.automatic_memory.evaluation import load_corpus, load_questions
 from src.automatic_memory.evidence_identity import (
-    EvidenceIdentityError,
     SelectedEvidence,
     build_identity_registry,
     select_context_evidence,
@@ -110,9 +109,12 @@ def test_real_quality_gate_reports_measured_result(tmp_path: Path, monkeypatch: 
 def test_quality_runner_rejects_unknown_selected_membership(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selected: SelectedEvidence):
     monkeypatch.setattr(quality_gate_module, "select_context_evidence", lambda *_args, **_kwargs: selected)
     with temporary_acceptance_roots(base_directory=tmp_path) as roots:
-        with pytest.raises(EvidenceIdentityError):
-            run_quality_gate(CORPUS, QUESTIONS, output_path=roots.output_root / "unknown.json", acceptance_roots=roots)
-        assert not (roots.output_root / "unknown.json").exists()
+        envelope = run_quality_gate(CORPUS, QUESTIONS, output_path=roots.output_root / "unknown.json", acceptance_roots=roots)
+        assert envelope.evaluation_report is None
+        assert envelope.functional_status == envelope.phase_status == envelope.windows_status == "NOT_EVALUATED"
+        assert envelope.blocked_reasons == ("RUNNER_SCORING_FAILED",)
+        payload = json.loads((roots.output_root / "unknown.json").read_text(encoding="utf-8"))
+        assert payload["blocked_reasons"] == ["RUNNER_SCORING_FAILED"]
 
 
 def test_real_import_promotion_storage_snapshot_has_no_evaluation_labels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

@@ -19,6 +19,8 @@ from src.automatic_memory.quality_gate import (
     run_release_preflight,
     verify_acceptance_cleanup,
     QualityScaleBlockedError,
+    QualityPublicationError,
+    runner_failure_envelope,
 )
 
 
@@ -63,10 +65,23 @@ def main() -> int:
             )
         verify_acceptance_cleanup(roots)
     except AcceptanceCleanupError as exc:
-        envelope = cleanup_failure_envelope(envelope, exc)
+        envelope = cleanup_failure_envelope(envelope, exc, roots=roots)
+    except Exception:
+        # Setup failures occur before a tracker exists; runner failures are
+        # already normalized by run_quality_gate. Keep this outer boundary
+        # sanitized so no traceback or stale PASS is presented.
+        envelope = runner_failure_envelope("root" if roots is None else "cleanup", roots=roots)
     if envelope is None:
-        raise SystemExit("quality runner did not produce an envelope")
-    publish_quality_envelope(envelope, repository_output_path=output)
+        print("QUALITY_RUNNER_FAILED", file=sys.stderr)
+        return 1
+    try:
+        publish_quality_envelope(envelope, repository_output_path=output)
+    except QualityPublicationError as exc:
+        print(f"QUALITY_PUBLICATION_{exc.code}", file=sys.stderr)
+        return 1
+    except Exception:
+        print("QUALITY_PUBLICATION_FAILED", file=sys.stderr)
+        return 1
     print(f"functional quality report: {output}")
     print(f"functional_status={envelope.functional_status}")
     return 0 if envelope.functional_status == "PASS" else 1

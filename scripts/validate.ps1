@@ -352,6 +352,19 @@ function Invoke-FullValidation {
 }
 
 function Invoke-ReleaseValidation {
+    function Write-ReleaseTestHook {
+        param([Parameter(Mandatory = $true)][string]$Event)
+
+        # Test-only instrumentation. Production/release behavior is unchanged
+        # when this opt-in path is absent. The current quarantine exits during
+        # preflight, so the scale events must remain at zero.
+        $hookPath = [Environment]::GetEnvironmentVariable("LINGJI_VALIDATE_TEST_HOOK", "Process")
+        if (-not [string]::IsNullOrWhiteSpace($hookPath)) {
+            Add-Content -Path $hookPath -Value $Event -Encoding UTF8
+        }
+    }
+
+    Write-ReleaseTestHook -Event "preflight"
     # Task 4R2 owns MCP/Qdrant degradation, corruption isolation, measured
     # context baseline and scale readiness. The executable preflight must fail
     # before a scale command or its opt-in environment is constructed.
@@ -360,6 +373,12 @@ function Invoke-ReleaseValidation {
         -WorkingDirectory $repoRoot `
         -Command $PythonCommand `
         -Arguments @("scripts/automatic_memory_quality_gate.py", "--check-4r2")
+
+    # These markers intentionally remain unreachable while the readiness
+    # preflight is blocked. Task 4R2 may add the real scale construction and
+    # invocation beneath this boundary without changing the test contract.
+    Write-ReleaseTestHook -Event "scale-env"
+    Write-ReleaseTestHook -Event "scale-command"
 }
 
 $scopeText = ""

@@ -7,7 +7,7 @@ import json
 import os
 import secrets
 import stat as stat_module
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
 from pathlib import Path
@@ -871,6 +871,9 @@ class QualityRunEnvelope:
     phase_status: Literal["NOT_EVALUATED", "PASS", "FAIL", "BLOCKED"]
     windows_status: Literal["NOT_EVALUATED", "PASS", "FAIL", "BLOCKED"]
     blocked_reasons: tuple[str, ...]
+    # This inventory is deliberately machine-only: it reports cleanup state
+    # without embedding paths, exception text, fixture content or tokens.
+    cleanup_inventory: Mapping[str, Any] = field(default_factory=dict)
 
 
 def _reason_codes(values: Sequence[str]) -> tuple[str, ...]:
@@ -879,12 +882,19 @@ def _reason_codes(values: Sequence[str]) -> tuple[str, ...]:
         "MALFORMED_EVALUATION_REPORT", "GATE_EXCEPTION", "MALFORMED_GATE_RESULT",
         "CONTRADICTORY_FUNCTIONAL_EVIDENCE", "CONTRADICTORY_GATE_RESULT",
         "TEMP_CLEANUP_FAILED", "TEMP_CLEANUP_INCOMPLETE",
+        "RUNNER_FAILED",
         "OWNER_REVIEW_NOT_RUN_IN_AUTOMATED_GATE", "REBOOT_RECOVERY_NOT_RUN_IN_AUTOMATED_GATE",
         "MAC_M5_P95_RESERVED_FOR_TASK_6", "MAC_IDLE_CPU_RESERVED_FOR_TASK_6",
     }
     for field in QualityEvidenceReadiness._MAC_FIELDS + ("windows_release",):
         for state in EvidenceState:
             allowed.add(f"{field.upper()}_{state.value.upper()}")
+    for stage in (
+        "ADMISSION", "ROOT", "SENTINEL", "FIXTURE", "IMPORT", "GATEWAY",
+        "PROMOTION", "AUDIT", "SCORING", "EVALUATOR", "PUBLICATION_PRE",
+        "CLEANUP",
+    ):
+        allowed.add(f"RUNNER_{stage}_FAILED")
     result: list[str] = []
     try:
         iterator = iter(values)
