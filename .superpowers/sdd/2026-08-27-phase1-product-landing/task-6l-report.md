@@ -3,12 +3,12 @@
 Date: 2026-08-28 (Asia/Shanghai)
 Worktree: `/Users/wuhanwangduoyu/Documents/ChatGPT/灵机/.worktrees/phase1-automatic-memory`
 Base: `3fadc0996915d1e57e57f717f27b620df86318e6`
-Product/tests commits: `4fd2386`, `382091b`
+Product/tests commits: `4fd2386`, `382091b`, `2daac07`
 
 ## 1. Status
 
 ```text
-Task 6L: IMPLEMENTED_FOCUSED_PASS
+Task 6L: REPAIR_ROUND_1_IMPLEMENTED_FOCUSED_PASS
 Task 6M: FAIL / BLOCKED_AT_REPAIR_CAP (historical disposition unchanged)
 Task 6: IN_PROGRESS / NOT_ACCEPTED
 Task 6V packaged 30/70: DEFERRED
@@ -60,7 +60,20 @@ GREEN and regression results:
 11 passed
 
 ./.venv/bin/python -m pytest -q tests/test_task6l_durable_lease_receipt.py tests/test_task6m_transient_lifecycle.py tests/test_automatic_memory_runtime.py tests/test_automatic_memory_snapshot.py tests/test_automatic_memory_resume.py tests/test_extraction_queue.py tests/test_extraction_worker.py tests/test_automatic_memory_scheduler.py tests/test_task6h_heartbeat.py tests/test_task6s_source_authority_versions.py tests/test_task8_extraction_work_lifecycle.py tests/test_task8_work_fact.py tests/test_task8_work_transition_matrix.py tests/test_structured_evidence_lexical.py tests/test_structured_ingestion.py
-218 passed, 2 warnings
+219 passed, 2 warnings
+
+Repair Round 1 was authorized only for I1 in review record commit
+`9edb9eab98b5abf58999b0e16d09ece729c2e45e` (reviewed product baseline
+`880bd8c1beeddfda0b0c76752038ca7da521adfe`). RED was reproduced by the new
+ordinary queue-read test: public `queue.get()` still exposed `lease_token`.
+Product/tests commit `2daac07` makes ordinary `get`, `list`, `list_page`,
+`get_by_idempotency_key`, completion/failure/release/cancel projections and
+Control/MCP DTOs recursively remove lease fields and redact their values in
+nested result/error structures. A private `_get_claimed_job_internal()` seam
+keeps only the current plaintext token available to internal lease-owner
+operations; durable fingerprints remain behind `ownership_receipt()`.
+Repair focused/queue/MCP/capture tests: `34 passed`; required backend matrix:
+`219 passed, 2 warnings`.
 
 cd desktop/lingji-control && npm run test:memory-sources-repair
 PASS
@@ -95,7 +108,7 @@ Production/Vault or owner acceptance result. Task6M's final review remains
 
 ## 5. Changed files
 
-Product/tests commits `4fd2386`, `382091b`:
+Product/tests commits `4fd2386`, `382091b`, `2daac07`:
 
 ```text
 src/extraction/queue.py

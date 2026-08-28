@@ -45,6 +45,24 @@
   PASS。未执行 live/Artifact/release/8766/8767/Production/Vault/owner；
   `LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。
 
+## 2026-08-28 · Task 6L · Repair Round 1 — public lease projection boundary
+
+- Review record：`9edb9eab98b5abf58999b0e16d09ece729c2e45e`（审查产品 baseline
+  `880bd8c1beeddfda0b0c76752038ca7da521adfe`），结论 `FAIL / NEEDS_FIXES` 仅含
+  I1。Task6L 仍 `NOT_ACCEPTED`；Task6M 历史 `FAIL / BLOCKED_AT_REPAIR_CAP` 不改写，
+  Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`。本轮只修改 queue/public projection 边界，
+  不新增数据库、队列、ledger、API、UI、检索或记忆事实源。
+- RED：新增 ordinary `queue.get()`/equivalent read assertion 在旧代码真实暴露
+  `lease_token`；GREEN：产品/测试 commit `2daac07` 引入私有
+  `_get_claimed_job_internal()` 当前 lease seam，并令普通 `get/list/list_page/`
+  `get_by_idempotency_key`、完成/失败/释放/取消返回及 Control/MCP DTO 递归移除 lease
+  token/fingerprint（含 nested result/error 值遮蔽）。`ownership_receipt()` 仍是 durable
+  fingerprint 的唯一 ownership predicate；worker claim/heartbeat/complete/fail 流程保持。
+- 验证：repair focused queue/MCP/capture `34 passed`；required backend matrix
+  `219 passed, 2 warnings`；Desktop `test:memory-sources-repair`、`test:memory-sources`、
+  `build`、rendered `test:e2e:memory` PASS；compileall 与 `git diff --check` PASS。
+  `LOCAL_EXECUTION_TASK.md` 保持 `IDLE`，未启动 live/Artifact/Production/Vault。
+
 ## 2026-08-28 · Task 6C Repair Round 1 · blocked cleanup receipt
 
 - Fresh review `3fd8059da4ed10b8a1fcd0581793bd0fb2d177ee` 要求 I1–I6 修复。

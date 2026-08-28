@@ -547,3 +547,16 @@ reads) still return plaintext `lease_token` and
 Task6L remains `NOT_ACCEPTED`; one bounded Repair Round 1 is authorized. Task6M
 historical `FAIL / BLOCKED_AT_REPAIR_CAP` and Task6 `IN_PROGRESS / NOT_ACCEPTED`
 remain unchanged.
+
+Task 6L Repair Round 1 (review record `9edb9eab98b5abf58999b0e16d09ece729c2e45e`,
+reviewed product baseline `880bd8c1beeddfda0b0c76752038ca7da521adfe`) was limited
+to I1 public queue projection leakage. Product/tests commit `2daac07` adds the
+private `_get_claimed_job_internal()` lease-owner seam, keeps durable receipt
+checks behind `ownership_receipt()`, and makes ordinary queue reads plus
+Control/MCP projections recursively omit lease token/fingerprint material,
+including nested result/error values. TDD RED was the new direct queue-read
+assertion; focused repair coverage is `34 passed`, and the required backend
+matrix is `219 passed, 2 warnings`. Desktop static/build/rendered checks and
+compile/diff checks pass. Task6L remains `NOT_ACCEPTED` pending fresh review;
+Task6M remains historical `FAIL / BLOCKED_AT_REPAIR_CAP`, Task6 remains
+`IN_PROGRESS / NOT_ACCEPTED`, and Task6V packaged 30/70 remains deferred.

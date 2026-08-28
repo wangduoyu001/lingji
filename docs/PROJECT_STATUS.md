@@ -597,3 +597,14 @@ Task 6L independent review (2026-08-28)：报告
 `lease_token` 与 `last_claim_lease_fingerprint`，不满足 Task6L 明确的普通 queue read
 脱敏边界。Task6L 保持 `NOT_ACCEPTED`，仅授权一轮有界 Repair Round 1；Task6M 历史
 `FAIL / BLOCKED_AT_REPAIR_CAP` 不变，Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`。
+
+Task 6L Repair Round 1 已按 review record `9edb9eab98b5abf58999b0e16d09ece729c2e45e`
+（reviewed product baseline `880bd8c1beeddfda0b0c76752038ca7da521adfe`）只修复 I1：
+产品/测试 commit `2daac07` 将普通 queue `get/list/list_page/get_by_idempotency_key`
+及 Control/MCP projection 递归脱敏 lease token/fingerprint，并提供仅内部使用的
+`_get_claimed_job_internal()` 当前 lease seam；durable fingerprint 继续只经
+`ownership_receipt()` 布尔谓词参与 ownership。新增 RED 后 repair focused `34 passed`，
+required backend matrix `219 passed, 2 warnings`；Desktop static/build/rendered、
+compile、diff 均通过。Task6L 等待新鲜独立复审，仍 `NOT_ACCEPTED`；Task6M 历史
+`FAIL / BLOCKED_AT_REPAIR_CAP` 不改写，Task6 仍 `IN_PROGRESS / NOT_ACCEPTED`，Task6V
+packaged 30/70、live/Artifact/Production/Vault/owner acceptance 均未执行。

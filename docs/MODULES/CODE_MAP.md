@@ -450,6 +450,14 @@ Desktop cleanup visibility is covered by the existing
 `desktop/lingji-control/tests/e2e_owner_memory_flow.mjs` rendered harness.
 Task6L does not add a database, queue, ledger, API, UI page, retrieval or memory
 fact source; Task6M remains blocked and Task6V packaged 30/70 remains deferred.
+Repair Round 1 (product/tests `2daac07`, review record
+`9edb9eab98b5abf58999b0e16d09ece729c2e45e`) closes the I1 public projection
+boundary: ordinary queue reads and existing Control/MCP DTOs recursively omit
+lease token/fingerprint material, while `_get_claimed_job_internal()` is the
+private current-token seam for internal worker operations. Durable ownership
+continues through the existing boolean `ownership_receipt()` predicate; no new
+queue, database, API, or UI contract is introduced. Task6L remains pending
+fresh review and NOT_ACCEPTED.
 
 Task 8:
 src/work/models.py
