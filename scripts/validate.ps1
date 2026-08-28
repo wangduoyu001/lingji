@@ -9,7 +9,12 @@ param(
     [string]$PythonCommand = "python",
 
     [ValidateRange(10, 200)]
-    [int]$FailureTailLines = 40
+    [int]$FailureTailLines = 40,
+
+    # This switch is intentionally inert unless the CI/test launcher also
+    # supplies the private opt-in environment marker. It exists only to
+    # exercise the release dispatch boundary without repeating full validation.
+    [switch]$TestReleaseEntryOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -391,7 +396,12 @@ if ($Mode -eq "focused") {
     Invoke-FocusedValidation
 }
 else {
-    Invoke-FullValidation
+    $entryOnly = $TestReleaseEntryOnly -and
+        ([Environment]::GetEnvironmentVariable("LINGJI_VALIDATE_TEST_ENTRY_ONLY", "Process") -eq "1") -and
+        -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable("LINGJI_VALIDATE_TEST_HOOK", "Process"))
+    if (-not $entryOnly) {
+        Invoke-FullValidation
+    }
     if ($Mode -eq "release") {
         Invoke-ReleaseValidation
     }

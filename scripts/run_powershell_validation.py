@@ -27,7 +27,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mode", choices=("focused", "full", "release"), default="release")
     parser.add_argument("--area", default="docs")
     parser.add_argument("--hook", type=Path, default=None)
+    parser.add_argument(
+        "--entry-only",
+        action="store_true",
+        help="test-only release dispatch; requires --hook and never skips normal validation by itself",
+    )
     args = parser.parse_args(argv)
+    if args.entry_only and (args.mode != "release" or args.hook is None):
+        parser.error("--entry-only requires --mode release and --hook")
     executable = _powershell_executable()
     if executable is None:
         print("BLOCKED_POWERSHELL_RUNTIME_UNAVAILABLE", file=sys.stderr)
@@ -41,6 +48,9 @@ def main(argv: list[str] | None = None) -> int:
     environment = os.environ.copy()
     if args.hook is not None:
         environment["LINGJI_VALIDATE_TEST_HOOK"] = str(args.hook)
+    if args.entry_only:
+        environment["LINGJI_VALIDATE_TEST_ENTRY_ONLY"] = "1"
+        command.append("-TestReleaseEntryOnly")
     return subprocess.run(command, cwd=repo, env=environment, check=False).returncode
 
 
