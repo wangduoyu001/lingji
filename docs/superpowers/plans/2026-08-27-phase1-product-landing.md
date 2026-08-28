@@ -417,6 +417,13 @@ or advance Task 6 to READY.
 
 **Acceptance:** Quality and scale pass with real production-path measurements, or the phase remains honestly FAIL/BLOCKED with a finite defect list. No synthetic evidence may unlock release.
 
+**Task 7 measured disposition (2026-08-28):** Frozen 100-question execution is complete but
+`FAIL_MEASURED_QUALITY`: facts 0.00%, citations 0.00%, and context reduction 55.28%.
+Import, role/order, duplicate, formal MCP, semantic degradation and corrupt-source isolation
+were measured. Per the stop rule, 100k scale and Task 8 release are not run until the
+existing retrieval/evidence binding and context-size boundaries are diagnosed and repaired
+under a separately authorized brief.
+
 ### Task 8: Build and Perform macOS M5 Release Acceptance
 
 **Purpose:** 交付同一 SHA 的真实发布版，并以主人是否看懂、是否无需代码操作作为最终产品门槛。

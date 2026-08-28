@@ -36,6 +36,12 @@ scale-command=0`，证明真实 PowerShell release entry 在 4R2 readiness 前�
 阻断且未构造 scale/100k。P0 总体因既有 Windows full 测试和 Desktop
 `主动投喂` smoke 失败，不能视为全门禁通过；Task7/4R2/100k/release/Artifact/
 主人验收仍未执行。
+
+Task 7 真实冻结质量门禁已执行：正式 Gateway 与 `create_mcp_server` 注册工具逐题运行
+原始 100 问；导入 145/145、角色顺序 145/145、重复 0、自动激活 96.80%、MCP
+100/100、lexical fallback 与损坏源隔离证据通过。事实召回 0.00%、引用准确率 0.00%、
+上下文压缩 55.28%，正式门禁为 `FAIL_MEASURED_QUALITY`。按规则停止后续产品修改，
+未运行 100k、release、Artifact、live、Production/Vault 或主人验收；Task8 不得开始。
 Task 2 root decisions — heartbeat age is null with explicit unavailable reason (no fake timestamp/daemon); one DB means one canonical state DB path plus one shared queue wrapper, multiple connections to that file allowed; snapshot terminal consumption remains Task 3.
 Task 2: REPAIR_ROUND_1 — implementation cbee300f519f66a2a090561a71ea4c21fb1057d7..2200c52c5d0a0d764e4545e25bd29c7431a61ffb; review Spec FAIL / Quality Needs fixes (0 Critical, 4 Important, 1 Minor).
 Task 2 repair scope: start/stop exception cleanup and truthful surviving-thread state; live authorized-source attach; executable real packaged composition test; watcher exit verification; never-started pause status.

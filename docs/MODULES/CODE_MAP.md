@@ -568,7 +568,13 @@ src/automatic_memory/quality_gate.py::AcceptanceRoots / run_quality_gate
   Production/Vault settings access, nullable unmeasured evidence that never
   enters `EvaluationReport`, and `NOT_EVALUATED` before 4R2 readiness.
   `publish_quality_envelope` is the only repository report writer;
-  `run_100k_benchmark` is blocked until 4R2. Runner-stage exceptions publish a
+  Task7 now measures the original 100 questions through the formal registered
+  MCP composition, persisted import/order evidence, semantic outage fallback,
+  corrupt-source isolation and an actual uncompressed baseline. The measured
+  run is currently `FAIL_MEASURED_QUALITY` (fact/citation recall 0%, semantic
+  outage probe had no lexical result, context reduction 55.28%), so
+  `run_100k_benchmark` remains blocked by the quality
+  stop rule. Runner-stage exceptions publish a
   sanitized fresh `QualityRunEnvelope` with path-free cleanup inventory;
   `scripts/run_powershell_validation.py` invokes the real PowerShell
   `scripts/validate.ps1` when available and otherwise reports

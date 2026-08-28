@@ -15,6 +15,14 @@
 
 当前文档仅保留该历史检索诊断供追溯；当前官方状态由 Task 4R-Reset runner envelope 管理，为 `NOT_EVALUATED`，不得把历史质量数字或检索诊断当作当前结论，也不得修改冻结评测以提高分数。
 
+## Task 7 真实冻结评测（2026-08-28）
+
+本轮使用原始 100 个问题、未改写 query，通过正式 `src.mcp_server.create_mcp_server` 注册的 `build_context_pack` 工具逐题调用。证据来自持久化 read model、正式 Gateway/ContextPack 和正式 MCP 返回值。
+
+实测：导入 145/145；角色/顺序 145/145；重复 0；自动激活 121/125（96.80%）；正式 MCP 100/100；Qdrant 真实适配器故障注入后状态为 degraded，但本题 lexical 结果为空，故降级证据不计通过；损坏源隔离 attempted=2、completed=1、failed=1、其他源继续=1；事实召回 0/106（0.00%）；引用准确率 0/106（0.00%）；实际上下文压缩 55.28%（baseline 65990、rendered 29512）。
+
+正式门禁结果为 `FAIL`。首个既有边界是正式 retrieval/structured-evidence 与冻结问题事实身份没有形成可召回绑定，引用随之为 0；ContextPack 相对真实未压缩 payload 仅减少 55.28%。按 Task7 规则停止后续产品修改，未运行 100k scale、release、Artifact、live 8766/8767、Production/Vault 或主人验收；Task7 不通过，不得进入 Task8 Mac 发布验收。
+
 ## 4R1 修复记录
 
 初始 draft 明确标记为 `TDD_ORDER_NOT_MET`。本轮先运行真实 RED（`ModuleNotFoundError: quality_evidence`），再实现并达到 `46 passed, 1 warning`。新增证据审计与 protected-tree sentinel；删除原问题改写，评分异常 fail-closed，实测失败优先于物理证据 BLOCKED。MCP/degradation/100k 仍属于 4R2，未在本轮宣称通过。

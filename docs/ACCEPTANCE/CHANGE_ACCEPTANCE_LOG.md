@@ -2335,4 +2335,10 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   `/usr/local`、`/opt/homebrew`、`/Applications`、`/Library`、开发者目录均无匹配），
   故标记 `BLOCKED_POWERSHELL_RUNTIME_UNAVAILABLE`；未执行 release/100k/4R2/Artifact、
   live 8766/8767、Production/Vault 或 owner acceptance。`LOCAL_EXECUTION_TASK.md`
-  保持 `IDLE`。详见 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7e-report.md`。
+ 保持 `IDLE`。详见 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7e-report.md`。
+
+## 2026-08-28 · Task 7 · Measured quality and scale gate
+
+- 本轮只修改既有 quality evidence/runner 与对应测试，不改变 retrieval、ranking、冻结题集、promotion、runtime、UI 或数据模型。
+- 原始 100 问通过正式 `create_mcp_server` 注册路径逐题运行；导入 145/145、角色顺序 145/145、重复 0、自动激活 121/125、MCP 100/100。Qdrant 真实适配器故障注入记录 degraded，但探针题无 lexical 结果，故不计降级通过；单源损坏隔离真实注入并记录计数。
+- 事实召回 0/106、引用准确率 0/106、ContextPack 压缩 55.28%（65990→29512），冻结门禁为 `FAIL_MEASURED_QUALITY`。按计划停止，100k、release、Artifact、live 服务、Production/Vault 和主人验收均未执行；Task8 不得开始。
