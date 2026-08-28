@@ -17,6 +17,7 @@ from src.automatic_memory.quality_gate import (
     run_quality_gate,
     temporary_acceptance_roots,
     run_release_preflight,
+    load_quality_readiness,
     verify_acceptance_cleanup,
     QualityScaleBlockedError,
     QualityPublicationError,
@@ -35,7 +36,8 @@ def main() -> int:
     output_root.mkdir(parents=True, exist_ok=True)
     if args.check_4r2:
         try:
-            run_release_preflight(None)
+            readiness = load_quality_readiness(output_root / "automatic-memory-quality.json")
+            run_release_preflight(readiness)
         except QualityScaleBlockedError as exc:
             raise SystemExit(str(exc)) from exc
         return 0
@@ -43,7 +45,7 @@ def main() -> int:
         if os.environ.get("LINGJI_RUN_100K") != "1":
             raise SystemExit("LINGJI_RUN_100K=1 is required for the opt-in 100k scale gate")
         output = args.output or output_root / "automatic-memory-100k.json"
-        report = run_100k_benchmark(output_path=output)
+        report = run_100k_benchmark(output_path=output, readiness_path=output_root / "automatic-memory-quality.json")
         print(f"100k scale report: {output}")
         print(f"messages={report['messages']} imported={report['imported_messages']} cleanup={report['cleanup_result']}")
         return 0 if report.get("imported_messages") == 100_000 and report.get("cleanup_result") == "cleaned" else 1
@@ -64,6 +66,9 @@ def main() -> int:
                 acceptance_roots=roots,
             )
         verify_acceptance_cleanup(roots)
+        if envelope is not None:
+            from dataclasses import replace
+            envelope = replace(envelope, cleanup_inventory=dict(roots.cleanup_inventory or {}))
     except AcceptanceCleanupError as exc:
         envelope = cleanup_failure_envelope(envelope, exc, roots=roots)
     except Exception:

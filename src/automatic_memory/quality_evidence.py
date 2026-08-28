@@ -75,6 +75,17 @@ def audit_promotion_persistence(memory_db: Any, *, promotion_evidence: Sequence[
     )
 
 
+def count_memory_projection_duplicates(memory_db: Any) -> int:
+    """Count duplicate active derived projections from the durable read model."""
+    rows = tuple(memory_db.list_derived_projection_identity_rows())
+    counts: dict[str, int] = {}
+    for row in rows:
+        memory_id = str(row.get("memory_id") or "")
+        if memory_id:
+            counts[memory_id] = counts.get(memory_id, 0) + 1
+    return sum(max(0, count - 1) for count in counts.values())
+
+
 def build_expected_import_rows(batch: ExtractionBatch) -> tuple[ExpectedImportedRow, ...]:
     """Flatten adapter output using the one global ingestion order contract."""
     rows: list[ExpectedImportedRow] = []
@@ -258,6 +269,48 @@ class ProtectedTreeSentinel:
             if before != current:
                 changes.append(SentinelChange(key, before, current))
         return tuple(changes)
+
+
+def cleanup_inventory_before_delete(root: Path) -> dict[str, Any]:
+    """Capture path-free machine counts before deleting an acceptance root."""
+    root = Path(root)
+    inventory = {
+        "file_count": 0, "directory_count": 0, "symlink_count": 0,
+        "other_count": 0, "bytes": 0, "root_exists": os.path.lexists(os.fspath(root)),
+    }
+    if not inventory["root_exists"]:
+        return inventory
+    try:
+        for path in (root, *root.rglob("*")):
+            try:
+                item = os.lstat(path)
+            except OSError:
+                inventory["other_count"] += 1
+                continue
+            if stat_module.S_ISLNK(item.st_mode):
+                inventory["symlink_count"] += 1
+            elif stat_module.S_ISDIR(item.st_mode):
+                if path != root:
+                    inventory["directory_count"] += 1
+            elif stat_module.S_ISREG(item.st_mode):
+                inventory["file_count"] += 1
+                inventory["bytes"] += int(item.st_size)
+            else:
+                inventory["other_count"] += 1
+    except OSError:
+        inventory["other_count"] += 1
+    return inventory
+
+
+def cleanup_inventory_after_delete(root: Path) -> dict[str, Any]:
+    """Verify deletion and report only machine counts, never path names."""
+    root = Path(root)
+    exists = os.path.lexists(os.fspath(root))
+    if not exists:
+        return {"root_exists": False, "remaining_count": 0, "remaining_bytes": 0, "error": None}
+    before = cleanup_inventory_before_delete(root)
+    remaining = sum(int(before.get(key, 0)) for key in ("file_count", "directory_count", "symlink_count", "other_count"))
+    return {"root_exists": True, "remaining_count": remaining, "remaining_bytes": int(before.get("bytes", 0)), "error": "TEMP_CLEANUP_INCOMPLETE"}
 
 
 def _root_identifier(root: Path) -> str:
@@ -920,7 +973,9 @@ def _reason_codes(values: Sequence[str]) -> tuple[str, ...]:
     return tuple(result)
 
 
-def _closed_envelope(readiness: QualityEvidenceReadiness, pollution: int | None, reasons: Sequence[str]) -> QualityRunEnvelope:
+def _closed_envelope(readiness: QualityEvidenceReadiness, pollution: int | None, reasons: Sequence[str], *, measured_failure: bool = False) -> QualityRunEnvelope:
+    if measured_failure:
+        return QualityRunEnvelope(readiness, pollution, None, "FAIL", "FAIL", "BLOCKED", _reason_codes(reasons))
     return QualityRunEnvelope(readiness, pollution, None, "NOT_EVALUATED", "NOT_EVALUATED", "NOT_EVALUATED", _reason_codes(reasons))
 
 
@@ -1000,6 +1055,7 @@ def finalize_quality_envelope(
     evaluation_report: Any | None,
     acceptance_gate: Any,
     blocked_reasons: Sequence[str] = (),
+    measured_failure: bool = False,
 ) -> QualityRunEnvelope:
     """Finalize immutable evidence around the unchanged frozen evaluator."""
     from dataclasses import replace
@@ -1021,7 +1077,7 @@ def finalize_quality_envelope(
     if not pollution_valid:
         return _closed_envelope(readiness, None, ("PRODUCTION_SENTINEL_MISMATCH",))
     if not readiness.functional_measured:
-        return _closed_envelope(readiness, production_pollution, blocked_reasons)
+        return _closed_envelope(readiness, production_pollution, blocked_reasons, measured_failure=measured_failure)
     if type(evaluation_report) is not EvaluationReport:
         return _closed_envelope(readiness, production_pollution, ("MALFORMED_EVALUATION_REPORT",))
     try:

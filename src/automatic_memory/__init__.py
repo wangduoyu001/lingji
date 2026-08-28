@@ -60,6 +60,17 @@ from .quality_evidence import (
     QualityRunEnvelope,
     finalize_quality_envelope,
     write_quality_json_atomic,
+    cleanup_inventory_before_delete,
+    cleanup_inventory_after_delete,
+    count_memory_projection_duplicates,
+)
+from .quality_degradation import (
+    ContextBaselineMeasurement,
+    CorruptionIsolationMeasurement,
+    MCPParityMeasurement,
+    measure_context_baseline,
+    measure_corruption_isolation,
+    measure_mcp_parity,
 )
 
 __all__ = [
@@ -124,4 +135,13 @@ __all__ = [
     "QualityPublicationError",
     "finalize_quality_envelope",
     "write_quality_json_atomic",
+    "cleanup_inventory_before_delete",
+    "cleanup_inventory_after_delete",
+    "count_memory_projection_duplicates",
+    "ContextBaselineMeasurement",
+    "CorruptionIsolationMeasurement",
+    "MCPParityMeasurement",
+    "measure_context_baseline",
+    "measure_corruption_isolation",
+    "measure_mcp_parity",
 ]
