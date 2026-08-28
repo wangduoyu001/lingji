@@ -49,7 +49,8 @@ production `null`。因此 Task7 质量、100k、release、Artifact、live 8766/
 
 ## 交付身份
 
-- 产品/测试 Commit：`5b5a22a094d328561ef4636e751aad6de6201840`
+- 产品/测试 Commits：`5b5a22a094d328561ef4636e751aad6de6201840`,
+  `7bdd0b408ff1b6c884ac72acaa59caa3e1feacb0`
 - 初始证据/文档 Commit：`214b717c9920dfb44ca2290aaa593e78abdaf9ab`
 - 本报告不声明 Task7O accepted，须由全新
   独立审查确认 Critical=0、Important=0 后才能进入下一步。
