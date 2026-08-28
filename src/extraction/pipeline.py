@@ -11,7 +11,7 @@ from uuid import uuid4
 from .errors import safe_extraction_error
 from .idempotency import directory_manifest, extraction_key_for_request, sha256_file
 from .models import ExtractionRequest
-from .queue import SQLiteExtractionQueue
+from .queue import SQLiteExtractionQueue, _without_lease_material
 from .registry import AdapterRegistry
 from .sink import VaultExtractionSink
 from .structured_sink import StructuredReadModelSink
@@ -56,6 +56,12 @@ class ExtractionPipeline:
         self.default_options_provider = default_options_provider
         self.default_priority_provider = default_priority_provider
         self._transient_cleanup_inventory: dict[str, Any] = self.reconcile_transient_files()
+
+    @staticmethod
+    def _scrub_lease_value(value: Any, lease_token: str) -> Any:
+        token = str(lease_token or "")
+        known = (token, SQLiteExtractionQueue.lease_fingerprint(token)) if token else ()
+        return _without_lease_material(value, redact_values=known)
 
     @property
     def transient_cleanup_inventory(self) -> dict[str, Any]:
@@ -387,19 +393,21 @@ class ExtractionPipeline:
                 worker_id=worker_id,
                 lease_token=lease_token,
             )
+            safe_result = self._scrub_lease_value(result, lease_token)
             self._notify_lifecycle(
                 "completed",
                 {**job, "status": "completed"},
-                result,
+                safe_result,
                 None,
             )
-            return {"job": completed, "result": result}
+            return {"job": completed, "result": safe_result}
         except Exception as exc:
-            logger.exception("Extraction job failed: %s", job["job_id"])
+            safe_error = self._scrub_lease_value(str(exc), lease_token)
+            logger.error("Extraction job failed: %s: %s", job["job_id"], safe_error)
             try:
                 failed = self.queue.fail(
                     job["job_id"],
-                    str(exc),
+                    safe_error,
                     worker_id=worker_id,
                     lease_token=lease_token,
                 )
@@ -407,11 +415,11 @@ class ExtractionPipeline:
                 failed = self.queue.get(job["job_id"])
                 return {
                     "job": failed,
-                    "error": str(exc),
-                    "lease_error": str(lease_error),
+                    "error": safe_error,
+                    "lease_error": self._scrub_lease_value(str(lease_error), lease_token),
                 }
-            self._notify_lifecycle("failed", {**job, **failed}, None, str(exc))
-            return {"job": failed, "error": str(exc)}
+            self._notify_lifecycle("failed", {**job, **failed}, None, safe_error)
+            return {"job": failed, "error": safe_error}
         finally:
             stop_heartbeat.set()
             heartbeat_thread.join(timeout=max(self.lease_heartbeat_seconds, 2.0))
@@ -481,23 +489,26 @@ class ExtractionPipeline:
         try:
             result = self._execute_internal_snapshot(job)
             completed = self.queue.complete(job["job_id"], result, worker_id=worker_id, lease_token=lease_token)
-            self._notify_lifecycle("completed", {**job, "status": "completed"}, result, None)
-            return {"job": completed, "result": result}
+            safe_result = self._scrub_lease_value(result, lease_token)
+            self._notify_lifecycle("completed", {**job, "status": "completed"}, safe_result, None)
+            return {"job": completed, "result": safe_result}
         except PermissionError as exc:
+            safe_error = self._scrub_lease_value(str(exc), lease_token)
             failed = self.queue.fail(
                 job["job_id"],
-                str(exc),
+                safe_error,
                 worker_id=worker_id,
                 lease_token=lease_token,
                 terminal=True,
             )
-            self._notify_lifecycle("failed", {**job, **failed}, None, str(exc))
-            return {"job": failed, "error": str(exc)}
+            self._notify_lifecycle("failed", {**job, **failed}, None, safe_error)
+            return {"job": failed, "error": safe_error}
         except Exception as exc:
-            logger.exception("Automatic-memory snapshot job failed: %s", job["job_id"])
-            failed = self.queue.fail(job["job_id"], str(exc), worker_id=worker_id, lease_token=lease_token, terminal=True)
-            self._notify_lifecycle("failed", {**job, **failed}, None, str(exc))
-            return {"job": failed, "error": str(exc)}
+            safe_error = self._scrub_lease_value(str(exc), lease_token)
+            logger.error("Automatic-memory snapshot job failed: %s: %s", job["job_id"], safe_error)
+            failed = self.queue.fail(job["job_id"], safe_error, worker_id=worker_id, lease_token=lease_token, terminal=True)
+            self._notify_lifecycle("failed", {**job, **failed}, None, safe_error)
+            return {"job": failed, "error": safe_error}
 
     def _execute_internal_snapshot(self, job: Mapping[str, Any]) -> dict[str, Any]:
         payload = job.get("payload")
@@ -582,16 +593,20 @@ class ExtractionPipeline:
             try:
                 result = self._execute_internal_snapshot(claimed)
                 completed = self.queue.complete(job_id, result, worker_id=worker_id or self._worker_id(), lease_token=lease_token)
-                self._notify_lifecycle("completed", {**claimed, "status": "completed"}, result, None)
-                return {"job": completed, "result": result}
+                safe_result = self._scrub_lease_value(result, lease_token)
+                self._notify_lifecycle("completed", {**claimed, "status": "completed"}, safe_result, None)
+                return {"job": completed, "result": safe_result}
             except PermissionError as exc:
-                failed = self.queue.fail(job_id, str(exc), worker_id=worker_id or self._worker_id(), lease_token=lease_token, terminal=True)
-                self._notify_lifecycle("failed", {**claimed, **failed}, None, str(exc))
-                return {"job": failed, "error": str(exc)}
+                safe_error = self._scrub_lease_value(str(exc), lease_token)
+                failed = self.queue.fail(job_id, safe_error, worker_id=worker_id or self._worker_id(), lease_token=lease_token, terminal=True)
+                self._notify_lifecycle("failed", {**claimed, **failed}, None, safe_error)
+                return {"job": failed, "error": safe_error}
             except Exception as exc:
-                failed = self.queue.fail(job_id, str(exc), worker_id=worker_id or self._worker_id(), lease_token=lease_token, terminal=True)
-                self._notify_lifecycle("failed", {**claimed, **failed}, None, str(exc))
-                return {"job": failed, "error": str(exc)}
+                safe_error = self._scrub_lease_value(str(exc), lease_token)
+                logger.error("Automatic-memory snapshot job failed: %s: %s", job_id, safe_error)
+                failed = self.queue.fail(job_id, safe_error, worker_id=worker_id or self._worker_id(), lease_token=lease_token, terminal=True)
+                self._notify_lifecycle("failed", {**claimed, **failed}, None, safe_error)
+                return {"job": failed, "error": safe_error}
         outcome = self.process_next(worker_id=worker_id, job_id=job_id)
         if outcome is None:
             return {"job": self.queue.get(job_id), "result": {}}

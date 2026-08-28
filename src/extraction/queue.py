@@ -16,29 +16,108 @@ from src.storage.state_db import LeaseLostError
 TERMINAL_STATUSES = ("completed", "failed", "cancelled")
 CANCELLABLE_STATUSES = ("queued", "retrying")
 RETRYABLE_STATUSES = ("failed", "cancelled")
-_LEASE_SENSITIVE_KEYS = frozenset({"lease_token", "last_claim_lease_fingerprint"})
+_LEASE_SENSITIVE_KEYS = frozenset(
+    {
+        "lease_token",
+        "last_claim_lease_fingerprint",
+        # Explicit wire/internal spellings only.  Do not broaden this to
+        # generic ``token``/``secret`` keys: queue payloads can contain chat.
+        "claim_lease_token",
+        "claim_lease_fingerprint",
+        "leasetoken",
+        "lastclaimleasefingerprint",
+        "claimleasetoken",
+        "claimleasefingerprint",
+    }
+)
+_LEASE_SCRUB_MAX_DEPTH = 32
+_LEASE_SCRUB_MAX_NODES = 10_000
+_LEASE_SCRUB_MAX_STRING = 1_000_000
 
 
 def _without_lease_material(value: Any, *, redact_values: tuple[str, ...] = ()) -> Any:
-    """Recursively remove lease credentials from public projections."""
+    """Recursively scrub explicit lease material without serializing by repr.
 
-    if isinstance(value, str):
-        redacted = value
-        for secret in redact_values:
-            if secret:
-                redacted = redacted.replace(secret, "[redacted]")
-        return redacted
-    if isinstance(value, Mapping):
-        return {
-            key: _without_lease_material(item, redact_values=redact_values)
-            for key, item in value.items()
-            if str(key).strip().lower() not in _LEASE_SENSITIVE_KEYS
-        }
-    if isinstance(value, list):
-        return [_without_lease_material(item, redact_values=redact_values) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_without_lease_material(item, redact_values=redact_values) for item in value)
-    return value
+    This is shared by persistence and public DTO boundaries.  Traversal is
+    bounded and cycle-safe so hostile adapter payloads cannot recurse forever;
+    bounded branches fail closed with a redaction marker.  Only explicit lease
+    field names are removed.  Ordinary text is changed only when it contains a
+    token/fingerprint supplied by the caller as known material.
+    """
+
+    known = tuple(
+        sorted(
+            {str(item) for item in redact_values if str(item)},
+            key=len,
+            reverse=True,
+        )
+    )
+    state = {"nodes": 0}
+
+    def scrub(item: Any, *, depth: int, active: set[int]) -> Any:
+        if depth > _LEASE_SCRUB_MAX_DEPTH or state["nodes"] >= _LEASE_SCRUB_MAX_NODES:
+            return "[REDACTED]"
+        state["nodes"] += 1
+        if isinstance(item, str):
+            result = item
+            for secret in known:
+                result = result.replace(secret, "[REDACTED]")
+            if len(result) > _LEASE_SCRUB_MAX_STRING:
+                return "[REDACTED]"
+            return result
+        if isinstance(item, Mapping):
+            identity = id(item)
+            if identity in active:
+                return "[REDACTED]"
+            active.add(identity)
+            try:
+                output: dict[Any, Any] = {}
+                for key, child in item.items():
+                    if state["nodes"] >= _LEASE_SCRUB_MAX_NODES:
+                        output["[REDACTED]"] = "[REDACTED]"
+                        break
+                    normalized_key = str(key).strip().lower().replace("-", "_")
+                    if normalized_key in _LEASE_SENSITIVE_KEYS:
+                        continue
+                    output[key] = scrub(child, depth=depth + 1, active=active)
+                return output
+            finally:
+                active.remove(identity)
+        if isinstance(item, list):
+            identity = id(item)
+            if identity in active:
+                return "[REDACTED]"
+            active.add(identity)
+            try:
+                output: list[Any] = []
+                for child in item:
+                    if state["nodes"] >= _LEASE_SCRUB_MAX_NODES:
+                        output.append("[REDACTED]")
+                        break
+                    output.append(scrub(child, depth=depth + 1, active=active))
+                return output
+            finally:
+                active.remove(identity)
+        if isinstance(item, tuple):
+            identity = id(item)
+            if identity in active:
+                return "[REDACTED]"
+            active.add(identity)
+            try:
+                output: list[Any] = []
+                for child in item:
+                    if state["nodes"] >= _LEASE_SCRUB_MAX_NODES:
+                        output.append("[REDACTED]")
+                        break
+                    output.append(scrub(child, depth=depth + 1, active=active))
+                return tuple(output)
+            finally:
+                active.remove(identity)
+        # Keep the existing json serializer boundary for unknown objects; in
+        # particular, never call repr() and accidentally persist a secret.
+        return item
+
+    return scrub(value, depth=0, active=set())
 
 
 class _SQLiteExtractionQueueBase:
@@ -137,8 +216,11 @@ class _SQLiteExtractionQueueBase:
         return value.isoformat(timespec="seconds")
 
     @staticmethod
-    def _json(value: Any) -> str:
-        return json.dumps(value if value is not None else {}, ensure_ascii=False, sort_keys=True)
+    def _json(value: Any, *, known_material: tuple[str, ...] = ()) -> str:
+        scrubbed = _without_lease_material(
+            value if value is not None else {}, redact_values=known_material
+        )
+        return json.dumps(scrubbed, ensure_ascii=False, sort_keys=True)
 
     @staticmethod
     def _parse_row(
@@ -165,6 +247,10 @@ class _SQLiteExtractionQueueBase:
                     result[target] = {}
             else:
                 result[target] = {}
+        if result.get("last_error") is not None:
+            result["last_error"] = _without_lease_material(
+                str(result["last_error"]), redact_values=lease_values
+            )
         if not include_lease:
             result.pop("lease_token", None)
             result.pop("last_claim_lease_fingerprint", None)
@@ -472,12 +558,31 @@ class _SQLiteExtractionQueueBase:
     ) -> dict[str, Any]:
         now = now or datetime.now()
         where = "job_id = ? AND status = 'running'"
-        params: list[Any] = [self._json(result), self._iso(now), self._iso(now)]
         identity: list[Any] = [job_id]
         if worker_id is not None or lease_token is not None:
             where += " AND locked_by = ? AND lease_token = ?"
             identity.extend([worker_id or "", lease_token or ""])
         with self._lock, self._connection() as connection:
+            current = connection.execute(
+                "SELECT lease_token, last_claim_lease_fingerprint FROM extraction_jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+            known_material = tuple(
+                value
+                for value in (
+                    str(current["lease_token"] or "") if current else "",
+                    str(current["last_claim_lease_fingerprint"] or "") if current else "",
+                    str(lease_token or ""),
+                )
+                if value
+            )
+            # Scrub while the transaction still owns the current lease.  The
+            # current token is cleared by the same UPDATE below.
+            params: list[Any] = [
+                self._json(result, known_material=known_material),
+                self._iso(now),
+                self._iso(now),
+            ]
             cursor = connection.execute(
                 f"""
                 UPDATE extraction_jobs
@@ -506,7 +611,8 @@ class _SQLiteExtractionQueueBase:
         now = now or datetime.now()
         with self._lock, self._connection() as connection:
             row = connection.execute(
-                "SELECT attempts, max_attempts, locked_by, lease_token, status FROM extraction_jobs WHERE job_id = ?",
+                "SELECT attempts, max_attempts, locked_by, lease_token, last_claim_lease_fingerprint, status "
+                "FROM extraction_jobs WHERE job_id = ?",
                 (job_id,),
             ).fetchone()
             if not row:
@@ -525,6 +631,21 @@ class _SQLiteExtractionQueueBase:
             if delay is None:
                 delay = min(60 * (2 ** max(attempts - 1, 0)), 3600)
             next_run = now + timedelta(seconds=max(int(delay), 0))
+            known_material = tuple(
+                value
+                for value in (
+                    str(row["lease_token"] or ""),
+                    str(lease_token or ""),
+                    str(row["last_claim_lease_fingerprint"] or ""),
+                )
+                if value
+            )
+            scrubbed_error = self._json(
+                str(error), known_material=known_material
+            )
+            # _json returns a JSON string; decode the scrubbed scalar so the
+            # SQLite error column remains the established plain-text shape.
+            scrubbed_error = str(json.loads(scrubbed_error))[:2000]
             connection.execute(
                 """
                 UPDATE extraction_jobs
@@ -536,7 +657,7 @@ class _SQLiteExtractionQueueBase:
                 (
                     "retrying" if should_retry else "failed",
                     self._iso(next_run if should_retry else now),
-                    str(error)[:2000],
+                    scrubbed_error,
                     "retrying" if should_retry else "failed",
                     self._iso(now),
                     job_id,
@@ -662,6 +783,22 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
         """Cancel an executing job when authorization is revoked."""
         now = now or datetime.now()
         with self._lock, self._connection() as connection:
+            current = connection.execute(
+                "SELECT lease_token, last_claim_lease_fingerprint FROM extraction_jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+            known_material = tuple(
+                value
+                for value in (
+                    str(current["lease_token"] or "") if current else "",
+                    str(current["last_claim_lease_fingerprint"] or "") if current else "",
+                    str(lease_token or ""),
+                )
+                if value
+            )
+            scrubbed_reason = _without_lease_material(
+                str(reason), redact_values=known_material
+            )
             cursor = connection.execute(
                 """
                 UPDATE extraction_jobs
@@ -674,7 +811,7 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
                 (
                     self._iso(now),
                     self._iso(now),
-                    str(reason)[:2000],
+                    str(scrubbed_reason)[:2000],
                     self._iso(now),
                     job_id,
                     worker_id,
