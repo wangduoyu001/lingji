@@ -57,6 +57,263 @@ class StableDuplicateSummary:
         return self.source_records + self.conversation_records + self.message_records + self.memory_records
 
 
+@dataclass(frozen=True)
+class CanonicalFunctionalEvidence:
+    """The one wire contract for Task 7 functional evidence.
+
+    The runner and the scale admission code deliberately share this typed
+    boundary.  A plain dictionary is accepted only at the boundary and is
+    immediately validated into this immutable artifact; neither side is
+    allowed to invent a second set of field names.
+    """
+
+    data: Mapping[str, Any]
+
+    _REQUIRED = frozenset({
+        "schema_version", "run_id", "code_commit", "fixture_hashes",
+        "import_audit", "promotion_outcomes", "promotion_category_outcomes",
+        "promotion_provenance", "gateway_selection", "mcp_parity",
+        "qdrant_degradation", "corruption_isolation", "context_baseline",
+        "production_pollution", "measured_quality", "quality_evidence_readiness",
+        "functional_status", "phase_status",
+    })
+    _STATUSES = frozenset({"not_measured", "ready", "failed", "invalid"})
+    _QUALITY_STATUSES = frozenset({"PASS", "FAIL", "NOT_EVALUATED"})
+
+    @classmethod
+    def from_mapping(cls, value: Mapping[str, Any]) -> "CanonicalFunctionalEvidence":
+        try:
+            if not isinstance(value, Mapping) or set(value) != set(cls._REQUIRED):
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            data = {str(key): value[key] for key in cls._REQUIRED}
+            if data["schema_version"] != 1:
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            commit = data["code_commit"]
+            if (not isinstance(commit, str) or len(commit) != 40
+                    or any(char not in "0123456789abcdefABCDEF" for char in commit)):
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            if not isinstance(data["run_id"], str) or not data["run_id"]:
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            hashes = data["fixture_hashes"]
+            if (not isinstance(hashes, Mapping) or set(hashes) != {"corpus", "questions"}
+                    or any(not isinstance(item, str) or len(item) != 64 for item in hashes.values())):
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            for name in (
+                "import_audit", "promotion_outcomes", "promotion_category_outcomes",
+                "promotion_provenance", "gateway_selection", "mcp_parity",
+                "qdrant_degradation", "corruption_isolation", "context_baseline",
+                "measured_quality", "quality_evidence_readiness",
+            ):
+                if not isinstance(data[name], Mapping):
+                    raise ValueError("BLOCKED_4R2_REQUIRED")
+            readiness = data["quality_evidence_readiness"]
+            expected_readiness = set(QualityEvidenceReadiness._FUNCTIONAL_FIELDS + QualityEvidenceReadiness._MAC_FIELDS + ("windows_release",))
+            if set(readiness) != expected_readiness or any(item not in cls._STATUSES for item in readiness.values()):
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            if data["functional_status"] not in cls._QUALITY_STATUSES or data["phase_status"] not in {"PASS", "FAIL", "BLOCKED", "NOT_EVALUATED"}:
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            if data["production_pollution"] is not None and type(data["production_pollution"]) is not int:
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            _validate_canonical_details(data)
+            _reject_nonfinite_or_bool_numbers(data)
+            return cls(data)
+        except (TypeError, ValueError, KeyError):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+
+    @classmethod
+    def from_runner_payload(cls, payload: Mapping[str, Any]) -> "CanonicalFunctionalEvidence":
+        """Normalize the runner's in-memory result into this one wire shape."""
+        if not isinstance(payload, Mapping):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+        details = payload.get("evidence_details")
+        details = details if isinstance(details, Mapping) else payload
+
+        def pick(name: str, default: Any = None) -> Any:
+            value = payload.get(name)
+            return details.get(name, default) if value is None else value
+
+        qdrant = pick("qdrant_degradation", pick("semantic_degradation", {}))
+        qdrant = dict(qdrant) if isinstance(qdrant, Mapping) else {}
+        if "lexical_ids" not in qdrant:
+            qdrant["lexical_ids"] = None
+        if "degraded_ids" not in qdrant:
+            qdrant["degraded_ids"] = None
+        diagnostics = qdrant.get("diagnostics")
+        if isinstance(diagnostics, Mapping):
+            qdrant.setdefault("semantic", diagnostics.get("semantic"))
+            qdrant.setdefault("lexical", diagnostics.get("lexical"))
+        qdrant.setdefault("semantic", None)
+        qdrant.setdefault("lexical", None)
+        promotion = pick("promotion_provenance", {})
+        promotion = dict(promotion) if isinstance(promotion, Mapping) else {}
+        # Older test-only envelopes used link-oriented names.  Normalize
+        # them once at this boundary; the canonical wire contract has one
+        # vocabulary thereafter.
+        promotion.setdefault("missing_projection", promotion.get("missing_links", 0))
+        promotion.setdefault("extra_projection", promotion.get("extra_links", 0))
+        promotion.setdefault("missing_audit", 0)
+        promotion.setdefault("extra_audit", 0)
+        promotion.setdefault("duplicate_audits", 0)
+        promotion.setdefault("duplicate_links", 0)
+        promotion.setdefault("duplicate_records", 0)
+        promotion.pop("missing_links", None)
+        promotion.pop("extra_links", None)
+        corruption = pick("corruption_isolation", {})
+        corruption = dict(corruption) if isinstance(corruption, Mapping) else {}
+        corruption.setdefault("terminal_tasks", corruption.get("attempted", 0))
+        corruption.setdefault("bad_source_messages", 0)
+        corruption.setdefault("bad_source_leaks", corruption.get("bad_leakage_count", 0))
+        corruption.setdefault("queue_status_counts", {})
+        gateway = pick("gateway_selection", {})
+        gateway = dict(gateway) if isinstance(gateway, Mapping) else {}
+        gateway.setdefault("status", "failed")
+        gateway.setdefault("calls_completed", 0)
+        gateway.setdefault("selector_calls", 0)
+        gateway.setdefault("unknown", 0)
+        gateway.setdefault("duplicates", 0)
+        mcp = pick("mcp_parity", {})
+        mcp = dict(mcp) if isinstance(mcp, Mapping) else {}
+        mcp.setdefault("status", "failed")
+        mcp.setdefault("attempts", 0)
+        mcp.setdefault("successes", 0)
+        mcp.setdefault("strict_rate", (100.0 * mcp["successes"] / mcp["attempts"] if mcp.get("attempts") else 0.0))
+        context = pick("context_baseline", {})
+        context = dict(context) if isinstance(context, Mapping) else {}
+        context.setdefault("status", "not_measured")
+        context.setdefault("baseline_chars", None)
+        context.setdefault("rendered_chars", None)
+        context.setdefault("reduction", None)
+        readiness = pick("quality_evidence_readiness", pick("readiness", {}))
+        readiness = dict(readiness) if isinstance(readiness, Mapping) else {}
+        readiness_fields = QualityEvidenceReadiness._FUNCTIONAL_FIELDS + QualityEvidenceReadiness._MAC_FIELDS + ("windows_release",)
+        readiness = {field: readiness.get(field, "not_measured") for field in readiness_fields}
+        for field in readiness_fields:
+            readiness.setdefault(field, "not_measured")
+            value = readiness[field]
+            readiness[field] = str(value).removeprefix("EvidenceState.").lower()
+        normalized = {
+            "schema_version": 1,
+            "run_id": payload.get("run_id") or "",
+            "code_commit": payload.get("code_commit") or "",
+            "fixture_hashes": payload.get("fixture_hashes") or {},
+            "import_audit": pick("import_audit", {}),
+            "promotion_outcomes": pick("promotion_outcomes", {}),
+            "promotion_category_outcomes": pick("promotion_category_outcomes", {}),
+            "promotion_provenance": promotion,
+            "gateway_selection": gateway,
+            "mcp_parity": mcp,
+            "qdrant_degradation": qdrant,
+            "corruption_isolation": corruption,
+            "context_baseline": context,
+            "production_pollution": payload.get("production_pollution"),
+            "measured_quality": pick("measured_quality", {}),
+            "quality_evidence_readiness": readiness,
+            "functional_status": payload.get("functional_status", "NOT_EVALUATED"),
+            "phase_status": payload.get("phase_status", "NOT_EVALUATED"),
+        }
+        return cls.from_mapping(normalized)
+
+    def to_mapping(self) -> dict[str, Any]:
+        return _json_safe_copy(self.data)
+
+    @classmethod
+    def complete_for_test(cls) -> "CanonicalFunctionalEvidence":
+        commit = "a" * 40
+        corpus = "bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94"
+        questions = "338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612"
+        ready = {field: "ready" for field in QualityEvidenceReadiness._FUNCTIONAL_FIELDS + QualityEvidenceReadiness._MAC_FIELDS + ("windows_release",)}
+        return cls.from_mapping({
+            "schema_version": 1,
+            "run_id": f"quality:{corpus[:16]}:{questions[:16]}:{commit[:16]}",
+            "code_commit": commit, "fixture_hashes": {"corpus": corpus, "questions": questions},
+            "import_audit": {"expected_rows": 2, "actual_rows": 2, "missing_external_keys": [], "extra_external_keys": [], "stable_duplicates": {"source_records": 0, "conversation_records": 0, "message_records": 0, "memory_records": 0}, "ordered_external_key_matches": 2, "role_matches": 2, "sequence_matches": 2, "timestamp_matches": 2, "content_hash_matches": 2, "source_matches": 2, "conversation_matches": 2, "intentional_content_hash_groups": []},
+            "promotion_outcomes": {"active": 2, "pending_owner_review": 0, "rejected": 0, "error": 0}, "promotion_category_outcomes": {},
+            "promotion_provenance": {"status": "ready", "expected": 2, "actual": 2, "links_expected": 2, "links_actual": 2, "missing_projection": 0, "extra_projection": 0, "missing_audit": 0, "extra_audit": 0, "duplicate_records": 0, "duplicate_audits": 0, "duplicate_links": 0},
+            "gateway_selection": {"status": "ready", "calls_completed": 100, "selector_calls": 100, "unknown": 0, "duplicates": 0},
+            "mcp_parity": {"status": "ready", "attempts": 100, "successes": 100, "strict_rate": 100.0},
+            "qdrant_degradation": {"status": "ready", "semantic": "degraded", "lexical": "available", "lexical_ids": ["m1"], "degraded_ids": ["m1"]},
+            "corruption_isolation": {"status": "ready", "terminal_tasks": 2, "attempted": 2, "completed": 1, "failed": 1, "continued": 1, "retrievable": 1, "bad_source_messages": 0, "bad_source_leaks": 0, "queue_status_counts": {"completed": 1, "failed": 1}},
+            "context_baseline": {"status": "ready", "baseline_chars": 1000, "rendered_chars": 50, "reduction": 95.0}, "production_pollution": None,
+            "measured_quality": {"status": "PASS", "mcp_attempts": 100, "mcp_successes": 100, "baseline_context_chars": 1000, "rendered_context_chars": 50, "context_reduction": 95.0},
+            "quality_evidence_readiness": ready, "functional_status": "PASS", "phase_status": "BLOCKED",
+        })
+
+
+def _json_safe_copy(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe_copy(child) for key, child in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_json_safe_copy(child) for child in value]
+    return value
+
+
+def _reject_nonfinite_or_bool_numbers(value: Any) -> None:
+    import math
+    if isinstance(value, Mapping):
+        for child in value.values():
+            _reject_nonfinite_or_bool_numbers(child)
+    elif isinstance(value, (tuple, list)):
+        for child in value:
+            _reject_nonfinite_or_bool_numbers(child)
+    elif isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("BLOCKED_4R2_REQUIRED")
+
+
+def _validate_canonical_details(data: Mapping[str, Any]) -> None:
+    exact_sections = {
+        "import_audit": {"expected_rows", "actual_rows", "missing_external_keys", "extra_external_keys", "stable_duplicates", "ordered_external_key_matches", "role_matches", "sequence_matches", "timestamp_matches", "content_hash_matches", "source_matches", "conversation_matches", "intentional_content_hash_groups"},
+        "promotion_outcomes": {"active", "pending_owner_review", "rejected", "error"},
+        "promotion_provenance": {"status", "expected", "actual", "active", "pending", "rejected", "error", "links_expected", "links_actual", "missing_projection", "extra_projection", "missing_audit", "extra_audit", "duplicate_records", "duplicate_audits", "duplicate_links"},
+        "gateway_selection": {"status", "calls_completed", "selector_calls", "empty_responses", "selected_evidence", "empty_response_is_retrieval_miss", "unknown", "duplicates"},
+        "mcp_parity": {"status", "attempts", "successes", "strict_rate", "failures"},
+        "qdrant_degradation": {"status", "semantic", "lexical", "lexical_ids", "degraded_ids", "lexical_results", "degraded_results", "diagnostics"},
+        "corruption_isolation": {"status", "terminal_tasks", "attempted", "completed", "failed", "continued", "retrievable", "bad_source_messages", "bad_source_leaks", "queue_status_counts", "reasons", "target_source_ids", "target_scan_ids", "target_job_ids", "work_outcome_counts", "valid_retrieval_identities", "bad_leakage_count", "reason"},
+        "context_baseline": {"status", "baseline_chars", "rendered_chars", "reduction"},
+        "measured_quality": {"status", "answered_questions", "valid_fact_hits", "valid_fact_total", "citation_hits", "citation_total", "automatic_activation_correct", "automatic_activation_total", "automatic_activation_accuracy", "mcp_successes", "mcp_attempts", "baseline_context_chars", "rendered_context_chars", "context_reduction"},
+    }
+    for section, allowed in exact_sections.items():
+        if set(data[section]) - allowed:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    for value in data["promotion_category_outcomes"].values():
+        if not isinstance(value, Mapping) or set(value) - {"expected", "actual", "active", "pending", "rejected", "error"}:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    for section, required in {
+        "import_audit": {"expected_rows", "actual_rows"},
+        "promotion_provenance": {"status", "expected", "actual"},
+        "gateway_selection": {"status", "calls_completed", "selector_calls"},
+        "mcp_parity": {"status", "attempts", "successes", "strict_rate"},
+        "qdrant_degradation": {"status", "semantic", "lexical", "lexical_ids", "degraded_ids"},
+        "corruption_isolation": {"status", "terminal_tasks", "attempted", "completed", "failed", "continued", "retrievable", "bad_source_messages", "bad_source_leaks", "queue_status_counts"},
+        "context_baseline": {"status", "baseline_chars", "rendered_chars", "reduction"},
+    }.items():
+        section_value = data[section]
+        if not required <= set(section_value):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    numeric_fields = {
+        "import_audit": ("expected_rows", "actual_rows", "ordered_external_key_matches", "role_matches", "sequence_matches", "timestamp_matches", "content_hash_matches", "source_matches", "conversation_matches"),
+        "promotion_provenance": ("expected", "actual", "links_expected", "links_actual"),
+        "gateway_selection": ("calls_completed", "selector_calls"),
+        "mcp_parity": ("attempts", "successes"),
+        "corruption_isolation": ("terminal_tasks", "attempted", "completed", "failed", "continued", "retrievable", "bad_source_messages", "bad_source_leaks"),
+    }
+    for section, fields in numeric_fields.items():
+        if any(type(data[section].get(field)) is not int or data[section][field] < 0 for field in fields):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    context = data["context_baseline"]
+    readiness = data["quality_evidence_readiness"]
+    for section in ("mcp_parity", "qdrant_degradation", "corruption_isolation", "context_baseline", "promotion_provenance"):
+        if str(data[section].get("status") or "").lower() != str(readiness.get({"mcp_parity": "mcp_parity", "qdrant_degradation": "qdrant_degradation", "corruption_isolation": "corruption_isolation", "context_baseline": "context_baseline", "promotion_provenance": "promotion_provenance"}[section]) or "").lower():
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    if data["functional_status"] == "PASS" and any(readiness[field] != "ready" for field in QualityEvidenceReadiness._FUNCTIONAL_FIELDS if field != "production_sentinel"):
+        raise ValueError("BLOCKED_4R2_REQUIRED")
+    if context["status"] == "not_measured":
+        if any(context[field] is not None for field in ("baseline_chars", "rendered_chars", "reduction")):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    else:
+        if any(type(context[field]) is not int for field in ("baseline_chars", "rendered_chars")) or type(context["reduction"]) not in (int, float):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+
+
 def audit_promotion_persistence(memory_db: Any, *, promotion_evidence: Sequence[PromotionEvidence]) -> PromotionPersistenceAudit:
     """Compare durable active derived rows with verified activation evidence."""
     active = [item.memory_id for item in promotion_evidence if item.state is PromotionProjectionState.VISIBLE_ACTIVE or str(item.state) == PromotionProjectionState.VISIBLE_ACTIVE.value]

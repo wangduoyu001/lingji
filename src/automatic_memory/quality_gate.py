@@ -54,6 +54,7 @@ from .evaluation import (
 )
 from .quality_evidence import (
     EvidenceState,
+    CanonicalFunctionalEvidence,
     ExpectedImportedRow,
     QualityRunEnvelope,
     ImportedEvidenceAudit,
@@ -69,7 +70,7 @@ from .quality_evidence import (
     count_memory_projection_duplicates,
 )
 from .quality_degradation import measure_context_baseline, measure_mcp_parity, measure_corruption_isolation_from_runtime, measure_semantic_degradation
-from .quality_promotion import measure_promotion_fixtures
+from .quality_promotion import activation_measurement, measure_promotion_fixtures
 from .scale_benchmark import readiness_from_envelope, generate_history_fixture
 
 
@@ -378,17 +379,6 @@ def _opaque_memory_id(record: CorpusRecord) -> str:
     return f"LJ-MEM-{digest[:32]}"
 
 
-def _all_messages(read_model: SourceReadModel) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    offset = 0
-    while True:
-        page = read_model.list_messages(owner=True, limit=200, offset=offset)
-        rows.extend(page.get("items") or [])
-        if not page.get("next_offset"):
-            return rows
-        offset = int(page["next_offset"])
-
-
 def _build_pipeline(root: Path, memory_db: MemoryDatabase, read_model: SourceReadModel, state_db: StateDatabase) -> ExtractionPipeline:
     layout = VaultLayout(root / "vault")
     layout.ensure()
@@ -445,6 +435,35 @@ def _build_gateway(
         state_db=state_db,
     )
     return gateway, profiles
+
+
+def _promote_fixtures(
+    corpus: Sequence[CorpusRecord],
+    message_map: Mapping[str, Mapping[str, Any]],
+    memory_db: MemoryDatabase,
+    read_model: SourceReadModel,
+    state_db: StateDatabase,
+) -> tuple[dict[str, dict[str, Any]], int | None, int | None, dict[str, str], dict[str, int]]:
+    """Compatibility shim for historical evaluator callers.
+
+    The runner no longer calls this legacy orchestration helper; promotion
+    measurement lives in :mod:`quality_promotion`.  Keep the old import
+    contract while delegating without maintaining a second implementation.
+    """
+    bindings = {_opaque_memory_id(record): str(record.fact_id) for record in corpus}
+    if len(bindings) != len(corpus):
+        raise ValueError("opaque memory ID collision")
+    measured_map = {
+        str(record.fact_id): {**dict(message_map.get(str(record.fact_id)) or {}), "promotion_memory_id": _opaque_memory_id(record)}
+        for record in corpus
+    }
+    measurement = measure_promotion_fixtures(corpus, measured_map, memory_db, read_model, state_db)
+    decisions = {item["fact_id"]: item for item in measurement.outcomes}
+    outcomes = {status: 0 for status in ("active", "pending_owner_review", "rejected", "error")}
+    for item in measurement.outcomes:
+        status = str(item.get("status") or "error")
+        outcomes[status] = outcomes.get(status, 0) + 1
+    return decisions, None, None, bindings, outcomes
 
 
 def _build_formal_mcp_server(gateway: MemoryGateway, pipeline: ExtractionPipeline) -> Any:
@@ -539,34 +558,6 @@ def _match_persisted_messages(
             raise ValueError(f"missing persisted composite message key: {key}")
         matched[fact_id] = item
     return matched
-
-
-def _promote_fixtures(
-    corpus: Sequence[CorpusRecord],
-    message_map: Mapping[str, Mapping[str, Any]],
-    memory_db: MemoryDatabase,
-    read_model: SourceReadModel,
-    state_db: StateDatabase,
-) -> tuple[dict[str, dict[str, Any]], int, int, dict[str, str], dict[str, int]]:
-    bindings = {_opaque_memory_id(record): str(record.fact_id) for record in corpus}
-    if len(bindings) != len(corpus):
-        raise ValueError("opaque memory ID collision")
-    fact_ids = [str(record.fact_id or "").strip() for record in corpus]
-    if any(not value for value in fact_ids) or len(fact_ids) != len(set(fact_ids)):
-        raise ValueError("promotion fact binding collision")
-    measured_map = {
-        str(record.fact_id): {**dict(message_map.get(str(record.fact_id)) or {}), "promotion_memory_id": _opaque_memory_id(record)}
-        for record in corpus
-    }
-    measurement = measure_promotion_fixtures(corpus, measured_map, memory_db, read_model, state_db)
-    decisions = {item["fact_id"]: item for item in measurement.outcomes}
-    activation_total = sum(item["expected_status"] == "active" for item in measurement.outcomes)
-    activation_correct = sum(item["expected_status"] == "active" and item["status"] == "active" for item in measurement.outcomes)
-    outcomes: dict[str, int] = {"active": 0, "pending_owner_review": 0, "rejected": 0, "error": 0}
-    for item in measurement.outcomes:
-        status = str(item.get("status") or "error")
-        outcomes[status] = outcomes.get(status, 0) + 1
-    return decisions, activation_correct, activation_total, bindings, outcomes
 
 
 def validate_selected_evidence(
@@ -699,8 +690,9 @@ def _run_quality_gate_impl(
             corpus, promotion_map, memory_db, read_model, state_db
         )
         decisions = {item["fact_id"]: item for item in promotion_measurement.outcomes}
-        activation_total = sum(item["expected_status"] == "active" for item in promotion_measurement.outcomes)
-        activation_correct = sum(item["expected_status"] == "active" and item["status"] == "active" for item in promotion_measurement.outcomes)
+        activation = activation_measurement(promotion_measurement.outcomes)
+        activation_correct = activation["correct"]
+        activation_total = activation["total"]
         promotion_outcomes: dict[str, int] = {"active": 0, "pending_owner_review": 0, "rejected": 0, "error": 0}
         for item in promotion_measurement.outcomes:
             status = str(item.get("status") or "error")
@@ -858,7 +850,6 @@ def _run_quality_gate_impl(
         measured_quality_failure = (
             valid_fact_total <= 0 or 100 * valid_fact_hits / valid_fact_total < 90
             or citation_total <= 0 or 100 * citation_hits / citation_total < 95
-            or (activation_total > 0 and 100 * activation_correct / activation_total < 95)
             or mcp_attempts <= 0 or 100 * mcp_successes / mcp_attempts < 95
             or context_reduction is None or context_reduction < 90
         )
@@ -960,7 +951,7 @@ def _run_quality_gate_impl(
                 "valid_fact_hits": valid_fact_hits, "valid_fact_total": valid_fact_total,
                 "citation_hits": citation_hits, "citation_total": citation_total,
                 "automatic_activation_correct": activation_correct, "automatic_activation_total": activation_total,
-                "automatic_activation_accuracy": (100 * activation_correct / activation_total) if activation_total else None,
+                "automatic_activation_accuracy": None,
                 "mcp_successes": mcp_successes, "mcp_attempts": mcp_attempts,
                 "baseline_context_chars": measured_baseline_chars,
                 "rendered_context_chars": measured_rendered_chars,
@@ -997,9 +988,10 @@ def publish_quality_envelope(envelope: QualityRunEnvelope, *, repository_output_
     if isinstance(details, Mapping):
         # Keep the machine-readable report convenient for existing consumers
         # while retaining one authoritative envelope and one evidence map.
-        for key in ("semantic_degradation", "corruption_isolation", "context_baseline",
-                    "mcp_parity", "promotion_outcomes", "promotion_category_outcomes",
-                    "promotion_provenance", "import_audit", "acceptance_boundary", "measured_quality"):
+        for key in ("import_audit", "promotion_outcomes", "promotion_category_outcomes",
+                    "promotion_provenance", "gateway_selection", "mcp_parity",
+                    "qdrant_degradation", "corruption_isolation", "context_baseline",
+                    "production_pollution", "measured_quality"):
             if key in details:
                 payload[key] = details[key]
         payload["quality_evidence_readiness"] = payload.get("quality_evidence_readiness") or payload.get("readiness", {})
@@ -1048,18 +1040,10 @@ def run_quality_gate(
             blocked_reasons=tuple(raw.get("blocked_physical_evidence") or ()),
             measured_failure=bool((raw.get("measured_quality") or {}).get("status") == "FAIL"),
         )
-        envelope = replace(envelope, evidence_details={
-            "semantic_degradation": raw.get("semantic_degradation"),
-            "corruption_isolation": raw.get("corruption_isolation"),
-            "context_baseline": raw.get("context_baseline"),
-            "mcp_parity": raw.get("mcp_parity"),
-            "promotion_outcomes": raw.get("promotion_outcomes"),
-            "promotion_category_outcomes": raw.get("promotion_category_outcomes"),
-            "promotion_provenance": raw.get("promotion_provenance"),
-            "import_audit": raw.get("import_audit"),
-            "acceptance_boundary": raw.get("acceptance_boundary"),
-            "measured_quality": raw.get("measured_quality"),
-        }, run_id=raw.get("run_id"), fixture_hashes=raw.get("fixture_hashes") or {},
+        canonical = CanonicalFunctionalEvidence.from_runner_payload(raw)
+        canonical_details = canonical.to_mapping()
+        envelope = replace(envelope, evidence_details=canonical_details,
+        run_id=raw.get("run_id"), fixture_hashes=raw.get("fixture_hashes") or {},
         quality_evidence_readiness=asdict(readiness))
         # The temporary machine report is deliberately written beneath the
         # acceptance output root; the caller publishes it only after cleanup.

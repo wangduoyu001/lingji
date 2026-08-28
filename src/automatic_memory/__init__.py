@@ -50,6 +50,7 @@ from .evidence_identity import (
     select_context_evidence,
 )
 from .quality_evidence import (
+    CanonicalFunctionalEvidence,
     EvidenceState,
     ProtectedTreeInvalidError,
     ProtectedTreeSentinel,
@@ -126,6 +127,7 @@ __all__ = [
     "build_identity_registry",
     "select_context_evidence",
     "EvidenceState",
+    "CanonicalFunctionalEvidence",
     "QualityEvidenceReadiness",
     "QualityRunEnvelope",
     "ProtectedTreeSentinel",

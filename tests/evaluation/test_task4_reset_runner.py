@@ -143,8 +143,12 @@ def test_runner_restores_readiness_enums_before_finalizing_envelope(tmp_path: Pa
             output_path=roots.output_root / "quality.json",
             acceptance_roots=roots,
         )
-    assert envelope.readiness.mcp_parity is EvidenceState.READY
-    assert envelope.readiness.context_baseline is EvidenceState.READY
+    # The current measured run has strict MCP retrieval failure and no
+    # complete selection-before-bound baseline.  Preserve enum restoration
+    # while keeping those facts honest and nullable.
+    assert envelope.readiness.mcp_parity is EvidenceState.FAILED
+    assert envelope.readiness.context_baseline is EvidenceState.NOT_MEASURED
+    assert envelope.phase_status == "FAIL"
     assert envelope.blocked_reasons != ("INVALID_EVIDENCE",)
 
 

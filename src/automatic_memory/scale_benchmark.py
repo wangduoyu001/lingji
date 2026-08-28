@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from .quality_evidence import EvidenceState, QualityEvidenceReadiness
+from .quality_evidence import CanonicalFunctionalEvidence, EvidenceState, QualityEvidenceReadiness
 from src.extraction.adapters.generic_ai_history import HISTORY_SCHEMA, HISTORY_VERSION
 
 
@@ -114,8 +114,9 @@ def _validate_promotion(payload: Mapping[str, Any], details: Mapping[str, Any], 
         raise ValueError("promotion outcomes are incomplete")
     provenance = _detail(payload, details, "promotion_provenance")
     _require_keys(provenance, {
-        "status", "expected", "actual", "links_expected", "links_actual", "missing_links",
-        "extra_links", "duplicate_links", "duplicate_records",
+        "status", "expected", "actual", "links_expected", "links_actual", "missing_projection",
+        "extra_projection", "missing_audit", "extra_audit", "duplicate_links", "duplicate_records",
+        "duplicate_audits",
     }, "promotion_provenance")
     if provenance["status"] != EvidenceState.READY.value:
         raise ValueError("promotion provenance is not ready")
@@ -123,7 +124,7 @@ def _validate_promotion(payload: Mapping[str, Any], details: Mapping[str, Any], 
         raise ValueError("promotion provenance count mismatch")
     if _counter(provenance["links_expected"], "promotion_provenance.links_expected") != expected or _counter(provenance["links_actual"], "promotion_provenance.links_actual") != expected:
         raise ValueError("promotion link count mismatch")
-    for field in ("missing_links", "extra_links", "duplicate_links", "duplicate_records"):
+    for field in ("missing_projection", "extra_projection", "missing_audit", "extra_audit", "duplicate_links", "duplicate_records", "duplicate_audits"):
         if _counter(provenance[field], f"promotion_provenance.{field}") != 0:
             raise ValueError("promotion provenance has invalid links")
 
@@ -201,6 +202,23 @@ def readiness_from_envelope(path: Path) -> QualityEvidenceReadiness:
     try:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         payload = _require_mapping(payload, "quality envelope")
+        canonical = CanonicalFunctionalEvidence.from_runner_payload(payload)
+        canonical_payload = canonical.to_mapping()
+        # All detailed validation below consumes the canonical artifact.  The
+        # two legacy count projections remain only as derived compatibility
+        # fields for older callers; they are never accepted as evidence.
+        payload = dict(payload)
+        payload.update(canonical_payload)
+        payload["evidence_details"] = canonical_payload
+        audit_projection = canonical_payload["import_audit"]
+        payload["import_counts"] = {
+            "expected_messages": audit_projection["expected_rows"],
+            "imported_messages": audit_projection["actual_rows"],
+        }
+        payload["role_order_counts"] = {
+            "expected": audit_projection["expected_rows"],
+            "matched": audit_projection["ordered_external_key_matches"],
+        }
         code_commit = payload.get("code_commit")
         if not isinstance(code_commit, str) or len(code_commit) != 40 or any(char not in "0123456789abcdefABCDEF" for char in code_commit):
             raise ValueError("invalid code commit")

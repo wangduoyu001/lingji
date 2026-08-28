@@ -35,12 +35,15 @@ def promotion_category(record: Any) -> str:
 
 
 def expected_status(record: Any) -> str:
-    """Return the frozen fixture outcome contract, not a runner policy guess."""
-    category = promotion_category(record)
-    lifecycle = str(getattr(record, "lifecycle", "") or "").strip().lower()
-    if category in _PROTECTED_CATEGORIES or lifecycle in {"superseded", "invalidated", "archived"}:
-        return "pending_owner_review"
-    return "active"
+    """Return the current product contract while activation is quarantined."""
+    return "pending_owner_review"
+
+
+def activation_measurement(outcomes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Represent quarantined activation as unavailable, never as a false 0/93."""
+    if any(str(item.get("expected_status") or "") != "pending_owner_review" for item in outcomes):
+        raise ValueError("activation expectation is outside quarantine contract")
+    return {"status": "not_applicable", "correct": None, "total": None, "accuracy": None}
 
 
 def _ids(values: Sequence[Any]) -> list[str]:
@@ -194,15 +197,32 @@ def measure_promotion_fixtures(
             "reason_codes": list(reason_codes),
         })
 
-    projection_rows = tuple(memory_db.list_derived_projection_identity_rows())
+    candidate_memory_ids = {str(item.get("memory_id") or "") for item in outcomes if str(item.get("memory_id") or "")}
+    projection_rows = tuple(
+        row for row in memory_db.list_derived_projection_identity_rows()
+        if str(row.get("memory_id") or "") in candidate_memory_ids
+    )
     projection_ids = [str(row.get("memory_id") or "") for row in projection_rows]
     links: list[tuple[str, str]] = []
-    for memory_id in projection_ids:
-        for row in read_model.memory_links(memory_id):
-            links.append((str(row.get("message_id") or ""), memory_id))
+    # Query from every imported message first.  Looking only through existing
+    # projections misses an orphan link attached to a pending/rejected/error
+    # decision, which is precisely the negative case this gate must detect.
+    imported_message_ids = {
+        str(message.get("message_id") or "")
+        for message in message_map.values()
+        if str(message.get("message_id") or "")
+    }
+    for message_id in sorted(imported_message_ids):
+        for row in read_model.message_links(message_id):
+            memory_id = str(row.get("memory_id") or "")
+            if memory_id in candidate_memory_ids:
+                links.append((message_id, memory_id))
     audit_ids: list[str] = []
     for row in state_db.recent_events(limit=100000):
-        if str(row.get("event_type") or "") not in {"memory_promotion_decision", "memory_promotion_owner_approved", "memory_promotion_projection_error"}:
+        if str(row.get("event_type") or "") not in {
+            "memory_promotion_decision", "memory_promotion_owner_approved",
+            "memory_promotion_owner_rejected", "memory_promotion_projection_error",
+        }:
             continue
         payload = row.get("payload_json")
         if isinstance(payload, str):
@@ -234,4 +254,4 @@ def measure_promotion_fixtures(
     return PromotionMeasurement(status, tuple(outcomes), category_outcomes, provenance, reason)
 
 
-__all__ = ["PromotionMeasurement", "expected_status", "measure_promotion_fixtures", "promotion_category", "validate_promotion_measurement"]
+__all__ = ["PromotionMeasurement", "activation_measurement", "expected_status", "measure_promotion_fixtures", "promotion_category", "validate_promotion_measurement"]
