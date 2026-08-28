@@ -95,7 +95,7 @@ Phase 1 的自动化第二大脑目标是：一次中文主人授权后，在明
 
 所有聊天先进入原始证据和可检索层。Automatic archival and candidate generation continue; automatic activation is quarantined; owner approval is required until a future independently approved recovery gate exists. Derived current memory 仍只是可重建投影；Core、身份、高风险和正式永久知识仍需主人明确确认。`superseded`、`invalidated`、`archived` 历史保留审计，但 current lexical/Qdrant/hybrid/Core/ContextPack/MCP 默认排除。Opportunity Center 在 Phase 1 PASS 前保持冻结。
 
-当前 thin quality runner 已按 Task 4R-Reset Task 6 收口：仅在带精确 lease token/owner 校验的临时 Acceptance roots 编排现有导入、Work/Memory/Gateway contracts；不可用证据保持 nullable/`NOT_MEASURED`，不进入 `EvaluationReport`，实测失败保持 `FAIL`，清理失败覆盖预清理结论并由 CLI 复核完整清理库存。Task7 已真实运行原始 100 问：导入、角色顺序、MCP 和损坏源隔离可测；Qdrant 适配器故障状态可测但探针无 lexical 结果；事实召回 0.00%、引用准确率 0.00%、ContextPack 压缩 55.28%，官方 functional/phase 状态为 `FAIL_MEASURED_QUALITY`；release、100k、Artifact、Production/Vault 和主人验收保持未执行，Task8 不得开始。
+此前 Task7 测量 runner 的原始 100 问结果仅作历史基线保留；Task7M-Reset 已重置其证据组合。当前质量 runner 只在带精确 lease token/owner 校验的临时 Acceptance roots 编排现有导入、Work/Memory/Gateway contracts；不可用证据保持 nullable/`NOT_MEASURED`，不进入 `EvaluationReport`，实测失败保持 `FAIL`，清理失败覆盖预清理结论并由 CLI 复核完整清理库存。release、100k、Artifact、Production/Vault 和主人验收保持未执行，Task8 不得开始。
 
 Task7 Measurement Repair 已完成有界测量架构修复但未通过质量门禁：生产污染保持
 `null/NOT_MEASURED`，Acceptance protected boundary 单独记录；两个真实授权临时来源
