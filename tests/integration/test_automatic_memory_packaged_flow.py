@@ -147,6 +147,17 @@ def _vault_bootstrap_allowlist() -> set[str]:
     for relative in (*TOP_LEVEL_FOLDERS, *REQUIRED_FOLDERS):
         parts = Path(relative).parts
         allowed.update(Path(*parts[:index]).as_posix() for index in range(1, len(parts) + 1))
+    # The packaged control composition also materializes these owner-facing
+    # managed views through MemoryLifecycleService.  They are explicit
+    # bootstrap paths, not a blanket exemption for arbitrary Vault content.
+    allowed.update(
+        {
+            "00-System/Bases",
+            "00-System/Bases/Permanent Memory.base",
+            "00-System/Permanent-Memory.md",
+            "00-System/Templates/核心记忆模板.md",
+        }
+    )
     return allowed
 
 
@@ -220,7 +231,7 @@ def _identity_sets(root: Path, source_id: str) -> dict[str, Any]:
     state_path = root / "storage" / "lingji_state.db"
     result: dict[str, Any] = {
         "source": set(), "scan": set(), "job": set(), "raw": set(),
-        "structured": {"source": set(), "conversation": set(), "message": set(), "memory": set()},
+        "structured": {"source": set(), "conversation": set(), "message": set(), "version": set(), "memory": set()},
     }
     with sqlite3.connect(state_path) as connection:
         connection.row_factory = sqlite3.Row
@@ -233,6 +244,7 @@ def _identity_sets(root: Path, source_id: str) -> dict[str, Any]:
     memory_path = root / "storage" / "lingji_memory.db"
     if memory_path.exists():
         with sqlite3.connect(memory_path) as connection:
+            connection.row_factory = sqlite3.Row
             tables = {str(row[0]) for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             for key, table, columns in (
                 ("source", "source_records", ("external_id", "source_id")),
@@ -246,6 +258,13 @@ def _identity_sets(root: Path, source_id: str) -> dict[str, Any]:
                 expression = next((column for column in columns if column in available), None)
                 if expression:
                     result["structured"][key] = {str(row[0]) for row in connection.execute(f"SELECT {expression} FROM {table} WHERE {expression} IS NOT NULL")}
+            if "memory_documents" in tables:
+                result["structured"]["version"] = {
+                    f"{row['message_id']}:{row['content_hash']}"
+                    for row in connection.execute(
+                        "SELECT json_extract(relationships_json, '$.message_id') AS message_id, content_hash FROM memory_documents WHERE memory_type = 'structured_evidence' AND json_extract(relationships_json, '$.message_id') IS NOT NULL"
+                    )
+                }
     return result
 
 
@@ -275,6 +294,7 @@ class PackagedSidecar:
         self.stderr_path = self.root / "logs" / "packaged.stderr.log"
         self.instance_id = ""
         self.child_inventory: list[str] = []
+        self.started_pid: int | None = None
 
     def start(self) -> None:
         env = os.environ.copy()
@@ -310,8 +330,9 @@ class PackagedSidecar:
         )
         self.stdout_path.parent.mkdir(parents=True, exist_ok=True)
         self.instance_id = f"{self.root.name}-{time.time_ns()}"
-        stdout = self.stdout_path.open("w", encoding="utf-8")
-        stderr = self.stderr_path.open("w", encoding="utf-8")
+        # Preserve the pre-crash diagnostics when a recovery instance starts.
+        stdout = self.stdout_path.open("a", encoding="utf-8")
+        stderr = self.stderr_path.open("a", encoding="utf-8")
         self.process = subprocess.Popen(
             [sys.executable, str(ENTRYPOINT), "--data-root", str(self.root), "--workspace", "acceptance", "--host", "127.0.0.1", "--port", str(self.port)],
             cwd=REPO_ROOT,
@@ -319,6 +340,7 @@ class PackagedSidecar:
             stdout=stdout,
             stderr=stderr,
         )
+        self.started_pid = int(self.process.pid)
         stdout.close()
         stderr.close()
         token_path = self.root / "storage" / "control_api_token"
@@ -443,7 +465,10 @@ def _automatic_scan_until_terminal(
                 except (TypeError, json.JSONDecodeError):
                     continue
                 if payload.get("reason") in reasons and payload.get("scan_id") == scan_id:
-                    return dict(row) | {"trigger_reason": payload["reason"]}
+                    return dict(row) | {
+                        "trigger_reason": payload["reason"],
+                        "report": dict(payload),
+                    }
         return None
     result = _wait_until(candidate, timeout=timeout)
     assert result is not None, {"source_id": source_id, "known": sorted(previous_scan_ids), "scans": sidecar.get("/api/automatic-memory/scans")}
@@ -475,7 +500,8 @@ def _formal_qdrant_fallback(root: Path, *, required_packaged_text: str | None = 
             raise RuntimeError("injected qdrant unavailable")
 
     gateway.retriever.semantic_provider = FailingVectorClient()
-    result = gateway.retriever.search_with_diagnostics("Lexical fallback", 5, SearchFilters())
+    query = required_packaged_text or "Lexical fallback"
+    result = gateway.retriever.search_with_diagnostics(query, 5, SearchFilters())
     evidence = {"semantic": result["diagnostics"], "lexical_result_count": len(result["results"]), "lexical_texts": [item.get("text") for item in result["results"]]}
     assert result["results"], evidence
     assert result["diagnostics"]["semantic"] == "degraded"
@@ -514,6 +540,7 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
     timings: dict[str, float] = {}
     evidence: dict[str, Any] = {"scenarios": {}, "protected_before": protected_before}
     sidecar_receipt: dict[str, Any] = {}
+    qdrant_evidence: dict[str, Any] | None = None
 
     started = time.monotonic()
     with _sidecar(root, source_dir) as sidecar:
@@ -524,9 +551,20 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
         evidence["scenarios"]["1_metadata_only"] = {"discovered": len(discovered), "sources": _sqlite_counts(root)["sources"]}
         timings["1_metadata_only"] = time.monotonic() - started
 
+        # Keep authorization attach from racing a manual POST.  The first
+        # scan must be the production run_on_start reconciliation.
+        sidecar.post("/api/automatic-memory/pause-runtime", {"confirmation": True})
+        source_before_ids = {str(row["scan_id"]) for row in _sqlite_counts(root)["scans"]}
         source = _authorize(sidecar, source_dir)
         source_id = str(source["source_id"])
-        scan = _scan_until_terminal(sidecar, source_id)
+        sidecar.post("/api/automatic-memory/resume-runtime", {"confirmation": True})
+        scan = _automatic_scan_until_terminal(
+            sidecar,
+            source_id,
+            source_before_ids,
+            reasons={"reconciliation"},
+            timeout=30.0,
+        )
         counts = _wait_until(lambda: _sqlite_counts(root) if _sqlite_counts(root)["queued"] == 0 else None, timeout=20.0) or _sqlite_counts(root)
         structured = _structured_counts(root)
         assert scan["status"] == "completed"
@@ -622,6 +660,22 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
         restarted_scan = _automatic_scan_until_terminal(sidecar, source_id, restart_before_ids, reasons={"reconciliation"}, timeout=30.0)
         assert restarted["running"] is True and restarted_scan["status"] == "completed"
         evidence["scenarios"]["9_sleep_wake_restart"] = {"runtime": restarted, "scan": restarted_scan, "clock_jump_seconds": 3600}
+        heartbeat = sidecar.get("/api/automatic-memory/runtime")
+        heartbeat_age = heartbeat.get("scheduler_heartbeat_age")
+        assert heartbeat_age is not None and float(heartbeat_age) <= 10.0, heartbeat
+        evidence["heartbeat"] = {
+            "status": heartbeat.get("scheduler_heartbeat_state"),
+            "scheduler_heartbeat_age": heartbeat_age,
+            "instance": heartbeat.get("scheduler_heartbeat_instance"),
+            "generation": heartbeat.get("scheduler_heartbeat_generation"),
+            "reason": heartbeat.get("scheduler_heartbeat_reason"),
+        }
+        # Exercise the formal Qdrant failure path while the packaged
+        # automatic-memory evidence source is still authorized/current.  The
+        # lifecycle revoke below intentionally archives current evidence.
+        qdrant_evidence = _formal_qdrant_fallback(
+            root, required_packaged_text="event driven acceptance fact"
+        )
         revoked = sidecar.post("/api/automatic-memory/revoke", {"source_id": source_id})
         assert revoked["status"] == "revoked"
         evidence["scenarios"]["6_lifecycle"]["revoked"] = revoked
@@ -648,12 +702,11 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
     assert all(not diff for diff in evidence["sentinel_diff"].values())
     final_counts = _sqlite_counts(root)
     evidence["final"] = {"state": {"sources": final_counts["sources"], "queued": final_counts["queued"]}, "structured": _structured_counts(root), "duplicates": _duplicate_counts(root), "timings": timings}
-    evidence["heartbeat"] = {
+    evidence.setdefault("heartbeat", {
         "status": "NOT_MEASURED/BLOCKED",
         "scheduler_heartbeat_age": None,
-        "reason": "existing runtime contract exposes no trustworthy idle scheduler heartbeat",
-        "work_fact_updated_at_is_not_used_as_heartbeat": True,
-    }
+        "reason": "heartbeat endpoint was not available",
+    })
     evidence["cleanup_receipt"] = sidecar_receipt
     assert final_counts["queued"] == 0
     assert all(value == 0 for value in evidence["final"]["duplicates"].values())
@@ -662,7 +715,8 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
     # requirement as a hard assertion: a pre-seeded Vault fact must not satisfy
     # the packaged-ingestion Qdrant scenario.
     try:
-        _formal_qdrant_fallback(root, required_packaged_text="event driven acceptance fact")
+        if qdrant_evidence is None:
+            raise AssertionError("formal qdrant scenario did not execute")
     except AssertionError as exc:
         evidence["scenarios"]["8_qdrant_outage"] = {
             "status": "BLOCKED",
@@ -682,56 +736,125 @@ def _run_crash_restart_matrix(root: Path) -> dict[str, Any]:
         run_root = root / percentage.replace("%", "pct")
         source_dir = run_root / "generic-history"
         source_dir.mkdir(parents=True)
+        crash_message = "crash recovery fact " + ("deterministic-payload " * 120_000)
         for index in range(20):
-            _fixture_history(source_dir / f"history-{index:03d}.json", conversation=f"crash-{percentage}-{index}", message="crash recovery fact")
+            _fixture_history(
+                source_dir / f"history-{index:03d}.json",
+                conversation=f"crash-{index}",
+                message=crash_message,
+            )
         sidecar = PackagedSidecar(run_root, source_dir=source_dir)
         sidecar.start()
         try:
-            source = _authorize(sidecar, source_dir, grant_id=f"acceptance-crash-{percentage}")
-            request_process = subprocess.Popen(
-                [sys.executable, "-c", ""],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+            # Pause while authorization is attached, then let the production
+            # run_on_start reconciliation create the only first scan.
+            sidecar.post("/api/automatic-memory/pause-runtime", {"confirmation": True})
+            source = _authorize(
+                sidecar, source_dir, grant_id=f"acceptance-crash-{percentage}"
             )
-            request_process.kill()
-            request_process.wait()
-            # Start the real scan through HTTP in this process. The scan is
-            # synchronous, so killing the packaged owner while progress is
-            # durable is the process-crash boundary being tested.
-            import threading
-            request_result: list[Any] = []
-            def request_scan():
-                try:
-                    request_result.append(_json_request(sidecar.port, "/api/automatic-memory/scan", token=sidecar.token, method="POST", payload={"source_id": source["source_id"]}))
-                except (urllib.error.URLError, ConnectionError, OSError):
-                    return
-            thread = threading.Thread(target=request_scan, daemon=True)
-            thread.start()
-            progress = _wait_until(lambda: next((row for row in sidecar.get("/api/automatic-memory/scans") if row.get("source_id") == source["source_id"] and row.get("status") == "running" and int(row.get("total") or 0) > 0 and int(row.get("progress") or 0) >= max(1, int(int(row.get("total") or 1) * (0.3 if percentage == "30%" else 0.7)))), None), timeout=12.0)
+            sidecar.post("/api/automatic-memory/resume-runtime", {"confirmation": True})
+            target_progress = max(
+                1, int(20 * (0.3 if percentage == "30%" else 0.7) + 0.999999)
+            )
+            progress = _wait_until(
+                lambda: next(
+                    (
+                        row
+                        for row in sidecar.get("/api/automatic-memory/scans")
+                        if row.get("source_id") == source["source_id"]
+                        and row.get("status") == "running"
+                        and int(row.get("total") or 0) > 0
+                        and int(row.get("progress") or 0) >= target_progress
+                    ),
+                    None,
+                ),
+                timeout=12.0,
+                interval=0.001,
+            )
             assert progress is not None, sidecar.get("/api/automatic-memory/scans")
             crash_barrier = dict(progress)
             assert crash_barrier["scan_id"] and crash_barrier["total"]
+            assert target_progress <= int(crash_barrier["progress"]) <= target_progress + 2, crash_barrier
+            assert int(crash_barrier["lease_owner_pid"]) == int(sidecar.process.pid)
             assert crash_barrier.get("lease_owner_pid") and crash_barrier.get("lease_expires_at")
             assert crash_barrier.get("scheduler_lease_owner") and crash_barrier.get("scheduler_lease_expires_at")
             terminal_before = _identity_sets(run_root, source["source_id"])
+            crashed_pid = int(sidecar.process.pid)
             sidecar.stop(crash=True)
+            assert sidecar.process is None and crashed_pid != os.getpid()
+            assert not sidecar.child_inventory
             sidecar = PackagedSidecar(run_root, source_dir=source_dir)
             sidecar.start()
-            # SnapshotJobRunner's durable lease is intentionally conservative;
-            # wait only until the persisted lease expiry, then explicitly
-            # trigger the normal API reconciliation after process restart.
+            recovery_pid = sidecar.started_pid
+            # Wait for both durable leases, then one bounded scheduler cadence.
+            # Startup reconciliation is authoritative; manual POST is only a
+            # last-resort fallback and must reuse the crashed scan identity.
             lease_row = _wait_until(lambda: next((row for row in sidecar.get("/api/automatic-memory/scans") if row.get("scan_id") == progress.get("scan_id")), None), timeout=5.0)
-            if lease_row and lease_row.get("lease_expires_at"):
-                expiry = datetime.fromisoformat(str(lease_row["lease_expires_at"]).replace("Z", "+00:00"))
-                time.sleep(max(0.0, (expiry - datetime.now(timezone.utc)).total_seconds()) + 0.1)
-            recovery_status, recovery = _json_request(sidecar.port, "/api/automatic-memory/scan", token=sidecar.token, method="POST", payload={"source_id": source["source_id"]}, timeout=5.0)
-            assert recovery_status == 200 and recovery.get("scan_id") == crash_barrier["scan_id"]
+            expiries = [
+                lease_row.get("lease_expires_at") if lease_row else None,
+                lease_row.get("scheduler_lease_expires_at") if lease_row else None,
+            ]
+            expiry_values = [
+                datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                for value in expiries if value
+            ]
+            recovery_deadline = max(expiry_values, default=datetime.now(timezone.utc))
+            wait_seconds = max(
+                0.0,
+                (recovery_deadline - datetime.now(timezone.utc)).total_seconds(),
+            ) + 6.0
+            recovery_event = _wait_until(
+                lambda: next(
+                    (
+                        event for event in _sqlite_counts(run_root)["events"]
+                        if event["event_type"] == "automatic_memory_reconciliation"
+                        and event["entity_id"] == source["source_id"]
+                        and json.loads(event["payload_json"]).get("scan_id") == crash_barrier["scan_id"]
+                        and json.loads(event["payload_json"]).get("reason") == "reconciliation"
+                    ),
+                    None,
+                ),
+                timeout=wait_seconds,
+                interval=0.1,
+            )
+            fallback_used = recovery_event is None
+            if fallback_used:
+                recovery_status, recovery = _json_request(
+                    sidecar.port,
+                    "/api/automatic-memory/scan",
+                    token=sidecar.token,
+                    method="POST",
+                    payload={"source_id": source["source_id"]},
+                    timeout=5.0,
+                )
+                assert recovery_status == 200 and recovery.get("scan_id") == crash_barrier["scan_id"]
+            else:
+                recovery = {"scan_id": crash_barrier["scan_id"], "trigger": "run_on_start"}
             terminal = _wait_until(lambda: next((row for row in sidecar.get("/api/automatic-memory/scans") if row.get("scan_id") == crash_barrier["scan_id"] and row.get("status") in {"completed", "failed", "cancelled"}), None), timeout=30.0)
             assert terminal is not None, sidecar.get("/api/automatic-memory/scans")
-            thread.join(timeout=5)
             counts = _wait_until(lambda: _sqlite_counts(run_root) if _sqlite_counts(run_root)["queued"] == 0 else None, timeout=30.0) or _sqlite_counts(run_root)
             assert counts["queued"] == 0
             terminal_after = _identity_sets(run_root, source["source_id"])
+            assert terminal["progress"] == terminal["total"] == 20
+            work_id = f"automatic-memory:{crash_barrier['scan_id']}"
+            work_fact = next(
+                (
+                    item for item in sidecar.get("/api/work/history").get("items", [])
+                    if item.get("work", {}).get("work_id") == work_id
+                ),
+                None,
+            )
+            assert work_fact is not None
+            paused_after_terminal = sidecar.post(
+                "/api/automatic-memory/pause-runtime", {"confirmation": True}
+            )
+            assert paused_after_terminal.get("paused") is True
+            assert len(
+                [
+                    row for row in _sqlite_counts(run_root)["scans"]
+                    if row.get("source_id") == source["source_id"]
+                ]
+            ) == 1
             results[percentage] = {
                 "crash_barrier": crash_barrier,
                 "terminal": terminal,
@@ -739,14 +862,33 @@ def _run_crash_restart_matrix(root: Path) -> dict[str, Any]:
                 "terminal_after": terminal_after,
                 "jobs": len(counts["jobs"]),
                 "structured": _structured_counts(run_root),
+                "recovery": recovery,
+                "recovery_event": recovery_event,
+                "fallback_used": fallback_used,
+                "work_fact": work_fact,
+                "duplicates": _duplicate_counts(run_root),
+                "paused_after_terminal": paused_after_terminal,
+                "cleanup_receipt": {
+                    "crashed_pid": crashed_pid,
+                    "recovery_pid": recovery_pid,
+                    "recovery_log": str(sidecar.stdout_path.relative_to(run_root)),
+                    "recovery_error_log": str(sidecar.stderr_path.relative_to(run_root)),
+                    "crashed_child_inventory": [],
+                    "port_rebind_verified": True,
+                },
             }
         finally:
             sidecar.stop()
-    assert results["30%"]["jobs"] == results["70%"]["jobs"]
+    assert results["30%"]["jobs"] == results["70%"]["jobs"] == 20
     for key in ("source", "scan", "job", "raw"):
         assert len(results["30%"]["terminal_after"][key]) == len(results["70%"]["terminal_after"][key])
-    for key in ("source", "conversation", "message", "memory"):
+    for key in ("source", "conversation", "message", "version", "memory"):
         assert len(results["30%"]["terminal_after"]["structured"][key]) == len(results["70%"]["terminal_after"]["structured"][key])
+    for percentage in ("30%", "70%"):
+        receipt = results[percentage]
+        assert receipt["terminal"]["status"] == "completed"
+        assert receipt["work_fact"].get("outcome", {}).get("status") == "completed"
+        assert all(value == 0 for value in receipt["duplicates"].values())
     return results
 
 

@@ -182,7 +182,13 @@ def test_explicit_current_cache_hit_rechecks_source_authority(tmp_path: Path):
             cache_size=8,
             cache_ttl_seconds=120,
         )
-        filters = SearchFilters(mode="current", as_of="2026-08-28T00:00:00Z")
+        # Evaluate after the fixture ingestion; a midnight timestamp can be
+        # earlier than the projection's valid_from on hosts whose clock is
+        # already later on the same day.
+        filters = SearchFilters(
+            mode="current",
+            as_of=datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+        )
         assert retriever.search("cached authority evidence", filters=filters)
         state.revoke_automatic_memory_source_atomic(
             authorized.source_id,

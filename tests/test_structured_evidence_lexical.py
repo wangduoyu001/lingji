@@ -357,7 +357,7 @@ def test_state_db_revoke_and_expiry_are_excluded_from_current_gateway_context_an
         assert historical["results"]
         as_of = gateway.search_memory(
             "chatgpt", "lifecycle evidence must be revoked",
-            mode="as_of", as_of="2026-08-28T00:00:00Z",
+            mode="as_of", as_of=datetime.now(timezone.utc).isoformat(timespec="microseconds"),
         )
         assert as_of["results"]
         runtime.stop()
