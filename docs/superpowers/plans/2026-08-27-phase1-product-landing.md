@@ -436,6 +436,15 @@ retrievable). 100k, release, Production/Vault and Task 8 remain prohibited until
 independent review reports zero Critical/Important findings. This repair does not authorize a
 retrieval diagnosis or any product feature expansion.
 
+**Task 7O contract disposition (2026-08-28):** Task7N's bounded contract findings were repaired
+without touching retrieval or activation policy. Runner and scale admission now share one strict
+`CanonicalFunctionalEvidence` artifact; malformed/real FAIL output remains blocked. Automatic
+activation is explicitly quarantined (`pending_owner_review`, accuracy `NOT_APPLICABLE`), promotion
+audit scans all imported-message links including owner rejection, and the historical readiness test
+uses current MCP failure/nullable baseline semantics. Task7O does not accept Task7 quality: the CLI
+still reports measured retrieval/MCP failure and no baseline, so 100k, release, Artifact and Task8
+remain prohibited until the final independent review authorizes the next bounded step.
+
 ### Task 8: Build and Perform macOS M5 Release Acceptance
 
 **Purpose:** 交付同一 SHA 的真实发布版，并以主人是否看懂、是否无需代码操作作为最终产品门槛。

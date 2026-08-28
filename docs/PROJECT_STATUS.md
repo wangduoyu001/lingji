@@ -762,3 +762,14 @@ Task7N3 focused matrix 为 `156 passed, 1 skipped, 1 warning`；质量 CLI 仍�
 自动晋级 `0/93`），不代表 Task7、100k、release、Artifact、真实服务或主人验收通过。
 报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-7n3-report.md`；等待独立
 审查后才能决定 retrieval 诊断，Task8 不得开始。
+
+### Task 7O measurement contract closure（2026-08-28）
+
+Task7O 仅收口 Task7N 的证据契约，不改变检索、排序、向量、模型或自动晋级策略：
+runner 与 scale loader 共用严格的 `CanonicalFunctionalEvidence` artifact，真实 FAIL
+输出不能进入 scale admission；automatic activation 在当前 quarantine 下按
+`pending_owner_review` 记录，accuracy 为 `NOT_APPLICABLE`/`NOT_MEASURED`；promotion
+审计从全部 imported message 关系发现孤儿 link，并纳入 owner-rejected 终态；历史 readiness
+断言已迁移到 MCP measured failure 与 nullable baseline 合同。Task7O 的 CLI 仍诚实报告
+事实/引用/MCP 失败、baseline 未测量和 production null，因此 Task7、100k、release、Artifact、
+真实服务和主人验收仍未通过，必须等待独立终审。

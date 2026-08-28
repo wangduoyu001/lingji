@@ -1,6 +1,6 @@
 # Task 7N2 — Corruption isolation retrieval evidence
 
-日期：2026-08-28（Asia/Shanghai）  
+日期：2026-08-28（Asia/Shanghai）
 基线：`5d3192c3c5b69aad7eec80ebe5fec9d68ebbf98f`
 
 ## 范围

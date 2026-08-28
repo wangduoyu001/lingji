@@ -2419,3 +2419,22 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 质量 CLI 允许执行一次，仅用于确认当前测量仍诚实失败；禁止 100k、release、Artifact、live
   8766/8767、Production/Vault、真实主人数据。完成前需运行 compileall、diff-check、acceptance sync、
   local handoff，并写入 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7n3-report.md`。
+
+## 2026-08-28 · Task 7O · Measurement contract closure
+
+- 本轮仅关闭 Task7N 的 C1/C2/I1/I2/M1：以 `CanonicalFunctionalEvidence` 作为 runner
+  与 scale loader 共用的严格 typed artifact；真实 FAIL 输出必须被 loader 阻断；完整一致
+  fixture artifact 必须可 round-trip。未知字段、缺失字段、布尔数值、NaN 和状态矛盾均
+  fail closed。
+- 当前 automatic activation quarantine 的 low-risk expected/actual 均为
+  `pending_owner_review`，accuracy 使用 `NOT_APPLICABLE`/`NOT_MEASURED` 与 null 计数；不
+  恢复自动 approve，不改变 retrieval、ranking、向量、模型或产品策略。
+- Promotion audit 从本次所有 imported message 的关系查询收集 links，并纳入
+  owner-rejected 与 projection-error 等正式终态；pending/rejected/error 不得拥有 projection
+  或 link，孤儿、缺失、额外、重复审计均阻断。旧 runner readiness 断言迁移到当前 MCP
+  measured-failure 与 nullable baseline 合同；保留历史兼容导出 shim，不再保留第二套编排。
+- 测试：Task7O contract closure、Task7N1/N2/N3、Task7M、Task7 measurement repair、Task4
+  reset/readiness/runner 直接回归；质量 CLI 只运行一次，结果必须保留事实/引用/MCP FAIL、
+  baseline NOT_MEASURED、activation NOT_APPLICABLE、production null。未运行 100k、release、
+  Artifact、live 8766/8767、Production/Vault 或主人数据。报告路径：
+  `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7o-report.md`。

@@ -1,6 +1,6 @@
 # Task 7N1 — Scale admission and nullable context baseline
 
-日期：2026-08-28（Asia/Shanghai）  
+日期：2026-08-28（Asia/Shanghai）
 产品/测试提交：`0ddb70b2451eb7224196bfefc4718ae8601aef7e`
 
 ## 范围
