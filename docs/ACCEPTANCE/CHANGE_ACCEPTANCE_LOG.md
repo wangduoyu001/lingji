@@ -2376,3 +2376,15 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 修复后质量仍 `FAIL`（事实召回 0/106、引用 0/106、自动激活 121/125），100k、
   release、Artifact、live 8766/8767、Production/Vault 和主人验收均未执行。当前
   `MEASUREMENT_NOT_ACCEPTED`，等待全新独立审查，不得进入诊断或 Task8。
+
+## 2026-08-28 · Task 7N1 · Scale admission and nullable baseline
+
+- 产品/测试提交：`0ddb70b2451eb7224196bfefc4718ae8601aef7e`；报告：
+  `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7n1-report.md`。
+- Scale loader 现在只接受与冻结 fixture hash、code commit 和正式 run identity
+  完全一致的 envelope，并逐项核对 import、promotion provenance/links、Gateway、
+  MCP、Qdrant lexical fallback、corruption terminal counts 和 context reduction；
+  缺失/矛盾/伪造证据统一阻断 `BLOCKED_4R2_REQUIRED`。
+- 未测量 Context baseline 在 runner 输出与 envelope round-trip 保持 `null`，不再使用
+  0 表示未执行测量。聚焦回归 `128 passed, 1 warning`；未运行 100k、release、Artifact、
+  live 服务、Production/Vault 或主人验收。Task 7 质量结果仍按真实测量保持未通过。
