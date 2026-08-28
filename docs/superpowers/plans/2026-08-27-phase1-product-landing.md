@@ -436,14 +436,17 @@ retrievable). 100k, release, Production/Vault and Task 8 remain prohibited until
 independent review reports zero Critical/Important findings. This repair does not authorize a
 retrieval diagnosis or any product feature expansion.
 
-**Task 7O contract disposition (2026-08-28):** Task7N's bounded contract findings were repaired
-without touching retrieval or activation policy. Runner and scale admission now share one strict
-`CanonicalFunctionalEvidence` artifact; malformed/real FAIL output remains blocked. Automatic
-activation is explicitly quarantined (`pending_owner_review`, accuracy `NOT_APPLICABLE`), promotion
-audit scans all imported-message links including owner rejection, and the historical readiness test
-uses current MCP failure/nullable baseline semantics. Task7O does not accept Task7 quality: the CLI
-still reports measured retrieval/MCP failure and no baseline, so 100k, release, Artifact and Task8
-remain prohibited until the final independent review authorizes the next bounded step.
+**Task 7O final disposition (2026-08-28):** Final independent review report
+`.superpowers/sdd/2026-08-27-phase1-product-landing/task-7o-final-review.md` at commit
+`ce9807adb8aa9f4997819105ff3f1a949d93105b` is `BLOCKED_AT_MEASUREMENT_CAP / NO_DIAGNOSTIC`
+with Critical=1 and Important=3. C1/I1/I2/I3 remain open: the loader accepts unknown/duplicate
+wire views, promotion measurement can miss non-candidate orphan links, empty memory identity can
+be marked ready, and activation quarantine does not verify actual/reason/category. The current
+raw facts/citations/MCP values remain 0 with baseline `NOT_MEASURED`, but measurement is not
+accepted and these values are not a final retrieval diagnosis. Tasks 2–6 automated/UI acceptance
+does not regress. Only one bounded measurement-contract repair is allowed; until a fresh review
+reaches zero Critical/Important, no retrieval diagnosis, 100k, release, Artifact, Mac, owner or
+Task 8 work may begin.
 
 ### Task 8: Build and Perform macOS M5 Release Acceptance
 

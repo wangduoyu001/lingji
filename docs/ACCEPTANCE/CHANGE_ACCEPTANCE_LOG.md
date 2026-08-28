@@ -2420,12 +2420,11 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   8766/8767、Production/Vault、真实主人数据。完成前需运行 compileall、diff-check、acceptance sync、
   local handoff，并写入 `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7n3-report.md`。
 
-## 2026-08-28 · Task 7O · Measurement contract closure
+## 2026-08-28 · Task 7O · Measurement contract closure (superseded by final review)
 
-- 本轮仅关闭 Task7N 的 C1/C2/I1/I2/M1：以 `CanonicalFunctionalEvidence` 作为 runner
-  与 scale loader 共用的严格 typed artifact；真实 FAIL 输出必须被 loader 阻断；完整一致
-  fixture artifact 必须可 round-trip。未知字段、缺失字段、布尔数值、NaN 和状态矛盾均
-  fail closed。
+- 本轮实现曾试图关闭 Task7N 的 C1/C2/I1/M1：以 `CanonicalFunctionalEvidence` 作为 runner
+  与 scale loader 共用的 typed artifact；真实 FAIL 输出被 loader 阻断。该实现声明已被下方
+  最终独立审查 supersede，不能作为当前 acceptance 结论。
 - 当前 automatic activation quarantine 的 low-risk expected/actual 均为
   `pending_owner_review`，accuracy 使用 `NOT_APPLICABLE`/`NOT_MEASURED` 与 null 计数；不
   恢复自动 approve，不改变 retrieval、ranking、向量、模型或产品策略。
@@ -2438,3 +2437,19 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   baseline NOT_MEASURED、activation NOT_APPLICABLE、production null。未运行 100k、release、
   Artifact、live 8766/8767、Production/Vault 或主人数据。报告路径：
   `.superpowers/sdd/2026-08-27-phase1-product-landing/task-7o-report.md`。
+
+## 2026-08-28 · Task 7O · Final independent truth reconciliation
+
+- 最终独立审查报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-7o-final-review.md`，
+  report commit `ce9807adb8aa9f4997819105ff3f1a949d93105b`。结论为
+  `BLOCKED_AT_MEASUREMENT_CAP / NO_DIAGNOSTIC`，Critical=1、Important=3；C1/I1/I2/I3
+  未关闭。具体为 loader duplicate evidence view/unknown 字段盲区、promotion orphan link
+  过滤、缺失 memory identity 可 ready，以及 activation actual/reason/category 未验证。
+- 当前 raw facts/citations/MCP 仍为 `0`，Context baseline 仍 `NOT_MEASURED`，但 measurement
+  未接受；这些数字不得当作最终产品 retrieval 诊断。只允许一次有界 measurement-contract
+  repair，修复前不得进入 retrieval diagnosis、100k、release 或 Task8。
+- Tasks 2–6 的自动化/UI automated acceptance 不回退。未运行 100k、release、Artifact、Mac、
+  owner、Production/Vault 或真实数据验收；`LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。
+- 本条仅为现有权威文档事实对齐，不修改 `src/`、Desktop、tests 或 scripts；完成后必须
+  运行 `./.venv/bin/python scripts/check_acceptance_sync.py`、
+  `./.venv/bin/python scripts/check_local_execution_handoff.py`、diff-check，并远程复读提交。

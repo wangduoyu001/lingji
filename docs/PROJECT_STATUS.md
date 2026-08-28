@@ -8,7 +8,7 @@
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
-> Current engineering gate: `TASK 7M-RESET — RUNTIME EVIDENCE COMPOSITION`
+> Current engineering gate: `TASK 7 — MEASUREMENT CONTRACT CAP / BLOCKED`
 > Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
@@ -32,7 +32,7 @@ Phase 1 PASS 后，Phase 2 第一优先级固定为 **Opportunity Center / 机�
 
 ## 1A. 当前实现范围与真实进度
 
-当前分支 `codex/phase1-automatic-memory` 已完成并冻结 Tasks 0–7：来源授权与扫描状态、一致快照/续扫、受支持来源适配、监听与调度、Obsidian 隔离、派生记忆晋级，以及全检索路径的 current/as_of/history/why 时态隔离。Task 8 的 Work Fact、8766 读取接口和 Desktop 真实投影已进入分支；Task 1 follow-up 已在产品 Commit `31a14a4` 完成 callback/replay 事务一致性、UTC 事件排序、pending action 唯一复用和 Desktop smoke 注册，但仍未进行发布版与主人验收。
+当前分支 `codex/phase1-automatic-memory` 已完成并冻结 Tasks 0–6 的自动化/UI 交付边界；Task 7 的质量测量组合仍被证据契约门禁阻塞。已有来源授权与扫描状态、一致快照/续扫、受支持来源适配、监听与调度、Obsidian 隔离、派生记忆晋级，以及全检索路径的 current/as_of/history/why 时态隔离。Task 8 的 Work Fact、8766 读取接口和 Desktop 真实投影已进入分支，但发布版与主人验收仍未进行。
 
 此前唯一已复现的 P0 缺口是：一次终态失败已经产生主人待办后，实时生命周期 callback 随即成功时，成功 Outcome 会立即写入，但旧 PendingAction 要等后续 `WorkStore` 重放/读取才被解决。Task 1 已通过单一事务转换和 callback/replay/restart/乱序矩阵修复并回归验证；剩余执行权威为 `docs/superpowers/plans/2026-08-26-phase1-automatic-memory-followup.md`。
 
@@ -113,6 +113,14 @@ scale envelope 校验 run identity、fixture、verdict、测量字段和 readine
 Production nullable 时仅以功能质量准入 scale。当前 CLI 实测仍为 `FAIL`，MCP `0/100`、
 baseline `NOT_MEASURED`，未运行 100k/release/Artifact/主人验收；需要独立审查为零
 Critical/Important 后才可进入一次有界 retrieval 诊断。
+
+Task7O 最终独立审查（报告提交 `ce9807adb8aa9f4997819105ff3f1a949d93105b`）结论为
+`BLOCKED_AT_MEASUREMENT_CAP / NO_DIAGNOSTIC`，发现 1 个 Critical、3 个 Important：
+canonical loader 可接受未知顶层字段并忽略 duplicate evidence detail 冲突，promotion
+测量过滤非候选 orphan link，缺失 memory identity 可被判为 ready，activation quarantine
+未验证 actual/reason/category。故当前 Task7 measurement 仍未接受；raw facts/citations/
+MCP 均为 0，但不能把这些数字当作最终产品 retrieval 诊断。Tasks 2–6 的自动化/UI
+接受状态不回退；未运行 100k、release、Mac、owner 或真实数据验收，Task8 不得开始。
 
 Task7E 的 PowerShell executable-entry 证据已通过真实 Windows runner 取得：现有
 `p0-windows-gate.yml` 的 full pytest artifact 在 `33153622216` 明确记录真实
@@ -765,11 +773,9 @@ Task7N3 focused matrix 为 `156 passed, 1 skipped, 1 warning`；质量 CLI 仍�
 
 ### Task 7O measurement contract closure（2026-08-28）
 
-Task7O 仅收口 Task7N 的证据契约，不改变检索、排序、向量、模型或自动晋级策略：
-runner 与 scale loader 共用严格的 `CanonicalFunctionalEvidence` artifact，真实 FAIL
-输出不能进入 scale admission；automatic activation 在当前 quarantine 下按
-`pending_owner_review` 记录，accuracy 为 `NOT_APPLICABLE`/`NOT_MEASURED`；promotion
-审计从全部 imported message 关系发现孤儿 link，并纳入 owner-rejected 终态；历史 readiness
-断言已迁移到 MCP measured failure 与 nullable baseline 合同。Task7O 的 CLI 仍诚实报告
-事实/引用/MCP 失败、baseline 未测量和 production null，因此 Task7、100k、release、Artifact、
-真实服务和主人验收仍未通过，必须等待独立终审。
+Task7O 仅收口 Task7N 的证据契约，不改变检索、排序、向量、模型或自动晋级策略。最终
+独立审查报告 `ce9807adb8aa9f4997819105ff3f1a949d93105b` 判定
+`BLOCKED_AT_MEASUREMENT_CAP / NO_DIAGNOSTIC`（Critical=1、Important=3）；C1/I1/I2/I3
+尚未关闭。质量 CLI 仍返回 raw facts/citations/MCP `0` 与 baseline 未测量，但 measurement
+未接受，不能将这些数字当作最终产品 retrieval 诊断。Tasks 2–6 自动化/UI 状态不回退；
+未运行 100k、release、Artifact、Mac、owner 或真实数据验收，Task8 不得开始。

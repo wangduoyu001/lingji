@@ -13,15 +13,33 @@
 
 冻结输入：corpus `bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94`；questions `338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612`。
 
-本轮已真实执行冻结质量评测，当前官方状态为 `FAIL_MEASURED_QUALITY`。不得把本轮失败数字改写成未评测，也不得修改冻结评测、问题或阈值以提高分数。
+该节保留冻结质量评测的 raw 观察值；其测量组合随后被 Task7O 最终独立审查判定为
+`BLOCKED_AT_MEASUREMENT_CAP / NO_DIAGNOSTIC`，因此当前 measurement 未接受。不得把 raw
+facts/citations/MCP 数字当作最终产品 retrieval 诊断，也不得修改冻结评测、问题或阈值以提高分数。
 
-## Task 7 真实冻结评测（2026-08-28）
+## Task 7 真实冻结评测（2026-08-28，测量组合未接受）
 
 本轮使用原始 100 个问题、未改写 query，通过正式 `src.mcp_server.create_mcp_server` 注册的 `build_context_pack` 工具逐题调用。证据来自持久化 read model、正式 Gateway/ContextPack 和正式 MCP 返回值。
 
 实测：导入 145/145；角色/顺序 145/145；重复 0；自动激活 121/125（96.80%）；正式 MCP 100/100；Qdrant 真实适配器故障注入后状态为 degraded，但本题 lexical 结果为空，故降级证据不计通过；损坏源隔离 attempted=2、completed=1、failed=1、其他源继续=1；事实召回 0/106（0.00%）；引用准确率 0/106（0.00%）；实际上下文压缩 55.28%（baseline 65990、rendered 29512）。
 
-正式门禁结果为 `FAIL`。首个既有边界是正式 retrieval/structured-evidence 与冻结问题事实身份没有形成可召回绑定，引用随之为 0；ContextPack 相对真实未压缩 payload 仅减少 55.28%。按 Task7 规则停止后续产品修改，未运行 100k scale、release、Artifact、live 8766/8767、Production/Vault 或主人验收；Task7 不通过，不得进入 Task8 Mac 发布验收。
+这些是本次运行观察到的 raw 数字，不是已接受的产品诊断。后续 Task7O 最终独立审查发现
+measurement contract 仍有 Critical/Important 缺口，故正式状态为
+`BLOCKED_AT_MEASUREMENT_CAP / NO_DIAGNOSTIC`；不得把 raw facts/citations/MCP 失败归因
+为最终 retrieval 产品边界，也不得进入诊断、100k scale、release、Artifact、live
+8766/8767、Production/Vault、Mac 或主人验收。
+
+Tasks 2–6 的自动化/UI automated acceptance 不因本质量测量阻塞而回退。
+
+## Task 7 最终独立审查状态（2026-08-28）
+
+报告：`.superpowers/sdd/2026-08-27-phase1-product-landing/task-7o-final-review.md`，提交
+`ce9807adb8aa9f4997819105ff3f1a949d93105b`。Focused/direct 矩阵 `316 passed, 1 warning`，
+compileall、acceptance sync、local handoff 与 diff-check 通过；审查发现 1 Critical、3
+Important（C1/I1/I2/I3），结论为 `BLOCKED_AT_MEASUREMENT_CAP / NO_DIAGNOSTIC`。当前
+measurement 未接受；下一步只能是一次有界 measurement-contract repair，修复并重新独立
+审查到 Critical/Important 均为零前，不得运行 100k/release/Mac/owner 或进入 retrieval
+诊断。Tasks 2–6 的自动化/UI 状态保持不变。
 
 ## 4R1 修复记录
 
