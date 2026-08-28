@@ -165,5 +165,8 @@ oversize values without repr serialization. complete/fail/cancel-running scrub
 before clearing current lease in one transaction; enqueue/force payload/options
 and pipeline/MCP/process summaries, callbacks, and logs reuse the boundary.
 Task6P focused is `5 passed`; queue/worker/pipeline regressions are `77 passed,
-2 warnings`. Task6L/M dispositions are preserved; independent review remains
-required and Task6 stays `IN_PROGRESS / NOT_ACCEPTED`.
+2 warnings`; expanded Task6L/M/P/runtime/Control/MCP/structured/Work matrix is
+`241 passed, 2 warnings`. Desktop source/static/build/rendered, compile,
+diff-check, acceptance sync, and local handoff pass. Task6L/M dispositions are
+preserved; independent review remains required and Task6 stays
+`IN_PROGRESS / NOT_ACCEPTED`.

@@ -631,6 +631,8 @@ lease 的同一事务先 scrub，enqueue/force payload/options 复用；ordinary
 Control/MCP/process summary、lifecycle callback 和 extraction 错误日志均不重新暴露
 lease material。private worker seam、`ownership_receipt()` durable fingerprint、
 Task6L/Task6M 历史保持不变。RED `3 failed`、Task6P focused `5 passed`，受影响
-queue/worker/pipeline 回归 `77 passed, 2 warnings`（截至产品实现阶段）。Task6 仍
+queue/worker/pipeline 回归 `77 passed, 2 warnings`；扩大 Task6L/M/P、runtime、Control/MCP、
+structured、Work 矩阵为 `241 passed, 2 warnings`。Desktop memory source static/build/
+rendered checks pass；compile、diff-check、acceptance sync、local handoff pass。Task6 仍
 `IN_PROGRESS / NOT_ACCEPTED`，Task6V packaged 30/70、live/Artifact/Production/Vault/
 owner acceptance 未执行。
