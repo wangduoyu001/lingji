@@ -312,3 +312,40 @@ API 回归 `25 passed, 1 warning`，`compileall`、`git diff --check`、验收�
 本轮没有打包、安装或操作 live App，没有访问 Acceptance/Production/Vault/主人数据；
 父任务预先存在的 `desktop/lingji-control/src-tauri/binaries/` 未跟踪打包产物未修改。
 独立复审和主人最终可读性确认仍然是后续门槛。
+
+## 22. Real UI Repair Round 2 — 压缩活动完整审计
+
+独立审查发现上一轮活动页将连续的安静扫描折叠成一张普通卡片时，只保留首条
+Work Fact 的技术详情，其余成员的工作 ID、来源、原时间、状态和执行事件无法从
+页面找回。本轮仅修复 Desktop 展示视图模型，未修改后端 DTO、自动化、队列、数据
+模型、永久记忆权威或运行中的 App。
+
+- `collapseQuietActivity` 现在返回显式 `ActivityCardModel`：普通页使用首条作为
+  展示锚点，`compactedItems` 保存连续段内全部原始 `WorkHistoryItem`，不向后端
+  DTO 增加私有字段。
+- 合并仍只允许输入顺序中相邻、同一稳定 `source_id` 的成功空扫描；失败、处理中、
+  有新增/更新、不同来源和不同分页响应不会合并。次数只使用当前连续段的真实成员
+  数量，单条不显示虚假的“近期已检查1次”。
+- 技术详情逐条显示每个成员的工作 ID、来源 ID、原始时间、状态码和完整执行事件
+  JSON；普通标题、结果和元信息不泄露这些内部字段。原始审计仍可通过折叠详情访问。
+
+TDD 证据：渲染 fixture 使用正式 WorkProjector 形状，并为三条连续记录提供不同的
+ 原始时间与事件 detail。新增断言先在旧实现上于“第二条审计必须保留”处失败；最小
+实现后 `npm run test:e2e:memory` PASS。测试还验证失败分隔后的两段审计互不串联、
+同名不同来源不合并、分页总数不影响次数、单条和处理中状态保持原样。
+
+验证结果：
+
+- `npm run test:e2e:memory`：PASS（`e2e_owner_memory_flow: PASS`）。
+- `npm run test:smoke`：PASS（23 scripts）。
+- `npm run build`：PASS（92 modules transformed）。
+- 受影响后端：`62 passed, 1 warning`。
+- `python3 -m compileall -q src`、`git diff --check`、
+  `python3 scripts/check_local_execution_handoff.py`：PASS。
+- 本轮不打包、不安装、不停止或操作 live App，不访问 Acceptance/Production/Vault/
+  主人数据；预先存在的未跟踪 `desktop/lingji-control/src-tauri/binaries/` 保持原样，
+  不属于本轮提交。
+
+产品/测试提交为 `5fbe9db6d6be93d32c3b57cea0ea7ef3e4f6bef4`。本报告和验收日志在独立
+文档提交中记录；主人最终观察仍需根代理在当前候选上完成，本报告不能单独宣布 Mac
+发布版或 Phase 1 通过。

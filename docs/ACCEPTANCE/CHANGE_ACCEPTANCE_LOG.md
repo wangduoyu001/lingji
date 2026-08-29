@@ -1,5 +1,28 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Owner UI Repair Round 2 — 保留压缩活动审计
+
+- 独立审查指出活动页将连续的安静扫描折叠为一张普通卡片时，只保留首条
+  Work Fact 的技术详情，导致其余成员的工作 ID、来源、原时间、状态和执行事件
+  无法从 UI 找回。本轮仅修复 Desktop 展示视图模型：普通页仍显示一张易读摘要，
+  折叠的技术详情逐条保留该连续段的全部原始 WorkHistoryItem；没有修改后端 DTO、
+  自动化、队列、数据模型或运行中的 App。
+- 合并规则保持严格：仅相邻、同一稳定 `source_id` 的成功空扫描可合并；失败、
+  处理中、发生变化、不同来源和不同分页响应均立即分段；次数只来自当前连续段的
+  实际成员数量。单条记录不会伪造“近期已检查1次”，普通表面不显示内部 ID。
+- 真实 Playwright rendered fixture 覆盖连续三条审计、失败分隔、同名不同来源、
+  changed、跨页总数、单条和处理中；展开技术详情核对每条工作 ID、来源 ID、原始
+  ISO 时间、状态码、事件 ID 和事件 detail。先取得 RED，再取得 GREEN。
+- 本轮验证：`npm run test:e2e:memory` PASS；`npm run test:smoke` PASS（23 scripts）；
+  `npm run build` PASS（92 modules）；受影响后端 `62 passed, 1 warning`；
+  `python3 -m compileall -q src`、`git diff --check`、本机交接检查 PASS。验收同步在
+  文档提交前暂不能通过，复核时若仍报告父任务预先存在的未跟踪
+  `desktop/lingji-control/src-tauri/binaries/`，该产物保持原样且不纳入本轮提交。
+- 不打包、不安装、不停止或操作 live App，不访问 Acceptance/Production/Vault/主人
+  数据；主人最终观察仍由根代理在已运行候选上独立完成。产品/测试提交：
+  `5fbe9db6d6be93d32c3b57cea0ea7ef3e4f6bef4`；报告沿用
+  `.superpowers/sdd/2026-08-29-task8e-owner-plain-ui/task-report.md`。
+
 ## 2026-08-29 · Task 8E · Owner UI Repair Round 1 — activity contract correction
 
 - 独立审查发现上一轮活动页合并规则未遵守正式 WorkProjector 数据形状，也可能跨失败、不同来源或分页边界合并。本轮仅修复 Desktop 展示适配：空扫描判断优先使用 `outcome.summary`，仅对明确的 0 文件扫描文本归一为“检查完成，未发现新内容”；`summary.result=成功` 不再遮蔽真实结果。活动合并只处理输入顺序中相邻、同一 `summary.source_id`（回退 `work.source_id`）的成功空扫描，次数只来自该段实际记录，不使用 API total/has_more；变化、失败、处理中和不同 source_id 均保持独立。后端、API、自动化、队列、数据模型和记忆权威不变。
