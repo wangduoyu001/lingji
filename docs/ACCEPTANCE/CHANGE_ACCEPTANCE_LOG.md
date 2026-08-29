@@ -1,5 +1,26 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Owner real history proof and memory cards
+
+- 主人确认当前候选仍不能证明接管了本机 AI 历史，并明确要求普通界面展示整理后的
+  “记忆卡片”而不是聊天流水账。每张卡必须回答事情/主题、发展或讨论结果、当前是否
+  最新/过时、原始来源、原始/结构化/向量/永久层级、内容可信与冲突、是否需要主人
+  修正/确认/移出当前记忆；原文只按需展开。
+- 根因审计证明当前安装运行在隔离 Acceptance data-root；现有 discovery 只读取显式
+  settings/env，未发现本机 `~/.codex/sessions` 与 `~/.codex/archived_sessions`。
+  2026-08-29 metadata baseline 为 current 324 + archived 16 个 JSONL，约 1.2 GiB；
+  该数字只证明候选存在，不代表已授权、已解析、已向量化或已成为永久记忆。
+- 本轮按 `docs/superpowers/plans/2026-08-29-owner-real-history-memory-cards.md` 执行：
+  复用现有 registry/snapshot/queue/SourceReadModel/MemoryDatabase/Qdrant/8766/Desktop，
+  不新增数据库、索引器、队列、端口或永久事实源。Claude 内部存储、客户端数据库、
+  auth/token/cookie/config 保持禁止读取；ChatGPT 仍只接官方导出。
+- 自动验收必须覆盖 metadata-only 未授权边界、Codex rollout fail-closed/流式解析、
+  重复扫描和 30%/70% 崩溃恢复、第三方 sentinel、OwnerMemoryCard 的分页/时态/来源/
+  向量/永久/冲突/动作矩阵、修正与失效保留历史、rendered E2E、23 项 Desktop smoke、
+  build、focused regressions、compileall、diff-check、acceptance-sync 和 local-handoff。
+- 未取得最终 reviewed product HEAD、release、同 SHA Mac Artifact、新 ACTIVE 本机任务、
+  真实主人数据授权、全控件遍历和主人明确确认前，不得宣称 Mac 或 Phase 1 通过。
+
 ## 2026-08-29 · Task 8E · Final UI wording — 活动记录刷新动作
 
 - 活动记录页按钮只会重新读取履历，不会发起来源扫描；本轮将普通按钮从“现在检查”改为
