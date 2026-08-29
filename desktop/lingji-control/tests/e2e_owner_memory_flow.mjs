@@ -9,7 +9,9 @@ const allStateDiscovered = [
   ["detected", "available"], ["consent", "consent_required"], ["unsupported", "unsupported"], ["authorized", "available"],
   ["scanning", "available"], ["current", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
 ].map(([suffix, status]) => ({ kind: `fixture_${suffix}`, display_name: `测试${suffix}`, candidate_root: `/tmp/${suffix}`, status, capability: "metadata_discovery", reason: status === "unsupported" ? "不读取不透明存储" : null }));
-const allStateSources = allStateDiscovered.filter((item) => !["detected", "consent", "unsupported"].includes(item.kind.replace("fixture_", ""))).map((item) => ({ source_id: `src-${item.kind}`, kind: item.kind, root: item.candidate_root, status: item.kind === "fixture_degraded" ? "degraded" : item.kind === "fixture_revoked" ? "revoked" : item.kind === "fixture_expired" ? "expired" : "authorized", capability: "metadata_discovery" }));
+allStateDiscovered.push({ kind: "obsidian", display_name: "Managed Obsidian memory", candidate_root: "/tmp/obsidian", status: "available", capability: "metadata_discovery", reason: null });
+allStateDiscovered.push({ kind: "claude_desktop", display_name: "Claude Desktop", candidate_root: "", status: "unsupported", capability: "metadata_discovery", reason: "Claude Desktop has no approved official export schema; opaque storage is not read" });
+const allStateSources = allStateDiscovered.filter((item) => !["detected", "consent", "unsupported"].includes(item.kind.replace("fixture_", "")) && item.status !== "unsupported").map((item) => ({ source_id: `src-${item.kind}`, kind: item.kind, root: item.candidate_root, status: item.kind === "fixture_degraded" ? "degraded" : item.kind === "fixture_revoked" ? "revoked" : item.kind === "fixture_expired" ? "expired" : "authorized", capability: "metadata_discovery" }));
 const allStateScans = [
   ["scanning", "running"], ["current", "completed"], ["failed", "failed"], ["paused", "paused"],
 ].map(([suffix, status]) => ({ scan_id: `scan-${suffix}`, source_id: `src-fixture_${suffix}`, status, progress: status === "completed" ? 1 : 0, total: 1, last_error: status === "failed" ? "fixture failure" : null }));
@@ -44,7 +46,7 @@ const server = http.createServer((req, res) => {
       }
       return json(res, 200, { counts: state.allStates ? { completed: 1, failed: 1 } : state.scan ? { [state.scan.status]: 1 } : {}, total: state.allStates ? allStateScans.length : state.scan ? 1 : 0, latest, progress: state.scan ? { current: state.scan.progress, total: 1 } : { current: null, total: null }, last_error: state.scan?.last_error ?? null, next_action: "wait" });
     }
-    if (path === "/api/automatic-memory/runtime") return json(res, 200, { state: state.cleanupPending ? "degraded" : "running", running: true, paused: false, worker_state: true, authorized_watcher_count: 1, cleanup_pending: state.cleanupPending, cleanup_error: state.cleanupPending ? "cleanup_scan_failed" : null });
+    if (path === "/api/automatic-memory/runtime") return json(res, 200, { state: state.cleanupPending ? "degraded" : "running", running: true, paused: false, worker_state: true, authorized_watcher_count: 1, automation_mode: "periodic_reconciliation", event_watcher_enabled: false, next_reconciliation_seconds: 900, cleanup_pending: state.cleanupPending, cleanup_error: state.cleanupPending ? "cleanup_scan_failed" : null });
     if (path === "/api/automatic-memory/scans") {
       if (state.allStates) return json(res, 200, allStateScans);
       if (state.scan?.status === "running" && state.completeNextRead) state.scan = { ...state.scan, status: "completed", progress: 1, total: 1, queued: 1, reused: 0, failed: 0, updated: 2, skipped: 3 };
@@ -116,7 +118,7 @@ try {
   await racePage.locator(".desktop-nav-item").filter({ hasText: "活动记录" }).click();
   await new Promise((resolve) => setTimeout(resolve, 1_100));
   await racePage.getByRole("heading", { name: "活动记录", exact: true }).waitFor();
-  assert.equal(await racePage.getByRole("heading", { name: "让灵机知道哪些内容可以接管", exact: true }).count(), 0, "delayed onboarding reads cannot redirect after navigation");
+  assert.equal(await racePage.getByRole("heading", { name: "选择灵机要记住的内容", exact: true }).count(), 0, "delayed onboarding reads cannot redirect after navigation");
   await fetch(`http://127.0.0.1:${apiPort}/__test/release-onboarding`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
   await new Promise((resolve) => setTimeout(resolve, 500));
   await racePage.getByRole("heading", { name: "活动记录", exact: true }).waitFor();
@@ -130,114 +132,113 @@ try {
   // rendered landing heading instead.
   await page.goto("http://127.0.0.1:4178", { waitUntil: "domcontentloaded" });
   try {
-    await page.getByRole("heading", { name: "让灵机知道哪些内容可以接管" }).waitFor({ timeout: 30_000 });
+    await page.getByRole("heading", { name: "选择灵机要记住的内容" }).waitFor({ timeout: 30_000 });
   } catch (reason) {
     console.error("rendered body:", await page.locator("body").innerText());
     throw reason;
   }
-  await page.getByRole("button", { name: "选择文件夹并授权" }).click();
+  await page.getByRole("button", { name: "选择文件夹并开始记忆" }).click();
   await page.getByRole("heading", { name: "已授权", exact: true }).waitFor();
-  await page.getByRole("button", { name: "立即扫描" }).click();
+  await page.getByText("打开灵机时会检查，之后每15分钟自动检查一次。", { exact: true }).waitFor();
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查", exact: true }).waitFor();
+  assert.equal(await page.getByText("已授权 / 当前", { exact: true }).count(), 0, "source status counters must not be stacked as owner-facing cards");
+  assert.equal(await page.getByText("SYSTEM POSTURE", { exact: true }).count(), 0, "internal posture label must stay out of primary UI");
+  await page.locator('[data-source-kind="generic_ai_history"]').getByRole("button", { name: "现在检查", exact: true }).click();
   await page.getByRole("heading", { name: "扫描中" }).waitFor();
   assert.equal(await page.getByText("扫描已完成").count(), 0, "running scan cannot show terminal success");
   await fetch(`http://127.0.0.1:${apiPort}/__test/complete`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
-  await page.getByRole("button", { name: "重新读取" }).click();
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.getByRole("heading", { name: "已接管" }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/outage`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
-  await page.getByRole("button", { name: "重新读取" }).click();
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.getByText("暂时无法读取记忆来源", { exact: false }).waitFor();
   assert.equal(await page.getByText("尚未获得", { exact: true }).count(), 0, "outage must preserve prior snapshot rather than show fake zeros");
   await fetch(`http://127.0.0.1:${apiPort}/__test/outage`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
-  await page.getByRole("button", { name: "重新读取" }).click();
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.getByRole("heading", { name: "已接管" }).waitFor();
-  await page.getByRole("button", { name: "撤销" }).click();
+  await page.getByRole("button", { name: "停止记忆", exact: true }).click();
   await page.getByRole("heading", { name: "已撤销" }).waitFor();
-  await page.getByRole("button", { name: "选择文件夹并授权" }).waitFor();
-  await page.getByRole("button", { name: "选择文件夹并授权" }).click();
+  await page.getByRole("button", { name: "选择文件夹并开始记忆" }).waitFor();
+  await page.getByRole("button", { name: "选择文件夹并开始记忆" }).click();
   await page.getByRole("heading", { name: "已授权", exact: true }).waitFor();
-  await page.getByRole("button", { name: "立即扫描" }).click();
+  await page.locator('[data-source-kind="generic_ai_history"]').getByRole("button", { name: "现在检查", exact: true }).click();
   await page.getByRole("heading", { name: "扫描失败" }).waitFor();
-  await page.getByRole("button", { name: "重试" }).click();
+  await page.getByRole("button", { name: "再次检查" }).click();
   await page.getByRole("heading", { name: "已接管" }).waitFor();
   await page.getByRole("button", { name: "活动记录" }).click();
   await page.getByRole("heading", { name: "活动记录" }).waitFor();
   await page.getByRole("button", { name: "运行状态" }).click();
-  await page.getByRole("heading", { name: "运行正常", exact: true }).waitFor();
-  const metricValue = async (title) => page.locator(".metric").filter({ hasText: title }).locator("strong").innerText();
-  const waitMetric = async (title, expected, message) => {
-    const deadline = Date.now() + 10_000;
-    let value = "";
-    while (Date.now() < deadline) {
-      value = await metricValue(title);
-      if (value === expected) return;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    assert.equal(value, expected, message);
-  };
-  await waitMetric("本次新增", "1", "Home must render the backend added count");
-  await waitMetric("本次更新", "2", "Home must render the backend updated count");
-  await waitMetric("本次跳过", "3", "Home must render the backend skipped count");
-  await waitMetric("本次失败", "0", "Home must render the backend failed count");
-  assert.equal(await page.locator(".observation-live-state").getByText("尚未获得", { exact: true }).count(), 1, "unknown queue activity must be neutral");
+  await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+  await page.getByText(/最近一次检查(已完成|已记录|正在进行)/).waitFor();
+  assert.equal(await page.getByText("本次新增", { exact: true }).count(), 0, "scan counts must be summarized in a readable sentence, not stacked as developer metrics");
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
-  await page.getByRole("heading", { name: "让灵机知道哪些内容可以接管" }).waitFor();
+  await page.getByRole("heading", { name: "选择灵机要记住的内容" }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/cleanup-pending`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
-  await page.getByRole("button", { name: "重新读取" }).click();
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.getByText("临时文件清理失败：灵机会自动重试，可重试。", { exact: true }).waitFor();
   const cleanupDom = await page.locator("body").innerText();
   assert.equal(cleanupDom.includes("cleanup_scan_failed"), false, "cleanup reason must not be rendered");
   assert.equal(cleanupDom.includes("secret"), false, "cleanup secret must not be rendered");
   await fetch(`http://127.0.0.1:${apiPort}/__test/cleanup-pending`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
-  await page.getByRole("button", { name: "重新读取" }).click();
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.waitForTimeout(100);
   assert.equal(await page.getByText("临时文件清理失败：灵机会自动重试，可重试。", { exact: true }).count(), 0, "recovered cleanup must clear the notice");
   await fetch(`http://127.0.0.1:${apiPort}/__test/omit-home-counts`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
-  await page.getByRole("button", { name: "重新读取" }).click();
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.getByRole("button", { name: "运行状态" }).click();
-  await page.getByRole("heading", { name: "运行正常", exact: true }).waitFor();
-  assert.equal(await metricValue("本次更新"), "尚未获得", "Home must keep absent updated count neutral");
-  assert.equal(await metricValue("本次跳过"), "尚未获得", "Home must keep absent skipped count neutral");
+  await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+  assert.equal(await page.getByText("本次更新", { exact: true }).count(), 0, "missing scan counts must not appear as fake zeros or developer metrics");
+  assert.equal(await page.getByText("本次跳过", { exact: true }).count(), 0, "missing scan counts must not appear as fake zeros or developer metrics");
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
-  await page.getByRole("heading", { name: "让灵机知道哪些内容可以接管" }).waitFor();
+  await page.getByRole("heading", { name: "选择灵机要记住的内容" }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/all-states`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
-  await page.getByRole("button", { name: "重新读取" }).click();
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   for (const heading of ["已发现", "需要确认", "暂不支持", "已授权", "扫描中", "已接管", "需要检查", "已撤销", "扫描失败"]) await page.getByRole("heading", { name: heading }).first().waitFor();
+  await page.locator('[data-source-kind="obsidian"]').getByText("Obsidian 长期记忆区", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂不支持自动导入旧记录。", { exact: true }).waitFor();
   const stateActions = {
-    fixture_detected: { allow: ["授权"], deny: ["撤销", "立即扫描", "暂停", "继续", "重试"] },
-    fixture_consent: { allow: ["授权"], deny: ["撤销", "立即扫描", "暂停", "继续", "重试"] },
-    fixture_unsupported: { allow: [], deny: ["授权", "撤销", "立即扫描", "暂停", "继续", "重试", "查看结果"] },
-    fixture_authorized: { allow: ["撤销", "立即扫描"], deny: ["授权", "暂停", "继续", "重试", "查看结果"] },
-    fixture_scanning: { allow: ["撤销", "暂停", "查看结果"], deny: ["授权", "立即扫描", "继续", "重试"] },
-    fixture_current: { allow: ["撤销", "立即扫描", "查看结果"], deny: ["授权", "暂停", "继续", "重试"] },
-    fixture_degraded: { allow: ["授权", "撤销"], deny: ["立即扫描", "暂停", "继续", "重试", "查看结果"] },
-    fixture_revoked: { allow: ["授权"], deny: ["撤销", "立即扫描", "暂停", "继续", "重试", "查看结果"] },
-    fixture_failed: { allow: ["撤销", "重试", "查看结果"], deny: ["授权", "立即扫描", "暂停", "继续"] },
-    fixture_paused: { allow: ["撤销", "继续", "查看结果"], deny: ["授权", "立即扫描", "暂停", "重试"] },
-    fixture_expired: { allow: ["授权", "撤销"], deny: ["立即扫描", "暂停", "继续", "重试", "查看结果"] },
+    fixture_detected: { allow: ["开始记忆"], deny: ["停止记忆", "现在检查", "暂停检查", "继续检查", "再次检查"] },
+    fixture_consent: { allow: ["开始记忆"], deny: ["停止记忆", "现在检查", "暂停检查", "继续检查", "再次检查"] },
+    fixture_unsupported: { allow: [], deny: ["开始记忆", "停止记忆", "现在检查", "暂停检查", "继续检查", "再次检查", "查看这次检查"] },
+    fixture_authorized: { allow: ["停止记忆", "现在检查"], deny: ["开始记忆", "暂停检查", "继续检查", "再次检查", "查看这次检查"] },
+    fixture_scanning: { allow: ["停止记忆", "暂停检查", "查看这次检查"], deny: ["开始记忆", "现在检查", "继续检查", "再次检查"] },
+    fixture_current: { allow: ["停止记忆", "现在检查", "查看这次检查"], deny: ["开始记忆", "暂停检查", "继续检查", "再次检查"] },
+    fixture_degraded: { allow: ["开始记忆", "停止记忆"], deny: ["现在检查", "暂停检查", "继续检查", "再次检查", "查看这次检查"] },
+    fixture_revoked: { allow: ["开始记忆"], deny: ["停止记忆", "现在检查", "暂停检查", "继续检查", "再次检查", "查看这次检查"] },
+    fixture_failed: { allow: ["停止记忆", "再次检查", "查看这次检查"], deny: ["开始记忆", "现在检查", "暂停检查", "继续检查"] },
+    fixture_paused: { allow: ["停止记忆", "继续检查", "查看这次检查"], deny: ["开始记忆", "现在检查", "暂停检查", "再次检查"] },
+    fixture_expired: { allow: ["开始记忆", "停止记忆"], deny: ["现在检查", "暂停检查", "继续检查", "再次检查", "查看这次检查"] },
   };
   for (const [kind, expected] of Object.entries(stateActions)) {
     const card = page.locator(`[data-source-kind="${kind}"]`);
     await card.waitFor();
-    const nextStep = await card.locator(".memory-source-facts > div").nth(2).locator("strong").innerText();
+    const nextStep = await card.locator(".memory-source-next").innerText();
     assert.ok(nextStep.trim(), `${kind} must show a visible next step`);
     for (const label of expected.allow) await card.getByRole("button", { name: label, exact: true }).waitFor();
     for (const label of expected.deny) assert.equal(await card.getByRole("button", { name: label, exact: true }).count(), 0, `${kind} cannot offer ${label}`);
   }
   await page.locator('[data-source-kind="fixture_expired"]').getByText("授权已过期，需要重新授权。", { exact: true }).waitFor();
   await page.locator('[data-source-kind="fixture_paused"]').getByText("已暂停", { exact: false }).waitFor();
-  await page.locator('[data-source-kind="fixture_paused"]').getByText("继续扫描", { exact: false }).waitFor();
+  await page.locator('[data-source-kind="fixture_paused"]').getByText("继续检查", { exact: false }).waitFor();
 
   await page.locator(".desktop-nav-item").filter({ hasText: "活动记录" }).click();
   await page.getByRole("heading", { name: "活动记录", exact: true }).waitFor();
   await page.getByText("整理项目会议记录", { exact: true }).waitFor();
   await page.getByText("已保存 1 条记忆", { exact: false }).waitFor();
   assert.equal(await page.getByText('"internal":"not primary"', { exact: false }).count(), 0, "raw event JSON must not be primary activity copy");
+  assert.equal(await page.getByText("source-1", { exact: true }).count(), 0, "source IDs must stay in collapsed technical details");
 
   await page.locator(".desktop-nav-item").filter({ hasText: "需要我处理" }).click();
-  await page.getByRole("heading", { name: "需要主人处理", exact: true }).waitFor();
+  await page.locator("h1").filter({ hasText: "需要我处理" }).waitFor();
   await page.getByText("确认这条会议决定是否进入长期记忆", { exact: true }).waitFor();
+  assert.equal(await page.getByText("work-capture-1", { exact: true }).count(), 0, "attention page must not expose work IDs");
   await page.getByRole("button", { name: "完成处理", exact: true }).click();
-  await page.getByText("当前没有需要主人决定的事项。", { exact: true }).waitFor();
+  await page.getByText("现在没有需要你处理的事项。灵机会继续自动工作。", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "运行状态" }).click();
+  await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+  await page.getByText("你现在不用做任何事", { exact: true }).waitFor();
+  assert.equal(await page.getByText("OWNER WORK FACT", { exact: true }).count(), 0, "internal work label must stay out of primary UI");
+  assert.equal(await page.getByText("work-capture-1", { exact: true }).count(), 0, "work identity must stay in collapsed technical details");
 
   await page.locator(".desktop-nav-item").filter({ hasText: "高级诊断" }).click();
   await page.locator("details").filter({ hasText: "记忆与项目" }).locator("summary").click();

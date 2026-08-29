@@ -76,25 +76,22 @@ assert.match(connection, /ownerStopped/);
 assert.match(connection, /autoRecoveryActive/);
 assert.match(connection, /后台自动恢复已暂停/);
 
-assert.match(overview, /状态每 10 秒自动更新/);
+assert.match(overview, /你现在不用做任何事/);
 assert.equal(overview.includes("后台自动运行"), false, "unknown queue activity must not be presented as running");
-for (const metric of ["本次新增", "本次更新", "本次跳过", "本次失败"]) {
-  assert.match(overview, new RegExp(metric), `Overview must ask for ${metric}`);
-}
 assert.match(overview, /尚未获得/);
-assert.match(overview, /查看待办/);
+assert.match(overview, /去处理|需要你处理/);
 assert.equal(overview.includes("刷新本机状态"), false, "Overview must not require manual refresh");
 assert.equal(overview.includes("健康检查"), false, "Detailed health checks belong in diagnostics");
 assert.equal(overview.includes("本地 Provider"), false, "Provider internals belong in diagnostics");
 assert.equal(overview.includes("定时任务"), false, "Scheduler internals belong in diagnostics");
 
 assert.match(activity, /intervalMs: 5000/);
-assert.match(activity, /当前工作事实/);
+assert.doesNotMatch(activity, /当前工作事实/);
 assert.match(activity, /执行事件/);
-assert.equal(activity.includes("刷新看板"), false, "Activity page must not expose manual refresh");
+assert.match(activity, /现在检查/);
 
 assert.match(attention, /\/api\/work\/pending-actions/);
-assert.match(attention, /当前没有需要主人决定的事项/);
+assert.match(attention, /现在没有需要你处理的事项/);
 assert.match(attention, /resource\.error/);
 assert.match(attention, /resource\.stale/);
 assert.equal(attention.includes("/api/auto-review/metrics"), false, "Attention must not use cumulative metrics as pending actions");

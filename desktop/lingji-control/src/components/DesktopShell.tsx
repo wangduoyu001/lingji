@@ -111,7 +111,7 @@ export default function DesktopShell({
               <strong>{shellStateLabel}</strong>
               <small>
                 {runtimeStatus
-                  ? `${runtimeStatus.host}:${runtimeStatus.port}${externalRuntime ? " · 外部进程" : managedRuntime ? ` · PID ${runtimeStatus.pid ?? "未知"}` : ""}`
+                  ? externalRuntime ? "已连接到本机服务（外部进程）" : managedRuntime ? "灵机核心正在运行" : "核心状态已连接"
                   : connectionState === "configuration_required"
                     ? "核心尚未启动"
                     : "正在读取本机核心"}

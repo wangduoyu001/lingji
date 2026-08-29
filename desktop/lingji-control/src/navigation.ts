@@ -1,16 +1,16 @@
 import type { NavigationGroup, NavigationItem } from "./types";
 
 export const NAVIGATION_GROUPS: NavigationGroup[] = [
-  { id: "observe", label: "运行观察" },
+  { id: "observe", label: "日常使用" },
   { id: "advanced", label: "高级诊断" },
 ];
 
 export const PRIMARY_NAVIGATION: NavigationItem[] = [
-  { id: "overview", label: "运行状态", hint: "系统是否正常、现在正在做什么", group: "observe", icon: "home" },
-  { id: "memory_sources", label: "记忆来源", hint: "发现、授权并查看灵机正在接管的来源", group: "observe", icon: "vault" },
-  { id: "activity", label: "活动记录", hint: "当前任务、最近完成与失败记录", group: "observe", icon: "logs" },
-  { id: "attention", label: "需要我处理", hint: "只显示必须由主人决定的事项", group: "observe", icon: "review" },
-  { id: "diagnostics", label: "高级诊断", hint: "模型、向量、存储、设置与日志", group: "observe", icon: "settings" },
+  { id: "overview", label: "运行状态", hint: "查看灵机是否正常，以及你是否需要做事", group: "observe", icon: "home" },
+  { id: "memory_sources", label: "记忆来源", hint: "选择灵机要记住的内容", group: "observe", icon: "vault" },
+  { id: "activity", label: "活动记录", hint: "查看灵机最近完成的工作", group: "observe", icon: "logs" },
+  { id: "attention", label: "需要我处理", hint: "只显示现在需要你决定的事项", group: "observe", icon: "review" },
+  { id: "diagnostics", label: "高级诊断", hint: "遇到问题时查看详细信息", group: "observe", icon: "settings" },
 ];
 
 export const ADVANCED_NAVIGATION: NavigationItem[] = [

@@ -8,10 +8,10 @@ const sourceText = async (path) => {
   try { return await readFile(new URL(path, import.meta.url), "utf8"); }
   catch { return ""; }
 };
-assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: 60 }), /最迟 1 分钟发现变化/);
-assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: 900 }), /最迟 15 分钟发现变化/);
-assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: 1800 }), /最迟 30 分钟发现变化/);
-assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation" }), /尚未获得/);
+assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: 60 }), /之后每1分钟自动检查一次/);
+assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: 900 }), /之后每15分钟自动检查一次/);
+assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: 1800 }), /之后每30分钟自动检查一次/);
+assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation" }), /检查时间尚未获得/);
 for (const invalid of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, null]) {
   const notice = periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: invalid });
   assert.match(notice, /尚未获得/);
@@ -60,13 +60,13 @@ assert.equal(vectorSemanticLabel("healthy", false), "记忆可用、语义向量
 const failures = [];
 const behavior = (name, check) => { try { check(); } catch (error) { failures.push(`${name}: ${error.message}`); } };
 behavior("source count excludes revoked", () => {
-  assert.match(contract, /activeAuthorizedCount/);
-  assert.match(sourcesPage, /activeAuthorizedCount\(snapshot\.authorized\)/);
-  assert.match(overviewPage, /activeAuthorizedCount\(sourceSnapshot\.authorized\)/);
+  assert.match(sourcesPage, /ownerSourceName/);
+  assert.match(sourcesPage, /sourceSummary/);
+  assert.match(overviewPage, /正在记住什么/);
 });
 behavior("configuration required and ordinary work noise", () => {
   assert.match(overviewPage, /configuration_required/);
-  assert.match(overviewPage, /需要配置|需要先配置/);
+  assert.match(overviewPage, /需要先完成设置/);
   assert.doesNotMatch(workPage, /JSON\.stringify\(event\.detail\)/);
 });
 behavior("pagination follows backend has_more", () => {

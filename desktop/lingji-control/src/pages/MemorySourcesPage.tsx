@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, type LingJiApi } from "../api";
-import { actionAvailability, actionEvidence, authorizationEvidence, MemorySourcesApi, periodicReconciliationNotice, scanStatusLabel, sourceStateLabel } from "./memorySourcesApi";
-import type { MemorySourcesSnapshot, RuntimeSummary, SourceFact, SourceState } from "./memorySourcesTypes";
+import { actionAvailability, actionEvidence, authorizationEvidence, MemorySourcesApi, ownerSourceName, periodicReconciliationNotice, scanStatusLabel, sourceStateLabel } from "./memorySourcesApi";
+import type { MemorySourcesSnapshot, SourceFact, SourceState } from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 import { Empty, Notice } from "../components/ui";
-import { activeAuthorizedCount } from "./codexWorkspaceContract";
 
 const stateTone: Record<SourceState, string> = {
   detected: "warning",
@@ -21,13 +20,6 @@ const stateTone: Record<SourceState, string> = {
 function actionError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   return error instanceof Error ? error.message : "操作没有完成，请稍后重试。";
-}
-
-function scanProgress(source: SourceFact): string {
-  const scan = source.latestScan;
-  if (!scan) return "尚未获得";
-  if (scan.progress == null || scan.total == null) return "处理中";
-  return `${scan.progress}/${scan.total}`;
 }
 
 function isPickerSource(source: SourceFact): boolean {
@@ -106,7 +98,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
   const snapshot = verifiedSnapshot ?? resource.data;
   if (!active) return <Empty text="连接灵机核心后才能查看记忆来源。" />;
   if (resource.loading && !snapshot) return <div className="empty-state" aria-busy="true">正在读取已发现的来源…</div>;
-  if (resource.error && !snapshot) return <div className="stack"><Notice kind="error">暂时无法读取记忆来源：{resource.error.message}。请确认灵机核心正在运行后重试。</Notice><button className="button secondary" onClick={() => void resource.refresh()}>重新读取</button></div>;
+  if (resource.error && !snapshot) return <div className="stack"><Notice kind="error">暂时无法读取记忆来源。请确认灵机核心正在运行后重试。</Notice><button className="button secondary" onClick={() => void resource.refresh()}>现在检查</button></div>;
   if (!snapshot) return <Empty text="尚未获得来源信息。请稍后重试。" />;
   const periodicNotice = periodicReconciliationNotice(snapshot.runtime);
 
@@ -114,42 +106,33 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
     <div className="stack memory-sources-page">
       <section className="memory-sources-intro">
         <div>
-          <span className="desktop-eyebrow">FIRST RUN · MEMORY SOURCES</span>
-          <h2>让灵机知道哪些内容可以接管</h2>
-          <p>灵机只读取你明确授权的目录。先看见来源，再决定是否授权；“已发现”不等于“已接管”。</p>
+          <h2>选择灵机要记住的内容</h2>
+          <p>灵机只读取你明确允许的来源。选择后，灵机会检查内容并记住变化。</p>
         </div>
-        <button className="button secondary" disabled={resource.refreshing} onClick={() => void resource.refresh()}>{resource.refreshing ? "读取中…" : "重新读取"}</button>
+        <button className="button secondary" disabled={resource.refreshing} onClick={() => void resource.refresh()}>{resource.refreshing ? "检查中…" : "现在检查"}</button>
       </section>
       {resource.stale && <Notice kind="warning">当前显示的是上一次成功读取的结果，正在重试。请不要把过期状态当成当前状态。</Notice>}
-      {resource.error && snapshot && <Notice kind="warning">暂时无法读取记忆来源：{resource.error.message}。已保留上一次成功结果，请点击“重新读取”恢复。</Notice>}
+      {resource.error && snapshot && <Notice kind="warning">暂时无法读取记忆来源，已保留上一次成功结果。请点击“现在检查”恢复。</Notice>}
       {error && <Notice kind="error">{error}</Notice>}
       {message && <Notice kind="info">{message}</Notice>}
       {snapshot.runtime?.cleanup_pending && <Notice kind="error">临时文件清理失败：灵机会自动重试，可重试。</Notice>}
       {periodicNotice && <Notice kind="info">{periodicNotice}</Notice>}
-      <section className="memory-sources-summary" aria-label="来源总览">
-        <div><span>已发现来源</span><strong>{snapshot.discovered.length}</strong><small>已授权 {activeAuthorizedCount(snapshot.authorized)} 个</small></div>
-        <div><span>当前接管</span><strong>{snapshot.sources.filter((item) => item.state === "current").length}</strong><small>扫描完成后才算接管</small></div>
-        <div><span>最近活动</span><strong>{snapshot.summary?.latest?.status ? scanStatusLabel(snapshot.summary.latest.status) : "尚未获得"}</strong><small>{runtimeHeartbeatLabel(snapshot.runtime)}</small></div>
-      </section>
-      {snapshot.sources.length === 0 ? <Empty text="尚未发现可接入的来源。可以稍后重新读取；灵机不会自行扩大读取范围。" /> : (
+      <p className="memory-sources-summary" aria-label="来源总览">{sourceSummary(snapshot)}</p>
+      {snapshot.sources.length === 0 ? <Empty text="尚未发现可接入的来源。可以稍后点击“现在检查”；灵机不会自行扩大读取范围。" /> : (
         <section className="memory-source-list" aria-label="记忆来源列表">
           {snapshot.sources.map((source) => <SourceCard key={`${source.kind}:${source.root}`} source={source} busy={busy} onAuthorize={() => void authorize(source)} onAction={runAction} sourceApi={sourceApi} onDetail={setDetail} />)}
         </section>
       )}
-      {detail && <section className="panel memory-scan-detail" aria-live="polite"><h2>扫描结果</h2><div className="panel-body"><p>这是后端返回的本次扫描结果，可用于核对新增、复用和错误。</p><dl className="memory-detail-grid">{Object.entries(detail).filter(([key]) => ["status", "progress", "total", "queued", "reused", "last_error"].includes(key)).map(([key, value]) => <div key={key}><dt>{key === "status" ? "状态" : key === "progress" ? "进度" : key === "total" ? "总数" : key === "queued" ? "新增" : key === "reused" ? "复用" : "错误"}</dt><dd>{value == null || value === "" ? "尚未获得" : String(value)}</dd></div>)}</dl><details><summary>技术详情</summary><pre className="json-panel">{JSON.stringify(detail, null, 2)}</pre></details></div></section>}
+      {detail && <section className="panel memory-scan-detail" aria-live="polite"><h2>这次检查的结果</h2><div className="panel-body"><p>灵机已完成这次检查，下面是可读结果。</p><dl className="memory-detail-grid">{Object.entries(detail).filter(([key]) => ["status", "progress", "total", "queued", "reused", "last_error"].includes(key)).map(([key, value]) => <div key={key}><dt>{key === "status" ? "结果" : key === "progress" ? "已检查" : key === "total" ? "总数" : key === "queued" ? "新增" : key === "reused" ? "未重复导入" : "说明"}</dt><dd>{value == null || value === "" ? "检查结果尚未获得" : String(value)}</dd></div>)}</dl><details><summary>技术详情</summary><pre className="json-panel">{JSON.stringify(detail, null, 2)}</pre></details></div></section>}
     </div>
   );
 }
 
-function runtimeHeartbeatLabel(runtime: RuntimeSummary | null): string {
-  if (!runtime) return "尚未获得后台状态";
-  if (runtime.state === "degraded" || runtime.scheduler_heartbeat_state === "degraded") {
-    return runtime.scheduler_heartbeat_reason || runtime.scheduler_heartbeat_last_error || "需要检查后台状态";
-  }
-  if (runtime.state === "stopped" || runtime.scheduler_heartbeat_state === "stopped") return "后台已停止";
-  if (runtime.state === "paused" || runtime.scheduler_heartbeat_state === "paused") return "后台已暂停，仍在确认状态";
-  if (runtime.state === "running" && runtime.scheduler_heartbeat_age != null) return "后台状态持续更新";
-  return "尚未获得后台状态";
+function sourceSummary(snapshot: MemorySourcesSnapshot): string {
+  const current = snapshot.sources.filter((item) => item.state === "current").map(ownerSourceName);
+  if (current.length) return `正在记住：${current.join("、")}。`;
+  if (snapshot.sources.length) return "已找到可接入的内容，完成选择和检查后才会开始记住。";
+  return "目前还没有可接入的内容。灵机不会自行扩大读取范围。";
 }
 
 function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }: { source: SourceFact; busy: string | null; onAuthorize: () => void; onAction: (key: string, operation: () => Promise<unknown>, verify: (next: MemorySourcesSnapshot) => boolean, success?: string) => Promise<void>; sourceApi: MemorySourcesApi; onDetail: (detail: Record<string, unknown>) => void }) {
@@ -169,17 +152,16 @@ function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }
   return <article className={`memory-source-card memory-source-${stateTone[source.state]}`} data-source-kind={source.kind}>
     <div className="memory-source-card-header"><div><span className="memory-source-kind">{source.display_name}</span><h3>{sourceStateLabel(source.state)}</h3></div><span className={`pill ${stateTone[source.state]}`}>{sourceStateLabel(source.state)}</span></div>
     <p className="memory-source-detail">{source.detail}</p>
-    <div className="memory-source-facts"><div><span>找到什么</span><strong>{source.display_name}</strong></div><div><span>本次进度</span><strong>{scanProgress(source)}</strong></div><div><span>下一步</span><strong>{source.nextAction}</strong></div></div>
+    <p className="memory-source-next">下一步：{source.nextAction}</p>
     <div className="memory-source-actions">
-      {canAuthorize && <button className="button primary" disabled={Boolean(busy)} onClick={onAuthorize}>{busy?.startsWith("authorize:") ? "授权中…" : isPickerSource(source) ? "选择文件夹并授权" : "授权"}</button>}
-      {canRevoke && <button className="button danger" disabled={Boolean(busy)} onClick={() => void invoke("revoke", () => sourceApi.revoke(source.source_id!), (next) => next.sources.some((item) => item.source_id === source.source_id && item.state === "revoked"), "已撤销授权；灵机不会再读取这个来源。")}>撤销</button>}
-      {canScan && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("scan", () => sourceApi.scan(source.source_id!), (next) => actionEvidence(next, source.source_id!, "scan"))}>立即扫描</button>}
-      {canPause && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("pause", () => sourceApi.pause(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "pause"))}>暂停</button>}
-      {actions.includes("resume") && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("resume", () => sourceApi.resume(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "resume"))}>继续</button>}
-      {canRetry && <button className="button warning" disabled={Boolean(busy)} onClick={() => void invoke("retry", () => sourceApi.retry(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "retry"))}>重试</button>}
-      {actions.includes("detail") && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void showDetail()}>查看结果</button>}
+      {canAuthorize && <button className="button primary" disabled={Boolean(busy)} onClick={onAuthorize}>{busy?.startsWith("authorize:") ? "准备中…" : isPickerSource(source) ? "选择文件夹并开始记忆" : "开始记忆"}</button>}
+      {canRevoke && <button className="button danger" disabled={Boolean(busy)} onClick={() => void invoke("revoke", () => sourceApi.revoke(source.source_id!), (next) => next.sources.some((item) => item.source_id === source.source_id && item.state === "revoked"), "已停止记忆这个来源。")}>停止记忆</button>}
+      {canScan && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("scan", () => sourceApi.scan(source.source_id!), (next) => actionEvidence(next, source.source_id!, "scan"))}>现在检查</button>}
+      {canPause && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("pause", () => sourceApi.pause(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "pause"))}>暂停检查</button>}
+      {actions.includes("resume") && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("resume", () => sourceApi.resume(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "resume"))}>继续检查</button>}
+      {canRetry && <button className="button warning" disabled={Boolean(busy)} onClick={() => void invoke("retry", () => sourceApi.retry(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "retry"))}>再次检查</button>}
+      {actions.includes("detail") && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void showDetail()}>查看这次检查</button>}
     </div>
     {!canAuthorize && source.state === "consent_required" && <small className="memory-source-reason">需要先确认一个受支持的目录；当前没有可安全授权的路径。</small>}
-    {source.latestScan?.last_error && <small className="memory-source-error">后端原因：{source.latestScan.last_error}</small>}
   </article>;
 }

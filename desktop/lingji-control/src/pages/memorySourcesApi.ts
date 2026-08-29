@@ -42,6 +42,14 @@ function rootName(root: string): string {
   return clean.split("/").filter(Boolean).at(-1) || "来源目录";
 }
 
+export function ownerSourceName(source: { kind?: string | null; display_name?: string | null }): string {
+  const kind = String(source.kind ?? "").trim().toLowerCase();
+  const displayName = String(source.display_name ?? "").trim();
+  if (kind === "obsidian" || displayName.toLowerCase().includes("managed obsidian")) return "Obsidian 长期记忆区";
+  if (kind === "claude_desktop") return "Claude";
+  return displayName || "这个来源";
+}
+
 function latestScansBySource(scans: ScanRun[]): Map<string, ScanRun> {
   const latest = new Map<string, ScanRun>();
   for (const scan of scans) {
@@ -63,13 +71,16 @@ function describe(discovered: DiscoveredSource, state: SourceState, scan?: ScanR
     if (scan?.status === "paused") return { detail: `扫描已暂停，已保留「${rootName(discovered.candidate_root)}」的授权。`, nextAction: "继续扫描，完成后才会显示为已接管。" };
     return { detail: `正在检查「${rootName(discovered.candidate_root)}」${progress}，完成后才会显示为已接管。`, nextAction: "等待扫描完成，或暂停后稍后继续。" };
   }
-  if (state === "failed") return { detail: scan?.last_error ? `这次扫描没有完成：${scan.last_error}` : "这次扫描没有完成。", nextAction: "请重试；原授权仍保留。" };
+  if (state === "failed") return { detail: "这次检查没有完成，原来的记忆不会被删除。", nextAction: "再次检查；原来的记忆不会被删除。" };
   if (state === "revoked") return { detail: "主人已撤销接管，灵机不会再读取这个来源。", nextAction: "如需继续，请重新授权。" };
   if (state === "degraded") {
     const expired = scan?.last_error?.toLowerCase().includes("expired");
     return { detail: expired ? "授权已过期，需要重新授权。" : "来源或运行时需要检查，灵机会保留最近一次已知状态。", nextAction: expired ? "重新授权这个来源。" : "需要重启/检查后再试。" };
   }
-  if (state === "unsupported") return { detail: discovered.reason || "当前没有可用的官方导出方式，灵机不会读取不透明存储。", nextAction: "请使用官方导出，或暂不接入。" };
+  if (state === "unsupported") {
+    if (discovered.kind === "claude_desktop") return { detail: "Claude 暂不支持自动导入旧记录。", nextAction: "请使用 Claude 的官方导出，或暂不接入。" };
+    return { detail: discovered.reason || "当前没有可用的官方导出方式，灵机不会读取不透明存储。", nextAction: "请使用官方导出，或暂不接入。" };
+  }
   if (state === "consent_required") return { detail: discovered.reason || "这个来源需要主人明确确认后才能继续。", nextAction: "确认允许的来源目录后再授权。" };
   if (state === "authorized") return { detail: `已授权「${rootName(discovered.candidate_root)}」，尚未完成首轮扫描。`, nextAction: "立即扫描以完成接管。" };
   return { detail: discovered.reason ? `发现「${rootName(discovered.candidate_root)}」：${discovered.reason}` : `发现可接入的「${rootName(discovered.candidate_root)}」。`, nextAction: "确认来源后授权；灵机只会读取这个目录。" };
@@ -110,7 +121,7 @@ export function mergeSourceFacts(
     const copy = source?.status === "expired"
       ? { detail: "授权已过期，需要重新授权。", nextAction: "重新授权这个来源。" }
       : describe(candidate, state, scan);
-    facts.push({ ...candidate, state, source_id: source?.source_id, root: source?.root ?? candidate.candidate_root, latestScan: scan, ...copy });
+    facts.push({ ...candidate, display_name: ownerSourceName(candidate), state, source_id: source?.source_id, root: source?.root ?? candidate.candidate_root, latestScan: scan, ...copy });
   }
   return facts;
 }
@@ -162,10 +173,10 @@ export function scanStatusLabel(status: string | null | undefined): string {
 export function periodicReconciliationNotice(runtime: RuntimeSummary | null | undefined): string {
   if (runtime?.automation_mode !== "periodic_reconciliation") return "";
   const seconds = Number(runtime.next_reconciliation_seconds ?? runtime.reconciliation_interval_seconds);
-  if (!Number.isFinite(seconds) || seconds <= 0) return "定期核对模式：已禁用文件事件监听；核对周期尚未获得。";
+  if (!Number.isFinite(seconds) || seconds <= 0) return "打开灵机时会检查，之后自动检查一次；检查时间尚未获得。";
   const minutes = seconds / 60;
   const label = Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(1);
-  return `定期核对模式：应用启动时做增量扫描，之后自动核对来源；最迟 ${label} 分钟发现变化。此模式不使用不可靠的文件事件监听。`;
+  return `打开灵机时会检查，之后每${label}分钟自动检查一次。`;
 }
 
 export function actionEvidence(snapshot: MemorySourcesSnapshot, sourceId: string, action: "authorize" | "scan" | "revoke" | "pause" | "resume" | "retry"): boolean {

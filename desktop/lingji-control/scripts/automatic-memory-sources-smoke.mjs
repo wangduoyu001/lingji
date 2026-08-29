@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { actionEvidence, MemorySourcesApi, mergeSourceFacts, scanStatusLabel, scanTerminalEvidence, sourceStateLabel, countLabel } from "../src/pages/memorySourcesApi.ts";
+import { actionEvidence, MemorySourcesApi, mergeSourceFacts, ownerSourceName, scanStatusLabel, scanTerminalEvidence, sourceStateLabel, countLabel } from "../src/pages/memorySourcesApi.ts";
 import { LingJiApi } from "../src/api.ts";
 import { readFileSync } from "node:fs";
 
@@ -41,7 +41,9 @@ assert.doesNotMatch(pageSource, /String\(snapshot\.runtime\?\.cleanup_error/);
 assert.equal(snapshot.sources.length, 2);
 assert.equal(snapshot.sources.find((item) => item.kind === "codex_transcript")?.state, "current");
 assert.equal(snapshot.sources.find((item) => item.kind === "claude_desktop")?.state, "unsupported");
+assert.equal(snapshot.sources.find((item) => item.kind === "claude_desktop")?.detail, "Claude 暂不支持自动导入旧记录。");
 assert.match(snapshot.sources.find((item) => item.kind === "claude_desktop")?.nextAction ?? "", /不要读取|官方导出/);
+assert.equal(ownerSourceName({ kind: "obsidian", display_name: "Managed Obsidian memory" }), "Obsidian 长期记忆区");
 assert.equal(sourceStateLabel("available"), "已发现");
 assert.equal(scanStatusLabel("completed"), "已完成");
 assert.equal(countLabel(null), "尚未获得");
