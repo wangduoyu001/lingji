@@ -50,6 +50,17 @@
   diff-check、acceptance-sync、local-handoff；提交：`8f73841` 产品/测试，报告文档
   提交另行记录。未执行 live/真实主人数据验收。
 
+## 2026-08-29 · Task 1 Round 3 · effective-home resolver closure
+
+- 仅修复最后一个 re-review Important：统一 `home_dir`/`user_home`/安全 fallback
+  解析顺序，贯通 API authorize、持久化 canonical Codex root 与 runtime enumeration；
+  宿主 HOME 不得替换已配置的 effective HOME，伪造宿主根和祖先 symlink 仍拒绝。
+- 合成 API→runtime 行为测试先 RED 后 GREEN，验证 `settings.user_home` 与进程 HOME
+  不同仍可授权并消费真实 rollout；受影响 focused suite、compileall、diff-check、
+  acceptance-sync、local-handoff 均须通过。未改 UI，故本轮不重复 E2E/smoke/build。
+- 产品/测试提交：`2a64e62`；报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-1-report.md`；
+  未执行 live/真实主人数据验收。
+
 ## 2026-08-29 · Task 8E · Final UI wording — 活动记录刷新动作
 
 - 活动记录页按钮只会重新读取履历，不会发起来源扫描；本轮将普通按钮从“现在检查”改为

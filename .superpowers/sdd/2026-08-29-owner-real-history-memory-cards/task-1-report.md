@@ -102,3 +102,19 @@ Production/Vault, or owner data was accessed.
   rendered E2E `PASS`; Desktop smoke `PASS (23 scripts)`; build `PASS` (93 modules);
   compileall, diff-check, acceptance-sync, and local-handoff `PASS`. No live app,
   real owner data, Acceptance/Production/Vault data, or old worktree was accessed.
+
+## Round 3 re-review evidence
+
+- RED: a real API authorize → runtime scan test with `settings.user_home` different
+  from process `HOME` returned `403 Codex rollout root must be one exact effective-home
+  root`; the test also attempted an unapproved process-HOME root and required `403`.
+- GREEN: added one shared effective-home resolver with the order `home_dir`,
+  `user_home`, explicit environment, then OS identity fallback, and used it in
+  discovery, API authorization, and extraction bootstrap. Runtime enumeration keeps
+  rebuilding the trusted home from the canonical registered Codex root, so the
+  configured-home authorization now reaches a real scan even when process HOME differs.
+- Round 3 product/tests commit: `2a64e62` (`fix: unify automatic-memory home resolution`).
+- Verification: affected focused suite `82 passed, 3 warnings`; compileall and
+  diff-check passed. No UI files changed, so rendered E2E/smoke/build were not
+  repeated in this narrow Round 3; Round 2 evidence remains valid for unchanged UI.
+  Acceptance/Production/Vault, live app, and real owner data were not accessed.
