@@ -17,7 +17,8 @@ authorized real macOS observation.
 ## Scope and safety boundary
 
 - Base: `c70ce6b165213151ca02baf34ff11e2217a21c82`.
-- Product/test commit: `6862c46bd9718998235d42cf7a29a7e02ea7ea95`.
+- Product/test commits: `6862c46bd9718998235d42cf7a29a7e02ea7ea95` and
+  `eff22b4ea3476088f32a87f7b90b4fcf330b75d2`.
 - Branch: `codex/task8e-safe-polling-fallback`.
 - Worktree: `/Users/wuhanwangduoyu/Documents/ChatGPT/灵机/.worktrees/task8e-safe-polling-fallback`.
 - No watcher algorithm repair, deletion invalidation, read-model seam, new queue/database,
@@ -81,7 +82,8 @@ scope and are not implied by this focused pass.
 
 ## Changed files
 
-Product/test commit `6862c46bd9718998235d42cf7a29a7e02ea7ea95` contains:
+Product/test commits `6862c46bd9718998235d42cf7a29a7e02ea7ea95` and
+`eff22b4ea3476088f32a87f7b90b4fcf330b75d2` contain:
 
 - `src/automatic_memory/scheduler.py`
 - `src/automatic_memory/runtime.py`
@@ -91,6 +93,7 @@ Product/test commit `6862c46bd9718998235d42cf7a29a7e02ea7ea95` contains:
 - `desktop/lingji-control/src/pages/memorySourcesTypes.ts`
 - `desktop/lingji-control/scripts/automatic-memory-sources-repair-smoke.mjs`
 - `tests/test_task8e_safe_polling_fallback.py`
+- `tests/test_automatic_memory_scheduler.py`
 
 The acceptance log, implementation plan, and this report are committed separately as the docs
 commit after the product/test commit.
