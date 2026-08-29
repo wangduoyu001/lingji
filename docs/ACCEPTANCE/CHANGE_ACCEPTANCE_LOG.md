@@ -1,5 +1,25 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Owner-facing plain UI repair Round 5
+
+- 本轮仅修复 Round4 终审指出的两个契约问题，不增加功能：scheduler 对
+  `ScanRun` 的 `queued/reused` 缺失值继续保留为未知，只有已完成且实际测量的扫描
+  才写入/显示真实计数；内部进度计算使用局部安全回退，不向事件、Work Fact 或
+  API 投影伪造 `0`。
+- Local Control API 的 action、list、summary、detail 共用正式 scan projector；
+  所有有 `scan_id` 的响应稳定派生同一个 `automatic-memory:<scan_id>` `work_id`，
+  并保留非接管结果的 `complete/errors/next_action`，避免过期或不支持来源被误报为
+  中性成功快照。
+- TDD/验证：I1/I2 最小 RED 后 GREEN；直接后端 `69 passed, 1 warning`，Round5
+  专项 `17 passed, 1 warning`，Task2–5 affected `184 passed, 3 warnings`；packaged
+  contract（显式兼容 event watcher 环境）`2 passed, 1 warning, 291.19s`；Desktop
+  rendered E2E、23-script smoke、build（92 modules）均 PASS。
+- `compileall` 与 diff-check PASS；本轮没有启动/安装 live App，没有访问或修改
+  Acceptance/Production/Vault/主人数据。Mac 默认安全 periodic fallback 未改变；
+  packaged 首次在系统 Python 缺少可选 MCP 依赖时停止，安装仓库声明的测试依赖后重跑通过。
+- 产品/测试提交：`ca6b8ea40cf6d95974639af213ca6ee41e08bdee`。报告沿用
+  `.superpowers/sdd/2026-08-29-task8e-owner-plain-ui/task-report.md`，文档提交另行记录。
+
 ## 2026-08-29 · Task 8E · Owner-facing plain UI repair Round 4
 
 - 本轮承接 Round3 的正式计数证据缺口：扫描数据库新增 `queued_count`/`reused_count` 可空字段，旧表增量迁移且旧行保持 `NULL`；只有完整扫描实际测量完成时才原子写入计数，明确空扫描写入真实 `0`，暂停、失败、崩溃恢复、未测量和 legacy 行保持未知。

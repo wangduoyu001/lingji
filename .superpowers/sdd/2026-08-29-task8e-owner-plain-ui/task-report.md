@@ -5,7 +5,7 @@
 ```text
 Verdict: PASS (focused implementation and rendered/behavior smoke)
 Merge recommendation: ALLOW owner observation
-Product commit: 33b730e
+Product commit: ca6b8ea
 Artifact: NOT_BUILT_BY_SCOPE
 Artifact ID: NOT_APPLICABLE
 Report commit: the commit containing this report (see final delivery SHA)
@@ -20,7 +20,7 @@ Disposition: READY_FOR_OWNER_EXPERIENCE
 | 项目 | 实际 | 结论 |
 |---|---|---|
 | Repository | 灵机 | PASS |
-| Product Commit | `ea87ebe41ab37d44789ec68a126629fc074a483a` (`fix: preserve scan count evidence semantics`) | PASS |
+| Product Commit | `ca6b8ea40cf6d95974639af213ca6ee41e08bdee` (`fix: preserve scan evidence through scheduler actions`) | PASS |
 | Artifact | 未打包、未安装；按任务边界不生成 | NOT_BUILT_BY_SCOPE |
 | Artifact ID / hashes | `NOT_APPLICABLE` | NOT_APPLICABLE |
 | Report Commit | the commit containing this report | PASS |
@@ -174,10 +174,11 @@ compatibility projector gap (`1 failed`). The focused repair matrix is now
 `47 passed, 1 warning`. Owner rendered E2E is PASS; Desktop smoke is PASS for
 23 scripts; build is PASS with 92 modules transformed; Task2–5 related backend
 regressions are `183 passed, 3 warnings`; compileall, diff-check, acceptance
-sync and local handoff are PASS. The broad repository run still has 22
-pre-existing quality-evaluation/environment baseline failures (missing local
-`.venv`, historical Task4/Task7 contract tests, and unrelated legacy tests);
-none were changed or reclassified as Round4 failures.
+sync and local handoff are PASS. The broad repository run was not repeated in
+Round5; the independent Round4 review records 24 failures (including quality-
+evaluation/environment and unrelated legacy contracts), rather than the
+previous report's stale count of 22. None were changed or reclassified as
+Round4 failures.
 
 Round4 remains limited to scan evidence and its owner-facing projection. It
 does not change watcher strategy, introduce a second queue/database, or touch
@@ -185,7 +186,43 @@ live/Acceptance/Production/Vault/owner data. Product/tests are committed at
 `33b730ec8de1b7b545da7c5eecdb70cdcf67e30e`; docs/report are committed
 separately. Owner observation and a new Mac artifact remain pending.
 
-## 17. Sign-off
+## 17. Owner-Plain Repair Round 5
+
+Round5 addressed the two Important findings from the independent Round4 review.
+The scheduler now preserves `queued`/`reused` as unknown for legacy, paused,
+failed, crashed, and otherwise unmeasured scans. Internal progress arithmetic
+uses a local zero fallback only; reconciliation events, Work Facts, and API
+projections retain the unknown state. A completed scan with measured zero or a
+positive count still persists and exposes that real value.
+
+The single Local Control API projector now gives action, list, summary, and
+detail responses the same stable `automatic-memory:<scan_id>` `work_id`, and
+action responses retain real non-admitting outcomes such as `complete=false`,
+errors, and next action when no durable scan row exists. No UI-local ID was
+introduced. New tests cover legacy count absence, Work Fact unknown counts,
+cross-endpoint work identity, and non-admitting action results.
+
+TDD evidence: the two requested I1/I2 RED cases failed before implementation;
+the focused GREEN checks passed. Direct backend focused regression is
+`69 passed, 1 warning`; Round5 repair tests are `17 passed, 1 warning`; the
+Task2–5 affected matrix is `184 passed, 3 warnings`. Packaged flow with an
+explicit compatibility event-watcher setting passed `2 passed, 1 warning` in
+291.19 seconds, after reaching event, expiry, pause/resume, and crash-recovery
+contract checks. Desktop rendered E2E, all 23 smoke scripts, and the 92-module
+build passed. `compileall` and diff-check passed.
+
+The first packaged attempt on the Mac default periodic policy correctly did
+not produce the old event-triggered scan; a second attempt reached the same
+flow but stopped because the system Python lacked the optional `mcp` package.
+These were environment/policy observations, not suppressed product failures;
+the required dependency was installed from `requirements-mcp.txt` and the
+packaged test passed. No live App, Acceptance/Production/Vault root, or owner
+data was started or touched. Product/tests are committed at
+`ca6b8ea40cf6d95974639af213ca6ee41e08bdee`; this Round5 report and authority
+docs are committed separately. Final owner observation and a Mac artifact
+remain pending.
+
+## 18. Sign-off
 
 ```text
 Codex executor: Task8E Owner-facing Plain UI implementation agent
