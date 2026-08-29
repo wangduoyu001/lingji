@@ -1,5 +1,23 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 3 planned owner UI and menu contract
+
+- 主人要求界面不仅可用，还必须简洁、好看且菜单逻辑科学。本轮普通菜单固定为四项并按
+  `首页 / 记忆内容 / 需要我 / 记忆来源` 排列；活动记录并入首页的最多三条真实工作摘要，
+  Inspector、Review、Vector、Workspace 和其他技术页面不删除，但只从一个低强调的
+  `高级诊断` 入口访问，保留旧 PageId 直达兼容。
+- `记忆内容` 复用 Task 2 cards API 与既有 Desktop 视觉组件，不新增后端、事实源、设计系统
+  或第二套 UI。默认每页 20 条；1280px 两列、1024px 一列且无横向溢出。每张卡按主题、最多
+  三条有证据的过程/结果、当前结论、时效、来源、原始/结构/向量/长期四层状态、可信提示与
+  唯一建议动作排序；默认不显示 ID、路径、hash、JSON、chunks 或英文内部状态。
+- 首页统计必须与 cards/source API 同源；缺失显示 `尚未获得`，禁止补零或把 Activity 当记忆。
+  修改、标记过时、移出当前记忆都需确认和 fresh GET；无物理 DELETE，原始消息、历史版本、
+  来源与审计保持可读。409 不覆盖新内容。
+- 自动验收必须使用至少 12 张不同卡片并覆盖两页分页、精确计数、四普通菜单与单一高级入口、
+  current/pending/superseded/stale/revoked/conflict/no-vector/not-permanent、人话空/加载/错误状态、
+  查看单一来源、owner 动作、键盘/focus、1024/1280 布局，以及所有可见按钮真实生效；23 项
+  既有 Desktop smoke、rendered E2E、build 与后端回归同时通过。真实 Mac 体验仍属于 Task 4。
+
 ## 2026-08-29 · Owner real history proof and memory cards
 
 - 主人确认当前候选仍不能证明接管了本机 AI 历史，并明确要求普通界面展示整理后的

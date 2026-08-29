@@ -150,6 +150,8 @@
 - Create: `desktop/lingji-control/src/pages/ownerMemoryCardsApi.ts`
 - Create: `desktop/lingji-control/src/pages/ownerMemoryCardsTypes.ts`
 - Modify: `desktop/lingji-control/src/AppPages.tsx`
+- Modify: `desktop/lingji-control/src/DesktopShell.tsx`
+- Modify: `desktop/lingji-control/src/types.ts`
 - Modify: `desktop/lingji-control/src/navigation.ts`
 - Modify: `desktop/lingji-control/src/pages/OverviewPage.tsx`
 - Modify: `desktop/lingji-control/src/pages/MemoryReviewPage.tsx`
@@ -162,7 +164,8 @@
 
 **Interfaces:**
 - Consumes: Task 2 cards API and existing message-detail/approve/edit-approve/reject/archive APIs.
-- Produces: one normal navigation entry `记忆内容`, not a new backend or second diagnostics UI.
+- Produces: owner navigation with exactly four ordinary entries in this order: `首页 / 记忆内容 / 需要我 / 记忆来源`; Activity becomes a Home summary and existing Inspector/Review/Vector/Workspace pages remain reachable only from one low-emphasis `高级诊断` entry.
+- Produces: one normal page `记忆内容`, not a new backend, fact source, design system or second diagnostics UI.
 - Produces: owner-confirmed `correct`, `invalidate`, and `archive` transitions using existing version/lifecycle semantics; never physical deletion.
 
 - [ ] **Step 1: Add rendered RED for the owner memory page**
@@ -177,7 +180,7 @@
 
 - [ ] **Step 3: Implement the concise page and navigation**
 
-  Add `记忆内容` to ordinary navigation. Default list limit is 20; show `已显示 X / 共 Y 条` and working next/previous controls. Card detail shows evidence-backed summary and source links; `查看来源` fetches only the selected message detail. Technical fields remain folded.
+  Add `记忆内容` to ordinary navigation and reduce the ordinary menu to the four entries above; do not delete old `PageId` routes. Default list limit is 20; show `已显示 X / 共 Y 条` and working next/previous controls. At 1280px use a calm two-column card grid and at 1024px collapse to one column without horizontal overflow. Reuse existing `DesktopUX.css`, `LocalMemoryLoop.css`, panels, pills, focus rings and detail drawer; do not introduce a new visual system. Card detail shows evidence-backed summary and source links; `查看来源` fetches only the selected message detail. Technical fields remain folded. Every state and action must remain understandable without color alone, keyboard reachable, and at least 40px clickable.
 
 - [ ] **Step 4: Add RED lifecycle action tests**
 
@@ -191,11 +194,11 @@
 
 - [ ] **Step 6: Connect Home proof without duplication**
 
-  Home shows only: discovered candidate count, imported conversation/message count, memory card total, permanent count, vectorized count and owner-review count, each from the same card/source APIs. A button opens `记忆内容`; Home never copies full card bodies.
+  Home shows only: discovered candidate count, imported conversation/message count, memory card total, permanent count, vectorized count and owner-review count, each from the same card/source APIs. Missing counts render `尚未获得`, never fake zero. Show at most three recent real Work Facts as `最近工作` and label them as work records, not memories. A single primary button opens `记忆内容`; Home never copies full card bodies, raw paths, IDs, JSON, chunks, vector collection or model details.
 
 - [ ] **Step 7: Verify Task 3 and commit**
 
-  Run lifecycle tests, rendered E2E, all 23 Desktop smoke scripts, build, Inspector/Review/API regressions, compileall, diff-check, acceptance-sync and local-handoff. Commit product/tests separately from docs/evidence.
+  Run lifecycle tests, rendered E2E, all 23 Desktop smoke scripts, build, Inspector/Review/API regressions, compileall, diff-check, acceptance-sync and local-handoff. Rendered E2E must use at least 12 distinct cards and also prove two-page navigation, exact totals, the four ordinary menu entries, one advanced entry, current/pending/superseded/stale/revoked/conflict/no-vector/not-permanent states, no default raw ID/path/hash/JSON/chunk leakage, working source drill-down, owner actions with fresh re-read, 409 preservation, keyboard/focus behavior and 1024/1280 no-overflow layouts. Every visible button must perform a real navigation or API action. Commit product/tests separately from docs/evidence.
 
 ---
 
