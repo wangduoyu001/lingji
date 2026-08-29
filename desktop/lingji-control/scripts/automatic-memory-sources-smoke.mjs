@@ -4,6 +4,7 @@ import { LingJiApi } from "../src/api.ts";
 import { readFileSync } from "node:fs";
 
 const calls = [];
+const originalFetch = globalThis.fetch;
 globalThis.window = globalThis;
 const responses = {
   "/api/automatic-memory/discovered": [
@@ -74,4 +75,5 @@ assert.equal(calls.at(-2).path, "/api/automatic-memory/authorize");
 assert.equal(calls.at(-2).body.owner_confirmed, true);
 assert.equal(calls.at(-1).path, "/api/automatic-memory/scan");
 assert.equal(calls.at(-1).body.source_id, "src-codex");
+globalThis.fetch = originalFetch;
 console.log("automatic-memory-sources-smoke: PASS");

@@ -20,15 +20,21 @@ export function paginationHasNext(pagination: PagePagination): boolean {
 }
 
 export function formatErrorForUi(reason: unknown, fallback = "操作失败，请检查本机服务状态后重试。"): string {
-  if (reason instanceof Error && reason.message) return reason.message;
-  if (typeof reason === "string" && reason.trim()) return reason;
-  if (reason && typeof reason === "object") {
-    const value = reason as Record<string, unknown>;
-    const message = [value.message, value.detail, value.error].find((item): item is string => typeof item === "string" && item.trim().length > 0);
-    const next = typeof value.next_action === "string" && value.next_action.trim() ? value.next_action : "";
-    if (message) return next ? `${message} 下一步：${next}` : message;
-    if (typeof value.code === "string" && value.code.trim()) return `操作失败（${value.code}），请稍后重试。`;
+  const value = reason && typeof reason === "object" ? reason as Record<string, unknown> : null;
+  const detail = value?.detail && typeof value.detail === "object" ? value.detail as Record<string, unknown> : null;
+  const code = [value?.code, detail?.code].find((item): item is string => typeof item === "string" && item.trim().length > 0);
+  const codeMessages: Record<string, string> = {
+    MEMORY_CANDIDATE_NOT_FOUND: "候选记忆不存在，请刷新后重试。",
+    MEMORY_REVIEW_CONFLICT: "候选记忆已变化，请刷新后重试。",
+    PROJECT_ACCESS_DENIED: "当前项目无权访问，请切换项目后重试。",
+  };
+  const rawMessage = reason instanceof Error ? reason.message : typeof reason === "string" ? reason : [value?.message, value?.detail, value?.error].find((item): item is string => typeof item === "string" && item.trim().length > 0);
+  const message = rawMessage && rawMessage.trim() !== "[object Object]" ? rawMessage : "";
+  if (message) {
+    const next = typeof value?.next_action === "string" && value.next_action.trim() ? value.next_action : "";
+    return next ? `${message} 下一步：${next}` : message;
   }
+  if (code) return codeMessages[code] ?? `操作失败（${code}），请检查本机服务状态后重试。`;
   return fallback;
 }
 
@@ -45,9 +51,13 @@ export function captureJobSummary(job: { status?: string | null; error_message?:
 }
 
 export function vectorSemanticLabel(memoryState?: string | null, embeddingAvailable?: boolean | null, vectorState?: string | null): string {
-  if (["healthy", "ready"].includes(String(memoryState)) && embeddingAvailable === false) return "记忆可用、语义向量待配置/降级";
-  if (["healthy", "ready"].includes(String(memoryState))) return "记忆可用";
-  if (["degraded", "unavailable", "configuration_required"].includes(String(vectorState))) return "语义向量待配置/降级";
+  const normalizedMemory = String(memoryState ?? "");
+  const normalizedVector = String(vectorState ?? "");
+  const vectorUnavailable = embeddingAvailable === false || ["disabled", "degraded", "unavailable", "configuration_required"].includes(normalizedVector);
+  if (["healthy", "ready"].includes(normalizedMemory) && vectorUnavailable) return "记忆可用、语义向量待配置/降级";
+  if (["healthy", "ready"].includes(normalizedMemory)) return "记忆可用";
+  if (["unavailable", "failed", "degraded", "configuration_required"].includes(normalizedMemory)) return vectorUnavailable ? "记忆不可用、语义向量待配置/降级" : "记忆不可用";
+  if (["disabled", "degraded", "unavailable", "configuration_required"].includes(normalizedVector)) return "语义向量待配置/降级";
   if (vectorState) return `向量状态：${vectorState}`;
   return "记忆状态尚未获得";
 }

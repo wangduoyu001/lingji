@@ -104,7 +104,7 @@ export default function VectorCenterPage({ api, active }: PageProps) {
   const visibleMissingIds = showAllMissing ? missingIds : missingIds.slice(0, DEFAULT_MISSING_LIMIT);
   const allPrimaryFailed = !memory && !vector && !coverage && Boolean(memoryError && vectorError && coverageError);
   const topState = allPrimaryFailed ? "unavailable" : stale ? "stale" : vector?.state ?? memory?.state ?? coverage?.state ?? "unavailable";
-  const semanticState = vectorSemanticLabel(memory?.state, embedding?.available);
+  const semanticState = vectorSemanticLabel(memory?.state, embedding?.available, vector?.state);
   const endpointErrors = useMemo(() => [
     memoryError && `Memory Status: ${memoryError}`, vectorError && `Vector Status: ${vectorError}`,
     coverageError && `Vector Coverage: ${coverageError}`, brainError && `Brain Status: ${brainError}`,

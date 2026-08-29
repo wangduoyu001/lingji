@@ -20,6 +20,7 @@ const scripts = [
   "polling-data-smoke.mjs",
   "auto-review-shadow-smoke.mjs",
   "settings-governance-smoke.mjs",
+  "task8e-contract-behavior-smoke.mjs",
 ];
 
 // Task6's rendered owner flow is the single maintained E2E surface. Keep it

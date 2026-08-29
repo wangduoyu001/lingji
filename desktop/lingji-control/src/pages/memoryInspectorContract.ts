@@ -57,7 +57,7 @@ export const mapStatus = (response: InspectorStatusResponse | Record<string, unk
   vectorSemanticLabel: vectorSemanticLabel(
     String((response as Record<string, Record<string, unknown>>)?.memory?.state ?? ""),
     ((response as Record<string, Record<string, unknown>>)?.vector?.embedding_available === false
-      || ["degraded", "unavailable", "configuration_required"].includes(String((response as Record<string, Record<string, unknown>>)?.vector?.state))) ? false : null,
+      || ["disabled", "degraded", "unavailable", "configuration_required"].includes(String((response as Record<string, Record<string, unknown>>)?.vector?.state))) ? false : null,
     String((response as Record<string, Record<string, unknown>>)?.vector?.state ?? "") || null,
   ),
   rebuildRequired: (response as Record<string, Record<string, unknown>>)?.vector?.rebuild_required ?? null,

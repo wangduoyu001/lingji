@@ -37,7 +37,7 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
       {resource.stale && <Notice kind="warning">工作事实暂时过期，正在自动重试。</Notice>}
 
       <div className="current-work-summary">
-        <div><span>当前项目</span><strong>{text(work?.source_id, "未绑定")}</strong></div>
+        <div><span>来源</span><strong>{text(work?.source_id, "未绑定")}</strong></div>
         <div><span>活动会话</span><strong>{fact?.events?.length ? "有活动记录" : "无活动会话"}</strong></div>
         <div><span>任务</span><strong>{text(work?.work_id)}</strong></div>
         <div><span>事件</span><strong>{String(fact?.events?.length ?? 0)}</strong></div>
