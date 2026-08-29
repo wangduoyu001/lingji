@@ -374,3 +374,17 @@ TDD 证据：真实形状 rendered fixture 先在旧 UI 上于当前工作空扫
 `4b2708a8f940fb4ef2a5e26832088486ec885134`。本报告与验收日志在独立
 文档提交中记录；主人最终观察仍需根代理完成，本报告不能单独宣布 Mac 发布版或 Phase 1
 通过。
+
+## 24. Final UI wording — 活动记录刷新动作
+
+活动记录页的工具栏动作原本只是调用 history resource refresh，却显示为“现在检查”，
+容易让主人误以为会重新扫描来源。本轮改为“刷新记录”，进行中显示“刷新中…”；来源卡片
+的“现在检查”没有改变。
+
+TDD rendered E2E 新增真实请求计数断言：活动页点击刷新不增加 scan 请求，来源页点击“现在
+检查”仍增加 scan 请求。`npm run test:e2e:memory`、`npm run test:smoke`（23 scripts）和
+`npm run build`（93 modules）均通过；未修改后端或 live/Acceptance/Production/Vault/
+主人数据。
+
+产品/测试提交为 `8a45aba623a069a4a6cb2124b33a1d1a74dea9eb`。主人最终观察仍需根代理在
+当前候选上完成，本报告不能单独宣布 Mac 发布版或 Phase 1 通过。

@@ -1,5 +1,15 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Final UI wording — 活动记录刷新动作
+
+- 活动记录页按钮只会重新读取履历，不会发起来源扫描；本轮将普通按钮从“现在检查”改为
+  “刷新记录”，进行中显示“刷新中…”。来源卡片的“现在检查”保持不变。
+- rendered E2E 通过 scan 请求计数验证：活动页点击不增加 scan 请求，来源页点击仍启动扫描；
+  23 项 Desktop smoke 与 build（93 modules）通过。后端、自动化、Activity 审计、live App
+  和用户数据未修改。
+- 产品/测试提交：`8a45aba623a069a4a6cb2124b33a1d1a74dea9eb`；报告沿用
+  `.superpowers/sdd/2026-08-29-task8e-owner-plain-ui/task-report.md`。
+
 ## 2026-08-29 · Task 8E · Real UI Live-shape Repair Round 3
 
 - 根代理在真实发布版抓到的 Claude 来源形状为 `claude_desktop + consent_required + 空路径`
