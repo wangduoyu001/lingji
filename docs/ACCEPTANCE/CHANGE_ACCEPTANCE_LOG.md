@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 3 implementation evidence
+
+- 产品/测试提交：`21ad4ae`；报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-3-report.md`。
+- 已实现四项普通菜单、低强调高级诊断、主人记忆卡片分页/来源钻取，以及 owner-confirmed 修正、失效、archive 生命周期；不新增数据库、队列、端口或 DELETE。
+- 合成验证：lifecycle/card/projector/API/review `25 passed, 1 warning`；rendered E2E PASS；23-script Desktop smoke PASS；Desktop build、compileall、diff-check PASS。未执行 live/App/Acceptance、Artifact、Production/Vault 或真实主人数据。
+- docs/evidence Commit 在报告提交时补录；acceptance sync 与 local handoff 仅在 docs 树更新后执行。
+
 ## 2026-08-29 · Task 3 planned owner UI and menu contract
 
 - 主人要求界面不仅可用，还必须简洁、好看且菜单逻辑科学。本轮普通菜单固定为四项并按
