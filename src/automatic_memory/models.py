@@ -37,5 +37,7 @@ class ScanRun:
     source_sentinel: str | None = None
     lease_id: str | None = None
     attempt: int = 0
-    queued: int = 0
-    reused: int = 0
+    queued: int | None = None
+    reused: int | None = None
+    counts_present: tuple[str, ...] = ()
+    updated_at: str | None = None

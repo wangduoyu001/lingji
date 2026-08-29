@@ -552,6 +552,63 @@ def test_scheduler_invokes_real_snapshot_runner_without_binding_source_to_crash_
     assert report.complete
     assert scheduler.status()[0].status == "completed"
     assert queue.count(source_type="automatic_memory_snapshot") == 1
+    persisted = db.get_automatic_memory_scan(report.scan_id or "")
+    assert persisted is not None
+    assert persisted["queued_count"] == 1
+    assert persisted["reused_count"] == 0
+
+
+def test_empty_snapshot_completion_persists_explicit_zero_counts(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+    snapshot = ConsistentSnapshot(registry, tmp_path / "raw")
+    queue = SQLiteExtractionQueue(tmp_path / "state.db")
+    runner = SnapshotJobRunner(
+        snapshot,
+        queue,
+        db,
+        path_provider=lambda scan, source: [],
+    )
+
+    scan = registry.start_scan(source_id)
+    completed = runner.run(scan.scan_id)
+
+    assert completed.status == "completed"
+    assert completed.queued == 0
+    assert completed.reused == 0
+    assert completed.counts_present == ("queued", "reused")
+    reopened = StateDatabase(tmp_path / "state.db")
+    row = reopened.get_automatic_memory_scan(scan.scan_id)
+    assert row is not None
+    assert row["queued_count"] == 0
+    assert row["reused_count"] == 0
+
+
+@pytest.mark.parametrize("crash_at", ["30%", "70%"])
+def test_paused_snapshot_keeps_measurement_counts_unknown(tmp_path: Path, crash_at: str):
+    db, registry, source_id = registered(tmp_path)
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+    first.write_text("first", encoding="utf-8")
+    second.write_text("second", encoding="utf-8")
+    snapshot = ConsistentSnapshot(registry, tmp_path / "raw")
+    queue = SQLiteExtractionQueue(tmp_path / "state.db")
+    runner = SnapshotJobRunner(
+        snapshot,
+        queue,
+        db,
+        path_provider=lambda scan, source: [first, second],
+    )
+
+    scan = registry.start_scan(source_id)
+    paused = runner.run(scan.scan_id, crash_at=crash_at)
+
+    assert paused.status == "paused"
+    assert paused.queued is None
+    assert paused.reused is None
+    row = db.get_automatic_memory_scan(scan.scan_id)
+    assert row is not None
+    assert row["queued_count"] is None
+    assert row["reused_count"] is None
 
 
 def test_scheduler_snapshot_runner_reacquires_paused_scan(tmp_path: Path):

@@ -153,6 +153,8 @@ class StateDatabase:
                     lease_heartbeat_at TEXT,
                     lease_expires_at TEXT,
                     attempt INTEGER NOT NULL DEFAULT 0,
+                    queued_count INTEGER,
+                    reused_count INTEGER,
                     updated_at TEXT NOT NULL
                 );
 
@@ -221,6 +223,8 @@ class StateDatabase:
                 ("scheduler_lease_owner", "TEXT"),
                 ("scheduler_lease_heartbeat_at", "TEXT"),
                 ("scheduler_lease_expires_at", "TEXT"),
+                ("queued_count", "INTEGER"),
+                ("reused_count", "INTEGER"),
             ):
                 if name not in columns:
                     connection.execute(
@@ -1017,7 +1021,10 @@ class StateDatabase:
         if source_id is not None:
             query += " WHERE source_id = ?"
             values = (str(source_id),)
-        query += " ORDER BY updated_at DESC, scan_id DESC"
+        # `updated_at` is a second-resolution legacy field.  Use insertion
+        # order as a deterministic tie-breaker so a newly paused/completed
+        # scan is still the latest row when two transitions share a second.
+        query += " ORDER BY updated_at DESC, rowid DESC"
         with self._connection() as connection:
             rows = connection.execute(query, values).fetchall()
         return [dict(row) for row in rows]
@@ -1141,7 +1148,7 @@ class StateDatabase:
                     """
                     SELECT * FROM automatic_memory_scans
                     WHERE source_id = ? AND status IN ('running', 'paused')
-                    ORDER BY updated_at DESC LIMIT 1
+                    ORDER BY updated_at DESC, rowid DESC LIMIT 1
                     """,
                     (source_id,),
                 ).fetchone()
@@ -1516,7 +1523,8 @@ class StateDatabase:
         return dict(row) if row is not None else None
 
     def complete_automatic_memory_scan_if_authorized(
-        self, scan_id: str, *, progress: int, total: int
+        self, scan_id: str, *, progress: int, total: int,
+        queued_count: int | None = None, reused_count: int | None = None,
     ) -> dict[str, Any] | None:
         """Complete only the scan that still owns an active authorization.
 
@@ -1529,7 +1537,8 @@ class StateDatabase:
             cursor = connection.execute(
                 """
                 UPDATE automatic_memory_scans
-                SET status = 'completed', progress = ?, total = ?, last_error = NULL,
+                SET status = 'completed', progress = ?, total = ?,
+                    queued_count = ?, reused_count = ?, last_error = NULL,
                     lease_id = NULL, lease_owner_pid = NULL, lease_owner_thread = NULL,
                     lease_owner_instance = NULL, lease_heartbeat_at = NULL,
                     lease_expires_at = NULL, scheduler_lease_id = NULL,
@@ -1546,7 +1555,7 @@ class StateDatabase:
                       AND (grants.expires_at IS NULL OR grants.expires_at > ?)
                   )
                 """,
-                (int(progress), int(total), now, scan_id, now),
+                (int(progress), int(total), queued_count, reused_count, now, scan_id, now),
             )
             if cursor.rowcount != 1:
                 return None
@@ -1640,6 +1649,8 @@ class StateDatabase:
             "recovery_token",
             "source_sentinel",
             "attempt",
+            "queued_count",
+            "reused_count",
             "updated_at",
         }
         changes = {key: value for key, value in values.items() if key in allowed}
@@ -1781,6 +1792,8 @@ class StateDatabase:
             "recovery_token",
             "source_sentinel",
             "attempt",
+            "queued_count",
+            "reused_count",
             "updated_at",
         }
         changes = {key: value for key, value in values.items() if key in allowed}
@@ -1828,7 +1841,10 @@ class StateDatabase:
         timestamp = values.get(
             "updated_at", datetime.now(timezone.utc).isoformat(timespec="microseconds")
         )
-        allowed = {"status", "cursor", "progress", "total", "last_error", "updated_at"}
+        allowed = {
+            "status", "cursor", "progress", "total", "last_error",
+            "queued_count", "reused_count", "updated_at",
+        }
         changes = {key: value for key, value in values.items() if key in allowed}
         changes["lease_id"] = None
         changes["lease_owner_pid"] = None

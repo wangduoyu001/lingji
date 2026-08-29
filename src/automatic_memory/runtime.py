@@ -537,18 +537,24 @@ class AutomaticMemoryRuntime:
             self.work_bridge.record_failure(work_id, stage="extraction", reason="一个或多个来源文件提取失败，其他来源仍可继续", retryable=False, evidence={"scan_id": scan_id, "failed_jobs": [item.get("job_id") for item in jobs if item.get("status") in {"failed", "cancelled"}]})
             self._scan_reports.pop(scan_id, None)
             return
-        queued = int(getattr(report, "queued", 0) or 0)
-        reused = int(getattr(report, "reused", 0) or 0)
+        queued_raw = getattr(report, "queued", None) if report is not None else None
+        reused_raw = getattr(report, "reused", None) if report is not None else None
+        queued = queued_raw if isinstance(queued_raw, int) and not isinstance(queued_raw, bool) else None
+        reused = reused_raw if isinstance(reused_raw, int) and not isinstance(reused_raw, bool) else None
+        queued_for_math = queued if queued is not None else 0
+        reused_for_math = reused if reused is not None else 0
         reported_total = getattr(report, "total", None) if report is not None else None
         if reported_total is None and report is not None:
             reported_total = getattr(report, "discovered", None)
         if reported_total is None:
-            total = queued + reused if report is not None else len(jobs)
+            total = queued_for_math + reused_for_math if report is not None else len(jobs)
         else:
             total = max(int(reported_total or 0), len(jobs))
-        if not jobs and reused == 0 and queued == 0 and report is None:
+        if not jobs and reused is None and queued is None and report is None:
             return
-        summary = f"扫描完成，已检查 {total} 个来源文件（新增 {queued}，复用 {reused}）"
+        queued_label = str(queued) if queued is not None else "尚未获得"
+        reused_label = str(reused) if reused is not None else "尚未获得"
+        summary = f"扫描完成，已检查 {total} 个来源文件（新增 {queued_label}，复用 {reused_label}）"
         self.work_bridge.complete_extraction(work_id, summary, evidence={"scan_id": scan_id, "jobs": len(jobs), "queued": queued, "reused": reused, "next_actor": "system"})
         self._scan_reports.pop(scan_id, None)
 

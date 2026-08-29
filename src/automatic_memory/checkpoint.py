@@ -5,7 +5,7 @@ import json
 import math
 import os
 import threading
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Literal
 from uuid import uuid4
@@ -464,6 +464,8 @@ class SnapshotJobRunner:
                 progress=total,
                 total=total,
                 last_error=None,
+                queued_count=queued_count,
+                reused_count=reused_count,
                 updated_at=self._updated_at(),
             )
             self._reconcile_snapshot_temporary_files(scan_id)
@@ -471,7 +473,7 @@ class SnapshotJobRunner:
             self._stop_heartbeat()
             return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
         final_row = self.state_db.get_automatic_memory_scan(scan_id) or finalized
-        return replace(self._scan(final_row), queued=queued_count, reused=reused_count)
+        return self._scan(final_row)
 
     def _pause(self, scan_id: str, token: ResumeToken) -> ScanRun:
         self._stop_heartbeat()
@@ -543,6 +545,25 @@ class SnapshotJobRunner:
             source_sentinel=row.get("source_sentinel"),
             lease_id=row.get("lease_id"),
             attempt=int(row.get("attempt") or 0),
+            queued=(
+                int(row["queued_count"])
+                if row.get("queued_count") is not None
+                else None
+            ),
+            reused=(
+                int(row["reused_count"])
+                if row.get("reused_count") is not None
+                else None
+            ),
+            counts_present=tuple(
+                key
+                for key, value in (
+                    ("queued", row.get("queued_count")),
+                    ("reused", row.get("reused_count")),
+                )
+                if value is not None
+            ),
+            updated_at=row.get("updated_at"),
         )
 
 

@@ -20,6 +20,24 @@ const allStateScans = [
   ["scanning", "running"], ["current", "completed"], ["failed", "failed"], ["paused", "paused"],
 ].map(([suffix, status]) => ({ scan_id: `scan-${suffix}`, source_id: `src-fixture_${suffix}`, status, progress: status === "completed" ? 1 : 0, total: 1, last_error: status === "failed" ? "fixture failure" : null }));
 const json = (res, status, body) => { res.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, X-LingJi-Token" }); res.end(JSON.stringify(body)); };
+const scanDto = (scan) => {
+  const dto = { ...scan };
+  if (state.detailCountMode === "legacy" || state.detailCountMode === "missing") {
+    dto.queued = null;
+    dto.reused = null;
+  } else if (state.detailCountMode === "explicit-zero") {
+    dto.queued = 0;
+    dto.reused = 0;
+  } else if (state.detailCountMode === "explicit-positive") {
+    dto.queued = 2;
+    dto.reused = 1;
+  }
+  const countsPresent = ["queued", "reused"].filter((key) => Number.isInteger(dto[key]));
+  dto.queued = countsPresent.includes("queued") ? dto.queued : null;
+  dto.reused = countsPresent.includes("reused") ? dto.reused : null;
+  dto.counts_present = countsPresent;
+  return dto;
+};
 const server = http.createServer((req, res) => {
   const path = new URL(req.url, "http://127.0.0.1").pathname;
   if (req.method === "OPTIONS") { res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, X-LingJi-Token", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" }); return res.end(); }
@@ -43,7 +61,7 @@ const server = http.createServer((req, res) => {
       return response();
     }
     if (path === "/api/automatic-memory/summary") {
-      const latest = state.allStates ? allStateScans[1] : state.scan ? { ...state.scan } : null;
+      const latest = state.allStates ? scanDto(allStateScans[1]) : state.scan ? scanDto(state.scan) : null;
       if (state.omitHomeCounts && latest) {
         delete latest.queued;
         delete latest.reused;
@@ -54,9 +72,9 @@ const server = http.createServer((req, res) => {
     }
     if (path === "/api/automatic-memory/runtime") return json(res, 200, { state: state.cleanupPending ? "degraded" : "running", running: true, paused: false, worker_state: true, authorized_watcher_count: 1, automation_mode: "periodic_reconciliation", event_watcher_enabled: false, next_reconciliation_seconds: 900, cleanup_pending: state.cleanupPending, cleanup_error: state.cleanupPending ? "cleanup_scan_failed" : null });
     if (path === "/api/automatic-memory/scans") {
-      if (state.allStates) return json(res, 200, allStateScans);
+      if (state.allStates) return json(res, 200, allStateScans.map(scanDto));
       if (state.scan?.status === "running" && state.completeNextRead) state.scan = { ...state.scan, status: "completed", progress: 1, total: 1, queued: 1, reused: 0, failed: 0, updated: 2, skipped: 3 };
-      return json(res, 200, state.scan ? [{ ...state.scan, updated_at: new Date().toISOString() }] : []);
+      return json(res, 200, state.scan ? [{ ...scanDto(state.scan), updated_at: new Date().toISOString() }] : []);
     }
     if (path === "/__test/complete") { state.completeNextRead = true; return json(res, 200, { ok: true }); }
     if (path === "/__test/all-states") { state.allStates = true; return json(res, 200, { ok: true }); }
@@ -69,15 +87,15 @@ const server = http.createServer((req, res) => {
     if (path === "/__test/outage") { state.outage = body.includes("true"); return json(res, 200, { ok: true, outage: state.outage }); }
     if (path === "/__test/cleanup-pending") { state.cleanupPending = body.includes("true"); return json(res, 200, { ok: true, cleanup_pending: state.cleanupPending }); }
     if (path === "/api/automatic-memory/authorize") { state.authorized = true; state.revoked = false; return json(res, 200, { source_id: "src-fixture", kind: "generic_ai_history", root: "/tmp/lingji-fixture", status: "authorized" }); }
-    if (path === "/api/automatic-memory/scan") { state.scanRequests += 1; state.scanReads = 0; state.scan = state.scanRequests === 2 ? { scan_id: "scan-fixture", source_id: "src-fixture", status: "failed", progress: 0, total: 1, last_error: "fixture failure" } : { scan_id: "scan-fixture", source_id: "src-fixture", status: "running", progress: 0, total: 1 }; return json(res, 200, state.scan); }
-    if (path === "/api/automatic-memory/retry") { state.scan = { scan_id: "scan-fixture", source_id: "src-fixture", status: "completed", progress: 1, total: 1, queued: 1, reused: 0, failed: 0, updated: 2, skipped: 3 }; return json(res, 200, state.scan); }
+    if (path === "/api/automatic-memory/scan") { state.scanRequests += 1; state.scanReads = 0; state.scan = state.scanRequests === 2 ? { scan_id: "scan-fixture", source_id: "src-fixture", status: "failed", progress: 0, total: 1, last_error: "fixture failure" } : { scan_id: "scan-fixture", source_id: "src-fixture", status: "running", progress: 0, total: 1 }; return json(res, 200, scanDto(state.scan)); }
+    if (path === "/api/automatic-memory/retry") { state.scan = { scan_id: "scan-fixture", source_id: "src-fixture", status: "completed", progress: 1, total: 1, queued: 1, reused: 0, failed: 0, updated: 2, skipped: 3 }; return json(res, 200, scanDto(state.scan)); }
     if (path.startsWith("/api/automatic-memory/scans/")) {
-      const detail = state.scan ? { ...state.scan } : { status: "unknown" };
+      const detail = state.scan ? scanDto(state.scan) : { status: "unknown" };
       const countFields = ["created", "queued", "reused", "updated", "skipped", "failed"];
-      if (state.detailCountMode === "legacy") Object.assign(detail, { queued: 0, reused: 0, updated: 0, skipped: 0, failed: 0 });
-      if (state.detailCountMode === "explicit-zero") Object.assign(detail, { queued: 0, reused: 0, updated: 0, skipped: 0, failed: 0, counts_present: countFields });
-      if (state.detailCountMode === "explicit-positive") Object.assign(detail, { queued: 2, reused: 1, updated: 3, skipped: 4, failed: 0, counts_present: countFields });
-      if (state.detailCountMode === "missing") for (const field of countFields) delete detail[field];
+      if (state.detailCountMode === "legacy") Object.assign(detail, { queued: null, reused: null, updated: 0, skipped: 0, failed: 0, counts_present: [] });
+      if (state.detailCountMode === "explicit-zero") Object.assign(detail, { queued: 0, reused: 0, updated: 0, skipped: 0, failed: 0, counts_present: ["queued", "reused"] });
+      if (state.detailCountMode === "explicit-positive") Object.assign(detail, { queued: 2, reused: 1, updated: 3, skipped: 4, failed: 0, counts_present: ["queued", "reused"] });
+      if (state.detailCountMode === "missing") { Object.assign(detail, { queued: null, reused: null, counts_present: [] }); for (const field of ["created", "updated", "skipped", "failed"]) delete detail[field]; }
       return json(res, 200, detail);
     }
     if (path === "/api/automatic-memory/revoke") { state.authorized = false; state.revoked = true; state.scan = null; return json(res, 200, { source_id: "src-fixture", status: "revoked" }); }
@@ -207,6 +225,12 @@ try {
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
   await page.waitForTimeout(100);
   assert.ok((await page.locator(".memory-detail-grid > div").filter({ hasText: "新增" }).innerText()).includes("新增\n0"), "explicit zero must remain visible");
+  const zeroSummary = await (await fetch(`http://127.0.0.1:${apiPort}/api/automatic-memory/summary`, { headers: { "X-LingJi-Token": "fixture-token" } })).json();
+  const zeroList = await (await fetch(`http://127.0.0.1:${apiPort}/api/automatic-memory/scans`, { headers: { "X-LingJi-Token": "fixture-token" } })).json();
+  assert.equal(zeroSummary.latest.queued, 0, "summary must preserve explicit zero");
+  assert.equal(zeroList[0].queued, 0, "list must preserve explicit zero");
+  assert.deepEqual(zeroSummary.latest.counts_present, ["queued", "reused"], "summary presence must match detail");
+  assert.deepEqual(zeroList[0].counts_present, ["queued", "reused"], "list presence must match detail");
   await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "explicit-positive" });
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
   await page.waitForTimeout(100);

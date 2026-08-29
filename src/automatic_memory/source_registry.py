@@ -274,10 +274,15 @@ class SourceRegistry:
         return self._scan(self.state_db.update_automatic_memory_scan(scan_id, **values))
 
     def complete_scan_if_authorized(
-        self, scan_id: str, *, progress: int, total: int
+        self, scan_id: str, *, progress: int, total: int,
+        queued_count: int | None = None, reused_count: int | None = None,
     ) -> ScanRun | None:
         row = self.state_db.complete_automatic_memory_scan_if_authorized(
-            scan_id, progress=progress, total=total
+            scan_id,
+            progress=progress,
+            total=total,
+            queued_count=queued_count,
+            reused_count=reused_count,
         )
         return self._scan(row) if row is not None else None
 
@@ -311,6 +316,12 @@ class SourceRegistry:
 
     @staticmethod
     def _scan(row: dict[str, Any]) -> ScanRun:
+        queued = row.get("queued_count")
+        reused = row.get("reused_count")
+        present = tuple(
+            key for key, value in (("queued", queued), ("reused", reused))
+            if value is not None
+        )
         return ScanRun(
             scan_id=row["scan_id"],
             source_id=row["source_id"],
@@ -323,4 +334,8 @@ class SourceRegistry:
             source_sentinel=row.get("source_sentinel"),
             lease_id=row.get("lease_id"),
             attempt=int(row.get("attempt") or 0),
+            queued=int(queued) if queued is not None else None,
+            reused=int(reused) if reused is not None else None,
+            counts_present=present,
+            updated_at=row.get("updated_at"),
         )

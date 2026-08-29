@@ -30,6 +30,10 @@ class ReconciliationReport:
     # reports while allowing callers to bind evidence to this exact scan.
     scan_id: str | None = None
     work_id: str | None = None
+    # A report produced by an actual completed scanner has measured counts;
+    # a ScanRun without persisted evidence must remain unmeasured even when
+    # internal arithmetic uses zero.
+    counts_measured: bool = True
 
 
 class AutomaticMemoryScheduler:
@@ -314,6 +318,25 @@ class AutomaticMemoryScheduler:
                 source_sentinel=row.get("source_sentinel"),
                 lease_id=row.get("lease_id"),
                 attempt=int(row.get("attempt") or 0),
+                queued=(
+                    int(row["queued_count"])
+                    if row.get("queued_count") is not None
+                    else None
+                ),
+                reused=(
+                    int(row["reused_count"])
+                    if row.get("reused_count") is not None
+                    else None
+                ),
+                counts_present=tuple(
+                    key
+                    for key, value in (
+                        ("queued", row.get("queued_count")),
+                        ("reused", row.get("reused_count")),
+                    )
+                    if value is not None
+                ),
+                updated_at=row.get("updated_at"),
             )
             for row in rows
         )
@@ -396,6 +419,8 @@ class AutomaticMemoryScheduler:
                         scan.scan_id,
                         progress=max(report.queued, report.discovered - report.unchanged),
                         total=report.discovered,
+                        queued_count=report.queued if report.counts_measured else None,
+                        reused_count=report.reused if report.counts_measured else None,
                     )
                 if finalized is None:
                     current = self.registry.get_scan(scan.scan_id)
@@ -661,6 +686,9 @@ class AutomaticMemoryScheduler:
                 else (),
                 complete,
                 int(result.reused or 0),
+                counts_measured=(
+                    result.queued is not None and result.reused is not None
+                ),
             )
         if result is None:
             raise TypeError("automatic-memory scan runner must return a report")

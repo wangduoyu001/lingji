@@ -360,3 +360,79 @@ def test_concurrent_start_scan_creates_one_active_scan(tmp_path: Path):
             (source.source_id,),
         ).fetchone()[0]
     assert active_count == 1
+
+
+def test_legacy_scan_schema_migrates_nullable_measurement_columns_without_zero_defaults(tmp_path: Path):
+    """Old scan rows retain unknown count evidence after additive migration."""
+    database_path = tmp_path / "legacy.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE automatic_memory_scans (
+                scan_id TEXT PRIMARY KEY,
+                source_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                cursor TEXT,
+                progress INTEGER NOT NULL DEFAULT 0,
+                total INTEGER,
+                last_error TEXT,
+                recovery_token TEXT,
+                source_sentinel TEXT,
+                lease_id TEXT,
+                lease_owner_pid INTEGER,
+                lease_owner_thread TEXT,
+                lease_owner_instance TEXT,
+                lease_heartbeat_at TEXT,
+                lease_expires_at TEXT,
+                attempt INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO automatic_memory_scans (scan_id, source_id, status, updated_at) VALUES (?, ?, ?, ?)",
+            ("legacy-scan", "src-legacy", "completed", "2026-08-29T00:00:00+00:00"),
+        )
+    state = StateDatabase(database_path)
+    columns = {
+        row[1]: row[4]
+        for row in sqlite3.connect(database_path).execute(
+            "PRAGMA table_info(automatic_memory_scans)"
+        )
+    }
+    assert columns["queued_count"] is None
+    assert columns["reused_count"] is None
+    persisted = state.get_automatic_memory_scan("legacy-scan")
+    assert persisted is not None
+    assert persisted["queued_count"] is None
+    assert persisted["reused_count"] is None
+
+
+def test_scan_model_persists_explicit_zero_and_keeps_unmeasured_counts_unknown(tmp_path: Path):
+    """Measured empty scans expose zero while failed/unmeasured scans stay NULL."""
+    root = tmp_path / "root"
+    root.mkdir()
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    registry = SourceRegistry(StateDatabase(tmp_path / "state.db"))
+    source = registry.register(
+        AuthorizationScope(
+            "grant-counts", ("chatgpt_export",), (str(root),), now, None, True
+        ),
+        "chatgpt_export",
+        str(root),
+    )
+    empty = registry.start_scan(source.source_id)
+    completed = registry.complete_scan_if_authorized(
+        empty.scan_id, progress=0, total=0, queued_count=0, reused_count=0
+    )
+    assert completed is not None
+    assert completed.queued == 0
+    assert completed.reused == 0
+    assert completed.counts_present == ("queued", "reused")
+
+    failed = registry.start_scan(source.source_id)
+    registry.fail_scan_if_running(failed.scan_id, last_error="not measured")
+    failed_view = registry.get_scan(failed.scan_id)
+    assert failed_view.queued is None
+    assert failed_view.reused is None
+    assert failed_view.counts_present == ()

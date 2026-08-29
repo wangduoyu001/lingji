@@ -9,6 +9,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.storage import StateDatabase
+from src.automatic_memory.models import AuthorizationScope
+from src.automatic_memory.source_registry import SourceRegistry
+from src.control.automatic_memory_api import project_scan_dto
 
 try:
     from src.control.api import create_control_app
@@ -174,3 +177,76 @@ def test_automatic_memory_discovery_scan_summary_and_runtime_actions_are_secured
         summary = client.get("/api/automatic-memory/summary", headers=headers)
         assert summary.status_code == 200
         assert summary.json()["total"] == 0
+
+
+def test_scan_list_summary_and_detail_share_nullable_count_evidence_shape(tmp_path: Path):
+    """Every scan endpoint must project the same persisted count evidence."""
+    root = tmp_path / "source"
+    root.mkdir()
+    settings = SimpleNamespace(storage_path=tmp_path / "storage")
+    settings.storage_path.mkdir()
+    control = LocalControlService.__new__(LocalControlService)
+    database_path = settings.storage_path / "lingji_state.db"
+    control.state_db = StateDatabase(database_path)
+    app = create_control_app(settings, service=control, token="local-secret")
+    headers = {"X-LingJi-Token": "local-secret"}
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    source = control.automatic_memory_registry.register(
+        AuthorizationScope(
+            "grant-api-counts", ("chatgpt_export",), (str(root),), now, None, True
+        ),
+        "chatgpt_export",
+        str(root),
+    )
+    scan = control.automatic_memory_registry.start_scan(source.source_id)
+    completed = control.automatic_memory_registry.complete_scan_if_authorized(
+        scan.scan_id, progress=0, total=0, queued_count=0, reused_count=0
+    )
+    assert completed is not None
+
+    with TestClient(app) as client:
+        listed = client.get("/api/automatic-memory/scans", headers=headers)
+        summary = client.get("/api/automatic-memory/summary", headers=headers)
+        detail = client.get(
+            f"/api/automatic-memory/scans/{scan.scan_id}", headers=headers
+        )
+    assert listed.status_code == summary.status_code == detail.status_code == 200
+    list_item = listed.json()[0]
+    summary_item = summary.json()["latest"]
+    detail_item = detail.json()
+    for payload in (list_item, summary_item, detail_item):
+        assert payload["queued"] == 0
+        assert payload["reused"] == 0
+        assert payload["counts_present"] == ["queued", "reused"]
+    assert list_item["updated_at"] == summary_item["updated_at"] == detail_item["updated_at"]
+
+    unmeasured = control.automatic_memory_registry.start_scan(source.source_id)
+    with TestClient(app) as client:
+        paused = client.post(
+            "/api/automatic-memory/pause",
+            headers=headers,
+            json={"scan_id": unmeasured.scan_id},
+        )
+        listed = client.get("/api/automatic-memory/scans", headers=headers)
+        summary = client.get("/api/automatic-memory/summary", headers=headers)
+        detail = client.get(
+            f"/api/automatic-memory/scans/{unmeasured.scan_id}", headers=headers
+        )
+    assert paused.status_code == 200
+    listed_by_id = {item["scan_id"]: item for item in listed.json()}
+    assert unmeasured.scan_id in listed_by_id
+    assert summary.json()["latest"]["scan_id"] == unmeasured.scan_id
+    for payload in (paused.json(), listed_by_id[unmeasured.scan_id], summary.json()["latest"], detail.json()):
+        assert payload["queued"] is None
+        assert payload["reused"] is None
+        assert payload["counts_present"] == []
+
+
+def test_scan_projector_does_not_promote_legacy_zero_without_presence_marker():
+    """Compatibility rows with model-default zero remain unmeasured."""
+    projected = project_scan_dto(
+        {"scan_id": "legacy", "queued": 0, "reused": 0, "status": "completed"}
+    )
+    assert projected["queued"] is None
+    assert projected["reused"] is None
+    assert projected["counts_present"] == []

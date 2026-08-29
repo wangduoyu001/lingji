@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import math
+from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -36,11 +37,55 @@ class AutomaticMemoryRuntimeActionRequest(BaseModel):
     confirmation: bool = True
 
 
+_SCAN_DTO_FIELDS = (
+    "scan_id", "source_id", "work_id", "status", "cursor", "progress", "total",
+    "last_error", "recovery_token", "source_sentinel", "lease_id",
+    "lease_owner_pid", "lease_owner_thread", "lease_owner_instance",
+    "lease_heartbeat_at", "lease_expires_at", "attempt",
+    "scheduler_lease_id", "scheduler_lease_owner",
+    "scheduler_lease_heartbeat_at", "scheduler_lease_expires_at", "updated_at",
+    "queued", "reused", "counts_present",
+)
+
+
+def project_scan_dto(scan: Any) -> dict[str, Any]:
+    """Project every scan response from the same nullable evidence contract."""
+    payload = asdict(scan) if is_dataclass(scan) else dict(scan)
+    presence_was_declared = "counts_present" in payload
+    declared = set(payload.get("counts_present") or ())
+
+    def normalize_count(name: str) -> int | None:
+        value = payload.get(name)
+        persisted_name = f"{name}_count"
+        if value is None and persisted_name in payload:
+            value = payload.get(persisted_name)
+        if not isinstance(value, int) or isinstance(value, bool):
+            return None
+        # Older model/dict callers used zero as a default.  Only accept that
+        # value when the current DTO declares presence or the persisted
+        # nullable column itself supplied it.
+        if value == 0 and presence_was_declared and name not in declared:
+            return None
+        if value == 0 and not presence_was_declared and persisted_name not in payload:
+            return None
+        return value
+
+    queued = normalize_count("queued")
+    reused = normalize_count("reused")
+    result = {key: payload.get(key) for key in _SCAN_DTO_FIELDS}
+    result["queued"] = queued
+    result["reused"] = reused
+    result["counts_present"] = [
+        key for key, value in (("queued", queued), ("reused", reused))
+        if value is not None
+    ]
+    return result
+
+
 def register_automatic_memory_routes(
     app: Any, control: Any, secured: list[Any]
 ) -> None:
     """Expose source metadata and scan controls through the existing 8766 auth."""
-    from dataclasses import asdict, is_dataclass
     from fastapi import HTTPException
 
     registry: SourceRegistry | None = getattr(control, "automatic_memory_registry", None)
@@ -90,23 +135,33 @@ def register_automatic_memory_routes(
         if runtime is None:
             raise HTTPException(status_code=409, detail="automatic-memory runtime is not composed")
         result = call(lambda: runtime.scan_now(request.source_id))
-        return asdict(result) if is_dataclass(result) else dict(result)
+        if isinstance(result, dict) and result.get("scan_id"):
+            # scan_now returns a reconciliation report; the durable scan row
+            # is the sole count-evidence authority for action responses.
+            try:
+                return project_scan_dto(registry.get_scan(str(result["scan_id"])))
+            except LookupError:
+                # Lightweight control doubles may return a report identity
+                # without owning the registry row; preserve that compatibility
+                # while real runtimes always take the durable branch above.
+                return project_scan_dto(result)
+        return project_scan_dto(result)
 
     @app.post("/api/automatic-memory/pause", dependencies=secured)
     def pause_scan(request: AutomaticMemoryScanActionRequest) -> dict[str, Any]:
         result = call(lambda: registry.pause_scan(request.scan_id))
-        return asdict(result)
+        return project_scan_dto(result)
 
     @app.post("/api/automatic-memory/retry", dependencies=secured)
     def retry_scan(request: AutomaticMemoryScanActionRequest) -> dict[str, Any]:
         result = call(lambda: registry.retry_scan(request.scan_id))
-        return asdict(result)
+        return project_scan_dto(result)
 
     @app.post("/api/automatic-memory/resume", dependencies=secured)
     def resume_scan(request: AutomaticMemoryScanActionRequest) -> dict[str, Any]:
         # Resume is the durable retry transition for a paused scan.
         result = call(lambda: registry.retry_scan(request.scan_id))
-        return asdict(result)
+        return project_scan_dto(result)
 
     @app.get("/api/automatic-memory/sources", dependencies=secured)
     def list_sources() -> list[dict[str, Any]]:
@@ -119,7 +174,10 @@ def register_automatic_memory_routes(
 
     @app.get("/api/automatic-memory/scans", dependencies=secured)
     def list_scans(limit: int = 50) -> list[dict[str, Any]]:
-        return [dict(item) for item in registry.state_db.list_automatic_memory_scans()[: min(max(int(limit), 1), 200)]]
+        return [
+            project_scan_dto(item)
+            for item in registry.state_db.list_automatic_memory_scans()[: min(max(int(limit), 1), 200)]
+        ]
 
     @app.get("/api/automatic-memory/summary", dependencies=secured)
     def scan_summary() -> dict[str, Any]:
@@ -128,7 +186,7 @@ def register_automatic_memory_routes(
         for scan in scans:
             status = str(scan.get("status") or "unknown")
             counts[status] = counts.get(status, 0) + 1
-        latest = scans[0] if scans else None
+        latest = project_scan_dto(scans[0]) if scans else None
         runtime = getattr(control, "runtime", None)
         scheduler = getattr(runtime, "scheduler", None)
         periodic = getattr(scheduler, "automation_mode", None) == "periodic_reconciliation"
@@ -148,7 +206,7 @@ def register_automatic_memory_routes(
         return {
             "counts": counts,
             "total": len(scans),
-            "latest": dict(latest) if latest else None,
+            "latest": latest,
             "progress": {
                 "current": int((latest or {}).get("progress") or 0),
                 "total": (latest or {}).get("total"),
@@ -206,4 +264,4 @@ def register_automatic_memory_routes(
     @app.get("/api/automatic-memory/scans/{scan_id}", dependencies=secured)
     def get_scan(scan_id: str) -> dict[str, Any]:
         result = call(lambda: registry.get_scan(scan_id))
-        return asdict(result)
+        return project_scan_dto(result)
