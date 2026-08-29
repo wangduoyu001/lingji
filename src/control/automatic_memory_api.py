@@ -188,7 +188,26 @@ def register_automatic_memory_routes(
     @app.get("/api/automatic-memory/discovered", dependencies=secured)
     def discovered_sources() -> list[dict[str, Any]]:
         settings = getattr(control, "settings", control)
-        return [asdict(item) for item in discover_source_metadata(settings)]
+        result: list[dict[str, Any]] = []
+        for item in discover_source_metadata(settings):
+            payload = asdict(item)
+            # Keep owner actions explicit and machine-readable.  The API does
+            # not authorize anything here; the POST route remains the sole
+            # authorization boundary.
+            if item.kind == "codex_rollout":
+                payload["owner_action"] = {
+                    "kind": "authorize",
+                    "label": "允许接管 Codex",
+                    "source_kind": "codex_rollout",
+                }
+            elif item.kind == "chatgpt_export":
+                payload["owner_action"] = {
+                    "kind": "select_official_export",
+                    "label": "选择官方导出目录",
+                    "source_kind": "chatgpt_export",
+                }
+            result.append(payload)
+        return result
 
     @app.get("/api/automatic-memory/scans", dependencies=secured)
     def list_scans(limit: int = 50) -> list[dict[str, Any]]:

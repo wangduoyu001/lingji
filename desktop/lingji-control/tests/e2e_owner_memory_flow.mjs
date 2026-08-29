@@ -11,7 +11,7 @@ const allStateDiscovered = [
 ].map(([suffix, status]) => ({ kind: `fixture_${suffix}`, display_name: `测试${suffix}`, candidate_root: `/tmp/${suffix}`, status, capability: "metadata_discovery", reason: status === "unsupported" ? "不读取不透明存储" : null }));
 allStateDiscovered.push({ kind: "obsidian", display_name: "Managed Obsidian memory", candidate_root: "/tmp/vault", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "claude_desktop", display_name: "Claude Desktop", candidate_root: "", status: "unsupported", capability: "metadata_discovery", reason: "Claude Desktop has no approved official export schema; opaque storage is not read" });
-allStateDiscovered.push({ kind: "codex", display_name: "Codex transcript", candidate_root: "/tmp/codex", status: "available", capability: "metadata_discovery", reason: null });
+allStateDiscovered.push({ kind: "codex_rollout", display_name: "Codex聊天记录", candidate_root: "/tmp/codex", status: "available", file_count: 2, capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "chatgpt_export", display_name: "ChatGPT official export", candidate_root: "/tmp/chatgpt", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "generic", display_name: "Generic AI History Inbox", candidate_root: "/tmp/generic", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "mystery_kind", display_name: "Raw Internal Kind", candidate_root: "/tmp/mystery", status: "available", capability: "metadata_discovery", reason: null });
@@ -351,7 +351,7 @@ try {
   await page.locator('[data-source-kind="obsidian"]').getByText("Obsidian 长期记忆区", { exact: true }).waitFor();
   await page.locator('[data-source-kind="obsidian"]').getByText("你选择的目录", { exact: false }).waitFor();
   assert.equal(await page.locator('[data-source-kind="obsidian"]').getByText("vault", { exact: true }).count(), 0, "ordinary source card must not expose the root leaf");
-  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂不支持自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
   assert.equal(await page.locator('[data-source-kind="claude_desktop"]').getByRole("button", { name: /开始记忆|选择文件夹/ }).count(), 0, "unsupported Claude must not offer an authorization action");
   await page.locator('[data-source-kind="codex"]').getByText("Codex聊天记录", { exact: true }).waitFor();
   await page.locator('[data-source-kind="chatgpt_export"]').getByText("ChatGPT导出记录", { exact: true }).waitFor();
@@ -387,15 +387,15 @@ try {
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.getByText("暂时没有可连接的记录来源。", { exact: true }).waitFor();
   await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
-  await page.locator('[data-source-kind="claude_desktop"]').getByText("请等待 Claude 提供受支持的官方导出，或暂不接入。", { exact: false }).waitFor();
+  assert.equal(await page.locator('[data-source-kind="claude_desktop"] .memory-source-next').count(), 0, "unsupported Claude must not render a next-step heading");
   assert.equal(await page.getByText("Claude Desktop has no approved official export schema; opaque storage is not read", { exact: true }).count(), 0, "Claude raw reason must stay out of ordinary source copy");
   await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "claude-consent" });
   await page.waitForTimeout(300);
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.getByText("暂时没有可连接的记录来源。", { exact: true }).waitFor();
   await page.locator('[data-source-kind="claude_desktop"]').getByRole("heading", { name: "需要确认", exact: true }).waitFor();
-  await page.locator('[data-source-kind="claude_desktop"]').getByText("请等待 Claude 提供受支持的官方导出，或暂不接入。", { exact: false }).waitFor();
-  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
+  assert.equal(await page.locator('[data-source-kind="claude_desktop"] .memory-source-next').count(), 0, "consent-required Claude must not render a next-step heading");
+  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂不支持自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
   assert.equal(await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude Desktop has no approved official export schema; opaque storage is not read", { exact: true }).count(), 0, "consent-required Claude raw reason must stay out of ordinary source copy");
   assert.equal(await page.locator('[data-source-kind="claude_desktop"]').getByRole("button", { name: /开始记忆|选择文件夹/ }).count(), 0, "consent-required Claude must not offer authorization without an approved path");
   await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "empty" });

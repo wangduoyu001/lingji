@@ -69,6 +69,13 @@ function latestScansBySource(scans: ScanRun[]): Map<string, ScanRun> {
 }
 
 function describe(discovered: DiscoveredSource, state: SourceState, scan?: ScanRun): { detail: string; nextAction: string } {
+  if (state === "detected" && discovered.kind === "codex_rollout") {
+    const count = typeof discovered.file_count === "number" ? discovered.file_count : null;
+    return {
+      detail: count === null ? "已发现 Codex 本机记录目录。" : `发现 ${count} 个本机对话文件。灵机尚未读取对话正文。`,
+      nextAction: "允许接管 Codex。",
+    };
+  }
   if (state === "current") return { detail: `已接管「${rootName(discovered.candidate_root)}」，最近一次扫描已完成。`, nextAction: "可查看本次扫描结果。" };
   if (state === "scanning") {
     const progress = scan?.progress != null && scan?.total != null ? `（${scan.progress}/${scan.total}）` : "";
@@ -82,11 +89,11 @@ function describe(discovered: DiscoveredSource, state: SourceState, scan?: ScanR
     return { detail: expired ? "授权已过期，需要重新授权。" : "来源或运行时需要检查，灵机会保留最近一次已知状态。", nextAction: expired ? "重新授权这个来源。" : "需要重启/检查后再试。" };
   }
   if (state === "unsupported") {
-    if (discovered.kind === "claude_desktop") return { detail: "Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", nextAction: "请等待 Claude 提供受支持的官方导出，或暂不接入。" };
+    if (discovered.kind === "claude_desktop") return { detail: "Claude 暂不支持自动导入旧记录；灵机不会读取它的内部数据库。", nextAction: "暂不支持 · 目前没有可执行操作" };
     return { detail: discovered.reason || "当前没有可用的官方导出方式，灵机不会读取不透明存储。", nextAction: "请使用官方导出，或暂不接入。" };
   }
   if (state === "consent_required") {
-    if (discovered.kind === "claude_desktop") return { detail: "Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", nextAction: "请等待 Claude 提供受支持的官方导出，或暂不接入。" };
+    if (discovered.kind === "claude_desktop") return { detail: "Claude 暂不支持自动导入旧记录；灵机不会读取它的内部数据库。", nextAction: "暂不支持 · 目前没有可执行操作" };
     return { detail: discovered.reason || "这个来源需要主人明确确认后才能继续。", nextAction: "确认允许的来源目录后再授权。" };
   }
   if (state === "authorized") return { detail: `已授权「${rootName(discovered.candidate_root)}」，尚未完成首轮扫描。`, nextAction: "立即扫描以完成接管。" };

@@ -151,13 +151,14 @@ class AdapterRegistry:
             "codex",
             "codex_history",
             "codex_transcript",
+            "codex_rollout",
             "generic_ai_history",
             "history_inbox",
             "claude_desktop",
         }
     )
     _APPROVED_TASK3_ADAPTERS = frozenset(
-        {"chatgpt_export", "codex_transcript", "generic_ai_history", "claude_desktop"}
+        {"chatgpt_export", "codex_transcript", "codex_rollout", "generic_ai_history", "claude_desktop"}
     )
 
     def __init__(self):

@@ -180,9 +180,9 @@ function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }
   return <article className={`memory-source-card memory-source-${stateTone[source.state]}`} data-source-kind={source.kind}>
     <div className="memory-source-card-header"><div><span className="memory-source-kind">{source.display_name}</span><h3>{sourceStateLabel(source.state)}</h3></div><span className={`pill ${stateTone[source.state]}`}>{sourceStateLabel(source.state)}</span></div>
     <p className="memory-source-detail">{source.detail}</p>
-    <p className="memory-source-next">下一步：{source.nextAction}</p>
+    {source.state !== "unsupported" && !(source.kind === "claude_desktop" && source.nextAction.startsWith("暂不支持")) && <p className="memory-source-next">下一步：{source.nextAction}</p>}
     <div className="memory-source-actions">
-      {canAuthorize && <button className="button primary" disabled={Boolean(busy)} onClick={onAuthorize}>{busy?.startsWith("authorize:") ? "准备中…" : isPickerSource(source) ? "选择文件夹并开始记忆" : "开始记忆"}</button>}
+      {canAuthorize && <button className="button primary" disabled={Boolean(busy)} onClick={onAuthorize}>{busy?.startsWith("authorize:") ? "准备中…" : source.kind === "codex_rollout" ? "允许接管 Codex" : source.kind === "chatgpt_export" ? "选择官方导出目录" : isPickerSource(source) ? "选择文件夹并开始记忆" : "开始记忆"}</button>}
       {canRevoke && <button className="button danger" disabled={Boolean(busy)} onClick={() => void invoke("revoke", () => sourceApi.revoke(source.source_id!), (next) => next.sources.some((item) => item.source_id === source.source_id && item.state === "revoked"), "已停止记忆这个来源。")}>停止记忆</button>}
       {canScan && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("scan", () => sourceApi.scan(source.source_id!), (next) => actionEvidence(next, source.source_id!, "scan"))}>现在检查</button>}
       {canPause && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("pause", () => sourceApi.pause(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "pause"))}>暂停检查</button>}

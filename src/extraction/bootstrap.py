@@ -8,7 +8,7 @@ from src.storage import StateDatabase
 
 from .adapters.chatgpt import ChatGPTExportAdapter
 from .adapters.claude_desktop import ClaudeDesktopAdapter
-from .adapters.codex import CodexTranscriptAdapter, CodexWorkReportAdapter
+from .adapters.codex import CodexRolloutAdapter, CodexTranscriptAdapter, CodexWorkReportAdapter
 from .adapters.codex_session import CodexSessionAdapter
 from .adapters.generic_ai_history import GenericAIHistoryAdapter
 from .adapters.media import MediaExtractionAdapter
@@ -43,6 +43,7 @@ def build_extraction_pipeline(
     registry.register(ChatGPTExportAdapter())
     registry.register(ClaudeDesktopAdapter())
     registry.register(CodexTranscriptAdapter())
+    registry.register(CodexRolloutAdapter())
     registry.register(CodexWorkReportAdapter(), structured_fallback=True)
     registry.register(CodexSessionAdapter())
     registry.register(GenericAIHistoryAdapter())

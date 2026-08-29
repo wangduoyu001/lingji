@@ -17,6 +17,7 @@ _SENSITIVE_SUFFIXES = {".db", ".sqlite", ".sqlite3"}
 _EXTENSIONS = {
     "chatgpt_export": {".json", ".zip"}, "codex_transcript": {".jsonl"}, "codex": {".jsonl"}, "codex_history": {".jsonl"},
     "generic_ai_history": {".json", ".jsonl", ".md", ".markdown"}, "history_inbox": {".json", ".jsonl", ".md", ".markdown"},
+    "codex_rollout": {".jsonl"},
 }
 
 
@@ -58,6 +59,11 @@ def enumerate_authorized_files(source: SourceRecord) -> tuple[Path, ...]:
     root = _reject_root(Path(source.root))
     if _sensitive(root):
         raise PermissionError("unsafe credential/auth/private database source root")
+    if source.kind == "codex_rollout":
+        # Only the two discovered Codex roots are admissible; an arbitrary
+        # directory must never become a transcript import root.
+        if root.name not in {"sessions", "archived_sessions"} or root.parent.name != ".codex":
+            raise PermissionError("Codex rollout root must be .codex/sessions or .codex/archived_sessions")
     if not root.is_dir() or source.kind == "claude_desktop":
         return ()
     if source.kind == "obsidian":
@@ -75,6 +81,8 @@ def enumerate_authorized_files(source: SourceRecord) -> tuple[Path, ...]:
         for name in names:
             candidate = current_path / name
             if candidate.is_symlink() or not candidate.is_file() or _sensitive(candidate):
+                continue
+            if source.kind == "codex_rollout" and not name.startswith("rollout-"):
                 continue
             if candidate.suffix.casefold() in extensions:
                 files.append(candidate)

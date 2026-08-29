@@ -19,6 +19,12 @@ export type DiscoveredSource = {
   status: string;
   capability?: string | null;
   reason?: string | null;
+  file_count?: number | null;
+  byte_count?: number | null;
+  earliest_mtime?: number | null;
+  latest_mtime?: number | null;
+  format?: string | null;
+  owner_action?: { kind?: string; label?: string; source_kind?: string } | null;
 };
 
 export type AuthorizedSource = {

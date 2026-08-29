@@ -642,3 +642,213 @@ class CodexTranscriptAdapter(ExtractionAdapter):
     @staticmethod
     def _hash(value: str) -> str:
         return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+class CodexRolloutAdapter(CodexTranscriptAdapter):
+    """Bounded streaming reader for the local Codex rollout JSONL format.
+
+    Rollouts are an implementation detail of Codex, so this adapter accepts a
+    deliberately small, explicit subset.  Unknown records are ignored and an
+    unknown/missing session identity is rejected rather than guessed.
+    """
+
+    name = "codex_rollout"
+    version = "1.0.0"
+    source_types = ("codex_rollout",)
+    SCHEMA = "codex_rollout"
+    SCHEMA_VERSION = "1"
+    MAX_INPUT_BYTES = 256 * 1024 * 1024
+    MAX_RECORD_BYTES = 1024 * 1024
+
+    def can_handle(self, source_type, input_path, payload):
+        del payload
+        return source_type in self.source_types and bool(input_path and self.detect_schema(input_path).supported)
+
+    def detect_schema(self, path: Path) -> SchemaDetection:
+        try:
+            self._canonical_input_path(path)
+            if path.stat().st_size > self.MAX_INPUT_BYTES:
+                raise ValueError("Codex rollout exceeds size limit")
+            session_id = None
+            has_message = False
+            for row in self._iter_rows(path):
+                declared_schema = row.get("schema") or row.get("schema_name")
+                declared_version = row.get("schema_version") or row.get("version")
+                if declared_schema and str(declared_schema) not in {self.SCHEMA, "codex"}:
+                    return SchemaDetection(str(declared_schema), str(declared_version or "") or None, False, "unknown Codex rollout schema; no guessing")
+                if declared_version and str(declared_version) != self.SCHEMA_VERSION:
+                    return SchemaDetection(str(declared_schema or self.SCHEMA), str(declared_version), False, "unknown Codex rollout schema version; no guessing")
+                if row.get("type") == "session_meta":
+                    session_id = self._session_id(row) or session_id
+                if self._message(row):
+                    has_message = True
+            if not session_id:
+                return SchemaDetection(None, None, False, "Codex rollout session_meta identity is missing")
+            if not has_message:
+                return SchemaDetection(self.SCHEMA, self.SCHEMA_VERSION, False, "Codex rollout contains no supported messages")
+        except (OSError, UnicodeError, ValueError) as exc:
+            return SchemaDetection(None, None, False, str(exc))
+        return SchemaDetection(self.SCHEMA, self.SCHEMA_VERSION, True, "supported Codex rollout schema v1")
+
+    def extract(self, request: ExtractionRequest) -> ExtractionBatch:
+        if not request.input_path:
+            raise ValueError("Codex rollout path is required")
+        detection = self.detect_schema(request.input_path)
+        if not detection.supported:
+            raise ValueError(f"unsupported Codex rollout: {detection.reason}")
+        # Automatic-memory snapshots have already passed the SourceRegistry
+        # allowlist and snapshot stat-before/stat-after boundary. Direct
+        # adapter calls still require an explicit authorization root.
+        canonical = (
+            self._canonical_input_path(request.input_path)
+            if request.options.get("automatic_memory") and not any(
+                request.options.get(key) for key in ("authorized_roots", "authorization_roots", "allowed_roots", "roots")
+            )
+            else self._validate_authorized_input(request.input_path, request.options)
+        )
+        session_id = ""
+        messages: list[dict[str, str]] = []
+        warnings: list[str] = []
+        for line_number, row in self._iter_rows(canonical, include_line_number=True):
+            if row.get("type") == "session_meta":
+                session_id = self._session_id(row) or session_id
+            message = self._message(row)
+            if message is None:
+                continue
+            message["line"] = str(line_number)
+            messages.append(message)
+        if not session_id or not messages:
+            raise ValueError("unsupported Codex rollout: complete session identity and messages are required")
+
+        unique: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for item in messages:
+            identity = item["item_id"] or self._hash("|".join(item[key] for key in ("role", "content", "timestamp")))
+            content_identity = self._hash("|".join(item[key] for key in ("role", "content", "timestamp")))
+            if identity in seen or content_identity in seen:
+                continue
+            seen.update((identity, content_identity))
+            item["item_id"] = identity
+            unique.append(item)
+        source_scope = self._hash(str(canonical))[:24].upper()
+        raw_reference = f"raw:codex_rollout/{canonical.name}"
+        automatic_source_id = str(request.payload.get("source_id") or "").strip() if request.options.get("automatic_memory") else ""
+        provenance = {"automatic_memory_source_id": automatic_source_id} if automatic_source_id else {}
+        structured_messages = tuple(
+            StructuredMessage(
+                external_id=f"codex-rollout:message:{session_id}:{item['item_id']}",
+                role=item["role"],
+                content=item["content"],
+                sequence=index,
+                author="owner" if item["role"] == "user" else "codex",
+                occurred_at=item["timestamp"],
+                agent_scope=("codex",),
+                raw_reference=raw_reference,
+                metadata={
+                    "conversation_id": session_id,
+                    "message_id": item["item_id"],
+                    "content_hash": self._hash(item["content"]),
+                    "source_scope": source_scope,
+                    "schema": self.SCHEMA,
+                    "schema_version": self.SCHEMA_VERSION,
+                },
+            )
+            for index, item in enumerate(unique)
+        )
+        conversation = StructuredConversation(
+            external_id=f"codex-rollout:conversation:{session_id}",
+            title=f"Codex · {unique[0]['content'][:60]}",
+            messages=structured_messages,
+            started_at=unique[0]["timestamp"],
+            ended_at=unique[-1]["timestamp"],
+            participants=("owner", "codex"),
+            agent_scope=("codex",),
+            metadata={"session_id": session_id, "raw_reference": raw_reference, "message_count": len(unique), **provenance},
+        )
+        source = StructuredSource(
+            source_type="codex_rollout",
+            external_id=f"codex-rollout:{automatic_source_id}" if automatic_source_id else "codex-rollout-source",
+            display_name="Codex聊天记录",
+            conversations=(conversation,),
+            agent_scope=("codex",),
+            metadata={"adapter_name": self.name, "adapter_version": self.version, "schema": self.SCHEMA, "schema_version": self.SCHEMA_VERSION, "source_scope": source_scope, **provenance},
+        )
+        return ExtractionBatch(
+            documents=(),
+            structured_sources=(source,),
+            warnings=tuple(warnings),
+            summary={"conversations_found": 1, "messages": len(unique), "messages_skipped": len(messages) - len(unique), "session_id": session_id},
+        )
+
+    @classmethod
+    def _iter_rows(cls, path: Path, include_line_number: bool = False):
+        with path.open("r", encoding="utf-8-sig", errors="strict") as handle:
+            for line_number, line in enumerate(handle, 1):
+                if not line.strip():
+                    continue
+                if len(line.encode("utf-8")) > cls.MAX_RECORD_BYTES:
+                    raise ValueError("Codex rollout record exceeds bounded size")
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    # A final partial line is expected while Codex is writing;
+                    # preserving complete preceding records is fail-closed.
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                yield (line_number, row) if include_line_number else row
+
+    @staticmethod
+    def _session_id(row: Mapping[str, Any]) -> str:
+        payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
+        value = payload.get("id") or payload.get("session_id") or row.get("session_id") or row.get("id")
+        return str(value).strip() if value is not None else ""
+
+    @classmethod
+    def _message(cls, row: Mapping[str, Any]) -> dict[str, str] | None:
+        kind = str(row.get("type") or "").casefold()
+        payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
+        payload_kind = str(payload.get("type") or "").casefold()
+        candidate = payload.get("item") if isinstance(payload.get("item"), Mapping) else payload
+        role = str(candidate.get("role") or "").casefold()
+        if kind == "event_msg" and payload_kind in {"user_message", "assistant_message", "message"}:
+            role = "user" if payload_kind == "user_message" else ("assistant" if payload_kind == "assistant_message" else role)
+        elif kind == "response_item" and payload_kind in {"user_message", "assistant_message"}:
+            role = "user" if payload_kind == "user_message" else "assistant"
+        elif kind == "response_item" and payload_kind != "message" and role not in {"user", "assistant"}:
+            return None
+        elif kind not in {"event_msg", "response_item", "user_message", "assistant_message", "message"}:
+            return None
+        if role not in {"user", "assistant"}:
+            return None
+        content = cls._message_text(candidate)
+        if not content:
+            return None
+        timestamp = row.get("timestamp") or row.get("occurred_at") or payload.get("timestamp") or candidate.get("timestamp")
+        try:
+            if isinstance(timestamp, (int, float)):
+                parsed = datetime.fromtimestamp(float(timestamp), tz=timezone.utc)
+            else:
+                parsed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+            if parsed.tzinfo is None or parsed.utcoffset() is None:
+                return None
+            normalized_time = parsed.astimezone(timezone.utc).isoformat(timespec="seconds")
+        except (TypeError, ValueError):
+            return None
+        item_id = str(row.get("id") or row.get("event_id") or row.get("item_id") or candidate.get("id") or "").strip()
+        return {"role": role, "content": content, "timestamp": normalized_time, "item_id": item_id}
+
+    @classmethod
+    def _message_text(cls, value: Mapping[str, Any]) -> str:
+        raw = value.get("content") or value.get("message") or value.get("text")
+        if isinstance(raw, Mapping):
+            raw = raw.get("content") or raw.get("text") or raw.get("message")
+        if isinstance(raw, list):
+            parts = []
+            for item in raw:
+                if isinstance(item, Mapping) and str(item.get("type") or "").casefold() in {"output_text", "input_text", "text"}:
+                    text = item.get("text")
+                    if isinstance(text, str):
+                        parts.append(text)
+            raw = "\n".join(parts)
+        return str(raw).strip() if isinstance(raw, str) else ""

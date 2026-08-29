@@ -2,6 +2,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any, Mapping
+
+
+@dataclass(frozen=True)
+class DiscoveredSource:
+    """Metadata-only source evidence shown before owner authorization."""
+
+    kind: str
+    display_name: str
+    candidate_root: str
+    status: str
+    capability: str
+    reason: str | None = None
+    file_count: int | None = None
+    byte_count: int | None = None
+    earliest_mtime: float | None = None
+    latest_mtime: float | None = None
+    format: str | None = None
+    owner_action: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
