@@ -648,17 +648,20 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
     """Bounded streaming reader for the local Codex rollout JSONL format.
 
     Rollouts are an implementation detail of Codex, so this adapter accepts a
-    deliberately small, explicit subset.  Unknown records are ignored and an
-    unknown/missing session identity is rejected rather than guessed.
+    deliberately small, explicit subset.  Unknown envelopes are rejected and
+    non-message records are ignored only after their variant is recognized.
     """
 
     name = "codex_rollout"
     version = "1.0.0"
     source_types = ("codex_rollout",)
-    SCHEMA = "codex_rollout"
+    SCHEMA = "codex.rollout.v1"
     SCHEMA_VERSION = "1"
     MAX_INPUT_BYTES = 256 * 1024 * 1024
     MAX_RECORD_BYTES = 1024 * 1024
+    _KNOWN_TOP_LEVEL = frozenset({"session_meta", "turn_context", "event_msg", "response_item", "world_state", "reasoning", "tool_call", "tool_output", "base_instructions", "config"})
+    _KNOWN_EVENT_VARIANTS = frozenset({"user_message", "assistant_message", "message", "agent_reasoning", "tool_call", "tool_output", "function_call", "function_call_output"})
+    _KNOWN_RESPONSE_VARIANTS = frozenset({"message", "user_message", "assistant_message", "reasoning", "function_call", "function_call_output", "tool_call", "tool_output"})
 
     def can_handle(self, source_type, input_path, payload):
         del payload
@@ -669,9 +672,11 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
             self._canonical_input_path(path)
             if path.stat().st_size > self.MAX_INPUT_BYTES:
                 raise ValueError("Codex rollout exceeds size limit")
-            session_id = None
+            session_ids: set[str] = set()
             has_message = False
             for row in self._iter_rows(path):
+                if str(row.get("type") or "") not in self._KNOWN_TOP_LEVEL:
+                    return SchemaDetection(None, None, False, "unknown Codex rollout record type; no guessing")
                 declared_schema = row.get("schema") or row.get("schema_name")
                 declared_version = row.get("schema_version") or row.get("version")
                 if declared_schema and str(declared_schema) not in {self.SCHEMA, "codex"}:
@@ -679,10 +684,16 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
                 if declared_version and str(declared_version) != self.SCHEMA_VERSION:
                     return SchemaDetection(str(declared_schema or self.SCHEMA), str(declared_version), False, "unknown Codex rollout schema version; no guessing")
                 if row.get("type") == "session_meta":
-                    session_id = self._session_id(row) or session_id
+                    identity = self._session_id(row)
+                    if identity:
+                        session_ids.add(identity)
+                if row.get("type") == "event_msg" and self._payload_type(row) not in self._KNOWN_EVENT_VARIANTS:
+                    return SchemaDetection(None, None, False, "unknown Codex rollout event variant; no guessing")
+                if row.get("type") == "response_item" and self._payload_type(row) not in self._KNOWN_RESPONSE_VARIANTS:
+                    return SchemaDetection(None, None, False, "unknown Codex rollout response variant; no guessing")
                 if self._message(row):
                     has_message = True
-            if not session_id:
+            if len(session_ids) != 1:
                 return SchemaDetection(None, None, False, "Codex rollout session_meta identity is missing")
             if not has_message:
                 return SchemaDetection(self.SCHEMA, self.SCHEMA_VERSION, False, "Codex rollout contains no supported messages")
@@ -706,19 +717,32 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
             )
             else self._validate_authorized_input(request.input_path, request.options)
         )
-        session_id = ""
+        authorized_root = str(request.payload.get("authorized_root") or "").strip()
+        if request.options.get("automatic_memory"):
+            if not authorized_root:
+                raise ValueError("Codex rollout authorized root is required")
+            from src.automatic_memory.path_policy import validate_codex_rollout_root
+            root_path = Path(authorized_root).expanduser()
+            try:
+                validate_codex_rollout_root(root_path, request.payload.get("effective_home"))
+            except PermissionError as exc:
+                raise ValueError(str(exc)) from exc
+        session_ids: set[str] = set()
         messages: list[dict[str, str]] = []
         warnings: list[str] = []
         for line_number, row in self._iter_rows(canonical, include_line_number=True):
             if row.get("type") == "session_meta":
-                session_id = self._session_id(row) or session_id
+                identity = self._session_id(row)
+                if identity:
+                    session_ids.add(identity)
             message = self._message(row)
             if message is None:
                 continue
             message["line"] = str(line_number)
             messages.append(message)
-        if not session_id or not messages:
+        if len(session_ids) != 1 or not messages:
             raise ValueError("unsupported Codex rollout: complete session identity and messages are required")
+        session_id = next(iter(session_ids))
 
         unique: list[dict[str, str]] = []
         seen: set[str] = set()
@@ -731,7 +755,11 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
             item["item_id"] = identity
             unique.append(item)
         source_scope = self._hash(str(canonical))[:24].upper()
-        raw_reference = f"raw:codex_rollout/{canonical.name}"
+        raw_id = str(request.payload.get("raw_id") or "").strip().lower()
+        if raw_id and len(raw_id) == 64 and all(char in "0123456789abcdef" for char in raw_id):
+            raw_reference = str(request.payload.get("raw_path") or f"raw:sha256/{raw_id}")
+        else:
+            raw_reference = f"raw:codex_rollout/{canonical.name}"
         automatic_source_id = str(request.payload.get("source_id") or "").strip() if request.options.get("automatic_memory") else ""
         provenance = {"automatic_memory_source_id": automatic_source_id} if automatic_source_id else {}
         structured_messages = tuple(
@@ -782,12 +810,22 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
 
     @classmethod
     def _iter_rows(cls, path: Path, include_line_number: bool = False):
-        with path.open("r", encoding="utf-8-sig", errors="strict") as handle:
-            for line_number, line in enumerate(handle, 1):
+        # Read bytes with a hard readline bound.  Text iteration can decode and
+        # allocate an arbitrarily long physical line before we get a chance to
+        # enforce MAX_RECORD_BYTES.
+        with path.open("rb") as handle:
+            for line_number in range(1, 2**63):
+                raw_line = handle.readline(cls.MAX_RECORD_BYTES + 1)
+                if not raw_line:
+                    break
+                if len(raw_line) > cls.MAX_RECORD_BYTES:
+                    raise ValueError("Codex rollout record exceeds bounded size")
+                try:
+                    line = raw_line.decode("utf-8-sig" if line_number == 1 else "utf-8")
+                except UnicodeDecodeError as exc:
+                    raise ValueError("Codex rollout contains invalid UTF-8") from exc
                 if not line.strip():
                     continue
-                if len(line.encode("utf-8")) > cls.MAX_RECORD_BYTES:
-                    raise ValueError("Codex rollout record exceeds bounded size")
                 try:
                     row = json.loads(line)
                 except json.JSONDecodeError:
@@ -801,8 +839,17 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
     @staticmethod
     def _session_id(row: Mapping[str, Any]) -> str:
         payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
-        value = payload.get("id") or payload.get("session_id") or row.get("session_id") or row.get("id")
+        id_value = payload.get("id")
+        session_value = payload.get("session_id")
+        if id_value and session_value and str(id_value).strip() != str(session_value).strip():
+            return ""
+        value = id_value or session_value
         return str(value).strip() if value is not None else ""
+
+    @staticmethod
+    def _payload_type(row: Mapping[str, Any]) -> str:
+        payload = row.get("payload")
+        return str(payload.get("type") or "").casefold() if isinstance(payload, Mapping) else ""
 
     @classmethod
     def _message(cls, row: Mapping[str, Any]) -> dict[str, str] | None:

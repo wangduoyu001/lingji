@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from src.control.runtime_settings import RuntimeSettingsStore
 from src.memory import VaultLayout
 from src.retrieval.memory_db import MemoryDatabase
@@ -50,6 +52,10 @@ def build_extraction_pipeline(
     registry.register(WebCaptureAdapter(), structured_fallback=True)
     registry.register(MediaExtractionAdapter(settings.storage_path), structured_fallback=True)
     sink = VaultExtractionSink(layout, settings.storage_path, state_db=state_db)
+    configured_env = getattr(settings, "environ", None)
+    effective_home = getattr(settings, "home_dir", None) or getattr(settings, "user_home", None)
+    if effective_home is None:
+        effective_home = (configured_env if configured_env is not None else os.environ).get("HOME")
     return ExtractionPipeline(
         queue,
         registry,
@@ -61,4 +67,5 @@ def build_extraction_pipeline(
         on_documents_written=on_documents_written,
         default_options_provider=runtime_settings.options_for_source,
         default_priority_provider=runtime_settings.priority_for_source,
+        effective_home=str(effective_home) if effective_home else None,
     )

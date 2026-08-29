@@ -15,7 +15,7 @@ allStateDiscovered.push({ kind: "codex_rollout", display_name: "Codex聊天记�
 allStateDiscovered.push({ kind: "chatgpt_export", display_name: "ChatGPT official export", candidate_root: "/tmp/chatgpt", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "generic", display_name: "Generic AI History Inbox", candidate_root: "/tmp/generic", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "mystery_kind", display_name: "Raw Internal Kind", candidate_root: "/tmp/mystery", status: "available", capability: "metadata_discovery", reason: null });
-const allStateSources = allStateDiscovered.filter((item) => !["detected", "consent", "unsupported"].includes(item.kind.replace("fixture_", "")) && item.status !== "unsupported").map((item) => ({ source_id: `src-${item.kind}`, kind: item.kind, root: item.candidate_root, status: item.kind === "fixture_degraded" ? "degraded" : item.kind === "fixture_revoked" ? "revoked" : item.kind === "fixture_expired" ? "expired" : "authorized", capability: "metadata_discovery" }));
+const allStateSources = allStateDiscovered.filter((item) => item.kind !== "codex_rollout" && !["detected", "consent", "unsupported"].includes(item.kind.replace("fixture_", "")) && item.status !== "unsupported").map((item) => ({ source_id: `src-${item.kind}`, kind: item.kind, root: item.candidate_root, status: item.kind === "fixture_degraded" ? "degraded" : item.kind === "fixture_revoked" ? "revoked" : item.kind === "fixture_expired" ? "expired" : "authorized", capability: "metadata_discovery" }));
 const allStateScans = [
   ["scanning", "running"], ["current", "completed"], ["failed", "failed"], ["paused", "paused"],
 ].map(([suffix, status]) => ({ scan_id: `scan-${suffix}`, source_id: `src-fixture_${suffix}`, status, progress: status === "completed" ? 1 : 0, total: 1, last_error: status === "failed" ? "fixture failure" : null }));
@@ -353,7 +353,10 @@ try {
   assert.equal(await page.locator('[data-source-kind="obsidian"]').getByText("vault", { exact: true }).count(), 0, "ordinary source card must not expose the root leaf");
   await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂不支持自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
   assert.equal(await page.locator('[data-source-kind="claude_desktop"]').getByRole("button", { name: /开始记忆|选择文件夹/ }).count(), 0, "unsupported Claude must not offer an authorization action");
-  await page.locator('[data-source-kind="codex"]').getByText("Codex聊天记录", { exact: true }).waitFor();
+  const codexCard = page.locator('[data-source-kind="codex_rollout"]');
+  await codexCard.getByText("Codex聊天记录", { exact: true }).waitFor();
+  await codexCard.getByText("发现 2 个本机对话文件。灵机尚未读取对话正文。", { exact: true }).waitFor();
+  await codexCard.getByRole("button", { name: "允许接管 Codex", exact: true }).waitFor();
   await page.locator('[data-source-kind="chatgpt_export"]').getByText("ChatGPT导出记录", { exact: true }).waitFor();
   await page.locator('[data-source-kind="generic"]').getByText("其他AI聊天投递箱", { exact: true }).waitFor();
   await page.locator('[data-source-kind="mystery_kind"]').getByText("其他聊天来源", { exact: true }).waitFor();
@@ -373,8 +376,10 @@ try {
   for (const [kind, expected] of Object.entries(stateActions)) {
     const card = page.locator(`[data-source-kind="${kind}"]`);
     await card.waitFor();
-    const nextStep = await card.locator(".memory-source-next").innerText();
-    assert.ok(nextStep.trim(), `${kind} must show a visible next step`);
+    if (kind !== "fixture_unsupported") {
+      const nextStep = await card.locator(".memory-source-next").innerText();
+      assert.ok(nextStep.trim(), `${kind} must show a visible next step`);
+    }
     for (const label of expected.allow) await card.getByRole("button", { name: label, exact: true }).waitFor();
     for (const label of expected.deny) assert.equal(await card.getByRole("button", { name: label, exact: true }).count(), 0, `${kind} cannot offer ${label}`);
   }
@@ -386,7 +391,7 @@ try {
   await page.waitForTimeout(300);
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.getByText("暂时没有可连接的记录来源。", { exact: true }).waitFor();
-  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂不支持自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
   assert.equal(await page.locator('[data-source-kind="claude_desktop"] .memory-source-next').count(), 0, "unsupported Claude must not render a next-step heading");
   assert.equal(await page.getByText("Claude Desktop has no approved official export schema; opaque storage is not read", { exact: true }).count(), 0, "Claude raw reason must stay out of ordinary source copy");
   await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "claude-consent" });

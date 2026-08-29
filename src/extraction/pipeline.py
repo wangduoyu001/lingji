@@ -83,6 +83,7 @@ class ExtractionPipeline:
         on_lifecycle_event: LifecycleCallback | None = None,
         default_options_provider: DefaultOptionsProvider | None = None,
         default_priority_provider: DefaultPriorityProvider | None = None,
+        effective_home: str | None = None,
     ):
         self.queue = queue
         self.registry = registry
@@ -97,6 +98,7 @@ class ExtractionPipeline:
             self._lifecycle_callbacks.append(on_lifecycle_event)
         self.default_options_provider = default_options_provider
         self.default_priority_provider = default_priority_provider
+        self.effective_home = effective_home
         self._transient_cleanup_inventory: dict[str, Any] = self.reconcile_transient_files()
 
     @staticmethod
@@ -653,7 +655,11 @@ class ExtractionPipeline:
                 raise ValueError(f"unable to stage raw snapshot for adapter dispatch: {exc}") from exc
             request_path = temporary_path
         request = ExtractionRequest(job_id=str(job["job_id"]), source_type=source_type, input_path=request_path,
-                                    payload={"source_id": source_id, "relative_path": relative_path},
+                                    payload={"source_id": source_id, "relative_path": relative_path,
+                                             "raw_id": raw_id, "sha256": expected_sha,
+                                             "raw_path": str(raw_path),
+                                             "authorized_root": str(source.get("root") or ""),
+                                             "effective_home": self.effective_home},
                                     options={"automatic_memory": True})
         try:
             adapter = self.registry.resolve(source_type, request_path, request.payload)

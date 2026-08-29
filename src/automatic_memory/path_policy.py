@@ -5,6 +5,10 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+try:
+    import pwd
+except ImportError:  # pragma: no cover
+    pwd = None  # type: ignore[assignment]
 
 from src.obsidian.discovery import discover_memory_paths
 
@@ -19,6 +23,26 @@ _EXTENSIONS = {
     "generic_ai_history": {".json", ".jsonl", ".md", ".markdown"}, "history_inbox": {".json", ".jsonl", ".md", ".markdown"},
     "codex_rollout": {".jsonl"},
 }
+
+
+def validate_codex_rollout_root(root: Path | str, effective_home: Path | str | None = None) -> Path:
+    """Return a canonical Codex root only when it is one exact home root."""
+    lexical = Path(os.path.abspath(str(Path(root).expanduser())))
+    if any(parent.is_symlink() for parent in (lexical, *lexical.parents)):
+        raise PermissionError("symbolic-link Codex root is not allowed")
+    resolved = lexical.resolve(strict=False)
+    if effective_home:
+        home = Path(effective_home).expanduser().resolve(strict=False)
+    elif os.environ.get("HOME"):
+        home = Path(os.environ["HOME"]).expanduser().resolve(strict=False)
+    elif pwd is not None:
+        home = Path(pwd.getpwuid(os.getuid()).pw_dir).resolve(strict=False)
+    else:
+        home = Path.home().resolve(strict=False)
+    expected = {home / ".codex" / "sessions", home / ".codex" / "archived_sessions"}
+    if resolved not in expected:
+        raise PermissionError("Codex rollout root must be one exact effective-home root")
+    return resolved
 
 
 def _reject_root(root: Path) -> Path:
@@ -62,8 +86,7 @@ def enumerate_authorized_files(source: SourceRecord) -> tuple[Path, ...]:
     if source.kind == "codex_rollout":
         # Only the two discovered Codex roots are admissible; an arbitrary
         # directory must never become a transcript import root.
-        if root.name not in {"sessions", "archived_sessions"} or root.parent.name != ".codex":
-            raise PermissionError("Codex rollout root must be .codex/sessions or .codex/archived_sessions")
+        root = validate_codex_rollout_root(root)
     if not root.is_dir() or source.kind == "claude_desktop":
         return ()
     if source.kind == "obsidian":
@@ -91,4 +114,4 @@ def enumerate_authorized_files(source: SourceRecord) -> tuple[Path, ...]:
     return tuple(sorted(files, key=lambda item: item.relative_to(root).as_posix()))
 
 
-__all__ = ["MAX_DEPTH", "MAX_FILES", "enumerate_authorized_files"]
+__all__ = ["MAX_DEPTH", "MAX_FILES", "enumerate_authorized_files", "validate_codex_rollout_root"]

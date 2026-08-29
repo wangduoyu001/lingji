@@ -11,6 +11,7 @@ from typing import Any, Callable
 from src.storage import StateDatabase
 
 from .models import AuthorizationScope, ScanRun, SourceRecord
+from .path_policy import validate_codex_rollout_root
 
 
 POLICY_VERSION = "automatic-memory-source-v1"
@@ -75,6 +76,8 @@ class SourceRegistry:
         if not kind or kind not in scope.source_kinds:
             raise PermissionError("source kind is not authorized")
         selected_root = _canonical_root(root)
+        if kind == "codex_rollout":
+            validate_codex_rollout_root(selected_root, scope.effective_home)
         allowed_roots = {_canonical_root(value) for value in scope.roots}
         if selected_root not in allowed_roots:
             raise PermissionError("source root is not exactly authorized")

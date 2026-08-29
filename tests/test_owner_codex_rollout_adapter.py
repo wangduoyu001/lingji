@@ -64,3 +64,65 @@ def test_rollout_adapter_rejects_oversized_record(tmp_path: Path):
     adapter = CodexRolloutAdapter()
     with pytest.raises(ValueError, match="size|large|bounded"):
         adapter.extract(ExtractionRequest("job-1", "codex_rollout", input_path=path, options={"authorized_roots": [str(tmp_path)]}))
+
+
+def test_rollout_requires_payload_session_identity_and_rejects_mixed_sessions(tmp_path: Path):
+    path = tmp_path / "rollout.jsonl"
+    _record(path, [
+        {"type": "session_meta", "id": "top-level-must-not-count", "payload": {"id": "session-one"}},
+        {"type": "session_meta", "payload": {"session_id": "session-two"}},
+        {"type": "event_msg", "id": "u", "payload": {"type": "user_message", "message": "x"}, "timestamp": "2026-08-29T00:00:00Z"},
+    ])
+    adapter = CodexRolloutAdapter()
+    with pytest.raises(ValueError, match="unsupported|session"):
+        adapter.extract(ExtractionRequest("job-1", "codex_rollout", input_path=path, options={"authorized_roots": [str(tmp_path)]}))
+
+
+def test_rollout_rejects_unknown_top_level_and_malformed_message_variant(tmp_path: Path):
+    path = tmp_path / "rollout.jsonl"
+    _record(path, [
+        {"type": "session_meta", "payload": {"id": "session-one"}},
+        {"type": "event_msg", "payload": {"type": "unrecognized_message", "role": "assistant", "text": "x"}, "timestamp": "2026-08-29T00:00:00Z"},
+        {"type": "future_internal_event", "payload": {}},
+    ])
+    adapter = CodexRolloutAdapter()
+    assert not adapter.can_handle("codex_rollout", path, {})
+
+
+def test_rollout_deduplicates_same_content_with_different_event_ids_and_preserves_raw_identity(tmp_path: Path):
+    path = tmp_path / "rollout.jsonl"
+    _record(path, [
+        {"type": "session_meta", "payload": {"id": "session-one"}},
+        {"type": "event_msg", "id": "event-u", "payload": {"type": "user_message", "message": "same"}, "timestamp": "2026-08-29T00:00:00Z"},
+        {"type": "response_item", "id": "response-u", "payload": {"type": "message", "role": "user", "content": "same"}, "timestamp": "2026-08-29T00:00:00Z"},
+    ])
+    batch = CodexRolloutAdapter().extract(ExtractionRequest("job-1", "codex_rollout", input_path=path, options={"authorized_roots": [str(tmp_path)]}))
+    messages = batch.structured_sources[0].conversations[0].messages
+    assert len(messages) == 1
+    assert messages[0].raw_reference == "raw:codex_rollout/rollout.jsonl"
+
+
+def test_rollout_automatic_dispatch_requires_exact_codex_root(tmp_path: Path):
+    path = tmp_path / "rollout.jsonl"
+    _record(path, _fixture())
+    with pytest.raises(ValueError, match="root|authorized"):
+        CodexRolloutAdapter().extract(ExtractionRequest(
+            "job-1", "codex_rollout", input_path=path,
+            payload={"source_id": "s1", "authorized_root": str(tmp_path)},
+        options={"automatic_memory": True},
+        ))
+
+
+def test_rollout_automatic_dispatch_rejects_same_named_root_outside_effective_home(tmp_path: Path, monkeypatch):
+    effective_home = tmp_path / "effective-home"
+    outside_root = tmp_path / "other-home" / ".codex" / "sessions"
+    path = outside_root / "rollout-outside.jsonl"
+    path.parent.mkdir(parents=True)
+    _record(path, _fixture())
+    monkeypatch.setenv("HOME", str(effective_home))
+    with pytest.raises(ValueError, match="root|authorized"):
+        CodexRolloutAdapter().extract(ExtractionRequest(
+            "job-1", "codex_rollout", input_path=path,
+            payload={"source_id": "s1", "authorized_root": str(outside_root)},
+            options={"automatic_memory": True},
+        ))

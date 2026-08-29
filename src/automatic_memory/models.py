@@ -31,6 +31,7 @@ class AuthorizationScope:
     granted_at: datetime
     expires_at: datetime | None
     owner_confirmed: bool
+    effective_home: str | None = None
 
 
 @dataclass(frozen=True)

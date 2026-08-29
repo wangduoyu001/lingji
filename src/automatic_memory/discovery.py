@@ -5,6 +5,10 @@ from __future__ import annotations
 import os
 import platform
 import stat
+try:
+    import pwd
+except ImportError:  # pragma: no cover - Windows compatibility
+    pwd = None  # type: ignore[assignment]
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -29,6 +33,7 @@ def _metadata_status(path: Path) -> tuple[str, str | None]:
 
 
 _CODEX_MAX_FILES = 50_000
+_CODEX_MAX_DIRECTORIES = 50_000
 _CODEX_MAX_DEPTH = 5
 _ROLLOUT_NAME = "rollout-"
 _SENSITIVE_NAMES = frozenset({"auth", "config", "credentials", "cookie", "cookies", "token", "private", "secret", "secrets", "keychain", "login", "logins"})
@@ -46,6 +51,11 @@ def _effective_home(settings: object, env: Mapping[str, str]) -> Path:
         return Path(str(supplied)).expanduser().resolve(strict=False)
     if env.get("HOME"):
         return Path(env["HOME"]).expanduser().resolve(strict=False)
+    if pwd is not None:
+        try:
+            return Path(pwd.getpwuid(os.getuid()).pw_dir).resolve(strict=False)
+        except (KeyError, OSError):
+            pass
     return Path.home().resolve(strict=False)
 
 
@@ -53,32 +63,44 @@ def _darwin(settings: object) -> bool:
     value = getattr(settings, "platform_name", None) or getattr(settings, "platform_system", None) or getattr(settings, "platform", None)
     if value is None:
         value = platform.system()
-    return str(value).strip().casefold() in {"darwin", "macos", "mac os", "mac"}
+    # Discovery is intentionally platform strict.  A caller must identify the
+    # Darwin host explicitly; aliases are too easy to pass accidentally from a
+    # user-provided setting and could enable local-path probing elsewhere.
+    return str(value).strip().casefold() == "darwin"
 
 
 def _rollout_inventory(root: Path) -> tuple[int | None, int | None, float | None, float | None, str | None]:
     """Inventory rollout files with stat only; never opens a file body."""
+    lexical = Path(os.path.abspath(str(root)))
+    if any(parent.is_symlink() for parent in (lexical, *lexical.parents)):
+        return None, None, None, None, "codex_rollout"
     if root.is_symlink() or not root.is_dir():
-        return 0, 0, None, None, "codex_rollout"
+        return None, None, None, None, "codex_rollout"
     count = 0
     bytes_total = 0
     earliest: float | None = None
     latest: float | None = None
     try:
-        for current, dirs, names in os.walk(root, topdown=True, followlinks=False):
-            current_path = Path(current)
-            depth = len(current_path.relative_to(root).parts)
-            dirs[:] = [name for name in dirs if not (current_path / name).is_symlink() and not _sensitive_name(name) and depth < _CODEX_MAX_DEPTH]
-            for name in names:
-                if not name.startswith(_ROLLOUT_NAME) or not name.casefold().endswith(".jsonl") or _sensitive_name(name):
+        pending: list[tuple[Path, int]] = [(root, 0)]
+        directories_seen = 0
+        while pending:
+            current_path, depth = pending.pop()
+            if depth >= _CODEX_MAX_DEPTH:
+                continue
+            for entry in current_path.iterdir():
+                if entry.is_symlink() or _sensitive_name(entry.name):
                     continue
-                candidate = current_path / name
-                if candidate.is_symlink():
+                if entry.is_dir():
+                    directories_seen += 1
+                    if directories_seen > _CODEX_MAX_DIRECTORIES:
+                        return None, None, None, None, "codex_rollout"
+                    if depth < _CODEX_MAX_DEPTH:
+                        pending.append((entry, depth + 1))
                     continue
-                try:
-                    info = candidate.stat()
-                except OSError:
+                name = entry.name
+                if not name.startswith(_ROLLOUT_NAME) or not name.casefold().endswith(".jsonl"):
                     continue
+                info = entry.stat()
                 if not stat.S_ISREG(info.st_mode):
                     continue
                 count += 1
@@ -95,7 +117,8 @@ def _rollout_inventory(root: Path) -> tuple[int | None, int | None, float | None
 
 def discover_source_metadata(settings: object) -> tuple[DiscoveredSource, ...]:
     """Return source candidates using paths only; never opens candidate files."""
-    env: Mapping[str, str] = getattr(settings, "environ", None) or os.environ
+    supplied_env = getattr(settings, "environ", None)
+    env: Mapping[str, str] = os.environ if supplied_env is None else supplied_env
     values = (
         ("codex_transcript", "Codex transcript", ("codex_transcript_dir", "codex_transcript_root", "codex_history_dir")),
         ("chatgpt_export", "ChatGPT official export", ("chatgpt_export_dir", "chatgpt_download_dir")),
@@ -106,16 +129,17 @@ def discover_source_metadata(settings: object) -> tuple[DiscoveredSource, ...]:
     if _darwin(settings):
         home = _effective_home(settings, env)
         for root in (home / ".codex" / "sessions", home / ".codex" / "archived_sessions"):
-            if root.is_symlink():
+            lexical = Path(os.path.abspath(str(root)))
+            if any(parent.is_symlink() for parent in (lexical, *lexical.parents)):
                 result.append(DiscoveredSource(
-                    "codex_rollout", "Codex聊天记录", str(root), "unavailable", "metadata_discovery",
+                    "codex_rollout", "Codex聊天记录", str(lexical), "unavailable", "metadata_discovery",
                     "symbolic-link Codex root is not traversed", None, None, None, None, "codex_rollout",
                     {"kind": "authorize", "label": "允许接管 Codex", "source_kind": "codex_rollout"},
                 ))
                 continue
             resolved = root.resolve(strict=False)
             status, reason = _metadata_status(resolved)
-            count, byte_count, earliest, latest, fmt = _rollout_inventory(resolved)
+            count, byte_count, earliest, latest, fmt = _rollout_inventory(lexical)
             result.append(DiscoveredSource(
                 "codex_rollout", "Codex聊天记录", str(resolved), status, "metadata_discovery", reason,
                 count, byte_count, earliest, latest, fmt,

@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from src.automatic_memory import AuthorizationScope, AutomaticMemoryRuntime, SourceRegistry
+from src.automatic_memory.checkpoint import SnapshotJobRunner
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.storage import StateDatabase
 
@@ -23,9 +24,10 @@ def _settings(root: Path) -> SimpleNamespace:
     )
 
 
-def test_authorized_rollout_scan_replay_is_idempotent_and_revocation_hides_source(tmp_path: Path):
+def test_authorized_rollout_scan_replay_is_idempotent_and_revocation_hides_source(tmp_path: Path, monkeypatch):
     settings = _settings(tmp_path)
     source_root = tmp_path / "home" / ".codex" / "sessions"
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     path = source_root / "2026/08/29/rollout-one.jsonl"
     path.parent.mkdir(parents=True)
     rows = [
@@ -52,6 +54,12 @@ def test_authorized_rollout_scan_replay_is_idempotent_and_revocation_hides_sourc
         assert jobs[0]["status"] == "completed", jobs[0].get("last_error") or jobs[0].get("error") or jobs[0]
         messages = pipeline.structured_sink.read_model.list_messages(owner=True, limit=20, offset=0)["items"]
         assert len(messages) == 2
+        raw_id = str(jobs[0]["payload"]["raw_id"])
+        raw_path = pipeline.sink.raw_root / raw_id
+        assert raw_path.is_file()
+        assert messages[0]["raw_reference"] == str(raw_path)
+        work = runtime.work_store.list_work(limit=10)
+        assert any(item.work_id == "automatic-memory:" + str(jobs[0]["payload"]["scan_id"]) for item in work)
         assert pipeline.registry.resolve("codex_rollout", path, {}) .name == "codex_rollout"
         before = len(pipeline.structured_sink.read_model.list_messages(owner=True, limit=20, offset=0)["items"])
         runtime.scan_now(source.source_id)
@@ -59,5 +67,30 @@ def test_authorized_rollout_scan_replay_is_idempotent_and_revocation_hides_sourc
         assert len(pipeline.structured_sink.read_model.list_messages(owner=True, limit=20, offset=0)["items"]) == before
         registry.revoke(source.source_id)
         assert registry.list_sources()[0].status == "revoked"
+        assert pipeline.structured_sink.read_model.list_sources(status="active", owner=True, limit=20, offset=0)["items"] == []
     finally:
         runtime.stop()
+
+
+def test_rollout_scan_crash_at_thirty_percent_resumes_after_runner_restart(tmp_path: Path, monkeypatch):
+    settings = _settings(tmp_path)
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    source_root = home / ".codex" / "sessions"
+    for index in range(3):
+        path = source_root / "2026" / "08" / "29" / f"rollout-{index}.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"type": "session_meta", "payload": {"id": f"s-{index}"}}) + "\n", encoding="utf-8")
+    pipeline = build_extraction_pipeline(settings)
+    state = StateDatabase(settings.state_db_path)
+    registry = SourceRegistry(state)
+    source = registry.register(AuthorizationScope("grant-crash", ("codex_rollout",), (str(source_root),), datetime.now(timezone.utc), None, True), "codex_rollout", str(source_root))
+    runtime = AutomaticMemoryRuntime(state_db=state, pipeline=pipeline, settings=settings, registry=registry)
+    scan = registry.start_scan(source.source_id)
+    first = runtime.runner.run(scan.scan_id, crash_at="30%")
+    assert first.status == "paused"
+    restarted = SnapshotJobRunner(runtime.snapshot, pipeline.queue, state, path_provider=runtime._authorized_paths)
+    final = restarted.run(scan.scan_id)
+    assert final.status == "completed"
+    assert final.progress == final.total == 3
+    assert len(list((pipeline.sink.raw_root).iterdir())) == 3
