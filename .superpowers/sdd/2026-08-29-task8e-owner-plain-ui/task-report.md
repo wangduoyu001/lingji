@@ -5,7 +5,7 @@
 ```text
 Verdict: PASS (focused implementation and rendered/behavior smoke)
 Merge recommendation: ALLOW owner observation
-Product commit: 6a84c49
+Product commit: f2f4843
 Artifact: NOT_BUILT_BY_SCOPE
 Artifact ID: NOT_APPLICABLE
 Report commit: the commit containing this report (see final delivery SHA)
@@ -20,7 +20,7 @@ Disposition: READY_FOR_OWNER_EXPERIENCE
 | 项目 | 实际 | 结论 |
 |---|---|---|
 | Repository | 灵机 | PASS |
-| Product Commit | `99343ec` (`feat: simplify owner-facing primary UI`) | PASS |
+| Product Commit | `f2f4843` (`fix: clarify owner work and scan states`) | PASS |
 | Artifact | 未打包、未安装；按任务边界不生成 | NOT_BUILT_BY_SCOPE |
 | Artifact ID / hashes | `NOT_APPLICABLE` | NOT_APPLICABLE |
 | Report Commit | the commit containing this report | PASS |
@@ -53,7 +53,7 @@ Control/MCP ports: not exercised by scope
 | 测试 | 结果 | 证据 |
 |---|---|---|
 | TDD rendered/behavior RED | PASS (RED evidence) | 变更前 `npm run test:e2e:memory` 在新按钮“现在检查”断言处按预期失败 |
-| Owner rendered/behavior GREEN | PASS | `npm run test:e2e:memory`；覆盖 0 来源、1 来源、失败/重试、主人待办/解决、Obsidian/Claude 文案、隐藏技术字段与真实按钮动作 |
+| Owner rendered/behavior GREEN | PASS | `npm run test:e2e:memory`；覆盖 Round1 四状态与 Round2 accepted/retrying、Claude consent 空路径、详情默认计数、隐藏技术字段与真实按钮动作 |
 | Desktop 23-script smoke | PASS | `npm run test:smoke` 输出 `[smoke] PASS (23 scripts)` |
 | Desktop build | PASS | `npm run build`；Vite/TypeScript 编译完成 |
 | Memory source focused smokes | PASS | `npm run test:memory-sources`、`npm run test:memory-sources-repair`、`npm run test:work-fact` |
@@ -120,30 +120,36 @@ Evidence: desktop/lingji-control/tests/e2e_owner_memory_flow.mjs
 
 Round1 RED 证据包括 fixture 自身参数错误修正后，running 详情断言失败、侧栏断言精度失败、summary/source 切页时序断言失败；调整为真实 UI 文案/等待后，`npm run test:e2e:memory` GREEN。最终 product/tests commit 为 `6a84c49`。
 
-## 11. Known Non-Blocking Limitations
+## 11. Owner-Plain Repair Round 2
+
+独立复审 `27ff136` 提出剩余 I1–I3。本轮先在 owner fixture 中增加 `accepted`/`retrying`、正式 Claude `consent_required + 空路径` 与详情 model-default 计数 0，取得 RED；随后最小修改 WorkStatus 中文映射、来源可连接判定和 scan detail 计数展示，取得 `npm run test:e2e:memory` GREEN。既有动作 API 与 backend 均未修改。
+
+Round2 最终证据：rendered E2E `PASS`；23-script smoke 输出 `[smoke] PASS (23 scripts)`；build PASS；backend focused `56 passed, 1 warning`；compile、diff-check、acceptance-sync、local-handoff PASS。产品/测试 commit 为 `f2f4843`。
+
+## 12. Known Non-Blocking Limitations
 
 - Owner 尚未在最终候选真机上观察本轮 UI；当前 disposition 只能是 `READY_FOR_OWNER_EXPERIENCE`。
 - 未执行 release、打包、安装、live 8766/8767、重启/Windows 验收；这些不属于本轮被授权范围。
 
-## 12. Blocking Defects
+## 13. Blocking Defects
 
 None found in focused rendered/behavior or regression checks. Final owner acceptance remains pending by design.
 
-## 13. Final Merge Recommendation
+## 14. Final Merge Recommendation
 
 ```text
-Product commit: 6a84c49
+Product commit: f2f4843
 Verdict: PASS (focused implementation and rendered/behavior smoke)
 Merge recommendation: ALLOW owner observation
 Owner observation complete: NO
 Required clients covered: synthetic owner fixture only
 Skipped clients: live app / installed clients / release artifact
 Blocking defects: None in scoped checks
-Acceptance docs synchronized: YES (pending report commit)
+Acceptance docs synchronized: YES (pending Round2 report commit)
 Temporary evidence cleaned: YES (no live/temporary acceptance data created)
 ```
 
-## 14. Sign-off
+## 15. Sign-off
 
 ```text
 Codex executor: Task8E Owner-facing Plain UI implementation agent

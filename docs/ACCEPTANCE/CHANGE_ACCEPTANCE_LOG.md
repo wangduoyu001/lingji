@@ -1,5 +1,13 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Owner-facing plain UI repair Round 2
+
+- 独立复审剩余 I1–I3：accepted/retrying 工作状态未知、真实 Claude `consent_required + 空路径` 被误计可连接、scan detail 的 model 默认计数 0 伪装为真实结果。本轮只改 Desktop owner-facing 展示与合成 rendered fixture，不改 backend、数据模型、队列、自动化或 live。
+- Current Work 覆盖 queued/accepted/running/retrying/pending/completed/success/failed/cancelled 的中文状态；未知值仍中性未知。Claude 只有存在路径或已授权证据才计入可连接来源，真实可授权路径不受影响。
+- scan detail 对 running/failed 等非终态的计数默认 0 显示“检查结果尚未获得”，completed 的 backend 明确 0 仍显示 0；缺字段不生成数值。新增 fixture 覆盖真实形状。
+- TDD：先新增 rendered RED，再最小 GREEN；最终运行 focused E2E、Desktop 23-script smoke、build、Task8E backend focused、compile、diff-check、acceptance sync、local handoff，全部通过。报告继续写入 `.superpowers/sdd/2026-08-29-task8e-owner-plain-ui/task-report.md`。
+- 范围边界：不启动/打包/安装 App，不操作 Acceptance/Production/Vault/主人数据；主人真机观察仍待根代理授权，保持 `READY_FOR_OWNER_EXPERIENCE`。
+
 ## 2026-08-29 · Task 8E · Owner-facing plain UI repair Round 1
 
 - 独立 review 发现 I1–I5/M1：空工作未知状态、真实扫描 DTO 缺计数/错误详情语义、pending stale/error 误报无需处理、Claude-only/零可用来源误称可接入、来源 kind 泄漏英文、侧栏 raw error/development/commit/version 普通态泄漏。本轮仅修复 Desktop owner-facing 展示和合成 Playwright fixture，不改 backend、数据模型、队列、自动化或动作 API。
