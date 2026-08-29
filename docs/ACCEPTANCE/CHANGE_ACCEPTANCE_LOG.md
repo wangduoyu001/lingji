@@ -1,5 +1,22 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Safe polling fallback
+
+- 基线：`c70ce6b165213151ca02baf34ff11e2217a21c82`。本轮只为 macOS 正式 runtime
+  禁用不可靠的 `watchfiles` event scan，保留启动增量扫描、15 分钟 reconciliation、每日
+  integrity、手动立即扫描、授权与 revoke；不新增 deletion invalidation、read-model seam、
+  第二队列/数据库或普通 Obsidian 读取。
+- 自动验收：RED 必须证明安全基线授权空 Obsidian 在真实 macOS backend 下会产生 event scan；
+  GREEN 必须证明 fallback 禁用 event watcher 后两个旧周期内增量扫描为 0、startup
+  reconciliation=1、manual=1，缩短 interval 的 scheduled reconciliation 能发现变化，revoke
+  后不再扫描，source UI 文案与 periodic 模式一致；另跑 backend focused、Desktop 23-script
+  smoke/build、compileall、diff-check、acceptance sync、local handoff。
+- 真机/产品边界：不打包、不安装、不启动 live app、不使用 Acceptance root 或主人数据；明确记录
+  fallback 不满足 30 秒事件 SLA，只满足最迟 15 分钟自动核对，Phase1 自动接管门禁仍为
+  `BLOCKED`，等待根代理授权的真机观察。
+- 清理/回滚：测试只用 pytest `tmp_path`/synthetic fixture；回滚本轮产品/测试提交和本条文档
+  提交，不触碰 Production、Vault、raw、memory、Qdrant、主人配置。
+
 ## 2026-08-29 · Task 8E · Mac experience repair candidate
 
 - 基线：`ffc2d8851dc91b5f09b14d31a34c1e6988358933`；唯一要求源为 `.superpowers/sdd/2026-08-29-task8e-mac-experience-repair/task-1-brief.md` 与 `task-1-observations.md`。本轮只修复来源计数、普通首屏/任务行降噪、真实分页、watcher 空事件、SHADOW 错误展示、Obsidian 终态和 Vector/Memory 状态语义，不改变 Task7、检索质量、模型能力或永久数据权威。
