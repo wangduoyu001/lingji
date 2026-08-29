@@ -1,5 +1,14 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Owner-facing plain UI repair
+
+- 主人反馈最终候选“仍然看不懂”。本轮只简化 Desktop 普通首屏、记忆来源、活动记录、需要我处理和主导航文案；不改 backend、数据模型、队列、自动化或永久记忆权威。普通页面只回答灵机是否正常、正在记住什么、最近检查结果与时间、主人是否需要处理。
+- 普通页面隐藏 source/work/internal status、英文技术标签、原始 JSON 与开发字段堆叠；技术 ID、事件和 JSON 仅保留在折叠详情。来源文案使用“Obsidian 长期记忆区”和“Claude 暂不支持自动导入旧记录”，来源动作使用“现在检查”“停止记忆”“查看这次检查”。
+- 定期检查文案继续读取 API 真实 interval，显示“打开灵机时会检查，之后每15分钟自动检查一次”；interval 缺失/非法显示“检查时间尚未获得”，不伪造 0 或固定时长。失败、空态和主人待办使用可理解的中文下一步。
+- 自动验收：现有 Playwright owner fixture rendered/behavior smoke 覆盖 0 来源、1 来源、检查失败/重试、主人待办/解决，验证授权、检查、停止记忆、重试、解决待办真实后端动作，且确认普通页面隐藏技术标签/ID/JSON；另跑 Desktop 23-script smoke、build、相关 backend focused、compileall、diff-check、acceptance sync、local handoff。
+- 真机/产品边界：不打包、不安装、不关闭或操作当前 live app，不访问 Acceptance root、Production、Vault 或主人数据；本轮仅合成 fixture 和本地构建验证。主人确认前只允许报告 `READY_FOR_OWNER_EXPERIENCE`。
+- 清理/回滚：仅回滚本轮产品/测试与 docs/report 提交，不触碰主人配置、正式记忆、Vault、raw、memory 或 Qdrant。报告路径：`.superpowers/sdd/2026-08-29-task8e-owner-plain-ui/task-report.md`。
+
 ## 2026-08-29 · Task 8E · Safe polling fallback Repair Round 2
 
 - 本轮修复最终 I1 与 M1：平台 policy 仅将规范化 `darwin` 判为 Darwin periodic，规范化
