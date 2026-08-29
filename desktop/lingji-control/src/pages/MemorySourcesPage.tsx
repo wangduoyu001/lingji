@@ -123,7 +123,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
           {snapshot.sources.map((source) => <SourceCard key={`${source.kind}:${source.root}`} source={source} busy={busy} onAuthorize={() => void authorize(source)} onAction={runAction} sourceApi={sourceApi} onDetail={setDetail} />)}
         </section>
       )}
-      {detail && <section className="panel memory-scan-detail" aria-live="polite"><h2>这次检查的结果</h2><div className="panel-body"><p>{scanDetailCopy(detail)}</p><dl className="memory-detail-grid">{Object.entries(detail).filter(([key]) => ["status", "progress", "total", "queued", "reused", "last_error"].includes(key)).map(([key, value]) => <div key={key}><dt>{key === "status" ? "结果" : key === "progress" ? "已检查" : key === "total" ? "总数" : key === "queued" ? "新增" : key === "reused" ? "未重复导入" : "说明"}</dt><dd>{value == null || value === "" ? "检查结果尚未获得" : String(value)}</dd></div>)}</dl><details><summary>技术详情</summary><pre className="json-panel">{JSON.stringify(detail, null, 2)}</pre></details></div></section>}
+      {detail && <section className="panel memory-scan-detail" aria-live="polite"><h2>这次检查的结果</h2><div className="panel-body"><p>{scanDetailCopy(detail)}</p><dl className="memory-detail-grid">{Object.entries(detail).filter(([key]) => ["status", "progress", "total", "created", "queued", "reused", "updated", "skipped", "failed", "last_error"].includes(key)).map(([key, value]) => <div key={key}><dt>{key === "status" ? "结果" : key === "progress" ? "已检查" : key === "total" ? "总数" : key === "created" ? "新建" : key === "queued" ? "新增" : key === "reused" ? "未重复导入" : key === "updated" ? "更新" : key === "skipped" ? "跳过" : key === "failed" ? "失败" : "说明"}</dt><dd>{detailValue(key, value, detail)}</dd></div>)}</dl><details><summary>技术详情</summary><pre className="json-panel">{JSON.stringify(detail, null, 2)}</pre></details></div></section>}
     </div>
   );
 }
@@ -131,7 +131,11 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
 function sourceSummary(snapshot: MemorySourcesSnapshot): string {
   const current = snapshot.sources.filter((item) => item.state === "current").map(ownerSourceName);
   if (current.length) return `正在记住：${current.join("、")}。`;
-  const connectable = snapshot.sources.some((item) => item.state !== "unsupported");
+  const connectable = snapshot.sources.some((item) => {
+    if (item.state === "unsupported") return false;
+    if (item.kind === "claude_desktop" && !item.root && !["authorized", "current", "scanning", "degraded", "failed", "revoked"].includes(item.state)) return false;
+    return Boolean(item.root || item.source_id || ["authorized", "current", "scanning", "degraded", "failed", "revoked"].includes(item.state));
+  });
   if (connectable) return "已找到可连接的内容，完成选择和检查后才会开始记住。";
   return "暂时没有可连接的记录来源。";
 }
@@ -142,6 +146,13 @@ function scanDetailCopy(detail: Record<string, unknown>): string {
   if (status === "failed") return "这次检查没有完成，原来的记忆不会被删除。";
   if (status === "completed") return "灵机已完成这次检查，下面是可读结果。";
   return "这次检查的状态尚未获得。";
+}
+
+function detailValue(key: string, value: unknown, detail: Record<string, unknown>): string {
+  if (value == null || value === "") return "检查结果尚未获得";
+  const countKeys = new Set(["created", "queued", "reused", "updated", "skipped", "failed"]);
+  if (countKeys.has(key) && detail.status !== "completed" && value === 0) return "检查结果尚未获得";
+  return String(value);
 }
 
 function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }: { source: SourceFact; busy: string | null; onAuthorize: () => void; onAction: (key: string, operation: () => Promise<unknown>, verify: (next: MemorySourcesSnapshot) => boolean, success?: string) => Promise<void>; sourceApi: MemorySourcesApi; onDetail: (detail: Record<string, unknown>) => void }) {

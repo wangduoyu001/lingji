@@ -9,12 +9,16 @@ export type CurrentWorkFact = WorkFact;
 const text = (value: unknown, fallback = "检查结果尚未获得") =>
   value === null || value === undefined || value === "" ? fallback : String(value);
 const statusLabel = (value: unknown): string => ({
+  queued: "排队中",
   active: "正在处理",
   running: "正在处理",
   pending: "等待处理",
+  accepted: "已接收",
+  retrying: "正在重试",
   completed: "已完成",
   success: "已完成",
   failed: "没有完成",
+  cancelled: "已取消",
   idle: "目前没有进行中的工作",
 } as Record<string, string>)[String(value ?? "")] ?? "状态尚未获得";
 
