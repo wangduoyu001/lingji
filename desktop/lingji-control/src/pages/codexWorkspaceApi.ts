@@ -1,11 +1,12 @@
 import type { LingJiApi } from "../api";
 import type { ActivityEvent, CodexCurrent, CodexProject, CodexSession, ContextPack, PageResponse, WorkspaceFilters } from "./codexWorkspaceTypes";
 import { workspaceQuery } from "./codexWorkspaceContract";
+import { WORKSPACE_LIMIT } from "./codexWorkspaceContract";
 
 export class CodexWorkspaceApi {
   constructor(private readonly api: LingJiApi) {}
   current(signal?: AbortSignal) { return this.api.get<CodexCurrent>("/api/codex/current", { signal }); }
-  projects(signal?: AbortSignal) { return this.api.get<PageResponse<CodexProject>>("/api/codex/projects", { signal }); }
+  projects(signal?: AbortSignal, offset = 0) { return this.api.get<PageResponse<CodexProject>>(`/api/codex/projects?limit=${WORKSPACE_LIMIT}&offset=${offset}`, { signal }); }
   resolve(body: { workspace_path: string }, signal?: AbortSignal) { return this.api.post<CodexProject>("/api/codex/projects/resolve", body, { signal }); }
   sessions(filters: WorkspaceFilters, signal?: AbortSignal) { return this.api.get<PageResponse<CodexSession>>(`/api/codex/sessions?${workspaceQuery(filters)}`, { signal }); }
   session(id: string, signal?: AbortSignal) { return this.api.get<CodexSession>(`/api/codex/sessions/${encodeURIComponent(id)}`, { signal }); }

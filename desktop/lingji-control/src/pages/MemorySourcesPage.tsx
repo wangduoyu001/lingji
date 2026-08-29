@@ -4,6 +4,7 @@ import { actionAvailability, actionEvidence, authorizationEvidence, MemorySource
 import type { MemorySourcesSnapshot, RuntimeSummary, SourceFact, SourceState } from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 import { Empty, Notice } from "../components/ui";
+import { activeAuthorizedCount } from "./codexWorkspaceContract";
 
 const stateTone: Record<SourceState, string> = {
   detected: "warning",
@@ -124,7 +125,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
       {message && <Notice kind="info">{message}</Notice>}
       {snapshot.runtime?.cleanup_pending && <Notice kind="error">临时文件清理失败：灵机会自动重试，可重试。</Notice>}
       <section className="memory-sources-summary" aria-label="来源总览">
-        <div><span>已发现来源</span><strong>{snapshot.discovered.length}</strong><small>已授权 {snapshot.authorized.length} 个</small></div>
+        <div><span>已发现来源</span><strong>{snapshot.discovered.length}</strong><small>已授权 {activeAuthorizedCount(snapshot.authorized)} 个</small></div>
         <div><span>当前接管</span><strong>{snapshot.sources.filter((item) => item.state === "current").length}</strong><small>扫描完成后才算接管</small></div>
         <div><span>最近活动</span><strong>{snapshot.summary?.latest?.status ? scanStatusLabel(snapshot.summary.latest.status) : "尚未获得"}</strong><small>{runtimeHeartbeatLabel(snapshot.runtime)}</small></div>
       </section>

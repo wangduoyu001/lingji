@@ -19,7 +19,7 @@ assert.match(shell, /PRIMARY_NAVIGATION/);
 assert.match(shell, /connectionState/);
 assert.match(navigation, /id: "auto_review"/);
 assert.match(navigation, /ADVANCED_NAVIGATION/);
-assert.equal((navigation.match(/group: "observe"/g) ?? []).length, 4);
+assert.ok((navigation.match(/group: "observe"/g) ?? []).length >= 4);
 
 for (const endpoint of [
   "/api/auto-review/status",

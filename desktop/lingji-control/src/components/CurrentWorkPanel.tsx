@@ -37,20 +37,23 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
       {resource.stale && <Notice kind="warning">工作事实暂时过期，正在自动重试。</Notice>}
 
       <div className="current-work-summary">
+        <div><span>当前项目</span><strong>{text(work?.source_id, "未绑定")}</strong></div>
+        <div><span>活动会话</span><strong>{fact?.events?.length ? "有活动记录" : "无活动会话"}</strong></div>
         <div><span>任务</span><strong>{text(work?.work_id)}</strong></div>
         <div><span>事件</span><strong>{String(fact?.events?.length ?? 0)}</strong></div>
         <div><span>结果</span><strong>{text(fact?.outcome?.summary, "等待结果")}</strong></div>
         <div><span>下一步</span><strong>{text(fact?.next_action?.description, "无")}</strong></div>
       </div>
 
-      <div className="current-work-timeline">
+      <details className="current-work-timeline">
+        <summary>查看技术详情</summary>
         {(fact?.events ?? []).slice(0, 5).map((event) => (
           <div key={event.event_id}>
             <strong>{text(event.event_type)}</strong>
-            <span>{text(event.detail ? JSON.stringify(event.detail) : "")}</span>
+            <span>{text(event.detail?.summary ?? event.detail?.message ?? "技术事件已记录")}</span>
           </div>
         ))}
-      </div>
+      </details>
     </section>
   );
 }

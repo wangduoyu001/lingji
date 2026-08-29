@@ -3,7 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { ApiError } from "../api";
 import { Empty } from "../components/ui";
 import type { PageProps } from "../types";
-import { ACTIVE_POLL_MS, IDLE_POLL_MS, WORKSPACE_LIMIT, displayPath, progressLabel } from "./codexWorkspaceContract";
+import { ACTIVE_POLL_MS, IDLE_POLL_MS, WORKSPACE_LIMIT, displayPath, paginationHasNext, progressLabel } from "./codexWorkspaceContract";
 import { CodexWorkspaceApi } from "./codexWorkspaceApi";
 import type { ActivityEvent, CodexCurrent, CodexProject, CodexSession, ContextPack, WorkspaceFilters } from "./codexWorkspaceTypes";
 import "./LocalMemoryLoop.css";
@@ -16,7 +16,10 @@ export default function CodexWorkspacePage({ api, active, onOpenInspector }: Pro
   const client = useMemo(() => new CodexWorkspaceApi(api), [api]);
   const [current, setCurrent] = useState<CodexCurrent | null>(null);
   const [projects, setProjects] = useState<CodexProject[]>([]);
+  const [projectPagination, setProjectPagination] = useState<{ limit: number; offset: number; total: number | null; has_more?: boolean } | null>(null);
+  const [projectOffset, setProjectOffset] = useState(0);
   const [sessions, setSessions] = useState<CodexSession[]>([]);
+  const [sessionPagination, setSessionPagination] = useState<{ limit: number; offset: number; total: number | null; has_more?: boolean } | null>(null);
   const [selected, setSelected] = useState<CodexSession | null>(null);
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [filters, setFilters] = useState<WorkspaceFilters>({ projectId: "", status: "", q: "", limit: WORKSPACE_LIMIT, offset: 0 });
@@ -39,16 +42,18 @@ export default function CodexWorkspacePage({ api, active, onOpenInspector }: Pro
     const id = ++listRequestId.current;
     listAbort.current = abort;
     try {
-      const [now, projectPage, sessionPage] = await Promise.all([client.current(abort.signal), client.projects(abort.signal), client.sessions(filters, abort.signal)]);
+      const [now, projectPage, sessionPage] = await Promise.all([client.current(abort.signal), client.projects(abort.signal, projectOffset), client.sessions(filters, abort.signal)]);
       if (id !== listRequestId.current) return;
       setCurrent(now);
       setProjects(projectPage.items ?? []);
+      setProjectPagination(projectPage.pagination ?? null);
       setSessions(sessionPage.items ?? []);
+      setSessionPagination(sessionPage.pagination ?? null);
       setError(null);
     } catch (reason) {
       if (id === listRequestId.current && reason instanceof ApiError && reason.code !== "REQUEST_CANCELLED") setError(reason);
     }
-  }, [active, client, filters]);
+  }, [active, client, filters, projectOffset]);
 
   const pollActivity = useCallback(async () => {
     if (!active || document.hidden) return;
@@ -158,6 +163,7 @@ export default function CodexWorkspacePage({ api, active, onOpenInspector }: Pro
             </button>
           )) : <Empty text="尚未识别项目。" />}
         </div>
+        <div className="loop-pager"><button disabled={projectOffset === 0} onClick={() => setProjectOffset(Math.max(0, projectOffset - WORKSPACE_LIMIT))}>上一页</button><span>{projectPagination?.total == null ? "第 1 页" : `${Math.floor(projectOffset / WORKSPACE_LIMIT) + 1} / ${Math.max(1, Math.ceil(projectPagination.total / WORKSPACE_LIMIT))}`}</span><button disabled={!paginationHasNext(projectPagination)} onClick={() => setProjectOffset(projectOffset + WORKSPACE_LIMIT)}>下一页</button></div>
       </aside>
 
       <section className="loop-panel session-browser-panel">
@@ -177,7 +183,7 @@ export default function CodexWorkspacePage({ api, active, onOpenInspector }: Pro
             </button>
           )) : <Empty text={filters.projectId || filters.status || filters.q ? "筛选后没有 Session。" : "没有 Session。"} />}
         </div>
-        <div className="loop-pager"><button disabled={filters.offset === 0} onClick={() => setFilters({ ...filters, offset: Math.max(0, filters.offset - WORKSPACE_LIMIT) })}>上一页</button><span>第 {Math.floor(filters.offset / WORKSPACE_LIMIT) + 1} 页</span><button onClick={() => setFilters({ ...filters, offset: filters.offset + WORKSPACE_LIMIT })}>下一页</button></div>
+        <div className="loop-pager"><button disabled={filters.offset === 0} onClick={() => setFilters({ ...filters, offset: Math.max(0, filters.offset - WORKSPACE_LIMIT) })}>上一页</button><span>{sessionPagination?.total == null ? `第 ${Math.floor(filters.offset / WORKSPACE_LIMIT) + 1} 页` : `${Math.floor(filters.offset / WORKSPACE_LIMIT) + 1} / ${Math.max(1, Math.ceil(sessionPagination.total / WORKSPACE_LIMIT))}`}</span><button disabled={!paginationHasNext(sessionPagination)} onClick={() => setFilters({ ...filters, offset: filters.offset + WORKSPACE_LIMIT })}>下一页</button></div>
       </section>
 
       <aside className="loop-panel session-detail-panel">

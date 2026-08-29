@@ -148,6 +148,11 @@ class AutomaticMemoryWatcher:
                 raise LookupError(f"watcher source is not running: {source_id}")
             if self._paused:
                 return
+            # watchfiles may yield an empty batch while a directory is quiet.
+            # It is an observation heartbeat, not evidence that a source changed.
+            changes = tuple(changes)
+            if not changes:
+                return
             source = self._source(source_id)
             if str(self._value(source, "status")) != "authorized":
                 # Revocation/unsupported transitions are normal lifecycle

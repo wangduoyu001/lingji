@@ -3,6 +3,7 @@ import { Empty, Metric, Notice } from "../components/ui";
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { PageProps, Row } from "../types";
 import type { AutoReviewAudit, AutoReviewDecisionPage, AutoReviewMetrics, AutoReviewStatus } from "./autoReviewTypes";
+import { formatErrorForUi } from "./codexWorkspaceContract";
 
 const ACTION_LABELS: Record<string, string> = {
   would_auto_approve: "建议自动批准",
@@ -60,7 +61,7 @@ export default function AutoReviewPage({ api, active }: PageProps) {
       setSelected(result);
       await resource.refresh();
     } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : String(reason));
+      setActionError(formatErrorForUi(reason));
     } finally {
       setActionState("");
     }
@@ -74,7 +75,7 @@ export default function AutoReviewPage({ api, active }: PageProps) {
       await api.post("/api/auto-review/feedback", { decision_id: selected.decision.decision_id, outcome: feedbackOutcome, notes: feedbackNotes });
       setFeedbackNotes("");
     } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : String(reason));
+      setActionError(formatErrorForUi(reason));
     } finally {
       setActionState("");
     }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Empty, Metric, Notice, Panel, bytes } from "../components/ui";
 import type { BrainStatusSummary, EmbeddingStatus, MemoryStatus, PageProps, RuntimeWarning, VectorCoverage, VectorStatus } from "../types";
+import { vectorSemanticLabel } from "./codexWorkspaceContract";
 
 const REFRESH_INTERVAL_MS = 15_000;
 const DEFAULT_MISSING_LIMIT = 20;
@@ -103,6 +104,7 @@ export default function VectorCenterPage({ api, active }: PageProps) {
   const visibleMissingIds = showAllMissing ? missingIds : missingIds.slice(0, DEFAULT_MISSING_LIMIT);
   const allPrimaryFailed = !memory && !vector && !coverage && Boolean(memoryError && vectorError && coverageError);
   const topState = allPrimaryFailed ? "unavailable" : stale ? "stale" : vector?.state ?? memory?.state ?? coverage?.state ?? "unavailable";
+  const semanticState = vectorSemanticLabel(memory?.state, embedding?.available);
   const endpointErrors = useMemo(() => [
     memoryError && `Memory Status: ${memoryError}`, vectorError && `Vector Status: ${vectorError}`,
     coverageError && `Vector Coverage: ${coverageError}`, brainError && `Brain Status: ${brainError}`,
@@ -114,6 +116,7 @@ export default function VectorCenterPage({ api, active }: PageProps) {
     {!active && <Notice kind="warning">本机服务已断开。页面保留上次成功数据，不会把连接失败伪装成本地状态。</Notice>}
     {allPrimaryFailed && <Notice kind="error">三个正式状态接口均读取失败。请检查 8766 控制服务、访问令牌和运行日志。</Notice>}
     {stale && <Notice kind="warning">当前状态快照已经超过有效时间。它表示数据可能不是最新，并不等于记忆系统已经损坏。</Notice>}
+    {memory && embedding?.available === false && <Notice kind="warning">{semanticState}。请配置 Embedding 服务后再使用语义检索。</Notice>}
 
     <div className="toolbar vector-toolbar">
       <button className="button secondary" disabled={!active || refreshing} onClick={() => void load()} aria-label="刷新向量中心状态">{refreshing ? "正在刷新…" : "刷新状态"}</button>
@@ -125,7 +128,7 @@ export default function VectorCenterPage({ api, active }: PageProps) {
     <div className="vector-summary-grid">
       <Metric title="文档" value={count(memory?.documents)} detail={`Core Memory ${count(memory?.core_memories)}`} />
       <Metric title="Chunk" value={count(memory?.chunks)} detail={`Revision ${count(memory?.revision)}`} />
-      <Metric title="向量" value={count(vector?.vectors)} detail={`已索引 ${count(coverage?.indexed)}`} tone={vector?.ready ? "good" : "warn"} />
+      <Metric title="向量" value={count(vector?.vectors)} detail={`${semanticState} · 已索引 ${count(coverage?.indexed)}`} tone={vector?.ready ? "good" : "warn"} />
       <Metric title="覆盖率" value={percentage(coverage?.coverage)} detail={`缺失 ${count(coverage?.missing)}`} tone={coverage?.coverage === 1 ? "good" : coverage?.coverage == null ? "neutral" : "warn"} />
     </div>
     <div className="vector-summary-grid">

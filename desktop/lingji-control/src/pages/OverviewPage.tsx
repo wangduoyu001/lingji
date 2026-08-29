@@ -6,6 +6,7 @@ import { MemorySourcesApi, sourceStateLabel, scanStatusLabel, countLabel } from 
 import type { MemorySourcesSnapshot } from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { PageId, Row } from "../types";
+import { activeAuthorizedCount } from "./codexWorkspaceContract";
 
 const display = (value: unknown, fallback = "尚未获得") => value === null || value === undefined || value === "" ? fallback : String(value);
 const stateTone = (value: unknown): "good" | "warn" | "bad" | undefined => {
@@ -15,7 +16,7 @@ const stateTone = (value: unknown): "good" | "warn" | "bad" | undefined => {
   if (["failed", "error", "unavailable", "blocked"].includes(state)) return "bad";
   return undefined;
 };
-const stateLabel = (value: unknown) => ({ healthy: "运行正常", ready: "已就绪", degraded: "需要检查", failed: "运行失败", unavailable: "当前不可用", stale: "数据过期" } as Record<string, string>)[String(value ?? "")] ?? display(value);
+const stateLabel = (value: unknown) => ({ healthy: "运行正常", ready: "已就绪", degraded: "需要检查", failed: "运行失败", unavailable: "当前不可用", configuration_required: "需要配置", stale: "数据过期" } as Record<string, string>)[String(value ?? "")] ?? display(value);
 
 export default function OverviewPage({ data, api, active, onNavigate }: { data: Row | null; api: LingJiApi; active: boolean; onNavigate: (page: PageId) => void }) {
   const sourceApi = useMemo(() => new MemorySourcesApi(api), [api]);
@@ -47,7 +48,7 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
     <section className="attention-summary"><div><span className="desktop-eyebrow">OWNER ATTENTION</span><h3>需要你决定的事项以真实待办为准</h3><p>只有持久化工作事实要求主人确认时，灵机才会把事情交给你。</p></div><button className="button secondary" onClick={() => onNavigate("attention")}>查看待办</button></section>
 
     <section className="overview-section source-overview-card"><div className="overview-section-heading"><div><span className="desktop-eyebrow">MEMORY SOURCES</span><h3>灵机发现并接管了什么</h3></div><button className="button secondary" onClick={() => onNavigate("memory_sources")}>查看记忆来源</button></div>
-      <div className="source-overview-copy"><div><strong>已发现</strong><span>{sourceSnapshot ? sourceSnapshot.discovered.map((item) => item.display_name).join("、") || "尚未发现" : "尚未获得"}</span></div><div><strong>已授权 / 当前</strong><span>{sourceSnapshot ? `${sourceSnapshot.authorized.filter((item) => item.status === "authorized").length} 个已授权，${sourceSnapshot.sources.filter((item) => item.state === "current").length} 个已接管` : "尚未获得"}</span></div><div><strong>下一步</strong><span>{latestSource?.nextAction ?? "打开记忆来源查看授权和扫描下一步。"}</span></div></div>
+      <div className="source-overview-copy"><div><strong>已发现</strong><span>{sourceSnapshot ? sourceSnapshot.discovered.map((item) => item.display_name).join("、") || "尚未发现" : "尚未获得"}</span></div><div><strong>已授权 / 当前</strong><span>{sourceSnapshot ? `${activeAuthorizedCount(sourceSnapshot.authorized)} 个已授权，${sourceSnapshot.sources.filter((item) => item.state === "current").length} 个已接管` : "尚未获得"}</span></div><div><strong>下一步</strong><span>{latestSource?.nextAction ?? "打开记忆来源查看授权和扫描下一步。"}</span></div></div>
     </section>
 
     <section className="overview-section"><div className="overview-section-heading"><div><span className="desktop-eyebrow">CURRENT ACTIVITY</span><h3>现在正在做什么</h3></div><small>{latestStatus ? (latestSource ? sourceStateLabel(latestStatus) : scanStatusLabel(String(latestStatus))) : "尚未获得"}</small></div><div className="metric-grid observation-metric-grid"><Metric title="当前活动" value={latestSource?.display_name ?? "尚未获得"} detail={latestSource ? `${latestSource.detail} · 进度 ${latestSource.latestScan?.progress ?? "尚未获得"}/${latestSource.latestScan?.total ?? "尚未获得"}` : "打开记忆来源查看"} tone={stateTone(latestStatus)} /><Metric title="本次新增" value={countLabel(run?.queued)} detail="后端未提供时显示尚未获得" /><Metric title="本次更新" value={countLabel(run?.updated)} detail="后端未提供时显示尚未获得" /><Metric title="本次跳过" value={countLabel(run?.skipped)} detail="后端未提供时显示尚未获得" /><Metric title="本次复用" value={countLabel(run?.reused)} detail="已有证据不会重复导入" /><Metric title="本次失败" value={countLabel(run?.failed)} detail={latest?.last_error ? String(latest.last_error) : "没有可确认的失败数量"} tone={latest?.last_error ? "bad" : undefined} /></div></section>

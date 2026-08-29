@@ -38,10 +38,12 @@ export default function ObsidianPage({ api, active }: PageProps) {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "failed">("idle");
 
   const load = useCallback(async () => {
     if (!active) return;
     setBusy(true);
+    setLoadState("loading");
     try {
       const [nextStatus, settings] = await Promise.all([
         api.get<ObsidianStatus>("/api/obsidian/status"),
@@ -58,8 +60,10 @@ export default function ObsidianPage({ api, active }: PageProps) {
         obsidian_cli_dry_run: Boolean(values.obsidian_cli_dry_run),
       });
       setError("");
+      setLoadState("loaded");
     } catch (reason) {
       setError(errorText(reason));
+      setLoadState("failed");
     } finally {
       setBusy(false);
     }
@@ -115,7 +119,7 @@ export default function ObsidianPage({ api, active }: PageProps) {
   }
 
   if (!active && !status) return <Empty text="连接本机服务后显示 Obsidian 状态。" />;
-  if (!draft) return <Empty text={busy ? "正在读取 Obsidian 配置…" : "尚未加载 Obsidian 配置。"} />;
+  if (!draft) return <Empty text={loadState === "loading" ? "正在读取 Obsidian 配置…" : loadState === "failed" ? `Obsidian 配置读取失败：${error || "请检查本机服务后重试。"}` : "尚未加载 Obsidian 配置。"} />;
 
   return <div className="stack">
     {!active && <Notice kind="warning">本机控制服务已断开，页面保留上次状态。</Notice>}

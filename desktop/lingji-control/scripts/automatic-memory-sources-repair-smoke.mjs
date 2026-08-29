@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { actionAvailability, authorizationEvidence, decideOnboardingRoute } from "../src/pages/memorySourcesApi.ts";
 import { canPublishRequest, ownsRequest } from "../src/hooks/usePollingResource.ts";
+import { activeAuthorizedCount, captureJobLabel, captureJobSummary, formatErrorForUi, paginationHasNext, vectorSemanticLabel } from "../src/pages/codexWorkspaceContract.ts";
+
+const sourceText = async (path) => {
+  try { return await readFile(new URL(path, import.meta.url), "utf8"); }
+  catch { return ""; }
+};
+const [contract, sourcesPage, overviewPage, workPage, codexPage, reviewPage, autoReviewPage, capturePage, obsidianPage, vectorPage, inspectorPage] = await Promise.all([
+  sourceText("../src/pages/codexWorkspaceContract.ts"), sourceText("../src/pages/MemorySourcesPage.tsx"),
+  sourceText("../src/pages/OverviewPage.tsx"), sourceText("../src/components/CurrentWorkPanel.tsx"),
+  sourceText("../src/pages/CodexWorkspacePage.tsx"), sourceText("../src/pages/MemoryReviewPage.tsx"),
+  sourceText("../src/pages/AutoReviewPage.tsx"), sourceText("../src/pages/CaptureCenterPage.tsx"),
+  sourceText("../src/pages/ObsidianPage.tsx"), sourceText("../src/pages/VectorCenterPage.tsx"),
+  sourceText("../src/pages/MemoryInspectorPage.tsx"),
+]);
 
 const available = [{ status: "available", kind: "generic_ai_history" }];
 const empty = [];
@@ -18,4 +33,56 @@ assert.equal(ownsRequest(freshRequest, freshRequest), true);
 assert.equal(canPublishRequest(freshRequest, oldRequest, true), false, "aborted ordinary errors cannot overwrite a newer request");
 assert.equal(canPublishRequest(freshRequest, freshRequest, true), false, "aborted current errors cannot publish");
 assert.equal(canPublishRequest(freshRequest, freshRequest, false), true);
-console.log("automatic-memory-sources-repair-smoke: PASS");
+assert.equal(activeAuthorizedCount([{ status: "authorized" }, { status: "current" }, { status: "revoked" }]), 2);
+assert.equal(paginationHasNext({ total: 0, offset: 0, limit: 30, has_more: false }), false);
+assert.equal(paginationHasNext({ total: 31, offset: 0, limit: 30, has_more: true }), true);
+assert.equal(formatErrorForUi({ message: "候选 ID 不存在", next_action: "请刷新候选列表" }), "候选 ID 不存在 下一步：请刷新候选列表");
+assert.equal(formatErrorForUi({ code: "NOT_FOUND" }).includes("[object Object]"), false);
+assert.equal(captureJobLabel({ source_type: "web", status: "completed" }), "文本 · 已完成");
+assert.equal(captureJobSummary({ status: "completed", error_message: null }), "已完成，可在任务详情查看技术信息");
+assert.equal(vectorSemanticLabel("healthy", false), "记忆可用、语义向量待配置/降级");
+
+const failures = [];
+const behavior = (name, check) => { try { check(); } catch (error) { failures.push(`${name}: ${error.message}`); } };
+behavior("source count excludes revoked", () => {
+  assert.match(contract, /activeAuthorizedCount/);
+  assert.match(sourcesPage, /activeAuthorizedCount\(snapshot\.authorized\)/);
+  assert.match(overviewPage, /activeAuthorizedCount\(sourceSnapshot\.authorized\)/);
+});
+behavior("configuration required and ordinary work noise", () => {
+  assert.match(overviewPage, /configuration_required/);
+  assert.match(overviewPage, /需要配置|需要先配置/);
+  assert.doesNotMatch(workPage, /JSON\.stringify\(event\.detail\)/);
+});
+behavior("pagination follows backend has_more", () => {
+  assert.match(contract, /paginationHasNext/);
+  assert.match(codexPage, /paginationHasNext\(sessionPagination/);
+  assert.match(reviewPage, /paginationHasNext\(pagination/);
+});
+behavior("structured shadow errors have a stable user message", () => {
+  assert.match(contract, /formatErrorForUi/);
+  assert.match(autoReviewPage, /formatErrorForUi\(reason/);
+  assert.doesNotMatch(autoReviewPage, /String\(reason\)/);
+});
+behavior("text capture rows use user semantics", () => {
+  assert.match(contract, /captureJobLabel/);
+  assert.match(capturePage, /captureJobLabel\(job\)/);
+  assert.doesNotMatch(capturePage, /job\.source_type \?\? "未知".*job\.adapter_name/);
+});
+behavior("obsidian load ends in a truthful terminal state", () => {
+  assert.match(obsidianPage, /loadState/);
+  assert.match(obsidianPage, /配置读取失败/);
+  assert.match(obsidianPage, /尚未加载 Obsidian 配置/);
+});
+behavior("memory and vector degraded states stay consistent", () => {
+  assert.match(contract, /vectorSemanticLabel/);
+  assert.match(vectorPage, /vectorSemanticLabel\(/);
+  assert.match(inspectorPage, /vectorSemanticLabel/);
+  assert.match(vectorPage, /semanticState/);
+});
+if (failures.length) {
+  console.error(failures.join("\n"));
+  process.exitCode = 1;
+} else {
+  console.log("automatic-memory-sources-repair-smoke: PASS (Task8E behaviors included)");
+}

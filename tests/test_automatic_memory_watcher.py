@@ -40,6 +40,22 @@ def test_events_are_debounced_for_five_seconds_and_duplicate_callbacks_are_suppr
     watcher.stop()
 
 
+def test_empty_watcher_batches_do_not_admit_a_scan_or_work_fact(tmp_path: Path):
+    calls: list[str] = []
+    watcher = AutomaticMemoryWatcher(
+        source_provider=lambda _source_id: source(tmp_path),
+        on_change=calls.append,
+    )
+    watcher.start("src-1")
+    try:
+        for _ in range(5):
+            watcher.notify("src-1", set())
+            assert watcher.flush("src-1", force=True) is False
+        assert calls == []
+    finally:
+        watcher.stop()
+
+
 def test_pause_revoke_and_unsupported_sources_do_not_admit_work(tmp_path: Path):
     calls: list[str] = []
     current = source(tmp_path)

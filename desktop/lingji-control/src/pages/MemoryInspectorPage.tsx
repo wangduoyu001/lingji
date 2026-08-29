@@ -251,7 +251,7 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
           ["Chunk", status?.chunks],
         ].map(([label, value]) => <div key={String(label)}><span>{label}</span><strong>{countLabel(value)}</strong></div>)}
         <div><span>Vector 覆盖</span><strong>{typeof status?.vectorCoverage === "number" ? `${(status.vectorCoverage * 100).toFixed(2)}%` : "未知"}</strong></div>
-        <div><span>Vector 状态</span><strong>{text(status?.vectorState)}</strong></div>
+        <div><span>Vector 状态</span><strong>{text(status?.vectorSemanticLabel || status?.vectorState)}</strong></div>
         <div><span>重建状态</span><strong>{rebuildLabel(status?.rebuildRequired)}</strong></div>
         <div><span>最后更新</span><strong>{dateTime(status?.asOf)}</strong></div>
       </div>

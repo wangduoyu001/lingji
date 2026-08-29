@@ -3,7 +3,7 @@ import { ApiError } from "../api";
 import { Empty, Notice } from "../components/ui";
 import type { PageProps } from "../types";
 import type { CaptureInspectorTarget } from "./captureCenterTypes";
-import { REVIEW_LIMIT, canApprove, integrityMessage } from "./codexWorkspaceContract";
+import { REVIEW_LIMIT, canApprove, integrityMessage, paginationHasNext } from "./codexWorkspaceContract";
 import { MemoryReviewApi } from "./memoryReviewApi";
 import type { CoreIntegrity, CoreMemoryDraft, MemoryCandidate, ReviewFilters } from "./memoryReviewTypes";
 import "./LocalMemoryLoop.css";
@@ -17,6 +17,7 @@ export default function MemoryReviewPage({ api, active, onOpenInspector }: PageP
   const client = useMemo(() => new MemoryReviewApi(api), [api]);
   const [filters, setFilters] = useState<ReviewFilters>({ projectId: "", agent: "", type: "", importance: "", q: "", limit: REVIEW_LIMIT, offset: 0 });
   const [items, setItems] = useState<MemoryCandidate[]>([]);
+  const [pagination, setPagination] = useState<{ limit: number; offset: number; total: number | null; has_more?: boolean } | null>(null);
   const [selected, setSelected] = useState<MemoryCandidate | null>(null);
   const [editContent, setEditContent] = useState("");
   const [rejectReason, setRejectReason] = useState("");
@@ -45,6 +46,7 @@ export default function MemoryReviewPage({ api, active, onOpenInspector }: PageP
       const response = await client.candidates(filters, abort.signal);
       if (id === requestId.current) {
         setItems(response.items ?? []);
+        setPagination(response.pagination ?? null);
         setListError(null);
         setError(null);
       }
@@ -201,7 +203,7 @@ export default function MemoryReviewPage({ api, active, onOpenInspector }: PageP
             </button>
           )) : <Empty text={hasFilters(filters) ? "筛选后没有候选记忆。" : "没有待审核记忆。"} />}
         </div>
-        <div className="loop-pager"><button disabled={filters.offset === 0} onClick={() => setFilters({ ...filters, offset: Math.max(0, filters.offset - REVIEW_LIMIT) })}>上一页</button><span>第 {Math.floor(filters.offset / REVIEW_LIMIT) + 1} 页</span><button onClick={() => setFilters({ ...filters, offset: filters.offset + REVIEW_LIMIT })}>下一页</button></div>
+        <div className="loop-pager"><button disabled={filters.offset === 0} onClick={() => setFilters({ ...filters, offset: Math.max(0, filters.offset - REVIEW_LIMIT) })}>上一页</button><span>{pagination?.total == null ? `第 ${Math.floor(filters.offset / REVIEW_LIMIT) + 1} 页` : `${Math.floor(filters.offset / REVIEW_LIMIT) + 1} / ${Math.max(1, Math.ceil(pagination.total / REVIEW_LIMIT))}`}</span><button disabled={!paginationHasNext(pagination)} onClick={() => setFilters({ ...filters, offset: filters.offset + REVIEW_LIMIT })}>下一页</button></div>
       </aside>
 
       <section className="loop-panel review-detail-panel">

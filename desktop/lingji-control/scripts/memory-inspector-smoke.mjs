@@ -43,6 +43,7 @@ assert.deepEqual(summary, {
   chunks: 6,
   vectorCoverage: 0.75,
   vectorState: "healthy",
+  vectorSemanticLabel: "向量状态：healthy",
   rebuildRequired: null,
   asOf: "2026-07-21T00:00:00Z",
 });

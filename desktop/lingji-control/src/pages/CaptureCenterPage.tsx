@@ -22,6 +22,7 @@ import {
   validateText,
   validateUrl,
 } from "./captureCenterContract";
+import { captureJobLabel, captureJobSummary } from "./codexWorkspaceContract";
 import type {
   CaptureCapabilitiesResponse,
   CaptureInspectorTarget,
@@ -259,7 +260,7 @@ export default function CaptureCenterPage({ api, active, onOpenInspector }: Prop
         <div className="capture-job-list">
           {jobs.map((job) => (
             <article key={job.job_id} className={`capture-job${restrictedClass(job.privacy)}`}>
-              <button className="capture-job-main" onClick={() => setSelectedJob(job)}><strong>{safeName(job)}</strong><span>{job.source_type ?? "未知"} · {job.adapter_name ?? "未知"}</span><span>{job.status} · 进度 {progressLabel(job)}</span><span>尝试 {count(job.attempts)}/{count(job.max_attempts)}</span><small>{job.error_message || job.result_summary || "无错误摘要"}</small><small>{time(job.created_at)} → {time(job.updated_at)}</small></button>
+              <button className="capture-job-main" onClick={() => setSelectedJob(job)}><strong>{safeName(job)}</strong><span>{captureJobLabel(job)}</span><span>进度 {progressLabel(job)}</span><span>尝试 {count(job.attempts)}/{count(job.max_attempts)}</span><small>{captureJobSummary(job)}</small><small>{time(job.created_at)} → {time(job.updated_at)}</small></button>
               <div className="capture-job-actions"><button disabled={!canCancel(job.status) || operatingJobId === job.job_id} onClick={() => void operate(job, "cancel")}>取消</button><button disabled={!canRetry(job.status) || operatingJobId === job.job_id} onClick={() => void operate(job, "retry")}>重试</button>{job.status === "running" && <span>处理中，当前版本不支持强制终止</span>}{job.status === "completed" && resultTarget(job) && <button onClick={() => onOpenInspector(resultTarget(job)!)}>查看结果</button>}</div>
             </article>
           ))}

@@ -2,6 +2,8 @@
 
 export const INSPECTOR_LIMIT = 30;
 
+import { vectorSemanticLabel } from "./codexWorkspaceContract";
+
 const clean = (params: Record<string, string | undefined>): Record<string, string> =>
   Object.fromEntries(
     Object.entries(params).filter(([, value]) => value !== "" && value !== null && value !== undefined),
@@ -52,6 +54,12 @@ export const mapStatus = (response: InspectorStatusResponse | Record<string, unk
   chunks: (response as InspectorStatusResponse)?.memory?.chunks ?? null,
   vectorCoverage: (response as Record<string, Record<string, unknown>>)?.vector?.coverage ?? null,
   vectorState: (response as Record<string, Record<string, unknown>>)?.vector?.state ?? null,
+  vectorSemanticLabel: vectorSemanticLabel(
+    String((response as Record<string, Record<string, unknown>>)?.memory?.state ?? ""),
+    ((response as Record<string, Record<string, unknown>>)?.vector?.embedding_available === false
+      || ["degraded", "unavailable", "configuration_required"].includes(String((response as Record<string, Record<string, unknown>>)?.vector?.state))) ? false : null,
+    String((response as Record<string, Record<string, unknown>>)?.vector?.state ?? "") || null,
+  ),
   rebuildRequired: (response as Record<string, Record<string, unknown>>)?.vector?.rebuild_required ?? null,
   asOf: (response as Record<string, string>)?.as_of ?? null,
 });
