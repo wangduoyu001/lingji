@@ -61,7 +61,8 @@ revoke prevents subsequent scan admission, and the runtime mode is `periodic_rec
 
 ## Implementation summary
 
-- `Settings.automatic_memory_event_watcher_enabled` defaults to `False`.
+- `Settings.automatic_memory_event_watcher_enabled` is tri-state: unset resolves to periodic mode
+  on Darwin and preserves event-watcher mode elsewhere; explicit true/false always wins.
 - `AutomaticMemoryRuntime` passes that setting into the existing scheduler and exposes
   `automation_mode`, `event_watcher_enabled`, and `next_reconciliation_seconds` in the existing
   runtime status DTO.
@@ -97,3 +98,26 @@ Product/test commits `6862c46bd9718998235d42cf7a29a7e02ea7ea95` and
 
 The acceptance log, implementation plan, and this report are committed separately as the docs
 commit after the product/test commit.
+
+## Repair Round 1 disposition
+
+The independent review identified two Important findings and three evidence gaps. This round
+keeps the existing scheduler and source lifecycle boundaries and adds no new data authority.
+
+- Platform policy is centralized in `src/automatic_memory/policy.py`. With no explicit setting,
+  Darwin resolves to periodic reconciliation and Windows/non-Darwin resolves to the historical
+  event watcher. `AutomaticMemoryRuntime` accepts an injectable `platform_provider`; an explicit
+  `automatic_memory_event_watcher_enabled` setting always wins.
+- Runtime and summary API responses now carry the configured reconciliation interval and maximum
+  change-detection delay. The source UI uses an executable pure helper: 60/900/1800 seconds render
+  as 1/15/30 minutes, while missing/invalid intervals render “尚未获得”; event mode renders no
+  periodic notice.
+- Tests now cover two quiet reconciliation periods with zero event scans, scheduled discovery,
+  pause/resume/restart, revoke, runtime/API parity, platform defaults and overrides. The Desktop
+  smoke executes the interval/copy helper for each mode instead of relying only on copy regexes.
+- `docs/PROJECT_STATUS.md` now records the platform split, truthful 15-minute default, 30-second
+  SLA limitation, and continuing Phase 1 `BLOCKED` disposition.
+
+Repair Round 1 product/test commit is `cf09946102d89ddf67f3f69bae79f7bd45180dfe`; the docs
+commit follows after final verification. No live app, package, install, Artifact, Production/Vault,
+or owner data was used.

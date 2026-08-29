@@ -17,6 +17,21 @@
 - 清理/回滚：测试只用 pytest `tmp_path`/synthetic fixture；回滚本轮产品/测试提交和本条文档
   提交，不触碰 Production、Vault、raw、memory、Qdrant、主人配置。
 
+## 2026-08-29 · Task 8E · Safe polling fallback Repair Round 1
+
+- 本轮修复审查 I1/I2 与 M1–M3：safe polling 默认只对 Darwin/macOS 生效，Windows/非 Mac
+  保持 event watcher；平台判定集中于可注入 policy，显式设置可覆盖默认。Runtime/API 必须
+  暴露真实 reconciliation interval 与最大变化发现延迟，UI 根据字段渲染，字段缺失不得伪造
+  15 分钟；已有 startup/manual/reconciliation/integrity/revoke/pause/resume/restart 保持。
+- 自动验收：默认 Darwin periodic、Windows event、显式覆盖和 runtime/API mode/interval parity；
+  60/900/1800 秒 UI 文案分别显示 1/15/30 分钟，缺失显示“尚未获得”；fallback 静止两个旧
+  周期无 event scan，scheduled reconciliation 仍发现变化，pause/resume/restart 恢复，revoke
+  停止扫描；UI helper 执行式 DTO 合同加最小 wiring 检查；另跑 backend focused、Desktop
+  23-script smoke/build、compileall、diff-check、acceptance sync、local handoff。
+- 结果边界：本轮仍不满足 30 秒事件 SLA，只满足按配置周期的自动核对；Phase 1 自动接管门禁
+  继续 `BLOCKED`。不打包、不安装、不启动 live app、不访问 Acceptance root、Production、Vault
+  或主人数据。
+
 ## 2026-08-29 · Task 8E · Mac experience repair candidate
 
 - 基线：`ffc2d8851dc91b5f09b14d31a34c1e6988358933`；唯一要求源为 `.superpowers/sdd/2026-08-29-task8e-mac-experience-repair/task-1-brief.md` 与 `task-1-observations.md`。本轮只修复来源计数、普通首屏/任务行降噪、真实分页、watcher 空事件、SHADOW 错误展示、Obsidian 终态和 Vector/Memory 状态语义，不改变 Task7、检索质量、模型能力或永久数据权威。
