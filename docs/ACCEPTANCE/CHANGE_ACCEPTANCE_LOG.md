@@ -1,5 +1,12 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Owner-facing plain UI repair Round 3
+
+- 独立复审仅剩 completed scan detail 的计数证据边界：`ScanRun` 模型对未由 StateDB 提供的 `queued/reused` 等字段会默认填充 0，不能在 Desktop 详情中当作真实测量值。本轮只在 Desktop DTO/API adapter 统一摘要与详情的计数判定，不改 backend、数据模型、队列、自动化、API 动作或 live。
+- 新增 `scanCountValue` 证据归一化：正数可作为真实值；0 只有 DTO 明确带 `counts_present` 字段时才显示；缺字段或 legacy/model 默认 0 显示“检查结果尚未获得”。同一 helper 用于 Home 摘要与检查详情，明确真实 0 仍显示 0。
+- rendered fixture 覆盖 completed 缺字段、legacy/default 0、明确 0 与明确正数，并保留 running 详情未知计数断言；测试先取得 RED，再以最小实现 GREEN。
+- 自动验收：`npm run test:e2e:memory`、Desktop `npm run test:smoke`（23 scripts）、`npm run build`、Task8E backend focused、compileall、diff-check、acceptance sync、local handoff。未启动/打包/安装 App，未操作 live、Acceptance/Production/Vault 或主人数据；主人观察仍为 `READY_FOR_OWNER_EXPERIENCE`。报告沿用 `.superpowers/sdd/2026-08-29-task8e-owner-plain-ui/task-report.md`。
+
 ## 2026-08-29 · Task 8E · Owner-facing plain UI repair Round 2
 
 - 独立复审剩余 I1–I3：accepted/retrying 工作状态未知、真实 Claude `consent_required + 空路径` 被误计可连接、scan detail 的 model 默认计数 0 伪装为真实结果。本轮只改 Desktop owner-facing 展示与合成 rendered fixture，不改 backend、数据模型、队列、自动化或 live。

@@ -5,7 +5,7 @@
 ```text
 Verdict: PASS (focused implementation and rendered/behavior smoke)
 Merge recommendation: ALLOW owner observation
-Product commit: f2f4843
+Product commit: ea87ebe
 Artifact: NOT_BUILT_BY_SCOPE
 Artifact ID: NOT_APPLICABLE
 Report commit: the commit containing this report (see final delivery SHA)
@@ -20,7 +20,7 @@ Disposition: READY_FOR_OWNER_EXPERIENCE
 | 项目 | 实际 | 结论 |
 |---|---|---|
 | Repository | 灵机 | PASS |
-| Product Commit | `f2f4843` (`fix: clarify owner work and scan states`) | PASS |
+| Product Commit | `ea87ebe41ab37d44789ec68a126629fc074a483a` (`fix: preserve scan count evidence semantics`) | PASS |
 | Artifact | 未打包、未安装；按任务边界不生成 | NOT_BUILT_BY_SCOPE |
 | Artifact ID / hashes | `NOT_APPLICABLE` | NOT_APPLICABLE |
 | Report Commit | the commit containing this report | PASS |
@@ -58,7 +58,7 @@ Control/MCP ports: not exercised by scope
 | Desktop build | PASS | `npm run build`；Vite/TypeScript 编译完成 |
 | Memory source focused smokes | PASS | `npm run test:memory-sources`、`npm run test:memory-sources-repair`、`npm run test:work-fact` |
 | Backend focused regression | PASS | `pytest -q tests/test_task8e_safe_polling_fallback.py tests/test_automatic_memory_scheduler.py tests/test_automatic_memory_runtime.py tests/test_automatic_memory_control_api.py --tb=short`：`56 passed, 1 warning` |
-| Compile/diff/docs handoff | PASS | `python3 -m compileall -q src && git diff --check && python3 scripts/check_acceptance_sync.py && python3 scripts/check_local_execution_handoff.py` |
+| Compile/diff/docs handoff | PASS | `python3 -m compileall -q src`; `git diff --check`; `python3 scripts/check_acceptance_sync.py`; `python3 scripts/check_local_execution_handoff.py` |
 | Full/release validation | NOT_RUN_BY_SCOPE | 本轮禁止打包/安装/live 操作；未伪报通过 |
 
 ## 7. Desktop and First-Time UX
@@ -126,19 +126,25 @@ Round1 RED 证据包括 fixture 自身参数错误修正后，running 详情断�
 
 Round2 最终证据：rendered E2E `PASS`；23-script smoke 输出 `[smoke] PASS (23 scripts)`；build PASS；backend focused `56 passed, 1 warning`；compile、diff-check、acceptance-sync、local-handoff PASS。产品/测试 commit 为 `f2f4843`。
 
-## 12. Known Non-Blocking Limitations
+## 12. Owner-Plain Repair Round 3
+
+最终复审 `task-repair-2-review.md` 仅剩 I1：正式 `ScanRun` 模型对 StateDB 未提供的计数字段使用模型默认 0，completed detail 因而可能把未知显示成 0。本轮先在 rendered fixture 增加 completed 缺字段、legacy/default 0、明确 0、明确正数四态，RED 断言确认 legacy default 0 被误显示；随后在 Desktop `memorySourcesApi.ts` 建立 `scanCountValue` adapter 边界，只有数值为正或 DTO 明确通过 `counts_present` 标记该字段存在时才保留数字，缺字段/无标记默认 0 统一为 `undefined`。Home 摘要与检查详情共用该 helper，后端、API、数据模型和真实数据均未改动。
+
+Round3 GREEN 证据：`npm run test:e2e:memory` `PASS`；`npm run test:smoke` 输出 `[smoke] PASS (23 scripts)`；`npm run build` `PASS`；Task8E focused backend `56 passed, 1 warning`；`python3 -m compileall -q src`、`git diff --check`、`python3 scripts/check_acceptance_sync.py`、`python3 scripts/check_local_execution_handoff.py` 均 `PASS`。产品/测试 commit 为 `ea87ebe41ab37d44789ec68a126629fc074a483a`。
+
+## 13. Known Non-Blocking Limitations
 
 - Owner 尚未在最终候选真机上观察本轮 UI；当前 disposition 只能是 `READY_FOR_OWNER_EXPERIENCE`。
 - 未执行 release、打包、安装、live 8766/8767、重启/Windows 验收；这些不属于本轮被授权范围。
 
-## 13. Blocking Defects
+## 14. Blocking Defects
 
 None found in focused rendered/behavior or regression checks. Final owner acceptance remains pending by design.
 
-## 14. Final Merge Recommendation
+## 15. Final Merge Recommendation
 
 ```text
-Product commit: f2f4843
+Product commit: ea87ebe41ab37d44789ec68a126629fc074a483a
 Verdict: PASS (focused implementation and rendered/behavior smoke)
 Merge recommendation: ALLOW owner observation
 Owner observation complete: NO
@@ -149,7 +155,7 @@ Acceptance docs synchronized: YES (pending Round2 report commit)
 Temporary evidence cleaned: YES (no live/temporary acceptance data created)
 ```
 
-## 15. Sign-off
+## 16. Sign-off
 
 ```text
 Codex executor: Task8E Owner-facing Plain UI implementation agent
