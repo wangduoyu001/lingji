@@ -29,38 +29,84 @@ function readableNextActor(item: WorkHistoryItem): string {
   return shown(item.summary?.next_actor, "暂时没有下一步");
 }
 
+const EMPTY_SCAN_SUMMARIES = [
+  /^扫描完成，已检查\s*0\s*个来源文件（新增\s*0，复用\s*0）$/,
+  /^扫描完成，已检查\s*0\s*个来源文件\s*\(新增\s*0，复用\s*0\)$/,
+];
+
+function normalizeActivityResult(item: WorkHistoryItem): string | null {
+  const outcomeSummary = String(item.outcome?.summary ?? "").trim();
+  if (outcomeSummary) {
+    if (EMPTY_SCAN_SUMMARIES.some((pattern) => pattern.test(outcomeSummary))) return "检查完成，未发现新内容";
+    return outcomeSummary;
+  }
+  const summaryResult = String(item.summary?.result ?? "").trim();
+  return summaryResult || null;
+}
+
+function activitySourceIdentity(item: WorkHistoryItem): string | null {
+  const summarySourceId = String(item.summary?.source_id ?? "").trim();
+  if (summarySourceId) return `source:${summarySourceId}`;
+  const workSourceId = String(item.work?.source_id ?? "").trim();
+  return workSourceId ? `source:${workSourceId}` : null;
+}
+
 function isQuietSuccessfulScan(item: WorkHistoryItem): boolean {
   const status = item.outcome?.status || item.work?.status;
-  const source = String(item.summary?.source ?? "").toLowerCase();
+  const sourceId = activitySourceIdentity(item);
   const title = String(item.work?.title ?? "");
-  const result = String(item.summary?.result ?? item.outcome?.summary ?? "");
+  const result = normalizeActivityResult(item);
   return (status === "completed" || status === "success")
-    && (source === "obsidian" || /^扫描\s+obsidian$/i.test(title))
-    && result.includes("检查完成，未发现新内容")
+    && Boolean(sourceId)
+    && (/^扫描\s+obsidian$/i.test(title) || String(item.summary?.source ?? "").toLowerCase() === "obsidian")
+    && result === "检查完成，未发现新内容"
     && !item.failure
     && !(item.pending_actions ?? []).length;
 }
 
-function collapseQuietActivity(items: WorkHistoryItem[], total?: number | null): WorkHistoryItem[] {
-  const quiet = items.filter(isQuietSuccessfulScan);
-  if (quiet.length < 2) return items;
-  const first = quiet[0];
-  const count = quiet.length === items.length && typeof total === "number" && total > quiet.length ? total : quiet.length;
-  return [
-    {
-      ...first,
-      work: first.work ? { ...first.work, title: "Obsidian 长期记忆区" } : first.work,
-      summary: { ...(first.summary ?? {}), source: "Obsidian 长期记忆区", result: `Obsidian 长期记忆区已自动检查，未发现新内容；近期已检查${count}次` },
-      next_action: first.next_action ? { ...first.next_action, description: "灵机会继续自动检查", actor: "system" } : first.next_action,
-    },
-    ...items.filter((item) => !isQuietSuccessfulScan(item)),
-  ];
+type ActivityItem = WorkHistoryItem & { display_result?: string };
+
+function collapseQuietActivity(items: WorkHistoryItem[]): ActivityItem[] {
+  const output: ActivityItem[] = [];
+  let run: WorkHistoryItem[] = [];
+  let runIdentity: string | null = null;
+  const flush = () => {
+    if (!run.length) return;
+    const first = run[0];
+    if (run.length >= 2) {
+      output.push({
+        ...first,
+        display_result: `Obsidian 长期记忆区已自动检查，未发现新内容；近期已检查${run.length}次`,
+      });
+    } else {
+      output.push(first);
+    }
+    run = [];
+    runIdentity = null;
+  };
+  for (const item of items) {
+    const quiet = isQuietSuccessfulScan(item);
+    const identity = quiet ? activitySourceIdentity(item) : null;
+    if (quiet && run.length && identity === runIdentity) {
+      run.push(item);
+      continue;
+    }
+    flush();
+    if (quiet) {
+      run = [item];
+      runIdentity = identity;
+    } else {
+      output.push(item);
+    }
+  }
+  flush();
+  return output;
 }
 
-function WorkCard({ item }: { item: WorkHistoryItem }) {
+function WorkCard({ item }: { item: ActivityItem }) {
   const summary = item.summary ?? {};
   const status = item.outcome?.status || item.work?.status;
-  const result = summary.result || (status === "failed" ? "失败" : status === "completed" || status === "success" ? "成功" : null);
+  const result = item.display_result || normalizeActivityResult(item) || (status === "failed" ? "失败" : status === "completed" || status === "success" ? "成功" : null);
   return <article className="activity-card">
     <div className="activity-card-heading"><div><span className={`timeline-marker ${status === "failed" ? "failed" : status === "completed" || status === "success" ? "completed" : ""}`} /><strong>{readableActivityName(item.work?.title || summary.source) || "一项灵机工作"}</strong></div><span className={`pill ${status === "failed" ? "failed" : status === "completed" || status === "success" ? "success" : "neutral"}`}>{phaseLabel(summary.phase, status)}</span></div>
     <p className="activity-card-result">结果：{shown(result || item.outcome?.summary)}</p>
@@ -77,7 +123,7 @@ export default function ActivityPage({ api, active }: { api: LingJiApi; active: 
   if (!active) return <Empty text="连接灵机后显示活动记录。" />;
   if (resource.loading && !resource.data) return <Notice>正在读取活动记录…</Notice>;
   if (resource.error && !resource.data) return <Notice kind="error">活动读取失败：{resource.error.message}</Notice>;
-  const items = collapseQuietActivity(resource.data?.items ?? [], resource.data?.total);
+  const items = collapseQuietActivity(resource.data?.items ?? []);
   return (
     <div className="stack observation-page activity-page">
       <Panel title="最近工作">

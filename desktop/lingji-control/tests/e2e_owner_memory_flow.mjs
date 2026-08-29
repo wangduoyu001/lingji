@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", currentWorkMode: "normal", activityBurst: false, detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed" };
+const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", currentWorkMode: "normal", activityMode: "normal", detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed" };
 const allStateDiscovered = [
   ["detected", "available"], ["consent", "consent_required"], ["unsupported", "unsupported"], ["authorized", "available"],
   ["scanning", "available"], ["current", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
@@ -81,7 +81,7 @@ const server = http.createServer((req, res) => {
     if (path === "/__test/omit-home-counts") { state.omitHomeCounts = body.includes("true"); return json(res, 200, { ok: true }); }
     if (path === "/__test/source-mode") { state.sourceMode = body.trim() || "default"; state.allStates = false; state.authorized = false; state.revoked = false; state.scan = null; return json(res, 200, { ok: true, source_mode: state.sourceMode }); }
     if (path === "/__test/current-work-status") { state.currentWorkNull = body.trim() === "null"; state.currentWorkMode = body.trim() === "empty-scan" ? "empty-scan" : "normal"; state.currentWorkStatus = body.trim() || "accepted"; return json(res, 200, { ok: true, current_work_status: state.currentWorkStatus }); }
-    if (path === "/__test/activity-burst") { state.activityBurst = body.includes("true"); return json(res, 200, { ok: true, activity_burst: state.activityBurst }); }
+    if (path === "/__test/activity-mode") { state.activityMode = body.trim() || "normal"; return json(res, 200, { ok: true, activity_mode: state.activityMode }); }
     if (path === "/__test/detail-count-mode") { state.detailCountMode = body.trim() || "missing"; return json(res, 200, { ok: true, detail_count_mode: state.detailCountMode }); }
     if (path === "/__test/pending-outage") { state.pendingOutage = body.includes("true"); return json(res, 200, { ok: true, pending_outage: state.pendingOutage }); }
     if (path === "/__test/release-onboarding") { state.onboardingRelease = true; return json(res, 200, { ok: true }); }
@@ -102,9 +102,20 @@ const server = http.createServer((req, res) => {
     if (path === "/api/automatic-memory/revoke") { state.authorized = false; state.revoked = true; state.scan = null; return json(res, 200, { source_id: "src-fixture", status: "revoked" }); }
     if (path === "/api/work/history") {
       const normalItem = { work: { work_id: "work-capture-1", title: "整理项目会议记录", status: "completed", source_id: "source-1", updated_at: "2026-08-28T08:00:00Z" }, events: [{ event_id: "event-1", event_type: "completed", detail: { internal: "not primary" } }], outcome: { status: "completed", summary: "已保存 1 条记忆" }, next_action: null, pending_actions: [], failure: null, summary: { source: "项目会议", phase: "已完成", result: "已保存 1 条记忆", next_actor: null, time: "2026-08-28T08:00:00Z", source_id: "source-1" } };
-      const quietScan = (index) => ({ work: { work_id: `work-quiet-${index}`, title: "扫描 obsidian", status: "completed", source_id: "src-obsidian", updated_at: "2026-08-28T08:00:00Z" }, events: [{ event_id: `event-quiet-${index}`, event_type: "scan.completed", detail: {} }], outcome: { status: "completed", summary: "检查完成，未发现新内容" }, next_action: { action_id: `action-quiet-${index}`, work_id: `work-quiet-${index}`, description: "灵机", actor: "system" }, pending_actions: [], failure: null, summary: { source: "obsidian", phase: "已完成", result: "检查完成，未发现新内容", next_actor: "system", time: "2026-08-28T08:00:00Z", source_id: "src-obsidian" } });
-      const items = state.activityBurst ? Array.from({ length: 102 }, (_, index) => quietScan(index)) : [normalItem];
-      return json(res, 200, { items, total: items.length, has_more: false, limit: 20, offset: 0 });
+      const quietScan = (index, sourceId = "src-obsidian") => ({ work: { work_id: `work-quiet-${sourceId}-${index}`, title: "扫描 obsidian", status: "completed", source_id: sourceId, updated_at: "2026-08-28T08:00:00Z" }, events: [{ event_id: `event-quiet-${sourceId}-${index}`, event_type: "scan.completed", detail: {} }], outcome: { status: "completed", summary: "扫描完成，已检查 0 个来源文件（新增 0，复用 0）" }, next_action: { action_id: `action-quiet-${sourceId}-${index}`, work_id: `work-quiet-${sourceId}-${index}`, description: "灵机", actor: "system" }, pending_actions: [], failure: null, summary: { source: "obsidian", phase: "已完成", result: "成功", next_actor: "system", time: "2026-08-28T08:00:00Z", source_id: sourceId } });
+      const failedScan = { work: { work_id: "work-failed", title: "扫描 obsidian", status: "failed", source_id: "src-obsidian", updated_at: "2026-08-28T08:01:00Z" }, events: [{ event_id: "event-failed", event_type: "scan.failed", detail: {} }], outcome: { status: "failed", summary: "扫描没有完成" }, next_action: { action_id: "action-failed", work_id: "work-failed", description: "再次检查", actor: "system" }, pending_actions: [], failure: { failure_id: "failure-1", work_id: "work-failed", stage: "scan", reason: "fixture failure", retryable: true }, summary: { source: "obsidian", phase: "没有完成", result: "失败", next_actor: "system", time: "2026-08-28T08:01:00Z", source_id: "src-obsidian" } };
+      const changedScan = { work: { work_id: "work-changed", title: "扫描 obsidian", status: "completed", source_id: "src-obsidian", updated_at: "2026-08-28T08:02:00Z" }, events: [{ event_id: "event-changed", event_type: "scan.completed", detail: {} }], outcome: { status: "completed", summary: "扫描完成，已检查 3 个来源文件（新增 1，复用 2）" }, next_action: { action_id: "action-changed", work_id: "work-changed", description: "灵机", actor: "system" }, pending_actions: [], failure: null, summary: { source: "obsidian", phase: "已完成", result: "成功", next_actor: "system", time: "2026-08-28T08:02:00Z", source_id: "src-obsidian" } };
+      const runningScan = { work: { work_id: "work-running", title: "扫描 obsidian", status: "running", source_id: "src-obsidian", updated_at: "2026-08-28T08:03:00Z" }, events: [{ event_id: "event-running", event_type: "scan.running", detail: {} }], outcome: null, next_action: null, pending_actions: [], failure: null, summary: { source: "obsidian", phase: "处理中", result: null, next_actor: null, time: "2026-08-28T08:03:00Z", source_id: "src-obsidian" } };
+      let items = [normalItem];
+      let total = 1;
+      let hasMore = false;
+      if (state.activityMode === "matrix") items = [quietScan(0), quietScan(1), failedScan, quietScan(2), quietScan(3)];
+      if (state.activityMode === "two-sources") items = [quietScan(0, "src-obsidian-a"), quietScan(1, "src-obsidian-b")];
+      if (state.activityMode === "changed") items = [quietScan(0), changedScan, quietScan(1)];
+      if (state.activityMode === "paged") { items = [quietScan(0), quietScan(1)]; total = 102; hasMore = true; }
+      if (state.activityMode === "single") items = [quietScan(0)];
+      if (state.activityMode === "running") items = [quietScan(0), runningScan, quietScan(1)];
+      return json(res, 200, { items, total, has_more: hasMore, limit: 20, offset: 0 });
     }
     if (path === "/api/work/current") {
       if (state.currentWorkNull) return json(res, 200, { work: null, events: [], outcome: null, next_action: null });
@@ -360,14 +371,42 @@ try {
   await page.getByText("已保存 1 条记忆", { exact: false }).waitFor();
   assert.equal(await page.getByText('"internal":"not primary"', { exact: false }).count(), 0, "raw event JSON must not be primary activity copy");
   assert.equal(await page.getByText("source-1", { exact: true }).count(), 0, "source IDs must stay in collapsed technical details");
-  await fetch(`http://127.0.0.1:${apiPort}/__test/activity-burst`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
+  const setActivityMode = async (mode) => fetch(`http://127.0.0.1:${apiPort}/__test/activity-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: mode });
+  await setActivityMode("matrix");
   await page.getByRole("button", { name: "现在检查", exact: true }).click();
-  await page.getByText("近期已检查102次", { exact: false }).waitFor();
-  assert.equal(await page.locator(".activity-card").count(), 1, "repeated successful empty scans must be folded into one readable activity item");
-  await page.getByText("Obsidian 长期记忆区", { exact: true }).waitFor();
-  assert.equal(await page.getByText("扫描 obsidian", { exact: true }).count(), 0, "ordinary activity must not expose raw source names");
+  await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 3);
+  await page.getByText("近期已检查2次", { exact: false }).first().waitFor();
+  assert.equal(await page.locator(".activity-card").count(), 3, "only each adjacent quiet run may be folded");
+  await page.getByText("扫描没有完成", { exact: false }).waitFor();
+  assert.equal(await page.getByText("扫描完成，已检查 0 个来源文件", { exact: false }).count(), 0, "empty scan raw summary must be normalized in ordinary copy");
+  await setActivityMode("two-sources");
+  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 2);
+  assert.equal(await page.locator(".activity-card").count(), 2, "same display name with different source IDs must remain separate");
+  assert.equal(await page.getByText("近期已检查1次", { exact: false }).count(), 0, "single quiet records must not claim a repeated count");
+  await setActivityMode("changed");
+  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 3);
+  await page.getByText("已检查 3 个来源文件", { exact: false }).waitFor();
+  assert.equal(await page.locator(".activity-card").count(), 3, "changed scans must remain separate from quiet scans");
+  await setActivityMode("paged");
+  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 1);
+  await page.getByText("近期已检查2次", { exact: false }).first().waitFor();
+  assert.equal(await page.getByText("近期已检查102次", { exact: false }).count(), 0, "quiet count must not use the API-wide total");
+  assert.equal(await page.locator(".activity-pager").getByRole("button", { name: "下一页" }).isDisabled(), false, "has_more must keep pagination available");
+  await setActivityMode("single");
+  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 1);
+  await page.getByText("检查完成，未发现新内容", { exact: false }).waitFor();
+  assert.equal(await page.getByText("近期已检查1次", { exact: false }).count(), 0, "single quiet scan must not claim a repeated count");
+  await setActivityMode("running");
+  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 3);
+  await page.getByText("处理中", { exact: true }).waitFor();
+  assert.equal(await page.locator(".activity-card").count(), 3, "running scan must break quiet runs and remain visible");
   assert.equal(await page.getByText("下一步：灵机", { exact: true }).count(), 0, "ordinary activity must not expose system actor names");
-  await fetch(`http://127.0.0.1:${apiPort}/__test/activity-burst`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
+  await setActivityMode("normal");
 
   await page.locator(".desktop-nav-item").filter({ hasText: "需要我处理" }).click();
   await page.locator("h1").filter({ hasText: "需要我处理" }).waitFor();
