@@ -102,7 +102,10 @@ const server = http.createServer((req, res) => {
     if (path === "/api/automatic-memory/revoke") { state.authorized = false; state.revoked = true; state.scan = null; return json(res, 200, { source_id: "src-fixture", status: "revoked" }); }
     if (path === "/api/work/history") {
       const normalItem = { work: { work_id: "work-capture-1", title: "整理项目会议记录", status: "completed", source_id: "source-1", updated_at: "2026-08-28T08:00:00Z" }, events: [{ event_id: "event-1", event_type: "completed", detail: { internal: "not primary" } }], outcome: { status: "completed", summary: "已保存 1 条记忆" }, next_action: null, pending_actions: [], failure: null, summary: { source: "项目会议", phase: "已完成", result: "已保存 1 条记忆", next_actor: null, time: "2026-08-28T08:00:00Z", source_id: "source-1" } };
-      const quietScan = (index, sourceId = "src-obsidian") => ({ work: { work_id: `work-quiet-${sourceId}-${index}`, title: "扫描 obsidian", status: "completed", source_id: sourceId, updated_at: "2026-08-28T08:00:00Z" }, events: [{ event_id: `event-quiet-${sourceId}-${index}`, event_type: "scan.completed", detail: {} }], outcome: { status: "completed", summary: "扫描完成，已检查 0 个来源文件（新增 0，复用 0）" }, next_action: { action_id: `action-quiet-${sourceId}-${index}`, work_id: `work-quiet-${sourceId}-${index}`, description: "灵机", actor: "system" }, pending_actions: [], failure: null, summary: { source: "obsidian", phase: "已完成", result: "成功", next_actor: "system", time: "2026-08-28T08:00:00Z", source_id: sourceId } });
+      const quietScan = (index, sourceId = "src-obsidian") => {
+        const occurredAt = `2026-08-28T08:00:0${index}Z`;
+        return { work: { work_id: `work-quiet-${sourceId}-${index}`, title: "扫描 obsidian", status: "completed", source_id: sourceId, updated_at: occurredAt }, events: [{ event_id: `event-quiet-${sourceId}-${index}`, event_type: "scan.completed", detail: { original_index: index, source_id: sourceId } }], outcome: { status: "completed", summary: "扫描完成，已检查 0 个来源文件（新增 0，复用 0）" }, next_action: { action_id: `action-quiet-${sourceId}-${index}`, work_id: `work-quiet-${sourceId}-${index}`, description: "灵机", actor: "system" }, pending_actions: [], failure: null, summary: { source: "obsidian", phase: "已完成", result: "成功", next_actor: "system", time: occurredAt, source_id: sourceId } };
+      };
       const failedScan = { work: { work_id: "work-failed", title: "扫描 obsidian", status: "failed", source_id: "src-obsidian", updated_at: "2026-08-28T08:01:00Z" }, events: [{ event_id: "event-failed", event_type: "scan.failed", detail: {} }], outcome: { status: "failed", summary: "扫描没有完成" }, next_action: { action_id: "action-failed", work_id: "work-failed", description: "再次检查", actor: "system" }, pending_actions: [], failure: { failure_id: "failure-1", work_id: "work-failed", stage: "scan", reason: "fixture failure", retryable: true }, summary: { source: "obsidian", phase: "没有完成", result: "失败", next_actor: "system", time: "2026-08-28T08:01:00Z", source_id: "src-obsidian" } };
       const changedScan = { work: { work_id: "work-changed", title: "扫描 obsidian", status: "completed", source_id: "src-obsidian", updated_at: "2026-08-28T08:02:00Z" }, events: [{ event_id: "event-changed", event_type: "scan.completed", detail: {} }], outcome: { status: "completed", summary: "扫描完成，已检查 3 个来源文件（新增 1，复用 2）" }, next_action: { action_id: "action-changed", work_id: "work-changed", description: "灵机", actor: "system" }, pending_actions: [], failure: null, summary: { source: "obsidian", phase: "已完成", result: "成功", next_actor: "system", time: "2026-08-28T08:02:00Z", source_id: "src-obsidian" } };
       const runningScan = { work: { work_id: "work-running", title: "扫描 obsidian", status: "running", source_id: "src-obsidian", updated_at: "2026-08-28T08:03:00Z" }, events: [{ event_id: "event-running", event_type: "scan.running", detail: {} }], outcome: null, next_action: null, pending_actions: [], failure: null, summary: { source: "obsidian", phase: "处理中", result: null, next_actor: null, time: "2026-08-28T08:03:00Z", source_id: "src-obsidian" } };
@@ -115,6 +118,7 @@ const server = http.createServer((req, res) => {
       if (state.activityMode === "paged") { items = [quietScan(0), quietScan(1)]; total = 102; hasMore = true; }
       if (state.activityMode === "single") items = [quietScan(0)];
       if (state.activityMode === "running") items = [quietScan(0), runningScan, quietScan(1)];
+      if (state.activityMode === "audit") items = [quietScan(0), quietScan(1), quietScan(2)];
       return json(res, 200, { items, total, has_more: hasMore, limit: 20, offset: 0 });
     }
     if (path === "/api/work/current") {
@@ -379,6 +383,40 @@ try {
   assert.equal(await page.locator(".activity-card").count(), 3, "only each adjacent quiet run may be folded");
   await page.getByText("扫描没有完成", { exact: false }).waitFor();
   assert.equal(await page.getByText("扫描完成，已检查 0 个来源文件", { exact: false }).count(), 0, "empty scan raw summary must be normalized in ordinary copy");
+  const matrixCards = page.locator(".activity-card");
+  const firstMatrixDiagnostics = matrixCards.nth(0).locator(".activity-diagnostics");
+  if (!(await firstMatrixDiagnostics.evaluate((node) => node.open))) await firstMatrixDiagnostics.locator("summary").click();
+  const firstMatrixAudit = await firstMatrixDiagnostics.innerText();
+  assert.ok(firstMatrixAudit.includes("work-quiet-src-obsidian-0"), "first quiet run must retain its first work audit");
+  assert.ok(firstMatrixAudit.includes("work-quiet-src-obsidian-1"), "first quiet run must retain every work audit");
+  assert.equal(firstMatrixAudit.includes("work-quiet-src-obsidian-2"), false, "a failure must separate later quiet audits");
+  const secondMatrixDiagnostics = matrixCards.nth(2).locator(".activity-diagnostics");
+  if (!(await secondMatrixDiagnostics.evaluate((node) => node.open))) await secondMatrixDiagnostics.locator("summary").click();
+  const secondMatrixAudit = await secondMatrixDiagnostics.innerText();
+  assert.ok(secondMatrixAudit.includes("work-quiet-src-obsidian-2"), "second quiet run must retain its first work audit");
+  assert.ok(secondMatrixAudit.includes("work-quiet-src-obsidian-3"), "second quiet run must retain every work audit");
+  assert.equal(secondMatrixAudit.includes("work-quiet-src-obsidian-0"), false, "separate quiet runs must not share audits");
+
+  await setActivityMode("audit");
+  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 1);
+  const auditCard = page.locator(".activity-card").first();
+  const ordinaryAuditSurface = auditCard.locator(".activity-card-heading, .activity-card-result, .activity-card-meta");
+  for (const workId of ["work-quiet-src-obsidian-0", "work-quiet-src-obsidian-1", "work-quiet-src-obsidian-2"]) {
+    assert.equal(await ordinaryAuditSurface.getByText(workId, { exact: false }).count(), 0, "work IDs stay out of ordinary activity copy");
+  }
+  const auditDetails = auditCard.locator(".activity-diagnostics");
+  if (!(await auditDetails.evaluate((node) => node.open))) await auditDetails.locator("summary").click();
+  const auditText = await auditDetails.innerText();
+  for (const index of [0, 1, 2]) {
+    assert.ok(auditText.includes(`work-quiet-src-obsidian-${index}`), `audit must retain work ${index}`);
+    assert.ok(auditText.includes(`2026-08-28T08:00:0${index}Z`), `audit must retain original time ${index}`);
+    assert.ok(auditText.includes(`event-quiet-src-obsidian-${index}`), `audit must retain event ${index}`);
+    assert.ok(auditText.includes(`"original_index": ${index}`), `audit must retain event detail ${index}`);
+  }
+  assert.ok(auditText.includes("来源 ID：src-obsidian"), "audit must retain source identity");
+  assert.ok(auditText.includes("状态码：completed"), "audit must retain original status");
+
   await setActivityMode("two-sources");
   await page.getByRole("button", { name: "现在检查", exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 2);

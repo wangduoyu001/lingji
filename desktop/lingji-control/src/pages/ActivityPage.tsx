@@ -64,10 +64,14 @@ function isQuietSuccessfulScan(item: WorkHistoryItem): boolean {
     && !(item.pending_actions ?? []).length;
 }
 
-type ActivityItem = WorkHistoryItem & { display_result?: string };
+type ActivityCardModel = {
+  item: WorkHistoryItem;
+  compactedItems: WorkHistoryItem[];
+  display_result?: string;
+};
 
-function collapseQuietActivity(items: WorkHistoryItem[]): ActivityItem[] {
-  const output: ActivityItem[] = [];
+function collapseQuietActivity(items: WorkHistoryItem[]): ActivityCardModel[] {
+  const output: ActivityCardModel[] = [];
   let run: WorkHistoryItem[] = [];
   let runIdentity: string | null = null;
   const flush = () => {
@@ -75,11 +79,12 @@ function collapseQuietActivity(items: WorkHistoryItem[]): ActivityItem[] {
     const first = run[0];
     if (run.length >= 2) {
       output.push({
-        ...first,
+        item: first,
+        compactedItems: [...run],
         display_result: `Obsidian 长期记忆区已自动检查，未发现新内容；近期已检查${run.length}次`,
       });
     } else {
-      output.push(first);
+      output.push({ item: first, compactedItems: [first] });
     }
     run = [];
     runIdentity = null;
@@ -96,22 +101,31 @@ function collapseQuietActivity(items: WorkHistoryItem[]): ActivityItem[] {
       run = [item];
       runIdentity = identity;
     } else {
-      output.push(item);
+      output.push({ item, compactedItems: [item] });
     }
   }
   flush();
   return output;
 }
 
-function WorkCard({ item }: { item: ActivityItem }) {
+function WorkCard({ model }: { model: ActivityCardModel }) {
+  const { item, compactedItems } = model;
   const summary = item.summary ?? {};
   const status = item.outcome?.status || item.work?.status;
-  const result = item.display_result || normalizeActivityResult(item) || (status === "failed" ? "失败" : status === "completed" || status === "success" ? "成功" : null);
+  const result = model.display_result || normalizeActivityResult(item) || (status === "failed" ? "失败" : status === "completed" || status === "success" ? "成功" : null);
+  const auditTime = (entry: WorkHistoryItem): string => shown(entry.summary?.time || entry.work?.updated_at || entry.work?.created_at, "时间尚未获得");
   return <article className="activity-card">
     <div className="activity-card-heading"><div><span className={`timeline-marker ${status === "failed" ? "failed" : status === "completed" || status === "success" ? "completed" : ""}`} /><strong>{readableActivityName(item.work?.title || summary.source) || "一项灵机工作"}</strong></div><span className={`pill ${status === "failed" ? "failed" : status === "completed" || status === "success" ? "success" : "neutral"}`}>{phaseLabel(summary.phase, status)}</span></div>
     <p className="activity-card-result">结果：{shown(result || item.outcome?.summary)}</p>
     <div className="activity-card-meta"><span>时间：{time(summary.time || item.work?.updated_at || item.work?.created_at)}</span><span>来源：{readableActivityName(summary.source) || "来源尚未获得"}</span><span>下一步：{readableNextActor(item)}</span></div>
-    <details className="activity-diagnostics"><summary>查看技术详情（执行事件）</summary><small>工作 ID：{shown(item.work?.work_id)} · 状态码：{shown(status)} · 来源 ID：{shown(summary.source_id || item.work?.source_id)}</small>{(item.events ?? []).length > 0 && <pre>{JSON.stringify(item.events ?? [], null, 2)}</pre>}</details>
+    <details className="activity-diagnostics"><summary>查看技术详情（执行事件）</summary>{compactedItems.map((entry, index) => {
+      const entryStatus = entry.outcome?.status || entry.work?.status;
+      const entrySourceId = entry.summary?.source_id || entry.work?.source_id;
+      return <section className="activity-audit-item" key={entry.work?.work_id ?? `${auditTime(entry)}-${index}`}>
+        <small>工作 ID：{shown(entry.work?.work_id)} · 状态码：{shown(entryStatus)} · 来源 ID：{shown(entrySourceId)} · 原时间：{auditTime(entry)}</small>
+        {(entry.events ?? []).length > 0 && <pre>{JSON.stringify(entry.events ?? [], null, 2)}</pre>}
+      </section>;
+    })}</details>
   </article>;
 }
 
@@ -130,7 +144,7 @@ export default function ActivityPage({ api, active }: { api: LingJiApi; active: 
         <div className="activity-toolbar"><p>这里展示灵机最近实际完成、失败或仍在处理的工作。</p><button className="button secondary" disabled={resource.refreshing} onClick={() => void resource.refresh({ force: true })}>{resource.refreshing ? "检查中…" : "现在检查"}</button></div>
         {resource.stale && <Notice kind="warning">活动数据暂时过期，正在自动重试。</Notice>}
         {resource.error && <Notice kind="error">活动刷新失败：{resource.error.message}</Notice>}
-        {items.length ? <div className="activity-card-list">{items.map((item) => <WorkCard key={item.work?.work_id ?? `${offset}-${item.summary?.time}`} item={item} />)}</div> : <Empty text="灵机还没有完成过可显示的工作。" />}
+        {items.length ? <div className="activity-card-list">{items.map((model) => <WorkCard key={model.item.work?.work_id ?? `${offset}-${model.item.summary?.time}`} model={model} />)}</div> : <Empty text="灵机还没有完成过可显示的工作。" />}
         <div className="loop-pager activity-pager"><button disabled={offset === 0 || resource.loading} onClick={() => setOffset(Math.max(0, offset - 20))}>上一页</button><span>第 {Math.floor(offset / 20) + 1} 页{resource.data?.total == null ? " · 总数尚未获得" : ` · 共 ${resource.data.total} 条`}</span><button disabled={!resource.data?.has_more || resource.loading} onClick={() => setOffset(offset + 20)}>下一页</button></div>
       </Panel>
     </div>
