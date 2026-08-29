@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime
 import math
-import os
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from src.automatic_memory import AuthorizationScope, SourceRegistry, discover_source_metadata
+from src.automatic_memory.home import resolve_effective_home
 
 
 class AutomaticMemoryAuthorizationRequest(BaseModel):
@@ -123,10 +123,8 @@ def register_automatic_memory_routes(
     @app.post("/api/automatic-memory/authorize", dependencies=secured)
     def authorize_source(request: AutomaticMemoryAuthorizationRequest) -> dict[str, Any]:
         settings = getattr(control, "settings", control)
-        effective_home = getattr(settings, "home_dir", None)
-        if effective_home is None:
-            configured_env = getattr(settings, "environ", None)
-            effective_home = (configured_env if configured_env is not None else os.environ).get("HOME")
+        configured_env = getattr(settings, "environ", None)
+        effective_home = resolve_effective_home(settings, configured_env)
         scope = AuthorizationScope(
             grant_id=request.grant_id,
             source_kinds=tuple(request.source_kinds),
@@ -134,7 +132,7 @@ def register_automatic_memory_routes(
             granted_at=request.granted_at,
             expires_at=request.expires_at,
             owner_confirmed=request.owner_confirmed,
-            effective_home=str(effective_home) if effective_home else None,
+            effective_home=str(effective_home),
         )
         result = call(lambda: registry.register(scope, request.kind, request.root))
         return asdict(result)

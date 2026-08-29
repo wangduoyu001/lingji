@@ -5,13 +5,10 @@ from __future__ import annotations
 import os
 import platform
 import stat
-try:
-    import pwd
-except ImportError:  # pragma: no cover - Windows compatibility
-    pwd = None  # type: ignore[assignment]
 from pathlib import Path
 from typing import Any, Mapping
 
+from .home import resolve_effective_home
 from .models import DiscoveredSource
 
 
@@ -46,17 +43,7 @@ def _sensitive_name(name: str) -> bool:
 
 
 def _effective_home(settings: object, env: Mapping[str, str]) -> Path:
-    supplied = getattr(settings, "home_dir", None) or getattr(settings, "user_home", None)
-    if supplied:
-        return Path(str(supplied)).expanduser().resolve(strict=False)
-    if env.get("HOME"):
-        return Path(env["HOME"]).expanduser().resolve(strict=False)
-    if pwd is not None:
-        try:
-            return Path(pwd.getpwuid(os.getuid()).pw_dir).resolve(strict=False)
-        except (KeyError, OSError):
-            pass
-    return Path.home().resolve(strict=False)
+    return resolve_effective_home(settings, env)
 
 
 def _darwin(settings: object) -> bool:

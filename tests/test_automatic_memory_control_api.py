@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from dataclasses import asdict
+import json
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -158,6 +160,68 @@ def test_automatic_memory_authorize_scan_pause_retry_and_reopen(tmp_path: Path):
         )
         assert persisted.status_code == 200
         assert persisted.json()["status"] == "cancelled"
+
+
+def test_user_home_drives_authorize_and_runtime_scan_when_process_home_differs(tmp_path: Path, monkeypatch):
+    effective_home = tmp_path / "configured-home"
+    host_home = tmp_path / "host-home"
+    source_root = effective_home / ".codex" / "sessions"
+    source_path = source_root / "2026" / "08" / "29" / "rollout-user-home.jsonl"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_text("\n".join(json.dumps(row) for row in [
+        {"type": "session_meta", "payload": {"id": "user-home-session"}},
+        {"type": "event_msg", "id": "user-home-u", "payload": {"type": "user_message", "message": "configured home"}, "timestamp": "2026-08-29T00:00:00Z"},
+    ]) + "\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(host_home))
+    settings = SimpleNamespace(
+        storage_path=tmp_path / "storage", state_db_path=tmp_path / "storage" / "lingji_state.db",
+        memory_db_path=tmp_path / "storage" / "lingji_memory.db", vault_path=tmp_path / "vault",
+        user_home=effective_home, runtime_settings_file="runtime_settings.json", extraction_max_attempts=1, extraction_lease_heartbeat_seconds=2,
+        extraction_stale_after_seconds=30, scheduler_poll_seconds=0.02,
+        automatic_memory_debounce_seconds=1, automatic_memory_reconciliation_seconds=60,
+        automatic_memory_integrity_seconds=3600, extraction_poll_seconds=0.02,
+        extraction_batch_size=2, embedding_enabled=False, semantic_enabled=False,
+    )
+    settings.storage_path.mkdir(parents=True)
+    state = StateDatabase(settings.state_db_path)
+    registry = SourceRegistry(state)
+    pipeline = build_extraction_pipeline(settings)
+    runtime = AutomaticMemoryRuntime(state_db=state, pipeline=pipeline, settings=settings, registry=registry)
+    control = LocalControlService.__new__(LocalControlService)
+    control.settings = settings
+    control.state_db = state
+    control.automatic_memory_registry = registry
+    control.runtime = runtime
+    app = create_control_app(settings, service=control, token="local-secret")
+    headers = {"X-LingJi-Token": "local-secret"}
+    authorization = {
+        "grant_id": "grant-user-home", "source_kinds": ["codex_rollout"],
+        "roots": [str(source_root)], "granted_at": datetime.now(timezone.utc).isoformat(),
+        "expires_at": None, "owner_confirmed": True, "kind": "codex_rollout", "root": str(source_root),
+    }
+    runtime.start()
+    try:
+        with TestClient(app) as client:
+            authorized = client.post("/api/automatic-memory/authorize", headers=headers, json=authorization)
+            assert authorized.status_code == 200, authorized.text
+            source_id = authorized.json()["source_id"]
+            denied = client.post("/api/automatic-memory/authorize", headers=headers, json={
+                **authorization, "grant_id": "grant-host-home", "roots": [str(host_home / ".codex" / "sessions")],
+                "root": str(host_home / ".codex" / "sessions"),
+            })
+            assert denied.status_code == 403
+            scan = client.post("/api/automatic-memory/scan", headers=headers, json={"source_id": source_id})
+            assert scan.status_code == 200, scan.text
+            deadline = time.time() + 8
+            jobs = []
+            while time.time() < deadline:
+                jobs = pipeline.queue.list_page(source_type="automatic_memory_snapshot", limit=10)
+                if jobs and jobs[0]["status"] in {"completed", "failed"}:
+                    break
+                time.sleep(0.03)
+            assert jobs and jobs[0]["status"] == "completed", jobs
+    finally:
+        runtime.stop()
 
 
 def test_automatic_memory_discovery_scan_summary_and_runtime_actions_are_secured(tmp_path: Path):

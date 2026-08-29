@@ -5,13 +5,10 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-try:
-    import pwd
-except ImportError:  # pragma: no cover
-    pwd = None  # type: ignore[assignment]
 
 from src.obsidian.discovery import discover_memory_paths
 
+from .home import resolve_effective_home
 from .models import SourceRecord
 
 MAX_FILES = 10_000
@@ -31,14 +28,7 @@ def validate_codex_rollout_root(root: Path | str, effective_home: Path | str | N
     if any(parent.is_symlink() for parent in (lexical, *lexical.parents)):
         raise PermissionError("symbolic-link Codex root is not allowed")
     resolved = lexical.resolve(strict=False)
-    if effective_home:
-        home = Path(effective_home).expanduser().resolve(strict=False)
-    elif os.environ.get("HOME"):
-        home = Path(os.environ["HOME"]).expanduser().resolve(strict=False)
-    elif pwd is not None:
-        home = Path(pwd.getpwuid(os.getuid()).pw_dir).resolve(strict=False)
-    else:
-        home = Path.home().resolve(strict=False)
+    home = resolve_effective_home(env={"HOME": str(effective_home)} if effective_home else None)
     expected = {home / ".codex" / "sessions", home / ".codex" / "archived_sessions"}
     if resolved not in expected:
         raise PermissionError("Codex rollout root must be one exact effective-home root")
