@@ -115,3 +115,47 @@ passed, 3 warnings**. The unchanged promotion recovery case 06 still returned
 the known **1 baseline failure** (`ROLLED_BACK` vs `VISIBLE_ACTIVE`). Affected
 compileall, diff-check, acceptance-sync, and local-handoff all passed; no
 live/owner data path was run.
+
+## Repair Round 2 (review baseline `fddcdf1`)
+
+### RED evidence
+
+Added two focused behavior tests and ran them before the repair:
+
+1. A newest `active` promotion event followed by an older pending event, with
+   no canonical MemoryDatabase document, incorrectly projected `needs_review`
+   (the older event won).
+2. The malformed-vector fixture did not call malformed coverage/semantic data;
+   a non-boolean semantic result was coerced to `True`, and coverage was never
+   reached (`coverage_calls == 0`).
+
+The targeted run was **2 failures**.
+
+### GREEN implementation
+
+Product/tests commit: `87fa2e4`.
+
+- Latest terminal promotion events now create a fail-closed card preserving the
+  terminal state, with `projection.state=unavailable`, unknown permanent layer,
+  and review action. Older pending events cannot override it.
+- Pending candidates remain pending; rejected and other terminal event states
+  remain terminal rather than becoming confirmation cards.
+- Per-memory vector projection now reads existing global coverage only as a
+  diagnostic (never as completion evidence), strictly accepts boolean chunk
+  existence, and marks malformed coverage/semantic results unavailable.
+- Added targeted fixture coverage proving malformed vector status/coverage and
+  semantic fields are reached and fail closed.
+
+### Round2 verification
+
+| Command | Result |
+|---|---|
+| `tests/test_owner_memory_card_projector.py` | 15 passed |
+| Task2 + Inspector/permission/temporal/promotion/source regression matrix | 101 passed, 2 warnings |
+| affected `compileall` | PASS |
+| `git diff --check` | PASS |
+
+The known, unchanged promotion recovery case 06 remains a baseline failure
+(`ROLLED_BACK` vs `VISIBLE_ACTIVE`); it is outside this Task2 repair diff and
+was neither modified nor hidden. No live 8766/8767, Desktop, Artifact,
+Acceptance, Production/Vault, real chat, or owner data was accessed.

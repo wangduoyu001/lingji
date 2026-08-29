@@ -59,6 +59,22 @@
   docs/evidence commit。继续执行 compileall、diff-check、acceptance-sync、local-handoff；
   不启动 live/App/Acceptance，不读取真实聊天或主人数据。
 
+## 2026-08-29 · Task 2 Repair Round 2
+
+- 仅收口独立复审剩余 1 Important + 1 Minor：当最新 promotion terminal event 存在但
+  canonical MemoryDatabase projection 暂缺时，保留最新 terminal state，生成明确
+  `projection=unavailable`、unknown permanent 与 review action，禁止回退旧 pending；
+  malformed vector 测试真实触达 malformed coverage/status 与非布尔 semantic existence，
+  全部 fail-closed。
+- RED：两条新增行为测试在基线实现上均失败；GREEN 后
+  `tests/test_owner_memory_card_projector.py` 为 15 passed，Task2/API、Inspector、temporal、
+  promotion、source 直接矩阵为 101 passed、2 warnings。既有 promotion recovery case 06
+  的基线失败保持原样，不修改、不隐藏。
+- Product/tests commit：`87fa2e4`；报告路径仍为
+  `.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-2-report.md`，需独立
+  docs/evidence commit。执行 compileall、diff-check、acceptance-sync、local-handoff；不启动
+  live/App/Acceptance，不读取真实聊天或主人数据。
+
 ## 2026-08-29 · Task 1 Round 1 · Codex rollout boundary repair
 
 - 针对独立 review 的 1 Critical、6 Important 与 Minor 项，仅在本 worktree 修复：
