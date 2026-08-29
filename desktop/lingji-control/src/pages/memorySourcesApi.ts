@@ -169,6 +169,25 @@ export function countLabel(value: unknown): string {
   return typeof value === "number" && Number.isFinite(value) ? String(value) : "尚未获得";
 }
 
+const scanCountKeys = new Set(["created", "queued", "reused", "updated", "skipped", "failed"]);
+
+/**
+ * A zero from the legacy ScanRun dataclass is not evidence: queued/reused are
+ * defaulted by the model when StateDB has no such measurement. Positive
+ * values are evidence, and zero is trusted only when the DTO explicitly
+ * marks that field as present.
+ */
+export function scanCountValue(scan: unknown, key: string): number | undefined {
+  if (!scanCountKeys.has(key)) return undefined;
+  if (!scan || typeof scan !== "object") return undefined;
+  const record = scan as Record<string, unknown>;
+  const value = record[key];
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  if (value !== 0) return value;
+  const present = record.counts_present;
+  return Array.isArray(present) && present.includes(key) ? 0 : undefined;
+}
+
 export function scanStatusLabel(status: string | null | undefined): string {
   return ({ running: "扫描中", paused: "已暂停", completed: "已完成", failed: "失败", cancelled: "已取消" } as Record<string, string>)[String(status ?? "")] ?? "尚未获得";
 }

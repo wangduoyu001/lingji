@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import CurrentWorkPanel from "../components/CurrentWorkPanel";
 import { Empty, Notice } from "../components/ui";
 import type { LingJiApi } from "../api";
-import { MemorySourcesApi, ownerSourceName, periodicReconciliationNotice, sourceStateLabel } from "./memorySourcesApi";
+import { MemorySourcesApi, ownerSourceName, periodicReconciliationNotice, scanCountValue, sourceStateLabel } from "./memorySourcesApi";
 import type { MemorySourcesSnapshot, ScanRun } from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { PageId, Row } from "../types";
@@ -31,9 +31,9 @@ function latestCheckSummary(latest: ScanRun | null | undefined): string {
   const when = stamp === "时间尚未获得" ? "" : `（${stamp}）`;
   if (status === "failed") return `最近一次检查没有完成${when}。`;
   const parts = [
-    typeof latest.queued === "number" ? `新增 ${latest.queued} 条` : "",
-    typeof latest.updated === "number" ? `更新 ${latest.updated} 条` : "",
-    typeof latest.skipped === "number" ? `跳过 ${latest.skipped} 条` : "",
+    scanCountValue(latest, "queued") !== undefined ? `新增 ${scanCountValue(latest, "queued")} 条` : "",
+    scanCountValue(latest, "updated") !== undefined ? `更新 ${scanCountValue(latest, "updated")} 条` : "",
+    scanCountValue(latest, "skipped") !== undefined ? `跳过 ${scanCountValue(latest, "skipped")} 条` : "",
   ].filter(Boolean);
   const phase = status === "completed" ? "已完成" : status === "running" ? "正在进行" : status === "failed" ? "没有完成" : "已记录";
   const outcome = parts.length ? `：${parts.join("，")}` : "";

@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", detailDefaultCounts: false, onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed" };
+const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed" };
 const allStateDiscovered = [
   ["detected", "available"], ["consent", "consent_required"], ["unsupported", "unsupported"], ["authorized", "available"],
   ["scanning", "available"], ["current", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
@@ -63,7 +63,7 @@ const server = http.createServer((req, res) => {
     if (path === "/__test/omit-home-counts") { state.omitHomeCounts = body.includes("true"); return json(res, 200, { ok: true }); }
     if (path === "/__test/source-mode") { state.sourceMode = body.trim() || "default"; state.allStates = false; state.authorized = false; state.revoked = false; state.scan = null; return json(res, 200, { ok: true, source_mode: state.sourceMode }); }
     if (path === "/__test/current-work-status") { state.currentWorkNull = body.trim() === "null"; state.currentWorkStatus = body.trim() || "accepted"; return json(res, 200, { ok: true, current_work_status: state.currentWorkStatus }); }
-    if (path === "/__test/detail-default-counts") { state.detailDefaultCounts = body.includes("true"); return json(res, 200, { ok: true, detail_default_counts: state.detailDefaultCounts }); }
+    if (path === "/__test/detail-count-mode") { state.detailCountMode = body.trim() || "missing"; return json(res, 200, { ok: true, detail_count_mode: state.detailCountMode }); }
     if (path === "/__test/pending-outage") { state.pendingOutage = body.includes("true"); return json(res, 200, { ok: true, pending_outage: state.pendingOutage }); }
     if (path === "/__test/release-onboarding") { state.onboardingRelease = true; return json(res, 200, { ok: true }); }
     if (path === "/__test/outage") { state.outage = body.includes("true"); return json(res, 200, { ok: true, outage: state.outage }); }
@@ -73,7 +73,11 @@ const server = http.createServer((req, res) => {
     if (path === "/api/automatic-memory/retry") { state.scan = { scan_id: "scan-fixture", source_id: "src-fixture", status: "completed", progress: 1, total: 1, queued: 1, reused: 0, failed: 0, updated: 2, skipped: 3 }; return json(res, 200, state.scan); }
     if (path.startsWith("/api/automatic-memory/scans/")) {
       const detail = state.scan ? { ...state.scan } : { status: "unknown" };
-      if (state.detailDefaultCounts) Object.assign(detail, { queued: 0, reused: 0, updated: 0, skipped: 0, failed: 0 });
+      const countFields = ["created", "queued", "reused", "updated", "skipped", "failed"];
+      if (state.detailCountMode === "legacy") Object.assign(detail, { queued: 0, reused: 0, updated: 0, skipped: 0, failed: 0 });
+      if (state.detailCountMode === "explicit-zero") Object.assign(detail, { queued: 0, reused: 0, updated: 0, skipped: 0, failed: 0, counts_present: countFields });
+      if (state.detailCountMode === "explicit-positive") Object.assign(detail, { queued: 2, reused: 1, updated: 3, skipped: 4, failed: 0, counts_present: countFields });
+      if (state.detailCountMode === "missing") for (const field of countFields) delete detail[field];
       return json(res, 200, detail);
     }
     if (path === "/api/automatic-memory/revoke") { state.authorized = false; state.revoked = true; state.scan = null; return json(res, 200, { source_id: "src-fixture", status: "revoked" }); }
@@ -163,7 +167,7 @@ try {
   assert.equal(await page.getByText("SYSTEM POSTURE", { exact: true }).count(), 0, "internal posture label must stay out of primary UI");
   await page.locator('[data-source-kind="generic_ai_history"]').getByRole("button", { name: "现在检查", exact: true }).click();
   await page.getByRole("heading", { name: "扫描中" }).waitFor();
-  await fetch(`http://127.0.0.1:${apiPort}/__test/detail-default-counts`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
+  await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "legacy" });
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
   await page.getByText("这次检查正在进行。", { exact: true }).waitFor();
   const runningNewRow = page.locator(".memory-detail-grid > div").filter({ hasText: "新增" });
@@ -191,6 +195,22 @@ try {
   await page.getByText("这次检查没有完成，原来的记忆不会被删除。", { exact: true }).waitFor();
   await page.getByRole("button", { name: "再次检查" }).click();
   await page.getByRole("heading", { name: "已接管" }).waitFor();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "missing" });
+  await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
+  const missingCompletedNewRow = page.locator(".memory-detail-grid > div").filter({ hasText: "新增" });
+  assert.ok((await missingCompletedNewRow.innerText()).includes("尚未获得"), "missing completed scan counts must remain unknown");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "legacy" });
+  await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
+  const legacyCompletedNewRow = page.locator(".memory-detail-grid > div").filter({ hasText: "新增" });
+  assert.equal((await legacyCompletedNewRow.innerText()).includes("新增\n0"), false, "legacy completed default zero must remain unknown");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "explicit-zero" });
+  await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
+  await page.waitForTimeout(100);
+  assert.ok((await page.locator(".memory-detail-grid > div").filter({ hasText: "新增" }).innerText()).includes("新增\n0"), "explicit zero must remain visible");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "explicit-positive" });
+  await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
+  await page.waitForTimeout(100);
+  assert.ok((await page.locator(".memory-detail-grid > div").filter({ hasText: "新增" }).innerText()).includes("新增\n2"), "explicit positive count must remain visible");
   await page.getByRole("button", { name: "活动记录" }).click();
   await page.getByRole("heading", { name: "活动记录" }).waitFor();
   await page.getByRole("button", { name: "运行状态" }).click();

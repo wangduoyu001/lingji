@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, type LingJiApi } from "../api";
-import { actionAvailability, actionEvidence, authorizationEvidence, MemorySourcesApi, ownerSourceName, periodicReconciliationNotice, scanStatusLabel, sourceStateLabel } from "./memorySourcesApi";
+import { actionAvailability, actionEvidence, authorizationEvidence, MemorySourcesApi, ownerSourceName, periodicReconciliationNotice, scanCountValue, scanStatusLabel, sourceStateLabel } from "./memorySourcesApi";
 import type { MemorySourcesSnapshot, SourceFact, SourceState } from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 import { Empty, Notice } from "../components/ui";
@@ -123,7 +123,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
           {snapshot.sources.map((source) => <SourceCard key={`${source.kind}:${source.root}`} source={source} busy={busy} onAuthorize={() => void authorize(source)} onAction={runAction} sourceApi={sourceApi} onDetail={setDetail} />)}
         </section>
       )}
-      {detail && <section className="panel memory-scan-detail" aria-live="polite"><h2>这次检查的结果</h2><div className="panel-body"><p>{scanDetailCopy(detail)}</p><dl className="memory-detail-grid">{Object.entries(detail).filter(([key]) => ["status", "progress", "total", "created", "queued", "reused", "updated", "skipped", "failed", "last_error"].includes(key)).map(([key, value]) => <div key={key}><dt>{key === "status" ? "结果" : key === "progress" ? "已检查" : key === "total" ? "总数" : key === "created" ? "新建" : key === "queued" ? "新增" : key === "reused" ? "未重复导入" : key === "updated" ? "更新" : key === "skipped" ? "跳过" : key === "failed" ? "失败" : "说明"}</dt><dd>{detailValue(key, value, detail)}</dd></div>)}</dl><details><summary>技术详情</summary><pre className="json-panel">{JSON.stringify(detail, null, 2)}</pre></details></div></section>}
+      {detail && <section className="panel memory-scan-detail" aria-live="polite"><h2>这次检查的结果</h2><div className="panel-body"><p>{scanDetailCopy(detail)}</p><dl className="memory-detail-grid">{detailEntries(detail).map(([key, value]) => <div key={key}><dt>{key === "status" ? "结果" : key === "progress" ? "已检查" : key === "total" ? "总数" : key === "created" ? "新建" : key === "queued" ? "新增" : key === "reused" ? "未重复导入" : key === "updated" ? "更新" : key === "skipped" ? "跳过" : key === "failed" ? "失败" : "说明"}</dt><dd>{detailValue(key, value, detail)}</dd></div>)}</dl><details><summary>技术详情</summary><pre className="json-panel">{JSON.stringify(detail, null, 2)}</pre></details></div></section>}
     </div>
   );
 }
@@ -149,10 +149,18 @@ function scanDetailCopy(detail: Record<string, unknown>): string {
 }
 
 function detailValue(key: string, value: unknown, detail: Record<string, unknown>): string {
-  if (value == null || value === "") return "检查结果尚未获得";
   const countKeys = new Set(["created", "queued", "reused", "updated", "skipped", "failed"]);
-  if (countKeys.has(key) && detail.status !== "completed" && value === 0) return "检查结果尚未获得";
+  if (countKeys.has(key)) {
+    const count = scanCountValue(detail, key);
+    return count === undefined ? "检查结果尚未获得" : String(count);
+  }
+  if (value == null || value === "") return "检查结果尚未获得";
   return String(value);
+}
+
+function detailEntries(detail: Record<string, unknown>): Array<[string, unknown]> {
+  const keys = ["status", "progress", "total", "created", "queued", "reused", "updated", "skipped", "failed", "last_error"];
+  return keys.filter((key) => key in detail || ["created", "queued", "reused", "updated", "skipped", "failed"].includes(key)).map((key) => [key, detail[key]]);
 }
 
 function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }: { source: SourceFact; busy: string | null; onAuthorize: () => void; onAction: (key: string, operation: () => Promise<unknown>, verify: (next: MemorySourcesSnapshot) => boolean, success?: string) => Promise<void>; sourceApi: MemorySourcesApi; onDetail: (detail: Record<string, unknown>) => void }) {
