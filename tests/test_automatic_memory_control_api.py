@@ -9,8 +9,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.storage import StateDatabase
-from src.automatic_memory.models import AuthorizationScope
+from src.automatic_memory import AuthorizationScope, AutomaticMemoryRuntime
 from src.automatic_memory.source_registry import SourceRegistry
+from src.extraction.bootstrap import build_extraction_pipeline
 from src.control.automatic_memory_api import project_scan_dto
 
 try:
@@ -253,3 +254,157 @@ def test_scan_projector_does_not_promote_legacy_zero_without_presence_marker():
     assert projected["queued"] is None
     assert projected["reused"] is None
     assert projected["counts_present"] == []
+
+
+@pytest.mark.parametrize(
+    ("status", "expected_action"),
+    [
+        ("unsupported", "official support"),
+        ("expired", "re-authorize"),
+    ],
+)
+def test_authenticated_scan_action_reports_real_early_exit_next_action(
+    tmp_path: Path, status: str, expected_action: str
+):
+    """The production runtime, not a fake route double, owns early exits."""
+    root = tmp_path / "source"
+    root.mkdir()
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    settings = SimpleNamespace(
+        storage_path=storage,
+        state_db_path=storage / "lingji_state.db",
+        memory_db_path=storage / "lingji_memory.db",
+        vault_path=tmp_path / "vault",
+        runtime_settings_file="runtime_settings.json",
+        extraction_poll_seconds=0.05,
+        extraction_batch_size=1,
+        extraction_max_attempts=1,
+        extraction_lease_heartbeat_seconds=2,
+        extraction_stale_after_seconds=30,
+        scheduler_poll_seconds=0.05,
+        automatic_memory_debounce_seconds=1,
+        automatic_memory_reconciliation_seconds=60,
+        automatic_memory_integrity_seconds=3600,
+        embedding_enabled=False,
+        semantic_enabled=False,
+    )
+    state = StateDatabase(settings.state_db_path)
+    registry = SourceRegistry(state)
+    source = registry.register(
+        AuthorizationScope(
+            f"grant-{status}", ("generic_ai_history",), (str(root),),
+            datetime.now(timezone.utc), None, True,
+        ),
+        "generic_ai_history",
+        str(root),
+    )
+    registry.set_status(source.source_id, status, reason="test early exit")
+    runtime = AutomaticMemoryRuntime(
+        state_db=state,
+        pipeline=build_extraction_pipeline(settings),
+        settings=settings,
+        registry=registry,
+    )
+    control = LocalControlService.__new__(LocalControlService)
+    control.settings = settings
+    control.state_db = state
+    control.automatic_memory_registry = registry
+    control.runtime = runtime
+    app = create_control_app(settings, service=control, token="secret")
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/automatic-memory/scan",
+                headers={"X-LingJi-Token": "secret"},
+                json={"source_id": source.source_id},
+            )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["complete"] is False
+        assert payload["queued"] is None and payload["reused"] is None
+        assert payload["counts_present"] == []
+        assert payload["next_action"] and expected_action in payload["next_action"]
+    finally:
+        runtime.stop()
+
+
+def test_authenticated_scan_action_reports_paused_and_lease_contention(
+    tmp_path: Path,
+):
+    """Paused and contended actions retain formal scheduler semantics."""
+    root = tmp_path / "source"
+    root.mkdir()
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    settings = SimpleNamespace(
+        storage_path=storage,
+        state_db_path=storage / "lingji_state.db",
+        memory_db_path=storage / "lingji_memory.db",
+        vault_path=tmp_path / "vault",
+        runtime_settings_file="runtime_settings.json",
+        extraction_poll_seconds=0.05,
+        extraction_batch_size=1,
+        extraction_max_attempts=1,
+        extraction_lease_heartbeat_seconds=2,
+        extraction_stale_after_seconds=30,
+        scheduler_poll_seconds=0.05,
+        automatic_memory_debounce_seconds=1,
+        automatic_memory_reconciliation_seconds=60,
+        automatic_memory_integrity_seconds=3600,
+        embedding_enabled=False,
+        semantic_enabled=False,
+    )
+    state = StateDatabase(settings.state_db_path)
+    registry = SourceRegistry(state)
+    source = registry.register(
+        AuthorizationScope(
+            "grant-paused-lease", ("generic_ai_history",), (str(root),),
+            datetime.now(timezone.utc), None, True,
+        ),
+        "generic_ai_history",
+        str(root),
+    )
+    runtime = AutomaticMemoryRuntime(
+        state_db=state,
+        pipeline=build_extraction_pipeline(settings),
+        settings=settings,
+        registry=registry,
+    )
+    control = LocalControlService.__new__(LocalControlService)
+    control.settings = settings
+    control.state_db = state
+    control.automatic_memory_registry = registry
+    control.runtime = runtime
+    app = create_control_app(settings, service=control, token="secret")
+    headers = {"X-LingJi-Token": "secret"}
+    try:
+        runtime.scheduler.pause()
+        with TestClient(app) as client:
+            paused = client.post(
+                "/api/automatic-memory/scan",
+                headers=headers,
+                json={"source_id": source.source_id},
+            )
+        assert paused.status_code == 200
+        assert paused.json()["queued"] is None
+        assert paused.json()["reused"] is None
+        assert paused.json()["next_action"] and "resume" in paused.json()["next_action"]
+
+        runtime.scheduler.resume()
+        scan = registry.start_scan(source.source_id)
+        assert state.claim_automatic_memory_scheduler_scan(
+            scan.scan_id, "api-existing-lease", "api-existing-owner", ttl_seconds=300
+        )
+        with TestClient(app) as client:
+            contended = client.post(
+                "/api/automatic-memory/scan",
+                headers=headers,
+                json={"source_id": source.source_id},
+            )
+        assert contended.status_code == 200
+        assert contended.json()["queued"] is None
+        assert contended.json()["reused"] is None
+        assert contended.json()["next_action"] and "existing" in contended.json()["next_action"]
+    finally:
+        runtime.stop()

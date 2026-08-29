@@ -93,6 +93,71 @@ def test_legacy_completed_scan_keeps_unknown_counts_in_report_and_event(tmp_path
     assert payload.get("reused") is None
 
 
+@pytest.mark.parametrize(
+    ("status", "expected_action"),
+    [
+        ("unsupported", "official support"),
+        ("degraded", "repair the source"),
+        ("expired", "re-authorize"),
+    ],
+)
+def test_source_early_exit_preserves_unknown_counts_and_next_action(
+    tmp_path: Path, status: str, expected_action: str
+):
+    db, registry, source_id = registered(tmp_path)
+    registry.set_status(source_id, status, reason="test source state")
+    scheduler = AutomaticMemoryScheduler(
+        db, registry, scan_runner=lambda *_args: pytest.fail("scanner must not run")
+    )
+
+    report = scheduler.reconcile(source_id, reason="manual")
+
+    assert report.complete is False
+    assert report.discovered is None
+    assert report.unchanged is None
+    assert report.queued is None
+    assert report.reused is None
+    assert report.counts_measured is False
+    assert report.next_action and expected_action in report.next_action
+
+
+def test_scheduler_paused_and_lease_contention_are_unknown_with_actions(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+    scheduler = AutomaticMemoryScheduler(
+        db, registry, scan_runner=lambda *_args: pytest.fail("scanner must not run")
+    )
+    scheduler.pause()
+    paused = scheduler.reconcile(source_id, reason="manual")
+    assert paused.queued is None and paused.reused is None
+    assert paused.counts_measured is False
+    assert paused.next_action and "resume" in paused.next_action
+
+    scheduler.resume()
+    scan = registry.start_scan(source_id)
+    assert db.claim_automatic_memory_scheduler_scan(
+        scan.scan_id, "existing-lease", "existing-owner", ttl_seconds=300
+    )
+    contended = scheduler.reconcile(source_id, reason="manual")
+    assert contended.queued is None and contended.reused is None
+    assert contended.counts_measured is False
+    assert contended.next_action and "existing" in contended.next_action
+
+
+def test_unexpected_scheduler_exception_is_unknown_with_manual_retry_action(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+    scheduler = AutomaticMemoryScheduler(
+        db,
+        registry,
+        scan_runner=lambda *_args: (_ for _ in ()).throw(RuntimeError("fixture failure")),
+    )
+    report = scheduler.reconcile(source_id, reason="manual")
+    assert report.complete is False
+    assert report.discovered is None and report.unchanged is None
+    assert report.queued is None and report.reused is None
+    assert report.counts_measured is False
+    assert report.next_action and "manually" in report.next_action
+
+
 def test_start_stop_pause_resume_and_restart_use_persisted_cron_jobs(tmp_path: Path):
     db, registry, source_id = registered(tmp_path)
     scheduler = AutomaticMemoryScheduler(db, registry, scan_runner=lambda *args: None, poll_seconds=0.01)

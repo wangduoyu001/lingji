@@ -19,9 +19,9 @@ from .watcher import AutomaticMemoryWatcher
 
 @dataclass(frozen=True)
 class ReconciliationReport:
-    discovered: int
+    discovered: int | None
     queued: int | None
-    unchanged: int
+    unchanged: int | None
     errors: tuple[str, ...]
     complete: bool
     reused: int | None = None
@@ -33,7 +33,8 @@ class ReconciliationReport:
     # A report produced by an actual completed scanner has measured counts;
     # a ScanRun without persisted evidence must remain unmeasured even when
     # internal arithmetic uses zero.
-    counts_measured: bool = True
+    counts_measured: bool = False
+    next_action: str | None = None
 
 
 class AutomaticMemoryScheduler:
@@ -364,13 +365,23 @@ class AutomaticMemoryScheduler:
 
     def _reconcile_once(self, source_id: str, *, reason: str) -> ReconciliationReport:
         if self._paused:
-            return ReconciliationReport(0, 0, 0, ("scheduler is paused",), False)
+            return ReconciliationReport(
+                None, None, None, ("scheduler is paused",), False,
+                next_action="resume automatic processing or retry later",
+            )
         scan = None
         try:
             source = self._source(source_id)
             if source.status != "authorized":
                 self._disable_source(source_id)
-                return ReconciliationReport(0, 0, 0, (f"source status is {source.status}",), False)
+                return ReconciliationReport(
+                    None,
+                    None,
+                    None,
+                    (f"source status is {source.status}",),
+                    False,
+                    next_action=self._next_action_for_source_status(source.status),
+                )
             scan = self._start_or_retry_scan(source_id)
             scheduler_lease_id = f"scheduler-lease-{uuid4().hex}"
             claimed = self.state_db.claim_automatic_memory_scheduler_scan(
@@ -381,13 +392,14 @@ class AutomaticMemoryScheduler:
             )
             if claimed is None:
                 return ReconciliationReport(
-                    0,
-                    0,
-                    0,
+                    None,
+                    None,
+                    None,
                     ("scan is already being processed",),
                     False,
                     scan_id=scan.scan_id,
                     work_id=f"automatic-memory:{scan.scan_id}",
+                    next_action="an existing check is running; wait for it to finish",
                 )
             heartbeat_stop = threading.Event()
             heartbeat = threading.Thread(
@@ -403,10 +415,16 @@ class AutomaticMemoryScheduler:
                 heartbeat_stop.set()
                 if heartbeat is not threading.current_thread():
                     heartbeat.join(timeout=1.0)
+            measured_report = self._report(result)
             report = replace(
-                self._report(result),
+                measured_report,
                 scan_id=scan.scan_id,
                 work_id=f"automatic-memory:{scan.scan_id}",
+                next_action=(
+                    measured_report.next_action
+                    or ("wait for watcher or scheduled reconciliation" if measured_report.complete
+                        else "retry on the next event or scheduled reconciliation")
+                ),
             )
             if report.complete:
                 current = self.registry.get_scan(scan.scan_id)
@@ -416,9 +434,11 @@ class AutomaticMemoryScheduler:
                     finalized = None
                 else:
                     queued_for_progress = report.queued if report.queued is not None else 0
+                    discovered_for_progress = report.discovered if report.discovered is not None else 0
+                    unchanged_for_progress = report.unchanged if report.unchanged is not None else 0
                     finalized = self.registry.complete_scan_if_authorized(
                         scan.scan_id,
-                        progress=max(queued_for_progress, report.discovered - report.unchanged),
+                        progress=max(queued_for_progress, discovered_for_progress - unchanged_for_progress),
                         total=report.discovered,
                         queued_count=report.queued if report.counts_measured else None,
                         reused_count=report.reused if report.counts_measured else None,
@@ -437,7 +457,12 @@ class AutomaticMemoryScheduler:
                         if current.status == "cancelled"
                         else "source authorization changed during reconciliation"
                     )
-                    report = replace(report, errors=(error,), complete=False)
+                    report = replace(
+                        report,
+                        errors=(error,),
+                        complete=False,
+                        next_action="re-authorize the source, then retry",
+                    )
             else:
                 error = "; ".join(report.errors)[:2000] or "reconciliation incomplete"
                 self.registry.fail_scan_if_running(
@@ -460,11 +485,7 @@ class AutomaticMemoryScheduler:
                     "unchanged": report.unchanged,
                     "errors": list(report.errors),
                     "complete": report.complete,
-                    "next_action": (
-                        "wait for watcher or scheduled reconciliation"
-                        if report.complete
-                        else "retry on the next event or scheduled reconciliation"
-                    ),
+                    "next_action": report.next_action,
                 },
             )
             return report
@@ -489,13 +510,14 @@ class AutomaticMemoryScheduler:
                 },
             )
             return ReconciliationReport(
-                0,
-                0,
-                0,
+                None,
+                None,
+                None,
                 (error,),
                 False,
                 scan_id=scan.scan_id if scan is not None else None,
                 work_id=(f"automatic-memory:{scan.scan_id}" if scan is not None else None),
+                next_action="retry on the next scheduled check or manually",
             )
         finally:
             if scan is not None and "scheduler_lease_id" in locals():
@@ -682,7 +704,7 @@ class AutomaticMemoryScheduler:
             return ReconciliationReport(
                 int(result.total or result.progress) if complete else int(result.progress),
                 int(result.queued) if complete and result.queued is not None else None,
-                0,
+                None,
                 (result.last_error or f"scan ended with status {result.status}",)
                 if not complete
                 else (),
@@ -695,6 +717,17 @@ class AutomaticMemoryScheduler:
         if result is None:
             raise TypeError("automatic-memory scan runner must return a report")
         raise TypeError("automatic-memory scan runner returned an unsupported report")
+
+    @staticmethod
+    def _next_action_for_source_status(status: str) -> str:
+        normalized = str(status or "").strip().lower()
+        if normalized == "unsupported":
+            return "official support is unavailable; do not retry repeatedly"
+        if normalized in {"expired", "stale", "revoked"}:
+            return "re-authorize the source, then retry"
+        if normalized == "degraded":
+            return "repair the source, then retry"
+        return "retry on the next scheduled check or manually"
 
     def _source(self, source_id: str):
         for source in self.registry.list_sources():
