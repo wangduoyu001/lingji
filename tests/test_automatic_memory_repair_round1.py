@@ -238,6 +238,46 @@ def test_scan_route_requires_composed_runtime_and_dispatches_scheduler_scan_now(
     assert calls == [source.source_id]
 
 
+def test_scan_action_preserves_non_admitting_report_outcome(tmp_path: Path):
+    settings = _settings(tmp_path)
+    settings.storage_path.mkdir()
+    state = StateDatabase(settings.state_db_path)
+    registry = SourceRegistry(state)
+    root = tmp_path / "generic"
+    root.mkdir()
+    source = registry.register(AuthorizationScope("grant", ("generic_ai_history",), (str(root),), datetime.now(timezone.utc), None, True), "generic_ai_history", str(root))
+    control = LocalControlService.__new__(LocalControlService)
+    control.settings = settings
+    control.state_db = state
+    control.automatic_memory_registry = registry
+
+    class Runtime:
+        def scan_now(self, source_id: str) -> dict[str, object]:
+            return {
+                "source_id": source_id,
+                "status": "unsupported",
+                "complete": False,
+                "errors": ["source status is expired"],
+                "discovered": 0,
+                "unchanged": 0,
+                "next_action": "retry on the next scheduled pass",
+            }
+
+    control.runtime = Runtime()
+    app = create_control_app(settings, service=control, token="secret")
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/automatic-memory/scan",
+            headers={"X-LingJi-Token": "secret"},
+            json={"source_id": source.source_id},
+        )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["complete"] is False
+    assert payload["errors"] == ["source status is expired"]
+    assert payload["next_action"] == "retry on the next scheduled pass"
+
+
 def test_work_transition_updates_item_source_and_terminal_status(tmp_path: Path):
     store = WorkStore(StateDatabase(tmp_path / "state.db"))
     work = store.create_work(WorkItem(title="scan", source_id="source-real", status="accepted", owner_approved=True))

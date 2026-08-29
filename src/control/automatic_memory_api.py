@@ -44,7 +44,8 @@ _SCAN_DTO_FIELDS = (
     "lease_heartbeat_at", "lease_expires_at", "attempt",
     "scheduler_lease_id", "scheduler_lease_owner",
     "scheduler_lease_heartbeat_at", "scheduler_lease_expires_at", "updated_at",
-    "queued", "reused", "counts_present",
+    "queued", "reused", "counts_present", "complete", "errors", "discovered",
+    "unchanged", "next_action",
 )
 
 
@@ -79,6 +80,13 @@ def project_scan_dto(scan: Any) -> dict[str, Any]:
         key for key, value in (("queued", queued), ("reused", reused))
         if value is not None
     ]
+    # A scan's work fact uses this same stable identity.  Derive it at the
+    # projector boundary so action, list, summary, and detail responses cannot
+    # drift into different UI-local identifiers.
+    if not result.get("work_id") and result.get("scan_id"):
+        result["work_id"] = f"automatic-memory:{result['scan_id']}"
+    if "errors" in payload:
+        result["errors"] = list(payload.get("errors") or ())
     return result
 
 
@@ -139,7 +147,17 @@ def register_automatic_memory_routes(
             # scan_now returns a reconciliation report; the durable scan row
             # is the sole count-evidence authority for action responses.
             try:
-                return project_scan_dto(registry.get_scan(str(result["scan_id"])))
+                projected = project_scan_dto(registry.get_scan(str(result["scan_id"])))
+                projected["work_id"] = result.get("work_id") or f"automatic-memory:{result['scan_id']}"
+                # A report can be intentionally non-admitting (for example an
+                # expired source) and therefore have no durable scan row.  When
+                # a row exists, retain the action outcome fields as well so the
+                # action response does not turn a real failure into a neutral
+                # scan snapshot.
+                for key in ("complete", "errors", "discovered", "unchanged", "next_action"):
+                    if key in result:
+                        projected[key] = result[key]
+                return projected
             except LookupError:
                 # Lightweight control doubles may return a report identity
                 # without owning the registry row; preserve that compatibility

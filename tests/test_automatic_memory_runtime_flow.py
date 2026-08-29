@@ -7,9 +7,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from src.automatic_memory import AuthorizationScope, AutomaticMemoryRuntime, SourceRegistry
+from src.automatic_memory.models import ScanRun
 from src.control.service import LocalControlService
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.storage import StateDatabase
+from src.work.models import WorkItem
 
 
 def _settings(tmp_path: Path) -> SimpleNamespace:
@@ -91,6 +93,62 @@ def test_authorized_snapshot_is_consumed_to_terminal_structured_rows_and_work(tm
 def test_repeated_snapshot_scan_reuses_idempotent_job(tmp_path: Path):
     # The same content-addressed snapshot must not create a duplicate extraction job.
     test_authorized_snapshot_is_consumed_to_terminal_structured_rows_and_work(tmp_path)
+
+
+def test_unmeasured_scan_work_fact_keeps_counts_unknown(tmp_path: Path):
+    settings = _settings(tmp_path)
+    state = StateDatabase(settings.state_db_path)
+    pipeline = build_extraction_pipeline(settings)
+    registry = SourceRegistry(state)
+    source_root = tmp_path / "generic"
+    source_root.mkdir()
+    source = registry.register(
+        AuthorizationScope(
+            "grant-unmeasured",
+            ("generic_ai_history",),
+            (str(source_root),),
+            datetime.now(timezone.utc),
+            None,
+            True,
+        ),
+        "generic_ai_history",
+        str(source_root),
+    )
+    runtime = AutomaticMemoryRuntime(
+        state_db=state, pipeline=pipeline, settings=settings, registry=registry
+    )
+    scan = registry.start_scan(source.source_id)
+    assert registry.complete_scan_if_authorized(
+        scan.scan_id, progress=0, total=0
+    ) is not None
+    work_id = f"automatic-memory:{scan.scan_id}"
+    runtime.work_store.create_work(
+        WorkItem(
+            work_id=work_id,
+            title="扫描测试来源",
+            source_id=source.source_id,
+            status="accepted",
+            owner_approved=True,
+        )
+    )
+    runtime._maybe_finalize_scan_work(
+        scan.scan_id,
+        ScanRun(
+            scan_id=scan.scan_id,
+            source_id=source.source_id,
+            status="completed",
+            cursor=None,
+            progress=0,
+            total=0,
+            last_error=None,
+            recovery_token=None,
+        ),
+    )
+    outcome = runtime.work_projector.fact(work_id)["outcome"]
+    assert outcome["evidence"]["queued"] is None
+    assert outcome["evidence"]["reused"] is None
+    assert "新增 尚未获得" in outcome["summary"]
+    assert "复用 尚未获得" in outcome["summary"]
 
 
 def test_one_source_failure_does_not_block_another_authorized_source(tmp_path: Path):

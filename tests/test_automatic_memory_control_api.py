@@ -96,6 +96,7 @@ def test_automatic_memory_authorize_scan_pause_retry_and_reopen(tmp_path: Path):
         assert scan["progress"] == 0
         assert scan["total"] is None
         scan_id = scan["scan_id"]
+        assert scan["work_id"] == f"automatic-memory:{scan_id}"
 
         paused = client.post(
             "/api/automatic-memory/pause",
@@ -218,6 +219,7 @@ def test_scan_list_summary_and_detail_share_nullable_count_evidence_shape(tmp_pa
         assert payload["queued"] == 0
         assert payload["reused"] == 0
         assert payload["counts_present"] == ["queued", "reused"]
+        assert payload["work_id"] == f"automatic-memory:{scan.scan_id}"
     assert list_item["updated_at"] == summary_item["updated_at"] == detail_item["updated_at"]
 
     unmeasured = control.automatic_memory_registry.start_scan(source.source_id)
@@ -240,6 +242,7 @@ def test_scan_list_summary_and_detail_share_nullable_count_evidence_shape(tmp_pa
         assert payload["queued"] is None
         assert payload["reused"] is None
         assert payload["counts_present"] == []
+        assert payload["work_id"] == f"automatic-memory:{unmeasured.scan_id}"
 
 
 def test_scan_projector_does_not_promote_legacy_zero_without_presence_marker():

@@ -9,6 +9,7 @@ import threading
 import pytest
 
 from src.automatic_memory.models import AuthorizationScope, SourceRecord
+from src.automatic_memory.models import ScanRun
 from src.automatic_memory.checkpoint import SnapshotJobRunner
 from src.automatic_memory.snapshot import ConsistentSnapshot
 from src.extraction.queue import SQLiteExtractionQueue
@@ -60,6 +61,36 @@ def test_reconcile_report_contains_the_durable_scan_identity_for_each_call(tmp_p
     assert second.scan_id
     assert second.work_id == f"automatic-memory:{second.scan_id}"
     assert first.scan_id != second.scan_id
+
+
+def test_legacy_completed_scan_keeps_unknown_counts_in_report_and_event(tmp_path: Path):
+    db, registry, source_id = registered(tmp_path)
+
+    def scan(scan_id: str, _source_id: str, _reason: str):
+        return ScanRun(
+            scan_id=scan_id,
+            source_id=source_id,
+            status="completed",
+            cursor=None,
+            progress=1,
+            total=1,
+            last_error=None,
+            recovery_token=None,
+        )
+
+    scheduler = AutomaticMemoryScheduler(db, registry, scan_runner=scan)
+    report = scheduler.reconcile(source_id, reason="legacy")
+
+    assert report.complete
+    assert report.queued is None
+    assert report.reused is None
+    event = next(
+        item for item in db.recent_events(10)
+        if item["event_type"] == "automatic_memory_reconciliation"
+    )
+    payload = json.loads(event["payload_json"])
+    assert payload["queued"] is None
+    assert payload.get("reused") is None
 
 
 def test_start_stop_pause_resume_and_restart_use_persisted_cron_jobs(tmp_path: Path):

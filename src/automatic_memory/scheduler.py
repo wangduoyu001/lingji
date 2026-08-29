@@ -20,11 +20,11 @@ from .watcher import AutomaticMemoryWatcher
 @dataclass(frozen=True)
 class ReconciliationReport:
     discovered: int
-    queued: int
+    queued: int | None
     unchanged: int
     errors: tuple[str, ...]
     complete: bool
-    reused: int = 0
+    reused: int | None = None
     # Durable identity of the scan admitted by this reconciliation call.  The
     # optional fields preserve compatibility with existing runner callbacks and
     # reports while allowing callers to bind evidence to this exact scan.
@@ -415,9 +415,10 @@ class AutomaticMemoryScheduler:
                 elif current.status == "cancelled":
                     finalized = None
                 else:
+                    queued_for_progress = report.queued if report.queued is not None else 0
                     finalized = self.registry.complete_scan_if_authorized(
                         scan.scan_id,
-                        progress=max(report.queued, report.discovered - report.unchanged),
+                        progress=max(queued_for_progress, report.discovered - report.unchanged),
                         total=report.discovered,
                         queued_count=report.queued if report.counts_measured else None,
                         reused_count=report.reused if report.counts_measured else None,
@@ -455,6 +456,7 @@ class AutomaticMemoryScheduler:
                     "work_id": report.work_id,
                     "discovered": report.discovered,
                     "queued": report.queued,
+                    "reused": report.reused,
                     "unchanged": report.unchanged,
                     "errors": list(report.errors),
                     "complete": report.complete,
@@ -679,15 +681,15 @@ class AutomaticMemoryScheduler:
             complete = result.status == "completed"
             return ReconciliationReport(
                 int(result.total or result.progress) if complete else int(result.progress),
-                int(result.queued or 0) if complete else int(result.progress),
+                int(result.queued) if complete and result.queued is not None else None,
                 0,
                 (result.last_error or f"scan ended with status {result.status}",)
                 if not complete
                 else (),
                 complete,
-                int(result.reused or 0),
+                int(result.reused) if complete and result.reused is not None else None,
                 counts_measured=(
-                    result.queued is not None and result.reused is not None
+                    complete and result.queued is not None and result.reused is not None
                 ),
             )
         if result is None:
