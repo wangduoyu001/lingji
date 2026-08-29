@@ -78,3 +78,27 @@ Production/Vault, or owner data was accessed.
 - A repository-wide `python3 -m pytest -q -x` audit reached `217 passed` before an
   unrelated release-preflight test failed because this worktree has no `.venv/bin/python`;
   no source change was made for that environment-only failure.
+
+## Round 2 re-review evidence
+
+- RED: with `settings.home_dir` intentionally different from host `HOME`, the
+  authorized runtime scan produced no queued jobs because enumeration recomputed
+  the host HOME; the new focused test failed with `Codex rollout root must be one
+  exact effective-home root`. A direct automatic adapter test also initially
+  accepted a source input whose payload raw path did not identify the durable raw
+  object.
+- GREEN: runtime enumeration now reliably rebuilds the trusted effective home from
+  the canonical root validated during registration; the pipeline passes durable raw
+  root/hash/source-path provenance, and the Codex adapter verifies the durable raw
+  file, hash, authorized root, and source-path identity before parsing. Codex raw
+  objects are dispatched directly, avoiding temporary hardlinks as provenance.
+- Flow tests now cover successful-message 30% and 70% crash/restart, exact source /
+  conversation / message identities and counts, terminal replay idempotency and
+  stable Work Fact ID, revoked current retrieval exclusion, and unchanged third-party
+  sentinel bytes/mtime/mode. Rendered E2E clicks `允许接管 Codex`, verifies authorize
+  payload kind/root, and observes refreshed `已授权` state.
+- Round 2 product/tests commit: `8f73841` (`fix: bind Codex scans to trusted snapshots`).
+- Verification: focused Task 1 + automatic-memory regressions `81 passed, 3 warnings`;
+  rendered E2E `PASS`; Desktop smoke `PASS (23 scripts)`; build `PASS` (93 modules);
+  compileall, diff-check, acceptance-sync, and local-handoff `PASS`. No live app,
+  real owner data, Acceptance/Production/Vault data, or old worktree was accessed.

@@ -36,6 +36,20 @@
   提交；未执行 live/Acceptance/Production/Vault/真实主人数据验收。
 - 报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-1-report.md`。
 
+## 2026-08-29 · Task 1 Round 2 · re-review open items
+
+- 仅收口 re-review 的三组 open items：从注册阶段验证的 canonical Codex root
+  可靠重建 effective HOME，贯通 settings HOME 与宿主 HOME 不同的 runtime 枚举；
+  automatic adapter 强制绑定已授权 root、durable content-addressed raw snapshot
+  与 snapshot source-path identity；不增第二套事实源或队列。
+- 合成行为测试覆盖 30%/70% crash/restart 的成功消息、精确 source/conversation/
+  message identity/count、终态 replay、稳定 Work Fact、revoke current retrieval、
+  third-party sentinel bytes/mtime/mode，以及 E2E 实际 Codex 授权 POST payload 与
+  刷新后的 authorized 状态。
+- 本轮已执行 focused pytest、rendered E2E、23-script smoke、build、compileall、
+  diff-check、acceptance-sync、local-handoff；提交：`8f73841` 产品/测试，报告文档
+  提交另行记录。未执行 live/真实主人数据验收。
+
 ## 2026-08-29 · Task 8E · Final UI wording — 活动记录刷新动作
 
 - 活动记录页按钮只会重新读取履历，不会发起来源扫描；本轮将普通按钮从“现在检查”改为
