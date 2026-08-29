@@ -37,6 +37,7 @@ class OwnerMemoryCard:
     layers: dict[str, Any]
     trust: dict[str, Any]
     action: dict[str, Any]
+    projection: dict[str, Any]
     evidence_count: int
     permanent_memory: str
     evidence: tuple[dict[str, Any], ...] = ()
@@ -57,6 +58,7 @@ class OwnerMemoryCard:
             "layers": {key: dict(value) for key, value in self.layers.items()},
             "trust": dict(self.trust),
             "action": dict(self.action),
+            "projection": dict(self.projection),
             "evidence_count": self.evidence_count,
             "permanent_memory": self.permanent_memory,
         }
@@ -191,12 +193,35 @@ class OwnerMemoryCardProjector:
                 continue
             state = str(payload.get("status") or payload.get("state") or "pending_owner_review").strip().lower()
             if state in {"active", "visible_active"}:
-                # An active projection should be represented by MemoryDatabase;
-                # do not duplicate it from the event stream.
+                # Keep the latest terminal meaning when the canonical
+                # projection is temporarily absent; never fall back to an
+                # older pending event and ask the owner to confirm it.
+                output.append({
+                    "memory_id": memory_id,
+                    "title": str(payload.get("title") or payload.get("topic") or memory_id),
+                    "memory_type": str(payload.get("memory_type") or "knowledge"),
+                    "memory_tier": "derived",
+                    "status": "active",
+                    "review_status": "projection_unavailable",
+                    "privacy": str(payload.get("privacy") or "private"),
+                    "confidence": payload.get("confidence"),
+                    "valid_from": None,
+                    "valid_to": None,
+                    "relationships": {"canonical_projection": "unavailable", "terminal_state": state},
+                })
+                known.add(memory_id)
                 continue
             pending = state in {"pending_owner_review", "requires_owner_review", "needs_review", "candidate", "received", "preparing"}
             lifecycle = "needs_review" if pending else state
             review_status = "pending_owner_review" if pending else lifecycle
+            relationships = {
+                "evidence_refs": payload.get("evidence_refs") or payload.get("source_refs") or [],
+                "authority": payload.get("authority") or payload.get("source_authority") or "",
+                "development_lines": payload.get("development_lines") or payload.get("evidence_lines") or [],
+                "invalidating_reason": payload.get("reason") or payload.get("rejection_reason") or payload.get("error") or "",
+            }
+            if not pending:
+                relationships["canonical_projection"] = "unavailable"
             output.append({
                 "memory_id": memory_id,
                 "title": str(payload.get("title") or payload.get("topic") or memory_id),
@@ -208,12 +233,7 @@ class OwnerMemoryCardProjector:
                 "confidence": payload.get("confidence"),
                 "valid_from": None,
                 "valid_to": None,
-                "relationships": {
-                    "evidence_refs": payload.get("evidence_refs") or payload.get("source_refs") or [],
-                    "authority": payload.get("authority") or payload.get("source_authority") or "",
-                    "development_lines": payload.get("development_lines") or payload.get("evidence_lines") or [],
-                    "invalidating_reason": payload.get("reason") or payload.get("rejection_reason") or payload.get("error") or "",
-                },
+                "relationships": relationships,
             })
             known.add(memory_id)
         return output
@@ -248,6 +268,7 @@ class OwnerMemoryCardProjector:
             "provenance": provenance,
         }
         permanent = self._permanent_layer(document, status)
+        projection = {"state": "unavailable" if relationships.get("canonical_projection") in {"unavailable", "unknown"} else "available", "reason": "canonical memory projection is unavailable" if relationships.get("canonical_projection") in {"unavailable", "unknown"} else None}
         layers = {
             "raw": self._layer("available" if evidence or source.get("message_count", 0) else "unknown", "原始证据可查看" if evidence else "原始证据尚未获得"),
             "structured": self._layer("available", "已有结构化记录"),
@@ -270,6 +291,7 @@ class OwnerMemoryCardProjector:
             layers=layers,
             trust=trust,
             action=action,
+            projection=projection,
             evidence_count=len(refs),
             permanent_memory=permanent["label"],
             evidence=tuple(evidence),
@@ -308,6 +330,7 @@ class OwnerMemoryCardProjector:
                     layers=layers,
                     trust=trust,
                     action=action,
+                    projection={"state": "available", "reason": None},
                     evidence_count=len(evidence),
                     permanent_memory="尚未加入永久记忆",
                     evidence=evidence,
@@ -444,6 +467,11 @@ class OwnerMemoryCardProjector:
         if semantic is None:
             return self._layer("unavailable", "没有可用的逐条向量检查服务")
         try:
+            coverage = dict(self.statistics.vector_coverage() or {})
+        except Exception:
+            coverage = {}
+        coverage_state = str(coverage.get("state") or "").lower()
+        try:
             memory = self.database.fetch_memory(memory_id, include_chunks=True)
             chunks = list((memory or {}).get("chunks") or [])
         except Exception:
@@ -453,7 +481,8 @@ class OwnerMemoryCardProjector:
         results: list[bool | None] = []
         for chunk in chunks:
             try:
-                results.append(bool(semantic.exists(str(chunk.get("chunk_id") or ""))))
+                value = semantic.exists(str(chunk.get("chunk_id") or ""))
+                results.append(value if type(value) is bool else None)
             except Exception:
                 results.append(None)
         if all(value is True for value in results):
@@ -461,7 +490,7 @@ class OwnerMemoryCardProjector:
         if any(value is True for value in results):
             return self._layer("partial", "该记忆只有部分向量索引")
         if any(value is None for value in results):
-            return self._layer("unavailable", "该记忆的向量状态无法核对")
+            return self._layer("unavailable", "向量覆盖状态尚未获得" if coverage_state in {"", "unknown", "unavailable", "degraded"} else "该记忆的向量状态无法核对")
         return self._layer("unavailable", "该记忆尚未建立向量索引")
 
     @staticmethod
@@ -470,6 +499,8 @@ class OwnerMemoryCardProjector:
 
     @staticmethod
     def _permanent_layer(document: Mapping[str, Any], status: str) -> dict[str, Any]:
+        if OwnerMemoryCardProjector._relationships(document).get("canonical_projection") in {"unavailable", "unknown"}:
+            return {"state": "unknown", "label": "永久状态尚未获得", "reason": "canonical memory projection is unavailable"}
         tier = str(document.get("memory_tier") or "").lower()
         if tier == "core" and status == "active":
             return {"state": "active", "label": "永久记忆", "reason": None}

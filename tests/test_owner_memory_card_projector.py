@@ -174,8 +174,20 @@ class FalseSemantic:
 
 
 class MalformedVectorStatistics(CompleteCoverageStatistics):
+    def __init__(self):
+        self.coverage_calls = 0
+
+    def vector_status(self):
+        return {"state": {"malformed": True}, "ready": "yes", "vectors": "many"}
+
     def vector_coverage(self):
+        self.coverage_calls += 1
         return {"state": "healthy", "expected": "many", "indexed": "?", "missing": "?"}
+
+
+class MalformedSemantic:
+    def exists(self, chunk_id):
+        return {"exists": "malformed"}
 
 
 class FixturePromotionEvents:
@@ -185,6 +197,14 @@ class FixturePromotionEvents:
             "entity_id": "candidate-from-state",
             "payload_json": '{"candidate_id":"candidate-from-state","title":"Pending event","status":"pending_owner_review","source_refs":["missing"]}',
         }]
+
+
+class TerminalThenPendingEvents:
+    def recent_events(self, limit=100000):
+        return [
+            {"event_type": "memory_promotion_decision", "entity_id": "missing-canonical", "payload_json": '{"candidate_id":"missing-canonical","status":"active","title":"Active terminal"}'},
+            {"event_type": "memory_promotion_decision", "entity_id": "missing-canonical", "payload_json": '{"candidate_id":"missing-canonical","status":"pending_owner_review","title":"Old pending"}'},
+        ]
 
 
 def test_projects_owner_cards_and_unpromoted_read_only_evidence_without_full_text():
@@ -304,8 +324,20 @@ def test_unknown_evidence_has_owner_review_action():
 
 
 def test_malformed_vector_counts_fail_closed():
-    card = OwnerMemoryCardProjector(FixtureDatabase(), MessageFixtureSources(), MalformedVectorStatistics()).get_card("mem-active")["item"]
+    statistics = MalformedVectorStatistics()
+    gateway = SimpleNamespace(retriever=SimpleNamespace(semantic_provider=MalformedSemantic()))
+    card = OwnerMemoryCardProjector(FixtureDatabase(), MessageFixtureSources(), statistics, gateway=gateway).get_card("mem-active")["item"]
+    assert statistics.coverage_calls >= 1
     assert card["layers"]["vector"]["state"] in {"unknown", "unavailable"}
+
+
+def test_latest_terminal_event_does_not_fallback_to_older_pending_when_projection_missing():
+    database = FixtureDatabase()
+    database.documents = []
+    card = OwnerMemoryCardProjector(database, MessageFixtureSources(), FixtureStatistics(), state_db=TerminalThenPendingEvents()).get_card("missing-canonical")["item"]
+    assert card["state"] == "active"
+    assert card["projection"]["state"] in {"unavailable", "unknown"}
+    assert card["action"]["type"] != "confirm"
 
 
 @pytest.mark.parametrize("limit", [0, 51])
