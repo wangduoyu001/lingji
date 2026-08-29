@@ -159,6 +159,15 @@ export function scanStatusLabel(status: string | null | undefined): string {
   return ({ running: "扫描中", paused: "已暂停", completed: "已完成", failed: "失败", cancelled: "已取消" } as Record<string, string>)[String(status ?? "")] ?? "尚未获得";
 }
 
+export function periodicReconciliationNotice(runtime: RuntimeSummary | null | undefined): string {
+  if (runtime?.automation_mode !== "periodic_reconciliation") return "";
+  const seconds = Number(runtime.next_reconciliation_seconds ?? runtime.reconciliation_interval_seconds);
+  if (!Number.isFinite(seconds) || seconds <= 0) return "定期核对模式：已禁用文件事件监听；核对周期尚未获得。";
+  const minutes = seconds / 60;
+  const label = Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(1);
+  return `定期核对模式：应用启动时做增量扫描，之后自动核对来源；最迟 ${label} 分钟发现变化。此模式不使用不可靠的文件事件监听。`;
+}
+
 export function actionEvidence(snapshot: MemorySourcesSnapshot, sourceId: string, action: "authorize" | "scan" | "revoke" | "pause" | "resume" | "retry"): boolean {
   const source = snapshot.sources.find((item) => item.source_id === sourceId);
   if (!source) return false;

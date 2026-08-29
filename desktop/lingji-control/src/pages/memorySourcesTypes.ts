@@ -73,6 +73,8 @@ export type RuntimeSummary = {
   automation_mode?: "event_watcher" | "periodic_reconciliation" | string | null;
   event_watcher_enabled?: boolean | null;
   next_reconciliation_seconds?: number | null;
+  reconciliation_interval_seconds?: number | null;
+  max_change_detection_delay_seconds?: number | null;
   cleanup_pending?: boolean | null;
   cleanup_error?: string | null;
   last_global_error?: string | null;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, type LingJiApi } from "../api";
-import { actionAvailability, actionEvidence, authorizationEvidence, MemorySourcesApi, scanStatusLabel, sourceStateLabel } from "./memorySourcesApi";
+import { actionAvailability, actionEvidence, authorizationEvidence, MemorySourcesApi, periodicReconciliationNotice, scanStatusLabel, sourceStateLabel } from "./memorySourcesApi";
 import type { MemorySourcesSnapshot, RuntimeSummary, SourceFact, SourceState } from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 import { Empty, Notice } from "../components/ui";
@@ -108,6 +108,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
   if (resource.loading && !snapshot) return <div className="empty-state" aria-busy="true">正在读取已发现的来源…</div>;
   if (resource.error && !snapshot) return <div className="stack"><Notice kind="error">暂时无法读取记忆来源：{resource.error.message}。请确认灵机核心正在运行后重试。</Notice><button className="button secondary" onClick={() => void resource.refresh()}>重新读取</button></div>;
   if (!snapshot) return <Empty text="尚未获得来源信息。请稍后重试。" />;
+  const periodicNotice = periodicReconciliationNotice(snapshot.runtime);
 
   return (
     <div className="stack memory-sources-page">
@@ -124,7 +125,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
       {error && <Notice kind="error">{error}</Notice>}
       {message && <Notice kind="info">{message}</Notice>}
       {snapshot.runtime?.cleanup_pending && <Notice kind="error">临时文件清理失败：灵机会自动重试，可重试。</Notice>}
-      {snapshot.runtime?.automation_mode === "periodic_reconciliation" && <Notice kind="info">定期核对模式：应用启动时做增量扫描，之后自动核对来源；最迟 15 分钟发现变化。此模式不使用不可靠的文件事件监听。</Notice>}
+      {periodicNotice && <Notice kind="info">{periodicNotice}</Notice>}
       <section className="memory-sources-summary" aria-label="来源总览">
         <div><span>已发现来源</span><strong>{snapshot.discovered.length}</strong><small>已授权 {activeAuthorizedCount(snapshot.authorized)} 个</small></div>
         <div><span>当前接管</span><strong>{snapshot.sources.filter((item) => item.state === "current").length}</strong><small>扫描完成后才算接管</small></div>

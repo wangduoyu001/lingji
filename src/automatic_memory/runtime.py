@@ -20,11 +20,19 @@ from .scheduler import AutomaticMemoryScheduler
 from .snapshot import ConsistentSnapshot
 from .source_registry import SourceRegistry
 from .models import SourceRecord
+from .policy import resolve_event_watcher_enabled
 from .path_policy import enumerate_authorized_files
 from src.work.capture_bridge import CaptureWorkBridge
 from src.work.models import ExecutionEvent, WorkItem
 from src.work.projector import WorkProjector
 from src.work.store import WorkStore
+
+
+def _optional_float(value: Any) -> float | None:
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 class AutomaticMemoryRuntime:
@@ -53,6 +61,7 @@ class AutomaticMemoryRuntime:
         scheduler: Any | None = None,
         worker: Any | None = None,
         path_provider: Callable[[Any, Any], Any] | None = None,
+        platform_provider: Callable[[], str] | None = None,
     ) -> None:
         self.state_db = state_db
         if pipeline is None and settings is not None:
@@ -62,6 +71,7 @@ class AutomaticMemoryRuntime:
 
             pipeline = build_extraction_pipeline(settings)
         self.pipeline = pipeline
+        self._platform_provider = platform_provider
         if self.pipeline is None:
             raise TypeError("pipeline or settings is required")
         pipeline_queue = getattr(self.pipeline, "queue", None)
@@ -100,8 +110,9 @@ class AutomaticMemoryRuntime:
                 integrity_seconds=float(
                     getattr(settings, "automatic_memory_integrity_seconds", 86400.0)
                 ),
-                event_watcher_enabled=bool(
-                    getattr(settings, "automatic_memory_event_watcher_enabled", False)
+                event_watcher_enabled=resolve_event_watcher_enabled(
+                    getattr(settings, "automatic_memory_event_watcher_enabled", None),
+                    platform_name=(self._platform_provider() if self._platform_provider else None),
                 ),
                 heartbeat_seconds=float(
                     getattr(settings, "automatic_memory_heartbeat_seconds", 5.0)
@@ -397,8 +408,14 @@ class AutomaticMemoryRuntime:
                 getattr(self.scheduler, "automation_mode", "event_watcher")
             ),
             "event_watcher_enabled": watcher_enabled,
-            "next_reconciliation_seconds": float(
-                getattr(self.scheduler, "next_reconciliation_seconds", 900.0)
+            "next_reconciliation_seconds": _optional_float(
+                getattr(self.scheduler, "next_reconciliation_seconds", None)
+            ),
+            "reconciliation_interval_seconds": _optional_float(
+                getattr(self.scheduler, "next_reconciliation_seconds", None)
+            ),
+            "max_change_detection_delay_seconds": _optional_float(
+                getattr(self.scheduler, "next_reconciliation_seconds", None)
             ),
             "last_global_error": self._last_global_error() or cleanup_error,
         }

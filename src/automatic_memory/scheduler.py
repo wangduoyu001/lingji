@@ -12,6 +12,7 @@ from src.scheduler.cron import CronScheduler
 from src.storage.state_db import StateDatabase
 
 from .models import ScanRun
+from .policy import resolve_event_watcher_enabled
 from .source_registry import SourceRegistry
 from .watcher import AutomaticMemoryWatcher
 
@@ -37,6 +38,12 @@ class AutomaticMemoryScheduler:
     JOB_PREFIX = "automatic_memory:"
     RECONCILIATION_SECONDS = 900.0
     INTEGRITY_SECONDS = 86400.0
+
+    @staticmethod
+    def resolve_event_watcher_enabled(
+        configured: bool | None, *, platform_name: str | None = None
+    ) -> bool:
+        return resolve_event_watcher_enabled(configured, platform_name=platform_name)
 
     def __init__(
         self,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { actionAvailability, authorizationEvidence, decideOnboardingRoute } from "../src/pages/memorySourcesApi.ts";
+import { actionAvailability, authorizationEvidence, decideOnboardingRoute, periodicReconciliationNotice } from "../src/pages/memorySourcesApi.ts";
 import { canPublishRequest, ownsRequest } from "../src/hooks/usePollingResource.ts";
 import { activeAuthorizedCount, captureJobLabel, captureJobSummary, formatErrorForUi, paginationHasNext, vectorSemanticLabel } from "../src/pages/codexWorkspaceContract.ts";
 
@@ -8,6 +8,11 @@ const sourceText = async (path) => {
   try { return await readFile(new URL(path, import.meta.url), "utf8"); }
   catch { return ""; }
 };
+assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: 60 }), /最迟 1 分钟发现变化/);
+assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: 900 }), /最迟 15 分钟发现变化/);
+assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: 1800 }), /最迟 30 分钟发现变化/);
+assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation" }), /尚未获得/);
+assert.equal(periodicReconciliationNotice({ automation_mode: "event_watcher", next_reconciliation_seconds: 900 }), "");
 const [contract, sourcesPage, overviewPage, workPage, codexPage, reviewPage, autoReviewPage, capturePage, obsidianPage, vectorPage, inspectorPage] = await Promise.all([
   sourceText("../src/pages/codexWorkspaceContract.ts"), sourceText("../src/pages/MemorySourcesPage.tsx"),
   sourceText("../src/pages/OverviewPage.tsx"), sourceText("../src/components/CurrentWorkPanel.tsx"),
@@ -19,10 +24,8 @@ const [contract, sourcesPage, overviewPage, workPage, codexPage, reviewPage, aut
 
 // Task8E safe polling fallback: source status must describe the actual
 // periodic contract instead of implying a live event takeover.
-assert.match(sourcesPage, /定期核对/);
-assert.match(sourcesPage, /15 分钟/);
 assert.doesNotMatch(sourcesPage, /30 秒实时|30秒实时|实时接管/);
-assert.match(sourcesPage, /automation_mode|event_watcher_enabled/);
+assert.match(sourcesPage, /periodicReconciliationNotice/);
 
 const available = [{ status: "available", kind: "generic_ai_history" }];
 const empty = [];

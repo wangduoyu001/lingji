@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     automatic_memory_debounce_seconds: int = Field(default=5, ge=1, le=60)
     # Safe default for macOS: periodic reconciliation is authoritative; event
     # watcher admission is only for controlled compatibility environments.
-    automatic_memory_event_watcher_enabled: bool = False
+    automatic_memory_event_watcher_enabled: bool | None = None
     automatic_memory_reconciliation_seconds: int = Field(default=900, ge=60)
     automatic_memory_integrity_seconds: int = Field(default=86400, ge=3600)
     manual_command_interval_minutes: int = 2
