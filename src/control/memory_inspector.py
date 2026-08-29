@@ -39,5 +39,6 @@ def build_memory_inspector(settings: Any, control: Any) -> MemoryInspectorFacade
         source_service,
         control.memory_statistics,
         gateway=gateway,
+        state_db=getattr(control, "state_db", None),
         workspace=workspace_name,
     )

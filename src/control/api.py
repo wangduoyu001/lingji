@@ -210,6 +210,38 @@ def create_control_app(
         except Exception as exc:
             raise translate_error(exc) from exc
 
+    @app.get("/api/memory/inspector/cards", dependencies=secured)
+    def inspector_cards(
+        state: str | None = Query(default=None),
+        action: str | None = Query(default=None),
+        source: str | None = Query(default=None),
+        limit: int = Query(default=20, ge=1, le=50),
+        offset: int = Query(default=0, ge=0),
+        include_evidence: bool = Query(default=False),
+        expand: bool = Query(default=False),
+    ) -> dict[str, Any]:
+        try:
+            return memory_inspector().list_cards(
+                state=state,
+                action=action,
+                source=source,
+                limit=limit,
+                offset=offset,
+                include_evidence=include_evidence or expand,
+            )
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get("/api/memory/inspector/cards/{memory_id}", dependencies=secured)
+    def inspector_card(
+        memory_id: str,
+        expand: bool = Query(default=True),
+    ) -> dict[str, Any]:
+        try:
+            return memory_inspector().get_card(memory_id, include_evidence=expand)
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
     @app.get("/api/memory/inspector/sources", dependencies=secured)
     def inspector_sources(
         source_type: str | None = Query(default=None),

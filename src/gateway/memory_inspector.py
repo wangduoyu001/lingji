@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from src.sources.service import SourceQueryService, ViewerContext
+from .owner_memory_cards import OwnerMemoryCardProjector
 
 
 logger = logging.getLogger("lingji.gateway.memory_inspector")
@@ -26,6 +27,7 @@ class MemoryInspectorFacade:
         statistics: Any,
         *,
         gateway: Any | None = None,
+        state_db: Any | None = None,
         workspace: str = "production",
     ):
         self.database = database
@@ -33,6 +35,14 @@ class MemoryInspectorFacade:
         self.statistics = statistics
         self.gateway = gateway
         self.workspace = str(workspace or "production")
+        self.card_projector = OwnerMemoryCardProjector(
+            database,
+            source_service,
+            statistics,
+            gateway=gateway,
+            state_db=state_db if state_db is not None else getattr(gateway, "state_db", None),
+            workspace=self.workspace,
+        )
 
     def status(self) -> dict[str, Any]:
         try:
@@ -163,6 +173,41 @@ class MemoryInspectorFacade:
                     "has_more": selected_offset + len(items) < total,
                 },
             }
+        )
+
+    def list_cards(
+        self,
+        *,
+        viewer: ViewerContext | None = None,
+        state: str | None = None,
+        action: str | None = None,
+        source: str | None = None,
+        source_id: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+        include_evidence: bool = False,
+    ) -> dict[str, Any]:
+        """Return concise owner cards over the same read authorities."""
+        return self.card_projector.list_cards(
+            viewer=viewer,
+            state=state,
+            action=action,
+            source=source,
+            source_id=source_id,
+            limit=limit,
+            offset=offset,
+            include_evidence=include_evidence,
+        )
+
+    def get_card(
+        self,
+        memory_id: str,
+        *,
+        viewer: ViewerContext | None = None,
+        include_evidence: bool = True,
+    ) -> dict[str, Any]:
+        return self.card_projector.get_card(
+            memory_id, viewer=viewer, include_evidence=include_evidence
         )
 
     def get_memory(
