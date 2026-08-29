@@ -31,11 +31,12 @@ function latestCheckSummary(latest: ScanRun | null | undefined): string {
   const when = stamp === "时间尚未获得" ? "" : `（${stamp}）`;
   if (status === "failed") return `最近一次检查没有完成${when}。`;
   const parts = [
-    scanCountValue(latest, "queued") !== undefined ? `新增 ${scanCountValue(latest, "queued")} 条` : "",
+    scanCountValue(latest, "queued") !== undefined && scanCountValue(latest, "queued") > 0 ? `新增 ${scanCountValue(latest, "queued")} 条` : "",
     scanCountValue(latest, "updated") !== undefined ? `更新 ${scanCountValue(latest, "updated")} 条` : "",
     scanCountValue(latest, "skipped") !== undefined ? `跳过 ${scanCountValue(latest, "skipped")} 条` : "",
   ].filter(Boolean);
   const phase = status === "completed" ? "已完成" : status === "running" ? "正在进行" : status === "failed" ? "没有完成" : "已记录";
+  if (status === "completed" && scanCountValue(latest, "queued") === 0 && parts.length === 0) return `最近一次检查${phase}${when}，未发现新内容。`;
   const outcome = parts.length ? `：${parts.join("，")}` : "";
   return `最近一次检查${phase}${when}${outcome}。`;
 }

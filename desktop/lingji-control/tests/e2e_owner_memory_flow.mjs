@@ -80,8 +80,9 @@ const server = http.createServer((req, res) => {
     if (path === "/__test/all-states") { state.allStates = true; return json(res, 200, { ok: true }); }
     if (path === "/__test/omit-home-counts") { state.omitHomeCounts = body.includes("true"); return json(res, 200, { ok: true }); }
     if (path === "/__test/source-mode") { state.sourceMode = body.trim() || "default"; state.allStates = false; state.authorized = false; state.revoked = false; state.scan = null; return json(res, 200, { ok: true, source_mode: state.sourceMode }); }
-    if (path === "/__test/current-work-status") { state.currentWorkNull = body.trim() === "null"; state.currentWorkMode = body.trim() === "empty-scan" ? "empty-scan" : "normal"; state.currentWorkStatus = body.trim() || "accepted"; return json(res, 200, { ok: true, current_work_status: state.currentWorkStatus }); }
+    if (path === "/__test/current-work-status") { state.currentWorkNull = body.trim() === "null"; state.currentWorkMode = ["empty-scan", "changed-scan"].includes(body.trim()) ? body.trim() : "normal"; state.currentWorkStatus = body.trim() || "accepted"; return json(res, 200, { ok: true, current_work_status: state.currentWorkStatus }); }
     if (path === "/__test/activity-mode") { state.activityMode = body.trim() || "normal"; return json(res, 200, { ok: true, activity_mode: state.activityMode }); }
+    if (path === "/__test/seed-latest-empty-scan") { state.sourceMode = "default"; state.authorized = true; state.revoked = false; state.onboardingFailures = 0; state.scan = { scan_id: "scan-empty", source_id: "src-fixture", status: "completed", progress: 1, total: 0, queued: 0, reused: 0, updated: 0, skipped: 0, failed: 0 }; return json(res, 200, { ok: true }); }
     if (path === "/__test/detail-count-mode") { state.detailCountMode = body.trim() || "missing"; return json(res, 200, { ok: true, detail_count_mode: state.detailCountMode }); }
     if (path === "/__test/pending-outage") { state.pendingOutage = body.includes("true"); return json(res, 200, { ok: true, pending_outage: state.pendingOutage }); }
     if (path === "/__test/release-onboarding") { state.onboardingRelease = true; return json(res, 200, { ok: true }); }
@@ -123,7 +124,8 @@ const server = http.createServer((req, res) => {
     }
     if (path === "/api/work/current") {
       if (state.currentWorkNull) return json(res, 200, { work: null, events: [], outcome: null, next_action: null });
-      if (state.currentWorkMode === "empty-scan") return json(res, 200, { work: { work_id: "work-empty-scan", title: "扫描 obsidian", status: "completed", source_id: "src-obsidian" }, events: [], outcome: { work_id: "work-empty-scan", status: "completed", summary: "检查完成，未发现新内容" }, next_action: { action_id: "next-empty-scan", work_id: "work-empty-scan", description: "灵机", actor: "system" } });
+      if (state.currentWorkMode === "empty-scan") return json(res, 200, { work: { work_id: "work-empty-scan", title: "扫描 obsidian", status: "completed", source_id: "src-obsidian" }, events: [], outcome: { work_id: "work-empty-scan", status: "completed", summary: "扫描完成，已检查 0 个来源文件（新增 0，复用 0）", evidence: { jobs: 0, queued: 0, reused: 0 } }, next_action: { action_id: "next-empty-scan", work_id: "work-empty-scan", description: "灵机", actor: "system" } });
+      if (state.currentWorkMode === "changed-scan") return json(res, 200, { work: { work_id: "work-changed-scan", title: "扫描 obsidian", status: "completed", source_id: "src-obsidian" }, events: [], outcome: { work_id: "work-changed-scan", status: "completed", summary: "成功", evidence: { jobs: 2, queued: 2, reused: 0 } }, next_action: { action_id: "next-changed-scan", work_id: "work-changed-scan", description: "灵机", actor: "system" } });
       return json(res, 200, { work: { work_id: "work-current-1", title: "整理会议记录", status: state.currentWorkStatus, source_id: "source-1" }, events: [], outcome: null, next_action: null });
     }
     if (path === "/api/work/pending-actions") {
@@ -287,6 +289,28 @@ try {
   await page.getByText("检查完成，未发现新内容", { exact: false }).waitFor();
   await page.getByText("灵机会继续自动检查", { exact: false }).waitFor();
   assert.equal(await page.getByText("下一步：灵机", { exact: true }).count(), 0, "system next action must be readable Chinese, not a raw actor");
+  const currentWorkResult = page.locator(".current-work-readable-line");
+  assert.equal(await currentWorkResult.getByText("扫描完成，已检查 0 个来源文件", { exact: false }).count(), 0, "raw automatic scan summary must stay out of ordinary current-work copy");
+  const currentWorkDetails = page.locator(".current-work-timeline");
+  if (!(await currentWorkDetails.evaluate((node) => node.open))) await currentWorkDetails.locator("summary").click();
+  const currentWorkTechnical = await currentWorkDetails.innerText();
+  assert.ok(currentWorkTechnical.includes("扫描完成，已检查 0 个来源文件"), "technical details must retain raw scan summary");
+  assert.ok(currentWorkTechnical.includes('"jobs": 0'), "technical details must retain scan evidence");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/current-work-status`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "changed-scan" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+  await page.getByText("检查完成，新增 2 条内容", { exact: false }).waitFor();
+  assert.equal(await page.getByText("结果：成功", { exact: true }).count(), 0, "generic success must not mask measured changed evidence");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "explicit-zero" });
+  await fetch(`http://127.0.0.1:${apiPort}/__test/seed-latest-empty-scan`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
+  await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
+  await page.getByRole("heading", { name: "选择灵机要记住的内容" }).waitFor();
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.getByRole("button", { name: "运行状态" }).click();
+  await page.getByText(/最近一次检查已完成.*未发现新内容/).waitFor();
+  const latestOverview = page.locator(".overview-page");
+  assert.equal(await latestOverview.getByText("新增 0 条", { exact: false }).count(), 0, "explicit zero latest scan must not show misleading added-zero copy");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "missing" });
   await fetch(`http://127.0.0.1:${apiPort}/__test/current-work-status`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "null" });
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
@@ -359,11 +383,17 @@ try {
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.getByText("暂时没有可连接的记录来源。", { exact: true }).waitFor();
   await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="claude_desktop"]').getByText("请等待 Claude 提供受支持的官方导出，或暂不接入。", { exact: false }).waitFor();
+  assert.equal(await page.getByText("Claude Desktop has no approved official export schema; opaque storage is not read", { exact: true }).count(), 0, "Claude raw reason must stay out of ordinary source copy");
   await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "claude-consent" });
   await page.waitForTimeout(300);
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.getByText("暂时没有可连接的记录来源。", { exact: true }).waitFor();
   await page.locator('[data-source-kind="claude_desktop"]').getByRole("heading", { name: "需要确认", exact: true }).waitFor();
+  await page.locator('[data-source-kind="claude_desktop"]').getByText("请等待 Claude 提供受支持的官方导出，或暂不接入。", { exact: false }).waitFor();
+  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
+  assert.equal(await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude Desktop has no approved official export schema; opaque storage is not read", { exact: true }).count(), 0, "consent-required Claude raw reason must stay out of ordinary source copy");
+  assert.equal(await page.locator('[data-source-kind="claude_desktop"]').getByRole("button", { name: /开始记忆|选择文件夹/ }).count(), 0, "consent-required Claude must not offer authorization without an approved path");
   await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "empty" });
   await page.waitForTimeout(300);
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();

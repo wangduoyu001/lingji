@@ -82,10 +82,13 @@ function describe(discovered: DiscoveredSource, state: SourceState, scan?: ScanR
     return { detail: expired ? "授权已过期，需要重新授权。" : "来源或运行时需要检查，灵机会保留最近一次已知状态。", nextAction: expired ? "重新授权这个来源。" : "需要重启/检查后再试。" };
   }
   if (state === "unsupported") {
-    if (discovered.kind === "claude_desktop") return { detail: "Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", nextAction: "请使用 Claude 的官方导出，或暂不接入。" };
+    if (discovered.kind === "claude_desktop") return { detail: "Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", nextAction: "请等待 Claude 提供受支持的官方导出，或暂不接入。" };
     return { detail: discovered.reason || "当前没有可用的官方导出方式，灵机不会读取不透明存储。", nextAction: "请使用官方导出，或暂不接入。" };
   }
-  if (state === "consent_required") return { detail: discovered.reason || "这个来源需要主人明确确认后才能继续。", nextAction: "确认允许的来源目录后再授权。" };
+  if (state === "consent_required") {
+    if (discovered.kind === "claude_desktop") return { detail: "Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", nextAction: "请等待 Claude 提供受支持的官方导出，或暂不接入。" };
+    return { detail: discovered.reason || "这个来源需要主人明确确认后才能继续。", nextAction: "确认允许的来源目录后再授权。" };
+  }
   if (state === "authorized") return { detail: `已授权「${rootName(discovered.candidate_root)}」，尚未完成首轮扫描。`, nextAction: "立即扫描以完成接管。" };
   return { detail: discovered.reason ? `发现「${rootName(discovered.candidate_root)}」：${discovered.reason}` : `发现可接入的「${rootName(discovered.candidate_root)}」。`, nextAction: "确认来源后授权；灵机只会读取这个目录。" };
 }

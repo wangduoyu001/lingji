@@ -3,6 +3,7 @@ import { Notice } from "../components/ui";
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { LingJiApi } from "../api";
 import type { WorkFact } from "../contracts/workFact";
+import { formatWorkFactResult } from "./workFactPresentation";
 
 export type CurrentWorkFact = WorkFact;
 
@@ -59,11 +60,12 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
         <span className="pill">{status}</span>
       </div>
       {resource.stale && <Notice kind="warning">当前工作状态正在刷新。</Notice>}
-      {hasWork && <div className="current-work-readable-line"><span>结果：{text(fact?.outcome?.summary, "还没有结果")}</span><span>下一步：{readableNextAction(fact?.next_action)}</span></div>}
+      {hasWork && <div className="current-work-readable-line"><span>结果：{fact ? formatWorkFactResult(fact) : "还没有结果"}</span><span>下一步：{readableNextAction(fact?.next_action)}</span></div>}
 
       <details className="current-work-timeline">
         <summary>查看技术详情</summary>
         <div className="current-work-technical"><span>工作标识：{text(work?.work_id)}</span><span>来源标识：{text(work?.source_id)}</span></div>
+        {fact?.outcome && <pre className="json-panel">{JSON.stringify({ summary: fact.outcome.summary, evidence: fact.outcome.evidence }, null, 2)}</pre>}
         {(fact?.events ?? []).slice(0, 5).map((event) => (
           <div key={event.event_id}>
             <strong>{text(event.event_type)}</strong>
