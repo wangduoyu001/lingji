@@ -17,6 +17,13 @@ const [contract, sourcesPage, overviewPage, workPage, codexPage, reviewPage, aut
   sourceText("../src/pages/MemoryInspectorPage.tsx"),
 ]);
 
+// Task8E safe polling fallback: source status must describe the actual
+// periodic contract instead of implying a live event takeover.
+assert.match(sourcesPage, /定期核对/);
+assert.match(sourcesPage, /15 分钟/);
+assert.doesNotMatch(sourcesPage, /30 秒实时|30秒实时|实时接管/);
+assert.match(sourcesPage, /automation_mode|event_watcher_enabled/);
+
 const available = [{ status: "available", kind: "generic_ai_history" }];
 const empty = [];
 assert.equal(decideOnboardingRoute({ page: "overview", checked: false, readsSucceeded: false, authorized: empty, discovered: available }), null, "a failed first read must remain retryable, not route");

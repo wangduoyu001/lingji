@@ -52,6 +52,7 @@ class AutomaticMemoryScheduler:
         integrity_seconds: float = INTEGRITY_SECONDS,
         heartbeat_seconds: float = 5.0,
         heartbeat_work_callback: Callable[[], Any] | None = None,
+        event_watcher_enabled: bool = True,
     ) -> None:
         self.state_db = state_db
         self.registry = source_registry
@@ -62,6 +63,13 @@ class AutomaticMemoryScheduler:
         self.integrity_seconds = max(float(integrity_seconds), 1.0)
         self.heartbeat_seconds = max(min(float(heartbeat_seconds), 5.0), 0.05)
         self.heartbeat_work_callback = heartbeat_work_callback
+        # The watcher remains injectable for compatibility and test coverage,
+        # while the packaged macOS runtime opts into safer periodic mode.
+        self.event_watcher_enabled = bool(event_watcher_enabled)
+        self.automation_mode = (
+            "event_watcher" if self.event_watcher_enabled else "periodic_reconciliation"
+        )
+        self.next_reconciliation_seconds = self.reconciliation_seconds
         self.watcher = watcher or AutomaticMemoryWatcher(
             source_provider=self._source,
             on_change=lambda source_id: self.reconcile(source_id, reason="event"),
@@ -162,10 +170,11 @@ class AutomaticMemoryScheduler:
             self._write_heartbeat("stopping")
             watcher_result: dict[str, object] = {}
             watcher_error: BaseException | None = None
-            try:
-                watcher_result = self.watcher.stop() or {}
-            except BaseException as exc:
-                watcher_error = exc
+            if self.event_watcher_enabled:
+                try:
+                    watcher_result = self.watcher.stop() or {}
+                except BaseException as exc:
+                    watcher_error = exc
             cron_error: BaseException | None = None
             try:
                 self.cron.stop()
@@ -267,7 +276,8 @@ class AutomaticMemoryScheduler:
     def pause(self) -> None:
         with self._lock:
             self._paused = True
-        self.watcher.pause()
+        if self.event_watcher_enabled:
+            self.watcher.pause()
         self.cron.set_jobs_enabled(self.JOB_PREFIX, False)
         self._write_heartbeat("paused")
 
@@ -278,7 +288,8 @@ class AutomaticMemoryScheduler:
         for source in self.registry.list_sources():
             if source.status != "authorized":
                 self._disable_source(source.source_id)
-        self.watcher.resume()
+        if self.event_watcher_enabled:
+            self.watcher.resume()
         self._write_heartbeat("running")
 
     def status(self) -> tuple[ScanRun, ...]:
@@ -497,11 +508,14 @@ class AutomaticMemoryScheduler:
             self.cron.set_jobs_enabled(self._source_prefix(source_id), False)
         except Exception as exc:
             cron_errors.append(f"failed to disable source jobs: {exc}")
-        try:
-            result = self.watcher.stop_source(source_id, timeout_seconds=0.1) or {}
-        except Exception as exc:
+        if self.event_watcher_enabled:
+            try:
+                result = self.watcher.stop_source(source_id, timeout_seconds=0.1) or {}
+            except Exception as exc:
+                result = {}
+                watcher_errors.append(f"failed to stop source watcher: {exc}")
+        else:
             result = {}
-            watcher_errors.append(f"failed to stop source watcher: {exc}")
         survivors = result.get("surviving_threads") or []
         if survivors:
             watcher_errors.append(
@@ -549,10 +563,11 @@ class AutomaticMemoryScheduler:
             self.integrity_seconds / 3600.0,
             run_on_start=False,
         )
-        try:
-            self.watcher.start(source.source_id, debounce_seconds=self.debounce_seconds)
-        except Exception as exc:
-            self._watch_error(source.source_id, str(exc)[:2000])
+        if self.event_watcher_enabled:
+            try:
+                self.watcher.start(source.source_id, debounce_seconds=self.debounce_seconds)
+            except Exception as exc:
+                self._watch_error(source.source_id, str(exc)[:2000])
         if self._paused:
             self.cron.set_jobs_enabled(prefix, False)
 

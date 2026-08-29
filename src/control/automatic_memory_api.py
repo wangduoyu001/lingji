@@ -128,6 +128,9 @@ def register_automatic_memory_routes(
             status = str(scan.get("status") or "unknown")
             counts[status] = counts.get(status, 0) + 1
         latest = scans[0] if scans else None
+        runtime = getattr(control, "runtime", None)
+        scheduler = getattr(runtime, "scheduler", None)
+        periodic = getattr(scheduler, "automation_mode", None) == "periodic_reconciliation"
         return {
             "counts": counts,
             "total": len(scans),
@@ -137,7 +140,11 @@ def register_automatic_memory_routes(
                 "total": (latest or {}).get("total"),
             },
             "last_error": (latest or {}).get("last_error"),
-            "next_action": "retry failed scan" if latest and latest.get("status") == "failed" else "wait for watcher or scheduled reconciliation",
+            "next_action": "retry failed scan" if latest and latest.get("status") == "failed" else (
+                "wait for scheduled reconciliation (at most 15 minutes)"
+                if periodic
+                else "wait for watcher or scheduled reconciliation"
+            ),
         }
 
     @app.get("/api/automatic-memory/runtime", dependencies=secured)
@@ -159,6 +166,9 @@ def register_automatic_memory_routes(
                 "scheduler_heartbeat_last_error": None,
                 "worker_state": None,
                 "authorized_watcher_count": None,
+                "automation_mode": None,
+                "event_watcher_enabled": None,
+                "next_reconciliation_seconds": None,
                 "last_global_error": None,
             }
         return dict(runtime.status())

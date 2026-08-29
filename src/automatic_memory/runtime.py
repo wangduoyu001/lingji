@@ -100,6 +100,9 @@ class AutomaticMemoryRuntime:
                 integrity_seconds=float(
                     getattr(settings, "automatic_memory_integrity_seconds", 86400.0)
                 ),
+                event_watcher_enabled=bool(
+                    getattr(settings, "automatic_memory_event_watcher_enabled", False)
+                ),
                 heartbeat_seconds=float(
                     getattr(settings, "automatic_memory_heartbeat_seconds", 5.0)
                 ),
@@ -362,11 +365,15 @@ class AutomaticMemoryRuntime:
                     state = "degraded" if started else state
                 if heartbeat_state == "degraded":
                     state = "degraded"
+        watcher_enabled = bool(getattr(self.scheduler, "event_watcher_enabled", True))
         watcher = getattr(self.scheduler, "watcher", None)
-        try:
-            sources = tuple(watcher.running_sources()) if watcher is not None else ()
-        except Exception:
-            sources = None
+        if not watcher_enabled:
+            sources = ()
+        else:
+            try:
+                sources = tuple(watcher.running_sources()) if watcher is not None else ()
+            except Exception:
+                sources = None
         return {
             "state": state,
             "running": bool(started or cleanup_pending or scheduler_running or worker_running),
@@ -386,6 +393,13 @@ class AutomaticMemoryRuntime:
             "worker": worker_status,
             "authorized_watcher_count": len(sources) if sources is not None else None,
             "watcher_sources": list(sources) if sources is not None else None,
+            "automation_mode": str(
+                getattr(self.scheduler, "automation_mode", "event_watcher")
+            ),
+            "event_watcher_enabled": watcher_enabled,
+            "next_reconciliation_seconds": float(
+                getattr(self.scheduler, "next_reconciliation_seconds", 900.0)
+            ),
             "last_global_error": self._last_global_error() or cleanup_error,
         }
 

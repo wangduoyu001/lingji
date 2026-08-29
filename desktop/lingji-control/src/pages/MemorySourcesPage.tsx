@@ -124,6 +124,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
       {error && <Notice kind="error">{error}</Notice>}
       {message && <Notice kind="info">{message}</Notice>}
       {snapshot.runtime?.cleanup_pending && <Notice kind="error">临时文件清理失败：灵机会自动重试，可重试。</Notice>}
+      {snapshot.runtime?.automation_mode === "periodic_reconciliation" && <Notice kind="info">定期核对模式：应用启动时做增量扫描，之后自动核对来源；最迟 15 分钟发现变化。此模式不使用不可靠的文件事件监听。</Notice>}
       <section className="memory-sources-summary" aria-label="来源总览">
         <div><span>已发现来源</span><strong>{snapshot.discovered.length}</strong><small>已授权 {activeAuthorizedCount(snapshot.authorized)} 个</small></div>
         <div><span>当前接管</span><strong>{snapshot.sources.filter((item) => item.state === "current").length}</strong><small>扫描完成后才算接管</small></div>
