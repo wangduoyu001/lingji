@@ -308,6 +308,7 @@ def test_daily_integrity_job_runs_without_event(tmp_path: Path):
         poll_seconds=0.01,
         reconciliation_seconds=60,
         integrity_seconds=0.1,
+        event_watcher_enabled=False,
     )
     scheduler.start()
     deadline = time.monotonic() + 1.0
