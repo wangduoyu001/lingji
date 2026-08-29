@@ -141,7 +141,7 @@ export default function ActivityPage({ api, active }: { api: LingJiApi; active: 
   return (
     <div className="stack observation-page activity-page">
       <Panel title="最近工作">
-        <div className="activity-toolbar"><p>这里展示灵机最近实际完成、失败或仍在处理的工作。</p><button className="button secondary" disabled={resource.refreshing} onClick={() => void resource.refresh({ force: true })}>{resource.refreshing ? "检查中…" : "现在检查"}</button></div>
+        <div className="activity-toolbar"><p>这里展示灵机最近实际完成、失败或仍在处理的工作。</p><button className="button secondary" disabled={resource.refreshing} onClick={() => void resource.refresh({ force: true })}>{resource.refreshing ? "刷新中…" : "刷新记录"}</button></div>
         {resource.stale && <Notice kind="warning">活动数据暂时过期，正在自动重试。</Notice>}
         {resource.error && <Notice kind="error">活动刷新失败：{resource.error.message}</Notice>}
         {items.length ? <div className="activity-card-list">{items.map((model) => <WorkCard key={model.item.work?.work_id ?? `${offset}-${model.item.summary?.time}`} model={model} />)}</div> : <Empty text="灵机还没有完成过可显示的工作。" />}

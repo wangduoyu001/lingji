@@ -88,7 +88,7 @@ assert.equal(overview.includes("定时任务"), false, "Scheduler internals belo
 assert.match(activity, /intervalMs: 5000/);
 assert.doesNotMatch(activity, /当前工作事实/);
 assert.match(activity, /执行事件/);
-assert.match(activity, /现在检查/);
+assert.match(activity, /刷新记录/);
 
 assert.match(attention, /\/api\/work\/pending-actions/);
 assert.match(attention, /现在没有需要你处理的事项/);

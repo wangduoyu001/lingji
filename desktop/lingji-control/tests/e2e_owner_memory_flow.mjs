@@ -82,6 +82,7 @@ const server = http.createServer((req, res) => {
     if (path === "/__test/source-mode") { state.sourceMode = body.trim() || "default"; state.allStates = false; state.authorized = false; state.revoked = false; state.scan = null; return json(res, 200, { ok: true, source_mode: state.sourceMode }); }
     if (path === "/__test/current-work-status") { state.currentWorkNull = body.trim() === "null"; state.currentWorkMode = ["empty-scan", "changed-scan"].includes(body.trim()) ? body.trim() : "normal"; state.currentWorkStatus = body.trim() || "accepted"; return json(res, 200, { ok: true, current_work_status: state.currentWorkStatus }); }
     if (path === "/__test/activity-mode") { state.activityMode = body.trim() || "normal"; return json(res, 200, { ok: true, activity_mode: state.activityMode }); }
+    if (path === "/__test/scan-request-count") return json(res, 200, { count: state.scanRequests });
     if (path === "/__test/seed-latest-empty-scan") { state.sourceMode = "default"; state.authorized = true; state.revoked = false; state.onboardingFailures = 0; state.scan = { scan_id: "scan-empty", source_id: "src-fixture", status: "completed", progress: 1, total: 0, queued: 0, reused: 0, updated: 0, skipped: 0, failed: 0 }; return json(res, 200, { ok: true }); }
     if (path === "/__test/detail-count-mode") { state.detailCountMode = body.trim() || "missing"; return json(res, 200, { ok: true, detail_count_mode: state.detailCountMode }); }
     if (path === "/__test/pending-outage") { state.pendingOutage = body.includes("true"); return json(res, 200, { ok: true, pending_outage: state.pendingOutage }); }
@@ -210,8 +211,11 @@ try {
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查", exact: true }).waitFor();
   assert.equal(await page.getByText("已授权 / 当前", { exact: true }).count(), 0, "source status counters must not be stacked as owner-facing cards");
   assert.equal(await page.getByText("SYSTEM POSTURE", { exact: true }).count(), 0, "internal posture label must stay out of primary UI");
+  const sourceScanCountBefore = (await (await fetch(`http://127.0.0.1:${apiPort}/__test/scan-request-count`, { headers: { "X-LingJi-Token": "fixture-token" } })).json()).count;
   await page.locator('[data-source-kind="generic_ai_history"]').getByRole("button", { name: "现在检查", exact: true }).click();
   await page.getByRole("heading", { name: "扫描中" }).waitFor();
+  const sourceScanCountAfter = (await (await fetch(`http://127.0.0.1:${apiPort}/__test/scan-request-count`, { headers: { "X-LingJi-Token": "fixture-token" } })).json()).count;
+  assert.ok(sourceScanCountAfter > sourceScanCountBefore, "source now-check must start a scan");
   await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "legacy" });
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
   await page.getByText("这次检查正在进行。", { exact: true }).waitFor();
@@ -402,12 +406,19 @@ try {
   await page.locator(".desktop-nav-item").filter({ hasText: "活动记录" }).click();
   await page.getByRole("heading", { name: "活动记录", exact: true }).waitFor();
   await page.getByText("整理项目会议记录", { exact: true }).waitFor();
+  const activityScanCountBefore = (await (await fetch(`http://127.0.0.1:${apiPort}/__test/scan-request-count`, { headers: { "X-LingJi-Token": "fixture-token" } })).json()).count;
+  const activityRefreshButton = page.getByRole("button", { name: "刷新记录", exact: true });
+  await activityRefreshButton.waitFor();
+  await activityRefreshButton.click();
+  await page.waitForTimeout(100);
+  const activityScanCountAfter = (await (await fetch(`http://127.0.0.1:${apiPort}/__test/scan-request-count`, { headers: { "X-LingJi-Token": "fixture-token" } })).json()).count;
+  assert.equal(activityScanCountAfter, activityScanCountBefore, "activity refresh must not start a source scan");
   await page.getByText("已保存 1 条记忆", { exact: false }).waitFor();
   assert.equal(await page.getByText('"internal":"not primary"', { exact: false }).count(), 0, "raw event JSON must not be primary activity copy");
   assert.equal(await page.getByText("source-1", { exact: true }).count(), 0, "source IDs must stay in collapsed technical details");
   const setActivityMode = async (mode) => fetch(`http://127.0.0.1:${apiPort}/__test/activity-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: mode });
   await setActivityMode("matrix");
-  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.getByRole("button", { name: "刷新记录", exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 3);
   await page.getByText("近期已检查2次", { exact: false }).first().waitFor();
   assert.equal(await page.locator(".activity-card").count(), 3, "only each adjacent quiet run may be folded");
@@ -428,7 +439,7 @@ try {
   assert.equal(secondMatrixAudit.includes("work-quiet-src-obsidian-0"), false, "separate quiet runs must not share audits");
 
   await setActivityMode("audit");
-  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.getByRole("button", { name: "刷新记录", exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 1);
   const auditCard = page.locator(".activity-card").first();
   const ordinaryAuditSurface = auditCard.locator(".activity-card-heading, .activity-card-result, .activity-card-meta");
@@ -448,28 +459,28 @@ try {
   assert.ok(auditText.includes("状态码：completed"), "audit must retain original status");
 
   await setActivityMode("two-sources");
-  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.getByRole("button", { name: "刷新记录", exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 2);
   assert.equal(await page.locator(".activity-card").count(), 2, "same display name with different source IDs must remain separate");
   assert.equal(await page.getByText("近期已检查1次", { exact: false }).count(), 0, "single quiet records must not claim a repeated count");
   await setActivityMode("changed");
-  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.getByRole("button", { name: "刷新记录", exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 3);
   await page.getByText("已检查 3 个来源文件", { exact: false }).waitFor();
   assert.equal(await page.locator(".activity-card").count(), 3, "changed scans must remain separate from quiet scans");
   await setActivityMode("paged");
-  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.getByRole("button", { name: "刷新记录", exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 1);
   await page.getByText("近期已检查2次", { exact: false }).first().waitFor();
   assert.equal(await page.getByText("近期已检查102次", { exact: false }).count(), 0, "quiet count must not use the API-wide total");
   assert.equal(await page.locator(".activity-pager").getByRole("button", { name: "下一页" }).isDisabled(), false, "has_more must keep pagination available");
   await setActivityMode("single");
-  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.getByRole("button", { name: "刷新记录", exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 1);
   await page.getByText("检查完成，未发现新内容", { exact: false }).waitFor();
   assert.equal(await page.getByText("近期已检查1次", { exact: false }).count(), 0, "single quiet scan must not claim a repeated count");
   await setActivityMode("running");
-  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.getByRole("button", { name: "刷新记录", exact: true }).click();
   await page.waitForFunction(() => document.querySelectorAll(".activity-card").length === 3);
   await page.getByText("处理中", { exact: true }).waitFor();
   assert.equal(await page.locator(".activity-card").count(), 3, "running scan must break quiet runs and remain visible");
