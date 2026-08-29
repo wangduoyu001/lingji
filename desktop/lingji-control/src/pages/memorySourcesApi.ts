@@ -47,7 +47,10 @@ export function ownerSourceName(source: { kind?: string | null; display_name?: s
   const displayName = String(source.display_name ?? "").trim();
   if (kind === "obsidian" || displayName.toLowerCase().includes("managed obsidian")) return "Obsidian 长期记忆区";
   if (kind === "claude_desktop") return "Claude";
-  return displayName || "这个来源";
+  if (kind === "codex" || kind.includes("codex")) return "Codex聊天记录";
+  if (kind === "chatgpt_export") return "ChatGPT导出记录";
+  if (kind === "generic" || kind === "generic_ai_history") return "其他AI聊天投递箱";
+  return "其他聊天来源";
 }
 
 function latestScansBySource(scans: ScanRun[]): Map<string, ScanRun> {

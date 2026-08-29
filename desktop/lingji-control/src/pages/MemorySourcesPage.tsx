@@ -109,7 +109,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
           <h2>选择灵机要记住的内容</h2>
           <p>灵机只读取你明确允许的来源。选择后，灵机会检查内容并记住变化。</p>
         </div>
-        <button className="button secondary" disabled={resource.refreshing} onClick={() => void resource.refresh()}>{resource.refreshing ? "检查中…" : "现在检查"}</button>
+        <button className="button secondary" disabled={resource.refreshing} onClick={() => void resource.refresh({ force: true })}>{resource.refreshing ? "检查中…" : "现在检查"}</button>
       </section>
       {resource.stale && <Notice kind="warning">当前显示的是上一次成功读取的结果，正在重试。请不要把过期状态当成当前状态。</Notice>}
       {resource.error && snapshot && <Notice kind="warning">暂时无法读取记忆来源，已保留上一次成功结果。请点击“现在检查”恢复。</Notice>}
@@ -118,12 +118,12 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
       {snapshot.runtime?.cleanup_pending && <Notice kind="error">临时文件清理失败：灵机会自动重试，可重试。</Notice>}
       {periodicNotice && <Notice kind="info">{periodicNotice}</Notice>}
       <p className="memory-sources-summary" aria-label="来源总览">{sourceSummary(snapshot)}</p>
-      {snapshot.sources.length === 0 ? <Empty text="尚未发现可接入的来源。可以稍后点击“现在检查”；灵机不会自行扩大读取范围。" /> : (
+      {snapshot.sources.length === 0 ? <Empty text="暂时没有可连接的记录来源。可以稍后点击“现在检查”；灵机不会自行扩大读取范围。" /> : (
         <section className="memory-source-list" aria-label="记忆来源列表">
           {snapshot.sources.map((source) => <SourceCard key={`${source.kind}:${source.root}`} source={source} busy={busy} onAuthorize={() => void authorize(source)} onAction={runAction} sourceApi={sourceApi} onDetail={setDetail} />)}
         </section>
       )}
-      {detail && <section className="panel memory-scan-detail" aria-live="polite"><h2>这次检查的结果</h2><div className="panel-body"><p>灵机已完成这次检查，下面是可读结果。</p><dl className="memory-detail-grid">{Object.entries(detail).filter(([key]) => ["status", "progress", "total", "queued", "reused", "last_error"].includes(key)).map(([key, value]) => <div key={key}><dt>{key === "status" ? "结果" : key === "progress" ? "已检查" : key === "total" ? "总数" : key === "queued" ? "新增" : key === "reused" ? "未重复导入" : "说明"}</dt><dd>{value == null || value === "" ? "检查结果尚未获得" : String(value)}</dd></div>)}</dl><details><summary>技术详情</summary><pre className="json-panel">{JSON.stringify(detail, null, 2)}</pre></details></div></section>}
+      {detail && <section className="panel memory-scan-detail" aria-live="polite"><h2>这次检查的结果</h2><div className="panel-body"><p>{scanDetailCopy(detail)}</p><dl className="memory-detail-grid">{Object.entries(detail).filter(([key]) => ["status", "progress", "total", "queued", "reused", "last_error"].includes(key)).map(([key, value]) => <div key={key}><dt>{key === "status" ? "结果" : key === "progress" ? "已检查" : key === "total" ? "总数" : key === "queued" ? "新增" : key === "reused" ? "未重复导入" : "说明"}</dt><dd>{value == null || value === "" ? "检查结果尚未获得" : String(value)}</dd></div>)}</dl><details><summary>技术详情</summary><pre className="json-panel">{JSON.stringify(detail, null, 2)}</pre></details></div></section>}
     </div>
   );
 }
@@ -131,8 +131,17 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
 function sourceSummary(snapshot: MemorySourcesSnapshot): string {
   const current = snapshot.sources.filter((item) => item.state === "current").map(ownerSourceName);
   if (current.length) return `正在记住：${current.join("、")}。`;
-  if (snapshot.sources.length) return "已找到可接入的内容，完成选择和检查后才会开始记住。";
-  return "目前还没有可接入的内容。灵机不会自行扩大读取范围。";
+  const connectable = snapshot.sources.some((item) => item.state !== "unsupported");
+  if (connectable) return "已找到可连接的内容，完成选择和检查后才会开始记住。";
+  return "暂时没有可连接的记录来源。";
+}
+
+function scanDetailCopy(detail: Record<string, unknown>): string {
+  const status = String(detail.status ?? "").toLowerCase();
+  if (status === "running") return "这次检查正在进行。";
+  if (status === "failed") return "这次检查没有完成，原来的记忆不会被删除。";
+  if (status === "completed") return "灵机已完成这次检查，下面是可读结果。";
+  return "这次检查的状态尚未获得。";
 }
 
 function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }: { source: SourceFact; busy: string | null; onAuthorize: () => void; onAction: (key: string, operation: () => Promise<unknown>, verify: (next: MemorySourcesSnapshot) => boolean, success?: string) => Promise<void>; sourceApi: MemorySourcesApi; onDetail: (detail: Record<string, unknown>) => void }) {

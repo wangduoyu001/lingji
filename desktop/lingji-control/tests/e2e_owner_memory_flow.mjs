@@ -4,13 +4,17 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false };
+const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, sourceMode: "default", currentWorkNull: true, onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed" };
 const allStateDiscovered = [
   ["detected", "available"], ["consent", "consent_required"], ["unsupported", "unsupported"], ["authorized", "available"],
   ["scanning", "available"], ["current", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
 ].map(([suffix, status]) => ({ kind: `fixture_${suffix}`, display_name: `测试${suffix}`, candidate_root: `/tmp/${suffix}`, status, capability: "metadata_discovery", reason: status === "unsupported" ? "不读取不透明存储" : null }));
 allStateDiscovered.push({ kind: "obsidian", display_name: "Managed Obsidian memory", candidate_root: "/tmp/obsidian", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "claude_desktop", display_name: "Claude Desktop", candidate_root: "", status: "unsupported", capability: "metadata_discovery", reason: "Claude Desktop has no approved official export schema; opaque storage is not read" });
+allStateDiscovered.push({ kind: "codex", display_name: "Codex transcript", candidate_root: "/tmp/codex", status: "available", capability: "metadata_discovery", reason: null });
+allStateDiscovered.push({ kind: "chatgpt_export", display_name: "ChatGPT official export", candidate_root: "/tmp/chatgpt", status: "available", capability: "metadata_discovery", reason: null });
+allStateDiscovered.push({ kind: "generic", display_name: "Generic AI History Inbox", candidate_root: "/tmp/generic", status: "available", capability: "metadata_discovery", reason: null });
+allStateDiscovered.push({ kind: "mystery_kind", display_name: "Raw Internal Kind", candidate_root: "/tmp/mystery", status: "available", capability: "metadata_discovery", reason: null });
 const allStateSources = allStateDiscovered.filter((item) => !["detected", "consent", "unsupported"].includes(item.kind.replace("fixture_", "")) && item.status !== "unsupported").map((item) => ({ source_id: `src-${item.kind}`, kind: item.kind, root: item.candidate_root, status: item.kind === "fixture_degraded" ? "degraded" : item.kind === "fixture_revoked" ? "revoked" : item.kind === "fixture_expired" ? "expired" : "authorized", capability: "metadata_discovery" }));
 const allStateScans = [
   ["scanning", "running"], ["current", "completed"], ["failed", "failed"], ["paused", "paused"],
@@ -25,13 +29,13 @@ const server = http.createServer((req, res) => {
   req.on("end", () => {
     if (path === "/api/overview") return json(res, 200, { health: { status: "healthy" }, memory_runtime: { state: "healthy", as_of: new Date().toISOString(), memory: { documents: 1 } }, queue: { stats: {} } });
     if (path === "/api/automatic-memory/discovered") {
-      const response = () => json(res, 200, state.allStates ? allStateDiscovered : [{ kind: "generic_ai_history", display_name: "Generic Inbox", candidate_root: "/tmp/lingji-fixture", status: "available", capability: "metadata_discovery", reason: null }]);
+      const response = () => json(res, 200, state.sourceMode === "empty" ? [] : state.sourceMode === "claude-only" ? [{ kind: "claude_desktop", display_name: "Claude Desktop", candidate_root: "", status: "unsupported", capability: "metadata_discovery", reason: "Claude Desktop has no approved official export schema; opaque storage is not read" }] : state.allStates ? allStateDiscovered : [{ kind: "generic_ai_history", display_name: "Generic Inbox", candidate_root: "/tmp/lingji-fixture", status: "available", capability: "metadata_discovery", reason: null }]);
       if (state.outage) return json(res, 503, { detail: { code: "OFFLINE", message: "source service unavailable" } });
       if (state.onboardingDelay && !state.onboardingRelease) { const timer = setInterval(() => { if (state.onboardingRelease) { clearInterval(timer); response(); } }, 20); return; }
       return response();
     }
     if (path === "/api/automatic-memory/sources") {
-      const response = () => state.onboardingFailures > 0
+      const response = () => state.sourceMode !== "default" ? json(res, 200, []) : state.onboardingFailures > 0
         ? (state.onboardingFailures -= 1, json(res, 503, { detail: { code: "TEMPORARY", message: "temporary source read failure" } }))
         : json(res, 200, state.allStates ? allStateSources : state.revoked ? [{ source_id: "src-fixture", kind: "generic_ai_history", root: "/tmp/lingji-fixture", status: "revoked", capability: "metadata_discovery" }] : state.authorized ? [{ source_id: "src-fixture", kind: "generic_ai_history", root: "/tmp/lingji-fixture", status: "authorized", capability: "metadata_discovery" }] : []);
       if (state.outage) return json(res, 503, { detail: { code: "OFFLINE", message: "source service unavailable" } });
@@ -41,6 +45,8 @@ const server = http.createServer((req, res) => {
     if (path === "/api/automatic-memory/summary") {
       const latest = state.allStates ? allStateScans[1] : state.scan ? { ...state.scan } : null;
       if (state.omitHomeCounts && latest) {
+        delete latest.queued;
+        delete latest.reused;
         delete latest.updated;
         delete latest.skipped;
       }
@@ -55,6 +61,8 @@ const server = http.createServer((req, res) => {
     if (path === "/__test/complete") { state.completeNextRead = true; return json(res, 200, { ok: true }); }
     if (path === "/__test/all-states") { state.allStates = true; return json(res, 200, { ok: true }); }
     if (path === "/__test/omit-home-counts") { state.omitHomeCounts = body.includes("true"); return json(res, 200, { ok: true }); }
+    if (path === "/__test/source-mode") { state.sourceMode = body.trim() || "default"; state.allStates = false; state.authorized = false; state.revoked = false; state.scan = null; return json(res, 200, { ok: true, source_mode: state.sourceMode }); }
+    if (path === "/__test/pending-outage") { state.pendingOutage = body.includes("true"); return json(res, 200, { ok: true, pending_outage: state.pendingOutage }); }
     if (path === "/__test/release-onboarding") { state.onboardingRelease = true; return json(res, 200, { ok: true }); }
     if (path === "/__test/outage") { state.outage = body.includes("true"); return json(res, 200, { ok: true, outage: state.outage }); }
     if (path === "/__test/cleanup-pending") { state.cleanupPending = body.includes("true"); return json(res, 200, { ok: true, cleanup_pending: state.cleanupPending }); }
@@ -64,7 +72,11 @@ const server = http.createServer((req, res) => {
     if (path.startsWith("/api/automatic-memory/scans/")) return json(res, 200, state.scan ?? { status: "unknown" });
     if (path === "/api/automatic-memory/revoke") { state.authorized = false; state.revoked = true; state.scan = null; return json(res, 200, { source_id: "src-fixture", status: "revoked" }); }
     if (path === "/api/work/history") return json(res, 200, { items: [{ work: { work_id: "work-capture-1", title: "整理项目会议记录", status: "completed", source_id: "source-1", updated_at: "2026-08-28T08:00:00Z" }, events: [{ event_id: "event-1", event_type: "completed", detail: { internal: "not primary" } }], outcome: { status: "completed", summary: "已保存 1 条记忆" }, next_action: null, pending_actions: [], failure: null, summary: { source: "项目会议", phase: "已完成", result: "已保存 1 条记忆", next_actor: null, time: "2026-08-28T08:00:00Z", source_id: "source-1" } }], total: 1, has_more: false, limit: 20, offset: 0 });
-    if (path === "/api/work/pending-actions") return json(res, 200, { pending_actions: state.pendingResolved ? [] : [{ action_id: "action-1", work_id: "work-capture-1", description: "确认这条会议决定是否进入长期记忆", actor: "owner", resolved: false, created_at: "2026-08-28T08:01:00Z" }] });
+    if (path === "/api/work/current") return json(res, 200, state.currentWorkNull ? { work: null, events: [], outcome: null, next_action: null } : { work: { work_id: "work-current-1", title: "整理会议记录", status: "running", source_id: "source-1" }, events: [], outcome: null, next_action: null });
+    if (path === "/api/work/pending-actions") {
+      if (state.pendingOutage) return json(res, 503, { detail: { code: "PENDING_OFFLINE", message: "pending service unavailable" } });
+      return json(res, 200, { pending_actions: state.pendingResolved ? [] : [{ action_id: "action-1", work_id: "work-capture-1", description: "确认这条会议决定是否进入长期记忆", actor: "owner", resolved: false, created_at: "2026-08-28T08:01:00Z" }] });
+    }
     if (path === "/api/work/pending-actions/action-1/resolve") { state.pendingResolved = true; return json(res, 200, { action_id: "action-1", work_id: "work-capture-1", resolved: true }); }
     if (path === "/api/memory/review/candidates" || path === "/api/memory/review/candidates/mem-1" || path === "/api/memory/review/candidates/mem-2") {
       const response = () => path.endsWith("mem-1")
@@ -96,14 +108,14 @@ try {
   assert.equal((await fetch(`http://127.0.0.1:${apiPort}/api/overview`)).status, 401, "missing token must be rejected");
   assert.equal((await fetch(`http://127.0.0.1:${apiPort}/api/overview`, { headers: { "X-LingJi-Token": "wrong-token" } })).status, 401, "wrong token must be rejected");
   const browser = await chromium.launch({ headless: true, ...(existsSync(installedChrome) ? { executablePath: installedChrome } : {}) });
-  const installTauri = async (target) => target.addInitScript(({ port }) => {
+  const installTauri = async (target) => target.addInitScript(({ port, runtimeLastError }) => {
     window.__TAURI_INTERNALS__ = { invoke: async (command) => {
       if (command === "control_credentials") return { base_url: `http://127.0.0.1:${port}`, token: "fixture-token" };
       if (command === "runtime_bootstrap_status") return { configured: true, c_drive_write_detected: false, active_workspace: "acceptance", data_root_display: "fixture" };
       if (String(command).includes("dialog") || String(command).includes("plugin:dialog")) return "/tmp/lingji-fixture";
-      return { healthy: true, managed: true, binary_available: true, host: "127.0.0.1", port: port };
+      return { healthy: true, managed: true, binary_available: true, host: "127.0.0.1", port: port, last_error: runtimeLastError };
     } };
-  }, { port: apiPort });
+  }, { port: apiPort, runtimeLastError: state.runtimeLastError });
   state.onboardingFailures = 0;
   state.onboardingDelay = true;
   const racePage = await browser.newPage();
@@ -145,6 +157,8 @@ try {
   assert.equal(await page.getByText("SYSTEM POSTURE", { exact: true }).count(), 0, "internal posture label must stay out of primary UI");
   await page.locator('[data-source-kind="generic_ai_history"]').getByRole("button", { name: "现在检查", exact: true }).click();
   await page.getByRole("heading", { name: "扫描中" }).waitFor();
+  await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
+  await page.getByText("这次检查正在进行。", { exact: true }).waitFor();
   assert.equal(await page.getByText("扫描已完成").count(), 0, "running scan cannot show terminal success");
   await fetch(`http://127.0.0.1:${apiPort}/__test/complete`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
@@ -163,12 +177,19 @@ try {
   await page.getByRole("heading", { name: "已授权", exact: true }).waitFor();
   await page.locator('[data-source-kind="generic_ai_history"]').getByRole("button", { name: "现在检查", exact: true }).click();
   await page.getByRole("heading", { name: "扫描失败" }).waitFor();
+  await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
+  await page.getByText("这次检查没有完成，原来的记忆不会被删除。", { exact: true }).waitFor();
   await page.getByRole("button", { name: "再次检查" }).click();
   await page.getByRole("heading", { name: "已接管" }).waitFor();
   await page.getByRole("button", { name: "活动记录" }).click();
   await page.getByRole("heading", { name: "活动记录" }).waitFor();
   await page.getByRole("button", { name: "运行状态" }).click();
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+  await page.getByText("目前空闲", { exact: true }).waitFor();
+  assert.equal(await page.getByText("状态尚未获得", { exact: true }).count(), 0, "null work must render a clear idle state, not an unknown status");
+  assert.equal(await page.getByText("内部错误：cleanup_scan_failed", { exact: true }).count(), 1, "raw runtime error may exist only in collapsed details");
+  assert.equal(await page.getByText("内部错误：cleanup_scan_failed", { exact: true }).isVisible(), false, "raw runtime error must stay hidden in primary sidebar");
+  assert.equal(await page.getByText("development", { exact: true }).count(), 0, "development channel must stay out of primary sidebar");
   await page.getByText(/最近一次检查(已完成|已记录|正在进行)/).waitFor();
   assert.equal(await page.getByText("本次新增", { exact: true }).count(), 0, "scan counts must be summarized in a readable sentence, not stacked as developer metrics");
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
@@ -185,10 +206,15 @@ try {
   assert.equal(await page.getByText("临时文件清理失败：灵机会自动重试，可重试。", { exact: true }).count(), 0, "recovered cleanup must clear the notice");
   await fetch(`http://127.0.0.1:${apiPort}/__test/omit-home-counts`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
+  await page.waitForTimeout(300);
   await page.getByRole("button", { name: "运行状态" }).click();
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   assert.equal(await page.getByText("本次更新", { exact: true }).count(), 0, "missing scan counts must not appear as fake zeros or developer metrics");
   assert.equal(await page.getByText("本次跳过", { exact: true }).count(), 0, "missing scan counts must not appear as fake zeros or developer metrics");
+  await page.getByText(/最近一次检查已完成/).waitFor({ timeout: 10_000 });
+  const overviewText = await page.locator(".overview-page").innerText();
+  assert.ok(overviewText.includes("最近一次检查已完成"), "completed summary without counts must still say it completed");
+  assert.equal(overviewText.includes("检查结果尚未获得"), false, "missing summary counts must not become an unknown result on the primary page");
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
   await page.getByRole("heading", { name: "选择灵机要记住的内容" }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/all-states`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
@@ -196,6 +222,10 @@ try {
   for (const heading of ["已发现", "需要确认", "暂不支持", "已授权", "扫描中", "已接管", "需要检查", "已撤销", "扫描失败"]) await page.getByRole("heading", { name: heading }).first().waitFor();
   await page.locator('[data-source-kind="obsidian"]').getByText("Obsidian 长期记忆区", { exact: true }).waitFor();
   await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂不支持自动导入旧记录。", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="codex"]').getByText("Codex聊天记录", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="chatgpt_export"]').getByText("ChatGPT导出记录", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="generic"]').getByText("其他AI聊天投递箱", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="mystery_kind"]').getByText("其他聊天来源", { exact: true }).waitFor();
   const stateActions = {
     fixture_detected: { allow: ["开始记忆"], deny: ["停止记忆", "现在检查", "暂停检查", "继续检查", "再次检查"] },
     fixture_consent: { allow: ["开始记忆"], deny: ["停止记忆", "现在检查", "暂停检查", "继续检查", "再次检查"] },
@@ -221,6 +251,16 @@ try {
   await page.locator('[data-source-kind="fixture_paused"]').getByText("已暂停", { exact: false }).waitFor();
   await page.locator('[data-source-kind="fixture_paused"]').getByText("继续检查", { exact: false }).waitFor();
 
+  await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "claude-only" });
+  await page.waitForTimeout(300);
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
+  await page.getByText("暂时没有可连接的记录来源。", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂不支持自动导入旧记录。", { exact: true }).waitFor();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "empty" });
+  await page.waitForTimeout(300);
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
+  await page.getByText("暂时没有可连接的记录来源。", { exact: true }).waitFor();
+
   await page.locator(".desktop-nav-item").filter({ hasText: "活动记录" }).click();
   await page.getByRole("heading", { name: "活动记录", exact: true }).waitFor();
   await page.getByText("整理项目会议记录", { exact: true }).waitFor();
@@ -234,7 +274,12 @@ try {
   assert.equal(await page.getByText("work-capture-1", { exact: true }).count(), 0, "attention page must not expose work IDs");
   await page.getByRole("button", { name: "完成处理", exact: true }).click();
   await page.getByText("现在没有需要你处理的事项。灵机会继续自动工作。", { exact: true }).waitFor();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/pending-outage`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
   await page.getByRole("button", { name: "运行状态" }).click();
+  await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+  await page.getByText("待办状态暂时无法确认，正在重试", { exact: true }).waitFor();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/pending-outage`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   await page.getByText("你现在不用做任何事", { exact: true }).waitFor();
   assert.equal(await page.getByText("OWNER WORK FACT", { exact: true }).count(), 0, "internal work label must stay out of primary UI");

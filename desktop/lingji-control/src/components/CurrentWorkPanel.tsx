@@ -33,8 +33,8 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
 
   const fact = resource.data;
   const work = fact?.work;
-  const status = statusLabel(work?.status);
   const hasWork = Boolean(work?.title);
+  const status = hasWork ? statusLabel(work?.status) : "目前空闲";
 
   return (
     <section className="panel current-work-panel">

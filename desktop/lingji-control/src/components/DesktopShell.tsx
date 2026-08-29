@@ -68,9 +68,11 @@ export default function DesktopShell({
     window.setTimeout(() => setCopyState("idle"), 2200);
   };
 
-  const shellStateLabel = connectionState === "configuration_required"
-    ? "等待数据目录配置"
-    : runtimeStateLabel(runtimeStatus);
+  const shellStateLabel = runtimeHealthy
+    ? "运行正常"
+    : connectionState === "configuration_required"
+      ? "需要先完成设置"
+      : "需要检查";
 
   return (
     <div className="desktop-frame">
@@ -111,7 +113,7 @@ export default function DesktopShell({
               <strong>{shellStateLabel}</strong>
               <small>
                 {runtimeStatus
-                  ? externalRuntime ? "已连接到本机服务（外部进程）" : managedRuntime ? "灵机核心正在运行" : "核心状态已连接"
+                  ? runtimeHealthy ? "可以继续使用" : "请按下方提示处理"
                   : connectionState === "configuration_required"
                     ? "核心尚未启动"
                     : "正在读取本机核心"}
@@ -119,30 +121,28 @@ export default function DesktopShell({
             </div>
           </div>
 
-          {bootstrapStatus?.active_workspace && (
-            <small className="desktop-runtime-path">
-              {bootstrapStatus.active_workspace} · {bootstrapStatus.data_root_display || "数据根未知"}
-            </small>
-          )}
           {bootstrapStatus?.c_drive_write_detected && (
             <small className="desktop-runtime-error">检测到 C 盘运行数据路径，核心已阻止启动。</small>
           )}
           {autoRecoveryActive && <small className="desktop-runtime-warning">连接中断，灵机会自动恢复，无需手动操作。</small>}
           {ownerStopped && <small className="desktop-runtime-warning">主人已停止核心，自动恢复暂时暂停。</small>}
-          {runtimeStatus?.last_error && <small className="desktop-runtime-error">{runtimeStatus.last_error}</small>}
           {!runtimeAvailable && runtimeConfigured && connectionState !== "unsupported" && (
             <small className="desktop-runtime-warning">当前安装包未包含灵机核心，仍可连接手动启动的8766服务。</small>
           )}
 
-          <div className="desktop-release-line">
-            <span>v{releaseMetadata?.version ?? "0.1.0"}</span>
-            <span>{releaseMetadata?.channel ?? "development"}</span>
-            <span>{shortCommit}</span>
-          </div>
-
           {connectionState !== "unsupported" && connectionState !== "configuration_required" && (
             <details className="desktop-runtime-tools" open={ownerStopped}>
               <summary>{runtimeHealthy ? "运行详情" : ownerStopped ? "恢复与诊断" : "故障工具"}</summary>
+              <div className="desktop-runtime-technical">
+                {bootstrapStatus?.active_workspace && <small className="desktop-runtime-path">工作区：{bootstrapStatus.active_workspace} · {bootstrapStatus.data_root_display || "数据根未知"}</small>}
+                {runtimeStatus?.last_error && <small className="desktop-runtime-error">内部错误：{runtimeStatus.last_error}</small>}
+                <div className="desktop-release-line">
+                  <span>版本 v{releaseMetadata?.version ?? "0.1.0"}</span>
+                  <span>渠道 {releaseMetadata?.channel ?? "development"}</span>
+                  <span>提交 {shortCommit}</span>
+                </div>
+                <small>连接方式：{externalRuntime ? "已连接到本机服务（外部进程）" : managedRuntime ? "灵机核心正在运行" : "核心状态已连接"}</small>
+              </div>
               <div className="desktop-sidebar-actions">
                 {!runtimeHealthy && (
                   <button className="desktop-retry-button" disabled={Boolean(runtimeBusy)} onClick={onRetry}>

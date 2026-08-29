@@ -26,15 +26,18 @@ function formatTime(value: unknown): string {
 
 function latestCheckSummary(latest: ScanRun | null | undefined): string {
   if (!latest) return "还没有检查记录。";
-  const status = String(latest.status ?? "");
-  if (status === "failed") return `最近一次检查没有完成（${formatTime(latest.updated_at)}）。`;
+  const status = String(latest.status ?? "").toLowerCase();
+  const stamp = formatTime(latest.updated_at);
+  const when = stamp === "时间尚未获得" ? "" : `（${stamp}）`;
+  if (status === "failed") return `最近一次检查没有完成${when}。`;
   const parts = [
     typeof latest.queued === "number" ? `新增 ${latest.queued} 条` : "",
     typeof latest.updated === "number" ? `更新 ${latest.updated} 条` : "",
     typeof latest.skipped === "number" ? `跳过 ${latest.skipped} 条` : "",
   ].filter(Boolean);
-  const outcome = parts.length ? parts.join("，") : "检查结果尚未获得";
-  return `最近一次检查${status === "completed" ? "已完成" : status === "running" ? "正在进行" : "已记录"}（${formatTime(latest.updated_at)}）：${outcome}。`;
+  const phase = status === "completed" ? "已完成" : status === "running" ? "正在进行" : status === "failed" ? "没有完成" : "已记录";
+  const outcome = parts.length ? `：${parts.join("，")}` : "";
+  return `最近一次检查${phase}${when}${outcome}。`;
 }
 
 export default function OverviewPage({ data, api, active, onNavigate }: { data: Row | null; api: LingJiApi; active: boolean; onNavigate: (page: PageId) => void }) {
@@ -51,15 +54,17 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
   const sourceSnapshot = sourceResource.data;
   const latest = sourceSnapshot?.summary?.latest;
   const latestSource = latest ? sourceSnapshot?.sources.find((item) => item.source_id === latest.source_id) : undefined;
+  const pendingUnavailable = Boolean(pendingResource.error || pendingResource.stale || !pendingResource.data);
   const pendingActions = pendingResource.data?.pending_actions ?? [];
   const currentNames = sourceSnapshot?.sources.filter((item) => item.state === "current").map(ownerSourceName) ?? [];
   const periodicNotice = periodicReconciliationNotice(sourceSnapshot?.runtime);
 
   return <div className="stack overview-page observation-page">
     <section className={`overview-hero overview-hero-${stateTone(runtimeState) ?? "neutral"}`}>
-      <div className="overview-hero-main"><div className="overview-title-line"><h2>{stateLabel(runtimeState)}</h2></div><p>{pendingActions.length ? `现在需要你处理：${display(pendingActions[0]?.description, "一项待确认事项")}` : pendingResource.data ? "你现在不用做任何事" : "正在检查是否需要你处理事项"}</p></div>
-      <div className="observation-live-state"><span className={stateTone(runtimeState) === "good" ? "status-dot online" : "status-dot"} /><div><strong>{pendingActions.length ? "需要你处理" : "目前不需要你处理"}</strong><small>灵机状态会自动更新</small></div>{pendingActions.length > 0 && <button className="button secondary" onClick={() => onNavigate("attention")}>去处理</button>}</div>
+      <div className="overview-hero-main"><div className="overview-title-line"><h2>{stateLabel(runtimeState)}</h2></div><p>{pendingUnavailable ? "待办状态暂时无法确认，正在重试" : pendingActions.length ? `现在需要你处理：${display(pendingActions[0]?.description, "一项待确认事项")}` : "你现在不用做任何事"}</p></div>
+      <div className="observation-live-state"><span className={stateTone(runtimeState) === "good" ? "status-dot online" : "status-dot"} /><div><strong>{pendingUnavailable ? "暂时无法确认" : pendingActions.length ? "需要你处理" : "目前不需要你处理"}</strong><small>{pendingUnavailable ? "灵机正在重试" : "灵机状态会自动更新"}</small></div>{pendingActions.length > 0 && !pendingUnavailable && <button className="button secondary" onClick={() => onNavigate("attention")}>去处理</button>}</div>
     </section>
+    {pendingUnavailable && <Notice kind="warning">待办状态暂时无法确认，正在重试。</Notice>}
     {sourceResource.stale && <Notice kind="warning">来源状态来自上一次成功读取，正在刷新。</Notice>}
     {sourceResource.error && <Notice kind="warning">来源状态暂时无法读取，请打开“记忆来源”重试。</Notice>}
     {periodicNotice && <Notice kind="info">{periodicNotice}</Notice>}
