@@ -1,5 +1,22 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Safe polling fallback Repair Round 2
+
+- 本轮修复最终 I1 与 M1：平台 policy 仅将规范化 `darwin` 判为 Darwin periodic，规范化
+  `windows`/`win32`/`linux` 保持 event；`macOS`、`darwin-arm64`、`unknown`、空值和显式
+  `None` 等未知/畸形值一律 fail-closed 到 periodic。未注入平台时使用 `platform.system()`，
+  其返回值经过同一 policy 合同；显式设置仍优先。
+- API/runtime/UI 只在 reconciliation interval 为 finite 且大于 0 时提供数字及分钟文案；
+  0、负数、NaN、Infinity、缺失均提供 unknown/“尚未获得”，不得输出误导性的 at-most 文案。
+- 自动验收：平台合法/未知负向矩阵、60/900/1800 和非法 interval 的 API/UI executable
+  contract、runtime/API parity；继续运行 fallback 静止两个旧周期、pause/resume/restart、
+  revoke、backend focused、Desktop 23-script smoke/build、compileall、diff-check、acceptance
+  sync、local handoff。
+- 边界：不 live、不打包、不安装，不访问 Acceptance root、Production、Vault 或主人数据；30 秒
+  事件 SLA 与 Phase 1 自动接管门禁仍为 `BLOCKED`。
+- 本轮 product/tests commit：`be73008407b3540eeb8bbcbd040ddc69faf4adc7`；docs/report commit
+  在最终验证后单独记录。
+
 ## 2026-08-29 · Task 8E · Safe polling fallback
 
 - 基线：`c70ce6b165213151ca02baf34ff11e2217a21c82`。本轮只为 macOS 正式 runtime

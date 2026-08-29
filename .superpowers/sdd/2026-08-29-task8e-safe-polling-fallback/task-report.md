@@ -4,10 +4,11 @@
 
 `IMPLEMENTED_FOCUSED_PASS / READY_FOR_ROOT_ACCEPTANCE`
 
-This worktree implements the conservative macOS automatic-memory fallback. The formal runtime
-defaults to periodic reconciliation and does not start `watchfiles` event admission. Startup
-incremental reconciliation, the persisted 15-minute reconciliation job, daily integrity job,
-manual immediate scan, authorization, and revoke remain on the existing scheduler/registry path.
+This worktree implements the conservative macOS automatic-memory fallback. On Darwin, the formal
+runtime defaults to periodic reconciliation and does not start `watchfiles` event admission;
+Windows and Linux retain the historical event-watcher default. Startup incremental
+reconciliation, the persisted 15-minute reconciliation job, daily integrity job, manual immediate
+scan, authorization, and revoke remain on the existing scheduler/registry path.
 
 The fallback explicitly does **not** satisfy the 30-second event SLA. It provides automatic
 change discovery at the next scheduled reconciliation, at most 15 minutes in the production
@@ -83,8 +84,9 @@ scope and are not implied by this focused pass.
 
 ## Changed files
 
-Product/test commits `6862c46bd9718998235d42cf7a29a7e02ea7ea95` and
-`eff22b4ea3476088f32a87f7b90b4fcf330b75d2` contain:
+Product/test commits `6862c46bd9718998235d42cf7a29a7e02ea7ea95`,
+`eff22b4ea3476088f32a87f7b90b4fcf330b75d2`, and the Repair Round 1 commit
+`cf09946102d89ddf67f3f69bae79f7bd45180dfe` contain:
 
 - `src/automatic_memory/scheduler.py`
 - `src/automatic_memory/runtime.py`
@@ -118,6 +120,23 @@ keeps the existing scheduler and source lifecycle boundaries and adds no new dat
 - `docs/PROJECT_STATUS.md` now records the platform split, truthful 15-minute default, 30-second
   SLA limitation, and continuing Phase 1 `BLOCKED` disposition.
 
-Repair Round 1 product/test commit is `cf09946102d89ddf67f3f69bae79f7bd45180dfe`; the docs
-commit follows after final verification. No live app, package, install, Artifact, Production/Vault,
-or owner data was used.
+Repair Round 1 product/test commit is `cf09946102d89ddf67f3f69bae79f7bd45180dfe`; its docs
+commit is `cc3ef41fdcff40f9f706780b0fb6f15256d4d8f3`. No live app, package, install, Artifact,
+Production/Vault, or owner data was used.
+
+## Repair Round 2 disposition
+
+Round 2 closed the remaining platform and interval-truth gaps without expanding the architecture.
+The policy accepts only normalized `darwin` for periodic mode and normalized `windows`/`win32`/
+`linux` for event mode; unknown or malformed values fail closed to periodic. When no test platform
+provider is supplied, the policy consumes `platform.system()` through the same centralized contract.
+Explicit configuration remains authoritative.
+
+The runtime and summary API now reject non-finite and non-positive reconciliation intervals from
+numeric DTO output and “at most” wording. The UI helper has executable coverage for 60/900/1800
+seconds and 0/negative/NaN/Infinity/missing values; invalid or missing values render “尚未获得”.
+The negative platform/API/UI matrix and all Round 1 lifecycle tests remain green.
+
+Round 2 product/test commit is `be73008407b3540eeb8bbcbd040ddc69faf4adc7`; the docs/report commit
+follows this final verification. The 30-second event SLA and Phase 1 automatic takeover gate remain
+`BLOCKED`. No live app, package, install, Artifact, Production/Vault, or owner data was used.
