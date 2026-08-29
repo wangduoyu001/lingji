@@ -1,5 +1,13 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Owner-facing plain UI repair Round 1
+
+- 独立 review 发现 I1–I5/M1：空工作未知状态、真实扫描 DTO 缺计数/错误详情语义、pending stale/error 误报无需处理、Claude-only/零可用来源误称可接入、来源 kind 泄漏英文、侧栏 raw error/development/commit/version 普通态泄漏。本轮仅修复 Desktop owner-facing 展示和合成 Playwright fixture，不改 backend、数据模型、队列、自动化或动作 API。
+- 普通态现在将 `work: null` 显示为“目前空闲”；完成/进行中/失败检查分别显示真实状态，缺计数不补默认 0；pending 读取失败或过期显示“待办状态暂时无法确认，正在重试”，只有新鲜成功空列表显示无需处理；Claude-only/零可用显示“暂时没有可连接的记录来源。”。
+- 已知来源统一为“Codex聊天记录”“ChatGPT导出记录”“其他AI聊天投递箱”，未知来源统一为“其他聊天来源”；侧栏普通态只显示“运行正常/需要检查”，内部错误、development、commit、version、工作区路径移入折叠运行详情。
+- 变更专测：先以新增 rendered 断言取得真实 RED，再 GREEN；fixture 覆盖 work:null、summary 缺计数、scan running/failed、pending error、Claude-only/零来源、known+unknown source name、sidebar raw error 隐藏，并保留真实按钮动作、advanced 入口和 900px 检查。
+- 本轮边界：不 live、不打包、不安装、不访问 Acceptance/Production/Vault/主人数据；主人观察仍需根代理授权，状态为 `READY_FOR_OWNER_EXPERIENCE`。报告沿用 `.superpowers/sdd/2026-08-29-task8e-owner-plain-ui/task-report.md`。
+
 ## 2026-08-29 · Task 8E · Owner-facing plain UI repair
 
 - 主人反馈最终候选“仍然看不懂”。本轮只简化 Desktop 普通首屏、记忆来源、活动记录、需要我处理和主导航文案；不改 backend、数据模型、队列、自动化或永久记忆权威。普通页面只回答灵机是否正常、正在记住什么、最近检查结果与时间、主人是否需要处理。

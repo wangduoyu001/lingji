@@ -5,7 +5,7 @@
 ```text
 Verdict: PASS (focused implementation and rendered/behavior smoke)
 Merge recommendation: ALLOW owner observation
-Product commit: 99343ec
+Product commit: 6a84c49
 Artifact: NOT_BUILT_BY_SCOPE
 Artifact ID: NOT_APPLICABLE
 Report commit: the commit containing this report (see final delivery SHA)
@@ -114,19 +114,25 @@ Actual: PASS
 Evidence: desktop/lingji-control/tests/e2e_owner_memory_flow.mjs
 ```
 
-## 10. Known Non-Blocking Limitations
+## 10. Owner-Plain Repair Round 1
+
+独立 review `dd86df8` 提出 I1–I5/M1。本轮以新增 rendered 断言先取得有效 RED，再以最小展示修复取得 GREEN：`work:null` 的明确“目前空闲”；真实 completed/running/failed 的 summary 与 scan 详情状态；缺失计数不补默认 0；pending error/stale 的“待办状态暂时无法确认，正在重试”；Claude-only/零可用来源空态；Codex、ChatGPT、generic 与 unknown 来源中文名；以及侧栏普通态隐藏 raw last_error、development、commit、version、工作区路径。原有 API 动作接线、advanced 入口与 900px 检查保持。
+
+Round1 RED 证据包括 fixture 自身参数错误修正后，running 详情断言失败、侧栏断言精度失败、summary/source 切页时序断言失败；调整为真实 UI 文案/等待后，`npm run test:e2e:memory` GREEN。最终 product/tests commit 为 `6a84c49`。
+
+## 11. Known Non-Blocking Limitations
 
 - Owner 尚未在最终候选真机上观察本轮 UI；当前 disposition 只能是 `READY_FOR_OWNER_EXPERIENCE`。
 - 未执行 release、打包、安装、live 8766/8767、重启/Windows 验收；这些不属于本轮被授权范围。
 
-## 11. Blocking Defects
+## 12. Blocking Defects
 
 None found in focused rendered/behavior or regression checks. Final owner acceptance remains pending by design.
 
-## 12. Final Merge Recommendation
+## 13. Final Merge Recommendation
 
 ```text
-Product commit: 99343ec
+Product commit: 6a84c49
 Verdict: PASS (focused implementation and rendered/behavior smoke)
 Merge recommendation: ALLOW owner observation
 Owner observation complete: NO
@@ -137,7 +143,7 @@ Acceptance docs synchronized: YES (pending report commit)
 Temporary evidence cleaned: YES (no live/temporary acceptance data created)
 ```
 
-## 13. Sign-off
+## 14. Sign-off
 
 ```text
 Codex executor: Task8E Owner-facing Plain UI implementation agent
