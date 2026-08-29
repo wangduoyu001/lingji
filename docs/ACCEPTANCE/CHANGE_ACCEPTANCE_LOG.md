@@ -1,5 +1,22 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Owner-facing plain UI repair Round 6
+
+- 本轮仅修复 Round5 终审指出的两个早退分支：`ReconciliationReport` 默认
+  `counts_measured=False`；暂停、unsupported/degraded/expired、lease contention
+  和异常等未完成/未调用 scanner 的路径统一保留 `queued/reused=NULL`，并在内部算术
+  使用局部安全回退，不把 `discovered/unchanged` 的未测量 0 作为对外证据。
+- 正式 report 增加 `next_action`：暂停提示恢复或稍后重试，unsupported 提示官方能力
+  不支持且无需反复重试，过期/撤销提示重新授权，degraded 提示修复来源，lease contention
+  提示已有检查运行中，异常提示下次定时或手动重试；事件与认证 API action 均保留该结果。
+- 真实 registry/scheduler/API 测试覆盖上述状态；后端 focused `65 passed, 1 warning`，
+  Task2–5 affected `229 passed, 3 warnings`；Desktop rendered E2E、23-script smoke、
+  build（92 modules）均 PASS。Packaged 完整流已由 Round5 `2 passed, 1 warning` 证据覆盖，
+  本轮未重复长流程。
+- compileall、diff-check、acceptance-sync、local-handoff PASS；未启动/安装 live App，
+  未访问 Acceptance/Production/Vault/主人数据。产品/测试提交：
+  `58e12ca37b321075445c49057c54851f55539baf`，报告沿用既有路径，文档另行提交。
+
 ## 2026-08-29 · Task 8E · Owner-facing plain UI repair Round 5
 
 - 本轮仅修复 Round4 终审指出的两个契约问题，不增加功能：scheduler 对

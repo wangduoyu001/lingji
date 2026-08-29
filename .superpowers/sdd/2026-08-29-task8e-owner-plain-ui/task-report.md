@@ -5,7 +5,7 @@
 ```text
 Verdict: PASS (focused implementation and rendered/behavior smoke)
 Merge recommendation: ALLOW owner observation
-Product commit: ca6b8ea
+Product commit: 58e12ca
 Artifact: NOT_BUILT_BY_SCOPE
 Artifact ID: NOT_APPLICABLE
 Report commit: the commit containing this report (see final delivery SHA)
@@ -20,7 +20,7 @@ Disposition: READY_FOR_OWNER_EXPERIENCE
 | 项目 | 实际 | 结论 |
 |---|---|---|
 | Repository | 灵机 | PASS |
-| Product Commit | `ca6b8ea40cf6d95974639af213ca6ee41e08bdee` (`fix: preserve scan evidence through scheduler actions`) | PASS |
+| Product Commit | `58e12ca37b321075445c49057c54851f55539baf` (`fix: preserve early scan outcomes`) | PASS |
 | Artifact | 未打包、未安装；按任务边界不生成 | NOT_BUILT_BY_SCOPE |
 | Artifact ID / hashes | `NOT_APPLICABLE` | NOT_APPLICABLE |
 | Report Commit | the commit containing this report | PASS |
@@ -222,7 +222,36 @@ data was started or touched. Product/tests are committed at
 docs are committed separately. Final owner observation and a Mac artifact
 remain pending.
 
-## 18. Sign-off
+## 18. Owner-Plain Repair Round 6
+
+Round6 closes the two Important findings from the independent Round5 review.
+`ReconciliationReport.counts_measured` now defaults to `False`, and all direct
+scheduler early exits preserve unknown `queued`/`reused` values. Paused,
+unsupported, degraded, expired, contended, and unexpected-exception paths also
+avoid publishing unmeasured `discovered`/`unchanged` zeroes. Only internal
+progress arithmetic uses a local zero fallback; measured completed scans retain
+their real zero or positive counts.
+
+The formal report now carries `next_action`. Real scheduler/runtime/API paths
+return a truthful action for paused, unsupported, expired, degraded, lease
+contention, and exceptions. The authenticated API tests use real
+`AutomaticMemoryRuntime`, `SourceRegistry`, scheduler, and StateDB; they do not
+use a fake runtime for these cases. Existing Round5 stable work identity and
+packaged contract behavior remain unchanged.
+
+Verification: Round6 early-exit/API focused checks `7 passed, 1 warning`; the
+full backend focused set is `65 passed, 1 warning`; the Task2–5 affected matrix
+is `229 passed, 3 warnings`. Desktop rendered E2E passed; all 23 smoke scripts
+passed; the build transformed 92 modules; compileall, diff-check,
+acceptance-sync, and local-handoff passed. The 291-second packaged flow was not
+repeated because its directly affected contract had already passed in Round5.
+
+No live App was started or installed and no Acceptance, Production, Vault, or
+owner data was touched. Product/tests are committed at
+`58e12ca37b321075445c49057c54851f55539baf`; this report and authority docs are
+committed separately. Final Mac artifact and owner observation remain pending.
+
+## 19. Sign-off
 
 ```text
 Codex executor: Task8E Owner-facing Plain UI implementation agent
