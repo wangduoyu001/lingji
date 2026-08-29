@@ -21,6 +21,27 @@
 - 未取得最终 reviewed product HEAD、release、同 SHA Mac Artifact、新 ACTIVE 本机任务、
   真实主人数据授权、全控件遍历和主人明确确认前，不得宣称 Mac 或 Phase 1 通过。
 
+## 2026-08-29 · Task 2 · Owner memory card projection
+
+- 产品投影仅复用 `MemoryDatabase`、`SourceReadModel/SourceQueryService`、可选只读
+  StateDB promotion events、既有 vector statistics 与认证 8766；不新增表、索引、
+  队列、端口或永久事实源。`OwnerMemoryCardProjector` 生成晋级记忆、待确认候选以及
+  未晋级会话 evidence card，后者明确显示“尚未加入永久记忆”。
+- 每张卡只展示有界 topic、最多三条证据预览、必要时的证据支持结论、freshness/replacement、
+  source 与 evidence time、raw/structured/vector/permanent、confidence/conflict/provenance
+  和唯一 owner action；未知保持 `unknown`，列表默认折叠 evidence，原文继续复用既有
+  message detail 路由。向量不可用、来源撤销、过时、冲突和 provenance mismatch 均不得
+  显示为成功。
+- 新增并认证 `/api/memory/inspector/cards` 与 `/api/memory/inspector/cards/{memory_id}`；
+  `limit` 严格为 1..50，offset 分页返回精确 `total/has_more`，支持 state/action/source
+  filters。必须执行 Task 2 两份 focused tests、Inspector/temporal/current-as_of-history-why/
+  promotion/vector-unavailable/permission 回归、compileall、diff-check、acceptance-sync
+  和 local-handoff；不启动 live/App/Acceptance，不读取真实聊天或主人数据。
+- 自动证据：`tests/test_owner_memory_card_projector.py` 5 passed、
+  `tests/test_owner_memory_card_api.py` 3 passed；合并相关回归共 94 passed、1 warning。
+  产品/测试提交为 `213bc7e`；Task 2 报告路径为
+  `.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-2-report.md`。
+
 ## 2026-08-29 · Task 1 Round 1 · Codex rollout boundary repair
 
 - 针对独立 review 的 1 Critical、6 Important 与 Minor 项，仅在本 worktree 修复：
