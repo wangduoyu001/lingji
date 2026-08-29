@@ -1,5 +1,21 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Real UI Live-shape Repair Round 3
+
+- 根代理在真实发布版抓到的 Claude 来源形状为 `claude_desktop + consent_required + 空路径`
+  且带英文 reason；本轮对 `consent_required` 与 `unsupported` 两态统一使用中文限制
+  说明和明确下一步，不透传英文 reason，也不在没有受支持路径时提供授权按钮。
+- 根代理抓到的正式当前工作形状为 completed、`outcome.summary` 为扫描原文、
+  `outcome.evidence.jobs/queued/reused` 为 0。本轮增加受控 `formatWorkFactResult`，
+  证据优先把真实空扫描显示为“检查完成，未发现新内容”，把正数 queued 显示为准确的
+  新增内容；原始摘要和 evidence 只在技术详情中保留。首页最新扫描对明确 queued=0
+  不再显示误导性的“新增 0 条”，未知值也不造数。
+- rendered E2E 直接使用上述正式 payload，并验证 Claude 两态、空/变化/失败和技术详情
+  可追溯；Activity Round2 的完整压缩审计测试保持不变。后端、自动化、队列、数据模型、
+  Activity 审计逻辑和 live 数据均未修改。
+- 产品/测试提交：`b8035f030a558bb990fb256004e89a98f3151d50`；报告沿用
+  `.superpowers/sdd/2026-08-29-task8e-owner-plain-ui/task-report.md`，文档提交另行记录。
+
 ## 2026-08-29 · Task 8E · Owner UI Repair Round 2 — 保留压缩活动审计
 
 - 独立审查指出活动页将连续的安静扫描折叠为一张普通卡片时，只保留首条

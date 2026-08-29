@@ -349,3 +349,27 @@ TDD 证据：渲染 fixture 使用正式 WorkProjector 形状，并为三条连�
 产品/测试提交为 `5fbe9db6d6be93d32c3b57cea0ea7ef3e4f6bef4`。本报告和验收日志在独立
 文档提交中记录；主人最终观察仍需根代理在当前候选上完成，本报告不能单独宣布 Mac
 发布版或 Phase 1 通过。
+
+## 23. Real UI Live-shape Repair Round 3 — Claude 与当前工作结果
+
+根代理在真实发布版抓到两类正式数据形状。本轮只修复对应的 Desktop 展示适配，未修改
+后端、自动化、队列、数据模型、Activity 审计逻辑、永久记忆权威或运行中的 App。
+
+- Claude 的 `claude_desktop + consent_required + 空路径 + 英文 reason` 与
+  `unsupported` 均显示“Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。”；
+  下一步显示“请等待 Claude 提供受支持的官方导出，或暂不接入。”，英文 reason 不进入
+  普通页面，且没有授权按钮。
+- 新增受控 `formatWorkFactResult`，优先解释正式 `outcome.evidence`：completed 且
+  `jobs=0、queued=0` 显示“检查完成，未发现新内容”；queued 为正且摘要只是通用“成功”
+  时显示准确的“检查完成，新增 N 条内容”；失败、未知或未测量状态不会误判为空扫描。
+  原始 outcome summary/evidence 只在“查看技术详情”中保留。
+- Overview 对明确的 `queued=0` 不显示“新增 0 条”；若无其他实际变化则显示“未发现新内容”，
+  正数与未知值继续分别显示准确数量或不造数。
+
+TDD 证据：真实形状 rendered fixture 先在旧 UI 上于当前工作空扫描文案处失败；修复后
+  `npm run test:e2e:memory` PASS。fixture 还覆盖 Claude 两态、正数 queued、技术详情原文
+  和首页明确 zero；此前 Round2 的连续压缩审计断言保持在同一 E2E 中。
+
+产品/测试提交为 `b8035f030a558bb990fb256004e89a98f3151d50`。本报告与验收日志在独立
+文档提交中记录；主人最终观察仍需根代理完成，本报告不能单独宣布 Mac 发布版或 Phase 1
+通过。
