@@ -13,7 +13,8 @@
 - rendered E2E 直接使用上述正式 payload，并验证 Claude 两态、空/变化/失败和技术详情
   可追溯；Activity Round2 的完整压缩审计测试保持不变。后端、自动化、队列、数据模型、
   Activity 审计逻辑和 live 数据均未修改。
-- 产品/测试提交：`b8035f030a558bb990fb256004e89a98f3151d50`；报告沿用
+- 产品/测试提交：`b8035f030a558bb990fb256004e89a98f3151d50` +
+  `4b2708a8f940fb4ef2a5e26832088486ec885134`；报告沿用
   `.superpowers/sdd/2026-08-29-task8e-owner-plain-ui/task-report.md`，文档提交另行记录。
 
 ## 2026-08-29 · Task 8E · Owner UI Repair Round 2 — 保留压缩活动审计

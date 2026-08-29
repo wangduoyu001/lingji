@@ -370,6 +370,7 @@ TDD 证据：真实形状 rendered fixture 先在旧 UI 上于当前工作空扫
   `npm run test:e2e:memory` PASS。fixture 还覆盖 Claude 两态、正数 queued、技术详情原文
   和首页明确 zero；此前 Round2 的连续压缩审计断言保持在同一 E2E 中。
 
-产品/测试提交为 `b8035f030a558bb990fb256004e89a98f3151d50`。本报告与验收日志在独立
+产品/测试提交为 `b8035f030a558bb990fb256004e89a98f3151d50` 与
+`4b2708a8f940fb4ef2a5e26832088486ec885134`。本报告与验收日志在独立
 文档提交中记录；主人最终观察仍需根代理完成，本报告不能单独宣布 Mac 发布版或 Phase 1
 通过。
