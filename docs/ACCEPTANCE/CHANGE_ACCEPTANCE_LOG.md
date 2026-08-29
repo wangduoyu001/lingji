@@ -1,5 +1,13 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Owner-facing plain UI repair Round 4
+
+- 本轮承接 Round3 的正式计数证据缺口：扫描数据库新增 `queued_count`/`reused_count` 可空字段，旧表增量迁移且旧行保持 `NULL`；只有完整扫描实际测量完成时才原子写入计数，明确空扫描写入真实 `0`，暂停、失败、崩溃恢复、未测量和 legacy 行保持未知。
+- `ScanRun`、StateDB、scheduler、snapshot runner、Local Control API 使用同一 presence 语义；列表、摘要、详情和动作响应统一通过同一 scan DTO projector。旧兼容调用传入无 presence 标记的默认 `0` 不得伪装为真实测量值；同秒更新时间以数据库插入顺序稳定排序。
+- rendered fixture 改为从统一 scan DTO 形状生成缺失、明确 `0`、正数和未完成状态，并验证 Home/列表/详情的计数存在性一致；不改变 watcher 策略、队列架构、永久记忆权威或任何 live/Acceptance/Production/Vault 数据。
+- TDD/自动验收：后端 focused 先复现 legacy 默认 `0` 与同秒 latest 排序问题，再修复至 `47 passed, 1 warning`；Owner rendered E2E PASS；Desktop `test:smoke`（23 scripts）PASS；`npm run build` PASS（92 modules）；Task2–5 相关回归 `183 passed, 3 warnings`；宽仓库回归仍保留既有 22 项质量评测/环境基线失败，不归因于本轮。
+- 本轮不启动/打包/安装 App，不访问 live 8766/8767、Acceptance/Production/Vault 或主人数据；主人观察仍待根代理在新 Artifact 上执行，状态保持 `READY_FOR_OWNER_EXPERIENCE`。报告沿用 `.superpowers/sdd/2026-08-29-task8e-owner-plain-ui/task-report.md`。
+
 ## 2026-08-29 · Task 8E · Owner-facing plain UI repair Round 3
 
 - 独立复审仅剩 completed scan detail 的计数证据边界：`ScanRun` 模型对未由 StateDB 提供的 `queued/reused` 等字段会默认填充 0，不能在 Desktop 详情中当作真实测量值。本轮只在 Desktop DTO/API adapter 统一摘要与详情的计数判定，不改 backend、数据模型、队列、自动化、API 动作或 live。

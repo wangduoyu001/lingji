@@ -5,7 +5,7 @@
 ```text
 Verdict: PASS (focused implementation and rendered/behavior smoke)
 Merge recommendation: ALLOW owner observation
-Product commit: ea87ebe
+Product commit: 33b730e
 Artifact: NOT_BUILT_BY_SCOPE
 Artifact ID: NOT_APPLICABLE
 Report commit: the commit containing this report (see final delivery SHA)
@@ -144,7 +144,7 @@ None found in focused rendered/behavior or regression checks. Final owner accept
 ## 15. Final Merge Recommendation
 
 ```text
-Product commit: ea87ebe41ab37d44789ec68a126629fc074a483a
+Product commit: 33b730ec8de1b7b545da7c5eecdb70cdcf67e30e
 Verdict: PASS (focused implementation and rendered/behavior smoke)
 Merge recommendation: ALLOW owner observation
 Owner observation complete: NO
@@ -155,7 +155,37 @@ Acceptance docs synchronized: YES (pending Round2 report commit)
 Temporary evidence cleaned: YES (no live/temporary acceptance data created)
 ```
 
-## 16. Sign-off
+## 16. Owner-Plain Repair Round 4
+
+Round4 closes the Round3 formal evidence gap instead of adding another UI-only
+marker. StateDB now migrates nullable `queued_count`/`reused_count` columns
+additively, preserving `NULL` for old rows. Snapshot completion and scheduler
+completion write counts atomically only when the completed scan has measured
+them; an actually empty completed scan records explicit zero, while paused,
+failed, crashed, unmeasured and legacy rows remain unknown. `ScanRun`, the
+Local Control API list/summary/detail/action responses, and the rendered owner
+fixture use the same `counts_present` contract. A compatibility dictionary with
+model-default zero and no presence marker is treated as unknown. Same-second
+scan transitions use SQLite insertion order as a deterministic latest tie-break.
+
+TDD evidence: the initial backend run exposed the same-second latest ordering
+failure (`1 failed`); a dedicated legacy-default-zero test then exposed the
+compatibility projector gap (`1 failed`). The focused repair matrix is now
+`47 passed, 1 warning`. Owner rendered E2E is PASS; Desktop smoke is PASS for
+23 scripts; build is PASS with 92 modules transformed; Task2–5 related backend
+regressions are `183 passed, 3 warnings`; compileall, diff-check, acceptance
+sync and local handoff are PASS. The broad repository run still has 22
+pre-existing quality-evaluation/environment baseline failures (missing local
+`.venv`, historical Task4/Task7 contract tests, and unrelated legacy tests);
+none were changed or reclassified as Round4 failures.
+
+Round4 remains limited to scan evidence and its owner-facing projection. It
+does not change watcher strategy, introduce a second queue/database, or touch
+live/Acceptance/Production/Vault/owner data. Product/tests are committed at
+`33b730ec8de1b7b545da7c5eecdb70cdcf67e30e`; docs/report are committed
+separately. Owner observation and a new Mac artifact remain pending.
+
+## 17. Sign-off
 
 ```text
 Codex executor: Task8E Owner-facing Plain UI implementation agent
