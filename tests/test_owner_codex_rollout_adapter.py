@@ -126,3 +126,24 @@ def test_rollout_automatic_dispatch_rejects_same_named_root_outside_effective_ho
             payload={"source_id": "s1", "authorized_root": str(outside_root)},
             options={"automatic_memory": True},
         ))
+
+
+def test_rollout_automatic_dispatch_requires_matching_durable_raw_snapshot(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    root = home / ".codex" / "sessions"
+    source_path = root / "rollout-source.jsonl"
+    raw_path = tmp_path / "raw" / "durable-object"
+    source_path.parent.mkdir(parents=True)
+    _record(source_path, _fixture())
+    raw_path.parent.mkdir(parents=True)
+    raw_path.write_bytes(source_path.read_bytes())
+    monkeypatch.setenv("HOME", str(home))
+    with pytest.raises(ValueError, match="raw|snapshot|provenance"):
+        CodexRolloutAdapter().extract(ExtractionRequest(
+            "job-1", "codex_rollout", input_path=source_path,
+            payload={
+                "source_id": "s1", "authorized_root": str(root),
+                "effective_home": str(home), "raw_id": "a" * 64,
+                "raw_path": str(raw_path),
+            }, options={"automatic_memory": True},
+        ))

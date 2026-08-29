@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ..base import ExtractionAdapter
+from ..idempotency import sha256_file
 from ..models import ExtractedDocument, ExtractionBatch, ExtractionRequest
 from ..models import StructuredConversation, StructuredMessage, StructuredSource
 from .generic_ai_history import SchemaDetection
@@ -727,6 +728,7 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
                 validate_codex_rollout_root(root_path, request.payload.get("effective_home"))
             except PermissionError as exc:
                 raise ValueError(str(exc)) from exc
+            self._validate_automatic_snapshot_provenance(request, canonical, root_path)
         session_ids: set[str] = set()
         messages: list[dict[str, str]] = []
         warnings: list[str] = []
@@ -807,6 +809,55 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
             warnings=tuple(warnings),
             summary={"conversations_found": 1, "messages": len(unique), "messages_skipped": len(messages) - len(unique), "session_id": session_id},
         )
+
+    @classmethod
+    def _validate_automatic_snapshot_provenance(
+        cls, request: ExtractionRequest, canonical: Path, authorized_root: Path
+    ) -> None:
+        payload = request.payload
+        raw_id = str(payload.get("raw_id") or "").strip().lower()
+        expected_sha = str(payload.get("sha256") or "").strip().lower()
+        raw_value = str(payload.get("raw_path") or "").strip()
+        raw_root_value = str(payload.get("raw_root") or "").strip()
+        source_value = str(payload.get("source_path") or "").strip()
+        if (
+            len(raw_id) != 64
+            or any(char not in "0123456789abcdef" for char in raw_id)
+            or expected_sha != raw_id
+            or not raw_value
+            or not raw_root_value
+            or not source_value
+        ):
+            raise ValueError("automatic Codex input lacks trusted raw snapshot provenance")
+        raw_path = cls._canonical_input_path(Path(raw_value))
+        raw_root_candidate = Path(raw_root_value).expanduser()
+        cls._reject_symlink_chain(raw_root_candidate)
+        try:
+            raw_root = raw_root_candidate.resolve(strict=True)
+        except OSError as exc:
+            raise ValueError("automatic Codex durable raw root is invalid") from exc
+        if not raw_root.is_dir():
+            raise ValueError("automatic Codex durable raw root is not a directory")
+        try:
+            if raw_path.parent != raw_root:
+                raw_path.relative_to(raw_root)
+        except ValueError as exc:
+            raise ValueError("automatic Codex raw snapshot is outside the durable raw root") from exc
+        if raw_path.name != raw_id or canonical != raw_path:
+            raise ValueError("automatic Codex input is not the durable raw snapshot")
+        if sha256_file(raw_path) != raw_id:
+            raise ValueError("automatic Codex raw snapshot hash does not match its identity")
+        source_path = Path(source_value).expanduser()
+        try:
+            source_path = source_path.resolve(strict=False)
+            source_path.relative_to(authorized_root.resolve(strict=False))
+            expected_source = authorized_root / Path(str(payload.get("relative_path") or ""))
+            if source_path != expected_source.resolve(strict=False):
+                raise ValueError("automatic Codex source path identity does not match authorization")
+        except (ValueError, OSError) as exc:
+            if isinstance(exc, ValueError) and str(exc).startswith("automatic Codex"):
+                raise
+            raise ValueError("automatic Codex source path is outside the authorized root") from exc
 
     @classmethod
     def _iter_rows(cls, path: Path, include_line_number: bool = False):

@@ -6,10 +6,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from src.automatic_memory import AuthorizationScope, AutomaticMemoryRuntime, SourceRegistry
 from src.automatic_memory.checkpoint import SnapshotJobRunner
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.storage import StateDatabase
+from src.work.models import WorkItem
 
 
 def _settings(root: Path) -> SimpleNamespace:
@@ -26,8 +29,9 @@ def _settings(root: Path) -> SimpleNamespace:
 
 def test_authorized_rollout_scan_replay_is_idempotent_and_revocation_hides_source(tmp_path: Path, monkeypatch):
     settings = _settings(tmp_path)
-    source_root = tmp_path / "home" / ".codex" / "sessions"
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    settings.home_dir = tmp_path / "configured-home"
+    source_root = settings.home_dir / ".codex" / "sessions"
+    monkeypatch.setenv("HOME", str(tmp_path / "host-home"))
     path = source_root / "2026/08/29/rollout-one.jsonl"
     path.parent.mkdir(parents=True)
     rows = [
@@ -39,7 +43,7 @@ def test_authorized_rollout_scan_replay_is_idempotent_and_revocation_hides_sourc
     pipeline = build_extraction_pipeline(settings)
     state = StateDatabase(settings.state_db_path)
     registry = SourceRegistry(state)
-    source = registry.register(AuthorizationScope("grant-rollout", ("codex_rollout",), (str(source_root),), datetime.now(timezone.utc), None, True), "codex_rollout", str(source_root))
+    source = registry.register(AuthorizationScope("grant-rollout", ("codex_rollout",), (str(source_root),), datetime.now(timezone.utc), None, True, str(settings.home_dir)), "codex_rollout", str(source_root))
     runtime = AutomaticMemoryRuntime(state_db=state, pipeline=pipeline, settings=settings, registry=registry)
     runtime.start()
     try:
@@ -72,25 +76,62 @@ def test_authorized_rollout_scan_replay_is_idempotent_and_revocation_hides_sourc
         runtime.stop()
 
 
-def test_rollout_scan_crash_at_thirty_percent_resumes_after_runner_restart(tmp_path: Path, monkeypatch):
+@pytest.mark.parametrize("crash_at", ["30%", "70%"])
+def test_rollout_scan_crash_restart_preserves_identity_and_third_party_sentinel(tmp_path: Path, monkeypatch, crash_at: str):
     settings = _settings(tmp_path)
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
     source_root = home / ".codex" / "sessions"
+    third_party = tmp_path / "third-party-sentinel.jsonl"
+    third_party.write_text("do not touch", encoding="utf-8")
+    third_party.chmod(0o640)
+    sentinel_before = (third_party.read_bytes(), third_party.stat().st_mtime_ns, third_party.stat().st_mode)
     for index in range(3):
         path = source_root / "2026" / "08" / "29" / f"rollout-{index}.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"type": "session_meta", "payload": {"id": f"s-{index}"}}) + "\n", encoding="utf-8")
+        rows = [
+            {"type": "session_meta", "payload": {"id": f"s-{index}"}},
+            {"type": "event_msg", "id": f"u-{index}", "payload": {"type": "user_message", "message": f"user-{index}"}, "timestamp": f"2026-08-29T00:00:0{index}Z"},
+            {"type": "response_item", "id": f"a-{index}", "payload": {"type": "message", "role": "assistant", "content": f"assistant-{index}"}, "timestamp": f"2026-08-29T00:00:1{index}Z"},
+        ]
+        path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
     pipeline = build_extraction_pipeline(settings)
     state = StateDatabase(settings.state_db_path)
     registry = SourceRegistry(state)
     source = registry.register(AuthorizationScope("grant-crash", ("codex_rollout",), (str(source_root),), datetime.now(timezone.utc), None, True), "codex_rollout", str(source_root))
     runtime = AutomaticMemoryRuntime(state_db=state, pipeline=pipeline, settings=settings, registry=registry)
     scan = registry.start_scan(source.source_id)
-    first = runtime.runner.run(scan.scan_id, crash_at="30%")
+    work_id = "automatic-memory:" + scan.scan_id
+    runtime.work_store.create_work(WorkItem(work_id=work_id, title="Codex rollout scan", source_id=source.source_id, status="accepted", owner_approved=True))
+    first = runtime.runner.run(scan.scan_id, crash_at=crash_at)
     assert first.status == "paused"
     restarted = SnapshotJobRunner(runtime.snapshot, pipeline.queue, state, path_provider=runtime._authorized_paths)
     final = restarted.run(scan.scan_id)
     assert final.status == "completed"
     assert final.progress == final.total == 3
     assert len(list((pipeline.sink.raw_root).iterdir())) == 3
+    for _ in range(3):
+        pipeline.process_pending(limit=10)
+    jobs = pipeline.queue.list_page(source_type="automatic_memory_snapshot", limit=20)
+    assert len(jobs) == 3
+    assert all(job["status"] == "completed" for job in jobs)
+    messages = pipeline.structured_sink.read_model.list_messages(owner=True, limit=20, offset=0)["items"]
+    assert len(messages) == 6
+    assert {item["external_id"] for item in messages} == {
+        f"codex-rollout:message:s-{index}:{role}-{index}"
+        for index in range(3)
+        for role in ("u", "a")
+    }
+    source = pipeline.structured_sink.read_model.list_sources(source_type="codex_rollout", owner=True, limit=20, offset=0)
+    assert source["pagination"]["total"] == 1
+    conversations = pipeline.structured_sink.read_model.list_conversations(source_type="codex_rollout", owner=True, limit=20, offset=0)
+    assert conversations["pagination"]["total"] == 3
+    work_before = runtime.work_store.get_work(work_id)
+    assert work_before is not None
+    replay = restarted.run(scan.scan_id)
+    assert replay.status == "completed"
+    pipeline.process_pending(limit=10)
+    assert len(pipeline.structured_sink.read_model.list_messages(owner=True, limit=20, offset=0)["items"]) == 6
+    assert runtime.work_store.get_work(work_id).work_id == work_before.work_id
+    sentinel_after = (third_party.read_bytes(), third_party.stat().st_mtime_ns, third_party.stat().st_mode)
+    assert sentinel_after == sentinel_before

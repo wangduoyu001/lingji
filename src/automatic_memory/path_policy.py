@@ -77,7 +77,9 @@ def _within(root: Path, candidate: Path) -> bool:
         return False
 
 
-def enumerate_authorized_files(source: SourceRecord) -> tuple[Path, ...]:
+def enumerate_authorized_files(
+    source: SourceRecord, *, effective_home: Path | str | None = None
+) -> tuple[Path, ...]:
     if source.status != "authorized":
         return ()
     root = _reject_root(Path(source.root))
@@ -86,7 +88,7 @@ def enumerate_authorized_files(source: SourceRecord) -> tuple[Path, ...]:
     if source.kind == "codex_rollout":
         # Only the two discovered Codex roots are admissible; an arbitrary
         # directory must never become a transcript import root.
-        root = validate_codex_rollout_root(root)
+        root = validate_codex_rollout_root(root, effective_home)
     if not root.is_dir() or source.kind == "claude_desktop":
         return ()
     if source.kind == "obsidian":

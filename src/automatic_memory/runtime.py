@@ -467,7 +467,8 @@ class AutomaticMemoryRuntime:
                 status=str(source["status"]), capability=str(source.get("capability") or "metadata_discovery"),
                 policy_version=str(source.get("policy_version") or "automatic-memory-source-v1"),
             )
-        return enumerate_authorized_files(record)
+        effective_home = Path(record.root).expanduser().parent.parent if record.kind == "codex_rollout" else None
+        return enumerate_authorized_files(record, effective_home=effective_home)
 
     def _run_scan(self, scan_id: str, source_id: str, reason: str = "scheduled") -> Any:
         work_id = f"automatic-memory:{scan_id}"

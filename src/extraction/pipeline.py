@@ -642,7 +642,7 @@ class ExtractionPipeline:
         request_path = raw_path
         temporary_path: Path | None = None
         original_suffix = Path(relative_path).suffix.lower()
-        if original_suffix and raw_path.suffix.lower() != original_suffix:
+        if original_suffix and raw_path.suffix.lower() != original_suffix and source_type != "codex_rollout":
             temporary_path = automatic_memory_dispatch_path(
                 self.sink.raw_root,
                 str(job.get("job_id") or ""),
@@ -658,6 +658,8 @@ class ExtractionPipeline:
                                     payload={"source_id": source_id, "relative_path": relative_path,
                                              "raw_id": raw_id, "sha256": expected_sha,
                                              "raw_path": str(raw_path),
+                                             "raw_root": str(self.sink.raw_root),
+                                             "source_path": str(Path(str(source.get("root") or "")) / relative_path),
                                              "authorized_root": str(source.get("root") or ""),
                                              "effective_home": self.effective_home},
                                     options={"automatic_memory": True})
