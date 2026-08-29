@@ -144,6 +144,30 @@ const server = http.createServer((req, res) => {
       if (state.reviewDelay && !state.reviewRelease) { const timer = setInterval(() => { if (state.reviewRelease) { clearInterval(timer); response(); } }, 20); return; }
       return response();
     }
+    if (path === "/api/memory/inspector/cards") {
+      const topics = ["发布计划", "每周摘要", "代码审查", "家庭安排", "阅读清单", "旅行计划", "饮食偏好", "会议决策", "预算安排", "学习目标", "设备维护", "写作习惯"];
+      const cards = Array.from({ length: 21 }, (_, index) => ({
+        memory_id: `card-${index + 1}`,
+        topic: topics[index] ?? `主题${index + 1}`,
+        developments: ["先讨论方案", "根据来源做出决定", "记录后续结果"],
+        conclusion: "最新结论已从来源核对",
+        freshness: { state: index === 3 ? "overdue" : "current", reason: index === 3 ? "已有一段时间没有新证据" : "最近证据仍有效", latest_evidence_at: "2026-08-28T08:03:00Z" },
+        source: { label: index % 2 ? "Codex 工作会话" : "ChatGPT 导出记录", message_count: 3, latest_evidence_at: "2026-08-28T08:03:00Z" },
+        layers: { raw: { state: "available" }, structured: { state: "available" }, vector: { state: index === 4 ? "unavailable" : "complete" }, permanent: { state: index === 2 ? "pending_owner_review" : "complete" } },
+        trust: { state: index === 5 ? "conflict" : "trusted" },
+        action: { type: index === 2 ? "confirm" : "correct", label: index === 2 ? "确认加入长期记忆" : "修正内容", reason: "请核对后决定" },
+        evidence: [{ message_id: "message-card-1", preview: "来源证据摘要", occurred_at: "2026-08-28T08:03:00Z" }],
+      }));
+      const url = new URL(req.url, "http://127.0.0.1");
+      const offset = Number(url.searchParams.get("offset") || 0);
+      const limit = Number(url.searchParams.get("limit") || 20);
+      return json(res, 200, { items: cards.slice(offset, offset + limit), pagination: { limit, offset, total: cards.length, has_more: offset + limit < cards.length } });
+    }
+    if (path.startsWith("/api/memory/inspector/cards/")) {
+      const id = decodeURIComponent(path.split("/").pop());
+      return json(res, 200, { item: { memory_id: id, topic: "发布计划", developments: ["先讨论方案", "根据来源做出决定"], conclusion: "最新结论已从来源核对", freshness: { state: "current", reason: "最近证据仍有效", latest_evidence_at: "2026-08-28T08:03:00Z" }, source: { label: "Codex 工作会话", message_count: 3 }, layers: { raw: { state: "available" }, structured: { state: "available" }, vector: { state: "complete" }, permanent: { state: "complete" } }, trust: { state: "trusted" }, action: { type: "correct", label: "修正内容" }, current_hash: "hash-card-1", evidence: [{ message_id: "message-card-1", preview: "来源证据摘要", occurred_at: "2026-08-28T08:03:00Z" }] } });
+    }
+    if (path === "/api/memory/inspector/messages/message-card-1") return json(res, 200, { item: { message_id: "message-card-1", content: "这是选定的来源消息正文。" } });
     if (path === "/api/memory/inspector/status") return json(res, 200, { as_of: "2026-08-28T08:03:00Z", sources: { sources: 1, conversations: 1, messages: 1 }, memory: { documents: 1, chunks: 1 }, vector: { state: "available", coverage: 1, rebuild_required: false } });
     if (path === "/api/memory/inspector/sources" || path === "/api/memory/inspector/conversations" || path === "/api/memory/inspector/messages") return json(res, 200, { items: path.endsWith("sources") ? [{ source_id: "source-1", source_type: "codex_session", display_name: "Codex 工作会话", status: "active", updated_at: "2026-08-28T08:02:00Z" }] : path.endsWith("conversations") ? [{ conversation_id: "session-1", source_id: "source-1", title: "发布计划讨论", started_at: "2026-08-28T08:00:00Z", message_count: 1 }] : [{ message_id: "message-1", conversation_id: "session-1", source_id: "source-1", role: "user", author: "主人", occurred_at: "2026-08-28T08:02:00Z", content_preview: "我们确认下周三发布。" }], pagination: { total: 1, limit: 30, offset: 0, has_more: false } });
     if (path === "/api/memory/inspector/conversations/session-1") return json(res, 200, { item: { conversation_id: "session-1", source_id: "source-1", title: "发布计划讨论", started_at: "2026-08-28T08:00:00Z", message_count: 1 } });
@@ -179,18 +203,18 @@ try {
   await installTauri(racePage);
   await racePage.goto("http://127.0.0.1:4178", { waitUntil: "domcontentloaded" });
   try {
-    await racePage.locator(".desktop-nav-item").filter({ hasText: "活动记录" }).waitFor({ timeout: 10_000 });
+    await racePage.getByRole("button", { name: "活动记录", exact: true }).waitFor({ timeout: 10_000 });
   } catch (reason) {
     console.error("race body:", await racePage.locator("body").innerText());
     throw reason;
   }
-  await racePage.locator(".desktop-nav-item").filter({ hasText: "活动记录" }).click();
+  await racePage.getByRole("button", { name: "活动记录", exact: true }).click();
   await new Promise((resolve) => setTimeout(resolve, 1_100));
-  await racePage.getByRole("heading", { name: "活动记录", exact: true }).waitFor();
+  try { await racePage.getByRole("heading", { name: "活动记录", exact: true }).first().waitFor({ timeout: 5_000 }); } catch (reason) { console.error("after activity click:", await racePage.locator("body").innerText()); throw reason; }
   assert.equal(await racePage.getByRole("heading", { name: "选择灵机要记住的内容", exact: true }).count(), 0, "delayed onboarding reads cannot redirect after navigation");
   await fetch(`http://127.0.0.1:${apiPort}/__test/release-onboarding`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
   await new Promise((resolve) => setTimeout(resolve, 500));
-  await racePage.getByRole("heading", { name: "活动记录", exact: true }).waitFor();
+  await racePage.getByRole("heading", { name: "活动记录", exact: true }).first().waitFor();
   await racePage.close();
   state.onboardingDelay = false;
   state.onboardingFailures = 7;
@@ -267,9 +291,10 @@ try {
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
   await page.waitForTimeout(100);
   assert.ok((await page.locator(".memory-detail-grid > div").filter({ hasText: "新增" }).innerText()).includes("新增\n2"), "explicit positive count must remain visible");
-  await page.getByRole("button", { name: "活动记录" }).click();
-  await page.getByRole("heading", { name: "活动记录" }).waitFor();
-  await page.getByRole("button", { name: "运行状态" }).click();
+  await page.getByRole("button", { name: "首页" }).click();
+  await page.getByRole("button", { name: "活动记录", exact: true }).click();
+  await page.getByRole("heading", { name: "活动记录" }).first().waitFor();
+  await page.getByRole("button", { name: "首页" }).click();
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   await page.getByText("目前空闲", { exact: true }).waitFor();
   assert.equal(await page.getByText("状态尚未获得", { exact: true }).count(), 0, "null work must render a clear idle state, not an unknown status");
@@ -311,7 +336,7 @@ try {
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
   await page.getByRole("heading", { name: "选择灵机要记住的内容" }).waitFor();
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查", exact: true }).click();
-  await page.getByRole("button", { name: "运行状态" }).click();
+  await page.getByRole("button", { name: "首页" }).click();
   await page.getByText(/最近一次检查已完成.*未发现新内容/).waitFor();
   const latestOverview = page.locator(".overview-page");
   assert.equal(await latestOverview.getByText("新增 0 条", { exact: false }).count(), 0, "explicit zero latest scan must not show misleading added-zero copy");
@@ -336,7 +361,7 @@ try {
   await fetch(`http://127.0.0.1:${apiPort}/__test/omit-home-counts`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.waitForTimeout(300);
-  await page.getByRole("button", { name: "运行状态" }).click();
+  await page.getByRole("button", { name: "首页" }).click();
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   assert.equal(await page.getByText("本次更新", { exact: true }).count(), 0, "missing scan counts must not appear as fake zeros or developer metrics");
   assert.equal(await page.getByText("本次跳过", { exact: true }).count(), 0, "missing scan counts must not appear as fake zeros or developer metrics");
@@ -413,8 +438,9 @@ try {
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.getByText("暂时没有可连接的记录来源。", { exact: true }).waitFor();
 
-  await page.locator(".desktop-nav-item").filter({ hasText: "活动记录" }).click();
-  await page.getByRole("heading", { name: "活动记录", exact: true }).waitFor();
+  await page.getByRole("button", { name: "首页" }).click();
+  await page.getByRole("button", { name: "活动记录", exact: true }).click();
+  await page.getByRole("heading", { name: "活动记录", exact: true }).first().waitFor();
   await page.getByText("整理项目会议记录", { exact: true }).waitFor();
   const activityScanCountBefore = (await (await fetch(`http://127.0.0.1:${apiPort}/__test/scan-request-count`, { headers: { "X-LingJi-Token": "fixture-token" } })).json()).count;
   const activityRefreshButton = page.getByRole("button", { name: "刷新记录", exact: true });
@@ -497,14 +523,14 @@ try {
   assert.equal(await page.getByText("下一步：灵机", { exact: true }).count(), 0, "ordinary activity must not expose system actor names");
   await setActivityMode("normal");
 
-  await page.locator(".desktop-nav-item").filter({ hasText: "需要我处理" }).click();
-  await page.locator("h1").filter({ hasText: "需要我处理" }).waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
+  await page.locator("h1").filter({ hasText: "需要我" }).waitFor();
   await page.getByText("确认这条会议决定是否进入长期记忆", { exact: true }).waitFor();
   assert.equal(await page.getByText("work-capture-1", { exact: true }).count(), 0, "attention page must not expose work IDs");
   await page.getByRole("button", { name: "完成处理", exact: true }).click();
   await page.getByText("现在没有需要你处理的事项。灵机会继续自动工作。", { exact: true }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/pending-outage`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
-  await page.getByRole("button", { name: "运行状态" }).click();
+  await page.getByRole("button", { name: "首页" }).click();
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   await page.getByText("待办状态暂时无法确认，正在重试", { exact: true }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/pending-outage`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
@@ -516,7 +542,29 @@ try {
   assert.equal(await page.getByText("AUTOMATIC RUNTIME", { exact: true }).count(), 0, "ordinary UI must not use decorative English runtime labels");
   assert.equal(await page.getByText("ADVANCED DIAGNOSTICS", { exact: true }).count(), 0, "ordinary UI must not use decorative English diagnostics labels");
 
-  await page.locator(".desktop-nav-item").filter({ hasText: "高级诊断" }).click();
+  const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
+  assert.deepEqual(primaryLabels, ["首页", "记忆内容", "需要我", "记忆来源"], "ordinary navigation must contain exactly four owner entries");
+  assert.equal(await page.locator(".desktop-diagnostics-link").count(), 1, "advanced diagnostics must have one low-emphasis entry");
+  await page.locator(".desktop-nav-item").filter({ hasText: "记忆内容" }).click();
+  await page.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor();
+  await page.locator(".owner-memory-card").nth(0).waitFor();
+  assert.equal(await page.locator(".owner-memory-card").count(), 20, "first card page uses the default 20-card limit");
+  assert.ok((await page.locator(".memory-cards-summary").innerText()).includes("已显示 20 / 共 21 条"), "card total must be exact");
+  const cardsText = await page.locator(".owner-memory-card-grid").innerText();
+  for (const topic of ["发布计划", "每周摘要", "代码审查", "家庭安排", "阅读清单", "旅行计划", "饮食偏好", "会议决策", "预算安排", "学习目标", "设备维护", "写作习惯"]) assert.ok(cardsText.includes(topic), `card topic ${topic} must be readable`);
+  assert.equal(/raw|structured|vector|permanent|chunk|hash|card-\d+|message-card-1|\{/.test(cardsText), false, "technical fields must stay out of default cards");
+  assert.equal(await page.locator(".owner-memory-card").first().locator(".owner-memory-developments p").count(), 3, "cards show at most three evidence lines");
+  await page.getByRole("button", { name: "下一页", exact: true }).click();
+  await page.locator(".owner-memory-card").first().getByText("主题21", { exact: true }).waitFor();
+  assert.ok((await page.locator(".memory-cards-summary").innerText()).includes("已显示 1 / 共 21 条"), "second page must preserve exact total");
+  assert.equal(await page.getByRole("button", { name: "下一页", exact: true }).isDisabled(), true, "last page disables next");
+  await page.getByRole("button", { name: "上一页", exact: true }).click();
+  await page.locator(".owner-memory-card").first().getByText("发布计划", { exact: true }).waitFor();
+  await page.locator(".owner-memory-card").first().getByRole("button", { name: "发布计划", exact: true }).click();
+  await page.getByRole("button", { name: "查看来源", exact: true }).click();
+  await page.getByText("这是选定的来源消息正文。", { exact: true }).waitFor();
+
+  await page.locator(".desktop-diagnostics-link").click();
   await page.locator("details").filter({ hasText: "记忆与项目" }).locator("summary").click();
   await fetch(`http://127.0.0.1:${apiPort}/__test/review-delay`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
   await page.getByRole("button", { name: /人工记忆审核/ }).click();
@@ -540,7 +588,7 @@ try {
   await page.getByText("为什么：尚未获得", { exact: true }).waitFor();
   assert.equal(await page.getByText("source_session_id", { exact: false }).count(), 0, "mock-only provenance IDs must not be used");
 
-  await page.locator(".desktop-nav-item").filter({ hasText: "高级诊断" }).click();
+  await page.locator(".desktop-diagnostics-link").click();
   await page.locator("details").filter({ hasText: "采集与任务" }).locator("summary").click();
   await page.getByRole("button", { name: /手动投喂中心/ }).waitFor();
   assert.equal(await page.locator(".desktop-nav-item").filter({ hasText: "主动投喂" }).count(), 0, "legacy Capture must be hidden from navigation");

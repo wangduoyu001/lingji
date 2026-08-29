@@ -45,10 +45,11 @@ for (const page of ["overview", "activity", "attention", "diagnostics"]) {
 }
 
 const primaryBlock = navigation.match(/PRIMARY_NAVIGATION:[\s\S]*?\];/)?.[0] ?? "";
-assert.equal((primaryBlock.match(/id:/g) ?? []).length, 5, "Primary navigation must contain exactly five entries");
-for (const label of ["运行状态", "记忆来源", "活动记录", "需要我处理", "高级诊断"]) {
+assert.equal((primaryBlock.match(/id:/g) ?? []).length, 4, "Primary navigation must contain exactly four entries");
+for (const label of ["首页", "记忆内容", "需要我", "记忆来源"]) {
   assert.ok(primaryBlock.includes(label), `Primary navigation is missing ${label}`);
 }
+assert.match(shell, /desktop-diagnostics-link/);
 for (const forbiddenId of ["memory_review", "auto_review", "vector_center", "system_compute", "settings", "logs"]) {
   assert.equal(primaryBlock.includes(`id: "${forbiddenId}"`), false, `${forbiddenId} must not remain a primary navigation entry`);
 }

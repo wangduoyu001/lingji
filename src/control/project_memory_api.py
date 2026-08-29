@@ -24,6 +24,7 @@ class ReviewAction(BaseModel):
     content: str = ""
     title: str | None = None
     target_category: str = "General"
+    valid_to: str | None = None
 
 
 class OwnerMemoryRequest(BaseModel):
@@ -97,7 +98,17 @@ def register_project_memory_routes(app, project_context_service, memory_review_s
     @router.post("/api/memory/core/{memory_id}/archive")
     def archive(memory_id: str, request: ReviewAction, x_lingji_token: str | None = Header(default=None)):
         auth(x_lingji_token)
-        return guard(lambda: memory_review_service.archive_core_memory(memory_id, owner_confirmed=request.owner_confirmed, reason=request.reason))
+        return guard(lambda: memory_review_service.archive_core_memory(memory_id, owner_confirmed=request.owner_confirmed, reason=request.reason, expected_content_hash=request.expected_content_hash))
+
+    @router.post("/api/memory/core/{memory_id}/correct")
+    def correct(memory_id: str, request: ReviewAction, x_lingji_token: str | None = Header(default=None)):
+        auth(x_lingji_token)
+        return guard(lambda: memory_review_service.correct_core_memory(memory_id, content=request.content, title=request.title, owner_confirmed=request.owner_confirmed, expected_content_hash=request.expected_content_hash, reason=request.reason))
+
+    @router.post("/api/memory/core/{memory_id}/invalidate")
+    def invalidate(memory_id: str, request: ReviewAction, x_lingji_token: str | None = Header(default=None)):
+        auth(x_lingji_token)
+        return guard(lambda: memory_review_service.invalidate_core_memory(memory_id, owner_confirmed=request.owner_confirmed, expected_content_hash=request.expected_content_hash, reason=request.reason, valid_to=request.valid_to))
 
     @router.get("/api/memory/core/{memory_id}/integrity")
     def integrity(memory_id: str, x_lingji_token: str | None = Header(default=None)):

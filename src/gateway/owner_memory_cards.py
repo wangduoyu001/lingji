@@ -40,6 +40,7 @@ class OwnerMemoryCard:
     projection: dict[str, Any]
     evidence_count: int
     permanent_memory: str
+    current_hash: str | None = None
     evidence: tuple[dict[str, Any], ...] = ()
 
     def to_dict(self, *, include_evidence: bool = False) -> dict[str, Any]:
@@ -64,6 +65,8 @@ class OwnerMemoryCard:
         }
         if include_evidence:
             item["evidence"] = [dict(value) for value in self.evidence[:MAX_EVIDENCE]]
+            if self.current_hash:
+                item["current_hash"] = self.current_hash
         return item
 
 
@@ -295,6 +298,7 @@ class OwnerMemoryCardProjector:
             projection=projection,
             evidence_count=len(refs),
             permanent_memory=permanent["label"],
+            current_hash=str(document.get("content_hash") or relationships.get("content_hash") or "") or None,
             evidence=tuple(evidence),
         )
 

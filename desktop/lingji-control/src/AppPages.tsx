@@ -18,6 +18,7 @@ import MemorySourcesPage from "./pages/MemorySourcesPage";
 import ModelsPage from "./pages/ModelsPage";
 import ObsidianLoopPage from "./pages/ObsidianLoopPage";
 import OverviewPage from "./pages/OverviewPage";
+import OwnerMemoryCardsPage from "./pages/OwnerMemoryCardsPage";
 import SettingsPage from "./pages/SettingsPage";
 import StoragePage from "./pages/StoragePage";
 import SystemComputePage from "./pages/SystemComputePage";
@@ -40,6 +41,7 @@ export default function AppPages(props: AppPagesProps) {
   const { page, api, connected, overview, inspectorTarget, onOpenInspector, onNavigate } = props;
   return <section className="page-content">
     {page === "overview" && <OverviewPage data={overview} api={api} active={connected} onNavigate={onNavigate} />}
+    {page === "memory_cards" && <OwnerMemoryCardsPage api={api} active={connected} onNavigate={onNavigate} />}
     {page === "memory_sources" && <MemorySourcesPage api={api} active={connected} />}
     {page === "activity" && <ActivityPage api={api} active={connected} />}
     {page === "attention" && <AttentionPage api={api} active={connected} />}

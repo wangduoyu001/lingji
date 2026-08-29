@@ -93,10 +93,64 @@ class MemoryReviewService:
         path = self.layout.root / candidate["relative_path"]
         return self.approve(candidate["id"], owner_confirmed=True, expected_content_hash=content_hash(path.read_text(encoding="utf-8-sig")))
 
-    def archive_core_memory(self, memory_id: str, *, owner_confirmed: bool, reason: str) -> dict[str, Any]:
+    def correct_core_memory(self, memory_id: str, *, content: str, expected_content_hash: str, owner_confirmed: bool, reason: str, title: str | None = None) -> dict[str, Any]:
+        """Create a new owner-confirmed version while retaining the old one."""
+        if not owner_confirmed:
+            raise MemoryReviewError("MEMORY_APPROVAL_REQUIRED")
+        if not content.strip():
+            raise ValueError("content is required")
+        if not reason.strip():
+            raise ValueError("reason is required")
+        source = self._find_core(memory_id)
+        self._require_hash(source, expected_content_hash)
+        metadata, _ = split_frontmatter(source.read_text(encoding="utf-8-sig"))
+        category = source.parent.name or "General"
+        candidate = self.lifecycle.propose_memory(
+            "owner_correction",
+            title or str(metadata.get("title") or "修正后的记忆"),
+            content,
+            {
+                "project_ids": self._list(metadata.get("project_ids") or metadata.get("project")),
+                "memory_type": metadata.get("memory_type", "knowledge"),
+                "importance": metadata.get("importance", "medium"),
+                "privacy": metadata.get("privacy", "private"),
+                "tags": self._list(metadata.get("tags")),
+            },
+        )
+        candidate_path = self.layout.root / candidate["relative_path"]
+        approved = self.approve(
+            candidate["id"],
+            owner_confirmed=True,
+            expected_content_hash=content_hash(candidate_path.read_text(encoding="utf-8-sig")),
+            target_category=category,
+        )
+        superseded = self.lifecycle.supersede_memory(source, approved["id"], True, reason=reason.strip())
+        result = {**approved, "superseded_id": memory_id, "superseded": superseded}
+        self._event("memory_owner_corrected", memory_id, result)
+        return result
+
+    def invalidate_core_memory(self, memory_id: str, *, expected_content_hash: str, owner_confirmed: bool, reason: str, valid_to: str | None = None) -> dict[str, Any]:
+        if not owner_confirmed:
+            raise MemoryReviewError("MEMORY_APPROVAL_REQUIRED")
+        if not reason.strip():
+            raise ValueError("reason is required")
+        source = self._find_core(memory_id)
+        self._require_hash(source, expected_content_hash)
+        metadata, body = split_frontmatter(source.read_text(encoding="utf-8-sig"))
+        now = valid_to or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        metadata.update({"status": "invalidated", "valid_to": now, "invalidating_reason": reason.strip(), "pin_to_context": False, "updated_at": now})
+        atomic_write(source, render_frontmatter(metadata, body))
+        self._sync(source)
+        result = {"id": memory_id, "relative_path": self.layout.relative(source).as_posix(), "status": "invalidated", "valid_to": now, "reason": reason.strip()}
+        self._event("memory_owner_invalidated", memory_id, result)
+        return result
+
+    def archive_core_memory(self, memory_id: str, *, owner_confirmed: bool, reason: str, expected_content_hash: str = "") -> dict[str, Any]:
         if not owner_confirmed:
             raise MemoryReviewError("MEMORY_APPROVAL_REQUIRED")
         path = self._find_core(memory_id)
+        if expected_content_hash:
+            self._require_hash(path, expected_content_hash)
         metadata, body = split_frontmatter(path.read_text(encoding="utf-8-sig"))
         if str(metadata.get("status") or "") == "archived":
             raise MemoryReviewError("MEMORY_ALREADY_REVIEWED")

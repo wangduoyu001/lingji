@@ -140,7 +140,7 @@ export default function ActivityPage({ api, active }: { api: LingJiApi; active: 
   const items = collapseQuietActivity(resource.data?.items ?? []);
   return (
     <div className="stack observation-page activity-page">
-      <Panel title="最近工作">
+      <Panel title="活动记录">
         <div className="activity-toolbar"><p>这里展示灵机最近实际完成、失败或仍在处理的工作。</p><button className="button secondary" disabled={resource.refreshing} onClick={() => void resource.refresh({ force: true })}>{resource.refreshing ? "刷新中…" : "刷新记录"}</button></div>
         {resource.stale && <Notice kind="warning">活动数据暂时过期，正在自动重试。</Notice>}
         {resource.error && <Notice kind="error">活动刷新失败：{resource.error.message}</Notice>}

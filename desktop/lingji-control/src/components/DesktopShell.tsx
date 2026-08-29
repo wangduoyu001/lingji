@@ -56,7 +56,7 @@ export default function DesktopShell({
   const externalRuntime = runtimeHealthy && runtimeStatus?.managed === false;
   const runtimeAvailable = runtimeStatus?.binary_available !== false;
   const runtimeConfigured = bootstrapStatus?.configured === true && !bootstrapStatus.c_drive_write_detected;
-  const advancedPage = current.group === "advanced";
+  const advancedPage = current.group === "advanced" && page !== "diagnostics";
 
   const copyDiagnostics = async () => {
     try {
@@ -86,7 +86,7 @@ export default function DesktopShell({
         </div>
 
         <nav className="desktop-nav desktop-nav-primary">
-          <div className="desktop-nav-group-title">运行观察</div>
+          <div className="desktop-nav-group-title">日常使用</div>
           <div className="desktop-nav-items">
             {PRIMARY_NAVIGATION.map((item) => (
               <button
@@ -105,6 +105,7 @@ export default function DesktopShell({
             ))}
           </div>
         </nav>
+        <button className="desktop-diagnostics-link" onClick={() => onNavigate("diagnostics")}>高级诊断</button>
 
         <div className="desktop-sidebar-status">
           <div className="desktop-status-line">
