@@ -42,6 +42,23 @@
   产品/测试提交为 `213bc7e`；Task 2 报告路径为
   `.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-2-report.md`。
 
+## 2026-08-29 · Task 2 Repair Round 1
+
+- 针对独立审查 I1–I7/M1–M2，仅在 OwnerMemoryCard projection 范围修复：无完整已核验
+  message evidence 不再生成 development/result/conclusion；promotion rejected/其他终态
+  不再重写成 pending；逐卡逐 chunk 使用既有 semantic `exists` 检查；完整 provenance refs
+  用于 identity/hash/count、owner preview 仍最多三条；时间统一经 timezone-aware parser，
+  source archived/revoked 和畸形 conversation 时间 fail-closed 为 unknown/不可用；unknown
+  provenance 给出 review action；source_id filter alias 与 malformed vector fail-closed 保留。
+- Round1 先 RED 后 GREEN：9 个新增 finding tests 在基线实现上失败，修复后
+  `tests/test_owner_memory_card_projector.py` 为 14 passed；Task2/API、Inspector、temporal、
+  promotion、source 直接矩阵为 100 passed、2 warnings。未修改或隐藏既有 promotion recovery
+  基线失败 `test_recovery_case_06_restart_after_link_commit_activates_after_verification`。
+- Product/tests commit：`0f657cc`；报告继续写入
+  `.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-2-report.md`，并提交独立
+  docs/evidence commit。继续执行 compileall、diff-check、acceptance-sync、local-handoff；
+  不启动 live/App/Acceptance，不读取真实聊天或主人数据。
+
 ## 2026-08-29 · Task 1 Round 1 · Codex rollout boundary repair
 
 - 针对独立 review 的 1 Critical、6 Important 与 Minor 项，仅在本 worktree 修复：

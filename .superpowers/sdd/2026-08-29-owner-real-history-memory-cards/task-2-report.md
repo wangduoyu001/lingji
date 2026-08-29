@@ -61,3 +61,57 @@ the equivalent available interpreter was `python3`.
   never treated as complete.
 - No real-machine, packaged, UI, owner-observation, or Acceptance run was
   authorized by the current `LOCAL_EXECUTION_TASK.md` (`IDLE`).
+
+## Repair Round 1 (review `c180fda`)
+
+### RED evidence
+
+Added one focused behavior test for each review finding (I1–I7, M1–M2) and
+ran `python3 -m pytest -q tests/test_owner_memory_card_projector.py --tb=short`.
+The current implementation produced **9 failures, 5 passes**: unsupported
+development fallback, rejected-event pending projection, global vector
+complete, truncated provenance, lexical timestamp max, archived source current,
+malformed conversation timestamp current, unknown-evidence no-op, and malformed
+vector-count exception.
+
+### GREEN implementation
+
+Product/tests commit: `0f657cc`.
+
+- Development/conclusion content now requires verified message evidence; event
+  payload lines are never treated as evidence.
+- Promotion events retain their actual pending or terminal state, newest event
+  wins, and rejected events do not become confirmation cards.
+- Vector state uses the existing per-memory chunk `semantic.exists` seam; absent
+  provider, missing chunks, and existence errors fail closed.
+- All provenance refs are checked for identity/content hash; only the returned
+  preview is capped to three items and `evidence_count` reflects all refs.
+- Shared timezone-aware `parse_instant` determines latest evidence and malformed
+  or missing times remain unknown. Archived sources are treated as unavailable.
+- Unknown evidence/provenance leads to a review action. `source_id` is also
+  accepted as an API filter alias.
+
+### Round1 verification
+
+| Command | Result |
+|---|---|
+| `tests/test_owner_memory_card_projector.py` | 14 passed |
+| Task2 + Inspector/temporal/promotion/source regression matrix | 100 passed, 2 warnings |
+| `tests/test_promotion_recovery_matrix.py::test_recovery_case_06_restart_after_link_commit_activates_after_verification` | 1 pre-existing baseline failure (`ROLLED_BACK` vs `VISIBLE_ACTIVE`); unchanged test and outside Task2 diff |
+| affected `compileall` | PASS |
+| `git diff --check` | PASS |
+
+No live 8766/8767, Desktop, Artifact, Acceptance, Production/Vault, real chat,
+or owner data was accessed. The repair is ready for final fresh verification;
+the known promotion recovery baseline failure remains explicitly reported and
+was not changed or hidden.
+
+### Final-HEAD fresh verification
+
+At final HEAD (`0f657cc` product + docs commit below), the focused pair returned
+**17 passed, 1 warning** and the direct Inspector/permission/temporal/promotion/
+source matrix returned **83 passed, 2 warnings**. Together these are **100
+passed, 3 warnings**. The unchanged promotion recovery case 06 still returned
+the known **1 baseline failure** (`ROLLED_BACK` vs `VISIBLE_ACTIVE`). Affected
+compileall, diff-check, acceptance-sync, and local-handoff all passed; no
+live/owner data path was run.
