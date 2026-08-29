@@ -337,6 +337,8 @@ def test_latest_terminal_event_does_not_fallback_to_older_pending_when_projectio
     card = OwnerMemoryCardProjector(database, MessageFixtureSources(), FixtureStatistics(), state_db=TerminalThenPendingEvents()).get_card("missing-canonical")["item"]
     assert card["state"] == "active"
     assert card["projection"]["state"] in {"unavailable", "unknown"}
+    assert card["layers"]["structured"]["state"] in {"unavailable", "unknown"}
+    assert card["layers"]["vector"]["state"] != "available"
     assert card["action"]["type"] != "confirm"
 
 

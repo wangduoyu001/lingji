@@ -269,9 +269,10 @@ class OwnerMemoryCardProjector:
         }
         permanent = self._permanent_layer(document, status)
         projection = {"state": "unavailable" if relationships.get("canonical_projection") in {"unavailable", "unknown"} else "available", "reason": "canonical memory projection is unavailable" if relationships.get("canonical_projection") in {"unavailable", "unknown"} else None}
+        structured = self._layer("unavailable", projection["reason"]) if projection["state"] != "available" else self._layer("available", "已有结构化记录")
         layers = {
             "raw": self._layer("available" if evidence or source.get("message_count", 0) else "unknown", "原始证据可查看" if evidence else "原始证据尚未获得"),
-            "structured": self._layer("available", "已有结构化记录"),
+            "structured": structured,
             "vector": self._vector_layer(memory_id),
             "permanent": permanent,
         }
