@@ -3,7 +3,7 @@
 ## 2026-08-29 · Task 8E · Mac experience repair candidate
 
 - 基线：`ffc2d8851dc91b5f09b14d31a34c1e6988358933`；唯一要求源为 `.superpowers/sdd/2026-08-29-task8e-mac-experience-repair/task-1-brief.md` 与 `task-1-observations.md`。本轮只修复来源计数、普通首屏/任务行降噪、真实分页、watcher 空事件、SHADOW 错误展示、Obsidian 终态和 Vector/Memory 状态语义，不改变 Task7、检索质量、模型能力或永久数据权威。
-- 自动验收：每项独立 RED→GREEN；Desktop smoke/build；watcher/scheduler/runtime 相关 focused 回归；`compileall`、`git diff --check`、acceptance sync、local handoff。watcher 空事件连续注入不得新增 scan、reconciliation event 或 Work Fact；真实变更/手动扫描/启动 reconciliation 仍各保留审计事实；分页以 `pagination.total/has_more` 为准；结构化错误、普通投喂行和 Vector 降级文案保持可理解且不伪报成功。
+- 自动验收：每项独立 RED→GREEN；Desktop smoke/build；watcher/scheduler/runtime 相关 focused 回归；`compileall`、`git diff --check`、acceptance sync、local handoff。watcher 空事件连续注入不得新增 scan、reconciliation event 或 Work Fact；真实变更/手动扫描/启动 reconciliation 仍各保留审计事实；分页以 `pagination.total/has_more` 为准；结构化错误、普通投喂行和 Vector 降级文案保持可理解且不伪报成功。Repair Round 1 另以可执行 contract smoke 覆盖真实 review_service 顶层 DTO 归一化、`ApiError`/嵌套 detail 错误和 disabled/degraded/unavailable 语义矩阵；suite mock fetch 必须恢复原生实现。
 - 真机验收（由根代理另行授权执行）：从修复提交构建并覆盖安装 arm64 `/Applications/灵机.app`，隔离 Acceptance root 验证授权撤销、空监听、普通首页/分页/SHADOW/文本投喂/Obsidian 未配置/Vector 降级，以及重启/停止/恢复；deep strict codesign；Production/Vault/真实聊天变化为 0；UI 保持打开，主人确认前仅 `READY_FOR_OWNER_EXPERIENCE`。
 - 主人观察：检查普通首屏不展开 Work Fact 原始 JSON，普通文本投喂行不显示 adapter JSON，`configuration_required` 提供中文下一步，空列表下一页 disabled，Memory healthy + embedding unavailable 明确显示记忆可用、向量待配置/降级，错误不显示 `[object Object]`。
 - 清理/回滚：自动测试只使用 pytest `tmp_path`/synthetic fixture；不安装 Ollama，不关闭 `/Applications/灵机.app`，不清理 Task8E Acceptance 数据，不访问 Production/Vault/真实聊天。回滚本轮产品/测试提交和本条 docs 提交即可，不触碰主人配置、Vault、raw、memory 或 Qdrant。
