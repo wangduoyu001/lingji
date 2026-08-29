@@ -174,7 +174,9 @@ class OwnerMemoryCardProjector:
             return []
         known = {str(item.get("memory_id") or item.get("id") or "") for item in self._list_documents()}
         output: list[dict[str, Any]] = []
-        for event in reversed(events):
+        # ``recent_events`` is newest-first; retain the latest terminal state
+        # for each candidate and never let an older pending event win.
+        for event in events:
             if str(event.get("event_type") or "") not in {"memory_promotion_decision", "memory_promotion_owner_approved", "memory_promotion_owner_rejected"}:
                 continue
             payload = event.get("payload")
@@ -187,18 +189,21 @@ class OwnerMemoryCardProjector:
             memory_id = str(payload.get("memory_id") or payload.get("candidate_id") or event.get("entity_id") or "").strip()
             if not memory_id or memory_id in known:
                 continue
-            state = str(payload.get("status") or payload.get("state") or "pending_owner_review").lower()
+            state = str(payload.get("status") or payload.get("state") or "pending_owner_review").strip().lower()
             if state in {"active", "visible_active"}:
                 # An active projection should be represented by MemoryDatabase;
                 # do not duplicate it from the event stream.
                 continue
+            pending = state in {"pending_owner_review", "requires_owner_review", "needs_review", "candidate", "received", "preparing"}
+            lifecycle = "needs_review" if pending else state
+            review_status = "pending_owner_review" if pending else lifecycle
             output.append({
                 "memory_id": memory_id,
                 "title": str(payload.get("title") or payload.get("topic") or memory_id),
                 "memory_type": str(payload.get("memory_type") or "knowledge"),
                 "memory_tier": "derived",
-                "status": "needs_review",
-                "review_status": "pending_owner_review",
+                "status": lifecycle,
+                "review_status": review_status,
                 "privacy": str(payload.get("privacy") or "private"),
                 "confidence": payload.get("confidence"),
                 "valid_from": None,
@@ -207,6 +212,7 @@ class OwnerMemoryCardProjector:
                     "evidence_refs": payload.get("evidence_refs") or payload.get("source_refs") or [],
                     "authority": payload.get("authority") or payload.get("source_authority") or "",
                     "development_lines": payload.get("development_lines") or payload.get("evidence_lines") or [],
+                    "invalidating_reason": payload.get("reason") or payload.get("rejection_reason") or payload.get("error") or "",
                 },
             })
             known.add(memory_id)
@@ -216,8 +222,9 @@ class OwnerMemoryCardProjector:
         memory_id = str(document.get("memory_id") or document.get("id") or "").strip()
         relationships = self._relationships(document)
         refs = self._evidence_refs(relationships)
-        evidence = self._evidence_for_refs(refs, viewer)
-        evidence_by_id = {str(item.get("message_id") or ""): item for item in evidence}
+        all_evidence = self._evidence_for_refs(refs, viewer)
+        evidence = all_evidence[:MAX_EVIDENCE]
+        evidence_by_id = {str(item.get("message_id") or ""): item for item in all_evidence}
         expected_refs = {self._ref_value(item): item for item in refs if self._ref_value(item)}
         provenance = "unknown"
         if expected_refs:
@@ -250,7 +257,7 @@ class OwnerMemoryCardProjector:
         conclusion = self._conclusion(document, evidence) if evidence and provenance == "verified" and conflict != "conflict" else None
         action = self._recommend_action(status, freshness, trust, source, permanent)
         topic = self._topic(document.get("title"), memory_id)
-        developments = tuple(self._development_lines(document, evidence))[:MAX_EVIDENCE]
+        developments = tuple(self._development_lines(document, evidence if provenance == "verified" else ()))[:MAX_EVIDENCE]
         return OwnerMemoryCard(
             memory_id=memory_id,
             kind="memory",
@@ -263,7 +270,7 @@ class OwnerMemoryCardProjector:
             layers=layers,
             trust=trust,
             action=action,
-            evidence_count=len(evidence),
+            evidence_count=len(refs),
             permanent_memory=permanent["label"],
             evidence=tuple(evidence),
         )
@@ -360,7 +367,7 @@ class OwnerMemoryCardProjector:
             if not message:
                 continue
             output.append(self._message_evidence_item(message))
-        return output[:MAX_EVIDENCE]
+        return output
 
     def _message_evidence(self, messages: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
         return [self._message_evidence_item(item) for item in list(messages)[:MAX_EVIDENCE]]
@@ -412,6 +419,10 @@ class OwnerMemoryCardProjector:
                 source_item = self._item(self.source_service.get_source(source_id, viewer=viewer))
             except Exception:
                 source_item = {}
+        latest = self._latest_time(self._message_evidence(messages)) or self._latest_time([
+            {"occurred_at": conversation.get("ended_at")},
+            {"occurred_at": conversation.get("started_at")},
+        ])
         return {
             "source_id": source_id or None,
             "label": str(source_item.get("display_name") or source_item.get("source_type") or "来源未知"),
@@ -419,7 +430,7 @@ class OwnerMemoryCardProjector:
             "status": source_item.get("status") or "unknown",
             "conversation_id": str(conversation.get("conversation_id") or "") or None,
             "message_count": int(conversation.get("message_count") or len(messages)),
-            "latest_evidence_at": self._latest_time(self._message_evidence(messages)) or conversation.get("ended_at") or conversation.get("started_at"),
+            "latest_evidence_at": latest,
         }
 
     def _vector_layer(self, memory_id: str) -> dict[str, Any]:
@@ -430,24 +441,28 @@ class OwnerMemoryCardProjector:
         except Exception:
             snapshot = {}
         semantic = getattr(getattr(self.gateway, "retriever", None), "semantic_provider", None)
-        if semantic is None and str(snapshot.get("state") or "").lower() in {"disabled", "configuration_required"}:
-            return self._layer("unavailable", "没有可用的向量服务")
+        if semantic is None:
+            return self._layer("unavailable", "没有可用的逐条向量检查服务")
         try:
-            coverage = dict(self.statistics.vector_coverage() or {})
+            memory = self.database.fetch_memory(memory_id, include_chunks=True)
+            chunks = list((memory or {}).get("chunks") or [])
         except Exception:
-            coverage = {}
-        expected = coverage.get("expected")
-        indexed = coverage.get("indexed")
-        missing = coverage.get("missing")
-        if expected is None or indexed is None or missing is None:
-            return self._layer("unavailable" if str(snapshot.get("state") or "").lower() in {"unavailable", "degraded"} else "unknown", "向量覆盖状态尚未获得")
-        if int(expected) == 0:
+            return self._layer("unavailable", "向量片段无法核对")
+        if not chunks:
             return self._layer("unknown", "没有可核对的向量片段")
-        if int(missing) == 0:
-            return self._layer("complete", "向量索引完整")
-        if int(indexed) > 0:
-            return self._layer("partial", "部分内容已有向量索引")
-        return self._layer("unavailable", "向量索引不可用")
+        results: list[bool | None] = []
+        for chunk in chunks:
+            try:
+                results.append(bool(semantic.exists(str(chunk.get("chunk_id") or ""))))
+            except Exception:
+                results.append(None)
+        if all(value is True for value in results):
+            return self._layer("complete", "该记忆的向量索引完整")
+        if any(value is True for value in results):
+            return self._layer("partial", "该记忆只有部分向量索引")
+        if any(value is None for value in results):
+            return self._layer("unavailable", "该记忆的向量状态无法核对")
+        return self._layer("unavailable", "该记忆尚未建立向量索引")
 
     @staticmethod
     def _layer(state: str, reason: str | None = None) -> dict[str, Any]:
@@ -469,19 +484,19 @@ class OwnerMemoryCardProjector:
             return {"type": "reauthorize_source", "label": "重新授权来源", "reason": "来源当前不可用"}
         if status in {"needs_review", "received", "preparing"} or permanent.get("state") == "pending_owner_review":
             return {"type": "confirm", "label": "确认是否加入永久记忆", "reason": "这条内容仍在等待主人确认"}
-        if freshness.get("state") in {"superseded", "invalidated", "archived", "overdue", "source_revoked"}:
+        if freshness.get("state") in {"superseded", "invalidated", "archived", "rejected", "rolled_back", "repair_required", "overdue", "source_revoked"}:
             return {"type": "review", "label": "检查并决定是否移出当前记忆", "reason": str(freshness.get("reason") or "内容可能已过时")}
-        if trust.get("conflict") == "conflict" or trust.get("provenance") == "mismatch" or trust.get("state") == "low_confidence":
+        if trust.get("conflict") == "conflict" or trust.get("provenance") in {"mismatch", "unknown"} or trust.get("state") in {"low_confidence", "unknown"}:
             return {"type": "review", "label": "检查来源并修正", "reason": "可信或来源证据需要主人复核"}
         return {"type": "none", "label": "目前无需处理", "reason": None}
 
     @staticmethod
     def _freshness(document: Mapping[str, Any], status: str, source: Mapping[str, Any]) -> dict[str, Any]:
-        if str(source.get("status") or "").lower() in {"revoked", "expired", "disabled"}:
+        if str(source.get("status") or "").lower() in {"revoked", "expired", "disabled", "archived"}:
             return {"state": "source_revoked", "reason": "来源已撤销或过期", "replacement_id": None}
         replacement = document.get("superseded_by") or OwnerMemoryCardProjector._relationships(document).get("superseded_by")
         reason = OwnerMemoryCardProjector._relationships(document).get("supersession_reason") or OwnerMemoryCardProjector._relationships(document).get("invalidating_reason")
-        if status in {"superseded", "invalidated", "archived"}:
+        if status in {"superseded", "invalidated", "archived", "rejected", "rolled_back", "repair_required"}:
             return {"state": status, "reason": reason or "生命周期状态已变化", "replacement_id": replacement or None}
         start = parse_instant(document.get("valid_from"))
         end = parse_instant(document.get("valid_to"))
@@ -498,21 +513,20 @@ class OwnerMemoryCardProjector:
 
     @staticmethod
     def _conversation_freshness(conversation: Mapping[str, Any], source: Mapping[str, Any]) -> dict[str, Any]:
-        if str(source.get("status") or "").lower() in {"revoked", "expired", "disabled"}:
+        if str(source.get("status") or "").lower() in {"revoked", "expired", "disabled", "archived"}:
             return {"state": "source_revoked", "reason": "来源已撤销或过期", "replacement_id": None}
-        if not conversation.get("started_at") and not conversation.get("ended_at"):
+        started = conversation.get("started_at")
+        ended = conversation.get("ended_at")
+        if not started and not ended:
             return {"state": "unknown", "reason": "缺少证据时间", "replacement_id": None}
+        parsed = [parse_instant(value) for value in (started, ended) if value not in (None, "")]
+        if not parsed or any(value is None for value in parsed):
+            return {"state": "unknown", "reason": "证据时间格式无法确认", "replacement_id": None}
         return {"state": "current", "reason": None, "replacement_id": None}
 
     @staticmethod
     def _development_lines(document: Mapping[str, Any], evidence: list[dict[str, Any]]) -> list[str]:
         lines = [str(item.get("preview") or "").strip() for item in evidence if str(item.get("preview") or "").strip()]
-        if not lines:
-            relationships = OwnerMemoryCardProjector._relationships(document)
-            candidate = relationships.get("development_lines") or relationships.get("evidence_lines") or []
-            if isinstance(candidate, str):
-                candidate = [candidate]
-            lines = [" ".join(str(item).split())[:MAX_PREVIEW] for item in candidate if str(item).strip()]
         return lines[:MAX_EVIDENCE]
 
     @staticmethod
@@ -562,7 +576,7 @@ class OwnerMemoryCardProjector:
         refs = relationships.get("evidence_refs") or relationships.get("source_refs") or []
         if isinstance(refs, (str, Mapping)):
             return [refs]
-        return list(refs)[:MAX_EVIDENCE]
+        return list(refs)
 
     @staticmethod
     def _ref_value(ref: Any) -> str:
@@ -573,7 +587,12 @@ class OwnerMemoryCardProjector:
     @staticmethod
     def _latest_time(items: Iterable[Mapping[str, Any]]) -> str | None:
         values = [str(item.get("occurred_at") or "").strip() for item in items if str(item.get("occurred_at") or "").strip()]
-        return max(values) if values else None
+        if not values:
+            return None
+        parsed = [(parse_instant(value), value) for value in values]
+        if any(instant is None for instant, _value in parsed):
+            return None
+        return max(parsed, key=lambda pair: pair[0])[1]
 
     @staticmethod
     def _items(response: Any) -> list[dict[str, Any]]:

@@ -139,6 +139,45 @@ class FixtureStatistics:
         return {"state": "unavailable", "expected": None, "indexed": None, "missing": None}
 
 
+class CompleteCoverageStatistics(FixtureStatistics):
+    def vector_status(self):
+        return {"state": "healthy", "ready": True, "collection_exists": True, "vectors": 2}
+
+    def vector_coverage(self):
+        return {"state": "healthy", "expected": 2, "indexed": 2, "missing": 0}
+
+
+class MessageFixtureSources(FixtureSources):
+    def __init__(self, messages=None, source_status="active", conversation_times=None):
+        self.messages = messages or {}
+        self.source_status = source_status
+        self.conversation_times = conversation_times
+
+    def get_source(self, source_id, **kwargs):
+        return {"item": {"source_id": source_id, "source_type": "codex_rollout", "display_name": "Codex 历史", "status": self.source_status}}
+
+    def get_message(self, message_id, **kwargs):
+        value = self.messages.get(message_id, {})
+        return {"item": {"message_id": message_id, "conversation_id": value.get("conversation_id", "conv-1"), "source_id": "src-codex", "role": "assistant", "occurred_at": value.get("occurred_at", "2026-03-01T10:00:00Z"), "content": value.get("content", "evidence"), "content_hash": value.get("content_hash", f"hash-{message_id}")}}
+
+    def list_conversations(self, **kwargs):
+        started_at, ended_at = self.conversation_times or ("2026-03-01T10:00:00Z", "2026-03-01T10:02:00Z")
+        return {"items": [{"conversation_id": "conv-1", "source_id": "src-codex", "title": "fixture", "message_count": 0, "started_at": started_at, "ended_at": ended_at}], "pagination": {"total": 1}}
+
+    def list_messages(self, **kwargs):
+        return {"items": [], "pagination": {"total": 0}}
+
+
+class FalseSemantic:
+    def exists(self, chunk_id):
+        return False
+
+
+class MalformedVectorStatistics(CompleteCoverageStatistics):
+    def vector_coverage(self):
+        return {"state": "healthy", "expected": "many", "indexed": "?", "missing": "?"}
+
+
 class FixturePromotionEvents:
     def recent_events(self, limit=100000):
         return [{
@@ -198,6 +237,75 @@ def test_pending_promotion_event_is_read_as_a_candidate_without_persisting_a_mem
     assert card["state"] == "needs_review"
     assert card["action"]["type"] == "confirm"
     assert card["layers"]["permanent"]["state"] == "pending_owner_review"
+
+
+def test_unverified_development_lines_are_not_projected():
+    database = FixtureDatabase()
+    database.documents[0]["relationships"]["evidence_refs"] = []
+    database.documents[0]["relationships"]["development_lines"] = ["UNSUPPORTED CLAIM"]
+    card = OwnerMemoryCardProjector(database, MessageFixtureSources(), FixtureStatistics()).get_card("mem-active")["item"]
+    assert card["developments"] == []
+
+
+def test_rejected_promotion_event_keeps_rejected_state():
+    class RejectedEvents:
+        def recent_events(self, limit=100000):
+            return [{"event_type": "memory_promotion_owner_rejected", "entity_id": "rejected", "payload_json": '{"candidate_id":"rejected","status":"rejected","title":"Rejected"}'}]
+    card = OwnerMemoryCardProjector(FixtureDatabase(), MessageFixtureSources(), FixtureStatistics(), state_db=RejectedEvents()).get_card("rejected")["item"]
+    assert card["state"] == "rejected"
+    assert card["action"]["type"] != "confirm"
+
+
+def test_vector_state_is_checked_per_memory_not_global_coverage():
+    gateway = SimpleNamespace(retriever=SimpleNamespace(semantic_provider=FalseSemantic()))
+    card = OwnerMemoryCardProjector(FixtureDatabase(), MessageFixtureSources(), CompleteCoverageStatistics(), gateway=gateway).get_card("mem-active")["item"]
+    assert card["layers"]["vector"]["state"] in {"partial", "unavailable", "unknown"}
+
+
+def test_all_provenance_refs_are_verified_even_when_preview_is_bounded():
+    database = FixtureDatabase()
+    refs = [{"kind": "message", "value": f"msg-{index}", "content_hash": f"hash-msg-{index}"} for index in range(1, 4)]
+    refs.append({"kind": "message", "value": "msg-4", "content_hash": "wrong"})
+    database.documents[0]["relationships"]["evidence_refs"] = refs
+    messages = {f"msg-{index}": {"content_hash": f"hash-msg-{index}"} for index in range(1, 5)}
+    card = OwnerMemoryCardProjector(database, MessageFixtureSources(messages), FixtureStatistics()).get_card("mem-active")["item"]
+    assert card["trust"]["provenance"] == "mismatch"
+    assert card["evidence_count"] == 4
+
+
+def test_latest_evidence_time_uses_timezone_aware_instants():
+    database = FixtureDatabase()
+    database.documents[0]["relationships"]["evidence_refs"] = [{"kind": "message", "value": "early"}, {"kind": "message", "value": "late"}]
+    messages = {"early": {"occurred_at": "2026-03-01T00:00:00Z"}, "late": {"occurred_at": "2026-02-28T23:30:00-05:00"}}
+    card = OwnerMemoryCardProjector(database, MessageFixtureSources(messages), FixtureStatistics()).get_card("mem-active")["item"]
+    assert card["source"]["latest_evidence_at"] == "2026-02-28T23:30:00-05:00"
+
+
+def test_archived_source_is_not_current():
+    card = OwnerMemoryCardProjector(FixtureDatabase(), MessageFixtureSources(source_status="archived"), FixtureStatistics()).get_card("mem-active")["item"]
+    assert card["freshness"]["state"] == "source_revoked"
+    assert card["action"]["type"] == "reauthorize_source"
+
+
+def test_malformed_conversation_timestamp_is_unknown():
+    database = FixtureDatabase()
+    database.documents = []
+    card = OwnerMemoryCardProjector(database, MessageFixtureSources(conversation_times=("not-a-time", None)), FixtureStatistics()).get_card("conversation:conv-1")["item"]
+    assert card["freshness"]["state"] == "unknown"
+
+
+def test_unknown_evidence_has_owner_review_action():
+    database = FixtureDatabase()
+    database.documents[0]["relationships"]["evidence_refs"] = []
+    database.documents[0]["confidence"] = None
+    card = OwnerMemoryCardProjector(database, MessageFixtureSources(), FixtureStatistics()).get_card("mem-active")["item"]
+    assert card["trust"]["provenance"] == "unknown"
+    assert card["action"]["type"] == "review"
+
+
+def test_malformed_vector_counts_fail_closed():
+    card = OwnerMemoryCardProjector(FixtureDatabase(), MessageFixtureSources(), MalformedVectorStatistics()).get_card("mem-active")["item"]
+    assert card["layers"]["vector"]["state"] in {"unknown", "unavailable"}
 
 
 @pytest.mark.parametrize("limit", [0, 51])

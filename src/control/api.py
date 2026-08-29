@@ -215,6 +215,7 @@ def create_control_app(
         state: str | None = Query(default=None),
         action: str | None = Query(default=None),
         source: str | None = Query(default=None),
+        source_id: str | None = Query(default=None),
         limit: int = Query(default=20, ge=1, le=50),
         offset: int = Query(default=0, ge=0),
         include_evidence: bool = Query(default=False),
@@ -224,7 +225,7 @@ def create_control_app(
             return memory_inspector().list_cards(
                 state=state,
                 action=action,
-                source=source,
+                source=source or source_id,
                 limit=limit,
                 offset=offset,
                 include_evidence=include_evidence or expand,
