@@ -283,3 +283,32 @@ TDD 证据：新增真实 Playwright rendered fixture 后，首次运行在空�
 主人数据；父任务要求保留的 `desktop/lingji-control/src-tauri/binaries/`
 未跟踪打包产物保持原样。主人仍需在新的 macOS 候选上确认“能看懂”，因此本报告
 状态仍为 `READY_FOR_OWNER_EXPERIENCE`，不能据此宣称 Phase 1 或最终发布通过。
+
+## 21. Real UI Repair Round 1 — 活动事实边界
+
+独立审查发现上一轮活动压缩逻辑存在两项重要问题：读取了错误的结果字段，
+无法识别正式自动扫描的 `outcome.summary`；并且会把所有 quiet 条目集中合并，
+跨越失败、不同来源和分页边界。本轮仅在 Desktop 活动展示层修复。
+
+- 新增受控 `normalizeActivityResult`：优先读取正式 `outcome.summary`；严格匹配
+  “扫描完成，已检查 0 个来源文件（新增 0，复用 0）”（及受控 ASCII 括号等价形状）
+  才显示“检查完成，未发现新内容”。真实新增/更新文本、失败文本和处理中状态不会
+  被归类为空扫描，也不会被 `summary.result=成功` 覆盖。
+- 新增稳定来源身份判定：优先使用 `summary.source_id`，否则使用
+  `work.source_id`；没有身份的条目不参与压缩。合并只发生在输入顺序中相邻、
+  同一身份的成功空扫描连续段，连续段长度至少为 2；失败、处理中、变化记录、
+  不同来源和跨页记录都不会合并。次数只来自该段实际条数，不使用 API `total` 或
+  `has_more` 推断。单条空扫描仍显示友好结果，但不虚构“近期已检查1次”。
+- Activity WorkCard 与压缩逻辑共用同一结果归一化 helper；正式技术数据仍保留在
+  原始对象/折叠详情中。
+
+TDD 证据：真实渲染 fixture 先以正式 WorkProjector shape（`summary.result=成功`、
+`outcome.summary` 为实际扫描结果）复现 RED；随后通过空/失败/空、同名不同来源、
+变化、跨页、单条和处理中矩阵取得 GREEN。`npm run test:e2e:memory` PASS，
+`npm run test:smoke` PASS（23 scripts），`npm run build` PASS（92 modules），
+API 回归 `25 passed, 1 warning`，`compileall`、`git diff --check`、验收同步和
+本机交接检查均完成；产品/测试提交为 `c6edcd2`。
+
+本轮没有打包、安装或操作 live App，没有访问 Acceptance/Production/Vault/主人数据；
+父任务预先存在的 `desktop/lingji-control/src-tauri/binaries/` 未跟踪打包产物未修改。
+独立复审和主人最终可读性确认仍然是后续门槛。

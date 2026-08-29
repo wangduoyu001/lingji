@@ -1,5 +1,11 @@
 # 验收要求变更记录
 
+## 2026-08-29 · Task 8E · Owner UI Repair Round 1 — activity contract correction
+
+- 独立审查发现上一轮活动页合并规则未遵守正式 WorkProjector 数据形状，也可能跨失败、不同来源或分页边界合并。本轮仅修复 Desktop 展示适配：空扫描判断优先使用 `outcome.summary`，仅对明确的 0 文件扫描文本归一为“检查完成，未发现新内容”；`summary.result=成功` 不再遮蔽真实结果。活动合并只处理输入顺序中相邻、同一 `summary.source_id`（回退 `work.source_id`）的成功空扫描，次数只来自该段实际记录，不使用 API total/has_more；变化、失败、处理中和不同 source_id 均保持独立。后端、API、自动化、队列、数据模型和记忆权威不变。
+- rendered E2E fixture 采用正式 WorkProjector shape，并覆盖空/失败/空、同名不同 source_id、变化扫描、跨页 total、单条和处理中矩阵；先取得 RED，再 GREEN。`npm run test:e2e:memory` PASS，`npm run test:smoke`（23 scripts）PASS，`npm run build` PASS（92 modules），API 回归 `25 passed, 1 warning`，compileall/diff-check/local-handoff PASS。
+- 本轮不打包、不安装、不停止或操作 live App，不访问 Acceptance/Production/Vault/主人数据；未跟踪的父任务打包产物保持原样。产品/测试提交：`c6edcd2`；报告沿用 `.superpowers/sdd/2026-08-29-task8e-owner-plain-ui/task-report.md`，文档提交另行记录。需独立复审后才能进入新的主人体验观察。
+
 ## 2026-08-29 · Task 8E · Owner-facing plain UI repair — real release feedback follow-up
 
 - 主人真实观察仍然无法读懂普通页面。本轮仅修复展示层：Claude 受官方能力限制的说明改为完整中文并隐藏授权动作；Obsidian 来源统一显示为“Obsidian 长期记忆区”，普通卡片不显示目录名；空扫描显示“检查完成，未发现新内容”，系统下一步显示“灵机会继续自动检查”；同一来源近期连续的成功且无变化检查在活动页合并为一条并显示次数，失败、处理中和待主人处理的工作仍逐条保留；启动/恢复/高级诊断眉标不再使用装饰性英文。后端、自动化、队列、数据模型和永久记忆权威不变。
