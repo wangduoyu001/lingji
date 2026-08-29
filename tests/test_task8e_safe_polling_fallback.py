@@ -162,6 +162,8 @@ def test_event_watcher_default_is_platform_specific_and_explicit_override_wins()
     assert AutomaticMemoryScheduler.resolve_event_watcher_enabled(None, platform_name="linux") is True
     assert AutomaticMemoryScheduler.resolve_event_watcher_enabled(True, platform_name="darwin") is True
     assert AutomaticMemoryScheduler.resolve_event_watcher_enabled(False, platform_name="win32") is False
+    for malformed in ("macOS", "darwin-arm64", "unknown", "", None):
+        assert AutomaticMemoryScheduler.resolve_event_watcher_enabled(None, platform_name=malformed) is False
 
 
 def test_fallback_stays_quiet_for_two_reconciliation_periods_and_discovers_on_schedule(tmp_path: Path):
@@ -268,6 +270,17 @@ def test_api_runtime_and_summary_report_the_same_periodic_interval(tmp_path: Pat
     assert runtime_payload["event_watcher_enabled"] is False
     assert runtime_payload["next_reconciliation_seconds"] == 900.0
     assert "15 minutes" in summary_payload["next_action"]
+    for invalid in (0, -1, float("nan"), float("inf"), None):
+        scheduler.next_reconciliation_seconds = invalid
+        runtime_payload = client.get("/api/automatic-memory/runtime").json()
+        summary_payload = client.get("/api/automatic-memory/summary").json()
+        assert runtime_payload["next_reconciliation_seconds"] is None
+        assert runtime_payload["reconciliation_interval_seconds"] is None
+        assert runtime_payload["max_change_detection_delay_seconds"] is None
+        assert summary_payload["reconciliation_interval_seconds"] is None
+        assert summary_payload["max_change_detection_delay_seconds"] is None
+        assert "at most" not in summary_payload["next_action"]
+        assert "interval unavailable" in summary_payload["next_action"]
 
 
 def test_runtime_composition_uses_injected_platform_and_explicit_override(tmp_path: Path):

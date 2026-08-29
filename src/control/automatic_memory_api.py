@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import math
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -134,6 +135,8 @@ def register_automatic_memory_routes(
         interval = getattr(scheduler, "next_reconciliation_seconds", None)
         try:
             interval = float(interval) if interval is not None else None
+            if interval is not None and (not math.isfinite(interval) or interval <= 0):
+                interval = None
         except (TypeError, ValueError):
             interval = None
         if interval is None:

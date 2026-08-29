@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
+import math
 from pathlib import Path
 from threading import RLock
 from typing import Any, Callable
@@ -30,7 +31,8 @@ from src.work.store import WorkStore
 
 def _optional_float(value: Any) -> float | None:
     try:
-        return float(value) if value is not None else None
+        numeric = float(value) if value is not None else None
+        return numeric if numeric is not None and math.isfinite(numeric) and numeric > 0 else None
     except (TypeError, ValueError):
         return None
 
@@ -96,6 +98,18 @@ class AutomaticMemoryRuntime:
                 # Task 3 supplies the authorized path policy.
                 path_provider=path_provider or self._authorized_paths,
             )
+            configured_event_watcher = getattr(
+                settings, "automatic_memory_event_watcher_enabled", None
+            )
+            if self._platform_provider is None:
+                event_watcher_enabled = resolve_event_watcher_enabled(
+                    configured_event_watcher
+                )
+            else:
+                event_watcher_enabled = resolve_event_watcher_enabled(
+                    configured_event_watcher,
+                    platform_name=self._platform_provider(),
+                )
             scheduler = AutomaticMemoryScheduler(
                 self.state_db,
                 self.registry,
@@ -110,10 +124,7 @@ class AutomaticMemoryRuntime:
                 integrity_seconds=float(
                     getattr(settings, "automatic_memory_integrity_seconds", 86400.0)
                 ),
-                event_watcher_enabled=resolve_event_watcher_enabled(
-                    getattr(settings, "automatic_memory_event_watcher_enabled", None),
-                    platform_name=(self._platform_provider() if self._platform_provider else None),
-                ),
+                event_watcher_enabled=event_watcher_enabled,
                 heartbeat_seconds=float(
                     getattr(settings, "automatic_memory_heartbeat_seconds", 5.0)
                 ),

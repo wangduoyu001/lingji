@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-import sys
+import platform
+
+
+_USE_SYSTEM_PLATFORM = object()
+_EVENT_WATCHER_PLATFORMS = frozenset({"windows", "win32", "linux"})
 
 
 def resolve_event_watcher_enabled(
     configured: bool | None,
     *,
-    platform_name: str | None = None,
+    platform_name: str | None | object = _USE_SYSTEM_PLATFORM,
 ) -> bool:
     """Resolve event admission with an injectable platform value.
 
@@ -18,5 +22,12 @@ def resolve_event_watcher_enabled(
     """
     if configured is not None:
         return bool(configured)
-    current_platform = str(platform_name or sys.platform).strip().lower()
-    return current_platform != "darwin"
+    if platform_name is _USE_SYSTEM_PLATFORM:
+        platform_name = platform.system()
+    current_platform = str(platform_name).strip().lower()
+    if current_platform == "darwin":
+        return False
+    if current_platform in _EVENT_WATCHER_PLATFORMS:
+        return True
+    # Unknown or malformed platform values fail closed to the safer mode.
+    return False

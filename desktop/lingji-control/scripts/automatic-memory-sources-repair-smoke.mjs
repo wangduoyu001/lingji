@@ -12,6 +12,11 @@ assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconcili
 assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: 900 }), /最迟 15 分钟发现变化/);
 assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: 1800 }), /最迟 30 分钟发现变化/);
 assert.match(periodicReconciliationNotice({ automation_mode: "periodic_reconciliation" }), /尚未获得/);
+for (const invalid of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, null]) {
+  const notice = periodicReconciliationNotice({ automation_mode: "periodic_reconciliation", next_reconciliation_seconds: invalid });
+  assert.match(notice, /尚未获得/);
+  assert.doesNotMatch(notice, /最迟 .* 分钟发现变化/);
+}
 assert.equal(periodicReconciliationNotice({ automation_mode: "event_watcher", next_reconciliation_seconds: 900 }), "");
 const [contract, sourcesPage, overviewPage, workPage, codexPage, reviewPage, autoReviewPage, capturePage, obsidianPage, vectorPage, inspectorPage] = await Promise.all([
   sourceText("../src/pages/codexWorkspaceContract.ts"), sourceText("../src/pages/MemorySourcesPage.tsx"),
