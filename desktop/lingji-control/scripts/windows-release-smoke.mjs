@@ -71,8 +71,8 @@ assert.equal(hook.includes("vault_path"), false, "Copied diagnostics must not ex
 assert.match(shell, /复制诊断信息/);
 assert.match(shell, /releaseMetadata\?\.version/);
 assert.match(shell, /desktop-runtime-tools/);
-assert.match(boundary, /AUTOMATIC RUNTIME/);
-assert.match(boundary, /DATA ROOT REQUIRED/);
+assert.match(boundary, /灵机自动运行/);
+assert.match(boundary, /需要选择数据目录/);
 assert.match(boundary, /恢复运行/);
 assert.equal(boundary.includes(">启动核心</button>"), false, "Routine installed startup must remain automatic");
 

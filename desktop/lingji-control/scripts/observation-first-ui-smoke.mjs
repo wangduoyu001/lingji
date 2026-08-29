@@ -61,9 +61,9 @@ assert.match(shell, /返回高级诊断/);
 
 assert.match(app, /autoRecoveryActive/);
 assert.match(app, /RuntimeBoundary/);
-assert.match(boundary, /OWNER PAUSED/);
-assert.match(boundary, /AUTO RECOVERY/);
-assert.match(boundary, /DATA ROOT REQUIRED/);
+assert.match(boundary, /主人已暂停/);
+assert.match(boundary, /自动恢复/);
+assert.match(boundary, /需要选择数据目录/);
 assert.match(boundary, /保存配置并启动核心/);
 assert.equal(
   boundary.includes(">启动核心</button>"),

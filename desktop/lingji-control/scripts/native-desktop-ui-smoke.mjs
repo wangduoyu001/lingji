@@ -19,7 +19,7 @@ const [app, shell, boundary, api, connection, navigation, styles, tauri] = await
 
 assert.match(app, /DesktopShell/);
 assert.match(app, /RuntimeBoundary/);
-assert.match(boundary, /仅桌面端|DESKTOP ONLY/);
+assert.match(boundary, /仅桌面端/);
 assert.match(boundary, /不提供浏览器操作入口/);
 assert.equal(app.includes("API 地址"), false);
 assert.equal(app.includes("connection-panel"), false);

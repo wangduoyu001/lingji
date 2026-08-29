@@ -8,6 +8,15 @@ export type CurrentWorkFact = WorkFact;
 
 const text = (value: unknown, fallback = "检查结果尚未获得") =>
   value === null || value === undefined || value === "" ? fallback : String(value);
+const readableWorkTitle = (value: unknown): string => {
+  const title = String(value ?? "");
+  return /^扫描\s+obsidian$/i.test(title) ? "Obsidian 长期记忆区" : title;
+};
+const readableNextAction = (action: WorkFact["next_action"] | undefined): string => {
+  if (!action) return "暂时没有下一步";
+  if (action.actor === "system") return "灵机会继续自动检查";
+  return text(action.description);
+};
 const statusLabel = (value: unknown): string => ({
   queued: "排队中",
   active: "正在处理",
@@ -45,12 +54,12 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
       <div className="current-work-heading">
         <div>
           <h2>正在做什么</h2>
-          <p className="current-work-readable">{hasWork ? text(work?.title) : "目前没有正在处理的事情。"}</p>
+          <p className="current-work-readable">{hasWork ? readableWorkTitle(work?.title) : "目前没有正在处理的事情。"}</p>
         </div>
         <span className="pill">{status}</span>
       </div>
       {resource.stale && <Notice kind="warning">当前工作状态正在刷新。</Notice>}
-      {hasWork && <div className="current-work-readable-line"><span>结果：{text(fact?.outcome?.summary, "还没有结果")}</span><span>下一步：{text(fact?.next_action?.description, "暂时没有下一步")}</span></div>}
+      {hasWork && <div className="current-work-readable-line"><span>结果：{text(fact?.outcome?.summary, "还没有结果")}</span><span>下一步：{readableNextAction(fact?.next_action)}</span></div>}
 
       <details className="current-work-timeline">
         <summary>查看技术详情</summary>

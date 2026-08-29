@@ -30,7 +30,7 @@ export default function DiagnosticsPage({ onNavigate }: { onNavigate: (page: Pag
     <div className="stack observation-page diagnostics-page">
       <section className="observation-hero diagnostics-hero">
         <div>
-          <span className="desktop-eyebrow">ADVANCED DIAGNOSTICS</span>
+          <span className="desktop-eyebrow">高级诊断入口</span>
           <h2>高级诊断</h2>
           <p>日常不需要进入这里。只有状态异常、需要核查或调整配置时再打开详细页面。</p>
         </div>

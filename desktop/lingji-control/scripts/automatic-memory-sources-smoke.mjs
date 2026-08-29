@@ -41,7 +41,7 @@ assert.doesNotMatch(pageSource, /String\(snapshot\.runtime\?\.cleanup_error/);
 assert.equal(snapshot.sources.length, 2);
 assert.equal(snapshot.sources.find((item) => item.kind === "codex_transcript")?.state, "current");
 assert.equal(snapshot.sources.find((item) => item.kind === "claude_desktop")?.state, "unsupported");
-assert.equal(snapshot.sources.find((item) => item.kind === "claude_desktop")?.detail, "Claude 暂不支持自动导入旧记录。");
+assert.equal(snapshot.sources.find((item) => item.kind === "claude_desktop")?.detail, "Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。");
 assert.match(snapshot.sources.find((item) => item.kind === "claude_desktop")?.nextAction ?? "", /不要读取|官方导出/);
 assert.equal(ownerSourceName({ kind: "obsidian", display_name: "Managed Obsidian memory" }), "Obsidian 长期记忆区");
 assert.equal(sourceStateLabel("available"), "已发现");

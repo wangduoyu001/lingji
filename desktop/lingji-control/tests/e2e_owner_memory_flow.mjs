@@ -4,12 +4,12 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed" };
+const state = { authorized: false, revoked: false, scan: null, scanReads: 0, scanRequests: 0, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", currentWorkMode: "normal", activityBurst: false, detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed" };
 const allStateDiscovered = [
   ["detected", "available"], ["consent", "consent_required"], ["unsupported", "unsupported"], ["authorized", "available"],
   ["scanning", "available"], ["current", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
 ].map(([suffix, status]) => ({ kind: `fixture_${suffix}`, display_name: `测试${suffix}`, candidate_root: `/tmp/${suffix}`, status, capability: "metadata_discovery", reason: status === "unsupported" ? "不读取不透明存储" : null }));
-allStateDiscovered.push({ kind: "obsidian", display_name: "Managed Obsidian memory", candidate_root: "/tmp/obsidian", status: "available", capability: "metadata_discovery", reason: null });
+allStateDiscovered.push({ kind: "obsidian", display_name: "Managed Obsidian memory", candidate_root: "/tmp/vault", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "claude_desktop", display_name: "Claude Desktop", candidate_root: "", status: "unsupported", capability: "metadata_discovery", reason: "Claude Desktop has no approved official export schema; opaque storage is not read" });
 allStateDiscovered.push({ kind: "codex", display_name: "Codex transcript", candidate_root: "/tmp/codex", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "chatgpt_export", display_name: "ChatGPT official export", candidate_root: "/tmp/chatgpt", status: "available", capability: "metadata_discovery", reason: null });
@@ -80,7 +80,8 @@ const server = http.createServer((req, res) => {
     if (path === "/__test/all-states") { state.allStates = true; return json(res, 200, { ok: true }); }
     if (path === "/__test/omit-home-counts") { state.omitHomeCounts = body.includes("true"); return json(res, 200, { ok: true }); }
     if (path === "/__test/source-mode") { state.sourceMode = body.trim() || "default"; state.allStates = false; state.authorized = false; state.revoked = false; state.scan = null; return json(res, 200, { ok: true, source_mode: state.sourceMode }); }
-    if (path === "/__test/current-work-status") { state.currentWorkNull = body.trim() === "null"; state.currentWorkStatus = body.trim() || "accepted"; return json(res, 200, { ok: true, current_work_status: state.currentWorkStatus }); }
+    if (path === "/__test/current-work-status") { state.currentWorkNull = body.trim() === "null"; state.currentWorkMode = body.trim() === "empty-scan" ? "empty-scan" : "normal"; state.currentWorkStatus = body.trim() || "accepted"; return json(res, 200, { ok: true, current_work_status: state.currentWorkStatus }); }
+    if (path === "/__test/activity-burst") { state.activityBurst = body.includes("true"); return json(res, 200, { ok: true, activity_burst: state.activityBurst }); }
     if (path === "/__test/detail-count-mode") { state.detailCountMode = body.trim() || "missing"; return json(res, 200, { ok: true, detail_count_mode: state.detailCountMode }); }
     if (path === "/__test/pending-outage") { state.pendingOutage = body.includes("true"); return json(res, 200, { ok: true, pending_outage: state.pendingOutage }); }
     if (path === "/__test/release-onboarding") { state.onboardingRelease = true; return json(res, 200, { ok: true }); }
@@ -99,8 +100,17 @@ const server = http.createServer((req, res) => {
       return json(res, 200, detail);
     }
     if (path === "/api/automatic-memory/revoke") { state.authorized = false; state.revoked = true; state.scan = null; return json(res, 200, { source_id: "src-fixture", status: "revoked" }); }
-    if (path === "/api/work/history") return json(res, 200, { items: [{ work: { work_id: "work-capture-1", title: "整理项目会议记录", status: "completed", source_id: "source-1", updated_at: "2026-08-28T08:00:00Z" }, events: [{ event_id: "event-1", event_type: "completed", detail: { internal: "not primary" } }], outcome: { status: "completed", summary: "已保存 1 条记忆" }, next_action: null, pending_actions: [], failure: null, summary: { source: "项目会议", phase: "已完成", result: "已保存 1 条记忆", next_actor: null, time: "2026-08-28T08:00:00Z", source_id: "source-1" } }], total: 1, has_more: false, limit: 20, offset: 0 });
-    if (path === "/api/work/current") return json(res, 200, state.currentWorkNull ? { work: null, events: [], outcome: null, next_action: null } : { work: { work_id: "work-current-1", title: "整理会议记录", status: state.currentWorkStatus, source_id: "source-1" }, events: [], outcome: null, next_action: null });
+    if (path === "/api/work/history") {
+      const normalItem = { work: { work_id: "work-capture-1", title: "整理项目会议记录", status: "completed", source_id: "source-1", updated_at: "2026-08-28T08:00:00Z" }, events: [{ event_id: "event-1", event_type: "completed", detail: { internal: "not primary" } }], outcome: { status: "completed", summary: "已保存 1 条记忆" }, next_action: null, pending_actions: [], failure: null, summary: { source: "项目会议", phase: "已完成", result: "已保存 1 条记忆", next_actor: null, time: "2026-08-28T08:00:00Z", source_id: "source-1" } };
+      const quietScan = (index) => ({ work: { work_id: `work-quiet-${index}`, title: "扫描 obsidian", status: "completed", source_id: "src-obsidian", updated_at: "2026-08-28T08:00:00Z" }, events: [{ event_id: `event-quiet-${index}`, event_type: "scan.completed", detail: {} }], outcome: { status: "completed", summary: "检查完成，未发现新内容" }, next_action: { action_id: `action-quiet-${index}`, work_id: `work-quiet-${index}`, description: "灵机", actor: "system" }, pending_actions: [], failure: null, summary: { source: "obsidian", phase: "已完成", result: "检查完成，未发现新内容", next_actor: "system", time: "2026-08-28T08:00:00Z", source_id: "src-obsidian" } });
+      const items = state.activityBurst ? Array.from({ length: 102 }, (_, index) => quietScan(index)) : [normalItem];
+      return json(res, 200, { items, total: items.length, has_more: false, limit: 20, offset: 0 });
+    }
+    if (path === "/api/work/current") {
+      if (state.currentWorkNull) return json(res, 200, { work: null, events: [], outcome: null, next_action: null });
+      if (state.currentWorkMode === "empty-scan") return json(res, 200, { work: { work_id: "work-empty-scan", title: "扫描 obsidian", status: "completed", source_id: "src-obsidian" }, events: [], outcome: { work_id: "work-empty-scan", status: "completed", summary: "检查完成，未发现新内容" }, next_action: { action_id: "next-empty-scan", work_id: "work-empty-scan", description: "灵机", actor: "system" } });
+      return json(res, 200, { work: { work_id: "work-current-1", title: "整理会议记录", status: state.currentWorkStatus, source_id: "source-1" }, events: [], outcome: null, next_action: null });
+    }
     if (path === "/api/work/pending-actions") {
       if (state.pendingOutage) return json(res, 503, { detail: { code: "PENDING_OFFLINE", message: "pending service unavailable" } });
       return json(res, 200, { pending_actions: state.pendingResolved ? [] : [{ action_id: "action-1", work_id: "work-capture-1", description: "确认这条会议决定是否进入长期记忆", actor: "owner", resolved: false, created_at: "2026-08-28T08:01:00Z" }] });
@@ -210,7 +220,7 @@ try {
   await page.locator('[data-source-kind="generic_ai_history"]').getByRole("button", { name: "现在检查", exact: true }).click();
   await page.getByRole("heading", { name: "扫描失败" }).waitFor();
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
-  await page.getByText("这次检查没有完成，原来的记忆不会被删除。", { exact: true }).waitFor();
+  await page.locator(".memory-scan-detail").getByText("这次检查没有完成，原来的记忆不会被删除。", { exact: true }).waitFor();
   await page.getByRole("button", { name: "再次检查" }).click();
   await page.getByRole("heading", { name: "已接管" }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "missing" });
@@ -256,6 +266,15 @@ try {
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   await page.getByText("目前空闲", { exact: true }).waitFor();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/current-work-status`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "empty-scan" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+  await page.getByText("检查完成，未发现新内容", { exact: false }).waitFor();
+  await page.getByText("灵机会继续自动检查", { exact: false }).waitFor();
+  assert.equal(await page.getByText("下一步：灵机", { exact: true }).count(), 0, "system next action must be readable Chinese, not a raw actor");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/current-work-status`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "null" });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   await page.getByText(/最近一次检查(已完成|已记录|正在进行)/).waitFor();
   assert.equal(await page.getByText("本次新增", { exact: true }).count(), 0, "scan counts must be summarized in a readable sentence, not stacked as developer metrics");
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
@@ -287,7 +306,10 @@ try {
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   for (const heading of ["已发现", "需要确认", "暂不支持", "已授权", "扫描中", "已接管", "需要检查", "已撤销", "扫描失败"]) await page.getByRole("heading", { name: heading }).first().waitFor();
   await page.locator('[data-source-kind="obsidian"]').getByText("Obsidian 长期记忆区", { exact: true }).waitFor();
-  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂不支持自动导入旧记录。", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="obsidian"]').getByText("你选择的目录", { exact: false }).waitFor();
+  assert.equal(await page.locator('[data-source-kind="obsidian"]').getByText("vault", { exact: true }).count(), 0, "ordinary source card must not expose the root leaf");
+  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
+  assert.equal(await page.locator('[data-source-kind="claude_desktop"]').getByRole("button", { name: /开始记忆|选择文件夹/ }).count(), 0, "unsupported Claude must not offer an authorization action");
   await page.locator('[data-source-kind="codex"]').getByText("Codex聊天记录", { exact: true }).waitFor();
   await page.locator('[data-source-kind="chatgpt_export"]').getByText("ChatGPT导出记录", { exact: true }).waitFor();
   await page.locator('[data-source-kind="generic"]').getByText("其他AI聊天投递箱", { exact: true }).waitFor();
@@ -321,7 +343,7 @@ try {
   await page.waitForTimeout(300);
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
   await page.getByText("暂时没有可连接的记录来源。", { exact: true }).waitFor();
-  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂不支持自动导入旧记录。", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "claude-consent" });
   await page.waitForTimeout(300);
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
@@ -338,6 +360,14 @@ try {
   await page.getByText("已保存 1 条记忆", { exact: false }).waitFor();
   assert.equal(await page.getByText('"internal":"not primary"', { exact: false }).count(), 0, "raw event JSON must not be primary activity copy");
   assert.equal(await page.getByText("source-1", { exact: true }).count(), 0, "source IDs must stay in collapsed technical details");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/activity-burst`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
+  await page.getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.getByText("近期已检查102次", { exact: false }).waitFor();
+  assert.equal(await page.locator(".activity-card").count(), 1, "repeated successful empty scans must be folded into one readable activity item");
+  await page.getByText("Obsidian 长期记忆区", { exact: true }).waitFor();
+  assert.equal(await page.getByText("扫描 obsidian", { exact: true }).count(), 0, "ordinary activity must not expose raw source names");
+  assert.equal(await page.getByText("下一步：灵机", { exact: true }).count(), 0, "ordinary activity must not expose system actor names");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/activity-burst`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
 
   await page.locator(".desktop-nav-item").filter({ hasText: "需要我处理" }).click();
   await page.locator("h1").filter({ hasText: "需要我处理" }).waitFor();
@@ -355,6 +385,8 @@ try {
   await page.getByText("你现在不用做任何事", { exact: true }).waitFor();
   assert.equal(await page.getByText("OWNER WORK FACT", { exact: true }).count(), 0, "internal work label must stay out of primary UI");
   assert.equal(await page.getByText("work-capture-1", { exact: true }).count(), 0, "work identity must stay in collapsed technical details");
+  assert.equal(await page.getByText("AUTOMATIC RUNTIME", { exact: true }).count(), 0, "ordinary UI must not use decorative English runtime labels");
+  assert.equal(await page.getByText("ADVANCED DIAGNOSTICS", { exact: true }).count(), 0, "ordinary UI must not use decorative English diagnostics labels");
 
   await page.locator(".desktop-nav-item").filter({ hasText: "高级诊断" }).click();
   await page.locator("details").filter({ hasText: "记忆与项目" }).locator("summary").click();

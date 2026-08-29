@@ -38,8 +38,9 @@ export function canonicalSourceKey(kind: unknown, root: unknown): string {
 }
 
 function rootName(root: string): string {
-  const clean = root.replaceAll("\\", "/").replace(/\/$/, "");
-  return clean.split("/").filter(Boolean).at(-1) || "来源目录";
+  // Ordinary owner-facing copy must not expose filesystem names.  The exact
+  // path remains available in the technical details/API for diagnostics.
+  return root.trim() ? "你选择的目录" : "来源目录";
 }
 
 export function ownerSourceName(source: { kind?: string | null; display_name?: string | null }): string {
@@ -81,7 +82,7 @@ function describe(discovered: DiscoveredSource, state: SourceState, scan?: ScanR
     return { detail: expired ? "授权已过期，需要重新授权。" : "来源或运行时需要检查，灵机会保留最近一次已知状态。", nextAction: expired ? "重新授权这个来源。" : "需要重启/检查后再试。" };
   }
   if (state === "unsupported") {
-    if (discovered.kind === "claude_desktop") return { detail: "Claude 暂不支持自动导入旧记录。", nextAction: "请使用 Claude 的官方导出，或暂不接入。" };
+    if (discovered.kind === "claude_desktop") return { detail: "Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。", nextAction: "请使用 Claude 的官方导出，或暂不接入。" };
     return { detail: discovered.reason || "当前没有可用的官方导出方式，灵机不会读取不透明存储。", nextAction: "请使用官方导出，或暂不接入。" };
   }
   if (state === "consent_required") return { detail: discovered.reason || "这个来源需要主人明确确认后才能继续。", nextAction: "确认允许的来源目录后再授权。" };

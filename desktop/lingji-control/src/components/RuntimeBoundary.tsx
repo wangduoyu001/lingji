@@ -56,7 +56,7 @@ export default function RuntimeBoundary({
       <section className="desktop-runtime-card desktop-runtime-card-blocked">
         <div className="desktop-runtime-symbol">桌</div>
         <div>
-          <span className="desktop-eyebrow">DESKTOP ONLY</span>
+          <span className="desktop-eyebrow">仅桌面端</span>
           <h2>请从灵机桌面应用启动</h2>
           <p>此控制中心不提供浏览器操作入口，也不会在浏览器中保存控制令牌或连接地址。</p>
         </div>
@@ -70,7 +70,7 @@ export default function RuntimeBoundary({
         <div className="desktop-runtime-symbol">盘</div>
         <div className="stack">
           <div>
-            <span className="desktop-eyebrow">DATA ROOT REQUIRED</span>
+            <span className="desktop-eyebrow">需要选择数据目录</span>
             <h2>先选择非 C 盘数据目录</h2>
             <p>
               数据库、向量、日志、缓存、原始材料和生成资产不会再静默写入 C 盘。
@@ -126,7 +126,7 @@ export default function RuntimeBoundary({
       <section className="desktop-runtime-card">
         <div className="desktop-spinner" aria-hidden="true" />
         <div>
-          <span className="desktop-eyebrow">AUTOMATIC RUNTIME</span>
+          <span className="desktop-eyebrow">灵机自动运行</span>
           <h2>{runtimeStateLabel(runtimeStatus)}</h2>
           <p>桌面端正在自动检查、启动并连接本机核心，不需要手动打开 PowerShell。</p>
         </div>
@@ -139,7 +139,7 @@ export default function RuntimeBoundary({
       {!connected && (
         <section className={ownerStopped ? "desktop-offline-banner owner-stopped" : "desktop-offline-banner"} role="status">
           <div>
-            <span className="desktop-eyebrow">{ownerStopped ? "OWNER PAUSED" : "AUTO RECOVERY"}</span>
+            <span className="desktop-eyebrow">{ownerStopped ? "主人已暂停" : "自动恢复"}</span>
             <strong>{ownerStopped ? "灵机核心已由主人停止" : error || "灵机正在自动恢复连接"}</strong>
             <small>
               {ownerStopped

@@ -151,10 +151,10 @@ assert.match(shell, /停止核心/);
 assert.match(shell, /重启核心/);
 assert.match(shell, /data_root_display/);
 assert.match(shell, /外部进程/);
-assert.match(boundary, /DATA ROOT REQUIRED/);
+assert.match(boundary, /需要选择数据目录/);
 assert.match(boundary, /保存配置并启动核心/);
 assert.match(boundary, /恢复运行/);
-assert.match(boundary, /AUTO RECOVERY/);
+assert.match(boundary, /自动恢复/);
 assert.equal(boundary.includes(">启动核心</button>"), false, "Routine Sidecar startup must remain automatic");
 
 assert.match(releaseHook, /runtime_data_root/);
