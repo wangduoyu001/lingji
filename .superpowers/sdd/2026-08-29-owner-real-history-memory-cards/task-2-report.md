@@ -159,3 +159,49 @@ The known, unchanged promotion recovery case 06 remains a baseline failure
 (`ROLLED_BACK` vs `VISIBLE_ACTIVE`); it is outside this Task2 repair diff and
 was neither modified nor hidden. No live 8766/8767, Desktop, Artifact,
 Acceptance, Production/Vault, real chat, or owner data was accessed.
+
+## Repair Round 3 (review baseline `2fc6a5b`)
+
+### RED evidence
+
+Extended the existing newest-terminal/missing-canonical reachability test with
+the required layer assertions and ran it before changing production code:
+
+```text
+python3 -m pytest -q tests/test_owner_memory_card_projector.py::test_latest_terminal_event_does_not_fallback_to_older_pending_when_projection_missing --tb=short
+1 failed
+AssertionError: assert 'available' in {'unavailable', 'unknown'}
+```
+
+The failure was specifically `layers.structured.state == "available"` while
+the same card reported `projection.state == "unavailable"`; the test also
+asserts that the per-card vector layer is not reported as available.
+
+### GREEN implementation
+
+Product/tests commit: `7d1c7c9`.
+
+- Canonical-memory cards now derive the structured layer from the canonical
+  projection state. Missing/unknown canonical projection reports structured
+  `unavailable` with the explicit canonical-projection reason.
+- Existing conversation-evidence cards and cards with an available canonical
+  projection retain their prior structured states.
+- The regression test reaches the real newest-terminal event path with an
+  empty canonical MemoryDatabase and verifies structured fail-closed behavior
+  plus no vector false-positive.
+
+### Round3 verification
+
+| Command | Result |
+|---|---|
+| `tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py` | 18 passed, 1 warning |
+| Round3 targeted terminal/vector regression | 2 passed |
+| affected `compileall` | PASS |
+| `git diff --check` | PASS |
+
+The required direct Inspector/temporal/promotion/vector regression matrix,
+acceptance-sync, and local-handoff were run after the docs update; results are
+recorded with the final Round3 evidence commit below. The unchanged promotion
+recovery case 06 remains a known baseline failure (`ROLLED_BACK` vs
+`VISIBLE_ACTIVE`), outside this diff. No live 8766/8767, Desktop, Artifact,
+Acceptance, Production/Vault, real chat, or owner data was accessed.

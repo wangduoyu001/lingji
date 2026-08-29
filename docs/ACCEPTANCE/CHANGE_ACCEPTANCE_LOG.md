@@ -2764,3 +2764,10 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 本条仅为现有权威文档事实对齐，不修改 `src/`、Desktop、tests 或 scripts；完成后必须
   运行 `./.venv/bin/python scripts/check_acceptance_sync.py`、
   `./.venv/bin/python scripts/check_local_execution_handoff.py`、diff-check，并远程复读提交。
+
+## 2026-08-29 · Task 2 Repair Round 3 · structured projection fail-closed
+
+- 基线：`2fc6a5b`；范围仅修复 canonical MemoryDB projection 缺失时的最后一项 Important，并补对应 reachability 断言；不改 API、权限、分页、向量事实源、promotion 写入、UI 或数据模型。
+- RED：在 newest terminal event + empty canonical MemoryDB 的真实 projector 路径中，新增断言首先复现 `layers.structured.state == available` 与 `projection.state == unavailable` 矛盾；同时断言逐卡 vector 不得为 available。
+- GREEN：`OwnerMemoryCardProjector._memory_card()` 现在由 canonical projection state 派生 structured layer；缺失/unknown 时为 `unavailable` 并给出明确原因，已有 projection 与未晋级 conversation evidence 保持原语义。产品/测试提交：`7d1c7c9`。
+- 验证要求：Task2 focused、Inspector/temporal/promotion/vector 直接回归、compileall、diff-check、acceptance-sync、local-handoff；禁止 live/App/Acceptance、真实聊天、Production/Vault 和 owner 数据。
