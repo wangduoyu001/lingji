@@ -49,3 +49,32 @@ Production/Vault, or owner data was accessed.
   no dependency installation was performed.
 - Full/release validation and physical owner acceptance are intentionally out
   of scope while `LOCAL_EXECUTION_TASK.md` is IDLE.
+
+## Round 1 repair evidence
+
+- Review-driven RED: the new ancestor-symlink, nullable missing-root, explicit-empty-
+  environment, mixed-session, and unknown-variant behavior checks initially produced
+  6 expected failures. The implementation then reached GREEN with the focused Task 1
+  suite at `14 passed`.
+- Product/tests commit: `2088813` (`fix: harden Codex rollout import boundaries`).
+- The adapter now uses bounded binary `readline(MAX_RECORD_BYTES + 1)`, strict
+  Darwin/effective-home checks at discovery, authorization, and automatic dispatch,
+  known envelope/variant fingerprinting, and durable content-addressed raw provenance.
+  Flow coverage includes crash/restart, terminal replay, revoke/current retrieval,
+  Work Fact identity, and third-party sentinel preservation. Discovery tests also
+  assert no rollout body open and bounded depth.
+- Verification:
+  `python3 -m pytest -q tests/test_owner_real_history_discovery.py tests/test_owner_codex_rollout_adapter.py tests/test_owner_real_history_import_flow.py --tb=short`
+  → `14 passed`;
+  the focused regression set (including automatic-memory discovery/runtime/API/
+  adapter regressions) → `79 passed, 3 warnings`;
+  rendered `npm run test:e2e:memory` → `PASS`;
+  `npm run test:smoke` → `PASS (23 scripts)`;
+  `npm run build` → `PASS` (93 modules);
+  compileall and diff-check → `PASS`.
+- `npm ci` was run only in this worktree; npm reported one moderate and one high
+  audit finding and allow-scripts warnings. No live app, Acceptance/Production/Vault,
+  or owner data was accessed.
+- A repository-wide `python3 -m pytest -q -x` audit reached `217 passed` before an
+  unrelated release-preflight test failed because this worktree has no `.venv/bin/python`;
+  no source change was made for that environment-only failure.

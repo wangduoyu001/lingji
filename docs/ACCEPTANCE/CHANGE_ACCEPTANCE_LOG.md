@@ -21,6 +21,21 @@
 - 未取得最终 reviewed product HEAD、release、同 SHA Mac Artifact、新 ACTIVE 本机任务、
   真实主人数据授权、全控件遍历和主人明确确认前，不得宣称 Mac 或 Phase 1 通过。
 
+## 2026-08-29 · Task 1 Round 1 · Codex rollout boundary repair
+
+- 针对独立 review 的 1 Critical、6 Important 与 Minor 项，仅在本 worktree 修复：
+  Codex 祖先 symlink/effective-home 精确根、授权与 adapter dispatch 双层校验、
+  durable content-addressed raw provenance、真正 bounded binary line reading、
+  strict envelope fingerprint、nullable metadata 与深度/目录预算；不增加数据库、
+  队列、端口或永久事实源。
+- 新增合成行为测试覆盖 malformed/truncated/unknown/mixed session、variant/identity、
+  body-open forbidden、crash/restart、终态重复扫描、撤销后 current retrieval、Work
+  Fact、第三方 sentinel；Desktop rendered E2E 及 23 项 smoke 必须保持通过。
+- 本轮已执行三份 Task 1 focused pytest、自动记忆回归、rendered E2E、23-script smoke、
+  build、compileall、diff-check。只允许合并 `2088813` 产品/测试提交与对应报告文档
+  提交；未执行 live/Acceptance/Production/Vault/真实主人数据验收。
+- 报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-1-report.md`。
+
 ## 2026-08-29 · Task 8E · Final UI wording — 活动记录刷新动作
 
 - 活动记录页按钮只会重新读取履历，不会发起来源扫描；本轮将普通按钮从“现在检查”改为
