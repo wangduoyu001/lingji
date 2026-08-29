@@ -260,3 +260,26 @@ Acceptance date: 2026-08-29 (focused checks)
 Report branch: codex/task8e-safe-polling-fallback
 Report commit: the commit containing this report (see final delivery SHA)
 ```
+
+## 20. 真实发布版主人可读性修复
+
+根代理在当前真实 `/Applications/灵机.app` 候选上观察到普通页面仍然难以理解，
+因此本轮只补齐对应的展示语义，不改后端、自动化、队列、数据模型、记忆权威或
+运行中的 App。修复内容如下：
+
+- Claude 受限卡片现在明确说明“Claude 暂时无法自动导入旧记录；灵机不会读取它的内部数据库。”，不提供误导性的授权按钮。
+- 普通来源和活动卡片使用“Obsidian 长期记忆区”，目录名不再出现在普通文案中；精确路径仍只留在技术详情/API。
+- 空扫描显示“检查完成，未发现新内容”，系统下一步显示“灵机会继续自动检查”。
+- 同一来源连续/近期的成功且无变化检查在活动页合并为一条，并显示例如“近期已检查102次”；失败、处理中和待主人处理的事项仍逐条展示。
+- 启动、自动恢复和高级诊断的眉标改为中文；技术详情和高级页面的技术内容仍可访问。
+
+TDD 证据：新增真实 Playwright rendered fixture 后，首次运行在空扫描结果断言处
+按预期 RED；随后最小实现 GREEN。`npm run test:e2e:memory` PASS，
+`npm run test:smoke` PASS（23 scripts），`npm run build` PASS（92 modules）。
+构建期间发现并修复一个新增可空类型错误后重新构建通过；`git diff --check`
+通过。产品/测试提交为 `77eeacb`。
+
+本轮未打包、未安装、未停止或修改真实 App，未访问 Acceptance/Production/Vault/
+主人数据；父任务要求保留的 `desktop/lingji-control/src-tauri/binaries/`
+未跟踪打包产物保持原样。主人仍需在新的 macOS 候选上确认“能看懂”，因此本报告
+状态仍为 `READY_FOR_OWNER_EXPERIENCE`，不能据此宣称 Phase 1 或最终发布通过。
