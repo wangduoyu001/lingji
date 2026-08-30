@@ -403,7 +403,23 @@ def test_core_lifecycle_actions_follow_current_status_without_candidate_api():
     assert projector.get_card("mem-active")["item"]["action"]["type"] == "invalidate"
 
     database.documents[0]["status"] = "archived"
-    assert projector.get_card("mem-active")["item"]["action"]["type"] == "archive"
+    card = projector.get_card("mem-active")["item"]
+    assert card["action"]["type"] == "review"
+    assert card["action"]["type"] not in {"archive", "invalidate", "correct"}
+
+
+def test_source_link_read_failure_fails_closed_to_unknown_provenance_and_review():
+    class BrokenLinksSources(FixtureSources):
+        def memory_sources(self, memory_id, **kwargs):
+            raise RuntimeError("read model unavailable")
+
+    card = OwnerMemoryCardProjector(
+        FixtureDatabase(), BrokenLinksSources(), FixtureStatistics()
+    ).get_card("mem-active")["item"]
+
+    assert card["trust"]["provenance"] == "unknown"
+    assert card["conclusion"] is None
+    assert card["action"]["type"] == "review"
 
 
 def test_summary_keeps_message_total_unknown_when_any_source_count_is_unknown():

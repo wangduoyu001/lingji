@@ -149,6 +149,7 @@ class MemoryReviewService:
         )
         self._copy_read_model_links(memory_id, approved["id"])
         superseded = self.lifecycle.supersede_memory(source, approved["id"], True, reason=reason.strip())
+        self._sync(source)
         result = {**approved, "superseded_id": memory_id, "superseded": superseded}
         self._event("memory_owner_corrected", memory_id, result)
         return result

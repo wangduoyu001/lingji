@@ -288,7 +288,11 @@ class OwnerMemoryCardProjector:
             for ref_id, ref in expected_refs.items():
                 actual = evidence_by_id.get(ref_id)
                 expected_hash = ref.get("content_hash") if isinstance(ref, Mapping) else None
-                if actual is None or (isinstance(ref, Mapping) and ref.get("_bounded_link_available") is False) or (expected_hash and str(actual.get("content_hash") or "") != str(expected_hash)):
+                link_state = ref.get("_bounded_link_available") if isinstance(ref, Mapping) else None
+                if link_state is None:
+                    provenance = "unknown"
+                    break
+                if actual is None or link_state is False or (expected_hash and str(actual.get("content_hash") or "") != str(expected_hash)):
                     provenance = "mismatch"
                     break
         source = self._source_for(document, evidence, viewer)
@@ -354,17 +358,26 @@ class OwnerMemoryCardProjector:
         here keeps card-list projection useful while reserving ``get_message``
         for the selected-card detail action.
         """
+        def unavailable() -> list[Any]:
+            marked: list[Any] = []
+            for ref in refs:
+                if isinstance(ref, Mapping):
+                    marked.append({**dict(ref), "_bounded_link_available": None})
+                else:
+                    marked.append({"message_id": self._ref_value(ref), "_bounded_link_available": None})
+            return marked
+
         if not memory_id or not hasattr(self.source_service, "memory_sources"):
-            return refs
+            return unavailable()
         try:
             response = self.source_service.memory_sources(memory_id, viewer=viewer)
         except TypeError:
             try:
                 response = self.source_service.memory_sources(memory_id)
             except Exception:
-                return refs
+                return unavailable()
         except Exception:
-            return refs
+            return unavailable()
         links = response.get("links") if isinstance(response, Mapping) else None
         if not isinstance(links, list):
             return refs
@@ -631,8 +644,8 @@ class OwnerMemoryCardProjector:
         # checked independently of the permanent layer because invalidated and
         # archived core files are intentionally no longer ``available``.
         if is_core:
-            if status == "archived" or freshness.get("state") == "archived":
-                return {"type": "archive", "label": "移出当前记忆", "reason": str(freshness.get("reason") or "内容已移出当前记忆")}
+            if status in {"archived", "superseded"} or freshness.get("state") in {"archived", "superseded"}:
+                return {"type": "review", "label": "查看历史记录", "reason": str(freshness.get("reason") or "内容已移出当前记忆")}
             if status == "invalidated" or freshness.get("state") in {"overdue", "invalidated"}:
                 return {"type": "invalidate", "label": "标记已经过时", "reason": str(freshness.get("reason") or "内容可能已过时")}
             if status in {"active", "superseded"} or permanent.get("state") == "available":

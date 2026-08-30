@@ -147,16 +147,19 @@ const server = http.createServer((req, res) => {
     if (path === "/api/memory/inspector/cards") {
       state.cardListRequests += 1;
       const topics = ["发布计划", "每周摘要", "代码审查", "家庭安排", "阅读清单", "旅行计划", "饮食偏好", "会议决策", "预算安排", "学习目标", "设备维护", "写作习惯"];
+      const freshnessStates = ["current", "overdue", "current", "overdue", "source_revoked", "current", "superseded", "current", "rejected", "rolled_back", "repair_required", "not_yet_current", "unknown"];
+      const listActions = ["correct", "invalidate", "archive", "confirm", "reauthorize_source", "correct", "review", "none", "review", "review", "review", "review", "review"];
+      const actionLabels = { correct: "修正内容", invalidate: "标记已经过时", archive: "移出当前记忆", review: "查看历史记录", confirm: "确认加入长期记忆", reauthorize_source: "重新授权来源", none: "目前无需处理" };
       const cards = Array.from({ length: 21 }, (_, index) => ({
         memory_id: `card-${index + 1}`,
         topic: topics[index] ?? `主题${index + 1}`,
         developments: ["先讨论方案", "根据来源做出决定", "记录后续结果"],
         conclusion: "最新结论已从来源核对",
-        freshness: { state: index === 3 ? "overdue" : "current", reason: index === 3 ? "已有一段时间没有新证据" : "最近证据仍有效", latest_evidence_at: index === 5 ? "not-a-time" : "2026-08-28T08:03:00Z" },
+        freshness: { state: freshnessStates[index] ?? "current", reason: index === 3 ? "已有一段时间没有新证据" : freshnessStates[index] === "unknown" ? "时效尚未判断" : "最近证据仍有效", latest_evidence_at: index === 5 ? "not-a-time" : "2026-08-28T08:03:00Z" },
         source: { label: index % 2 ? "Codex 工作会话" : "ChatGPT 导出记录", message_count: 3, latest_evidence_at: "2026-08-28T08:03:00Z" },
-        layers: { raw: { state: "available" }, structured: { state: "available" }, vector: { state: index === 4 ? "unavailable" : "complete" }, permanent: { state: index === 2 ? "pending_owner_review" : "complete" } },
+        layers: { raw: { state: "available" }, structured: { state: "available" }, vector: { state: index === 4 ? "unavailable" : "complete" }, permanent: { state: index === 2 ? "pending_owner_review" : index === 7 ? "not_permanent" : "complete" } },
         trust: { state: index === 5 ? "conflict" : "trusted" },
-        action: { type: index === 2 || index === 3 ? "confirm" : index === 4 ? "reauthorize_source" : "correct", label: index === 2 || index === 3 ? "确认加入长期记忆" : index === 4 ? "重新授权来源" : "修正内容", reason: "请核对后决定" },
+        action: { type: listActions[index] ?? "correct", label: actionLabels[listActions[index] ?? "correct"], reason: "请核对后决定" },
         evidence: [{ message_id: "message-card-1", preview: "来源证据摘要一", occurred_at: "2026-08-28T08:03:00Z" }, { message_id: "message-card-2", preview: "来源证据摘要二", occurred_at: "2026-08-28T08:04:00Z" }],
       }));
       const url = new URL(req.url, "http://127.0.0.1");
@@ -188,8 +191,9 @@ const server = http.createServer((req, res) => {
       state.cardDetailRequests += 1;
       const id = decodeURIComponent(path.split("/").pop());
       const action = state.cardActionStates[id] ?? (id === "card-2" ? "invalidate" : id === "card-3" ? "archive" : id === "card-4" ? "confirm" : id === "card-5" ? "reauthorize_source" : "correct");
-      const actionLabels = { correct: "修正内容", invalidate: "标记已经过时", archive: "移出当前记忆", confirm: "确认加入长期记忆", reauthorize_source: "重新授权来源" };
-      return json(res, 200, { item: { memory_id: id, topic: id === "card-2" ? "每周摘要" : id === "card-3" ? "代码审查" : id === "card-4" ? "家庭安排" : id === "card-5" ? "阅读清单" : "发布计划", kind: action === "confirm" ? "candidate" : "memory", state: action === "confirm" ? "needs_review" : "active", developments: ["先讨论方案", "根据来源做出决定"], conclusion: "最新结论已从来源核对", freshness: { state: action === "invalidate" ? "overdue" : action === "archive" ? "archived" : action === "reauthorize_source" ? "source_revoked" : "current", reason: action === "invalidate" ? "已标记为过时" : action === "archive" ? "已移出当前记忆" : action === "reauthorize_source" ? "来源已撤销" : "最近证据仍有效", latest_evidence_at: "2026-08-28T08:03:00Z" }, source: { label: action === "reauthorize_source" ? "已停止的来源" : "Codex 工作会话", status: action === "reauthorize_source" ? "revoked" : "active", message_count: 3 }, layers: { raw: { state: "available" }, structured: { state: "available" }, vector: { state: "complete" }, permanent: { state: action === "confirm" ? "pending_owner_review" : "available" } }, trust: { state: "trusted" }, action: { type: action, label: actionLabels[action], reason: "请核对后决定" }, current_hash: `hash-${id}`, evidence: [{ message_id: "message-card-1", preview: "来源证据摘要一", occurred_at: "2026-08-28T08:03:00Z" }, { message_id: "message-card-2", preview: "来源证据摘要二", occurred_at: "2026-08-28T08:04:00Z" }] } });
+      const projectedAction = action === "archive" && state.cardActionStates[id] ? "review" : action;
+      const actionLabels = { correct: "修正内容", invalidate: "标记已经过时", archive: "移出当前记忆", review: "查看历史记录", confirm: "确认加入长期记忆", reauthorize_source: "重新授权来源" };
+      return json(res, 200, { item: { memory_id: id, topic: id === "card-2" ? "每周摘要" : id === "card-3" ? "代码审查" : id === "card-4" ? "家庭安排" : id === "card-5" ? "阅读清单" : "发布计划", kind: action === "confirm" ? "candidate" : "memory", state: action === "confirm" ? "needs_review" : "active", developments: ["先讨论方案", "根据来源做出决定"], conclusion: "最新结论已从来源核对", freshness: { state: action === "invalidate" ? "overdue" : action === "archive" ? "archived" : action === "reauthorize_source" ? "source_revoked" : "current", reason: action === "invalidate" ? "已标记为过时" : action === "archive" ? "已移出当前记忆" : action === "reauthorize_source" ? "来源已撤销" : "最近证据仍有效", latest_evidence_at: "2026-08-28T08:03:00Z" }, source: { label: action === "reauthorize_source" ? "已停止的来源" : "Codex 工作会话", status: action === "reauthorize_source" ? "revoked" : "active", message_count: 3 }, layers: { raw: { state: "available" }, structured: { state: "available" }, vector: { state: "complete" }, permanent: { state: action === "confirm" ? "pending_owner_review" : "available" } }, trust: { state: "trusted" }, action: { type: projectedAction, label: actionLabels[projectedAction], reason: "请核对后决定" }, current_hash: `hash-${id}`, evidence: [{ message_id: "message-card-1", preview: "来源证据摘要一", occurred_at: "2026-08-28T08:03:00Z" }, { message_id: "message-card-2", preview: "来源证据摘要二", occurred_at: "2026-08-28T08:04:00Z" }] } });
     }
     if (path === "/api/memory/inspector/messages/message-card-1" || path === "/api/memory/inspector/messages/message-card-2") { state.messageDetailRequests += 1; return json(res, 200, { item: { message_id: path.endsWith("2") ? "message-card-2" : "message-card-1", content: path.endsWith("2") ? "这是第二条选定的来源消息正文。" : "这是选定的来源消息正文。" } }); }
     if (path === "/api/memory/inspector/status") return json(res, 200, { as_of: "2026-08-28T08:03:00Z", sources: { sources: 1, conversations: 1, messages: 1 }, memory: { documents: 1, chunks: 1 }, vector: { state: "available", coverage: 1, rebuild_required: false } });
@@ -595,6 +599,8 @@ try {
   assert.ok((await page.locator(".memory-cards-summary").innerText()).includes("已显示 20 / 共 21 条"), "card total must be exact");
   const cardsText = await page.locator(".owner-memory-card-grid").innerText();
   for (const topic of ["发布计划", "每周摘要", "代码审查", "家庭安排", "阅读清单", "旅行计划", "饮食偏好", "会议决策", "预算安排", "学习目标", "设备维护", "写作习惯"]) assert.ok(cardsText.includes(topic), `card topic ${topic} must be readable`);
+  for (const label of ["已被新版本替代", "尚未加入", "已拒绝", "已回滚", "需要修复", "尚未生效", "尚未判断"]) assert.ok(cardsText.includes(label), `complete lifecycle label ${label} must be readable`);
+  assert.equal(await page.locator(".owner-memory-card").nth(6).getByRole("button", { name: /查看历史记录：/ }).count(), 1, "superseded cards must expose review/history, not a mutation action");
   assert.equal(/raw|structured|vector|permanent|chunk|hash|card-\d+|message-card-1|\{/.test(cardsText), false, "technical fields must stay out of default cards");
   assert.equal(cardsText.includes("Invalid Date"), false, "invalid evidence times must use human fallback text");
   assert.equal(await page.locator(".owner-memory-card").first().locator(".owner-memory-developments p").count(), 3, "cards show at most three evidence lines");
@@ -652,6 +658,11 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "移出当前记忆", exact: true }).click();
   await page.getByText("已保存，当前状态已刷新。", { exact: true }).waitFor();
   assert.equal(state.cardMutations.at(-1).action, "archive", "archived core card must use archive endpoint");
+  await page.keyboard.press("Escape");
+  await page.locator(".owner-memory-card").nth(2).getByRole("button", { name: "代码审查", exact: true }).click();
+  await page.getByRole("dialog").waitFor();
+  assert.equal(await page.getByRole("dialog").getByRole("button", { name: "移出当前记忆", exact: true }).count(), 0, "fresh archived detail must not expose a dead archive action");
+  await page.keyboard.press("Escape");
 
   // Candidate actions remain owner-gated and use the candidate endpoints.
   await page.keyboard.press("Escape");
