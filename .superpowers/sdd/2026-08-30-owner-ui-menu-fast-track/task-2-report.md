@@ -230,3 +230,52 @@ tests：
 - 未运行或触碰：`/Applications/灵机.app`、Desktop PID `44824`、sidecar PID `44832`、8766/8767、
   Acceptance root/fixture、Production/Vault、主人真实数据、真实 API、打包/安装、live owner
   observation；未宣称主人验收或 release 通过。独立审查及后续候选重建由根代理调度。
+
+## Task 2 Repair Round 2 追加记录（2026-08-30）
+
+### 审查问题与范围
+
+本轮仅处理独立审查指定的两个 Important，不扩大至 Minor 或其它页面：
+
+- I1：既有 hidden activation 分支只看合并后的 `effectivelyPaused`，无法区分 hidden pause 与
+  manual pause；本轮增加可执行的 `shouldScheduleHiddenActivation` 行为契约，并使 manual pause
+  取消/阻止激活 timer，resume 在 hidden 时按契约只允许一次读取，不恢复热轮询。
+- I2：既有 `pendingActionsFrom` 只检查数组，`null`/缺少非空 `action_id` 的成员可能进入 UI 并
+  生成无效 resolve URL；本轮让任一 malformed 成员返回 `null`，Overview/Attention 保持同一
+  “暂时无法确认”文案。合法 action 的其它字段仍不新增约束，缺少 description 继续由既有 UI
+  fallback 处理。
+
+未修改 backend/API/data model/retrieval/vector/quality gate，未增加功能，未触碰 live app、PID、
+8766/8767、Acceptance 或主人数据。
+
+### TDD RED / GREEN
+
+- I1 RED：先在 `automatic-memory-sources-repair-smoke.mjs` 写入 manual pause + hidden + 未完成
+  activation 的行为断言；`npm run test:memory-sources-repair` 以
+  `SyntaxError: ... does not provide an export named shouldScheduleHiddenActivation` 精确失败。
+- I2 helper RED：先在 `work-fact-smoke.mjs` 写入 `[null]`、`[{}]`、空白 `action_id` 断言；
+  `npm run test:work-fact` 精确 `1 failed`，实际返回 `[null]` 而非 `null`。
+- I2 rendered RED：先将真实 owner fixture pending list 设为 `[null]`/`[{}]`，要求首页与“需要我”
+  均显示 unknown；`npm run test:owner-ui-menu-fast-track` 精确 `1 failed`，首页等待
+  `待办状态暂时无法确认，正在重试` 超时，复现 malformed action 被误当成有效待办。
+- GREEN：增加严格成员校验与 hidden/manual pause 条件后，上述三项全部 PASS；真实 rendered fixture
+  同时验证 malformed list 不渲染无效动作、不产生 resolve URL，并保持合法 pending、四菜单及
+  Round 1 卡片/来源行为不回归。
+
+### 命令计数与结果
+
+- RED 命令：3 个（I1 repair smoke、I2 work-fact smoke、owner rendered smoke），均按预期失败。
+- GREEN/回归命令：9 个——`npm run test:memory-sources-repair`、`npm run test:work-fact`、
+  `npm run test:owner-ui-menu-fast-track`、`npm run test:e2e:memory`、
+  `npm run test:memory-sources`、`npm exec -- tsx scripts/polling-data-smoke.mjs`、
+  `npm run build`、`python3 -m compileall -q src tests`、`git diff --check`，全部 PASS；build
+  为 TypeScript/Vite、97 modules，保留既有 dynamic-import warnings。
+- 产品/tests 提交：`615585397f9bab3596f77e1eed39d2dc63d05f7e`。
+- docs/evidence 提交将在本段追加及验收同步条目完成后单独生成；`python3 scripts/check_acceptance_sync.py`
+  与 `python3 scripts/check_local_execution_handoff.py` 在 docs 提交后复跑。
+
+### 未运行项目与交接
+
+- 未运行 live App/Sidecar、未访问 8766/8767、Acceptance root、Production/Vault、主人真实数据或
+  真实 API；未打包/安装、未更新或执行 `LOCAL_EXECUTION_TASK.md` 候选 SHA，未做主人观察。
+- 两个 Minor 按根代理 ledger 延后 final review；独立审查、重建候选及后续 live 验收由根代理调度。

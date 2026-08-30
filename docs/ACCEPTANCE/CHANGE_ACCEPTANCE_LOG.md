@@ -3133,6 +3133,24 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   chats、Desktop/UI；未改变自动激活 quarantine，未执行第二次 Round2 quality CLI。报告：
   `.superpowers/sdd/2026-08-30-release-4r2-acceptance-reset/task-2-report.md`。
 
+## 2026-08-30 · Owner UI / menu fast-track · Task 2 Repair Round 2
+
+- 基于产品/tests `0b0e2fcf4881deea9803c51280e6e3fd8d4f26a4`，本轮产品/tests 提交：
+  `615585397f9bab3596f77e1eed39d2dc63d05f7e`。仅修复独立审查 I1/I2：hidden 激活读取排除
+  manual pause，resume 保持一次读取契约；pending action 列表要求每项 object 且有非空
+  `action_id`，malformed list 在 Overview/Attention 统一显示未知。未修改 backend/API/data model/
+  retrieval/vector/quality gate，不增加功能。
+- TDD RED：I1 `npm run test:memory-sources-repair` 因 helper 未导出失败；I2 helper
+  `npm run test:work-fact` 精确 `1 failed`（`[null]` 被原逻辑原样返回）；真实 rendered
+  `npm run test:owner-ui-menu-fast-track` 精确 `1 failed`（malformed pending 未显示 unknown）。
+- GREEN：`npm run test:memory-sources-repair`、`npm run test:work-fact`、
+  `npm run test:owner-ui-menu-fast-track`、`npm run test:e2e:memory`、
+  `npm run test:memory-sources`、`npm exec -- tsx scripts/polling-data-smoke.mjs`、
+  `npm run build`（97 modules）、`python3 -m compileall -q src tests`、`git diff --check` 均 PASS。
+  报告：`.superpowers/sdd/2026-08-30-owner-ui-menu-fast-track/task-2-report.md`。
+- 未运行/触碰 live App、PID `44824/44832`、8766/8767、Acceptance/Production/Vault、主人数据、
+  打包安装或主人观察；两个 Minor 依根代理 ledger 延后 final review，未更新/执行候选 SHA。
+
 ## 2026-08-30 · Owner UI / menu fast-track · Task 2 Repair Round 1
 
 - 基线为 `3dd9295`；本轮产品/tests 提交：`0b0e2fcf4881deea9803c51280e6e3fd8d4f26a4`。
