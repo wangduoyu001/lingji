@@ -4,11 +4,13 @@ from __future__ import annotations
 import hashlib
 import errno
 import json
+import math
 import os
 import secrets
 import stat as stat_module
 from dataclasses import dataclass, field
 from enum import Enum
+from types import MappingProxyType
 from typing import Literal
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -17,6 +19,20 @@ from src.extraction.models import ExtractionBatch
 from src.sources import ExternalMessageKey, SourceReadModel, SourceReadModelError
 from src.auto_review.models import PromotionEvidence, PromotionPersistenceAudit, PromotionProjectionState
 from .evaluation import EvaluationReport
+
+
+_RUNNER_ALLOWED_FIELDS = frozenset({
+    "schema_version", "run_id", "code_commit", "fixture_hashes",
+    "import_audit", "promotion_outcomes", "promotion_category_outcomes",
+    "promotion_provenance", "gateway_selection", "mcp_parity",
+    "qdrant_degradation", "semantic_degradation", "corruption_isolation",
+    "context_baseline", "production_pollution", "measured_quality",
+    "quality_evidence_readiness", "functional_status", "phase_status",
+    "evidence_details", "readiness", "import_counts", "role_order_counts",
+    "acceptance_root", "protected_tree_changes", "protected_tree_capture_error",
+    "acceptance_boundary", "cleanup_inventory", "blocked_physical_evidence",
+    "evaluation_report", "windows_status", "blocked_reasons",
+})
 
 
 @dataclass(frozen=True)
@@ -80,6 +96,12 @@ class CanonicalFunctionalEvidence:
     _STATUSES = frozenset({"not_measured", "ready", "failed", "invalid"})
     _QUALITY_STATUSES = frozenset({"PASS", "FAIL", "NOT_EVALUATED"})
 
+    def __post_init__(self) -> None:
+        # ``frozen=True`` only protects the dataclass attribute.  Freeze the
+        # nested evidence tree as well so a validated view cannot be changed
+        # after it has crossed the runner/scale boundary.
+        object.__setattr__(self, "data", _freeze_evidence(self.data))
+
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "CanonicalFunctionalEvidence":
         try:
@@ -125,8 +147,17 @@ class CanonicalFunctionalEvidence:
         """Normalize the runner's in-memory result into this one wire shape."""
         if not isinstance(payload, Mapping):
             raise ValueError("BLOCKED_4R2_REQUIRED")
+        if set(payload) - _RUNNER_ALLOWED_FIELDS:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
         details = payload.get("evidence_details")
-        details = details if isinstance(details, Mapping) else payload
+        if details is not None:
+            if not isinstance(details, Mapping):
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            canonical_details = cls.from_mapping(details)
+            canonical_payload = canonical_details.to_mapping()
+            _compare_runner_projections(payload, canonical_payload)
+            return canonical_details
+        details = payload
 
         def pick(name: str, default: Any = None) -> Any:
             value = payload.get(name)
@@ -247,6 +278,78 @@ def _json_safe_copy(value: Any) -> Any:
     return value
 
 
+def _freeze_evidence(value: Any) -> Any:
+    """Recursively freeze the canonical evidence object."""
+    if isinstance(value, Mapping):
+        return MappingProxyType({str(key): _freeze_evidence(child) for key, child in value.items()})
+    if isinstance(value, (tuple, list)):
+        return tuple(_freeze_evidence(child) for child in value)
+    if isinstance(value, set):
+        return frozenset(_freeze_evidence(child) for child in value)
+    return value
+
+
+def _compare_runner_projections(payload: Mapping[str, Any], canonical: Mapping[str, Any]) -> None:
+    """Reject every compatibility projection that disagrees with evidence_details."""
+    for field in CanonicalFunctionalEvidence._REQUIRED:
+        if field not in payload:
+            continue
+        value = payload[field]
+        if field == "quality_evidence_readiness":
+            value = _normalize_readiness_projection(value)
+        elif field in {"qdrant_degradation"}:
+            value = _normalize_qdrant_projection(value)
+        if value != canonical[field]:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    if "semantic_degradation" in payload and payload["semantic_degradation"] != canonical["qdrant_degradation"]:
+        # The old runner spelling is accepted only as an exact projection of
+        # the canonical qdrant section.
+        if _normalize_qdrant_projection(payload["semantic_degradation"]) != canonical["qdrant_degradation"]:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    for name, expected in (
+        ("readiness", canonical["quality_evidence_readiness"]),
+    ):
+        if name in payload and _normalize_readiness_projection(payload[name]) != expected:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    for name, expected in (
+        ("import_counts", {"expected_messages": canonical["import_audit"]["expected_rows"], "imported_messages": canonical["import_audit"]["actual_rows"]}),
+        ("role_order_counts", {"expected": canonical["import_audit"]["expected_rows"], "matched": canonical["import_audit"]["ordered_external_key_matches"]}),
+    ):
+        if name in payload:
+            value = payload[name]
+            if not isinstance(value, Mapping) or value != expected:
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+
+
+def _normalize_readiness_projection(value: Any) -> Any:
+    if not isinstance(value, Mapping):
+        return value
+    normalized = {}
+    for key, item in value.items():
+        if isinstance(item, EvidenceState):
+            normalized[str(key)] = item.value
+        elif isinstance(item, str):
+            normalized[str(key)] = item.removeprefix("EvidenceState.").lower()
+        else:
+            normalized[str(key)] = item
+    return normalized
+
+
+def _normalize_qdrant_projection(value: Any) -> Any:
+    if not isinstance(value, Mapping):
+        return value
+    normalized = dict(value)
+    normalized.setdefault("lexical_ids", None)
+    normalized.setdefault("degraded_ids", None)
+    diagnostics = normalized.get("diagnostics")
+    if isinstance(diagnostics, Mapping):
+        normalized.setdefault("semantic", diagnostics.get("semantic"))
+        normalized.setdefault("lexical", diagnostics.get("lexical"))
+    normalized.setdefault("semantic", None)
+    normalized.setdefault("lexical", None)
+    return normalized
+
+
 def _reject_nonfinite_or_bool_numbers(value: Any) -> None:
     import math
     if isinstance(value, Mapping):
@@ -274,6 +377,52 @@ def _validate_canonical_details(data: Mapping[str, Any]) -> None:
     for section, allowed in exact_sections.items():
         if set(data[section]) - allowed:
             raise ValueError("BLOCKED_4R2_REQUIRED")
+    # Measured sections are recursively closed.  A permissive top-level check
+    # is not enough: an attacker can otherwise hide a second counter or status
+    # in stable-duplicate, diagnostics, queue, or identity records.
+    _require_nested_keys(data["import_audit"]["stable_duplicates"], {
+        "source_records", "conversation_records", "message_records", "memory_records"},
+        required={"source_records", "conversation_records", "message_records", "memory_records"})
+    for field in ("missing_external_keys", "extra_external_keys"):
+        _require_identity_list(data["import_audit"][field])
+    _require_nested_keys(
+        data["qdrant_degradation"].get("diagnostics"),
+        {"semantic", "lexical", "reason_code", "source_authority"},
+        required=set(), optional_none=True,
+    )
+    for field in ("target_source_ids", "target_scan_ids", "target_job_ids"):
+        if field in data["corruption_isolation"]:
+            _require_string_list(data["corruption_isolation"][field])
+    if "reasons" in data["corruption_isolation"]:
+        _require_string_list(data["corruption_isolation"]["reasons"])
+    if "valid_retrieval_identities" in data["corruption_isolation"]:
+        identities = data["corruption_isolation"]["valid_retrieval_identities"]
+        if not isinstance(identities, (list, tuple)):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+        for identity in identities:
+            _require_string_list(identity)
+    for field in ("missing_external_keys", "extra_external_keys"):
+        if not isinstance(data["import_audit"][field], (list, tuple)):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    groups = data["import_audit"]["intentional_content_hash_groups"]
+    if not isinstance(groups, (list, tuple)):
+        raise ValueError("BLOCKED_4R2_REQUIRED")
+    for group in groups:
+        _require_nested_keys(group, {"content_hash", "member_external_keys"}, required={"content_hash", "member_external_keys"})
+        _require_identity_list(group["member_external_keys"])
+    for category, bucket in data["promotion_category_outcomes"].items():
+        if not isinstance(category, str) or category not in {"core/protected", "high-risk", "authority-conflict", "assistant-only", "low-risk-user"}:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+        _require_nested_keys(bucket, {"expected", "actual", "active", "pending", "rejected", "error"}, required={"expected", "actual", "active", "pending", "rejected", "error"})
+    for field in ("lexical_ids", "degraded_ids"):
+        _require_string_list(data["qdrant_degradation"][field], allow_none=True)
+    if "failures" in data["mcp_parity"]:
+        _require_string_list(data["mcp_parity"]["failures"])
+    for field in ("queue_status_counts", "work_outcome_counts"):
+        if field in data["corruption_isolation"]:
+            _require_counter_mapping(data["corruption_isolation"][field])
+    if set(data["promotion_outcomes"]) != {"active", "pending_owner_review", "rejected", "error"}:
+        raise ValueError("BLOCKED_4R2_REQUIRED")
     for value in data["promotion_category_outcomes"].values():
         if not isinstance(value, Mapping) or set(value) - {"expected", "actual", "active", "pending", "rejected", "error"}:
             raise ValueError("BLOCKED_4R2_REQUIRED")
@@ -313,6 +462,15 @@ def _validate_canonical_details(data: Mapping[str, Any]) -> None:
     for field in ("automatic_activation_correct", "automatic_activation_total"):
         if field in measured and measured[field] is not None and (type(measured[field]) is not int or measured[field] < 0):
             raise ValueError("BLOCKED_4R2_REQUIRED")
+    for field in ("baseline_context_chars", "rendered_context_chars"):
+        if field in measured and measured[field] is not None and (type(measured[field]) is not int or measured[field] < 0):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    if "automatic_activation_accuracy" in measured and measured["automatic_activation_accuracy"] is not None:
+        if type(measured["automatic_activation_accuracy"]) not in (int, float) or not math.isfinite(float(measured["automatic_activation_accuracy"])) or not 0 <= measured["automatic_activation_accuracy"] <= 100:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+    if "context_reduction" in measured and measured["context_reduction"] is not None:
+        if type(measured["context_reduction"]) not in (int, float) or not math.isfinite(float(measured["context_reduction"])) or not 0 <= measured["context_reduction"] <= 100:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
     context = data["context_baseline"]
     readiness = data["quality_evidence_readiness"]
     for section in ("mcp_parity", "qdrant_degradation", "corruption_isolation", "context_baseline", "promotion_provenance"):
@@ -326,6 +484,34 @@ def _validate_canonical_details(data: Mapping[str, Any]) -> None:
     else:
         if any(type(context[field]) is not int for field in ("baseline_chars", "rendered_chars")) or type(context["reduction"]) not in (int, float):
             raise ValueError("BLOCKED_4R2_REQUIRED")
+
+
+def _require_nested_keys(value: Any, allowed: set[str], *, required: set[str], optional_none: bool = False) -> None:
+    if value is None and optional_none:
+        return
+    if not isinstance(value, Mapping) or not required <= set(value) or set(value) - allowed:
+        raise ValueError("BLOCKED_4R2_REQUIRED")
+
+
+def _require_string_list(value: Any, *, allow_none: bool = False) -> None:
+    if value is None and allow_none:
+        return
+    if not isinstance(value, (list, tuple)) or any(not isinstance(item, str) for item in value):
+        raise ValueError("BLOCKED_4R2_REQUIRED")
+
+
+def _require_identity_list(value: Any) -> None:
+    if not isinstance(value, (list, tuple)):
+        raise ValueError("BLOCKED_4R2_REQUIRED")
+    for item in value:
+        _require_nested_keys(item, {"source_external_id", "conversation_external_id", "message_external_id"}, required={"source_external_id", "conversation_external_id", "message_external_id"})
+        if any(not isinstance(item[field], str) for field in ("source_external_id", "conversation_external_id", "message_external_id")):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+
+
+def _require_counter_mapping(value: Any) -> None:
+    if not isinstance(value, Mapping) or any(not isinstance(key, str) or type(item) is not int or item < 0 for key, item in value.items()):
+        raise ValueError("BLOCKED_4R2_REQUIRED")
 
 
 def audit_promotion_persistence(memory_db: Any, *, promotion_evidence: Sequence[PromotionEvidence]) -> PromotionPersistenceAudit:
@@ -1217,6 +1403,7 @@ class QualityRunEnvelope:
     run_id: str | None = None
     fixture_hashes: Mapping[str, str] = field(default_factory=dict)
     quality_evidence_readiness: Mapping[str, Any] = field(default_factory=dict)
+    code_commit: str | None = None
 
 
 def _reason_codes(values: Sequence[str]) -> tuple[str, ...]:

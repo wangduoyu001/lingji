@@ -986,6 +986,10 @@ def publish_quality_envelope(envelope: QualityRunEnvelope, *, repository_output_
     payload = _jsonable(asdict(envelope))
     details = payload.get("evidence_details")
     if isinstance(details, Mapping):
+        # ``code_commit`` is part of the canonical identity.  It normally
+        # arrives on the envelope from ``run_quality_gate``; retaining this
+        # fallback keeps direct publication of a canonical envelope honest.
+        payload["code_commit"] = payload.get("code_commit") or details.get("code_commit")
         # Keep the machine-readable report convenient for existing consumers
         # while retaining one authoritative envelope and one evidence map.
         for key in ("import_audit", "promotion_outcomes", "promotion_category_outcomes",
@@ -1044,7 +1048,7 @@ def run_quality_gate(
         canonical_details = canonical.to_mapping()
         envelope = replace(envelope, evidence_details=canonical_details,
         run_id=raw.get("run_id"), fixture_hashes=raw.get("fixture_hashes") or {},
-        quality_evidence_readiness=asdict(readiness))
+        quality_evidence_readiness=asdict(readiness), code_commit=raw.get("code_commit"))
         # The temporary machine report is deliberately written beneath the
         # acceptance output root; the caller publishes it only after cleanup.
         payload = dict(raw)

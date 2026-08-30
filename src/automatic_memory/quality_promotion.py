@@ -14,6 +14,7 @@ from src.auto_review.promotion import AutoMemoryPromotionService
 
 
 _PROTECTED_CATEGORIES = frozenset({"core/protected", "high-risk", "authority-conflict", "assistant-only"})
+_CATEGORIES = _PROTECTED_CATEGORIES | {"low-risk-user"}
 _STATUSES = frozenset({"active", "pending_owner_review", "rejected", "error"})
 
 
@@ -40,14 +41,52 @@ def expected_status(record: Any) -> str:
 
 
 def activation_measurement(outcomes: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Represent quarantined activation as unavailable, never as a false 0/93."""
-    if any(str(item.get("expected_status") or "") != "pending_owner_review" for item in outcomes):
-        raise ValueError("activation expectation is outside quarantine contract")
+    """Represent quarantined activation as unavailable after checking truth.
+
+    The quality counter remains intentionally unavailable while quarantine is
+    in force.  We still inspect every persisted outcome first, so a forged
+    active/error status, category projection, or missing quarantine reason can
+    never be hidden behind a convenient ``not_applicable`` result.
+    """
+    if not isinstance(outcomes, Sequence) or isinstance(outcomes, (str, bytes)) or not outcomes:
+        raise ValueError("activation evidence is empty or malformed")
+    for item in outcomes:
+        if not isinstance(item, Mapping):
+            raise ValueError("activation evidence is malformed")
+        expected_status = item.get("expected_status")
+        if expected_status != "pending_owner_review":
+            raise ValueError("activation expectation is outside quarantine contract")
+        category = item.get("category")
+        expected_category = item.get("expected_category", item.get("fixture_category", category))
+        if not isinstance(category, str) or category not in _CATEGORIES or expected_category != category:
+            raise ValueError("activation category evidence is contradictory")
+        status = item.get("status")
+        for alias in ("actual_status", "persisted_status"):
+            if alias in item and item[alias] != status:
+                raise ValueError("activation actual status disagrees with persisted status")
+        if status != "pending_owner_review":
+            raise ValueError("activation actual status violates quarantine")
+        reasons = item.get("reason_codes")
+        if not isinstance(reasons, Sequence) or isinstance(reasons, (str, bytes)):
+            raise ValueError("activation reason evidence is malformed")
+        if not reasons or any(not isinstance(reason, str) or not reason.strip() for reason in reasons):
+            raise ValueError("activation reason evidence is missing")
+        # A pending decision may be held by a policy reason (for example
+        # ``confidence_below_threshold``) before the final quarantine marker
+        # is reached.  The contract is that at least one measured, non-empty
+        # reason explains why activation did not occur.
     return {"status": "not_applicable", "correct": None, "total": None, "accuracy": None}
 
 
-def _ids(values: Sequence[Any]) -> list[str]:
-    return [str(value or "").strip() for value in values if str(value or "").strip()]
+def _ids(values: Any, label: str) -> list[str]:
+    if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
+        raise ValueError(f"promotion_provenance {label} are malformed")
+    result: list[str] = []
+    for value in values:
+        if not isinstance(value, str) or not value.strip() or value != value.strip():
+            raise ValueError(f"promotion_provenance {label} identity is empty or malformed")
+        result.append(value)
+    return result
 
 
 def validate_promotion_measurement(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -56,34 +95,57 @@ def validate_promotion_measurement(payload: Mapping[str, Any]) -> dict[str, Any]
     This deliberately computes every duplicate/missing/extra count from the
     supplied rows.  A caller cannot claim a clean result by filling in a zero.
     """
+    if not isinstance(payload, Mapping):
+        raise ValueError("promotion_provenance payload is malformed")
     raw_outcomes = payload.get("outcomes")
     if not isinstance(raw_outcomes, Sequence) or isinstance(raw_outcomes, (str, bytes)):
         raise ValueError("promotion_provenance outcomes are malformed")
     outcomes = [dict(item) for item in raw_outcomes if isinstance(item, Mapping)]
     if len(outcomes) != len(raw_outcomes) or not outcomes:
         raise ValueError("promotion_provenance outcomes are malformed")
-    outcome_ids = _ids([item.get("memory_id") for item in outcomes])
+    outcome_ids = []
+    seen_decisions: set[str] = set()
+    for item in outcomes:
+        memory_id = item.get("memory_id")
+        if not isinstance(memory_id, str) or not memory_id.strip() or memory_id != memory_id.strip():
+            raise ValueError("promotion_provenance outcome identity is empty or malformed")
+        outcome_ids.append(memory_id)
+        if "decision_id" in item:
+            decision_id = item.get("decision_id")
+            if not isinstance(decision_id, str) or not decision_id.strip() or decision_id != decision_id.strip():
+                raise ValueError("promotion_provenance decision identity is empty or malformed")
+            if decision_id in seen_decisions:
+                raise ValueError("promotion_provenance duplicate decision identity")
+            seen_decisions.add(decision_id)
     if len(outcome_ids) != len(set(outcome_ids)):
         raise ValueError("promotion_provenance duplicate outcomes")
     for item in outcomes:
-        status = str(item.get("status") or "")
+        status = item.get("status")
         if status not in _STATUSES:
             raise ValueError("promotion_provenance unknown outcome status")
-        category = str(item.get("category") or "")
+        category = item.get("category")
+        if category not in _CATEGORIES:
+            raise ValueError("promotion_provenance unknown outcome category")
+        if "expected_category" in item and item["expected_category"] != category:
+            raise ValueError("promotion_provenance contradictory category")
+        if "fixture_category" in item and item["fixture_category"] != category:
+            raise ValueError("promotion_provenance contradictory category")
+        if "expected_status" in item and item["expected_status"] != "pending_owner_review":
+            raise ValueError("promotion_provenance unexpected quarantine status")
         if category in _PROTECTED_CATEGORIES and status == "active":
             raise ValueError("promotion_provenance protected outcome active")
 
-    projection_ids = _ids(payload.get("projection_ids") or ())
-    audit_ids = _ids(payload.get("audit_ids") or ())
-    links = payload.get("memory_link_keys") or ()
+    projection_ids = _ids(payload.get("projection_ids", ()), "projection")
+    audit_ids = _ids(payload.get("audit_ids", ()), "audit")
+    links = payload.get("memory_link_keys", ())
     if not isinstance(links, Sequence) or isinstance(links, (str, bytes)):
         raise ValueError("promotion_provenance links are malformed")
     link_keys = []
     for link in links:
         if not isinstance(link, Sequence) or isinstance(link, (str, bytes)) or len(link) != 2:
             raise ValueError("promotion_provenance link identity is malformed")
-        message_id, memory_id = _ids(link)
-        if not message_id or not memory_id:
+        message_id, memory_id = link
+        if any(not isinstance(value, str) or not value.strip() or value != value.strip() for value in (message_id, memory_id)):
             raise ValueError("promotion_provenance link identity is empty")
         link_keys.append((message_id, memory_id))
 
@@ -192,7 +254,12 @@ def measure_promotion_fixtures(
             actual_status, actual_memory, reason_codes, decision_id = "error", memory_id, ("promotion_measurement_error",), ""
         outcomes.append({
             "fact_id": str(record.fact_id), "category": category,
+            "expected_category": category,
             "expected_status": expected_status(record), "status": actual_status,
+            # Keep the persisted decision as an explicit measured field.  The
+            # activation gate compares it to the returned projection rather
+            # than assuming the runner's eligibility calculation was true.
+            "persisted_status": actual_status,
             "memory_id": actual_memory, "decision_id": decision_id,
             "reason_codes": list(reason_codes),
         })
@@ -215,8 +282,10 @@ def measure_promotion_fixtures(
     for message_id in sorted(imported_message_ids):
         for row in read_model.message_links(message_id):
             memory_id = str(row.get("memory_id") or "")
-            if memory_id in candidate_memory_ids:
-                links.append((message_id, memory_id))
+            # Keep every relationship observed on every imported message.
+            # Filtering to candidate IDs here would erase an orphan link
+            # before the strict validator can classify it as extra evidence.
+            links.append((message_id, memory_id))
     audit_ids: list[str] = []
     for row in state_db.recent_events(limit=100000):
         if str(row.get("event_type") or "") not in {
