@@ -178,7 +178,7 @@ Product/tests are separate from docs/evidence:
 ```text
 Product/tests commit: 4ce408b
 Docs/evidence commit: 1df49dd (initial docs/report commit)
-Report identity update commit: PENDING (this docs-only commit)
+Report identity update commit: 848f72c (docs-only metadata update)
 ```
 
 The report identity update is a docs-only follow-up because the report must record the
@@ -202,5 +202,5 @@ Codex executor: Task 2 implementation agent
 Owner confirmation: pending
 Acceptance date: 2026-08-30
 Report branch: codex/owner-real-history-memory-cards
-Report commit: 1df49dd (report contents; identity update pending)
+Report commit: 1df49dd (initial report; metadata update 848f72c)
 ```
