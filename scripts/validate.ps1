@@ -49,18 +49,118 @@ if ($env:GITHUB_HEAD_REF) {
     $branch = $env:GITHUB_HEAD_REF
 }
 
+function Normalize-ValidationPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    try {
+        $fullPath = [IO.Path]::GetFullPath($Path)
+        $pathRoot = [IO.Path]::GetPathRoot($fullPath)
+        if ([string]::IsNullOrWhiteSpace($pathRoot)) {
+            throw "path root is empty"
+        }
+        while ($fullPath.Length -gt $pathRoot.Length -and ($fullPath.EndsWith("\") -or $fullPath.EndsWith("/"))) {
+            $fullPath = $fullPath.Substring(0, $fullPath.Length - 1)
+        }
+        return $fullPath
+    }
+    catch {
+        throw "validation path is not valid"
+    }
+}
+
+function Test-ValidationPathEqual {
+    param(
+        [Parameter(Mandatory = $true)][string]$Left,
+        [Parameter(Mandatory = $true)][string]$Right
+    )
+
+    $leftPath = Normalize-ValidationPath -Path $Left
+    $rightPath = Normalize-ValidationPath -Path $Right
+    $comparison = [StringComparison]::Ordinal
+    if ([IO.Path]::DirectorySeparatorChar -eq "\") {
+        $comparison = [StringComparison]::OrdinalIgnoreCase
+    }
+    return [String]::Equals($leftPath, $rightPath, $comparison)
+}
+
+function Assert-ValidationRoot {
+    param([Parameter(Mandatory = $true)][string]$RootPath)
+
+    $cursor = Normalize-ValidationPath -Path $RootPath
+    while ($true) {
+        if (Test-Path -LiteralPath $cursor) {
+            try {
+                $item = Get-Item -LiteralPath $cursor -Force -ErrorAction Stop
+                if (-not $item.PSIsContainer) {
+                    throw "validation root is not a directory"
+                }
+                if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "VALIDATION_OUTPUT_ROOT_REPARSE"
+                }
+            }
+            catch {
+                throw "VALIDATION_OUTPUT_ROOT_REPARSE"
+            }
+        }
+
+        $parent = Split-Path -Parent $cursor
+        if ([string]::IsNullOrWhiteSpace($parent)) {
+            break
+        }
+        $parent = Normalize-ValidationPath -Path $parent
+        if (Test-ValidationPathEqual -Left $parent -Right $cursor) {
+            break
+        }
+        $cursor = $parent
+    }
+}
+
+function Assert-ValidationRegularDirectory {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    try {
+        $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+        if (-not $item.PSIsContainer -or (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+            throw "validation directory is not regular"
+        }
+    }
+    catch {
+        throw "VALIDATION_OUTPUT_DIRECTORY_REPARSE"
+    }
+}
+
+function Assert-ValidationRegularFileDestination {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ParentPath
+    )
+
+    $canonicalPath = Normalize-ValidationPath -Path $Path
+    $canonicalParent = Normalize-ValidationPath -Path (Split-Path -Parent $canonicalPath)
+    if (-not (Test-ValidationPathEqual -Left $canonicalParent -Right $ParentPath)) {
+        throw "VALIDATION_OUTPUT_PATH_OUTSIDE_ROOT"
+    }
+    if (Test-Path -LiteralPath $canonicalPath) {
+        try {
+            $item = Get-Item -LiteralPath $canonicalPath -Force -ErrorAction Stop
+            if ($item.PSIsContainer -or (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+                throw "validation destination is not a regular file"
+            }
+        }
+        catch {
+            throw "VALIDATION_OUTPUT_DESTINATION_REPARSE"
+        }
+    }
+}
+
 $configuredValidationRoot = [Environment]::GetEnvironmentVariable("LINGJI_VALIDATE_OUTPUT_ROOT", "Process")
 if ([string]::IsNullOrWhiteSpace($configuredValidationRoot)) {
     $validationRoot = Join-Path $repoRoot "output\validation"
 }
 else {
-    try {
-        $validationRoot = [IO.Path]::GetFullPath($configuredValidationRoot)
-    }
-    catch {
-        throw "LINGJI_VALIDATE_OUTPUT_ROOT is not a valid path"
-    }
+    $validationRoot = Normalize-ValidationPath -Path $configuredValidationRoot
 }
+Assert-ValidationRoot -RootPath $validationRoot
 
 $testClock = [Environment]::GetEnvironmentVariable("LINGJI_VALIDATE_TEST_CLOCK", "Process")
 if ($testClock -match "^\d{8}-\d{6}$") {
@@ -78,10 +178,13 @@ $hintPrefix = ""
 if ($outputHint -match "^[A-Za-z0-9_.-]{1,64}$") {
     $hintPrefix = "{0}-" -f $outputHint
 }
-$outputRoot = Join-Path $validationRoot ("{0}{1}-{2}-{3}-{4}" -f $hintPrefix, $stamp, $invocationId, $shortCommit, $Mode)
+$outputRoot = Normalize-ValidationPath -Path (Join-Path $validationRoot ("{0}{1}-{2}-{3}-{4}" -f $hintPrefix, $stamp, $invocationId, $shortCommit, $Mode))
 $logsRoot = Join-Path $outputRoot "logs"
 
-New-Item -ItemType Directory -Force -Path $validationRoot | Out-Null
+if (-not (Test-Path -LiteralPath $validationRoot)) {
+    New-Item -ItemType Directory -Path $validationRoot -ErrorAction Stop | Out-Null
+}
+Assert-ValidationRoot -RootPath $validationRoot
 
 $ownerMarkerPath = Join-Path $outputRoot ".owner.json"
 $invocationStartedAt = (Get-Date).ToUniversalTime().ToString("o")
@@ -111,26 +214,122 @@ function Write-ValidationOwnerMarker {
         $marker.ended_at = (Get-Date).ToUniversalTime().ToString("o")
     }
 
+    Assert-ValidationRegularDirectory -Path $outputRoot
     $json = $marker | ConvertTo-Json -Compress
     if ($json.Length -gt 4096) {
         throw "validation owner marker exceeded bounded size"
     }
+    Assert-ValidationRegularFileDestination -Path $ownerMarkerPath -ParentPath $outputRoot
     Set-Content -LiteralPath $ownerMarkerPath -Value $json -Encoding UTF8
+}
+
+function Test-ValidationJsonInteger {
+    param([Parameter(Mandatory = $false)]$Value)
+
+    if ($null -eq $Value) {
+        return $false
+    }
+    $typeName = $Value.GetType().FullName
+    return @(
+        "System.Byte",
+        "System.SByte",
+        "System.Int16",
+        "System.UInt16",
+        "System.Int32",
+        "System.UInt32",
+        "System.Int64",
+        "System.UInt64"
+    ) -contains $typeName
+}
+
+function Test-ValidationJsonTimestamp {
+    param([Parameter(Mandatory = $false)]$Value)
+
+    if ($null -eq $Value) {
+        return $false
+    }
+    return @("System.String", "System.DateTime", "System.DateTimeOffset") -contains $Value.GetType().FullName
 }
 
 function Read-ValidationOwnerMarker {
     param([Parameter(Mandatory = $true)][string]$DirectoryPath)
 
+    try {
+        Assert-ValidationRegularDirectory -Path $DirectoryPath
+    }
+    catch {
+        return $null
+    }
     $markerPath = Join-Path $DirectoryPath ".owner.json"
     try {
-        if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf)) {
+        $markerItem = Get-Item -LiteralPath $markerPath -Force -ErrorAction Stop
+        if (-not $markerItem.PSIsContainer -and (($markerItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0)) {
+            # continue
+        }
+        else {
             return $null
         }
         $raw = Get-Content -LiteralPath $markerPath -Raw -ErrorAction Stop
         if ($raw.Length -gt 4096) {
             return $null
         }
-        return ($raw | ConvertFrom-Json -ErrorAction Stop)
+        $marker = $raw | ConvertFrom-Json -ErrorAction Stop
+        if ($null -eq $marker -or $marker -is [Array]) {
+            return $null
+        }
+        $propertyNames = @($marker.PSObject.Properties | ForEach-Object { $_.Name })
+        $state = [string]$marker.state
+        if ($state -notin @("running", "completed", "failed")) {
+            return $null
+        }
+        $requiredNames = @("schema_version", "invocation_id", "process_id", "process_started_at", "state", "started_at")
+        if ($state -ne "running") {
+            $requiredNames += "ended_at"
+        }
+        if ($propertyNames.Count -ne $requiredNames.Count) {
+            return $null
+        }
+        foreach ($name in $requiredNames) {
+            if ($propertyNames -notcontains $name -or $null -eq $marker.$name) {
+                return $null
+            }
+        }
+        if (-not (Test-ValidationJsonInteger -Value $marker.schema_version) -or [int64]$marker.schema_version -ne 1) {
+            return $null
+        }
+        if (-not ($marker.state -is [string]) -or -not ($marker.invocation_id -is [string]) -or
+            -not (Test-ValidationJsonTimestamp -Value $marker.process_started_at) -or
+            -not (Test-ValidationJsonTimestamp -Value $marker.started_at)) {
+            return $null
+        }
+        if ($state -ne "running" -and -not (Test-ValidationJsonTimestamp -Value $marker.ended_at)) {
+            return $null
+        }
+        if ($marker.invocation_id -notmatch "^[0-9a-f]{32}$") {
+            return $null
+        }
+        $directoryName = Split-Path -Leaf (Normalize-ValidationPath -Path $DirectoryPath)
+        if ($directoryName -notmatch ("(^|-)" + [Regex]::Escape([string]$marker.invocation_id) + "(-|$)")) {
+            return $null
+        }
+        $processId = 0
+        if (-not (Test-ValidationJsonInteger -Value $marker.process_id) -or
+            -not [int]::TryParse([string]$marker.process_id, [ref]$processId) -or $processId -le 0) {
+            return $null
+        }
+        foreach ($timestamp in @("process_started_at", "started_at")) {
+            $parsed = [DateTimeOffset]::MinValue
+            if (-not [DateTimeOffset]::TryParse([string]$marker.$timestamp, $null, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$parsed)) {
+                return $null
+            }
+        }
+        if ($state -ne "running") {
+            $ended = [DateTimeOffset]::MinValue
+            if (-not [DateTimeOffset]::TryParse([string]$marker.ended_at, $null, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$ended)) {
+                return $null
+            }
+        }
+        return $marker
     }
     catch {
         return $null
@@ -149,40 +348,52 @@ function Test-ValidationMarkerActive {
 
     $processId = 0
     if (-not [int]::TryParse([string]$Marker.process_id, [ref]$processId) -or $processId -le 0) {
-        return $false
+        return $true
+    }
+    $markerStart = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse(
+            [string]$Marker.process_started_at,
+            $null,
+            [Globalization.DateTimeStyles]::RoundtripKind,
+            [ref]$markerStart)) {
+        return $true
     }
 
     try {
         $process = Get-Process -Id $processId -ErrorAction Stop
-        $markerStart = [DateTimeOffset]::MinValue
-        if (-not [DateTimeOffset]::TryParse(
-                [string]$Marker.process_started_at,
-                $null,
-                [Globalization.DateTimeStyles]::RoundtripKind,
-                [ref]$markerStart)) {
+        if ($null -eq $process) {
             return $true
         }
         $processStart = [DateTimeOffset]::new($process.StartTime.ToUniversalTime())
-        return ([Math]::Abs(($processStart - $markerStart.ToUniversalTime()).TotalSeconds) -lt 1)
+        if ([Math]::Abs(($processStart - $markerStart.ToUniversalTime()).TotalSeconds) -ge 1) {
+            # A reused PID is not this owner; protect it because it is not
+            # proven inactive.
+            return $true
+        }
+        # The recorded owner is still running. Keep it protected until an
+        # explicit process-not-found result proves it inactive.
+        return $true
     }
     catch {
-        return $false
+        if ($_.FullyQualifiedErrorId -like "NoProcessFoundForGivenId*") {
+            return $false
+        }
+        return $true
     }
 }
 
 function Remove-StaleValidationRuns {
-    if (-not (Test-Path $validationRoot)) {
+    if (-not (Test-Path -LiteralPath $validationRoot)) {
         return
     }
 
-    Get-ChildItem -Path $validationRoot -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -ne $outputRoot } |
+    $rootPath = Normalize-ValidationPath -Path $validationRoot
+    Get-ChildItem -LiteralPath $rootPath -Directory -Force -ErrorAction SilentlyContinue |
         ForEach-Object {
             $entry = $_
             try {
-                $entryPath = [IO.Path]::GetFullPath($entry.FullName)
-                $rootPath = [IO.Path]::GetFullPath($validationRoot)
-                if ((Split-Path -Parent $entryPath) -ne $rootPath) {
+                $entryPath = Normalize-ValidationPath -Path $entry.FullName
+                if (-not (Test-ValidationPathEqual -Left (Split-Path -Parent $entryPath) -Right $rootPath)) {
                     return
                 }
                 if (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
@@ -205,6 +416,20 @@ function Remove-StaleValidationRuns {
                 if (([DateTimeOffset]::UtcNow - $endedAt.ToUniversalTime()).TotalHours -lt 24) {
                     return
                 }
+
+                # Re-read both path and marker immediately before deletion. If
+                # an entry was replaced between inspection and removal, retain it.
+                $recheckItem = Get-Item -LiteralPath $entryPath -Force -ErrorAction Stop
+                if (-not $recheckItem.PSIsContainer -or (($recheckItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+                    return
+                }
+                $recheckMarker = Read-ValidationOwnerMarker -DirectoryPath $entryPath
+                if ($null -eq $recheckMarker -or $recheckMarker.invocation_id -ne $marker.invocation_id) {
+                    return
+                }
+                if (Test-ValidationMarkerActive -Marker $recheckMarker) {
+                    return
+                }
                 Remove-Item -LiteralPath $entryPath -Recurse -Force -ErrorAction Stop
             }
             catch {
@@ -215,11 +440,27 @@ function Remove-StaleValidationRuns {
 }
 
 Remove-StaleValidationRuns
-New-Item -ItemType Directory -Force -Path $logsRoot | Out-Null
+if (-not (Test-Path -LiteralPath $outputRoot)) {
+    New-Item -ItemType Directory -Path $outputRoot -ErrorAction Stop | Out-Null
+}
+Assert-ValidationRegularDirectory -Path $outputRoot
+if (-not (Test-Path -LiteralPath $logsRoot)) {
+    New-Item -ItemType Directory -Path $logsRoot -ErrorAction Stop | Out-Null
+}
+Assert-ValidationRegularDirectory -Path $logsRoot
 Write-ValidationOwnerMarker -State "running"
+
+$testBarrier = [Environment]::GetEnvironmentVariable("LINGJI_VALIDATE_TEST_BARRIER", "Process")
+if ($testBarrier -eq "1") {
+    Write-Output "LINGJI_VALIDATE_TEST_BARRIER_ENTERED"
+    [Console]::ReadLine() | Out-Null
+}
 
 function Write-ValidationSummary {
     param([string]$Overall)
+
+    Assert-ValidationRegularDirectory -Path $outputRoot
+    Assert-ValidationRegularDirectory -Path $logsRoot
 
     $areaValue = $null
     if ($Mode -eq "focused") {
@@ -229,6 +470,7 @@ function Write-ValidationSummary {
     $summary = [ordered]@{
         commit = $commit
         branch = $branch
+        invocation_id = $invocationId
         mode = $Mode
         area = $areaValue
         overall = $Overall
@@ -241,7 +483,9 @@ function Write-ValidationSummary {
     $markdownPath = Join-Path $outputRoot "summary.md"
     $latestJsonPath = Join-Path $validationRoot "latest-summary.json"
     $latestMarkdownPath = Join-Path $validationRoot "latest-summary.md"
-    $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $jsonPath -Encoding UTF8
+    Assert-ValidationRegularFileDestination -Path $jsonPath -ParentPath $outputRoot
+    Assert-ValidationRegularFileDestination -Path $markdownPath -ParentPath $outputRoot
+    $summary | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $jsonPath -Encoding UTF8
 
     $lines = @(
         "# LingJi Validation Summary",
@@ -264,10 +508,10 @@ function Write-ValidationSummary {
         $relativeLog = $result.log.Replace($repoRoot + "\", "")
         $lines += "| $($result.name) | $($result.status) | $($result.duration_seconds) | ``$relativeLog`` |"
     }
-    $lines | Set-Content -Path $markdownPath -Encoding UTF8
+    $lines | Set-Content -LiteralPath $markdownPath -Encoding UTF8
 
-    Copy-Item -Path $jsonPath -Destination $latestJsonPath -Force
-    Copy-Item -Path $markdownPath -Destination $latestMarkdownPath -Force
+    Publish-ValidationLatestPointer -SourcePath $jsonPath -DestinationPath $latestJsonPath -Suffix "json"
+    Publish-ValidationLatestPointer -SourcePath $markdownPath -DestinationPath $latestMarkdownPath -Suffix "md"
     if ($Overall -eq "PASS") {
         Write-ValidationOwnerMarker -State "completed"
     }
@@ -276,6 +520,36 @@ function Write-ValidationSummary {
     }
 
     return $latestJsonPath
+}
+
+function Publish-ValidationLatestPointer {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourcePath,
+        [Parameter(Mandatory = $true)][string]$DestinationPath,
+        [Parameter(Mandatory = $true)][string]$Suffix
+    )
+
+    Assert-ValidationRegularDirectory -Path $validationRoot
+    Assert-ValidationRegularFileDestination -Path $DestinationPath -ParentPath $validationRoot
+    $temporaryPath = Join-Path $validationRoot (".latest-summary-{0}-{1}.tmp" -f $invocationId, $Suffix)
+    try {
+        Assert-ValidationRegularFileDestination -Path $temporaryPath -ParentPath $validationRoot
+        Copy-Item -LiteralPath $SourcePath -Destination $temporaryPath -Force
+        Assert-ValidationRegularFileDestination -Path $DestinationPath -ParentPath $validationRoot
+        Move-Item -LiteralPath $temporaryPath -Destination $DestinationPath -Force
+        Assert-ValidationRegularFileDestination -Path $DestinationPath -ParentPath $validationRoot
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporaryPath) {
+            try {
+                Assert-ValidationRegularFileDestination -Path $temporaryPath -ParentPath $validationRoot
+                Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction Stop
+            }
+            catch {
+                # Preserve a suspicious temporary path rather than following it.
+            }
+        }
+    }
 }
 
 function Invoke-ValidationStep {
@@ -293,6 +567,7 @@ function Invoke-ValidationStep {
     $exitCode = 1
     $previousEnvironment = @{}
     $previousErrorActionPreference = $ErrorActionPreference
+    $logIsSafe = $false
 
     foreach ($key in $Environment.Keys) {
         $previousEnvironment[$key] = [Environment]::GetEnvironmentVariable($key, "Process")
@@ -301,6 +576,10 @@ function Invoke-ValidationStep {
 
     Push-Location $WorkingDirectory
     try {
+        Assert-ValidationRegularDirectory -Path $outputRoot
+        Assert-ValidationRegularDirectory -Path $logsRoot
+        Assert-ValidationRegularFileDestination -Path $logPath -ParentPath $logsRoot
+        $logIsSafe = $true
         $null = Get-Command $Command -ErrorAction Stop
 
         # Windows PowerShell 5.1 promotes native stderr to its Error stream. Some
@@ -316,7 +595,20 @@ function Invoke-ValidationStep {
         }
     }
     catch {
-        $_ | Out-String | Add-Content -Path $logPath -Encoding UTF8
+        if ($logIsSafe) {
+            try {
+                Assert-ValidationRegularDirectory -Path $outputRoot
+                Assert-ValidationRegularDirectory -Path $logsRoot
+                Assert-ValidationRegularFileDestination -Path $logPath -ParentPath $logsRoot
+                $_ | Out-String | Add-Content -LiteralPath $logPath -Encoding UTF8
+            }
+            catch {
+                Write-Host ("Validation evidence path rejected: {0}" -f $_.Exception.Message)
+            }
+        }
+        else {
+            Write-Host ("Validation evidence path rejected: {0}" -f $_.Exception.Message)
+        }
         $exitCode = 1
     }
     finally {

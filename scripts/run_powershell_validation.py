@@ -29,6 +29,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--python-command", default="python")
     parser.add_argument("--hook", type=Path, default=None)
     parser.add_argument(
+        "--hold-for-test",
+        action="store_true",
+        help="test-only barrier: hold the real PowerShell process after ownership starts",
+    )
+    parser.add_argument(
         "--output-root",
         type=Path,
         default=None,
@@ -60,6 +65,8 @@ def main(argv: list[str] | None = None) -> int:
     environment = os.environ.copy()
     if args.hook is not None:
         environment["LINGJI_VALIDATE_TEST_HOOK"] = str(args.hook)
+    if args.hold_for_test:
+        environment["LINGJI_VALIDATE_TEST_BARRIER"] = "1"
     if args.output_root is not None:
         environment["LINGJI_VALIDATE_OUTPUT_ROOT"] = str(args.output_root)
     if args.output_hint is not None:
