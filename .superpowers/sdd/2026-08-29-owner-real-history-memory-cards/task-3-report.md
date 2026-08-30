@@ -121,4 +121,4 @@
 ### Round 3 commits
 
 - Product/tests：`ae01b24`（`fix: close task3 repair round3 contracts`）。
-- Docs/evidence：本轮独立 docs/evidence 提交，最终 SHA 在提交完成后记录。
+- Docs/evidence：`8fea0ed`（报告与 acceptance log 独立提交；本行在后续 docs 校正提交中固定记录）。
