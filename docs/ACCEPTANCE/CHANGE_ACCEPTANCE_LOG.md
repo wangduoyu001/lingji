@@ -2839,3 +2839,21 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - GREEN：精确 focused 命令沿用 Round3 report，`85 passed, 1 warning`；`npm run test:e2e:memory` PASS；`npm run test:smoke` PASS（23/23，包含 E2E）；`python3 -m compileall -q src tests`、`git diff --check` PASS。无生产/TypeScript 变更，build 不重复执行。
 - 未启动 live/App/Acceptance，未读取真实聊天、Production/Vault、主人数据，未执行打包/安装/Artifact。报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-3-report.md`。
 - Tests commit：`7ccbc02`；docs/evidence commit follows separately。
+
+## 2026-08-30 · Release / 4R2 acceptance reset authorization
+
+- 当前 owner real-history/memory-card Tasks 1–3 的代码与合成验收结论保持
+  `PASS / APPROVED`；本轮不增加产品功能、不替换 SQLite/Qdrant/MemoryGateway/MCP，
+  只关闭 release 证据隔离与旧 Task7O 质量测量合同阻塞。
+- 只读诊断确认两个独立阻塞：嵌套 PowerShell validation 会删除外层仍在运行的证据目录；
+  当前不存在 accepted canonical quality artifact，历史 4R2 的 duplicate view、promotion
+  identity/link 与 activation actual/reason/category 仍须 fail-closed 证明。
+- 研究记录 `.research/ai-memory-acceptance-patterns/FINDINGS.md` 选用 Mem0 benchmark 的逐题
+  result/checkpoint/grouped metrics 与 LightRAG offline oracle 模式，Graphiti/LlamaIndex 只作
+  时间有效性和幂等参考；不导入第二记忆引擎。LoCoMo 仅作分类参考，不复制其 CC-BY-NC fixture。
+- 权威计划：`docs/superpowers/plans/2026-08-30-release-4r2-acceptance-reset.md`。顺序固定为：
+  Task 1 invocation-scoped release evidence；Task 2 strict canonical 4R2 contract；Task 3 frozen
+  100-question diagnostic。每项由 Luna TDD 实现、全新 Luna 独立审查，根代理只调度和验收。
+- Task 1 禁止 quality/100k/release/Artifact；Task 2 quality CLI 最多一次并诚实保留
+  FAIL/NOT_MEASURED；Task 3 只做冻结 100 问测量，不调 retrieval、不运行 100k/release。
+  `LOCAL_EXECUTION_TASK.md` 保持 `IDLE`，不得接触 Production/Vault/主人真实数据。
