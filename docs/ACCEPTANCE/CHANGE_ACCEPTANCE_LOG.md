@@ -1,5 +1,13 @@
 # 验收要求变更记录
 
+## 2026-08-30 · Whole-plan review repair · I1/I2
+
+- 产品/测试提交：`8b7c37e6f87561b6013123abb2995a760174c15c`；报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/whole-plan-repair-report.md`。
+- 仅修复 whole-plan review 的 I1/I2：Codex 未授权来源卡片通过现有 metadata DTO 显示实际文件数、字节数、最早/最近记录时间；缺失或非法值统一显示“尚未获得”，展示不含路径、source ID、正文或 JSON。OwnerMemoryCard 分页排序改用 timezone-aware UTC instant，unknown/invalid 明确落后，memory_id 作为稳定 tie-breaker。
+- 新增/更新合成验收：memorySources adapter 的 exact metadata/unknown 断言、rendered E2E 的实际值/unknown/泄漏边界断言、mixed-offset/invalid/unknown/相同 instant/分页边界 projector 测试。
+- 已执行并通过：两组 whole-plan focused（`68 passed, 1 warning` 与 `162 passed, 3 warnings`）、`npm run test:e2e:memory`、`npm run test:smoke`（23 scripts）、`npm run build`、`python3 -m compileall -q src tests`、`git diff --check`、`check_local_execution_handoff.py`；`check_acceptance_sync.py` 在本 docs 条目提交后复跑。
+- 仍不在范围：M1 `PROJECT_STATUS` 对齐、live/真实聊天/Acceptance、Mac release/Artifact/安装、Production/Vault 或主人体验确认。
+
 ## 2026-08-29 · Task 3 implementation evidence
 
 - 产品/测试提交：`21ad4ae`；报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-3-report.md`。
