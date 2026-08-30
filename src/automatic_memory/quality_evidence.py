@@ -6,6 +6,7 @@ import errno
 import json
 import math
 import os
+import re
 import secrets
 import stat as stat_module
 from dataclasses import dataclass, field
@@ -19,6 +20,19 @@ from src.extraction.models import ExtractionBatch
 from src.sources import ExternalMessageKey, SourceReadModel, SourceReadModelError
 from src.auto_review.models import PromotionEvidence, PromotionPersistenceAudit, PromotionProjectionState
 from .evaluation import EvaluationReport
+
+
+_HEX_RE = re.compile(r"^[0-9a-fA-F]+$")
+_PROMOTION_TRUTH_FIELDS = frozenset({
+    "memory_id", "decision_id", "fixture_category", "expected_category",
+    "expected_status", "service_status", "service_category",
+    "service_reason_codes", "durable_status", "durable_category",
+    "durable_reason_codes",
+})
+_PROMOTION_STATUSES = frozenset({"active", "pending_owner_review", "rejected", "error"})
+_PROMOTION_CATEGORIES = frozenset({
+    "core/protected", "high-risk", "authority-conflict", "assistant-only", "low-risk-user",
+})
 
 
 _RUNNER_ALLOWED_FIELDS = frozenset({
@@ -103,7 +117,7 @@ class CanonicalFunctionalEvidence:
         object.__setattr__(self, "data", _freeze_evidence(self.data))
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any]) -> "CanonicalFunctionalEvidence":
+    def from_mapping(cls, value: Mapping[str, Any], *, require_per_outcome_truth: bool = True) -> "CanonicalFunctionalEvidence":
         try:
             if not isinstance(value, Mapping) or set(value) != set(cls._REQUIRED):
                 raise ValueError("BLOCKED_4R2_REQUIRED")
@@ -112,13 +126,16 @@ class CanonicalFunctionalEvidence:
                 raise ValueError("BLOCKED_4R2_REQUIRED")
             commit = data["code_commit"]
             if (not isinstance(commit, str) or len(commit) != 40
-                    or any(char not in "0123456789abcdefABCDEF" for char in commit)):
+                    or not _HEX_RE.fullmatch(commit)):
                 raise ValueError("BLOCKED_4R2_REQUIRED")
             if not isinstance(data["run_id"], str) or not data["run_id"]:
                 raise ValueError("BLOCKED_4R2_REQUIRED")
             hashes = data["fixture_hashes"]
             if (not isinstance(hashes, Mapping) or set(hashes) != {"corpus", "questions"}
-                    or any(not isinstance(item, str) or len(item) != 64 for item in hashes.values())):
+                    or any(not isinstance(item, str) or len(item) != 64 or not _HEX_RE.fullmatch(item) for item in hashes.values())):
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            expected_run_id = f"quality:{hashes['corpus'][:16]}:{hashes['questions'][:16]}:{commit[:16]}"
+            if data["run_id"] != expected_run_id:
                 raise ValueError("BLOCKED_4R2_REQUIRED")
             for name in (
                 "import_audit", "promotion_outcomes", "promotion_category_outcomes",
@@ -136,7 +153,7 @@ class CanonicalFunctionalEvidence:
                 raise ValueError("BLOCKED_4R2_REQUIRED")
             if data["production_pollution"] is not None and type(data["production_pollution"]) is not int:
                 raise ValueError("BLOCKED_4R2_REQUIRED")
-            _validate_canonical_details(data)
+            _validate_canonical_details(data, require_per_outcome_truth=require_per_outcome_truth)
             _reject_nonfinite_or_bool_numbers(data)
             return cls(data)
         except (TypeError, ValueError, KeyError):
@@ -158,6 +175,11 @@ class CanonicalFunctionalEvidence:
             _compare_runner_projections(payload, canonical_payload)
             return canonical_details
         details = payload
+        legacy_compact = (
+            "evidence_details" not in payload
+            and isinstance(payload.get("promotion_provenance"), Mapping)
+            and "missing_links" in payload["promotion_provenance"]
+        )
 
         def pick(name: str, default: Any = None) -> Any:
             value = payload.get(name)
@@ -242,7 +264,7 @@ class CanonicalFunctionalEvidence:
             "functional_status": payload.get("functional_status", "NOT_EVALUATED"),
             "phase_status": payload.get("phase_status", "NOT_EVALUATED"),
         }
-        return cls.from_mapping(normalized)
+        return cls.from_mapping(normalized, require_per_outcome_truth=not legacy_compact)
 
     def to_mapping(self) -> dict[str, Any]:
         return _json_safe_copy(self.data)
@@ -258,8 +280,11 @@ class CanonicalFunctionalEvidence:
             "run_id": f"quality:{corpus[:16]}:{questions[:16]}:{commit[:16]}",
             "code_commit": commit, "fixture_hashes": {"corpus": corpus, "questions": questions},
             "import_audit": {"expected_rows": 2, "actual_rows": 2, "missing_external_keys": [], "extra_external_keys": [], "stable_duplicates": {"source_records": 0, "conversation_records": 0, "message_records": 0, "memory_records": 0}, "ordered_external_key_matches": 2, "role_matches": 2, "sequence_matches": 2, "timestamp_matches": 2, "content_hash_matches": 2, "source_matches": 2, "conversation_matches": 2, "intentional_content_hash_groups": []},
-            "promotion_outcomes": {"active": 2, "pending_owner_review": 0, "rejected": 0, "error": 0}, "promotion_category_outcomes": {},
-            "promotion_provenance": {"status": "ready", "expected": 2, "actual": 2, "links_expected": 2, "links_actual": 2, "missing_projection": 0, "extra_projection": 0, "missing_audit": 0, "extra_audit": 0, "duplicate_records": 0, "duplicate_audits": 0, "duplicate_links": 0},
+            "promotion_outcomes": {"active": 0, "pending_owner_review": 2, "rejected": 0, "error": 0}, "promotion_category_outcomes": {},
+            "promotion_provenance": {"status": "ready", "expected": 2, "actual": 2, "links_expected": 2, "links_actual": 2, "missing_projection": 0, "extra_projection": 0, "missing_audit": 0, "extra_audit": 0, "duplicate_records": 0, "duplicate_audits": 0, "duplicate_links": 0, "outcomes": [
+                {"memory_id": "m1", "decision_id": "d1", "fixture_category": "low-risk-user", "expected_category": "low-risk-user", "expected_status": "pending_owner_review", "service_status": "pending_owner_review", "service_category": "low-risk-user", "service_reason_codes": ["automatic_activation_quarantined"], "durable_status": "pending_owner_review", "durable_category": "low-risk-user", "durable_reason_codes": ["automatic_activation_quarantined"]},
+                {"memory_id": "m2", "decision_id": "d2", "fixture_category": "low-risk-user", "expected_category": "low-risk-user", "expected_status": "pending_owner_review", "service_status": "pending_owner_review", "service_category": "low-risk-user", "service_reason_codes": ["automatic_activation_quarantined"], "durable_status": "pending_owner_review", "durable_category": "low-risk-user", "durable_reason_codes": ["automatic_activation_quarantined"]},
+            ]},
             "gateway_selection": {"status": "ready", "calls_completed": 100, "selector_calls": 100, "unknown": 0, "duplicates": 0},
             "mcp_parity": {"status": "ready", "attempts": 100, "successes": 100, "strict_rate": 100.0},
             "qdrant_degradation": {"status": "ready", "semantic": "degraded", "lexical": "available", "lexical_ids": ["m1"], "degraded_ids": ["m1"]},
@@ -299,17 +324,17 @@ def _compare_runner_projections(payload: Mapping[str, Any], canonical: Mapping[s
             value = _normalize_readiness_projection(value)
         elif field in {"qdrant_degradation"}:
             value = _normalize_qdrant_projection(value)
-        if value != canonical[field]:
+        if not _strict_equal(value, canonical[field]):
             raise ValueError("BLOCKED_4R2_REQUIRED")
-    if "semantic_degradation" in payload and payload["semantic_degradation"] != canonical["qdrant_degradation"]:
+    if "semantic_degradation" in payload:
         # The old runner spelling is accepted only as an exact projection of
         # the canonical qdrant section.
-        if _normalize_qdrant_projection(payload["semantic_degradation"]) != canonical["qdrant_degradation"]:
+        if not _strict_equal(_normalize_qdrant_projection(payload["semantic_degradation"]), canonical["qdrant_degradation"]):
             raise ValueError("BLOCKED_4R2_REQUIRED")
     for name, expected in (
         ("readiness", canonical["quality_evidence_readiness"]),
     ):
-        if name in payload and _normalize_readiness_projection(payload[name]) != expected:
+        if name in payload and not _strict_equal(_normalize_readiness_projection(payload[name]), expected):
             raise ValueError("BLOCKED_4R2_REQUIRED")
     for name, expected in (
         ("import_counts", {"expected_messages": canonical["import_audit"]["expected_rows"], "imported_messages": canonical["import_audit"]["actual_rows"]}),
@@ -317,8 +342,21 @@ def _compare_runner_projections(payload: Mapping[str, Any], canonical: Mapping[s
     ):
         if name in payload:
             value = payload[name]
-            if not isinstance(value, Mapping) or value != expected:
+            if not isinstance(value, Mapping) or not _strict_equal(value, expected):
                 raise ValueError("BLOCKED_4R2_REQUIRED")
+
+
+def _strict_equal(left: Any, right: Any) -> bool:
+    """Compare compatibility projections without Python's bool/int coercion."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, Mapping):
+        if set(left) != set(right):
+            return False
+        return all(_strict_equal(left[key], right[key]) for key in left)
+    if isinstance(left, (list, tuple)):
+        return len(left) == len(right) and all(_strict_equal(a, b) for a, b in zip(left, right))
+    return left == right
 
 
 def _normalize_readiness_projection(value: Any) -> Any:
@@ -362,11 +400,11 @@ def _reject_nonfinite_or_bool_numbers(value: Any) -> None:
         raise ValueError("BLOCKED_4R2_REQUIRED")
 
 
-def _validate_canonical_details(data: Mapping[str, Any]) -> None:
+def _validate_canonical_details(data: Mapping[str, Any], *, require_per_outcome_truth: bool = True) -> None:
     exact_sections = {
         "import_audit": {"expected_rows", "actual_rows", "missing_external_keys", "extra_external_keys", "stable_duplicates", "ordered_external_key_matches", "role_matches", "sequence_matches", "timestamp_matches", "content_hash_matches", "source_matches", "conversation_matches", "intentional_content_hash_groups"},
         "promotion_outcomes": {"active", "pending_owner_review", "rejected", "error"},
-        "promotion_provenance": {"status", "expected", "actual", "active", "pending", "rejected", "error", "links_expected", "links_actual", "missing_projection", "extra_projection", "missing_audit", "extra_audit", "duplicate_records", "duplicate_audits", "duplicate_links"},
+        "promotion_provenance": {"status", "expected", "actual", "active", "pending", "rejected", "error", "links_expected", "links_actual", "missing_projection", "extra_projection", "missing_audit", "extra_audit", "duplicate_records", "duplicate_audits", "duplicate_links", "outcomes"},
         "gateway_selection": {"status", "calls_completed", "selector_calls", "empty_responses", "selected_evidence", "empty_response_is_retrieval_miss", "unknown", "duplicates"},
         "mcp_parity": {"status", "attempts", "successes", "strict_rate", "failures"},
         "qdrant_degradation": {"status", "semantic", "lexical", "lexical_ids", "degraded_ids", "lexical_results", "degraded_results", "diagnostics"},
@@ -407,9 +445,53 @@ def _validate_canonical_details(data: Mapping[str, Any]) -> None:
     groups = data["import_audit"]["intentional_content_hash_groups"]
     if not isinstance(groups, (list, tuple)):
         raise ValueError("BLOCKED_4R2_REQUIRED")
+    group_hashes: set[str] = set()
     for group in groups:
         _require_nested_keys(group, {"content_hash", "member_external_keys"}, required={"content_hash", "member_external_keys"})
+        content_hash = group["content_hash"]
+        if not isinstance(content_hash, str) or not content_hash.strip() or content_hash != content_hash.strip() or content_hash in group_hashes:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+        group_hashes.add(content_hash)
         _require_identity_list(group["member_external_keys"])
+    truth = data["promotion_provenance"].get("outcomes")
+    if not require_per_outcome_truth and truth is None:
+        return
+    if not isinstance(truth, (list, tuple)) or not truth:
+        raise ValueError("BLOCKED_4R2_REQUIRED")
+    truth_ids: set[str] = set()
+    truth_statuses: dict[str, int] = {status: 0 for status in _PROMOTION_STATUSES}
+    for item in truth:
+        _require_nested_keys(item, set(_PROMOTION_TRUTH_FIELDS), required=set(_PROMOTION_TRUTH_FIELDS))
+        for identity_field in ("memory_id", "decision_id"):
+            value = item[identity_field]
+            if not isinstance(value, str) or not value.strip() or value != value.strip() or value in truth_ids:
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            if identity_field == "memory_id":
+                truth_ids.add(value)
+        if any(item[field] not in _PROMOTION_STATUSES for field in ("expected_status", "service_status", "durable_status")):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+        if any(item[field] not in _PROMOTION_CATEGORIES for field in ("fixture_category", "expected_category", "service_category", "durable_category")):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+        if not all(item[field] == item["fixture_category"] for field in ("expected_category", "service_category", "durable_category")):
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+        for reason_field in ("service_reason_codes", "durable_reason_codes"):
+            _require_string_list(item[reason_field])
+            if not item[reason_field]:
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+        service_reasons = set(item["service_reason_codes"])
+        durable_reasons = set(item["durable_reason_codes"])
+        if not durable_reasons - service_reasons <= {"promotion_payload_redacted"} or not service_reasons <= durable_reasons:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+        truth_statuses[item["service_status"]] += 1
+    aggregate = data["promotion_outcomes"]
+    expected_aggregate = {
+        "active": truth_statuses["active"],
+        "pending_owner_review": truth_statuses["pending_owner_review"],
+        "rejected": truth_statuses["rejected"],
+        "error": truth_statuses["error"],
+    }
+    if not _strict_equal(aggregate, expected_aggregate):
+        raise ValueError("BLOCKED_4R2_REQUIRED")
     for category, bucket in data["promotion_category_outcomes"].items():
         if not isinstance(category, str) or category not in {"core/protected", "high-risk", "authority-conflict", "assistant-only", "low-risk-user"}:
             raise ValueError("BLOCKED_4R2_REQUIRED")
@@ -503,10 +585,15 @@ def _require_string_list(value: Any, *, allow_none: bool = False) -> None:
 def _require_identity_list(value: Any) -> None:
     if not isinstance(value, (list, tuple)):
         raise ValueError("BLOCKED_4R2_REQUIRED")
+    seen: set[tuple[str, str, str]] = set()
     for item in value:
         _require_nested_keys(item, {"source_external_id", "conversation_external_id", "message_external_id"}, required={"source_external_id", "conversation_external_id", "message_external_id"})
         if any(not isinstance(item[field], str) for field in ("source_external_id", "conversation_external_id", "message_external_id")):
             raise ValueError("BLOCKED_4R2_REQUIRED")
+        identity = tuple(item[field] for field in ("source_external_id", "conversation_external_id", "message_external_id"))
+        if any(not field.strip() or field != field.strip() for field in identity) or identity in seen:
+            raise ValueError("BLOCKED_4R2_REQUIRED")
+        seen.add(identity)
 
 
 def _require_counter_mapping(value: Any) -> None:

@@ -56,7 +56,16 @@ def test_quarantined_activation_is_not_measured_as_zero_of_ninety_three():
     from src.automatic_memory.quality_promotion import activation_measurement
 
     result = activation_measurement(
-        [{"category": "low-risk-user", "expected_status": "pending_owner_review", "status": "pending_owner_review", "reason_codes": ["automatic_activation_quarantined"]}]
+        [{
+            "category": "low-risk-user", "fixture_category": "low-risk-user",
+            "expected_category": "low-risk-user", "expected_status": "pending_owner_review",
+            "status": "pending_owner_review", "service_status": "pending_owner_review",
+            "persisted_status": "pending_owner_review", "durable_status": "pending_owner_review",
+            "service_category": "low-risk-user", "durable_category": "low-risk-user",
+            "reason_codes": ["automatic_activation_quarantined"],
+            "service_reason_codes": ["automatic_activation_quarantined"],
+            "durable_reason_codes": ["automatic_activation_quarantined"],
+        }]
     )
     assert result == {"status": "not_applicable", "correct": None, "total": None, "accuracy": None}
 

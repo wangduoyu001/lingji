@@ -164,10 +164,14 @@ def test_measurement_scans_orphan_links_outside_candidate_filter(monkeypatch):
 
 def _activation_outcomes():
     return [
-        {"category": category, "expected_category": category,
+        {"category": category, "fixture_category": category, "expected_category": category,
          "expected_status": "pending_owner_review", "status": "pending_owner_review",
-         "persisted_status": "pending_owner_review",
-         "reason_codes": ["automatic_activation_quarantined"]}
+         "service_status": "pending_owner_review", "persisted_status": "pending_owner_review",
+         "durable_status": "pending_owner_review",
+         "service_category": category, "durable_category": category,
+         "reason_codes": ["automatic_activation_quarantined"],
+         "service_reason_codes": ["automatic_activation_quarantined"],
+         "durable_reason_codes": ["automatic_activation_quarantined"]}
         for category in ("core/protected", "high-risk", "authority-conflict", "assistant-only", "low-risk-user")
     ]
 
@@ -193,3 +197,257 @@ def test_activation_measurement_rejects_false_or_incomplete_truth(mutate):
     mutate(outcomes)
     with pytest.raises(ValueError, match="activation"):
         activation_measurement(outcomes)
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda payload: payload["import_audit"]["intentional_content_hash_groups"].append({
+        "content_hash": "",
+        "member_external_keys": [{
+            "source_external_id": "source-1",
+            "conversation_external_id": "conversation-1",
+            "message_external_id": "message-1",
+        }],
+    }),
+    lambda payload: payload["import_audit"]["intentional_content_hash_groups"].append({
+        "content_hash": "hash-1",
+        "member_external_keys": [{
+            "source_external_id": "   ",
+            "conversation_external_id": "conversation-1",
+            "message_external_id": "message-1",
+        }],
+    }),
+    lambda payload: payload["import_audit"]["intentional_content_hash_groups"].append({
+        "content_hash": "hash-1",
+        "member_external_keys": [{
+            "source_external_id": "source-1",
+            "conversation_external_id": "conversation-1",
+            "message_external_id": "message-1",
+        }] * 2,
+    }),
+])
+def test_canonical_loader_rejects_blank_or_duplicate_hash_group_members(mutate):
+    payload = _canonical()
+    mutate(payload)
+    with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
+        CanonicalFunctionalEvidence.from_mapping(payload)
+
+
+def test_runner_projection_comparison_is_strict_about_bool_vs_integer():
+    payload = _envelope()
+    payload["promotion_outcomes"]["active"] = True
+    with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
+        CanonicalFunctionalEvidence.from_runner_payload(payload)
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda payload: payload.__setitem__("run_id", "wrong"),
+    lambda payload: payload.__setitem__("code_commit", "b" * 40),
+    lambda payload: payload["fixture_hashes"].__setitem__("corpus", "g" * 64),
+    lambda payload: payload["fixture_hashes"].__setitem__("corpus", "d" * 64),
+])
+def test_canonical_loader_validates_identity_format_and_consistency(mutate):
+    payload = _canonical()
+    mutate(payload)
+    with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
+        CanonicalFunctionalEvidence.from_mapping(payload)
+
+
+def _measurement_record():
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        fact_id="fact-1", memory_kind="stable_preference", risk="low", privacy="synthetic",
+        authority="owner-confirmed", lifecycle="active", project_id="project-lingji",
+        agent_scope=("agent-synthetic",), topic_key="topic", content="content",
+        content_hash="hash-1", occurred_at="2026-01-01T00:00:00Z",
+    )
+
+
+class _MeasurementService:
+    def __init__(self, **_kwargs):
+        pass
+
+    def evaluate(self, candidate):
+        return {
+            "status": "pending_owner_review",
+            "candidate_id": candidate.memory_id,
+            "decision_id": "decision-1",
+            "reason_codes": ["confidence_below_threshold"],
+        }
+
+
+def _measurement_stores(*, message_id="message-1", projection_rows=(), event_payload=None, links=()):
+    import src.automatic_memory.quality_promotion as promotion
+    from types import SimpleNamespace
+
+    memory_db = SimpleNamespace(list_derived_projection_identity_rows=lambda: list(projection_rows))
+    read_model = SimpleNamespace(message_links=lambda _message_id: list(links))
+    event_payload = event_payload or {
+        "candidate_id": "LJ-MEM-1", "decision_id": "decision-1", "memory_id": "LJ-MEM-1",
+        "status": "pending_owner_review", "reason_codes": ["confidence_below_threshold"],
+        "category": "low-risk-user",
+    }
+    state_db = SimpleNamespace(recent_events=lambda **_kwargs: [{
+        "event_type": "memory_promotion_decision",
+        "payload_json": json.dumps(event_payload),
+    }])
+    message_map = {"fact-1": {"message_id": message_id, "content_hash": "hash-1", "promotion_memory_id": "LJ-MEM-1"}}
+    return promotion, message_map, memory_db, read_model, state_db
+
+
+def test_measurement_does_not_filter_orphan_projection_rows(monkeypatch):
+    promotion, message_map, memory_db, read_model, state_db = _measurement_stores(
+        projection_rows=({"memory_id": "orphan"},),
+        links=(),
+    )
+    monkeypatch.setattr(promotion, "AutoMemoryPromotionService", _MeasurementService)
+    result = promotion.measure_promotion_fixtures(
+        [_measurement_record()], message_map, memory_db, read_model, state_db,
+    )
+    assert result.status == "failed"
+    assert result.provenance["status"] == "failed"
+
+
+def test_measurement_surfaces_empty_imported_message_relationship_identity(monkeypatch):
+    promotion, message_map, memory_db, read_model, state_db = _measurement_stores(
+        links=({"message_id": "", "memory_id": "LJ-MEM-1"},),
+    )
+    monkeypatch.setattr(promotion, "AutoMemoryPromotionService", _MeasurementService)
+    result = promotion.measure_promotion_fixtures(
+        [_measurement_record()], message_map, memory_db, read_model, state_db,
+    )
+    assert result.status == "failed"
+    assert result.provenance["status"] == "failed"
+
+
+def test_measurement_surfaces_malformed_message_relationship_identity(monkeypatch):
+    promotion, message_map, memory_db, read_model, state_db = _measurement_stores(
+        projection_rows=({"memory_id": "LJ-MEM-1"},),
+        event_payload={
+            "candidate_id": "LJ-MEM-1", "decision_id": "decision-1", "memory_id": "LJ-MEM-1",
+            "status": "active", "reason_codes": [], "category": "low-risk-user",
+        },
+        links=({"message_id": "", "memory_id": "LJ-MEM-1"},),
+    )
+
+    class ActiveService(_MeasurementService):
+        def evaluate(self, candidate):
+            return {
+                "status": "active", "candidate_id": candidate.memory_id,
+                "decision_id": "decision-1", "reason_codes": [],
+            }
+
+    monkeypatch.setattr(promotion, "AutoMemoryPromotionService", ActiveService)
+    result = promotion.measure_promotion_fixtures(
+        [_measurement_record()], message_map, memory_db, read_model, state_db,
+    )
+    assert result.status == "failed"
+    assert result.provenance["status"] == "failed"
+
+
+@pytest.mark.parametrize("message", [
+    {"message_id": "message-1", "content_hash": "hash-1"},
+    {"message_id": "message-1", "content_hash": "hash-1", "promotion_memory_id": ""},
+])
+def test_measurement_rejects_missing_promotion_memory_identity(monkeypatch, message):
+    promotion, _message_map, memory_db, read_model, state_db = _measurement_stores(links=())
+    monkeypatch.setattr(promotion, "AutoMemoryPromotionService", _MeasurementService)
+    result = promotion.measure_promotion_fixtures(
+        [_measurement_record()], {"fact-1": message}, memory_db, read_model, state_db,
+    )
+    assert result.status == "failed"
+    assert result.provenance["status"] == "failed"
+
+
+def test_measurement_rejects_service_result_without_candidate_identity(monkeypatch):
+    promotion, message_map, memory_db, read_model, state_db = _measurement_stores(links=())
+
+    class MissingCandidateService(_MeasurementService):
+        def evaluate(self, _candidate):
+            return {"status": "pending_owner_review", "decision_id": "decision-1", "reason_codes": ["confidence_below_threshold"]}
+
+    monkeypatch.setattr(promotion, "AutoMemoryPromotionService", MissingCandidateService)
+    result = promotion.measure_promotion_fixtures(
+        [_measurement_record()], message_map, memory_db, read_model, state_db,
+    )
+    assert result.status == "failed"
+    assert result.provenance["status"] == "failed"
+
+
+def test_activation_rejects_self_consistent_wrong_category():
+    from src.automatic_memory.quality_promotion import activation_measurement
+
+    outcomes = _activation_outcomes()
+    outcomes[1]["category"] = outcomes[1]["expected_category"] = "low-risk-user"
+    with pytest.raises(ValueError, match="activation"):
+        activation_measurement(outcomes)
+
+
+def test_activation_rejects_arbitrary_reason_code():
+    from src.automatic_memory.quality_promotion import activation_measurement
+
+    outcomes = _activation_outcomes()
+    outcomes[0]["reason_codes"] = ["other"]
+    with pytest.raises(ValueError, match="activation"):
+        activation_measurement(outcomes)
+
+
+def test_measurement_rejects_state_db_truth_disagreeing_with_service(monkeypatch):
+    promotion, message_map, memory_db, read_model, state_db = _measurement_stores(
+        event_payload={
+            "candidate_id": "LJ-MEM-1", "decision_id": "decision-1", "memory_id": "LJ-MEM-1",
+            "status": "error", "reason_codes": ["promotion_persist_failed"],
+            "category": "low-risk-user",
+        },
+        links=(),
+    )
+    monkeypatch.setattr(promotion, "AutoMemoryPromotionService", _MeasurementService)
+    result = promotion.measure_promotion_fixtures(
+        [_measurement_record()], message_map, memory_db, read_model, state_db,
+    )
+    assert result.status == "failed"
+    assert result.provenance["status"] == "failed"
+
+
+def test_measurement_rejects_state_db_category_disagreeing_with_service(monkeypatch):
+    promotion, message_map, memory_db, read_model, state_db = _measurement_stores(
+        event_payload={
+            "candidate_id": "LJ-MEM-1", "decision_id": "decision-1", "memory_id": "LJ-MEM-1",
+            "status": "pending_owner_review", "reason_codes": ["confidence_below_threshold"],
+            "category": "high-risk",
+        },
+        links=(),
+    )
+
+    class CategorizedService(_MeasurementService):
+        def evaluate(self, candidate):
+            result = super().evaluate(candidate)
+            result["category"] = "low-risk-user"
+            return result
+
+    monkeypatch.setattr(promotion, "AutoMemoryPromotionService", CategorizedService)
+    result = promotion.measure_promotion_fixtures(
+        [_measurement_record()], message_map, memory_db, read_model, state_db,
+    )
+    assert result.status == "failed"
+    assert result.provenance["status"] == "failed"
+
+
+def test_canonical_promotion_provenance_requires_per_outcome_truth():
+    payload = _canonical()
+    assert "outcomes" in payload["promotion_provenance"]
+
+
+def test_canonical_per_outcome_truth_rejects_missing_durable_fields():
+    payload = _canonical()
+    payload["promotion_provenance"]["outcomes"] = [{
+        "memory_id": "m1", "decision_id": "d1", "category": "low-risk-user",
+        "expected_category": "low-risk-user", "expected_status": "pending_owner_review",
+        "service_status": "pending_owner_review", "durable_status": "pending_owner_review",
+        "service_category": "low-risk-user", "durable_category": "low-risk-user",
+        "service_reason_codes": ["confidence_below_threshold"],
+        "durable_reason_codes": ["confidence_below_threshold"],
+    }]
+    payload["promotion_provenance"]["outcomes"][0].pop("durable_status", None)
+    with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
+        CanonicalFunctionalEvidence.from_mapping(payload)
