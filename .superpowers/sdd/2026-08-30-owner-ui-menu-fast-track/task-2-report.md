@@ -279,3 +279,116 @@ tests：
 - 未运行 live App/Sidecar、未访问 8766/8767、Acceptance root、Production/Vault、主人真实数据或
   真实 API；未打包/安装、未更新或执行 `LOCAL_EXECUTION_TASK.md` 候选 SHA，未做主人观察。
 - 两个 Minor 按根代理 ledger 延后 final review；独立审查、重建候选及后续 live 验收由根代理调度。
+
+## Task 2 second candidate technical handoff（2026-08-30）
+
+### 结论与 authority
+
+本追加记录对应新 ACTIVE 任务 `OWNER_UI_MENU_FAST_TRACK_TASK_2_B299E5B7`。authority docs 已先
+提交为 `cbdbbbe`，随后才执行构建、安装和隔离运行。新候选仅命名为
+`OWNER_UI_EXPERIENCE_CANDIDATE`，固定 exact product HEAD
+`b299e5b7d30e266e7dbbf4e2a9cc92c8f4d85ae4`，模式为 `MACOS_OWNER_UI_EXPERIENCE_ONLY`，并明确
+`NOT_A_RELEASE_GATE`。质量事实仍为 `MEASURED_FAIL / NOT_RELEASE_READY`；本次只交接技术健康
+候选，不宣称 release、Phase 1、merge 或主人体验 PASS。旧
+`OWNER_UI_REPAIR_REQUIRED` 失败结论及旧 root/backup/evidence/DB 全部保留。
+
+### 新隔离根、构建与整包安装
+
+- 新 acceptance root：`/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b`
+  （本机 canonical path 为 `/private/tmp/...`）；实际 packaged effective DataRoot 为
+  `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/data-root/acceptance`，其
+  `storage/` 与 `vault/` 为本轮 sidecar 实际使用根。新 source fixture home 为该 root 下
+  `source-fixture-home`，授权 exact Codex source 为其 `.codex/sessions`。
+- root 内建立了 `installed-app-backup/`、`evidence/`、`logs/`、`source-fixture/`、`vault/`、
+  `data-root/` 等隔离目录，并写入仅指向本轮 DataRoot 的 desktop bootstrap 配置。旧 root
+  `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6` 未删除、未复用、未用其 DB
+  验证新 UI。
+- 完整构建命令及结果：
+
+```text
+export PATH="/Users/wuhanwangduoyu/.cargo/bin:$PATH"
+cd desktop/lingji-control
+npm run build:sidecar:macos
+LINGJI_BUILD_CHANNEL=local-acceptance LINGJI_BUILD_TARGET=aarch64-apple-darwin npx tauri build --config src-tauri/tauri.sidecar.conf.json --bundles app --target aarch64-apple-darwin
+```
+
+  `build:sidecar:macos` PASS（PyInstaller arm64，runtime files=182）；Tauri `.app` PASS（Vite
+  97 modules，保留既有 dynamic-import warnings 与 Rust dead_code warnings）。DMG 未运行，本轮
+  为 app-only whole-bundle 安装，故 `dmg_sha256=NOT_RUN_APP_ONLY`。
+- 构建产物检查均通过：`file` 显示 main 与 sidecar 为 Mach-O 64-bit arm64，`otool -hv` 显示
+  sidecar `ARM64`，`codesign --verify --deep --strict --verbose=2` 返回 0。built main SHA256
+  为 `42d451593ed782b6bfce1f3fa421d1b0917face4fff40a5aaad4eb7997dea249`，built sidecar SHA256
+  为 `8d4a0db1a5b6d6ef0e45711af0d3ff2f69cdd58beb9eb6b149526d0772cdcdf9`，manifest SHA256 为
+  `be3ffc1bb4c82cf455fbc513e4a7763f031b331d6f1a3cb3f7f86927b695d5fe`。构建日志与签名日志
+  保存在新 root `logs/build-sidecar.log`、`logs/build-app.log`、`evidence/built-codesign-verify.log`
+  和 `evidence/built-codesign-details.log`。
+- 按明确 PID/job 关闭旧候选实例：先记录旧 `44824/44832`，对
+  `gui/501/com.lingji.acceptance.task2` 执行 stop/bootout 并只处理该 job 重启出的关联 PID，
+  确认旧实例退出且 8766 释放；旧 root 仍原样保留。没有卸载主人应用、删除主人数据或覆盖旧
+  备份。
+- 将原 `/Applications/灵机.app` 整包复制至新 root
+  `installed-app-backup/灵机.app`，并把 live preinstall 整包保留为
+  `installed-app-backup/灵机-live-preinstall.app`；再用 `ditto` 把新构建 `.app` whole-bundle
+  安装到 `/Applications/灵机.app`。preinstall backup main SHA256 为
+  `97be4f769b87b3c359b3b590eac707715f0c98796a587be0886149b9f2bb5c49`，sidecar SHA256 为
+  `8d4a0db1a5b6d6ef0e45711af0d3ff2f69cdd58beb9eb6b149526d0772cdcdf9`。
+- installed bundle 的 main/sidecar 仍为 arm64，strict codesign 返回 0。installed main、
+  sidecar、manifest SHA256 分别为上述 `42d451...`、`8d4a0d...`、`be3ffc...`；sorted bundle
+  inventory aggregate SHA256（本轮 installed exact product hash）为
+  `48b03e49d5ed8b3eb0bd7c6ec716bcb577f775bffdac83ce0d09bf892c57a721`。完整 inventory、hash
+  和安装签名日志在新 root `evidence/installed-bundle-files.sha256`、
+  `evidence/installed-hashes.sha256`、`evidence/installed-codesign-verify.log`。
+
+### 独立 fixture、真实 sidecar 与认证 API
+
+新 root 使用独立 seed 脚本，命令为：
+
+```text
+PYTHONPATH=. python3 -m py_compile /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/seed_acceptance.py
+PYTHONPATH=. python3 /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/seed_acceptance.py
+```
+
+Seed 实际创建 6 个可读记忆（`current`、`superseded`、`stale`、`conflict`、`permanent`、
+`candidate`）、1 个 authorized Codex source、1 个 conversation、6 条 messages、1 个真实
+`action-owner-review` pending action、2 个 rollout fixture files。新 sidecar 启动后的真实扫描
+为 1 条 completed scan（total/progress=2/2），未伪造 vector；API 如实报告 vector unavailable。
+
+使用用户 GUI launchd 隔离提交 job 启动真实已安装 app：
+
+```text
+launchctl submit -l com.lingji.acceptance.task2.b299e5b -- /usr/bin/env LOCALAPPDATA="/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/desktop-config" HOME="/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/source-fixture-home" /Applications/灵机.app/Contents/MacOS/lingji-control-center
+```
+
+当前 Desktop PID `55746`，sidecar PID `55764`；sidecar 命令行为：
+
+```text
+/Applications/灵机.app/Contents/Resources/lingji-core.exe --data-root /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/data-root/acceptance --host 127.0.0.1 --port 8766
+```
+
+认证 API（token 未写入报告）均 HTTP 200：`/api/runtime/ping`、`/api/health`、`/api/overview`、
+`/api/memory/inspector/cards?limit=50&include_evidence=true`、`/api/memory/inspector/cards-summary`、
+`/api/automatic-memory/sources`、`/api/automatic-memory/scans`、`/api/work/pending-actions`、
+`/api/automatic-memory/summary`、`/api/automatic-memory/runtime`。ping body 为
+`{"status":"ok"}`；cards summary 为 `cards=8`、`conversations=3`、`messages=12`、
+`permanent=1`、`owner_review=6`；source=1 authorized；scans=1 completed；pending=1 unresolved；
+runtime/scheduler/worker 均 running。`lsof` 确认 8766 由新 sidecar 监听。
+
+新 root `evidence/` 保存 `runtime-ping.json`、`health.json`、`overview.json`、`cards.json`、
+`cards-summary.json`、`automatic-sources.json`、`scans.json`、`pending.json`、
+`automatic-summary.json`、`automatic-runtime.json`、`installed-bundle-files.sha256`、
+`installed-codesign-verify.log`、`seed-summary.json`、PID 与 launchctl 日志；不含 acceptance token。
+Production path 不存在，`production_pollution_count=0`；新 effective vault 外无主人 Vault 读取，
+`vault_pollution_count=0`。
+
+### 当前交接边界
+
+- 当前页面：根代理已观察到新候选默认记忆页出现 `superseded`/`stale` 历史卡片；该观察判定
+  当前候选 `OWNER_UI_REPAIR_REQUIRED`，验收暂停，等待 repair 重建后再验。本 agent 未替根代理
+  点击，未声明 UI/主人通过。
+- 当前回执保持 `RUNNING / PENDING / OWNER_UI_REPAIR_REQUIRED`，
+  `owner_observation_page=MEMORY_DEFAULT_PAGE_SUPERSEDED_STALE_FAIL`。Desktop `55746`、sidecar
+  `55764`、8766 必须保持运行，acceptance root 不清理。
+- 新增主人规则：验收当前暂停，不得标记通过；默认记忆页若出现 `superseded`/`stale` 历史卡片
+  即为真实失败信号，等待 repair 重建后再验。该规则不改变本机已完成的技术证据，也不允许将
+  fixture/API 健康或进程运行误写成主人 PASS。新候选主人未完成项是根代理 Computer Use 观察
+  与 repair 后的主人最终结论。

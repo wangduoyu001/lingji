@@ -29,8 +29,19 @@ Phase 1 PASS、merge 或主人观察 PASS。旧候选 `6baf4ee6` 的 `OWNER_UI_R
 
 新 Acceptance 根固定为 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b`，DataRoot、
 Vault、source fixture、evidence 和新安装前 `/Applications/灵机.app` 整包备份分离；Production、
-主人真实聊天、真实 Vault、正式记忆与用户配置保持不触碰。根代理随后用 Computer Use 遍历
-四项普通菜单、技术诊断折叠入口、动作/窗口路径并等待主人确认；新候选与 sidecar 必须保持打开。
+主人真实聊天、真实 Vault、正式记忆与用户配置保持不触碰。根代理已开始 Computer Use 观察；
+新候选与 sidecar 必须保持打开，验收暂停，等待 repair 重建后再验。
+
+第二候选已由 authority docs 提交 `cbdbbbe` 后完成本机技术准备：安装整包 inventory SHA256
+为 `48b03e49d5ed8b3eb0bd7c6ec716bcb577f775bffdac83ce0d09bf892c57a721`，主程序与 sidecar
+均为 macOS arm64，installed bundle strict codesign 验证通过；Desktop PID `55746`、sidecar
+PID `55764`，认证 `127.0.0.1:8766` ping 为 HTTP 200。新隔离 fixture 实测 8 张记忆卡、1
+条 completed scan、1 条 pending action，Production pollution=0、Vault pollution=0；DMG 未运行
+（app-only whole-bundle 安装）。当前状态仍为 `RUNNING / PENDING / OWNER_UI_REPAIR_REQUIRED`，
+根代理已在默认记忆页观察到 `superseded`/`stale` 历史卡片，当前候选验收暂停，等待 repair
+重建后再验；绝不表示主人 PASS、release 或 Phase 1 PASS。
+旧 `6baf4ee6` 候选的 `OWNER_UI_REPAIR_REQUIRED` 报告、backup、fixture、DB、日志与 evidence
+必须继续保留。
 
 ## 1. 当前唯一产品目标
 

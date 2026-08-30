@@ -3187,3 +3187,31 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   报告：`.superpowers/sdd/2026-08-30-owner-ui-menu-fast-track/task-2-report.md`。
 - 本轮未运行/触碰 live App、PID `44824/44832`、8766/8767、Acceptance root、Production/Vault、
   主人数据、真实 API、打包/安装或主人观察；不更新、不执行 `LOCAL_EXECUTION_TASK.md` 中候选 SHA。
+
+## 2026-08-30 · Owner UI / menu fast-track · Task 2 second candidate technical handoff
+
+- authority docs 已先以提交 `cbdbbbe` 激活 `OWNER_UI_MENU_FAST_TRACK_TASK_2_B299E5B7`，模式为
+  `MACOS_OWNER_UI_EXPERIENCE_ONLY`，候选标签 `OWNER_UI_EXPERIENCE_CANDIDATE`，精确产品 SHA
+  `b299e5b7d30e266e7dbbf4e2a9cc92c8f4d85ae4`；本轮 `NOT_A_RELEASE_GATE`，保持
+  `MEASURED_FAIL / NOT_RELEASE_READY`，不宣称 release、Phase 1 或主人通过。
+- 从 exact SHA 构建并 whole-bundle 安装 arm64 Tauri `.app`；installed bundle inventory SHA256
+  `48b03e49d5ed8b3eb0bd7c6ec716bcb577f775bffdac83ce0d09bf892c57a721`，main SHA256
+  `42d451593ed782b6bfce1f3fa421d1b0917face4fff40a5aaad4eb7997dea249`，sidecar SHA256
+  `8d4a0db1a5b6d6ef0e45711af0d3ff2f69cdd58beb9eb6b149526d0772cdcdf9`；main+sidecar 为
+  macOS arm64，installed `codesign --verify --deep --strict` 通过。DMG 未运行（app-only）。
+- 本轮新隔离根为 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b`，真实有效
+  packaged DataRoot 为其 `data-root/acceptance`；独立 seed 实测 8 张记忆卡、1 条 completed
+  scan、1 条 pending action、1 个 authorized Codex source，Production pollution=0、Vault
+  pollution=0。旧 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6` 及其
+  backup/evidence/DB/fixture 原样保留，未用于新候选验证。
+- 新候选保持运行：Desktop PID `55746`、sidecar PID `55764`、认证 `127.0.0.1:8766` ping
+  HTTP 200；只完成 API/进程/架构/签名/fixture 自动验证，当前页面为默认 Home/Overview，
+  等待根代理 Computer Use 与主人观察，未替根代理点击、未宣布主人 PASS，未关闭进程或清理根。
+
+## 2026-08-30 · Owner UI / menu fast-track · Task 2 owner observation pause
+
+- 根代理新增主人观察：新候选默认记忆页出现 `superseded`/`stale` 历史卡片，按产品规则判定
+  `OWNER_UI_REPAIR_REQUIRED`；当前候选验收暂停，等待 repair 重建后再验。该失败不归因于
+  fixture、API 或进程健康，也不得将技术健康写成主人通过。
+- 交接回执保持 `RUNNING / PENDING / OWNER_UI_REPAIR_REQUIRED`，新 app、sidecar、8766、旧
+  `6baf4ee6` evidence 与新 root 均保持；不修改产品、不停止实例、不清理 acceptance 数据。
