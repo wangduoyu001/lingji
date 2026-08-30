@@ -2796,3 +2796,10 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - RED：在 newest terminal event + empty canonical MemoryDB 的真实 projector 路径中，新增断言首先复现 `layers.structured.state == available` 与 `projection.state == unavailable` 矛盾；同时断言逐卡 vector 不得为 available。
 - GREEN：`OwnerMemoryCardProjector._memory_card()` 现在由 canonical projection state 派生 structured layer；缺失/unknown 时为 `unavailable` 并给出明确原因，已有 projection 与未晋级 conversation evidence 保持原语义。产品/测试提交：`7d1c7c9`。
 - 验证要求：Task2 focused、Inspector/temporal/promotion/vector 直接回归、compileall、diff-check、acceptance-sync、local-handoff；禁止 live/App/Acceptance、真实聊天、Production/Vault 和 owner 数据。
+
+## 2026-08-30 · Task 3 Repair Round 1 · owner card truth and lifecycle closure
+
+- 基线：Task3 review `179bf3f88d4cb9daf86f2cbe46afefbe63478317`；产品/测试提交：`f34b6f9`。范围严格限于审查 I1–I8/M1–M2：Home full summary/Work Facts、Core action 分流与 provenance 保留、列表 preview 边界、ID-free fallback、archive reason、详情 focus/aria/live feedback、40px hit area，以及 rendered E2E fixture 证据。
+- TDD RED：旧基线 projector 新断言 6 failures（永久 state、列表 detail read、ID fallback、archive reason、Core action、summary 缺失）；旧基线 cards-summary API 为 404；当前草稿 archive 空 reason 新断言先失败。GREEN 后 focused `52 passed, 1 warning`。
+- 真机合成验证：`npm run test:e2e:memory` PASS；`npm run test:smoke` PASS（23 scripts）；`npm run build` PASS；`python3 -m compileall -q src` PASS；`git diff --check` PASS。E2E 覆盖 full Home counts、2–3 Work Facts、selected message detail request、Core correct/invalidate/archive + fresh GET、409、keyboard/Esc/focus、1280/1024 overflow/layout。
+- 本轮继续禁止 live/App/Acceptance/真实聊天/真实 Vault/Production 数据读取；未执行发布版、Artifact、Mac/Windows 或主人体验验收。最终 `acceptance-sync` 与 `local-handoff` 均 PASS；产品与 docs/evidence 保持分离提交。
