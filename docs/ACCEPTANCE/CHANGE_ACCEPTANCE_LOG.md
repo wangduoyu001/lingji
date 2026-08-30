@@ -32,6 +32,37 @@
   `LOCAL_EXECUTION_RESULT.md`、`PROJECT_STATUS.md` 与本条；最终只能报告候选技术事实及
   `PASS/FAIL/BLOCKED/NOT_TESTED`，不能替主人宣称体验通过。
 
+### Task 2 当前本机实测交接（仅技术准备）
+
+- 2026-08-30 已从 exact SHA 构建并 whole-bundle 安装 macOS arm64 Tauri 候选；DMG 生成成功，
+  SHA256=`c5cc7c73fc9753ae4cb580494101ddfeaeb14baeede62beeed87f794f809aff6`。installed app
+  inventory SHA256=`2c8a34dcf3250f46e23e538f03762053624d9887be722b3ba517b886a9631939`，主程序和
+  sidecar 均 arm64，strict codesign 通过。
+- 使用用户 GUI launchd 保持 Desktop PID `44824`、sidecar PID `44832`；认证 loopback
+  `127.0.0.1:8766/api/runtime/ping` 返回 HTTP 200。Acceptance API 实测 8 cards、2 completed
+  scans、1 pending action；raw/structured/permanent 状态均有真实数据，vector 如实 unavailable。
+  Production root 不存在且本轮 Production/Vault pollution=0。详细命令和证据文件见
+  `.superpowers/sdd/2026-08-30-owner-ui-menu-fast-track/task-2-report.md`。
+- 启动期间发现并记录一个非产品环境边界：`/tmp` canonical 为 `/private/tmp`，source exact-root
+  authorization 必须使用 canonical path；初次 seed 曾写入非 packaged runtime 的 nested DB，已定位
+  后改为 sidecar 实际 direct storage 并完成重启验证。该边界不构成产品改动或 release 结论。
+
+### Task 2 主人体验初验结论（OWNER_UI_REPAIR_REQUIRED）
+
+- 根代理已完成候选初步 UI 观察；结论固定为 `OWNER_UI_REPAIR_REQUIRED`，仍是
+  `OWNER_UI_EXPERIENCE_CANDIDATE` / `NOT_A_RELEASE_GATE`，不得误报为 release、Phase 1、merge
+  或主人 PASS。Desktop PID `44824`、sidecar PID `44832`、认证 8766 与 Acceptance fixture 必须
+  保持运行和保留，不能因失败观察停止或清理。
+- 首页在运行正常、已有来源/卡片时仍显示“需要先完成设置”；pending/source 轮询在普通页面间
+  出现“暂时无法确认/尚未获得”矛盾。来源页持续显示“尚未获得来源信息”，但认证
+  `discovered`/`sources`/`scans`/`summary`/`runtime` API 均 HTTP 200 且有数据。需要我显示 0 项，
+  但认证 `/api/work/pending-actions` 返回 1 项；首页先显示待办后又变为不可确认。
+- 8 张记忆卡有主题、发展、来源和层状态，但全部 `conclusion=null`；普通卡和详情均显示“最新
+  结论尚未获得”，详情不能回答当前结论/过时后的现状。修正入口可打开并填写原因，但 Mac 后续
+  因物理输入锁定，提交未完成；高级诊断折叠/打开及较窄窗口布局正常。
+- 以上为真实主人观察缺口，不能将 fixture/API 200/自动 smoke 解释为通过。下一步是产品修复后
+  重新构建同类候选与重新观察；本条不授权修改产品代码。
+
 ## 2026-08-30 · Task 1 Repair Round 2 · Trusted completed-scan aggregate
 
 - 基线：`81c813364985a223ce777592649154bbe9778580`；本轮产品/测试提交：`a8cfcae`。

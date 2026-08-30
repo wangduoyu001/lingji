@@ -2,26 +2,27 @@
 
 > 当前任务正在执行：`OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6`。
 > 当前候选仅为 `OWNER_UI_EXPERIENCE_CANDIDATE`，`NOT_A_RELEASE_GATE`；
-> `MEASURED_FAIL / NOT_RELEASE_READY` 质量事实保持延期。下方旧任务回执仅作历史记录，
+> 主人体验实测结论为 `OWNER_UI_REPAIR_REQUIRED`，`MEASURED_FAIL / NOT_RELEASE_READY`
+> 质量事实保持延期。下方旧任务回执仅作历史记录，
 > 不覆盖当前 ACTIVE 任务。
 
 ## 0. 当前 ACTIVE 任务回执
 
 ```yaml
 task_id: OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6
-status: PENDING
-verdict: PENDING
+status: RUNNING
+verdict: FAIL
 execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 product_commit: 6baf4ee6d15256e44164bcbe3f7ce227af0b5d07
-task_instruction_commit: PENDING
+task_instruction_commit: f31174fabec4a7e8c554a485fab954e3dc116f74
 report_branch: acceptance/owner-ui-menu-fast-track-task-2-6baf4ee6
 report_commit: PENDING
 report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_EXPERIENCE_ONLY_6baf4ee6.md
 public_summary_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_6baf4ee6.json
 public_hashes_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_6baf4ee6.txt
-cleanup_before: PENDING
+cleanup_before: PASS
 cleanup_after: PENDING
 remote_branch_verified: false
 remote_commit_verified: false
@@ -29,9 +30,24 @@ remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
 local_temp_root_absent: false
-owner_observation: PENDING
-started_at: PENDING
+owner_observation: OWNER_UI_REPAIR_REQUIRED
+started_at: 2026-08-30T20:27:51+08:00
 finished_at: PENDING
+installed_app_hash: 2c8a34dcf3250f46e23e538f03762053624d9887be722b3ba517b886a9631939
+installed_main_sha256: 97be4f769b87b3c359b3b590eac707715f0c98796a587be0886149b9f2bb5c49
+installed_sidecar_sha256: 8d4a0db1a5b6d6ef0e45711af0d3ff2f69cdd58beb9eb6b149526d0772cdcdf9
+dmg_sha256: c5cc7c73fc9753ae4cb580494101ddfeaeb14baeede62beeed87f794f809aff6
+desktop_pid: 44824
+sidecar_pid: 44832
+control_api_ping: HTTP_200_STATUS_OK
+acceptance_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6
+acceptance_effective_data_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6/data-root/acceptance
+acceptance_memory_cards: 8
+acceptance_completed_scans: 2
+acceptance_pending_actions: 1
+production_pollution_count: 0
+vault_pollution_count: 0
+owner_observation_page: HOME_OVERVIEW_OWNER_UI_REPAIR_REQUIRED
 ```
 
 Acceptance 根目录固定为 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6`，
