@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, type LingJiApi } from "../api";
-import { actionAvailability, actionEvidence, authorizationEvidence, MemorySourcesApi, ownerSourceName, periodicReconciliationNotice, scanCountValue, scanStatusLabel, sourceMetadataEvidence, sourceStateLabel } from "./memorySourcesApi";
+import { actionAvailability, actionEvidence, authorizationEvidence, countLabel, MemorySourcesApi, ownerSourceName, periodicReconciliationNotice, scanCountValue, scanStatusLabel, sourceMetadataEvidence, sourceStateLabel } from "./memorySourcesApi";
 import type { MemorySourcesSnapshot, SourceFact, SourceState } from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 import { Empty, Notice } from "../components/ui";
@@ -18,8 +18,12 @@ const stateTone: Record<SourceState, string> = {
 };
 
 function actionError(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  return error instanceof Error ? error.message : "操作没有完成，请稍后重试。";
+  if (error instanceof ApiError) {
+    if (error.status === 0) return "当前无法连接灵机，请检查连接后重试。";
+    if (error.status === 401 || error.status === 403) return "当前没有完成这项操作，请重新确认来源后重试。";
+    if (error.status === 409) return "来源状态刚刚变化，请刷新后再试。";
+  }
+  return "来源操作没有完成，请稍后重试。";
 }
 
 function isPickerSource(source: SourceFact): boolean {
@@ -129,15 +133,22 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
 }
 
 function sourceSummary(snapshot: MemorySourcesSnapshot): string {
-  const current = snapshot.sources.filter((item) => item.state === "current").map(ownerSourceName);
-  if (current.length) return `正在记住：${current.join("、")}。`;
-  const connectable = snapshot.sources.some((item) => {
+  const sources = Array.isArray(snapshot.sources) ? snapshot.sources : [];
+  const discoveredCount = countLabel(Array.isArray(snapshot.discovered) ? snapshot.discovered.length : undefined);
+  const authorizedCount = countLabel(Array.isArray(snapshot.authorized) ? snapshot.authorized.length : undefined);
+  const takenOverCount = countLabel(Array.isArray(snapshot.sources) ? sources.filter((item) => item.state === "current").length : undefined);
+  const scanCount = countLabel(Array.isArray(snapshot.scans) ? snapshot.scans.length : undefined);
+  const current = sources.filter((item) => item.state === "current").map(ownerSourceName);
+  const counts = `发现 ${discoveredCount} 个来源 · 已授权 ${authorizedCount} 个 · 已接管 ${takenOverCount} 个 · 已完成检查 ${scanCount} 次。`;
+  if (current.length) return `${counts}正在记住：${current.join("、")}。`;
+  const connectable = sources.some((item) => {
     if (item.state === "unsupported") return false;
     if (item.kind === "claude_desktop" && !item.root && !["authorized", "current", "scanning", "degraded", "failed", "revoked"].includes(item.state)) return false;
     return Boolean(item.root || item.source_id || ["authorized", "current", "scanning", "degraded", "failed", "revoked"].includes(item.state));
   });
-  if (connectable) return "已找到可连接的内容，完成选择和检查后才会开始记住。";
-  return "暂时没有可连接的记录来源。";
+  if (connectable) return `${counts}已找到可连接的内容，完成选择和检查后才会开始记住。`;
+  if (!Array.isArray(snapshot.sources)) return `${counts}来源状态尚未获得。`;
+  return `${counts}暂时没有可连接的记录来源。`;
 }
 
 function scanDetailCopy(detail: Record<string, unknown>): string {
@@ -159,7 +170,7 @@ function detailValue(key: string, value: unknown, detail: Record<string, unknown
 }
 
 function detailEntries(detail: Record<string, unknown>): Array<[string, unknown]> {
-  const keys = ["status", "progress", "total", "created", "queued", "reused", "updated", "skipped", "failed", "last_error"];
+  const keys = ["status", "progress", "total", "created", "queued", "reused", "updated", "skipped", "failed"];
   return keys.filter((key) => key in detail || ["created", "queued", "reused", "updated", "skipped", "failed"].includes(key)).map((key) => [key, detail[key]]);
 }
 

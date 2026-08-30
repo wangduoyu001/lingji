@@ -134,7 +134,7 @@ export default function DesktopShell({
           {autoRecoveryActive && <small className="desktop-runtime-warning">连接中断，灵机会自动恢复，无需手动操作。</small>}
           {ownerStopped && <small className="desktop-runtime-warning">主人已停止核心，自动恢复暂时暂停。</small>}
           {!runtimeAvailable && runtimeConfigured && connectionState !== "unsupported" && (
-            <small className="desktop-runtime-warning">当前安装包未包含灵机核心，仍可连接手动启动的8766服务。</small>
+            <small className="desktop-runtime-warning">当前安装包未包含灵机核心，请检查安装或联系支持。</small>
           )}
 
           {connectionState !== "unsupported" && connectionState !== "configuration_required" && (

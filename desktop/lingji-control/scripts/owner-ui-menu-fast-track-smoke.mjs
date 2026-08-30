@@ -26,6 +26,18 @@ const discovered = {
   capability: "metadata_discovery",
   reason: null,
 };
+const detectedOnly = {
+  kind: "generic_ai_history",
+  display_name: "其他AI聊天投递箱",
+  candidate_root: "/safe/fixture/generic",
+  status: "available",
+  file_count: 1,
+  byte_count: 512,
+  earliest_mtime: 1760000000,
+  latest_mtime: 1760003600,
+  capability: "metadata_discovery",
+  reason: null,
+};
 const scan = {
   scan_id: "scan-codex",
   source_id: source.source_id,
@@ -60,7 +72,7 @@ const card = {
   current_hash: "hash-memory-card-1",
   evidence: [{ message_id: "message-1", preview: "下周三发布", occurred_at: "2026-08-28T08:03:00Z" }],
 };
-const state = { scanRequests: 0 };
+const state = { scanRequests: 0, pauseFailure: false, pendingActions: [] };
 
 const json = (body) => JSON.stringify(body);
 const fulfill = (route, body, status = 200) => route.fulfill({
@@ -92,7 +104,7 @@ try {
     window.__TAURI_INTERNALS__ = { invoke: async (command) => {
       if (command === "control_credentials") return { base_url: "http://127.0.0.1:8766", token: "fixture-token" };
       if (command === "runtime_bootstrap_status") return { configured: true, c_drive_write_detected: false, active_workspace: "acceptance", data_root_display: "fixture" };
-      return { healthy: true, managed: true, binary_available: true, host: "127.0.0.1", port: 8766 };
+      return { healthy: true, managed: true, binary_available: false, host: "127.0.0.1", port: 8766 };
     } };
   });
   await page.route(`${apiOrigin}/**`, async (route) => {
@@ -101,16 +113,18 @@ try {
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, X-LingJi-Token", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" } });
     if (request.headers()["x-lingji-token"] !== "fixture-token") return fulfill(route, { detail: { code: "UNAUTHORIZED", message: "token required" } }, 401);
     if (url.pathname === "/api/overview") return fulfill(route, { health: { status: "healthy" }, memory_runtime: { state: "healthy", as_of: "2026-08-28T08:03:00Z" }, queue: { stats: {} } });
-    if (url.pathname === "/api/automatic-memory/discovered") return fulfill(route, [discovered]);
+    if (url.pathname === "/api/automatic-memory/discovered") return fulfill(route, [discovered, detectedOnly]);
     if (url.pathname === "/api/automatic-memory/sources") return fulfill(route, [source]);
     if (url.pathname === "/api/automatic-memory/scans") return fulfill(route, [{ ...scan, status: state.scanRequests ? "running" : scan.status }]);
+    if (url.pathname === "/api/automatic-memory/scans/scan-codex") return fulfill(route, { ...scan, status: "failed", last_error: "fixture failure: /private/secret" });
     if (url.pathname === "/api/automatic-memory/summary") return fulfill(route, { counts: { completed: 1 }, total: 1, latest: scan, progress: { current: 1, total: 2 }, next_action: "wait" });
     if (url.pathname === "/api/automatic-memory/runtime") return fulfill(route, { state: "running", running: true, paused: false, automation_mode: "periodic_reconciliation", event_watcher_enabled: false, next_reconciliation_seconds: 900 });
     if (url.pathname === "/api/automatic-memory/scan" && request.method() === "POST") { state.scanRequests += 1; return fulfill(route, { ...scan, status: "running" }); }
+    if (url.pathname === "/api/automatic-memory/pause" && request.method() === "POST" && state.pauseFailure) return fulfill(route, { detail: { code: "PAUSE_FAILED", message: "raw backend detail /private/secret" } }, 503);
     if (url.pathname === "/api/memory/inspector/cards-summary") return fulfill(route, { cards: 1, conversations: 1, messages: 2, permanent: 1, vectorized: 1, owner_review: 0 });
     if (url.pathname === "/api/memory/inspector/cards") return fulfill(route, { items: [card], pagination: { limit: 20, offset: 0, total: 1, has_more: false } });
     if (url.pathname === "/api/memory/inspector/cards/memory-card-1") return fulfill(route, { item: card });
-    if (url.pathname === "/api/work/pending-actions") return fulfill(route, { pending_actions: [] });
+    if (url.pathname === "/api/work/pending-actions") return fulfill(route, { pending_actions: state.pendingActions });
     if (url.pathname === "/api/work/current") return fulfill(route, { work: null, events: [], outcome: null, next_action: null });
     if (url.pathname === "/api/work/history") return fulfill(route, { items: [], total: 0, has_more: false, limit: 3, offset: 0 });
     return fulfill(route, { detail: "not found" }, 404);
@@ -118,6 +132,9 @@ try {
 
   await page.goto(viteOrigin, { waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+
+  const sidebarStatusText = await page.locator(".desktop-sidebar-status").innerText();
+  assert.equal(sidebarStatusText.includes("8766"), false, "ordinary runtime warning must not expose the control port");
 
   const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
   assert.deepEqual(primaryLabels, ["首页", "记忆内容", "需要我", "记忆来源"], "ordinary navigation must have exactly four destinations");
@@ -136,6 +153,18 @@ try {
   const homeText = await page.locator(".overview-page").innerText();
   assert.equal(/memory-card-1|source-codex|\{/.test(homeText), false, "Home ordinary copy must not expose IDs or JSON");
 
+  state.pendingActions = [{ action_id: "action-fixture", work_id: "work-fixture", description: "确认发布计划" }];
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+  const pendingNextStep = page.locator(".overview-next-step");
+  await pendingNextStep.getByText("需要你处理：确认发布计划", { exact: true }).waitFor();
+  await pendingNextStep.getByRole("button", { name: "去处理", exact: true }).click();
+  await page.getByRole("heading", { name: "需要我处理", exact: true }).waitFor();
+  state.pendingActions = [];
+  await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
+  await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
+  await page.getByText("你现在不用做任何事", { exact: true }).waitFor();
+
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆内容" }).click();
   await page.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor();
   const cardsText = await page.locator(".owner-memory-card-grid").innerText();
@@ -148,12 +177,27 @@ try {
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
   await page.getByRole("heading", { name: "选择灵机要记住的内容", exact: true }).waitFor();
   const sourceCard = page.locator('[data-source-kind="codex_rollout"]');
+  const sourceSummary = await page.locator(".memory-sources-summary").innerText();
+  for (const phrase of ["发现 2 个来源", "已授权 1 个", "已接管 1 个", "已完成检查 1 次"]) assert.ok(sourceSummary.includes(phrase), `source aggregate must show ${phrase}`);
+  assert.ok(sourceSummary.includes("发现 2 个来源") && sourceSummary.includes("已接管 1 个"), "detection and takeover counts must stay distinct");
   await sourceCard.getByText("文件数：2", { exact: true }).waitFor();
   await sourceCard.getByText("占用空间：2048 字节", { exact: true }).waitFor();
   assert.equal((await sourceCard.locator(".memory-source-metadata").innerText()).includes("/safe/fixture"), false, "source truth must not expose a filesystem path");
   await sourceCard.getByRole("button", { name: "现在检查", exact: true }).click();
   await page.getByRole("heading", { name: "扫描中", exact: true }).waitFor();
   assert.equal(state.scanRequests, 1, "source action must trigger the existing scan API");
+  state.pauseFailure = true;
+  await sourceCard.getByRole("button", { name: "暂停检查", exact: true }).click();
+  await page.getByText("来源操作没有完成，请稍后重试。", { exact: true }).waitFor();
+  const sourcePageText = await page.locator(".memory-sources-page").innerText();
+  assert.equal(sourcePageText.includes("raw backend detail /private/secret"), false, "ordinary source errors must not expose raw backend details");
+  await sourceCard.getByRole("button", { name: "查看这次检查", exact: true }).click();
+  const detailGrid = page.locator(".memory-scan-detail .memory-detail-grid");
+  await detailGrid.waitFor();
+  assert.equal((await detailGrid.innerText()).includes("fixture failure"), false, "last_error must stay out of ordinary scan results");
+  const technicalDetail = page.locator(".memory-scan-detail details");
+  await technicalDetail.locator("summary").click();
+  assert.ok((await technicalDetail.innerText()).includes("fixture failure: /private/secret"), "last_error must remain available in technical details");
 
   await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
   await page.getByRole("heading", { name: "需要我处理", exact: true }).waitFor();

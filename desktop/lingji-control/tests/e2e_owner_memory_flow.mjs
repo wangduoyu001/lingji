@@ -453,6 +453,9 @@ try {
   await fetch(`http://127.0.0.1:${apiPort}/__test/all-states`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查", exact: true }).click();
   await page.locator('[data-source-kind="codex_rollout"]').getByText("文件数：2", { exact: true }).waitFor();
+  const allStatesSourceSummary = await page.locator(".memory-sources-summary").innerText();
+  for (const phrase of ["发现 17 个来源", "已授权 12 个", "已接管 1 个", "已完成检查 4 次"]) assert.ok(allStatesSourceSummary.includes(phrase), `source aggregate must show ${phrase}`);
+  assert.ok(allStatesSourceSummary.includes("发现 17 个来源") && allStatesSourceSummary.includes("已接管 1 个"), "source detection and takeover counts must remain distinct");
   const codexCardAfterRestore = page.locator('[data-source-kind="codex_rollout"]');
   await codexCardAfterRestore.getByRole("button", { name: "允许接管 Codex", exact: true }).click();
   const authorizePayload = await (await fetch(`http://127.0.0.1:${apiPort}/__test/authorize-payload`, { headers: { "X-LingJi-Token": "fixture-token" } })).json();
@@ -492,14 +495,14 @@ try {
   await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "claude-only" });
   await page.waitForTimeout(300);
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
-  await page.getByText("暂时没有可连接的记录来源。", { exact: true }).waitFor();
+  await page.getByText("暂时没有可连接的记录来源。", { exact: false }).waitFor();
   await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂不支持自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
   assert.equal(await page.locator('[data-source-kind="claude_desktop"] .memory-source-next').count(), 0, "unsupported Claude must not render a next-step heading");
   assert.equal(await page.getByText("Claude Desktop has no approved official export schema; opaque storage is not read", { exact: true }).count(), 0, "Claude raw reason must stay out of ordinary source copy");
   await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "claude-consent" });
   await page.waitForTimeout(300);
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
-  await page.getByText("暂时没有可连接的记录来源。", { exact: true }).waitFor();
+  await page.getByText("暂时没有可连接的记录来源。", { exact: false }).waitFor();
   await page.locator('[data-source-kind="claude_desktop"]').getByRole("heading", { name: "需要确认", exact: true }).waitFor();
   assert.equal(await page.locator('[data-source-kind="claude_desktop"] .memory-source-next').count(), 0, "consent-required Claude must not render a next-step heading");
   await page.locator('[data-source-kind="claude_desktop"]').getByText("Claude 暂不支持自动导入旧记录；灵机不会读取它的内部数据库。", { exact: true }).waitFor();
@@ -508,7 +511,7 @@ try {
   await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "empty" });
   await page.waitForTimeout(300);
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查" }).click();
-  await page.getByText("暂时没有可连接的记录来源。", { exact: true }).waitFor();
+  await page.getByText("暂时没有可连接的记录来源。", { exact: false }).waitFor();
 
   await page.getByRole("button", { name: "首页" }).click();
   await page.getByRole("button", { name: "活动记录", exact: true }).click();
@@ -595,6 +598,12 @@ try {
   assert.equal(await page.getByText("下一步：灵机", { exact: true }).count(), 0, "ordinary activity must not expose system actor names");
   await setActivityMode("normal");
 
+  await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
+  await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+  const pendingNextStep = page.locator(".overview-next-step");
+  await pendingNextStep.getByText("需要你处理：确认这条会议决定是否进入长期记忆", { exact: true }).waitFor();
+  await pendingNextStep.getByRole("button", { name: "去处理", exact: true }).click();
+  await page.getByRole("heading", { name: "需要我处理", exact: true }).waitFor();
   await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
   await page.locator("h1").filter({ hasText: "需要我" }).waitFor();
   await page.getByText("确认这条会议决定是否进入长期记忆", { exact: true }).waitFor();
