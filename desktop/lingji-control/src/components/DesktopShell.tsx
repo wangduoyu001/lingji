@@ -105,7 +105,13 @@ export default function DesktopShell({
             ))}
           </div>
         </nav>
-        <button className="desktop-diagnostics-link" onClick={() => onNavigate("diagnostics")}>高级诊断</button>
+        <details className="desktop-advanced-disclosure">
+          <summary className="desktop-diagnostics-link">高级诊断</summary>
+          <div className="desktop-advanced-disclosure-body">
+            <p>日常不需要进入这里。状态异常或需要核查时，再打开详细页面。</p>
+            <button className="desktop-advanced-open" onClick={() => onNavigate("diagnostics")}>打开高级诊断</button>
+          </div>
+        </details>
 
         <div className="desktop-sidebar-status">
           <div className="desktop-status-line">

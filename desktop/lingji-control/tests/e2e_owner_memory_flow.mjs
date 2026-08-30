@@ -616,7 +616,16 @@ try {
 
   const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
   assert.deepEqual(primaryLabels, ["首页", "记忆内容", "需要我", "记忆来源"], "ordinary navigation must contain exactly four owner entries");
-  assert.equal(await page.locator(".desktop-diagnostics-link").count(), 1, "advanced diagnostics must have one low-emphasis entry");
+  const advancedDisclosure = page.locator("details.desktop-advanced-disclosure");
+  assert.equal(await advancedDisclosure.count(), 1, "advanced diagnostics must have one collapsed disclosure");
+  assert.equal(await advancedDisclosure.evaluate((node) => node.open), false, "advanced diagnostics must start collapsed");
+  await advancedDisclosure.locator("summary").click();
+  assert.equal(await advancedDisclosure.evaluate((node) => node.open), true, "advanced diagnostics disclosure must open from the keyboard/mouse target");
+  await advancedDisclosure.locator("summary").click();
+  assert.equal(await advancedDisclosure.evaluate((node) => node.open), false, "advanced diagnostics disclosure must be closable");
+  const nextStep = page.locator(".overview-next-step");
+  await nextStep.getByRole("heading", { name: "下一步", exact: true }).waitFor();
+  await nextStep.getByText("灵机会继续自动检查", { exact: false }).waitFor();
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆内容" }).click();
   await page.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor();
   await page.locator(".owner-memory-card").nth(0).waitFor();
@@ -624,6 +633,7 @@ try {
   assert.ok((await page.locator(".memory-cards-summary").innerText()).includes("已显示 20 / 共 21 条"), "card total must be exact");
   const cardsText = await page.locator(".owner-memory-card-grid").innerText();
   for (const topic of ["发布计划", "每周摘要", "代码审查", "家庭安排", "阅读清单", "旅行计划", "饮食偏好", "会议决策", "预算安排", "学习目标", "设备维护", "写作习惯"]) assert.ok(cardsText.includes(topic), `card topic ${topic} must be readable`);
+  for (const field of ["最新结论：", "来源：", "原始记录：", "结构记录：", "语义向量：", "长期记忆：", "可信提示：", "建议："]) assert.ok(cardsText.includes(field), `memory card must expose the owner field ${field}`);
   for (const label of ["已被新版本替代", "尚未加入", "已拒绝", "已回滚", "需要修复", "尚未生效", "尚未判断"]) assert.ok(cardsText.includes(label), `complete lifecycle label ${label} must be readable`);
   assert.equal(await page.locator(".owner-memory-card").nth(6).getByRole("button", { name: /查看历史记录：/ }).count(), 1, "superseded cards must expose review/history, not a mutation action");
   for (const index of [6, 7, 8, 9, 10, 11, 12]) {
@@ -734,7 +744,12 @@ try {
   await fetch(`http://127.0.0.1:${apiPort}/__test/card-conflict`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
   await page.keyboard.press("Escape");
 
-  await page.locator(".desktop-diagnostics-link").click();
+  const openAdvancedDiagnostics = async () => {
+    const disclosure = page.locator("details.desktop-advanced-disclosure");
+    if (!(await disclosure.evaluate((node) => node.open))) await disclosure.locator("summary").click();
+    await disclosure.getByRole("button", { name: "打开高级诊断", exact: true }).click();
+  };
+  await openAdvancedDiagnostics();
   await page.locator("details").filter({ hasText: "记忆与项目" }).locator("summary").click();
   await fetch(`http://127.0.0.1:${apiPort}/__test/review-delay`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
   await page.getByRole("button", { name: /人工记忆审核/ }).click();
@@ -758,7 +773,8 @@ try {
   await page.getByText("为什么：尚未获得", { exact: true }).waitFor();
   assert.equal(await page.getByText("source_session_id", { exact: false }).count(), 0, "mock-only provenance IDs must not be used");
 
-  await page.locator(".desktop-diagnostics-link").click();
+  await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
+  await openAdvancedDiagnostics();
   await page.locator("details").filter({ hasText: "采集与任务" }).locator("summary").click();
   await page.getByRole("button", { name: /手动投喂中心/ }).waitFor();
   assert.equal(await page.locator(".desktop-nav-item").filter({ hasText: "主动投喂" }).count(), 0, "legacy Capture must be hidden from navigation");
