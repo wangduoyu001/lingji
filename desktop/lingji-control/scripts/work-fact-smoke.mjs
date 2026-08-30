@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { pendingActionsFrom } from "../src/contracts/workFact.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (path) => readFile(resolve(here, path), "utf8");
@@ -34,4 +35,8 @@ assert.match(attention, /pending-actions\/\$\{encodeURIComponent\(action\.action
 assert.match(attention, /处理中…/);
 assert.match(panel, /work_id/);
 assert.equal(contract.includes("items: "), false, "Work Fact must not maintain the legacy items contract");
+assert.deepEqual(pendingActionsFrom({ pending_actions: [{ action_id: "action-1", work_id: "work-1", description: "确认" }] })?.map((action) => action.action_id), ["action-1"]);
+assert.equal(pendingActionsFrom({ pending_actions: [null] }), null, "null pending action must be treated as unknown");
+assert.equal(pendingActionsFrom({ pending_actions: [{}] }), null, "pending action without an id must be treated as unknown");
+assert.equal(pendingActionsFrom({ pending_actions: [{ action_id: "   " }] }), null, "blank pending action id must be treated as unknown");
 console.log("work-fact-smoke: PASS");

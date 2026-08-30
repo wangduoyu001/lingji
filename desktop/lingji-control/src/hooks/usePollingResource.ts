@@ -26,6 +26,10 @@ export function canPublishRequest(current: unknown, candidate: unknown, aborted:
   return !aborted && ownsRequest(current, candidate);
 }
 
+export function shouldScheduleHiddenActivation({ hidden, manuallyPaused, activationRead }: { hidden: boolean; manuallyPaused: boolean; activationRead: boolean }): boolean {
+  return hidden && !manuallyPaused && !activationRead;
+}
+
 const INITIAL_STATE = {
   data: null,
   loading: false,
@@ -186,7 +190,7 @@ export function usePollingResource<T>(options: PollingResourceOptions<T>): Polli
       clearPollTimer();
       // A hidden document may be the first active view after navigation. Do
       // one real read for that activation, then let visibility pause cadence.
-      if (hiddenPaused && needsActivationRead) {
+      if (shouldScheduleHiddenActivation({ hidden, manuallyPaused, activationRead: activationReadRef.current })) {
         // Use a cancellable timer so React StrictMode's setup/cleanup probe
         // cannot abort the only activation request before the second setup.
         timerRef.current = window.setTimeout(() => {
@@ -224,7 +228,7 @@ export function usePollingResource<T>(options: PollingResourceOptions<T>): Polli
       cancelled = true;
       clearPollTimer();
     };
-  }, [clearPollTimer, effectivelyPaused, enabled, immediate, intervalMs, maxBackoffMs, refresh, staleAfterMs]);
+  }, [clearPollTimer, effectivelyPaused, enabled, hidden, immediate, intervalMs, manuallyPaused, maxBackoffMs, refresh, staleAfterMs]);
 
   useEffect(() => {
     if (!enabled) return;

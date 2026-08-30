@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { actionAvailability, authorizationEvidence, decideOnboardingRoute, periodicReconciliationNotice } from "../src/pages/memorySourcesApi.ts";
-import { canPublishRequest, ownsRequest } from "../src/hooks/usePollingResource.ts";
+import { canPublishRequest, ownsRequest, shouldScheduleHiddenActivation } from "../src/hooks/usePollingResource.ts";
 import { activeAuthorizedCount, captureJobLabel, captureJobSummary, formatErrorForUi, paginationHasNext, vectorSemanticLabel } from "../src/pages/codexWorkspaceContract.ts";
 
 const sourceText = async (path) => {
@@ -48,6 +48,9 @@ assert.equal(ownsRequest(freshRequest, freshRequest), true);
 assert.equal(canPublishRequest(freshRequest, oldRequest, true), false, "aborted ordinary errors cannot overwrite a newer request");
 assert.equal(canPublishRequest(freshRequest, freshRequest, true), false, "aborted current errors cannot publish");
 assert.equal(canPublishRequest(freshRequest, freshRequest, false), true);
+assert.equal(shouldScheduleHiddenActivation({ hidden: true, manuallyPaused: true, activationRead: false }), false, "manual pause must block hidden activation reads");
+assert.equal(shouldScheduleHiddenActivation({ hidden: true, manuallyPaused: false, activationRead: false }), true, "hidden active page must perform one activation read");
+assert.equal(shouldScheduleHiddenActivation({ hidden: true, manuallyPaused: false, activationRead: true }), false, "hidden page must not hot-poll after activation read");
 assert.equal(activeAuthorizedCount([{ status: "authorized" }, { status: "current" }, { status: "revoked" }]), 2);
 assert.equal(paginationHasNext({ total: 0, offset: 0, limit: 30, has_more: false }), false);
 assert.equal(paginationHasNext({ total: 31, offset: 0, limit: 30, has_more: true }), true);

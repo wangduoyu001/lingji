@@ -164,8 +164,18 @@ try {
   await page.getByRole("heading", { name: "需要我处理", exact: true }).waitFor();
   await page.getByText("确认发布计划", { exact: true }).waitFor();
   assert.ok(state.pendingReads > 0, "attention page must read the shared pending-actions endpoint on activation");
-  state.pendingActions = [];
+  state.pendingActions = [null];
   await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
+  await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
+  await page.getByText("待办状态暂时无法确认，正在重试", { exact: true }).waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
+  await page.getByText("暂时无法确认需要你处理的事项，正在重试。", { exact: true }).waitFor();
+  state.pendingActions = [{}];
+  await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
+  await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
+  await page.getByText("待办状态暂时无法确认，正在重试", { exact: true }).waitFor();
+  state.pendingActions = [];
+  await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
   await page.getByText("你现在不用做任何事", { exact: true }).waitFor();
 

@@ -47,9 +47,15 @@ export type PendingActionsResponse = {
   pending_actions?: PendingAction[];
 };
 
-/** A missing list is an unknown read, not evidence that there are no actions. */
+/** A missing or malformed list is an unknown read, not evidence that there are no actions. */
 export function pendingActionsFrom(response: PendingActionsResponse | null | undefined): PendingAction[] | null {
-  return Array.isArray(response?.pending_actions) ? response.pending_actions : null;
+  const actions: unknown = response?.pending_actions;
+  if (!Array.isArray(actions)) return null;
+  return actions.every((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const actionId = (item as { action_id?: unknown }).action_id;
+    return typeof actionId === "string" && actionId.trim().length > 0;
+  }) ? actions as PendingAction[] : null;
 }
 
 export type Failure = {
