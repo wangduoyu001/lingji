@@ -297,12 +297,20 @@ def test_latest_evidence_time_uses_timezone_aware_instants():
     database = FixtureDatabase()
     database.documents[0]["relationships"]["evidence_refs"] = [{"kind": "message", "value": "early"}, {"kind": "message", "value": "late"}]
     messages = {"early": {"occurred_at": "2026-03-01T00:00:00Z"}, "late": {"occurred_at": "2026-02-28T23:30:00-05:00"}}
-    card = OwnerMemoryCardProjector(database, MessageFixtureSources(messages), FixtureStatistics()).get_card("mem-active")["item"]
+    class TimeLinksSources(MessageFixtureSources):
+        def memory_sources(self, memory_id, **kwargs):
+            return {"links": [{"message_id": "early", "occurred_at": messages["early"]["occurred_at"]}, {"message_id": "late", "occurred_at": messages["late"]["occurred_at"]}]}
+
+    card = OwnerMemoryCardProjector(database, TimeLinksSources(messages), FixtureStatistics()).get_card("mem-active")["item"]
     assert card["source"]["latest_evidence_at"] == "2026-02-28T23:30:00-05:00"
 
 
 def test_archived_source_is_not_current():
-    card = OwnerMemoryCardProjector(FixtureDatabase(), MessageFixtureSources(source_status="archived"), FixtureStatistics()).get_card("mem-active")["item"]
+    class RevokedLinksSources(MessageFixtureSources):
+        def memory_sources(self, memory_id, **kwargs):
+            return {"links": [{"message_id": "msg-1", "source_id": "src-codex"}]}
+
+    card = OwnerMemoryCardProjector(FixtureDatabase(), RevokedLinksSources(source_status="archived"), FixtureStatistics()).get_card("mem-active")["item"]
     assert card["freshness"]["state"] == "source_revoked"
     assert card["action"]["type"] == "reauthorize_source"
 
@@ -445,4 +453,4 @@ def test_card_detail_reads_only_the_selected_memory_evidence():
     sources = CountingDetailsSources()
     OwnerMemoryCardProjector(FixtureDatabase(), sources, FixtureStatistics()).get_card("mem-old")
 
-    assert sources.detail_ids == ["msg-3"]
+    assert sources.detail_ids == []

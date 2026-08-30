@@ -138,6 +138,63 @@ def test_owner_correction_stale_hash_is_conflict_without_overwrite(tmp_path):
     assert "当前内容" in current.read_text(encoding="utf-8")
 
 
+def test_candidate_edit_requires_owner_gate_before_writing(tmp_path):
+    candidate = write_candidate(tmp_path)
+    original = candidate.read_text(encoding="utf-8")
+    service = MemoryReviewService(Lifecycle(tmp_path))
+
+    with pytest.raises(MemoryReviewError, match="MEMORY_APPROVAL_REQUIRED"):
+        service.edit_and_approve(
+            "candidate-1",
+            content="不应先写入",
+            expected_content_hash=content_hash(original),
+            owner_confirmed=False,
+        )
+
+    assert candidate.read_text(encoding="utf-8") == original
+
+
+def test_owner_archive_requires_expected_hash(tmp_path):
+    current = write_core(tmp_path)
+    service = MemoryReviewService(Lifecycle(tmp_path))
+
+    with pytest.raises(MemoryReviewError, match="MEMORY_REVIEW_CONFLICT"):
+        service.archive_core_memory("core-1", owner_confirmed=True, reason="归档", expected_content_hash="")
+
+    assert current.exists()
+
+
+def test_owner_correction_rebuilds_new_read_model_evidence_links(tmp_path):
+    old = write_core(tmp_path)
+
+    class EvidenceStore:
+        def __init__(self):
+            self.calls = []
+
+        def memory_links(self, memory_id):
+            return [{"message_id": "msg-1", "content_hash": "raw-hash", "memory_id": memory_id}]
+
+        def link_message_memory_batch(self, refs, memory_id, *, decision_id):
+            self.calls.append((list(refs), memory_id, decision_id))
+            return {"memory_id": memory_id, "linked": len(list(refs))}
+
+    store = EvidenceStore()
+    service = MemoryReviewService(Lifecycle(tmp_path), evidence_store=store)
+    result = service.correct_core_memory(
+        "core-1",
+        content="保留来源链的新内容",
+        expected_content_hash=content_hash(old.read_text(encoding="utf-8")),
+        owner_confirmed=True,
+        reason="主人修正",
+    )
+
+    assert store.calls
+    refs, new_id, decision_id = store.calls[0]
+    assert new_id == result["id"]
+    assert refs[0]["message_id"] == "msg-1"
+    assert decision_id
+
+
 def test_candidate_confirm_edit_confirm_and_reject_keep_owner_gate(tmp_path):
     candidate = write_candidate(tmp_path)
     service = MemoryReviewService(Lifecycle(tmp_path))

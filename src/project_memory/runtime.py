@@ -126,6 +126,7 @@ def build_codex_memory_loop(
         database=gateway.database,
         index_sync=sync_memory_index,
         state_db=state_db,
+        evidence_store=SourceReadModel(gateway.database),
     )
     return CodexMemoryLoopServices(
         project_resolver=resolver,

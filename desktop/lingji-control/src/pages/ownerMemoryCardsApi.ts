@@ -13,6 +13,9 @@ export class OwnerMemoryCardsApi {
   detail(id: string, signal?: AbortSignal) {
     return this.api.get<{ item: OwnerMemoryCard }>(`/api/memory/inspector/cards/${encodeURIComponent(id)}?expand=true`, { signal });
   }
+  canonical(id: string, signal?: AbortSignal) {
+    return this.api.get<{ item?: { chunks?: Array<{ text?: string | null }> } }>(`/api/memory/inspector/memories/${encodeURIComponent(id)}`, { signal });
+  }
   message(id: string, signal?: AbortSignal) {
     return this.api.get<{ item: { content?: string | null; preview?: string | null; [key: string]: unknown } }>(`/api/memory/inspector/messages/${encodeURIComponent(id)}`, { signal });
   }

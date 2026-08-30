@@ -131,18 +131,11 @@ class OwnerMemoryCardProjector:
     ) -> dict[str, Any]:
         selected_viewer = viewer or self.source_service.owner_viewer()
         wanted = str(memory_id or "").strip()
-        # First locate the selected projection without reading any message
-        # bodies.  Re-project only that one memory with detail enabled; doing
-        # ``allow_message_detail`` across the full list would defeat the
-        # selected-message boundary for cards appearing earlier in the page.
+        # Locate the selected projection without reading any message bodies.
+        # Message detail is a separate explicit action on the selected
+        # evidence row, so opening a card must remain preview-only too.
         for card in self._all_cards(selected_viewer):
             if card.memory_id == wanted:
-                if card.kind == "memory":
-                    for document in self._list_documents():
-                        document_id = str(document.get("memory_id") or document.get("id") or "").strip()
-                        if document_id == wanted:
-                            card = self._memory_card(document, selected_viewer, allow_message_detail=True)
-                            break
                 return {
                     "workspace": self.workspace,
                     "viewer_scope": getattr(selected_viewer, "viewer_scope", "owner"),
@@ -162,13 +155,21 @@ class OwnerMemoryCardProjector:
             if all(type(value) is int and value >= 0 for value in measured_messages)
             else None
         )
+        memory_cards = [card for card in cards if card.kind == "memory"]
+
+        def measured_layer_count(layer: str, available_states: set[str]) -> int | None:
+            states = {str(card.layers.get(layer, {}).get("state") or "unknown") for card in memory_cards}
+            if any(state in {"unknown", "unavailable"} for state in states):
+                return None
+            return sum(1 for card in memory_cards if str(card.layers.get(layer, {}).get("state")) in available_states)
+
         return {
             "workspace": self.workspace,
             "cards": len(cards),
             "conversations": len(conversations),
             "messages": message_count if conversations else 0,
-            "permanent": sum(1 for card in cards if str(card.layers.get("permanent", {}).get("state")) in {"available", "complete"}),
-            "vectorized": sum(1 for card in cards if str(card.layers.get("vector", {}).get("state")) in {"available", "complete"}),
+            "permanent": measured_layer_count("permanent", {"available", "complete"}),
+            "vectorized": measured_layer_count("vector", {"available", "complete"}),
             "owner_review": sum(1 for card in cards if str(card.action.get("type")) in {"confirm", "review"}),
         }
 
@@ -232,7 +233,7 @@ class OwnerMemoryCardProjector:
                 # older pending event and ask the owner to confirm it.
                 output.append({
                     "memory_id": memory_id,
-                    "title": str(payload.get("title") or payload.get("topic") or memory_id),
+                    "title": str(payload.get("title") or payload.get("topic") or ""),
                     "memory_type": str(payload.get("memory_type") or "knowledge"),
                     "memory_tier": "derived",
                     "status": "active",
@@ -258,7 +259,7 @@ class OwnerMemoryCardProjector:
                 relationships["canonical_projection"] = "unavailable"
             output.append({
                 "memory_id": memory_id,
-                "title": str(payload.get("title") or payload.get("topic") or memory_id),
+                "title": str(payload.get("title") or payload.get("topic") or ""),
                 "memory_type": str(payload.get("memory_type") or "knowledge"),
                 "memory_tier": "derived",
                 "status": lifecycle,
@@ -287,7 +288,7 @@ class OwnerMemoryCardProjector:
             for ref_id, ref in expected_refs.items():
                 actual = evidence_by_id.get(ref_id)
                 expected_hash = ref.get("content_hash") if isinstance(ref, Mapping) else None
-                if actual is None or (expected_hash and str(actual.get("content_hash") or "") != str(expected_hash)):
+                if actual is None or (isinstance(ref, Mapping) and ref.get("_bounded_link_available") is False) or (expected_hash and str(actual.get("content_hash") or "") != str(expected_hash)):
                     provenance = "mismatch"
                     break
         source = self._source_for(document, evidence, viewer)
@@ -381,9 +382,11 @@ class OwnerMemoryCardProjector:
             ref_id = self._ref_value(ref)
             link = by_id.get(ref_id)
             if isinstance(link, Mapping) and isinstance(ref, Mapping):
-                enriched.append({**dict(link), **dict(ref)})
+                enriched.append({**dict(link), **dict(ref), "_bounded_link_available": True})
+            elif isinstance(ref, Mapping):
+                enriched.append({**dict(ref), "_bounded_link_available": False})
             else:
-                enriched.append(ref)
+                enriched.append({"message_id": ref_id, "_bounded_link_available": False})
         return enriched
 
     def _conversation_cards(self, viewer: ViewerContext, promoted: set[str]) -> list[OwnerMemoryCard]:

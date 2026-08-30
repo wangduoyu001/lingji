@@ -213,6 +213,7 @@
 .owner-memory-feedback { min-height: 24px; margin-top: 10px; color: var(--accent); }
 .owner-memory-detail > header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
 .owner-memory-detail-evidence p { padding: 8px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.owner-memory-evidence-row { display: block; width: 100%; min-height: 40px; margin: 6px 0; text-align: left; white-space: normal; }
 .owner-memory-message { margin-top: 12px; padding: 12px; border-left: 3px solid var(--accent); background: var(--surface-raised, var(--surface)); }
 .owner-memory-message p { white-space: pre-wrap; }
 .owner-memory-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; }

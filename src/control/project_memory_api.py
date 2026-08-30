@@ -98,6 +98,8 @@ def register_project_memory_routes(app, project_context_service, memory_review_s
     @router.post("/api/memory/core/{memory_id}/archive")
     def archive(memory_id: str, request: ReviewAction, x_lingji_token: str | None = Header(default=None)):
         auth(x_lingji_token)
+        if not request.expected_content_hash.strip():
+            raise HTTPException(status_code=422, detail={"code": "VALIDATION_ERROR", "message": "expected_content_hash is required"})
         return guard(lambda: memory_review_service.archive_core_memory(memory_id, owner_confirmed=request.owner_confirmed, reason=request.reason, expected_content_hash=request.expected_content_hash))
 
     @router.post("/api/memory/core/{memory_id}/correct")
