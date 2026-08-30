@@ -86,7 +86,7 @@
 ### TDD and verification
 
 - RED 已在基线隔离副本中确认：Round 2 direct projector/review tests 首轮为 `5 failed, 6 passed`（unknown summary、正文预取、ID fallback、owner gate、archive hash）；新增 read-model link test 首轮因缺少 evidence store 接口失败；API archive missing hash 首轮错误返回 200；rendered evidence-selection 断言在旧 UI 超时。工作树未被 reset/checkout/覆盖。
-- GREEN：direct projector/service/API 与相关 source/lifecycle regressions 合计 `181 passed, 2 warnings`。
+- GREEN（可复制命令）：`python3 -m pytest -q tests/test_owner_memory_corrections.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_review_service.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_project_memory_api.py tests/test_task3_round2_direct.py tests/test_task3_round3_integration.py tests/test_source_read_model.py tests/test_source_service.py --tb=short` → `85 passed, 1 warning`。
 - Rendered owner flow：`npm run test:e2e:memory` → `e2e_owner_memory_flow: PASS`。
 - Desktop smoke：`npm run test:smoke` → `PASS (23 scripts)`。
 - Desktop build：`npm run build` → TypeScript/Vite exit 0，96 modules，只有既有 dynamic-import warnings。
@@ -97,3 +97,28 @@
 
 - Product/tests：`10287c2`（`fix: close task3 repair round2 contracts`）。
 - Docs/evidence：`e75d7cf`（报告与 acceptance log 独立提交；本行在后续 docs 校正提交中固定记录）。
+
+## Task 3 Repair Round 3 — final re-review closure
+
+基于复审 `task-3-re-review-2.md`，仅处理 I1–I4/M1：
+
+| Item | Disposition |
+|---|---|
+| I1 | Fixed/verified：rendered fixture 补齐 superseded、not_permanent、rejected、rolled_back、repair_required、not_yet_current、unknown 人话状态；新增 `MemoryInspectorFacade`→production projector DTO probe。 |
+| I2 | Fixed/verified：tmp Vault + 真实 `MemoryLifecycleService`/`MemoryReviewService`/`MemoryDatabase`/`SourceReadModel` 注册同一 mutation API，覆盖 candidate 三动作、correct canonical chunks/replacement/read-model links/old superseded/source/history/audit、invalidate/archive reason/valid_to/hash、auth/schema/stale 409。 |
+| I3 | Fixed/verified：报告与 acceptance log 改为唯一可复制 focused pytest 命令，实际结果为 `85 passed, 1 warning`，不再引用不可复现的 181。 |
+| I4 | Fixed/verified：archived 与 superseded core fresh DTO 改为 `review/查看历史记录`，不再显示会失败的 archive mutation；rendered fresh GET 断言无“移出当前记忆”按钮。correct 后同步旧 read-model row，fresh old/new 状态一致。 |
+| M1 | Fixed/verified：`memory_sources`/link 查询异常标记 provenance unknown，禁止仅凭 metadata hash 变成 verified；conclusion 清空并建议 review。 |
+
+### Round 3 verification
+
+- Focused/integration：见上方精确命令，`85 passed, 1 warning`。
+- Rendered owner E2E：`npm run test:e2e:memory` → `e2e_owner_memory_flow: PASS`。
+- Desktop smoke：`npm run test:smoke` → `PASS (23 scripts)`；build → PASS（96 modules）。
+- `python3 -m compileall -q src tests`、`git diff --check`、acceptance sync、local handoff → PASS。
+- 全程未启动 live/App/Acceptance，未读取真实聊天、Production/Vault 或主人数据；未执行打包、安装或 Artifact。
+
+### Round 3 commits
+
+- Product/tests：`ae01b24`（`fix: close task3 repair round3 contracts`）。
+- Docs/evidence：本轮独立 docs/evidence 提交，最终 SHA 在提交完成后记录。

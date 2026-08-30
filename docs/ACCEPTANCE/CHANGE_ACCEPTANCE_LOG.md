@@ -2807,7 +2807,18 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 ## 2026-08-30 · Task 3 Repair Round 2 · re-review I1–I9/M1–M2
 
 - 基线：`f41673f` clean；范围仅为 `task-3-re-review-1.md` 的最小修复。Summary unknown/unavailable 保持 `null`；card detail 只返回 bounded preview；selected evidence 才读取单条 message；revoked action 导航既有 memory-sources 授权；correct 使用 canonical content、fresh replacement GET 并复制现有 evidence/source links；owner gate 在 candidate 写入前；archive hash 必填；event-only fallback 不含 ID；freshness/invalid date、evidence keyboard selection、nested keyboard duplicate GET 均已收口。
-- 自动测试：新增 direct production projector/lifecycle/read-model/API tests；首轮基线 RED 已记录在 Task3 report。最终 direct/projector/service/API/source/lifecycle regressions `181 passed, 2 warnings`。
+- 自动测试：新增 direct production projector/lifecycle/read-model/API tests；首轮基线 RED 已记录在 Task3 report。Round2 的旧 `181 passed` 宣称已更正；Round3 唯一可复制命令及文件集合见 Task3 report，实际 `85 passed, 1 warning`。
 - 真机合成 UI：`npm run test:e2e:memory` PASS，覆盖 Home full summary + unknown、Work Facts、candidate confirm/edit/reject、revoked navigation、core correct/invalidate/archive、fresh GET、retention、409 edit preservation、selected-message request count、自动 heading focus/Esc return focus、nested keyboard、1024/1280。
 - 回归门禁：`npm run test:smoke` PASS（23 scripts）；`npm run build` PASS（96 modules，既有 dynamic-import warnings）；`python3 -m compileall -q src tests` PASS；`git diff --check` PASS。完成 docs 后必须复跑 acceptance sync/local handoff，并以最终提交 SHA 回填 report。
 - 真实机/主人观察边界：未启动 live/App/Acceptance，未读取真实聊天、Production/Vault/主人数据；未执行打包、安装或 Artifact。保留原始记录、历史、来源、审计，不执行 DELETE。报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-3-report.md`。
+
+## 2026-08-30 · Task 3 Repair Round 3 · final re-review I1–I4/M1
+
+- 基线：`82f5cd7` clean；严格限定于 `task-3-re-review-2.md`。Rendered fixture 补齐 current/pending/superseded/stale/revoked/conflict/no-vector/not-permanent 及 rejected/rolled_back/repair_required/not_yet_current/unknown 人话状态；production projector→DTO probe 与真实 tmp Vault/API integration 已补齐。
+- 真实 API integration 使用同一 `MemoryLifecycleService`、`MemoryReviewService`、`MemoryDatabase`、`SourceReadModel` 和注册 routes，覆盖 candidate confirm/edit/reject、correct replacement/canonical chunks/links/old superseded/source/history/audit、invalidate/archive reason/valid_to/hash、auth/schema/stale 409。
+- 归档/替代后的 fresh GET 改为 `review/查看历史记录`，不渲染无效 archive 按钮；memory_sources/link 异常时 provenance/conclusion fail-closed 为 unknown/review。
+- 唯一可复制 focused 命令：
+  `python3 -m pytest -q tests/test_owner_memory_corrections.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_review_service.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_project_memory_api.py tests/test_task3_round2_direct.py tests/test_task3_round3_integration.py tests/test_source_read_model.py tests/test_source_service.py --tb=short`
+  → `85 passed, 1 warning`。另 `npm run test:e2e:memory` PASS、`npm run test:smoke` PASS（23/23）、`npm run build` PASS、compileall/diff/sync/handoff PASS。
+- 未启动 live/App/Acceptance，未读取真实聊天、Production/Vault、主人数据，未执行打包/安装/Artifact；保留 raw/history/source/audit，不执行 DELETE。报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-3-report.md`。
+- Product/tests commit：`ae01b24`；docs/evidence commit follows separately.
