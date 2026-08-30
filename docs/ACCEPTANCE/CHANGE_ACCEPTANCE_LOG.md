@@ -1,5 +1,26 @@
 # 验收要求变更记录
 
+## 2026-08-30 · Task 1 Repair Round 2 · Trusted completed-scan aggregate
+
+- 基线：`81c813364985a223ce777592649154bbe9778580`；本轮产品/测试提交：`a8cfcae`。
+  仅修复 scoped re-review 唯一 open Important：来源页不再把混合 running/failed/paused 扫描列表长度
+  冒充“已完成检查”，而是使用现有 snapshot summary 的 `counts.completed`；summary 缺失时显示
+  “尚未获得”，不新增 API、不修改 backend/API/data model/retrieval/vector/quality gate。
+- TDD RED：先让 focused fixture 返回列表 2 条但混合状态、summary 总量 5 且 completed 3，运行
+  `npm run test:owner-ui-menu-fast-track`；基线失败于
+  `source aggregate must show 已完成检查 3 次`，精确 `1 failed` assertion（旧实现显示列表长度 2）。
+- GREEN：`npm run test:owner-ui-menu-fast-track`、`npm run test:e2e:memory`、
+  `npm run test:memory-sources`、`npm run test:memory-sources-repair`、`npm run test:smoke`
+  （23 scripts）、`npm run build`（96 modules）和 `git diff --check` 均 PASS。rendered E2E 同步证明
+  running/failed/paused 不计入完成数，summary aggregate 大于列表时仍显示可信完成数。
+- 必跑门禁（Round2 docs/evidence 更新后）：`python3 scripts/check_acceptance_sync.py` →
+  `[acceptance-sync] changed files: 2`、`product-impacting files: 0`、
+  `PASS: no product-impacting changes detected.`；`python3 scripts/check_local_execution_handoff.py`
+  → `LOCAL_EXECUTION_HANDOFF: PASS`。
+- 报告：`.superpowers/sdd/2026-08-30-owner-ui-menu-fast-track/task-1-report.md`；docs/evidence
+  与产品/tests 分开提交。未执行 live 8766/8767、Sidecar/release/Artifact/安装、Production/Vault、
+  真实主人数据或主人观察；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。
+
 ## 2026-08-30 · Task 1 Repair Round 1 · Owner UI menu fast-track
 
 - 基线：`81c813364985a223ce777592649154bbe9778580`；本轮产品/测试提交：`2784dfa`。

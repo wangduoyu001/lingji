@@ -170,3 +170,83 @@ LOCAL_EXECUTION_HANDOFF: PASS
 
 - Product/tests: `2784dfa` (`fix: clarify owner memory menus`).
 - Docs/evidence: recorded separately after the product commit.
+
+## Repair Round 2 — trusted completed-scan aggregate
+
+The scoped re-review found one remaining Important issue: `snapshot.scans.length` was labeled as
+completed checks even when the list mixed running/failed/paused records and was capped below the
+summary total. The repair uses only the existing `snapshot.summary.counts.completed`; if that
+status count is absent, the owner-facing value remains `尚未获得`. No endpoint, DTO, backend, or
+data model was changed.
+
+### RED evidence (test first)
+
+The focused rendered fixture was changed first to return two mixed-status scan records while its
+existing summary reports five total records and three completed records. The baseline stopped at
+the aggregate assertion:
+
+```text
+$ npm run test:owner-ui-menu-fast-track
+AssertionError [ERR_ASSERTION]: source aggregate must show 已完成检查 3 次
+```
+
+Exact result: `1 failed` assertion. The old implementation rendered the list length (`2`) instead
+of the trusted completed count (`3`).
+
+### GREEN and regression evidence
+
+```text
+$ npm run test:owner-ui-menu-fast-track
+owner-ui-menu-fast-track-smoke: PASS
+```
+
+```text
+$ npm run test:e2e:memory
+e2e_owner_memory_flow: PASS
+```
+
+```text
+$ npm run test:memory-sources && npm run test:memory-sources-repair
+automatic-memory-sources-smoke: PASS
+automatic-memory-sources-repair-smoke: PASS (Task8E behaviors included)
+```
+
+```text
+$ npm run build
+✓ 96 modules transformed.
+✓ built in 407ms
+```
+
+```text
+$ npm run test:smoke
+[smoke] PASS (23 scripts)
+```
+
+```text
+$ git diff --check
+PASS (no output)
+```
+
+The focused and full rendered fixtures now assert that mixed running/failed/paused records are not
+counted as completed and that a summary aggregate larger than the capped scan list is rendered
+truthfully. Product/tests commit: `a8cfcae` (`fix: use trusted completed scan totals`).
+
+### Required acceptance gates
+
+These commands were rerun after the Round 2 docs/evidence update and passed:
+
+```text
+$ python3 scripts/check_acceptance_sync.py
+[acceptance-sync] changed files: 2
+[acceptance-sync] product-impacting files: 0
+[acceptance-sync] PASS: no product-impacting changes detected.
+```
+
+```text
+$ python3 scripts/check_local_execution_handoff.py
+LOCAL_EXECUTION_HANDOFF: PASS
+```
+
+Docs/evidence is committed separately after the product/tests commit. Existing Vite dynamic-import
+warnings remain; live/real-data/Production/Vault/installation/owner-observation checks remain
+outside this scoped UI round.
