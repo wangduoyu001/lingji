@@ -33,6 +33,22 @@ _PROMOTION_STATUSES = frozenset({"active", "pending_owner_review", "rejected", "
 _PROMOTION_CATEGORIES = frozenset({
     "core/protected", "high-risk", "authority-conflict", "assistant-only", "low-risk-user",
 })
+_PROMOTION_REASON_CODES = frozenset({
+    "schema_invalid", "confidence_below_threshold",
+    "direct_user_or_authoritative_source_required", "evidence_required",
+    "evidence_reference_unverifiable", "unresolved_conflict", "duplicate_ambiguity",
+    "core_memory_requires_owner", "restricted_requires_owner",
+    "automatic_activation_quarantined", "structured_message_provenance_required",
+    "promotion_measurement_error", "promotion_persist_failed",
+    "promotion_terminal_event_pending", "promotion_lease_conflict",
+    "promotion_start_event_failed", "projection_persist_failed", "projection_recovered",
+    "promotion_payload_redacted",
+    "core_requires_owner", "identity_requires_owner", "credentials_requires_owner",
+    "credential_requires_owner", "secret_requires_owner", "secrets_requires_owner",
+    "permission_requires_owner", "permissions_requires_owner", "medical_requires_owner",
+    "legal_requires_owner", "financial_requires_owner", "security_requires_owner",
+    "destructive_requires_owner", "irreversible_requires_owner", "privacy_requires_owner",
+})
 
 
 _RUNNER_ALLOWED_FIELDS = frozenset({
@@ -117,12 +133,12 @@ class CanonicalFunctionalEvidence:
         object.__setattr__(self, "data", _freeze_evidence(self.data))
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any], *, require_per_outcome_truth: bool = True) -> "CanonicalFunctionalEvidence":
+    def from_mapping(cls, value: Mapping[str, Any]) -> "CanonicalFunctionalEvidence":
         try:
             if not isinstance(value, Mapping) or set(value) != set(cls._REQUIRED):
                 raise ValueError("BLOCKED_4R2_REQUIRED")
             data = {str(key): value[key] for key in cls._REQUIRED}
-            if data["schema_version"] != 1:
+            if type(data["schema_version"]) is not int or data["schema_version"] != 1:
                 raise ValueError("BLOCKED_4R2_REQUIRED")
             commit = data["code_commit"]
             if (not isinstance(commit, str) or len(commit) != 40
@@ -153,7 +169,7 @@ class CanonicalFunctionalEvidence:
                 raise ValueError("BLOCKED_4R2_REQUIRED")
             if data["production_pollution"] is not None and type(data["production_pollution"]) is not int:
                 raise ValueError("BLOCKED_4R2_REQUIRED")
-            _validate_canonical_details(data, require_per_outcome_truth=require_per_outcome_truth)
+            _validate_canonical_details(data)
             _reject_nonfinite_or_bool_numbers(data)
             return cls(data)
         except (TypeError, ValueError, KeyError):
@@ -175,12 +191,6 @@ class CanonicalFunctionalEvidence:
             _compare_runner_projections(payload, canonical_payload)
             return canonical_details
         details = payload
-        legacy_compact = (
-            "evidence_details" not in payload
-            and isinstance(payload.get("promotion_provenance"), Mapping)
-            and "missing_links" in payload["promotion_provenance"]
-        )
-
         def pick(name: str, default: Any = None) -> Any:
             value = payload.get(name)
             return details.get(name, default) if value is None else value
@@ -264,7 +274,7 @@ class CanonicalFunctionalEvidence:
             "functional_status": payload.get("functional_status", "NOT_EVALUATED"),
             "phase_status": payload.get("phase_status", "NOT_EVALUATED"),
         }
-        return cls.from_mapping(normalized, require_per_outcome_truth=not legacy_compact)
+        return cls.from_mapping(normalized)
 
     def to_mapping(self) -> dict[str, Any]:
         return _json_safe_copy(self.data)
@@ -281,7 +291,7 @@ class CanonicalFunctionalEvidence:
             "code_commit": commit, "fixture_hashes": {"corpus": corpus, "questions": questions},
             "import_audit": {"expected_rows": 2, "actual_rows": 2, "missing_external_keys": [], "extra_external_keys": [], "stable_duplicates": {"source_records": 0, "conversation_records": 0, "message_records": 0, "memory_records": 0}, "ordered_external_key_matches": 2, "role_matches": 2, "sequence_matches": 2, "timestamp_matches": 2, "content_hash_matches": 2, "source_matches": 2, "conversation_matches": 2, "intentional_content_hash_groups": []},
             "promotion_outcomes": {"active": 0, "pending_owner_review": 2, "rejected": 0, "error": 0}, "promotion_category_outcomes": {},
-            "promotion_provenance": {"status": "ready", "expected": 2, "actual": 2, "links_expected": 2, "links_actual": 2, "missing_projection": 0, "extra_projection": 0, "missing_audit": 0, "extra_audit": 0, "duplicate_records": 0, "duplicate_audits": 0, "duplicate_links": 0, "outcomes": [
+            "promotion_provenance": {"status": "ready", "expected": 2, "actual": 2, "active": 0, "pending": 2, "rejected": 0, "error": 0, "links_expected": 2, "links_actual": 2, "missing_projection": 0, "extra_projection": 0, "missing_audit": 0, "extra_audit": 0, "duplicate_records": 0, "duplicate_audits": 0, "duplicate_links": 0, "outcomes": [
                 {"memory_id": "m1", "decision_id": "d1", "fixture_category": "low-risk-user", "expected_category": "low-risk-user", "expected_status": "pending_owner_review", "service_status": "pending_owner_review", "service_category": "low-risk-user", "service_reason_codes": ["automatic_activation_quarantined"], "durable_status": "pending_owner_review", "durable_category": "low-risk-user", "durable_reason_codes": ["automatic_activation_quarantined"]},
                 {"memory_id": "m2", "decision_id": "d2", "fixture_category": "low-risk-user", "expected_category": "low-risk-user", "expected_status": "pending_owner_review", "service_status": "pending_owner_review", "service_category": "low-risk-user", "service_reason_codes": ["automatic_activation_quarantined"], "durable_status": "pending_owner_review", "durable_category": "low-risk-user", "durable_reason_codes": ["automatic_activation_quarantined"]},
             ]},
@@ -400,7 +410,7 @@ def _reject_nonfinite_or_bool_numbers(value: Any) -> None:
         raise ValueError("BLOCKED_4R2_REQUIRED")
 
 
-def _validate_canonical_details(data: Mapping[str, Any], *, require_per_outcome_truth: bool = True) -> None:
+def _validate_canonical_details(data: Mapping[str, Any]) -> None:
     exact_sections = {
         "import_audit": {"expected_rows", "actual_rows", "missing_external_keys", "extra_external_keys", "stable_duplicates", "ordered_external_key_matches", "role_matches", "sequence_matches", "timestamp_matches", "content_hash_matches", "source_matches", "conversation_matches", "intentional_content_hash_groups"},
         "promotion_outcomes": {"active", "pending_owner_review", "rejected", "error"},
@@ -454,21 +464,19 @@ def _validate_canonical_details(data: Mapping[str, Any], *, require_per_outcome_
         group_hashes.add(content_hash)
         _require_identity_list(group["member_external_keys"])
     truth = data["promotion_provenance"].get("outcomes")
-    if not require_per_outcome_truth and truth is None:
-        return
     if not isinstance(truth, (list, tuple)) or not truth:
         raise ValueError("BLOCKED_4R2_REQUIRED")
-    truth_ids: set[str] = set()
+    memory_ids: set[str] = set()
+    decision_ids: set[str] = set()
     truth_statuses: dict[str, int] = {status: 0 for status in _PROMOTION_STATUSES}
     for item in truth:
         _require_nested_keys(item, set(_PROMOTION_TRUTH_FIELDS), required=set(_PROMOTION_TRUTH_FIELDS))
-        for identity_field in ("memory_id", "decision_id"):
+        for identity_field, seen in (("memory_id", memory_ids), ("decision_id", decision_ids)):
             value = item[identity_field]
-            if not isinstance(value, str) or not value.strip() or value != value.strip() or value in truth_ids:
+            if not isinstance(value, str) or not value.strip() or value != value.strip() or value in seen:
                 raise ValueError("BLOCKED_4R2_REQUIRED")
-            if identity_field == "memory_id":
-                truth_ids.add(value)
-        if any(item[field] not in _PROMOTION_STATUSES for field in ("expected_status", "service_status", "durable_status")):
+            seen.add(value)
+        if any(item[field] != "pending_owner_review" for field in ("expected_status", "service_status", "durable_status")):
             raise ValueError("BLOCKED_4R2_REQUIRED")
         if any(item[field] not in _PROMOTION_CATEGORIES for field in ("fixture_category", "expected_category", "service_category", "durable_category")):
             raise ValueError("BLOCKED_4R2_REQUIRED")
@@ -477,6 +485,10 @@ def _validate_canonical_details(data: Mapping[str, Any], *, require_per_outcome_
         for reason_field in ("service_reason_codes", "durable_reason_codes"):
             _require_string_list(item[reason_field])
             if not item[reason_field]:
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            if any(reason not in _PROMOTION_REASON_CODES for reason in item[reason_field]):
+                raise ValueError("BLOCKED_4R2_REQUIRED")
+            if len(item[reason_field]) != len(set(item[reason_field])):
                 raise ValueError("BLOCKED_4R2_REQUIRED")
         service_reasons = set(item["service_reason_codes"])
         durable_reasons = set(item["durable_reason_codes"])
@@ -510,7 +522,7 @@ def _validate_canonical_details(data: Mapping[str, Any], *, require_per_outcome_
             raise ValueError("BLOCKED_4R2_REQUIRED")
     for section, required in {
         "import_audit": {"expected_rows", "actual_rows"},
-        "promotion_provenance": {"status", "expected", "actual"},
+        "promotion_provenance": {"status", "expected", "actual", "active", "pending", "rejected", "error", "links_expected", "links_actual", "missing_projection", "extra_projection", "missing_audit", "extra_audit", "duplicate_records", "duplicate_audits", "duplicate_links", "outcomes"},
         "gateway_selection": {"status", "calls_completed", "selector_calls"},
         "mcp_parity": {"status", "attempts", "successes", "strict_rate"},
         "qdrant_degradation": {"status", "semantic", "lexical", "lexical_ids", "degraded_ids"},
@@ -531,6 +543,9 @@ def _validate_canonical_details(data: Mapping[str, Any], *, require_per_outcome_
     for section, fields in numeric_fields.items():
         if any(field in data[section] and (type(data[section].get(field)) is not int or data[section][field] < 0) for field in fields):
             raise ValueError("BLOCKED_4R2_REQUIRED")
+    stable = data["import_audit"]["stable_duplicates"]
+    if any(type(stable[field]) is not int or stable[field] < 0 for field in ("source_records", "conversation_records", "message_records", "memory_records")):
+        raise ValueError("BLOCKED_4R2_REQUIRED")
     for value in data["promotion_outcomes"].values():
         if type(value) is not int or value < 0:
             raise ValueError("BLOCKED_4R2_REQUIRED")

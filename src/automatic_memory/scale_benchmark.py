@@ -114,9 +114,9 @@ def _validate_promotion(payload: Mapping[str, Any], details: Mapping[str, Any], 
         raise ValueError("promotion outcomes are incomplete")
     provenance = _detail(payload, details, "promotion_provenance")
     _require_keys(provenance, {
-        "status", "expected", "actual", "links_expected", "links_actual", "missing_projection",
-        "extra_projection", "missing_audit", "extra_audit", "duplicate_links", "duplicate_records",
-        "duplicate_audits",
+        "status", "expected", "actual", "active", "pending", "rejected", "error",
+        "links_expected", "links_actual", "missing_projection", "extra_projection", "missing_audit",
+        "extra_audit", "duplicate_links", "duplicate_records", "duplicate_audits", "outcomes",
     }, "promotion_provenance")
     if provenance["status"] != EvidenceState.READY.value:
         raise ValueError("promotion provenance is not ready")
@@ -124,6 +124,21 @@ def _validate_promotion(payload: Mapping[str, Any], details: Mapping[str, Any], 
         raise ValueError("promotion provenance count mismatch")
     if _counter(provenance["links_expected"], "promotion_provenance.links_expected") != expected or _counter(provenance["links_actual"], "promotion_provenance.links_actual") != expected:
         raise ValueError("promotion link count mismatch")
+    outcome_counts = {
+        "active": _counter(provenance["active"], "promotion_provenance.active"),
+        "pending": _counter(provenance["pending"], "promotion_provenance.pending"),
+        "rejected": _counter(provenance["rejected"], "promotion_provenance.rejected"),
+        "error": _counter(provenance["error"], "promotion_provenance.error"),
+    }
+    if outcome_counts != {
+        "active": outcomes["active"],
+        "pending": outcomes["pending_owner_review"],
+        "rejected": outcomes["rejected"],
+        "error": outcomes["error"],
+    }:
+        raise ValueError("promotion provenance outcome counts disagree")
+    if not isinstance(provenance["outcomes"], list) or len(provenance["outcomes"]) != expected:
+        raise ValueError("promotion provenance outcomes are incomplete")
     for field in ("missing_projection", "extra_projection", "missing_audit", "extra_audit", "duplicate_links", "duplicate_records", "duplicate_audits"):
         if _counter(provenance[field], f"promotion_provenance.{field}") != 0:
             raise ValueError("promotion provenance has invalid links")
@@ -202,6 +217,11 @@ def readiness_from_envelope(path: Path) -> QualityEvidenceReadiness:
     try:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         payload = _require_mapping(payload, "quality envelope")
+        # Formal scale admission accepts only the published envelope shape.
+        # A top-level compact projection is not an evidence artifact because it
+        # cannot prove the per-outcome durable StateDB truth.
+        if not isinstance(payload.get("evidence_details"), Mapping):
+            raise ValueError("missing canonical evidence_details")
         canonical = CanonicalFunctionalEvidence.from_runner_payload(payload)
         canonical_payload = canonical.to_mapping()
         # All detailed validation below consumes the canonical artifact.  The

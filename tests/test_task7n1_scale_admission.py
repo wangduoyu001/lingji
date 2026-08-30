@@ -113,9 +113,21 @@ def test_scale_loader_rejects_zero_baseline_when_not_measured(tmp_path: Path) ->
         readiness_from_envelope(path)
 
 
-def test_complete_consistent_envelope_reaches_scale_callback(tmp_path: Path) -> None:
+def test_legacy_compact_envelope_is_blocked_without_canonical_per_outcome_truth(tmp_path: Path) -> None:
     path = tmp_path / "quality.json"
     _write(path, _complete_payload())
+    with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
+        readiness_from_envelope(path)
+
+
+def test_full_canonical_promotion_provenance_reaches_scale_callback(tmp_path: Path) -> None:
+    from src.automatic_memory.quality_evidence import CanonicalFunctionalEvidence
+
+    payload = CanonicalFunctionalEvidence.complete_for_test().to_mapping()
+    payload["quality_evidence_readiness"]["production_sentinel"] = "not_measured"
+    payload["evidence_details"] = json.loads(json.dumps(payload))
+    path = tmp_path / "quality.json"
+    _write(path, payload)
     readiness = readiness_from_envelope(path)
     calls: list[str] = []
     run_release_preflight(
@@ -125,6 +137,23 @@ def test_complete_consistent_envelope_reaches_scale_callback(tmp_path: Path) -> 
     )
     assert readiness.scale_ready
     assert calls == ["environment", "command"]
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda payload: payload["promotion_provenance"].pop("outcomes"),
+    lambda payload: payload["promotion_provenance"].update(unknown=1),
+])
+def test_scale_loader_requires_exact_full_canonical_promotion_provenance(tmp_path: Path, mutate) -> None:
+    from src.automatic_memory.quality_evidence import CanonicalFunctionalEvidence
+
+    payload = CanonicalFunctionalEvidence.complete_for_test().to_mapping()
+    payload["quality_evidence_readiness"]["production_sentinel"] = "not_measured"
+    payload["evidence_details"] = json.loads(json.dumps(payload))
+    mutate(payload)
+    path = tmp_path / "quality.json"
+    _write(path, payload)
+    with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
+        readiness_from_envelope(path)
 
 
 def test_unmeasured_runtime_baseline_is_nullable_not_zero(tmp_path: Path) -> None:

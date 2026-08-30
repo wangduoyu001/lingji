@@ -451,3 +451,42 @@ def test_canonical_per_outcome_truth_rejects_missing_durable_fields():
     payload["promotion_provenance"]["outcomes"][0].pop("durable_status", None)
     with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
         CanonicalFunctionalEvidence.from_mapping(payload)
+
+
+@pytest.mark.parametrize("schema_version", [True, 1.0, float("nan"), float("inf"), -1])
+def test_canonical_schema_version_requires_exact_integer_one(schema_version):
+    payload = _canonical()
+    payload["schema_version"] = schema_version
+    with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
+        CanonicalFunctionalEvidence.from_mapping(payload)
+
+
+@pytest.mark.parametrize("counter", [True, 1.0, float("nan"), float("inf"), -1])
+def test_canonical_stable_duplicate_counters_are_strict_measured_integers(counter):
+    payload = _canonical()
+    payload["import_audit"]["stable_duplicates"]["source_records"] = counter
+    with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
+        CanonicalFunctionalEvidence.from_mapping(payload)
+
+
+@pytest.mark.parametrize("field", ["expected_status", "service_status", "durable_status"])
+def test_canonical_per_outcome_truth_is_always_pending_under_quarantine(field):
+    payload = _canonical()
+    payload["promotion_provenance"]["outcomes"][0][field] = "active"
+    with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
+        CanonicalFunctionalEvidence.from_mapping(payload)
+
+
+def test_canonical_per_outcome_truth_rejects_arbitrary_reason_code():
+    payload = _canonical()
+    payload["promotion_provenance"]["outcomes"][0]["service_reason_codes"] = ["other"]
+    payload["promotion_provenance"]["outcomes"][0]["durable_reason_codes"] = ["other"]
+    with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
+        CanonicalFunctionalEvidence.from_mapping(payload)
+
+
+def test_canonical_per_outcome_truth_rejects_duplicate_decision_identity():
+    payload = _canonical()
+    payload["promotion_provenance"]["outcomes"][1]["decision_id"] = "d1"
+    with pytest.raises(ValueError, match="BLOCKED_4R2_REQUIRED"):
+        CanonicalFunctionalEvidence.from_mapping(payload)
