@@ -144,4 +144,4 @@
 ### Round 4 commits
 
 - Tests：`7ccbc02`（仅 `desktop/lingji-control/tests/e2e_owner_memory_flow.mjs`）。
-- Docs/evidence：本轮独立提交，最终 SHA 在提交完成后记录。
+- Docs/evidence：`93c1e1e`（报告与 acceptance log 独立提交；本行在后续 docs 校正提交中固定记录）。
