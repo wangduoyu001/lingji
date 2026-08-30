@@ -2857,3 +2857,29 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - Task 1 禁止 quality/100k/release/Artifact；Task 2 quality CLI 最多一次并诚实保留
   FAIL/NOT_MEASURED；Task 3 只做冻结 100 问测量，不调 retrieval、不运行 100k/release。
   `LOCAL_EXECUTION_TASK.md` 保持 `IDLE`，不得接触 Production/Vault/主人真实数据。
+
+## 2026-08-30 · Release / 4R2 reset · Task 1 invocation-scoped evidence
+
+- 本轮仅修复 `scripts/validate.ps1` 与其真实 PowerShell launcher 的验证证据边界，
+  不改变 quality、100k、release 门禁、Artifact、runtime、Desktop、Vault 或主人数据。
+  每次 validation 使用 GUID invocation ID、独立 output directory 与不超过 4 KiB 的
+  `.owner.json`；`summary.json`/`.md` 是每次运行的权威证据，`latest-summary.json`/`.md`
+  继续作为 convenience pointer。
+- stale cleanup 只处理 validation root 直接子目录中具有可解析 terminal `completed` marker、
+  已超过 24 小时且可证明未由 marker process 继续运行的目录；running、failed、缺失/畸形
+  marker、symlink、unresolved path 与 root 外文件 fail-closed 保留。嵌套运行不会删除或覆盖
+  live parent 的 invocation directory。
+- TDD RED（基线）：
+  `./.venv/bin/pytest -q tests/test_validation_invocation_isolation.py tests/test_00_task4_reset_validation_guard.py --tb=short`
+  无法启动（工作树没有 `./.venv/bin/pytest`）；等价系统 Python 3.12.10 首次运行
+  `python3 -m pytest -q ... --tb=short` 为 `3 failed, 6 passed`，失败用例为
+  `test_same_second_nested_invocations_keep_each_owned_evidence_and_parent_final_write`、
+  `test_different_second_nested_invocations_keep_authoritative_per_run_summaries`、
+  `test_stale_cleanup_only_removes_old_completed_runs_inside_validation_root`，原因是旧版
+  忽略临时 root、按秒/全量清理且未保留 old sibling。
+- GREEN：同一聚焦命令（等价系统 Python）最终为 `10 passed`；真实 PowerShell
+  `/tmp/LingJiToolchain/powershell-7.6.5/pwsh` 为 `PowerShell 7.6.5`。真实 entry-only
+  guard 非零退出，输出 `BLOCKED_4R2_REQUIRED`，hook 事件精确为 `preflight`，
+  `scale-env=0`、`scale-command=0`；本轮临时 validation roots 在测试结束后清理。
+- 未运行：quality CLI、100k、full、release（除 entry-only guard）、Artifact、live 8766/8767、
+  Production/Vault、真实聊天、主人数据、Desktop、安装或主人验收。

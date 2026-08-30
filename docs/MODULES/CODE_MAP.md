@@ -628,6 +628,18 @@ Focused validation:
 python -m pytest -q tests/evaluation/test_task4_reset_runner.py tests/test_00_task4_reset_validation_guard.py
 ```
 
+Task 1 release-evidence isolation:
+
+```text
+scripts/validate.ps1
+scripts/run_powershell_validation.py
+tests/test_validation_invocation_isolation.py
+tests/test_00_task4_reset_validation_guard.py
+= invocation-scoped validation directories with bounded owner markers; stale cleanup
+  only removes old completed runs proven inactive, while nested invocations retain
+  live parent evidence and latest-summary remains a convenience pointer
+```
+
 Tasks 10–11:
 scripts/validate.ps1
 desktop/lingji-control/scripts/macos-release-smoke.mjs
