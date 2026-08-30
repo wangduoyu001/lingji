@@ -106,7 +106,8 @@ Exact brief matrix:
 python3 -m pytest -q tests/test_task7o_contract_closure.py tests/test_task7o_contract_adversarial.py tests/test_task7n1_scale_admission.py tests/test_task7n2_corruption_retrieval.py tests/test_task7n3_promotion_thin.py tests/test_task7_measurement_repair.py tests/test_task7_quality_scale.py tests/evaluation/test_task4_reset_readiness.py tests/evaluation/test_automatic_memory_end_to_end.py --tb=short
 ```
 
-Recorded result: `189 passed, 1 warning in 57.13s` (system Python 3.12.10).
+Recorded result (rerun after final publication-identity GREEN): `190 passed, 1 warning
+in 57.20s` (system Python 3.12.10).
 
 Static/handoff command:
 
