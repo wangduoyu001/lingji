@@ -2,8 +2,8 @@
 
 ## Status
 
-Implemented in product/tests commit `e9a341d9314a23cac3a81b30de989447496a6f01`.
-Docs/evidence is committed separately.
+Implemented in original product/tests commit `e9a341d9314a23cac3a81b30de989447496a6f01`,
+with Repair Round 1 in product/tests commit `2784dfa`. Docs/evidence is committed separately.
 
 ## RED evidence
 
@@ -91,3 +91,82 @@ Additional checks: `python3 -m compileall -q src tests` PASS; `git diff --check`
   or owner visual acceptance. Those remain outside this Task 1 code/evidence scope.
 - Existing build output retains the pre-existing Vite dynamic-import warnings.
 - `LOCAL_EXECUTION_TASK.md` remains `IDLE` and was not changed.
+
+## Repair Round 1 — review Important items
+
+The review identified six Important findings. The repair stayed within Desktop UI copy/rendering,
+existing action wiring, rendered tests, and acceptance evidence; no backend/API/data model,
+retrieval, vector, quality-gate, live service, real data, Production/Vault, installation, or
+`LOCAL_EXECUTION_TASK.md` changes were made.
+
+### RED evidence (tests before repair implementation)
+
+The focused Playwright smoke was extended first with real rendered assertions for all six review
+behaviors. The baseline stopped at the first failing assertion:
+
+```text
+$ npm run test:owner-ui-menu-fast-track
+AssertionError [ERR_ASSERTION]: ordinary runtime warning must not expose the control port
+true !== false
+```
+
+Exact result: `1 failed` assertion (Node stops after the first assertion; the remaining new
+assertions were present in the same run but were not reached). This is the expected RED for the
+baseline ordinary sidebar text.
+
+### GREEN and regression evidence
+
+```text
+$ npm run test:owner-ui-menu-fast-track
+owner-ui-menu-fast-track-smoke: PASS
+```
+
+```text
+$ npm run test:e2e:memory
+e2e_owner_memory_flow: PASS
+```
+
+```text
+$ npm run test:smoke
+[smoke] PASS (23 scripts)
+```
+
+```text
+$ npm run build
+✓ 96 modules transformed.
+✓ built in 499ms
+```
+
+```text
+$ git diff --check
+PASS (no output)
+```
+
+The rendered fixtures now prove source aggregate semantics from the existing snapshot facts:
+`discovered.length`, `authorized.length`, current-state source facts for takeover, and scan-record
+count; unknown aggregate inputs remain `尚未获得`, while a detected-only source cannot inflate the
+takeover count. `last_error` is kept only in the existing collapsed `技术详情`; ordinary runtime
+warnings no longer show port `8766`; source operation failures use safe actionable Chinese copy;
+and Home's real pending action is rendered and clicked through to `需要我处理` in both focused and
+full rendered coverage.
+
+### Required acceptance gates
+
+These commands were rerun after the docs/evidence update and passed:
+
+```text
+$ python3 scripts/check_acceptance_sync.py
+[acceptance-sync] changed files: 2
+[acceptance-sync] product-impacting files: 0
+[acceptance-sync] PASS: no product-impacting changes detected.
+```
+
+```text
+$ python3 scripts/check_local_execution_handoff.py
+LOCAL_EXECUTION_HANDOFF: PASS
+```
+
+### Repair Round 1 commits
+
+- Product/tests: `2784dfa` (`fix: clarify owner memory menus`).
+- Docs/evidence: recorded separately after the product commit.

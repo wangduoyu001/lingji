@@ -1,5 +1,28 @@
 # 验收要求变更记录
 
+## 2026-08-30 · Task 1 Repair Round 1 · Owner UI menu fast-track
+
+- 基线：`81c813364985a223ce777592649154bbe9778580`；本轮产品/测试提交：`2784dfa`。
+  仅修复独立审查的六项 Important：来源页以现有 snapshot 事实展示发现/授权/已接管/已完成检查
+  聚合数（检测与接管保持不同，缺失为“尚未获得”）、失败扫描原始 `last_error` 仅放入技术折叠、
+  普通侧栏不显示 8766、来源操作错误使用安全中文概述、首页真实待办“去处理”保持 rendered 路由。
+  不修改 backend/API/data model/retrieval/vector/quality gate，不新增功能，不启动 live 服务或读取真实数据。
+- TDD RED：先更新 focused Playwright smoke，再运行
+  `npm run test:owner-ui-menu-fast-track`，基线在端口脱敏断言处以
+  `AssertionError ... ordinary runtime warning must not expose the control port`、实际
+  `true !== false` 失败，精确 `1 failed` assertion；随后最小 UI 修复。
+- GREEN：`npm run test:owner-ui-menu-fast-track`、`npm run test:e2e:memory`、
+  `npm run test:smoke`（23 scripts）和 `npm run build`（96 modules）均 PASS；另
+  `git diff --check` PASS。测试真实渲染聚合、折叠详情、错误脱敏、端口隐藏和待办路由，
+  不以脆弱正则代替 DOM/动作验证。
+- 必跑门禁（docs/evidence 更新后）：`python3 scripts/check_acceptance_sync.py` →
+  `[acceptance-sync] changed files: 2`、`product-impacting files: 0`、
+  `PASS: no product-impacting changes detected.`；`python3 scripts/check_local_execution_handoff.py`
+  → `LOCAL_EXECUTION_HANDOFF: PASS`。
+- 报告：`.superpowers/sdd/2026-08-30-owner-ui-menu-fast-track/task-1-report.md`；docs/evidence
+  与产品/tests 分开提交。未执行 live 8766/8767、Sidecar/release/Artifact/安装、Production/Vault、
+  真实主人数据或主人观察；`LOCAL_EXECUTION_TASK.md` 保持 `IDLE`。
+
 ## 2026-08-30 · Task 1 · Owner UI menu fast-track
 
 - 基线：`81c813364985a223ce777592649154bbe9778580`；产品/测试提交：
