@@ -357,3 +357,158 @@ Docs/evidence commit: this docs-only commit (exact SHA in final handoff)
 Report branch: codex/owner-real-history-memory-cards
 Acceptance date: 2026-08-30
 ```
+
+## 11. Repair Round 2 (final bounded canonical-only closure)
+
+The scoped review `task-2-repair-1-review.md` left original C1/I3 and introduced C2,
+I5, I6, and I7. I1/I2/I4 were not rewritten. M1 remains deferred. This round changed
+only the canonical evidence contract and formal scale loader plus the three permitted
+test files. Retrieval, ranking, query/filter, fixtures, UI/runtime/vector/schema, and
+promotion policy were not changed; automatic activation remains quarantined.
+
+### 11.1 TDD RED and GREEN
+
+New adversarial tests were written first and run before the production changes:
+
+```text
+python3 -m pytest -q tests/test_task7o_contract_adversarial.py tests/test_task7o_contract_closure.py tests/test_task7n1_scale_admission.py --tb=short
+11 failed, 71 passed, 1 warning in 7.10s
+```
+
+The RED failures covered C1/I6 (schema-version and stable-duplicate measured integer
+types), I3/I7 (forged non-pending status, arbitrary reason, duplicate decision identity),
+C2 (legacy compact envelope), and I5 (full canonical provenance rejected by the old
+scale schema). The test mutations were real canonical/loader inputs; no skip or lowered
+assertion was used.
+
+Minimal GREEN for the same three files:
+
+```text
+python3 -m pytest -q tests/test_task7o_contract_adversarial.py tests/test_task7o_contract_closure.py tests/test_task7n1_scale_admission.py --tb=short
+82 passed, 1 warning in 6.82s
+```
+
+The brief direct matrix was green before the final product commit:
+
+```text
+python3 -m pytest -q tests/test_task7o_contract_closure.py tests/test_task7o_contract_adversarial.py tests/test_task7n1_scale_admission.py tests/test_task7n2_corruption_retrieval.py tests/test_task7n3_promotion_thin.py tests/test_task7_measurement_repair.py tests/test_task7_quality_scale.py tests/evaluation/test_task4_reset_readiness.py tests/evaluation/test_automatic_memory_end_to_end.py --tb=short
+228 passed, 1 warning in 58.02s
+```
+
+The canonical loader now requires `schema_version` to be the exact integer `1`, and
+every measured integer/counter (including all `stable_duplicates`) is a non-negative
+integer, never bool/float/non-finite. The legacy compact scale path is removed: formal
+admission requires `evidence_details` and complete per-outcome promotion truth. The
+scale promotion validator requires exactly the same full provenance fields as the
+canonical schema, including `active`, `pending`, `rejected`, `error`, and `outcomes`.
+Canonical per-outcome records require unique non-empty memory and decision identities,
+the allowed category set, all expected/service/durable statuses equal to
+`pending_owner_review`, and reason codes from the production measurement allowlist with
+the existing durable redaction-set relation. No low-risk record can become auto-approved.
+
+Static checks before product commit:
+
+```text
+python3 -m compileall -q src tests && git diff --check
+PASS
+```
+
+### 11.2 Final product and previous artifact disposition
+
+Product/tests were committed before the authorized Round2 quality run:
+
+```text
+Product/tests commit: 8ccc3d44b1f921dec9b1b0a93fc71afdfd7dad99
+```
+
+The retained artifacts are explicitly not interchangeable:
+
+```text
+output/validation/task-2-quality.json
+  INVALID_HISTORICAL_ARTIFACT (top-level code_commit=null; baseline identity)
+output/validation/task-2-quality-repair1.json
+  PREVIOUS_REPAIR_ARTIFACT (canonical for product commit 272fbeb1252cfedf... only)
+output/validation/task-2-quality-repair2.json
+  CURRENT_ROUND2_ARTIFACT (canonical for product commit 8ccc3d44...)
+```
+
+No historical artifact was overwritten.
+
+### 11.3 The single authorized Round2 quality run
+
+After all RED/GREEN/direct-matrix checks and final product commit, the root agent's
+one-run authorization was used exactly once:
+
+```text
+python3 scripts/automatic_memory_quality_gate.py --output output/validation/task-2-quality-repair2.json
+Exit: 1
+functional_status: FAIL
+phase_status: FAIL
+```
+
+The isolated frozen run reported the existing generic-history adapter parse failure:
+`No approved extraction adapter for source type: generic_ai_history`; the adapter also
+reported malformed JSON at line 1 column 3. This is an honest measured FAIL, not a
+canonical identity failure. The new artifact identity is:
+
+```text
+artifact: output/validation/task-2-quality-repair2.json
+run_id: quality:bc1812fe64444027:338f5051c43902af:8ccc3d44b1f921de
+top-level code_commit: 8ccc3d44b1f921dec9b1b0a93fc71afdfd7dad99
+evidence_details.code_commit: 8ccc3d44b1f921dec9b1b0a93fc71afdfd7dad99
+corpus fixture SHA256: bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94
+questions fixture SHA256: 338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612
+```
+
+`CanonicalFunctionalEvidence.from_runner_payload()` accepted the artifact and all 145
+per-outcome truth records. `readiness_from_envelope()` and `load_quality_readiness()`
+then returned `BLOCKED_4R2_REQUIRED` because measured functional status is FAIL; this
+is the expected formal scale fail-closed result after canonical parsing. Readiness is:
+
+```text
+context_baseline=NOT_MEASURED
+corruption_isolation=FAILED
+gateway_selection=READY
+import_audit=READY
+mac_release=NOT_MEASURED
+mcp_parity=FAILED
+owner_review=NOT_MEASURED
+production_sentinel=NOT_MEASURED
+promotion_provenance=READY
+qdrant_degradation=FAILED
+reboot_recovery=NOT_MEASURED
+scale=NOT_MEASURED
+windows_release=NOT_MEASURED
+```
+
+Measured quality is explicit: `answered_questions=100`, `valid_fact_hits=0/106`,
+`citation_hits=0/106`, and `mcp_successes=0/100`; baseline/rendered/reduction and
+activation accuracy are null because they were not measured. Promotion provenance is
+`READY`, with `expected=145`, `actual=145`, `active=0`, `pending=145`, `rejected=0`,
+`error=0`, all duplicate/missing/extra counters zero, and `outcomes=145`. This leaves
+all records pending owner review and does not alter activation quarantine.
+
+The same isolated run cleaned its Acceptance roots completely:
+
+```text
+cleaned=true, root_exists=false, bytes=4591233, directory_count=118,
+file_count=160, other_count=0, symlink_count=0, remaining_count=0,
+remaining_bytes=0, error=None
+```
+
+### 11.4 Final handoff and unrun boundaries
+
+After the quality run, only this report and acceptance evidence are changed. Product/
+tests and docs/evidence are separate commits. No second Round2 quality CLI was run.
+
+Not run: 100k/full/release/Artifact, live 8766/8767, Production/Vault, owner data or
+real chats, Desktop/UI, retrieval/ranking/query/filter changes, or promotion-policy
+changes. No low-risk auto-approval was introduced.
+
+```text
+Repair Round 2 verdict: DONE
+Product/tests commit: 8ccc3d44b1f921dec9b1b0a93fc71afdfd7dad99
+Docs/evidence commit: this docs-only commit (exact SHA in final handoff)
+Report branch: codex/owner-real-history-memory-cards
+Acceptance date: 2026-08-30
+```

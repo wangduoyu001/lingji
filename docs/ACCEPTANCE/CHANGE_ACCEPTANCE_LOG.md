@@ -2951,3 +2951,26 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 未运行 100k/full/release/Artifact、live 8766/8767、Production/Vault、owner data/real
   chats、Desktop/UI；未改变自动激活 quarantine，未执行第二次 quality CLI。报告：
   `.superpowers/sdd/2026-08-30-release-4r2-acceptance-reset/task-2-report.md`。
+
+## 2026-08-30 · Release / 4R2 reset · Task 2 Repair Round 2 · final canonical-only closure
+
+- 本轮严格处理原 C1/I3 与新 C2/I5/I6/I7；I1/I2/I4 保持已修复，M1 deferred。仅修改
+  canonical evidence contract、formal scale loader 与指定 adversarial/closure/scale tests；
+  不改 retrieval/ranking/query/filter、promotion policy、fixtures、UI/runtime/vector/schema
+  或 activation quarantine。产品/tests 提交：`8ccc3d44b1f921dec9b1b0a93fc71afdfd7dad99`。
+- TDD RED：指定三组测试 `11 failed, 71 passed, 1 warning`；GREEN 为 `82 passed, 1 warning`。
+  brief direct matrix → `228 passed, 1 warning`；compileall/diff-check PASS。
+- 根代理授权的唯一 Round2 quality CLI：
+  `python3 scripts/automatic_memory_quality_gate.py --output output/validation/task-2-quality-repair2.json`
+  → exit `1`, honest `functional_status=FAIL`, `phase_status=FAIL`。新 artifact 顶层/嵌套
+  `code_commit` 均为最终 product SHA，run ID 为
+  `quality:bc1812fe64444027:338f5051c43902af:8ccc3d44b1f921de`；canonical loader PASS，
+  formal readiness 因真实 FAIL 返回 `BLOCKED_4R2_REQUIRED`。未重跑 CLI。
+- 新 artifact 的 promotion provenance 为完整 canonical schema，含 145 条 per-outcome
+  truth（expected/actual `145/145`，active `0`，pending `145`，rejected/error `0`，重复/缺失/
+  extra counters 均为 0）；Acceptance roots 清理完成（root_exists=false、remaining_count=0）。
+  旧 `task-2-quality.json` 标为 INVALID historical，Round1 `task-2-quality-repair1.json`
+  标为 previous repair artifact，均保留且未覆盖。
+- 未运行 100k/full/release/Artifact、live 8766/8767、Production/Vault、owner data/real
+  chats、Desktop/UI；未改变自动激活 quarantine，未执行第二次 Round2 quality CLI。报告：
+  `.superpowers/sdd/2026-08-30-release-4r2-acceptance-reset/task-2-report.md`。
