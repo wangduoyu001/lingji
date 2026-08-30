@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const state = { authorized: false, revoked: false, codexAuthorized: false, lastAuthorize: null, scan: null, scanReads: 0, scanRequests: 0, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", currentWorkMode: "normal", activityMode: "normal", detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed" };
+const state = { authorized: false, revoked: false, codexAuthorized: false, lastAuthorize: null, scan: null, scanReads: 0, scanRequests: 0, cardListRequests: 0, cardDetailRequests: 0, messageDetailRequests: 0, cardMutations: [], cardConflict: false, cardActionStates: {}, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", currentWorkMode: "normal", activityMode: "normal", detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed" };
 const allStateDiscovered = [
   ["detected", "available"], ["consent", "consent_required"], ["unsupported", "unsupported"], ["authorized", "available"],
   ["scanning", "available"], ["current", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
@@ -145,6 +145,7 @@ const server = http.createServer((req, res) => {
       return response();
     }
     if (path === "/api/memory/inspector/cards") {
+      state.cardListRequests += 1;
       const topics = ["发布计划", "每周摘要", "代码审查", "家庭安排", "阅读清单", "旅行计划", "饮食偏好", "会议决策", "预算安排", "学习目标", "设备维护", "写作习惯"];
       const cards = Array.from({ length: 21 }, (_, index) => ({
         memory_id: `card-${index + 1}`,
@@ -163,11 +164,25 @@ const server = http.createServer((req, res) => {
       const limit = Number(url.searchParams.get("limit") || 20);
       return json(res, 200, { items: cards.slice(offset, offset + limit), pagination: { limit, offset, total: cards.length, has_more: offset + limit < cards.length } });
     }
-    if (path.startsWith("/api/memory/inspector/cards/")) {
-      const id = decodeURIComponent(path.split("/").pop());
-      return json(res, 200, { item: { memory_id: id, topic: "发布计划", developments: ["先讨论方案", "根据来源做出决定"], conclusion: "最新结论已从来源核对", freshness: { state: "current", reason: "最近证据仍有效", latest_evidence_at: "2026-08-28T08:03:00Z" }, source: { label: "Codex 工作会话", message_count: 3 }, layers: { raw: { state: "available" }, structured: { state: "available" }, vector: { state: "complete" }, permanent: { state: "complete" } }, trust: { state: "trusted" }, action: { type: "correct", label: "修正内容" }, current_hash: "hash-card-1", evidence: [{ message_id: "message-card-1", preview: "来源证据摘要", occurred_at: "2026-08-28T08:03:00Z" }] } });
+    if (path === "/api/memory/inspector/cards-summary") return json(res, 200, { cards: 21, conversations: 7, messages: 42, permanent: 8, vectorized: 18, owner_review: 3 });
+    if (path.startsWith("/api/memory/core/") && ["correct", "invalidate", "archive"].some((action) => path.endsWith(`/${action}`))) {
+      const segments = path.split("/");
+      const id = segments[4];
+      const action = segments[5];
+      state.cardMutations.push({ id, action, body: JSON.parse(body || "{}") });
+      if (state.cardConflict) return json(res, 409, { detail: { code: "MEMORY_REVIEW_CONFLICT", message: "content changed" } });
+      state.cardActionStates[id] = action;
+      return json(res, 200, { id, status: action === "correct" ? "active" : `${action}d` });
     }
-    if (path === "/api/memory/inspector/messages/message-card-1") return json(res, 200, { item: { message_id: "message-card-1", content: "这是选定的来源消息正文。" } });
+    if (path === "/__test/card-conflict") { state.cardConflict = body.includes("true"); return json(res, 200, { ok: true }); }
+    if (path.startsWith("/api/memory/inspector/cards/")) {
+      state.cardDetailRequests += 1;
+      const id = decodeURIComponent(path.split("/").pop());
+      const action = state.cardActionStates[id] ?? (id === "card-2" ? "invalidate" : id === "card-3" ? "archive" : "correct");
+      const actionLabels = { correct: "修正内容", invalidate: "标记已经过时", archive: "移出当前记忆" };
+      return json(res, 200, { item: { memory_id: id, topic: id === "card-2" ? "每周摘要" : id === "card-3" ? "代码审查" : "发布计划", developments: ["先讨论方案", "根据来源做出决定"], conclusion: "最新结论已从来源核对", freshness: { state: action === "invalidate" ? "overdue" : action === "archive" ? "archived" : "current", reason: action === "invalidate" ? "已标记为过时" : action === "archive" ? "已移出当前记忆" : "最近证据仍有效", latest_evidence_at: "2026-08-28T08:03:00Z" }, source: { label: "Codex 工作会话", message_count: 3 }, layers: { raw: { state: "available" }, structured: { state: "available" }, vector: { state: "complete" }, permanent: { state: "available" } }, trust: { state: "trusted" }, action: { type: action, label: actionLabels[action], reason: "请核对后决定" }, current_hash: `hash-${id}`, evidence: [{ message_id: "message-card-1", preview: "来源证据摘要", occurred_at: "2026-08-28T08:03:00Z" }] } });
+    }
+    if (path === "/api/memory/inspector/messages/message-card-1") { state.messageDetailRequests += 1; return json(res, 200, { item: { message_id: "message-card-1", content: "这是选定的来源消息正文。" } }); }
     if (path === "/api/memory/inspector/status") return json(res, 200, { as_of: "2026-08-28T08:03:00Z", sources: { sources: 1, conversations: 1, messages: 1 }, memory: { documents: 1, chunks: 1 }, vector: { state: "available", coverage: 1, rebuild_required: false } });
     if (path === "/api/memory/inspector/sources" || path === "/api/memory/inspector/conversations" || path === "/api/memory/inspector/messages") return json(res, 200, { items: path.endsWith("sources") ? [{ source_id: "source-1", source_type: "codex_session", display_name: "Codex 工作会话", status: "active", updated_at: "2026-08-28T08:02:00Z" }] : path.endsWith("conversations") ? [{ conversation_id: "session-1", source_id: "source-1", title: "发布计划讨论", started_at: "2026-08-28T08:00:00Z", message_count: 1 }] : [{ message_id: "message-1", conversation_id: "session-1", source_id: "source-1", role: "user", author: "主人", occurred_at: "2026-08-28T08:02:00Z", content_preview: "我们确认下周三发布。" }], pagination: { total: 1, limit: 30, offset: 0, has_more: false } });
     if (path === "/api/memory/inspector/conversations/session-1") return json(res, 200, { item: { conversation_id: "session-1", source_id: "source-1", title: "发布计划讨论", started_at: "2026-08-28T08:00:00Z", message_count: 1 } });
@@ -296,6 +311,19 @@ try {
   await page.getByRole("heading", { name: "活动记录" }).first().waitFor();
   await page.getByRole("button", { name: "首页" }).click();
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+  for (const label of ["已导入对话", "已导入消息", "记忆卡片", "已进入长期记忆", "语义向量", "需要我确认"]) await page.getByText(label, { exact: true }).waitFor();
+  await page.locator(".metric").filter({ hasText: "已导入对话" }).locator("strong").filter({ hasText: "7" }).waitFor();
+  const metricValue = async (label) => page.locator(".metric").filter({ hasText: label }).locator("strong").innerText();
+  assert.equal(await metricValue("已导入对话"), "7", "Home conversation total must come from the full cards summary");
+  assert.equal(await metricValue("已导入消息"), "42", "Home message total must come from the full cards summary");
+  assert.equal(await metricValue("记忆卡片"), "21", "Home card total must match the cards API total");
+  assert.equal(await metricValue("已进入长期记忆"), "8", "Home permanent total must match the cards summary");
+  assert.equal(await metricValue("语义向量"), "18", "Home vector total must match the cards summary");
+  assert.equal(await metricValue("需要我确认"), "3", "Home review total must match the cards summary");
+  assert.equal(state.cardListRequests, 0, "Home must use full summary counts without loading card bodies");
+  await page.getByText("整理项目会议记录", { exact: true }).waitFor();
+  await page.getByText("已保存 1 条记忆", { exact: true }).waitFor();
+  assert.equal(await page.locator(".overview-work-fact").count(), 1, "Home must show real Work Facts, not a static activity prompt");
   await page.getByText("目前空闲", { exact: true }).waitFor();
   assert.equal(await page.getByText("状态尚未获得", { exact: true }).count(), 0, "null work must render a clear idle state, not an unknown status");
   assert.equal(await page.getByText("内部错误：cleanup_scan_failed", { exact: true }).count(), 1, "raw runtime error may exist only in collapsed details");
@@ -561,8 +589,52 @@ try {
   await page.getByRole("button", { name: "上一页", exact: true }).click();
   await page.locator(".owner-memory-card").first().getByText("发布计划", { exact: true }).waitFor();
   await page.locator(".owner-memory-card").first().getByRole("button", { name: "发布计划", exact: true }).click();
+  await page.getByRole("dialog").waitFor();
+  await page.getByRole("heading", { name: "发布计划", exact: true }).focus();
+  assert.equal(await page.getByRole("dialog").getAttribute("aria-modal"), "true", "detail must be modal and labelled");
+  const messageRequestBefore = state.messageDetailRequests;
   await page.getByRole("button", { name: "查看来源", exact: true }).click();
   await page.getByText("这是选定的来源消息正文。", { exact: true }).waitFor();
+  assert.equal(state.messageDetailRequests, messageRequestBefore + 1, "only selected source message detail may be fetched");
+  await page.keyboard.press("Escape");
+  await page.locator(".owner-memory-card").first().getByRole("button", { name: "发布计划", exact: true }).waitFor();
+  assert.equal(await page.getByRole("dialog").count(), 0, "Escape closes memory detail");
+
+  // Core corrections use lifecycle endpoints and re-read the selected card.
+  await page.locator(".owner-memory-card").nth(0).getByRole("button", { name: "发布计划", exact: true }).click();
+  await page.getByRole("dialog").getByRole("textbox", { name: "修正内容" }).fill("修正后的发布计划");
+  await page.getByRole("dialog").getByRole("textbox", { name: "修正原因" }).fill("主人确认更新");
+  const detailBeforeCorrection = state.cardDetailRequests;
+  await page.on("dialog", (dialog) => dialog.accept());
+  await page.getByRole("dialog").getByRole("button", { name: "修正内容", exact: true }).click();
+  await page.getByText("已保存，当前状态已刷新。", { exact: true }).waitFor();
+  assert.ok(state.cardDetailRequests > detailBeforeCorrection, "successful owner action must perform a fresh detail GET");
+  assert.equal(state.cardMutations.at(-1).action, "correct", "core correction must not call candidate approval");
+
+  await page.keyboard.press("Escape");
+  await page.locator(".owner-memory-card").nth(1).getByRole("button", { name: "每周摘要", exact: true }).click();
+  await page.getByRole("dialog").getByRole("textbox", { name: "过时原因" }).fill("旧摘要不再适用");
+  await page.getByRole("dialog").getByRole("button", { name: "标记已经过时", exact: true }).click();
+  await page.getByText("已保存，当前状态已刷新。", { exact: true }).waitFor();
+  assert.equal(state.cardMutations.at(-1).action, "invalidate", "overdue core card must use invalidate endpoint");
+
+  await page.keyboard.press("Escape");
+  await page.locator(".owner-memory-card").nth(2).getByRole("button", { name: "代码审查", exact: true }).click();
+  await page.getByRole("dialog").getByRole("textbox", { name: "移出原因" }).fill("不再属于当前记忆");
+  await page.getByRole("dialog").getByRole("button", { name: "移出当前记忆", exact: true }).click();
+  await page.getByText("已保存，当前状态已刷新。", { exact: true }).waitFor();
+  assert.equal(state.cardMutations.at(-1).action, "archive", "archived core card must use archive endpoint");
+
+  await fetch(`http://127.0.0.1:${apiPort}/__test/card-conflict`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
+  await page.keyboard.press("Escape");
+  await page.locator(".owner-memory-card").nth(0).getByRole("button", { name: "发布计划", exact: true }).click();
+  await page.getByRole("dialog").getByRole("textbox", { name: "修正内容" }).fill("本地未提交修正");
+  await page.getByRole("dialog").getByRole("textbox", { name: "修正原因" }).fill("冲突测试");
+  await page.getByRole("dialog").getByRole("button", { name: "修正内容", exact: true }).click();
+  await page.locator(".owner-memory-feedback").filter({ hasText: "这条内容刚刚发生变化，请刷新后再决定。" }).waitFor();
+  assert.equal(await page.locator(".owner-memory-card").first().getByText("发布计划", { exact: true }).count(), 1, "stale conflict must not overwrite the card");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/card-conflict`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
+  await page.keyboard.press("Escape");
 
   await page.locator(".desktop-diagnostics-link").click();
   await page.locator("details").filter({ hasText: "记忆与项目" }).locator("summary").click();
@@ -592,8 +664,16 @@ try {
   await page.locator("details").filter({ hasText: "采集与任务" }).locator("summary").click();
   await page.getByRole("button", { name: /手动投喂中心/ }).waitFor();
   assert.equal(await page.locator(".desktop-nav-item").filter({ hasText: "主动投喂" }).count(), 0, "legacy Capture must be hidden from navigation");
+  await page.locator(".desktop-nav-item").filter({ hasText: "记忆内容" }).click();
+  await page.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor();
+  await page.locator(".owner-memory-card-grid").waitFor();
   await page.setViewportSize({ width: 900, height: 800 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "900px viewport must not horizontally clip");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  assert.equal(await page.locator(".owner-memory-card-grid").evaluate((node) => getComputedStyle(node).gridTemplateColumns.split(" ").length), 2, "1280px uses two card columns");
+  await page.setViewportSize({ width: 1024, height: 800 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "1024px viewport must not overflow");
+  assert.equal(await page.locator(".owner-memory-card-grid").evaluate((node) => getComputedStyle(node).gridTemplateColumns.split(" ").length), 1, "1024px collapses to one card column");
   await browser.close();
   console.log("e2e_owner_memory_flow: PASS");
 } finally {

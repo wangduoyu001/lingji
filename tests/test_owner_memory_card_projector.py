@@ -347,3 +347,102 @@ def test_card_limit_is_bounded(limit):
     projector = OwnerMemoryCardProjector(FixtureDatabase(), FixtureSources(), FixtureStatistics())
     with pytest.raises(ValueError):
         projector.list_cards(limit=limit)
+
+
+def test_core_cards_recommend_owner_corrections_without_candidate_api():
+    database = FixtureDatabase()
+    database.documents[0].update({"memory_tier": "core", "status": "active", "review_status": "approved"})
+    card = OwnerMemoryCardProjector(database, FixtureSources(), FixtureStatistics()).get_card("mem-active")["item"]
+    assert card["layers"]["permanent"]["state"] == "available"
+    assert card["action"]["type"] in {"correct", "invalidate", "archive"}
+
+
+def test_card_list_never_reads_message_details():
+    class CountingSources(FixtureSources):
+        def __init__(self):
+            self.detail_calls = 0
+
+        def get_message(self, message_id, **kwargs):
+            self.detail_calls += 1
+            return super().get_message(message_id, **kwargs)
+
+    sources = CountingSources()
+    OwnerMemoryCardProjector(FixtureDatabase(), sources, FixtureStatistics()).list_cards(limit=50)
+    assert sources.detail_calls == 0
+
+
+def test_untitled_cards_use_human_fallback_not_identifiers():
+    database = FixtureDatabase()
+    database.documents[0]["title"] = ""
+    card = OwnerMemoryCardProjector(database, FixtureSources(), FixtureStatistics()).get_card("mem-active")["item"]
+    assert "mem-active" not in card["topic"]
+    assert card["topic"] == "一条待核对的记忆"
+
+
+def test_archive_reason_is_exposed_in_freshness():
+    database = FixtureDatabase()
+    database.documents[0].update({"status": "archived", "relationships": {"archive_reason": "不再适用"}})
+    card = OwnerMemoryCardProjector(database, FixtureSources(), FixtureStatistics()).get_card("mem-active")["item"]
+    assert card["freshness"]["reason"] == "不再适用"
+
+
+def test_core_lifecycle_actions_follow_current_status_without_candidate_api():
+    database = FixtureDatabase()
+    database.documents[0].update({"memory_tier": "core", "review_status": "approved"})
+    projector = OwnerMemoryCardProjector(database, FixtureSources(), FixtureStatistics())
+
+    database.documents[0]["status"] = "invalidated"
+    assert projector.get_card("mem-active")["item"]["action"]["type"] == "invalidate"
+
+    database.documents[0]["status"] = "archived"
+    assert projector.get_card("mem-active")["item"]["action"]["type"] == "archive"
+
+
+def test_summary_keeps_message_total_unknown_when_any_source_count_is_unknown():
+    class MissingMessageCountSources(FixtureSources):
+        def list_conversations(self, **kwargs):
+            return {
+                "items": [
+                    {"conversation_id": "known", "source_id": "src-codex", "title": "Known", "message_count": 2},
+                    {"conversation_id": "unknown", "source_id": "src-codex", "title": "Unknown", "message_count": None},
+                ],
+                "pagination": {"total": 2},
+            }
+
+    summary = OwnerMemoryCardProjector(
+        FixtureDatabase(), MissingMessageCountSources(), FixtureStatistics()
+    ).summary()
+
+    assert summary["conversations"] == 2
+    assert summary["messages"] is None
+
+
+def test_card_list_uses_bounded_memory_links_for_previews_without_message_detail_reads():
+    class BoundedLinksSources(FixtureSources):
+        def get_message(self, message_id, **kwargs):
+            raise AssertionError("card projection must not read message details")
+
+        def memory_sources(self, memory_id, **kwargs):
+            return {"links": [{"message_id": "msg-1", "content_preview": "有界来源摘要", "content_hash": "hash-msg-1", "occurred_at": "2026-03-01T10:00:00Z"}]}
+
+    result = OwnerMemoryCardProjector(
+        FixtureDatabase(), BoundedLinksSources(), FixtureStatistics()
+    ).list_cards(limit=50, include_evidence=True)
+
+    active = next(item for item in result["items"] if item["memory_id"] == "mem-active")
+    assert active["evidence"][0]["preview"] == "有界来源摘要"
+
+
+def test_card_detail_reads_only_the_selected_memory_evidence():
+    class CountingDetailsSources(FixtureSources):
+        def __init__(self):
+            self.detail_ids = []
+
+        def get_message(self, message_id, **kwargs):
+            self.detail_ids.append(message_id)
+            return super().get_message(message_id, **kwargs)
+
+    sources = CountingDetailsSources()
+    OwnerMemoryCardProjector(FixtureDatabase(), sources, FixtureStatistics()).get_card("mem-old")
+
+    assert sources.detail_ids == ["msg-3"]

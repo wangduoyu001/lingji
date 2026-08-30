@@ -210,6 +210,9 @@ class MemoryInspectorFacade:
             memory_id, viewer=viewer, include_evidence=include_evidence
         )
 
+    def card_summary(self, *, viewer: ViewerContext | None = None) -> dict[str, Any]:
+        return self.card_projector.summary(viewer=viewer)
+
     def get_memory(
         self, memory_id: str, *, viewer: ViewerContext | None = None
     ) -> dict[str, Any]:

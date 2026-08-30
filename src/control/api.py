@@ -233,6 +233,13 @@ def create_control_app(
         except Exception as exc:
             raise translate_error(exc) from exc
 
+    @app.get("/api/memory/inspector/cards-summary", dependencies=secured)
+    def inspector_cards_summary() -> dict[str, Any]:
+        try:
+            return memory_inspector().card_summary()
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
     @app.get("/api/memory/inspector/cards/{memory_id}", dependencies=secured)
     def inspector_card(
         memory_id: str,

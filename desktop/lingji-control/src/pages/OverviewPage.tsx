@@ -7,8 +7,8 @@ import type { MemorySourcesSnapshot, ScanRun } from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { PageId, Row } from "../types";
 import type { PendingAction } from "../contracts/workFact";
+import type { WorkHistoryResponse } from "../contracts/workFact";
 import { OwnerMemoryCardsApi } from "./ownerMemoryCardsApi";
-import type { OwnerMemoryCardsResponse } from "./ownerMemoryCardsTypes";
 
 const display = (value: unknown, fallback = "检查结果尚未获得") => value === null || value === undefined || value === "" ? fallback : String(value);
 const stateTone = (value: unknown): "good" | "warn" | "bad" | undefined => {
@@ -53,7 +53,8 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
   const sourceResource = usePollingResource<MemorySourcesSnapshot>({ fetcher: loadSources, enabled: active, intervalMs: 10_000, staleAfterMs: 30_000 });
   const loadPending = useCallback((signal: AbortSignal) => api.get<{ pending_actions?: PendingAction[] }>("/api/work/pending-actions", { signal }), [api]);
   const pendingResource = usePollingResource({ fetcher: loadPending, enabled: active, intervalMs: 8_000, staleAfterMs: 25_000, pauseWhenHidden: true });
-  const cardsResource = usePollingResource<OwnerMemoryCardsResponse>({ fetcher: useCallback(() => cardsApi.list(0, undefined, 50), [cardsApi]), enabled: active, intervalMs: 20_000, staleAfterMs: 45_000, pauseWhenHidden: true });
+  const cardSummaryResource = usePollingResource({ fetcher: useCallback((signal: AbortSignal) => cardsApi.summary(signal), [cardsApi]), enabled: active, intervalMs: 20_000, staleAfterMs: 45_000, pauseWhenHidden: true });
+  const workHistoryResource = usePollingResource<WorkHistoryResponse>({ fetcher: useCallback((signal: AbortSignal) => api.get<WorkHistoryResponse>("/api/work/history?limit=3&offset=0", { signal }), [api]), enabled: active, intervalMs: 15_000, staleAfterMs: 30_000, pauseWhenHidden: true });
   if (!data) return <Empty text="连接灵机后会显示运行状态。" />;
   const d = data as Record<string, unknown>;
   const health = (d.health ?? {}) as Record<string, unknown>;
@@ -66,12 +67,9 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
   const pendingActions = pendingResource.data?.pending_actions ?? [];
   const currentNames = sourceSnapshot?.sources.filter((item) => item.state === "current").map(ownerSourceName) ?? [];
   const periodicNotice = periodicReconciliationNotice(sourceSnapshot?.runtime);
-  const cards = cardsResource.data?.items ?? [];
-  const cardTotal = cardsResource.data?.pagination?.total;
-  const permanentCount = cards.filter((card) => ["complete", "available"].includes(String(card.layers?.permanent?.state ?? ""))).length;
-  const vectorCount = cards.filter((card) => ["complete", "available"].includes(String(card.layers?.vector?.state ?? ""))).length;
-  const reviewCount = cards.filter((card) => ["confirm", "review"].includes(String(card.action?.type ?? ""))).length;
-  const metric = (value: number | null | undefined) => typeof value === "number" ? String(value) : "尚未获得";
+  const cardSummary = cardSummaryResource.data;
+  const metric = (value: unknown) => typeof value === "number" ? String(value) : "尚未获得";
+  const workItems = workHistoryResource.data?.items ?? [];
 
   return <div className="stack overview-page observation-page">
     <section className={`overview-hero overview-hero-${stateTone(runtimeState) ?? "neutral"}`}>
@@ -82,7 +80,7 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
     {sourceResource.stale && <Notice kind="warning">来源状态来自上一次成功读取，正在刷新。</Notice>}
     {sourceResource.error && <Notice kind="warning">来源状态暂时无法读取，请打开“记忆来源”重试。</Notice>}
     {periodicNotice && <Notice kind="info">{periodicNotice}</Notice>}
-    <section className="overview-section owner-memory-summary"><div className="overview-section-heading"><div><h3>记忆摘要</h3><p className="overview-section-lede">这些数字和“记忆内容”使用同一份卡片记录。</p></div><button className="button primary" onClick={() => onNavigate("memory_cards")}>打开记忆内容</button></div><div className="metric-grid"><div className="metric"><span>发现候选</span><strong>{metric(sourceSnapshot?.discovered.length)}</strong></div><div className="metric"><span>记忆卡片</span><strong>{metric(cardTotal)}</strong></div><div className="metric"><span>已进入长期记忆</span><strong>{cardsResource.data ? permanentCount : "尚未获得"}</strong></div><div className="metric"><span>语义向量</span><strong>{cardsResource.data ? vectorCount : "尚未获得"}</strong></div><div className="metric"><span>需要我确认</span><strong>{cardsResource.data ? reviewCount : "尚未获得"}</strong></div></div></section>
+    <section className="overview-section owner-memory-summary"><div className="overview-section-heading"><div><h3>记忆摘要</h3><p className="overview-section-lede">这些数字和“记忆内容”使用同一份完整卡片记录。</p></div><button className="button primary" onClick={() => onNavigate("memory_cards")}>打开记忆内容</button></div><div className="metric-grid"><div className="metric"><span>发现候选</span><strong>{metric(sourceSnapshot?.discovered.length)}</strong></div><div className="metric"><span>已导入对话</span><strong>{metric(cardSummary?.conversations)}</strong></div><div className="metric"><span>已导入消息</span><strong>{metric(cardSummary?.messages)}</strong></div><div className="metric"><span>记忆卡片</span><strong>{metric(cardSummary?.cards)}</strong></div><div className="metric"><span>已进入长期记忆</span><strong>{metric(cardSummary?.permanent)}</strong></div><div className="metric"><span>语义向量</span><strong>{metric(cardSummary?.vectorized)}</strong></div><div className="metric"><span>需要我确认</span><strong>{metric(cardSummary?.owner_review)}</strong></div></div></section>
     <CurrentWorkPanel api={api} active={active} />
 
     <section className="overview-section source-overview-card"><div className="overview-section-heading"><div><h3>正在记住什么</h3><p className="overview-section-lede">灵机只记住你明确允许的来源。</p></div><button className="button secondary" onClick={() => onNavigate("memory_sources")}>查看记忆来源</button></div>
@@ -91,7 +89,7 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
 
     <section className="overview-section"><div className="overview-section-heading"><div><h3>最近一次检查</h3><p className="overview-section-lede">这里告诉你灵机上次实际做了什么。</p></div>{latestSource && <small>{sourceStateLabel(latestSource.state)}</small>}</div><p className="overview-readable-line">{latestCheckSummary(latest)}</p><div className="overview-inline-actions"><button className="button secondary" onClick={() => onNavigate("memory_sources")}>查看这次检查</button><button className="button secondary" onClick={() => onNavigate("activity")}>查看活动记录</button></div></section>
 
-    <section className="overview-section"><div className="overview-section-heading"><div><h3>最近工作</h3><p className="overview-section-lede">这里是工作记录，不是记忆内容。</p></div><button className="button secondary" onClick={() => onNavigate("activity")}>活动记录</button></div><p className="overview-readable-line">最近工作记录已更新，可查看完整活动记录。</p></section>
+    <section className="overview-section"><div className="overview-section-heading"><div><h3>最近工作</h3><p className="overview-section-lede">这里是工作记录，不是记忆内容。</p></div><button className="button secondary" onClick={() => onNavigate("activity")}>活动记录</button></div>{workHistoryResource.error && !workItems.length ? <p className="overview-readable-line">工作记录暂时无法读取，正在重试。</p> : workItems.length ? <div className="overview-work-facts">{workItems.slice(0, 3).map((item, index) => <article className="overview-work-fact" key={item.work?.work_id ?? index}><strong>{display(item.work?.title, "一项灵机工作")}</strong><span>{display(item.outcome?.summary ?? item.summary?.result, "仍在处理")}</span><small>{formatTime(item.summary?.time ?? item.work?.updated_at)} · 下一步：{display(item.next_action?.actor === "system" ? "灵机自动处理" : item.next_action?.description, "暂无")}</small></article>)}</div> : <p className="overview-readable-line">目前还没有工作记录。</p>}</section>
     <div className="overview-footer-actions"><button className="button secondary" onClick={() => onNavigate("diagnostics")}>打开高级诊断</button></div>
   </div>;
 }

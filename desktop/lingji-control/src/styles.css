@@ -121,7 +121,7 @@ code { color: #8fe0c3; font-family: "Cascadia Code", Consolas, monospace; }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .toolbar > span { color: var(--muted); font-size: 11px; }
-.button { min-height: 34px; padding: 7px 12px; color: var(--text); border: 1px solid transparent; border-radius: 9px; background: var(--surface-3); transition: filter .15s ease, transform .15s ease, border-color .15s ease; }
+.button { min-height: 40px; padding: 7px 12px; color: var(--text); border: 1px solid transparent; border-radius: 9px; background: var(--surface-3); transition: filter .15s ease, transform .15s ease, border-color .15s ease; }
 .button:hover { filter: brightness(1.1); }
 .button:active { transform: translateY(1px); }
 .button:disabled { opacity: .45; cursor: default; transform: none; }

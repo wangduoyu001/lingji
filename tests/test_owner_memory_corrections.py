@@ -113,6 +113,20 @@ def test_owner_invalidation_requires_reason_and_preserves_file(tmp_path):
     assert metadata["invalidating_reason"] == "已不再适用"
 
 
+def test_owner_archive_requires_reason_and_returns_auditable_reason(tmp_path):
+    current = write_core(tmp_path)
+    service = MemoryReviewService(Lifecycle(tmp_path))
+    expected = content_hash(current.read_text(encoding="utf-8"))
+
+    with pytest.raises(ValueError, match="reason"):
+        service.archive_core_memory("core-1", expected_content_hash=expected, owner_confirmed=True, reason="")
+
+    result = service.archive_core_memory("core-1", expected_content_hash=expected, owner_confirmed=True, reason="不再属于当前工作")
+    assert result["status"] == "archived"
+    metadata, _ = split_frontmatter(current.read_text(encoding="utf-8"))
+    assert metadata["archive_reason"] == "不再属于当前工作"
+
+
 def test_owner_correction_stale_hash_is_conflict_without_overwrite(tmp_path):
     current = write_core(tmp_path)
     service = MemoryReviewService(Lifecycle(tmp_path))
@@ -139,3 +153,24 @@ def test_candidate_confirm_edit_confirm_and_reject_keep_owner_gate(tmp_path):
     assert rejected["status"] == "rejected"
     assert not candidate.exists()
     assert list((tmp_path / "09-Archive").rglob("*.md"))
+
+
+def test_owner_correction_carries_provenance_relationships_and_validity(tmp_path):
+    old = write_core(tmp_path)
+    metadata, body = split_frontmatter(old.read_text(encoding="utf-8"))
+    metadata.update({
+        "source_refs": [{"message_id": "msg-1", "content_hash": "raw-1"}],
+        "relationships": {"conversation_id": "conv-1", "evidence_refs": ["msg-1"]},
+        "confidence": 0.94,
+        "valid_from": "2026-01-01T00:00:00Z",
+        "valid_to": "2027-01-01T00:00:00Z",
+    })
+    old.write_text(render_frontmatter(metadata, body), encoding="utf-8")
+    service = MemoryReviewService(Lifecycle(tmp_path))
+    result = service.correct_core_memory("core-1", content="新内容", expected_content_hash=content_hash(old.read_text(encoding="utf-8")), owner_confirmed=True, reason="主人修正")
+    new_meta, _ = split_frontmatter((tmp_path / result["relative_path"]).read_text(encoding="utf-8"))
+    assert new_meta["source_refs"] == metadata["source_refs"]
+    assert new_meta["relationships"] == metadata["relationships"]
+    assert new_meta["confidence"] == metadata["confidence"]
+    assert new_meta["valid_from"] == metadata["valid_from"]
+    assert new_meta["valid_to"] == metadata["valid_to"]

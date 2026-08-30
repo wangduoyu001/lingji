@@ -30,6 +30,9 @@ export default function OwnerMemoryCardsPage({ api, active, onNavigate }: { api:
   const [editContent, setEditContent] = useState("");
   const [reason, setReason] = useState("");
   const requestId = useRef(0);
+  const detailHeadingRef = useRef<HTMLHeadingElement>(null);
+  const detailTriggerRef = useRef<HTMLButtonElement>(null);
+  const [feedback, setFeedback] = useState("");
 
   const load = useCallback(async (nextOffset = offset) => {
     if (!active) return;
@@ -49,7 +52,8 @@ export default function OwnerMemoryCardsPage({ api, active, onNavigate }: { api:
   }, [active, client, offset]);
   useEffect(() => { void load(0); }, [active, client]);
 
-  const open = async (card: OwnerMemoryCard) => {
+  const open = async (card: OwnerMemoryCard, trigger?: HTMLButtonElement) => {
+    detailTriggerRef.current = trigger ?? null;
     setDetailLoading(true); setError(null); setMessage(null);
     try { const response = await client.detail(card.memory_id); const item = response.item ?? card; setSelected(item); setEditContent(item.conclusion ?? item.developments?.[0] ?? ""); }
     catch (value) { if (value instanceof ApiError) setError(value); }
@@ -58,16 +62,36 @@ export default function OwnerMemoryCardsPage({ api, active, onNavigate }: { api:
   const run = async (kind: string, call: () => Promise<unknown>, confirmation: string) => {
     if (!selected || busy || !window.confirm(confirmation)) return;
     setBusy(kind); setError(null);
-    try { await call(); const fresh = await client.detail(selected.memory_id); setSelected(fresh.item); setEditContent(fresh.item.conclusion ?? ""); setReason(""); await load(offset); }
-    catch (value) { if (value instanceof ApiError) setError(value); }
+    try { setFeedback("正在保存…"); await call(); const fresh = await client.detail(selected.memory_id); setSelected(fresh.item); setEditContent(fresh.item.conclusion ?? ""); setReason(""); setFeedback("已保存，当前状态已刷新。"); await load(offset); }
+    catch (value) {
+      if (value instanceof ApiError) {
+        setError(value);
+        setFeedback(value.status === 409 ? "这条内容刚刚发生变化，请刷新后再决定。" : "保存失败，请稍后重试。");
+      } else {
+        setFeedback("保存失败，请稍后重试。");
+      }
+    }
     finally { setBusy(""); }
   };
+  useEffect(() => {
+    if (!selected) return;
+    detailHeadingRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelected(null);
+        window.setTimeout(() => detailTriggerRef.current?.focus(), 0);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selected]);
   const source = async () => {
     const id = selected?.evidence?.[0]?.message_id;
     if (!id || busy) return;
     setBusy("source");
-    try { const response = await client.message(id); setMessage(response.item ?? null); }
-    catch (value) { if (value instanceof ApiError) setError(value); }
+    setFeedback("正在读取选定来源…");
+    try { const response = await client.message(id); setMessage(response.item ?? null); setFeedback("已读取选定来源。"); }
+    catch (value) { if (value instanceof ApiError) setError(value); setFeedback("来源暂时无法读取，请稍后重试。"); }
     finally { setBusy(""); }
   };
   const distribution = useMemo(() => Array.from(new Set(items.map((item) => text(item.source?.label, "来源未知")))).join("、") || "尚未获得", [items]);
@@ -79,21 +103,21 @@ export default function OwnerMemoryCardsPage({ api, active, onNavigate }: { api:
     {loading && items.length === 0 ? <div className="loop-state" aria-busy="true">正在读取你的记忆内容…</div> : items.length === 0 ? <Empty text="还没有可展示的记忆卡片。接管一个来源并完成一次检查后，这里会出现具体内容。" /> : <section className="owner-memory-card-grid" aria-label="记忆卡片">{items.map((card) => {
       const freshness = String(card.freshness?.state || "unknown");
       const evidence = card.developments ?? card.evidence_lines ?? [];
-      return <article className="owner-memory-card" key={card.memory_id} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); void open(card); } }}>
-        <button className="owner-memory-card-title" onClick={() => void open(card)}>{text(card.topic, "未命名记忆")}</button>
+      return <article className="owner-memory-card" key={card.memory_id} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); void open(card, event.currentTarget.querySelector<HTMLButtonElement>(".owner-memory-card-title") ?? undefined); } }}>
+        <button className="owner-memory-card-title" onClick={(event) => void open(card, event.currentTarget)}>{text(card.topic, "未命名记忆")}</button>
         <div className="owner-memory-developments">{evidence.slice(0, 3).map((line, index) => <p key={`${card.memory_id}-${index}`}>{line}</p>)}</div>
         <p className="owner-memory-conclusion"><strong>最新结论：</strong>{text(card.conclusion, "最新结论尚未获得")}</p>
         <div className="owner-memory-freshness"><span className="pill neutral">{freshnessLabels[freshness] ?? "尚未判断"}</span><small>{text(card.freshness?.reason, "时效尚未判断")} · {time(card.freshness?.latest_evidence_at)}</small></div>
-        <p className="owner-memory-source"><strong>来源：</strong>{text(card.source?.label)} · {card.source?.message_count == null ? "消息数尚未获得" : `${card.source.message_count} 条消息`}</p>
+        <p className="owner-memory-source"><strong>来源：</strong>{text(card.source?.label)} · {card.source?.message_count == null ? "消息数尚未获得" : `${card.source.message_count} 条消息`} · 最近证据：{time(card.source?.latest_evidence_at)}</p>
         <div className="owner-memory-layers">{Object.entries(layerLabels).map(([key, label]) => <span className="pill neutral" key={key}>{label}：{stateLabels[String(card.layers?.[key]?.state || "unknown")] ?? "尚未获得"}</span>)}</div>
         <p className="owner-memory-trust">可信提示：{trustLabels[String(card.trust?.state || "unknown")] ?? "可信度尚未判断"}</p>
         <p className="owner-memory-action">建议：{text(card.action?.label, "查看详情")}</p>
-        <button className="button secondary owner-memory-action-button" onClick={() => void open(card)}>{text(card.action?.label, "查看详情")}</button>
+        <button className="button secondary owner-memory-action-button" onClick={(event) => void open(card, event.currentTarget)} aria-label={`${text(card.action?.label, "查看详情")}：${text(card.topic, "记忆")}`}>{text(card.action?.label, "查看详情")}</button>
       </article>;
     })}</section>}
     <div className="loop-pager owner-memory-pager"><button disabled={offset === 0 || loading} onClick={() => void load(Math.max(0, offset - OWNER_MEMORY_CARD_LIMIT))}>上一页</button><span>{total == null ? `第 ${Math.floor(offset / OWNER_MEMORY_CARD_LIMIT) + 1} 页` : `${Math.floor(offset / OWNER_MEMORY_CARD_LIMIT) + 1} / ${Math.max(1, Math.ceil(total / OWNER_MEMORY_CARD_LIMIT))}`}</span><button disabled={!hasMore || loading} onClick={() => void load(offset + OWNER_MEMORY_CARD_LIMIT)}>下一页</button></div>
     {detailLoading && <div className="workspace-empty-detail" aria-busy="true">正在读取这条记忆…</div>}
-    {selected && !detailLoading && <section className="loop-panel owner-memory-detail" aria-label="记忆详情"><header><div><h2 tabIndex={-1}>{text(selected.topic, "记忆详情")}</h2><p>{text(selected.conclusion, "最新结论尚未获得")}</p></div><button className="button secondary" onClick={() => setSelected(null)}>关闭详情</button></header><div className="owner-memory-detail-evidence"><h3>可核对的证据</h3>{(selected.evidence ?? []).slice(0, 3).map((item, index) => <p key={`${item.message_id}-${index}`}>{text(item.preview, "证据摘要尚未获得")} · {time(item.occurred_at)}</p>)}<button className="button secondary" disabled={!selected.evidence?.[0]?.message_id || Boolean(busy)} onClick={() => void source()}>{busy === "source" ? "读取中…" : "查看来源"}</button>{message && <div className="owner-memory-message"><strong>选定来源消息</strong><p>{text(message.content, "原文尚未获得")}</p></div>}</div><div className="owner-memory-actions"><p>{text(selected.action?.reason, "请先确认当前状态")}</p>{(actionType(selected) === "confirm" || actionType(selected) === "review") && <><button className="button primary" disabled={Boolean(busy) || !selected.current_hash} onClick={() => void run("approve", () => client.approve(selected.memory_id, selected.current_hash ?? ""), "确认把这条内容加入长期记忆吗？")}>{busy === "approve" ? "确认中…" : "确认加入长期记忆"}</button><button className="button secondary" disabled={Boolean(busy) || !selected.current_hash} onClick={() => void run("edit-approve", () => client.editApprove(selected.memory_id, selected.current_hash ?? "", editContent), "保存修正后加入长期记忆吗？")}>编辑确认</button><button className="button danger" disabled={Boolean(busy) || !selected.current_hash || !reason.trim()} onClick={() => void run("reject", () => client.reject(selected.memory_id, selected.current_hash ?? "", reason), "拒绝这条候选内容吗？")}>拒绝</button><input aria-label="拒绝理由" placeholder="拒绝理由（必填）" value={reason} onChange={(event) => setReason(event.target.value)} /></>}{actionType(selected) === "correct" && <><textarea aria-label="修正内容" value={editContent} onChange={(event) => setEditContent(event.target.value)} /><input aria-label="修正原因" placeholder="说明为什么修正（必填）" value={reason} onChange={(event) => setReason(event.target.value)} /><button className="button secondary" disabled={Boolean(busy) || !selected.current_hash || !reason.trim()} onClick={() => void run("correct", () => client.correct(selected.memory_id, selected.current_hash ?? "", editContent, reason), "这会生成新的当前版本，旧版本仍保留。继续吗？")}>修正内容</button></>}{actionType(selected) === "invalidate" && <><input aria-label="过时原因" placeholder="说明为什么已经过时（必填）" value={reason} onChange={(event) => setReason(event.target.value)} /><button className="button secondary" disabled={Boolean(busy) || !selected.current_hash || !reason.trim()} onClick={() => void run("invalidate", () => client.invalidate(selected.memory_id, selected.current_hash ?? "", reason), "标记后这条内容会保留在历史中，但不再作为当前记忆。继续吗？")}>标记已经过时</button></>}{actionType(selected) === "archive" && <><input aria-label="移出原因" placeholder="说明为什么移出当前记忆（必填）" value={reason} onChange={(event) => setReason(event.target.value)} /><button className="button danger" disabled={Boolean(busy) || !selected.current_hash || !reason.trim()} onClick={() => void run("archive", () => client.archive(selected.memory_id, selected.current_hash ?? "", reason), "移出当前记忆？原始记录、历史和审计仍会保留。")}>移出当前记忆</button></>}</div></section>}
+    {selected && !detailLoading && <section className="loop-panel owner-memory-detail" role="dialog" aria-modal="true" aria-labelledby="owner-memory-detail-title" aria-label="记忆详情"><header><div><h2 id="owner-memory-detail-title" ref={detailHeadingRef} tabIndex={-1}>{text(selected.topic, "记忆详情")}</h2><p>{text(selected.conclusion, "最新结论尚未获得")}</p></div><button className="button secondary" onClick={() => { setSelected(null); window.setTimeout(() => detailTriggerRef.current?.focus(), 0); }}>关闭详情</button></header><div className="owner-memory-detail-evidence"><h3>可核对的证据</h3>{(selected.evidence ?? []).slice(0, 3).map((item, index) => <p key={`${item.message_id}-${index}`}>{text(item.preview, "证据摘要尚未获得")} · {time(item.occurred_at)}</p>)}<button className="button secondary" disabled={!selected.evidence?.[0]?.message_id || Boolean(busy)} onClick={() => void source()}>{busy === "source" ? "读取中…" : "查看来源"}</button>{message && <div className="owner-memory-message"><strong>选定来源消息</strong><p>{text(message.content, "原文尚未获得")}</p></div>}</div><div className="owner-memory-actions"><p>{text(selected.action?.reason, "请先确认当前状态")}</p>{(() => { const selectedAction = actionType(selected); const isCandidate = selected.kind !== "conversation_evidence" && (selectedAction === "confirm" || ["needs_review", "received", "preparing"].includes(String(selected.state ?? "")) || selected.layers?.permanent?.state === "pending_owner_review"); return <>{isCandidate && <><button className="button primary" disabled={Boolean(busy) || !selected.current_hash} onClick={() => void run("approve", () => client.approve(selected.memory_id, selected.current_hash ?? ""), "确认把这条内容加入长期记忆吗？")}>{busy === "approve" ? "确认中…" : "确认加入长期记忆"}</button><button className="button secondary" disabled={Boolean(busy) || !selected.current_hash} onClick={() => void run("edit-approve", () => client.editApprove(selected.memory_id, selected.current_hash ?? "", editContent), "保存修正后加入长期记忆吗？")}>{busy === "edit-approve" ? "编辑确认中…" : "编辑确认"}</button><button className="button danger" disabled={Boolean(busy) || !selected.current_hash || !reason.trim()} onClick={() => void run("reject", () => client.reject(selected.memory_id, selected.current_hash ?? "", reason), "拒绝这条候选内容吗？")}>{busy === "reject" ? "拒绝中…" : "拒绝"}</button><input aria-label="拒绝理由" placeholder="拒绝理由（必填）" value={reason} onChange={(event) => setReason(event.target.value)} /></>}{selected.kind !== "conversation_evidence" && ["correct", "invalidate", "archive"].includes(selectedAction) && <>{selectedAction === "correct" && <textarea aria-label="修正内容" value={editContent} onChange={(event) => setEditContent(event.target.value)} />}<input aria-label={`${selectedAction === "invalidate" ? "过时" : selectedAction === "archive" ? "移出" : "修正"}原因`} placeholder={`${selectedAction === "invalidate" ? "说明为什么已经过时" : selectedAction === "archive" ? "说明为什么移出当前记忆" : "说明为什么修正"}（必填）`} value={reason} onChange={(event) => setReason(event.target.value)} /><button className="button secondary" disabled={Boolean(busy) || !selected.current_hash || !reason.trim() || (selectedAction === "correct" && !editContent.trim())} onClick={() => void run(selectedAction, () => selectedAction === "correct" ? client.correct(selected.memory_id, selected.current_hash ?? "", editContent, reason) : selectedAction === "invalidate" ? client.invalidate(selected.memory_id, selected.current_hash ?? "", reason) : client.archive(selected.memory_id, selected.current_hash ?? "", reason), selectedAction === "correct" ? "这会生成新的当前版本，旧版本仍保留。继续吗？" : selectedAction === "invalidate" ? "标记后这条内容会保留在历史中，但不再作为当前记忆。继续吗？" : "移出当前记忆？原始记录、历史和审计仍会保留。")}>{busy === selectedAction ? selectedAction === "correct" ? "修正中…" : selectedAction === "invalidate" ? "标记中…" : "移出中…" : selectedAction === "correct" ? "修正内容" : selectedAction === "invalidate" ? "标记已经过时" : "移出当前记忆"}</button></>}</>})()}</div><div className="owner-memory-feedback" aria-live="polite">{feedback}</div></section>}
     <div className="owner-memory-footer"><button className="button secondary" onClick={() => onNavigate("memory_sources")}>查看记忆来源</button><button className="button secondary" onClick={() => onNavigate("diagnostics")}>高级诊断</button></div>
   </div>;
 }

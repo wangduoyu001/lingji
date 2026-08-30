@@ -7,6 +7,9 @@ export class OwnerMemoryCardsApi {
     const boundedLimit = Math.min(Math.max(1, limit), 50);
     return this.api.get<OwnerMemoryCardsResponse>(`/api/memory/inspector/cards?limit=${boundedLimit}&offset=${Math.max(0, offset)}`, { signal });
   }
+  summary(signal?: AbortSignal) {
+    return this.api.get<{ cards?: number | null; conversations?: number | null; messages?: number | null; permanent?: number | null; vectorized?: number | null; owner_review?: number | null }>("/api/memory/inspector/cards-summary", { signal });
+  }
   detail(id: string, signal?: AbortSignal) {
     return this.api.get<{ item: OwnerMemoryCard }>(`/api/memory/inspector/cards/${encodeURIComponent(id)}?expand=true`, { signal });
   }

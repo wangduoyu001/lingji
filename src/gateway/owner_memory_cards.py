@@ -131,8 +131,18 @@ class OwnerMemoryCardProjector:
     ) -> dict[str, Any]:
         selected_viewer = viewer or self.source_service.owner_viewer()
         wanted = str(memory_id or "").strip()
+        # First locate the selected projection without reading any message
+        # bodies.  Re-project only that one memory with detail enabled; doing
+        # ``allow_message_detail`` across the full list would defeat the
+        # selected-message boundary for cards appearing earlier in the page.
         for card in self._all_cards(selected_viewer):
             if card.memory_id == wanted:
+                if card.kind == "memory":
+                    for document in self._list_documents():
+                        document_id = str(document.get("memory_id") or document.get("id") or "").strip()
+                        if document_id == wanted:
+                            card = self._memory_card(document, selected_viewer, allow_message_detail=True)
+                            break
                 return {
                     "workspace": self.workspace,
                     "viewer_scope": getattr(selected_viewer, "viewer_scope", "owner"),
@@ -141,10 +151,31 @@ class OwnerMemoryCardProjector:
                 }
         raise LookupError("memory card not found")
 
+    def summary(self, *, viewer: ViewerContext | None = None) -> dict[str, Any]:
+        """Return full-card counts for Home without deriving from one page."""
+        selected_viewer = viewer or self.source_service.owner_viewer()
+        cards = self._all_cards(selected_viewer)
+        conversations = self._paged_conversations(selected_viewer)
+        measured_messages = [item.get("message_count") for item in conversations]
+        message_count = (
+            sum(measured_messages)
+            if all(type(value) is int and value >= 0 for value in measured_messages)
+            else None
+        )
+        return {
+            "workspace": self.workspace,
+            "cards": len(cards),
+            "conversations": len(conversations),
+            "messages": message_count if conversations else 0,
+            "permanent": sum(1 for card in cards if str(card.layers.get("permanent", {}).get("state")) in {"available", "complete"}),
+            "vectorized": sum(1 for card in cards if str(card.layers.get("vector", {}).get("state")) in {"available", "complete"}),
+            "owner_review": sum(1 for card in cards if str(card.action.get("type")) in {"confirm", "review"}),
+        }
+
     # Public alias used by callers that prefer the term ``project``.
     project = get_card
 
-    def _all_cards(self, viewer: ViewerContext) -> list[OwnerMemoryCard]:
+    def _all_cards(self, viewer: ViewerContext, *, allow_message_detail: bool = False) -> list[OwnerMemoryCard]:
         documents = self._list_documents()
         documents.extend(self._candidate_documents())
         promoted_conversations: set[str] = set()
@@ -156,7 +187,7 @@ class OwnerMemoryCardProjector:
                 # Structured evidence is the index projection of a message,
                 # not an additional owner memory card.
                 continue
-            card = self._memory_card(document, viewer)
+            card = self._memory_card(document, viewer, allow_message_detail=allow_message_detail)
             cards.append(card)
             conversation_id = self._relationship(document, "conversation_id")
             if conversation_id:
@@ -241,11 +272,12 @@ class OwnerMemoryCardProjector:
             known.add(memory_id)
         return output
 
-    def _memory_card(self, document: Mapping[str, Any], viewer: ViewerContext) -> OwnerMemoryCard:
+    def _memory_card(self, document: Mapping[str, Any], viewer: ViewerContext, *, allow_message_detail: bool = False) -> OwnerMemoryCard:
         memory_id = str(document.get("memory_id") or document.get("id") or "").strip()
         relationships = self._relationships(document)
         refs = self._evidence_refs(relationships)
-        all_evidence = self._evidence_for_refs(refs, viewer)
+        refs = self._bounded_memory_refs(memory_id, refs, viewer)
+        all_evidence = self._evidence_for_refs(refs, viewer, allow_message_detail=allow_message_detail)
         evidence = all_evidence[:MAX_EVIDENCE]
         evidence_by_id = {str(item.get("message_id") or ""): item for item in all_evidence}
         expected_refs = {self._ref_value(item): item for item in refs if self._ref_value(item)}
@@ -280,7 +312,14 @@ class OwnerMemoryCardProjector:
             "permanent": permanent,
         }
         conclusion = self._conclusion(document, evidence) if evidence and provenance == "verified" and conflict != "conflict" else None
-        action = self._recommend_action(status, freshness, trust, source, permanent)
+        action = self._recommend_action(
+            status,
+            freshness,
+            trust,
+            source,
+            permanent,
+            is_core=str(document.get("memory_tier") or "").lower() == "core",
+        )
         topic = self._topic(document.get("title"), memory_id)
         developments = tuple(self._development_lines(document, evidence if provenance == "verified" else ()))[:MAX_EVIDENCE]
         return OwnerMemoryCard(
@@ -301,6 +340,51 @@ class OwnerMemoryCardProjector:
             current_hash=str(document.get("content_hash") or relationships.get("content_hash") or "") or None,
             evidence=tuple(evidence),
         )
+
+    def _bounded_memory_refs(
+        self,
+        memory_id: str,
+        refs: list[Any],
+        viewer: ViewerContext,
+    ) -> list[Any]:
+        """Enrich evidence identities with read-model previews only.
+
+        ``memory_sources`` deliberately excludes message bodies.  Using it
+        here keeps card-list projection useful while reserving ``get_message``
+        for the selected-card detail action.
+        """
+        if not memory_id or not hasattr(self.source_service, "memory_sources"):
+            return refs
+        try:
+            response = self.source_service.memory_sources(memory_id, viewer=viewer)
+        except TypeError:
+            try:
+                response = self.source_service.memory_sources(memory_id)
+            except Exception:
+                return refs
+        except Exception:
+            return refs
+        links = response.get("links") if isinstance(response, Mapping) else None
+        if not isinstance(links, list):
+            return refs
+        by_id = {
+            self._ref_value(link): link
+            for link in links
+            if isinstance(link, Mapping) and self._ref_value(link)
+        }
+        # An empty canonical reference set means provenance is genuinely
+        # unknown; do not manufacture evidence from an unrelated link list.
+        if not refs:
+            return refs
+        enriched: list[Any] = []
+        for ref in refs:
+            ref_id = self._ref_value(ref)
+            link = by_id.get(ref_id)
+            if isinstance(link, Mapping) and isinstance(ref, Mapping):
+                enriched.append({**dict(link), **dict(ref)})
+            else:
+                enriched.append(ref)
+        return enriched
 
     def _conversation_cards(self, viewer: ViewerContext, promoted: set[str]) -> list[OwnerMemoryCard]:
         conversations = self._paged_conversations(viewer)
@@ -369,29 +453,32 @@ class OwnerMemoryCardProjector:
         # still bounded to the first page and are only used to produce the
         # short evidence preview on a card.
         enriched: list[dict[str, Any]] = []
-        for message in messages[:MAX_SOURCE_PAGE]:
-            if "content" not in message:
-                try:
-                    detail = self.source_service.get_message(str(message.get("message_id") or ""), viewer=viewer)
-                    body = dict(detail.get("item") or detail)
-                    if body:
-                        message = {**message, "content": body.get("content"), "content_hash": body.get("content_hash") or message.get("content_hash")}
-                except Exception:
-                    pass
-            enriched.append(message)
+        # List endpoints are deliberately metadata/preview-only.  Full message
+        # bodies are fetched exclusively by the explicit message-detail route.
+        enriched.extend(messages[:MAX_SOURCE_PAGE])
         return enriched
 
-    def _evidence_for_refs(self, refs: list[Any], viewer: ViewerContext) -> list[dict[str, Any]]:
+    def _evidence_for_refs(self, refs: list[Any], viewer: ViewerContext, *, allow_message_detail: bool = False) -> list[dict[str, Any]]:
         output: list[dict[str, Any]] = []
         for ref in refs:
             message_id = self._ref_value(ref)
             if not message_id:
                 continue
-            try:
-                response = self.source_service.get_message(message_id, viewer=viewer)
-                message = dict(response.get("item") or response)
-            except Exception:
-                message = {}
+            # References may carry a bounded preview.  Never turn card-list
+            # projection into a full message read; detail projection may use
+            # the existing service only after the owner selected a card.
+            message = dict(ref) if isinstance(ref, Mapping) else {"message_id": message_id}
+            if allow_message_detail:
+                try:
+                    response = self.source_service.get_message(message_id, viewer=viewer)
+                except TypeError:
+                    response = self.source_service.get_message(message_id)
+                except Exception:
+                    response = {}
+                detail = dict(response.get("item") or response) if isinstance(response, Mapping) else {}
+                if detail:
+                    message = detail
+            message.setdefault("message_id", message_id)
             if not message:
                 continue
             output.append(self._message_evidence_item(message))
@@ -402,7 +489,7 @@ class OwnerMemoryCardProjector:
 
     @staticmethod
     def _message_evidence_item(message: Mapping[str, Any]) -> dict[str, Any]:
-        content = " ".join(str(message.get("content") or "").split())
+        content = " ".join(str(message.get("preview") or message.get("content_preview") or message.get("excerpt") or "").split())
         return {
             "message_id": str(message.get("message_id") or ""),
             "conversation_id": str(message.get("conversation_id") or "") or None,
@@ -419,7 +506,11 @@ class OwnerMemoryCardProjector:
         source_item: dict[str, Any] = {}
         if source_id:
             try:
-                source_item = self._item(self.source_service.get_source(source_id, viewer=viewer))
+                try:
+                    response = self.source_service.get_source(source_id, viewer=viewer)
+                except TypeError:
+                    response = self.source_service.get_source(source_id)
+                source_item = self._item(response)
             except Exception:
                 source_item = {}
         latest = self._latest_time(evidence)
@@ -444,7 +535,11 @@ class OwnerMemoryCardProjector:
         source_item: dict[str, Any] = {}
         if source_id:
             try:
-                source_item = self._item(self.source_service.get_source(source_id, viewer=viewer))
+                try:
+                    response = self.source_service.get_source(source_id, viewer=viewer)
+                except TypeError:
+                    response = self.source_service.get_source(source_id)
+                source_item = self._item(response)
             except Exception:
                 source_item = {}
         latest = self._latest_time(self._message_evidence(messages)) or self._latest_time([
@@ -508,18 +603,37 @@ class OwnerMemoryCardProjector:
             return {"state": "unknown", "label": "永久状态尚未获得", "reason": "canonical memory projection is unavailable"}
         tier = str(document.get("memory_tier") or "").lower()
         if tier == "core" and status == "active":
-            return {"state": "active", "label": "永久记忆", "reason": None}
+            return {"state": "available", "label": "永久记忆", "reason": None}
         if status in {"needs_review", "received", "preparing"} or str(document.get("review_status") or "").lower() in {"pending_owner_review", "needs_review"}:
             return {"state": "pending_owner_review", "label": "等待主人确认", "reason": None}
         return {"state": "not_permanent", "label": "不是永久记忆", "reason": None}
 
     @staticmethod
-    def _recommend_action(status: str, freshness: Mapping[str, Any], trust: Mapping[str, Any], source: Mapping[str, Any], permanent: Mapping[str, Any]) -> dict[str, Any]:
+    def _recommend_action(
+        status: str,
+        freshness: Mapping[str, Any],
+        trust: Mapping[str, Any],
+        source: Mapping[str, Any],
+        permanent: Mapping[str, Any],
+        *,
+        is_core: bool = False,
+    ) -> dict[str, Any]:
         source_status = str(source.get("status") or "").lower()
         if source_status in {"revoked", "expired", "disabled", "archived"}:
             return {"type": "reauthorize_source", "label": "重新授权来源", "reason": "来源当前不可用"}
         if status in {"needs_review", "received", "preparing"} or permanent.get("state") == "pending_owner_review":
             return {"type": "confirm", "label": "确认是否加入永久记忆", "reason": "这条内容仍在等待主人确认"}
+        # Core memories use lifecycle-safe owner actions. They must never be
+        # routed through candidate approval endpoints. Lifecycle status is
+        # checked independently of the permanent layer because invalidated and
+        # archived core files are intentionally no longer ``available``.
+        if is_core:
+            if status == "archived" or freshness.get("state") == "archived":
+                return {"type": "archive", "label": "移出当前记忆", "reason": str(freshness.get("reason") or "内容已移出当前记忆")}
+            if status == "invalidated" or freshness.get("state") in {"overdue", "invalidated"}:
+                return {"type": "invalidate", "label": "标记已经过时", "reason": str(freshness.get("reason") or "内容可能已过时")}
+            if status in {"active", "superseded"} or permanent.get("state") == "available":
+                return {"type": "correct", "label": "修正内容", "reason": "如有变化，可生成新的当前版本"}
         if freshness.get("state") in {"superseded", "invalidated", "archived", "rejected", "rolled_back", "repair_required", "overdue", "source_revoked"}:
             return {"type": "review", "label": "检查并决定是否移出当前记忆", "reason": str(freshness.get("reason") or "内容可能已过时")}
         if trust.get("conflict") == "conflict" or trust.get("provenance") in {"mismatch", "unknown"} or trust.get("state") in {"low_confidence", "unknown"}:
@@ -531,7 +645,8 @@ class OwnerMemoryCardProjector:
         if str(source.get("status") or "").lower() in {"revoked", "expired", "disabled", "archived"}:
             return {"state": "source_revoked", "reason": "来源已撤销或过期", "replacement_id": None}
         replacement = document.get("superseded_by") or OwnerMemoryCardProjector._relationships(document).get("superseded_by")
-        reason = OwnerMemoryCardProjector._relationships(document).get("supersession_reason") or OwnerMemoryCardProjector._relationships(document).get("invalidating_reason")
+        relationships = OwnerMemoryCardProjector._relationships(document)
+        reason = relationships.get("supersession_reason") or relationships.get("supersede_reason") or relationships.get("invalidating_reason") or relationships.get("archive_reason") or document.get("archive_reason")
         if status in {"superseded", "invalidated", "archived", "rejected", "rolled_back", "repair_required"}:
             return {"state": status, "reason": reason or "生命周期状态已变化", "replacement_id": replacement or None}
         start = parse_instant(document.get("valid_from"))
@@ -577,7 +692,9 @@ class OwnerMemoryCardProjector:
     @staticmethod
     def _topic(value: Any, fallback: str) -> str:
         topic = " ".join(str(value or "").split()).strip()
-        return topic[:160] if topic else f"会话证据 {str(fallback)[:32]}"
+        # IDs are for technical details only; ordinary cards always have a
+        # deterministic human-readable fallback.
+        return topic[:160] if topic else "一条待核对的记忆"
 
     @staticmethod
     def _confidence(value: Any) -> float | None:

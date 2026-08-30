@@ -26,6 +26,9 @@ class CardInspector:
             },
         }
 
+    def card_summary(self, **kwargs):
+        return {"cards": 7, "conversations": 2, "messages": 12, "permanent": 3, "vectorized": 5, "owner_review": 1}
+
 
 class Control:
     def __init__(self):
@@ -66,3 +69,14 @@ def test_cards_limit_is_restricted_to_one_through_fifty():
             headers={"X-LingJi-Token": "secret"},
         )
         assert response.status_code == 422
+
+
+def test_card_summary_is_authenticated_and_uses_full_counts():
+    with client() as app:
+        assert app.get("/api/memory/inspector/cards-summary").status_code == 401
+        response = app.get(
+            "/api/memory/inspector/cards-summary",
+            headers={"X-LingJi-Token": "secret"},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"cards": 7, "conversations": 2, "messages": 12, "permanent": 3, "vectorized": 5, "owner_review": 1}

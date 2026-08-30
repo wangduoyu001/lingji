@@ -173,7 +173,7 @@
 }
 
 .loop-pager button {
-  min-height: 31px;
+  min-height: 40px;
   padding: 6px 10px;
   color: var(--text-soft);
   border: 1px solid var(--line);
@@ -210,6 +210,7 @@
 .owner-memory-action { color: var(--accent); font-weight: 600; }
 .owner-memory-action-button { min-height: 40px; margin-top: 4px; }
 .owner-memory-detail { margin-top: 18px; padding: 18px; }
+.owner-memory-feedback { min-height: 24px; margin-top: 10px; color: var(--accent); }
 .owner-memory-detail > header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
 .owner-memory-detail-evidence p { padding: 8px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .owner-memory-message { margin-top: 12px; padding: 12px; border-left: 3px solid var(--accent); background: var(--surface-raised, var(--surface)); }
