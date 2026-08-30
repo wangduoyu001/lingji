@@ -1,14 +1,15 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
-> Updated: 2026-08-28
+> Updated: 2026-08-30
 > Formal/default branch: `master`
 > Phase 1 implementation base: `d12c1fb837257e83835a7cdb899bb29a9c675c3d`
-> Current Phase 1 product head: `b43401c2f241820e6ebf5d89b31dad8638224751` (Task 7M-Reset product/tests)
-> Current implementation branch: `codex/phase1-automatic-memory`
+> Current bounded candidate product/tests head: `8b7c37e6f87561b6013123abb2995a760174c15c` (owner real history + memory cards)
+> Current reviewed evidence head: `7a23da197d1728253bf1009775872b1217600171`
+> Current implementation branch: `codex/owner-real-history-memory-cards`
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
-> Current engineering gate: `TASK 7 — MEASUREMENT CONTRACT CAP / BLOCKED`
+> Current engineering gate: `OWNER REAL HISTORY TASK 4 — RELEASE + MAC OWNER PROOF NOT YET RUN`
 > Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
@@ -32,11 +33,13 @@ Phase 1 PASS 后，Phase 2 第一优先级固定为 **Opportunity Center / 机�
 
 ## 1A. 当前实现范围与真实进度
 
-当前分支 `codex/phase1-automatic-memory` 已完成并冻结 Tasks 0–6 的自动化/UI 交付边界；Task 7 的质量测量组合仍被证据契约门禁阻塞。已有来源授权与扫描状态、一致快照/续扫、受支持来源适配、监听与调度、Obsidian 隔离、派生记忆晋级，以及全检索路径的 current/as_of/history/why 时态隔离。Task 8 的 Work Fact、8766 读取接口和 Desktop 真实投影已进入分支，但发布版与主人验收仍未进行。
+当前候选分支 `codex/owner-real-history-memory-cards` 已在现有自动记忆主线之上完成三个有界交付：安全发现并授权本机 Codex rollout 历史、把现有来源/会话/生命周期/向量/永久状态投影为主人可读的记忆卡片、以及四项普通菜单与安全修正/失效/归档流程。Tasks 1–3 whole-plan 最终独立复审为 `PASS / APPROVED`，产品 Critical/Important/Minor 均为 0；focused、rendered E2E、23 项 Desktop smoke 和 build 已通过。该结论仅代表代码与合成验收，不代表 release、真实 Mac 导入或主人体验 PASS。
+
+旧 Task 7 measurement contract 的历史阻塞仍保留为 Phase 1 全局质量背景，未被本次有界交付伪装成已解决；它不覆盖本候选 Tasks 1–3 的独立通过结论。下一权威动作是基于最终文档同步后的同一代码树运行一次 `release`，成功后才创建新的 ACTIVE Mac 任务、生成同 SHA arm64 Artifact、授权真实 Codex 历史并完成主人观察。
 
 此前唯一已复现的 P0 缺口是：一次终态失败已经产生主人待办后，实时生命周期 callback 随即成功时，成功 Outcome 会立即写入，但旧 PendingAction 要等后续 `WorkStore` 重放/读取才被解决。Task 1 已通过单一事务转换和 callback/replay/restart/乱序矩阵修复并回归验证；剩余执行权威为 `docs/superpowers/plans/2026-08-26-phase1-automatic-memory-followup.md`。
 
-当前 `LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。在 Work Fact 收口、固定 100 问评测、统一 RAG、质量/规模门禁和同 SHA Artifact 锁定之前，不执行新的真实安装或 M5 主人验收。
+当前 `LOCAL_EXECUTION_TASK.md` 仍为 `IDLE`。在本候选 final docs head、单次 release 结果、同 SHA Artifact 与哈希锁定之前，不执行新的真实安装或 M5 主人验收。
 
 Task 3 Repair Round 1 已在本分支产品提交 `f2f7312` 完成八项重要缺口修复；最终 Repair Round 2 产品提交 `7058da0` 补齐 BOM/CRLF frontmatter、自动 Generic AI 跨来源身份命名空间和暂停恢复 Work Fact 计数。该状态仅表示代码与合成 fixture 验证通过；不表示 Artifact、真实 UI、主人观察或 Production/Vault 验收完成。Task 2 的 stale scheduler cleanup-state 边界已由 Task 6A 产品/测试提交 `15eb4433c9d6c3ba218e89d50bec84987ad35915` 收口；自动晋级 seam 仍禁止调用。
 

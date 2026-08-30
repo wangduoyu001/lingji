@@ -1,6 +1,6 @@
 # CODE_MAP.md — LingJi 代码地图
 
-> Updated: 2026-08-28
+> Updated: 2026-08-30
 > Scope: code entry points, ownership and focused validation only
 > Architecture: `docs/ARCHITECTURE.md`
 > Current status and development order: `docs/PROJECT_STATUS.md`
@@ -390,6 +390,35 @@ desktop/lingji-control/src/pages/OverviewPage.tsx
 = first-run Chinese source discovery/authorization/scan status projection using the authenticated Task 3 endpoints; one-time onboarding and Home source/activity/memory summary. UI smoke: `cd desktop/lingji-control && npm run test:memory-sources`; rendered harness: `npm run test:e2e:memory`.
 Repair coverage additionally lives in `desktop/lingji-control/src/hooks/useMemorySourcesOnboarding.ts`, `desktop/lingji-control/scripts/automatic-memory-sources-repair-smoke.mjs`, and the authenticated rendered harness; run `npm run test:memory-sources-repair` for the focused review regressions.
 Task 4C adds only the Home `本次更新`/`本次跳过` fact projections and neutral unknown queue/count rendering in `desktop/lingji-control/src/pages/OverviewPage.tsx` plus the existing rendered/static smoke assertions; no backend contract or second UI state source is introduced.
+
+Owner real history + memory cards candidate:
+```text
+src/automatic_memory/discovery.py
+src/automatic_memory/home.py
+src/automatic_memory/path_policy.py
+src/extraction/adapters/codex.py
+src/extraction/bootstrap.py
+src/extraction/pipeline.py
+src/extraction/registry.py
+= metadata-only default macOS Codex rollout discovery, bounded authorization and fail-closed rollout import
+
+src/gateway/owner_memory_cards.py
+src/gateway/memory_inspector.py
+src/control/memory_inspector.py
+src/control/project_memory_api.py
+src/project_memory/review_service.py
+= read-only OwnerMemoryCard projection, authenticated card/summary/detail routes and owner-confirmed correction/invalidation/archive using existing lifecycle truth
+
+desktop/lingji-control/src/pages/OwnerMemoryCardsPage.tsx
+desktop/lingji-control/src/pages/ownerMemoryCardsApi.ts
+desktop/lingji-control/src/pages/ownerMemoryCardsTypes.ts
+desktop/lingji-control/src/pages/MemorySourcesPage.tsx
+desktop/lingji-control/src/pages/OverviewPage.tsx
+desktop/lingji-control/src/navigation.ts
+= four-item ordinary navigation, safe source metadata proof, concise memory cards and advanced-diagnostics demotion
+```
+
+Focused tests: `tests/test_owner_real_history_discovery.py`, `tests/test_owner_codex_rollout_adapter.py`, `tests/test_owner_real_history_import_flow.py`, `tests/test_owner_memory_card_projector.py`, `tests/test_owner_memory_card_api.py`, `tests/test_owner_memory_corrections.py`, `tests/test_project_memory_api.py`, `tests/test_task3_round2_direct.py`, `tests/test_task3_round3_integration.py`; rendered/UI: `cd desktop/lingji-control && npm run test:e2e:memory && npm run test:smoke && npm run build`.
 
 Task 5:
 src/obsidian/memory_scope.py
