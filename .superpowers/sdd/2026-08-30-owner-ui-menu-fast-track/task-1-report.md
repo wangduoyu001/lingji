@@ -1,0 +1,93 @@
+# Task 1 — Owner UI menu fast-track report
+
+## Status
+
+Implemented in product/tests commit `e9a341d9314a23cac3a81b30de989447496a6f01`.
+Docs/evidence is committed separately.
+
+## RED evidence
+
+Tests were extended before production changes.
+
+```text
+$ npm run test:e2e:memory
+AssertionError [ERR_ASSERTION]: advanced diagnostics must have one collapsed disclosure
+0 !== 1
+```
+
+Exact result: `1 failed` (the rendered fixture stopped at the missing collapsed disclosure).
+
+```text
+$ node scripts/owner-ui-menu-fast-track-smoke.mjs
+AssertionError [ERR_ASSERTION]: advanced diagnostics must be a single disclosure
+0 !== 1
+```
+
+Exact result: `1 failed` (the focused Playwright-rendered DOM stopped at the same missing disclosure).
+The initial smoke launch also exposed an encoded-workspace `spawn npm ENOENT`; the smoke runner was
+corrected to resolve its workspace with `fileURLToPath` before the product RED was recorded.
+
+## GREEN and regression evidence
+
+```text
+$ npm run test:e2e:memory
+e2e_owner_memory_flow: PASS
+```
+
+```text
+$ npm run test:owner-ui-menu-fast-track
+owner-ui-menu-fast-track-smoke: PASS
+```
+
+```text
+$ npm run test:smoke
+[smoke] PASS (23 scripts)
+```
+
+```text
+$ npm run build
+✓ 96 modules transformed.
+✓ built in 395ms
+```
+
+```text
+$ python3 -m pytest -q tests/test_owner_memory_corrections.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_review_service.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_project_memory_api.py tests/test_task3_round2_direct.py tests/test_task3_round3_integration.py tests/test_source_read_model.py tests/test_source_service.py --tb=short
+87 passed, 1 warning in 1.43s
+```
+
+Additional checks: `python3 -m compileall -q src tests` PASS; `git diff --check` PASS.
+
+## Scope and implementation
+
+- Added a native collapsed `高级诊断` disclosure in the Desktop shell. Its only advanced action is
+  `打开高级诊断`; the ordinary sidebar remains exactly `首页 / 记忆内容 / 需要我 / 记忆来源`.
+- Added an owner-facing `下一步` panel on Home. Pending actions route to `需要我`; zero pending
+  actions say `灵机会继续自动检查，你现在不用做任何事。`; unavailable pending data remains an
+  honest retry state.
+- Removed duplicate advanced links from ordinary Home and memory-card footers, leaving one visual
+  advanced entry in the shell.
+- Kept existing card fields, source truth metadata, owner correction/invalidation/archive/confirm
+  actions, source authorization/scan actions, attention resolve action, keyboard/focus handling,
+  and technical details behind existing disclosures.
+- Extended the rendered owner fixture with the collapsed-entry, Home next-step, and complete-card
+  field assertions; added `scripts/owner-ui-menu-fast-track-smoke.mjs` and its package command.
+
+## Self-review
+
+- Ordinary menu has exactly four labels in the required order.
+- Advanced diagnostics is closed by default, keyboard/mouse-toggleable, visually secondary, and
+  reachable through one action without removing legacy direct PageIds.
+- Home, cards, sources, and attention are checked through rendered DOM; IDs, paths, JSON and
+  internal English labels are excluded from ordinary assertions.
+- Existing owner state/action matrices remain covered by `e2e_owner_memory_flow.mjs` and the
+  owner-card/source Python matrix. No backend/API/data model/retrieval/vector/quality-gate files
+  changed.
+- 1024px and 1280px rendered overflow checks pass; no live service, real data, Vault, installation,
+  release, or Artifact was touched.
+
+## Not run / concerns
+
+- Not run: live 8766/8767, Sidecar/release/Artifact/installation, Production/Vault, real owner data,
+  or owner visual acceptance. Those remain outside this Task 1 code/evidence scope.
+- Existing build output retains the pre-existing Vite dynamic-import warnings.
+- `LOCAL_EXECUTION_TASK.md` remains `IDLE` and was not changed.

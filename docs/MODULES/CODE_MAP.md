@@ -418,7 +418,7 @@ desktop/lingji-control/src/navigation.ts
 = four-item ordinary navigation, safe source metadata proof, concise memory cards and advanced-diagnostics demotion
 ```
 
-Focused tests: `tests/test_owner_real_history_discovery.py`, `tests/test_owner_codex_rollout_adapter.py`, `tests/test_owner_real_history_import_flow.py`, `tests/test_owner_memory_card_projector.py`, `tests/test_owner_memory_card_api.py`, `tests/test_owner_memory_corrections.py`, `tests/test_project_memory_api.py`, `tests/test_task3_round2_direct.py`, `tests/test_task3_round3_integration.py`; rendered/UI: `cd desktop/lingji-control && npm run test:e2e:memory && npm run test:smoke && npm run build`.
+Focused tests: `tests/test_owner_real_history_discovery.py`, `tests/test_owner_codex_rollout_adapter.py`, `tests/test_owner_real_history_import_flow.py`, `tests/test_owner_memory_card_projector.py`, `tests/test_owner_memory_card_api.py`, `tests/test_owner_memory_corrections.py`, `tests/test_project_memory_api.py`, `tests/test_task3_round2_direct.py`, `tests/test_task3_round3_integration.py`; rendered/UI: `cd desktop/lingji-control && npm run test:e2e:memory && npm run test:owner-ui-menu-fast-track && npm run test:smoke && npm run build`. The owner menu fast-track smoke exercises the four ordinary destinations, collapsed advanced disclosure, owner next-step copy, card/source/attention rendered behavior, existing actions, and 1024/1280 overflow boundaries.
 
 Task 5:
 src/obsidian/memory_scope.py

@@ -1,5 +1,28 @@
 # 验收要求变更记录
 
+## 2026-08-30 · Task 1 · Owner UI menu fast-track
+
+- 基线：`81c813364985a223ce777592649154bbe9778580`；产品/测试提交：
+  `e9a341d9314a23cac3a81b30de989447496a6f01`。范围严格限定为 Desktop 四项普通菜单、
+  高级诊断折叠入口、首页下一步提示、主人记忆卡片/来源/需要我文案层级、既有动作接线、
+  渲染 E2E 与 focused DOM smoke；不修改 backend/API/data model/retrieval/vector/quality gate，
+  不新增功能，不启动 live 服务或读取真实数据。
+- TDD RED：`npm run test:e2e:memory` → `1 failed`（高级诊断缺少折叠入口，断言实际
+  `0 !== 1`）；`node scripts/owner-ui-menu-fast-track-smoke.mjs` → `1 failed`（同一断言，
+  实际 `0 !== 1`）。GREEN：`npm run test:e2e:memory`、
+  `npm run test:owner-ui-menu-fast-track`、`npm run test:smoke`（23 scripts）和
+  `npm run build` 均通过；build 为 96 modules，保留既有 dynamic-import warnings。
+- Python focused：`python3 -m pytest -q tests/test_owner_memory_corrections.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_review_service.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_project_memory_api.py tests/test_task3_round2_direct.py tests/test_task3_round3_integration.py tests/test_source_read_model.py tests/test_source_service.py --tb=short` → `87 passed, 1 warning in 1.43s`；另 `python3 -m compileall -q src tests`、`git diff --check` PASS。
+- 新增 focused rendered smoke：`desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs`，
+  通过 Playwright 真实渲染导航、折叠/展开、首页下一步、卡片字段、来源安全计数、扫描动作、
+  零待办文案和 1024/1280 无横向溢出；`package.json` 提供
+  `npm run test:owner-ui-menu-fast-track`。
+- 验收边界：未执行 live 8766/8767、Sidecar/release/Artifact/安装、Production/Vault、
+  真实主人数据或主人观察；不触碰 `LOCAL_EXECUTION_TASK.md`，保留既有 LOCAL 任务 `IDLE`。
+- 报告：`.superpowers/sdd/2026-08-30-owner-ui-menu-fast-track/task-1-report.md`；docs/evidence
+  与产品/tests 分开提交。回滚仅回退本条产品/测试提交及 docs 提交，不触碰正式 Vault、raw、
+  memory、Qdrant 或用户配置。
+
 ## 2026-08-30 · Release / 4R2 reset · Task 3 frozen 100-question diagnostic
 
 - 基线：`3cb45340de5afe1d8451aed41eece940954c0db3`；范围仅为冻结 corpus/questions
