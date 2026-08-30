@@ -96,4 +96,4 @@
 ### Commits
 
 - Product/tests：`10287c2`（`fix: close task3 repair round2 contracts`）。
-- Docs/evidence：本轮独立提交；最终 SHA 在提交完成后回填。
+- Docs/evidence：`e75d7cf`（报告与 acceptance log 独立提交；本行在后续 docs 校正提交中固定记录）。
