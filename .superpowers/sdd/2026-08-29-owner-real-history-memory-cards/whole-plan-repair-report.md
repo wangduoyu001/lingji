@@ -4,7 +4,7 @@
 
 - Baseline: `b67d1bbdcdd6cca92dce61a359eb37bae4694168` (clean).
 - Product/tests commit: `8b7c37e6f87561b6013123abb2995a760174c15c`.
-- Docs/evidence commit: pending (this report and the synchronized acceptance log).
+- Acceptance-log docs commit: `6ade5b9ce02b1053c27c7e0c7e76c05331729c5e` (synchronized change requirements). This report is finalized in the subsequent docs/evidence commit.
 - Scope was limited to `whole-plan-review.md` I1/I2. M1 (`PROJECT_STATUS`) was not changed.
 - No live app, Acceptance environment, real chats, Production/Vault, Artifact, or owner data was accessed.
 
@@ -35,4 +35,4 @@
 | `python3 scripts/check_local_execution_handoff.py` | PASS |
 | `python3 scripts/check_acceptance_sync.py` | PASS — after adding the synchronized acceptance-log entry |
 
-No product test failure remains in this scope. This report does not claim Mac release, live owner proof, or Phase 1 acceptance.
+No product test failure remains in this scope. This report does not claim Mac release, live owner proof, or Phase 1 acceptance. The final verification below must leave the worktree clean.
