@@ -2823,3 +2823,11 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   → `85 passed, 1 warning`。另 `npm run test:e2e:memory` PASS、`npm run test:smoke` PASS（23/23）、`npm run build` PASS、compileall/diff/sync/handoff PASS。
 - 未启动 live/App/Acceptance，未读取真实聊天、Production/Vault、主人数据，未执行打包/安装/Artifact；保留 raw/history/source/audit，不执行 DELETE。报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-3-report.md`。
 - Product/tests commit：`ae01b24`；docs/evidence commit follows separately.
+
+## 2026-08-30 · Task 3 Repair Round 4 · final E2E detail fixture
+
+- 基线：`b24f1ca` clean；唯一范围为 `task-3-re-review-3.md` 的 E2E detail fixture fallback。未修改生产代码、API、事实源或数据模型。
+- RED：旧 fixture 打开 `card-7`（superseded）后错误回落为“修正内容”，新增详情断言失败；随后让详情 route 复用列表的状态/action 派生，并覆盖 card-7/8/9 及 rolled_back/repair_required/not_yet_current/unknown，终态详情不再渲染 mutation 按钮。
+- GREEN：精确 focused 命令沿用 Round3 report，`85 passed, 1 warning`；`npm run test:e2e:memory` PASS；`npm run test:smoke` PASS（23/23，包含 E2E）；`python3 -m compileall -q src tests`、`git diff --check` PASS。无生产/TypeScript 变更，build 不重复执行。
+- 未启动 live/App/Acceptance，未读取真实聊天、Production/Vault、主人数据，未执行打包/安装/Artifact。报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-3-report.md`。
+- Tests commit：`7ccbc02`；docs/evidence commit follows separately。

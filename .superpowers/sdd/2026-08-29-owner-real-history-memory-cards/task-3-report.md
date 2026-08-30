@@ -123,3 +123,25 @@
 
 - Product/tests：`ae01b24`（`fix: close task3 repair round3 contracts`）。
 - Docs/evidence：`8fea0ed`（报告与 acceptance log 独立提交；本行在后续 docs 校正提交中固定记录）。
+
+## Task 3 Repair Round 4 — final detail-fixture closure
+
+基于 `task-3-re-review-3.md`，本轮唯一范围是 E2E detail fixture fallback；未修改生产代码。
+
+| Item | Disposition |
+|---|---|
+| I1 | Fixed/verified：detail fixture 复用与列表相同的 topic、freshness、action、kind、state、permanent 派生；card-7/8/9 及后续历史/unknown 状态不再默认回落 `correct`。 |
+| I2 | Fixed/verified：rendered E2E 打开 superseded、not_permanent、rejected、rolled_back、repair_required、not_yet_current、unknown 卡，逐项断言不显示修正/过时/移出 mutation 按钮；归档 fresh GET 仍无死 archive action。 |
+
+### Round 4 TDD and verification
+
+- RED：旧 detail fixture 在 card-7 打开后错误显示“修正内容”，新增断言失败；修复后复跑 E2E 通过。
+- Focused（唯一可复制命令）：沿用 Round3 精确命令，结果 `85 passed, 1 warning`。
+- `npm run test:e2e:memory`：`e2e_owner_memory_flow: PASS`。
+- `npm run test:smoke`：`PASS (23 scripts)`（包含该 rendered E2E）；`python3 -m compileall -q src tests` 与 `git diff --check`：PASS。
+- 本轮无生产/TypeScript 变更，未重复 build；未启动 live/App/Acceptance，未读取真实聊天、Production/Vault 或主人数据。
+
+### Round 4 commits
+
+- Tests：`7ccbc02`（仅 `desktop/lingji-control/tests/e2e_owner_memory_flow.mjs`）。
+- Docs/evidence：本轮独立提交，最终 SHA 在提交完成后记录。
