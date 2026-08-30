@@ -2903,6 +2903,13 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   FAIL/NOT_MEASURED；Task 3 只做冻结 100 问测量，不调 retrieval、不运行 100k/release。
   `LOCAL_EXECUTION_TASK.md` 保持 `IDLE`，不得接触 Production/Vault/主人真实数据。
 
+## 2026-08-30 · Owner UI / menu fast-track reprioritization
+
+- 主人明确要求停止偏向底层质量工具的开发，优先把 UI、菜单和普通用户可理解性做好并尽快进入 Mac 实际体验。当前 Task3 oracle Repair Round2 已中断，其未提交修改由原实现者精确恢复，工作树 clean；已提交的质量证据保留为 `MEASURED_FAIL / NOT_RELEASE_READY`，本轮不继续修 4R2/100k。
+- 新权威计划为 `docs/superpowers/plans/2026-08-30-owner-ui-menu-fast-track.md`。普通菜单固定：首页、记忆内容、需要我、记忆来源；技术诊断折叠为次要入口。页面只解释真实记忆、来源、时效、处理层、主人动作和下一步，不展示内部 JSON/ID/端口/provider。
+- Task 1 只允许 Desktop 信息架构、中文文案、视觉层级、已有动作接线和对应 tests；不新增 API/DB/来源/记忆能力。Task 1 独立审查通过后，Task 2 才创建 `MACOS_OWNER_UI_EXPERIENCE_ONLY` 本机任务，构建同 SHA arm64 应用、隔离运行、由根代理全控件遍历并保持 UI 打开等待主人确认。
+- 本轮候选只可标记 `OWNER_UI_EXPERIENCE_CANDIDATE`；100问/4R2、100k、正式 release 和 Phase 1 merge gate 均明确延期，不得伪装通过。
+
 ## 2026-08-30 · Release / 4R2 reset · Task 1 invocation-scoped evidence
 
 - 本轮仅修复 `scripts/validate.ps1` 与其真实 PowerShell launcher 的验证证据边界，
