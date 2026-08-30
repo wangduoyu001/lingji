@@ -62,3 +62,38 @@
 
 - Product/tests: `f34b6f9` (`fix: close owner memory card review gaps`)
 - 本报告与 `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md` 作为独立 docs/evidence 提交；未执行真实 8766、发布版、Artifact、Mac/Windows、Production/Vault 或主人观察。
+
+## Task 3 Repair Round 2 — re-review closure
+
+基线为 `f41673f`（clean）；范围严格限于 `task-3-re-review-1.md` 的 I1–I9/M1–M2，未重做已通过的功能，也未新增数据库、设计系统、后端路由或物理删除。
+
+### Disposition
+
+| Item | Disposition |
+|---|---|
+| I1 | Fixed: summary 对 vector/permanent 的 unknown/unavailable 返回 `null`，Home 显示“尚未获得”，不把未知计为 0。 |
+| I2 | Fixed: `get_card` 只返回 bounded evidence metadata/preview；详情打开不预取正文，只有选择证据行后才读取对应 message。 |
+| I3 | Fixed: revoked card 使用现有 `memory_sources` 导航和授权流程，未新增后端。 |
+| I4 | Fixed: correct 使用 canonical inspector 正文，mutation 返回 replacement id 后 fresh GET；复制 evidence/source relationships，并用现有 read-model links 保留 raw/history/source/audit。 |
+| I5 | Fixed: `edit_and_approve` 在任何 candidate 读写前执行 owner gate；archive 要求 expected hash。 |
+| I6 | Fixed: event-only 无标题时使用不含内部 ID 的中文 fallback。 |
+| I7 | Fixed: 新增真实 `MemoryDatabase`/`SourceReadModel`/projector/lifecycle probe，并扩展 rendered E2E 覆盖 candidate、revoked、unknown、retention、409、request count、focus、keyboard、1024/1280。 |
+| I8 | Fixed: nested card action 的 keydown 忽略事件目标不是 card 本身的情况，避免重复 detail GET；E2E 已验证。 |
+| I9 | Fixed: direct API/service tests 覆盖认证、owner false、schema/content/reason、hash、stale 409、valid_to、archive reason/hash、response 和保留链路。 |
+| M1 | Fixed: freshness 状态补齐人话标签；非法日期显示“时间尚未获得”，不显示 `Invalid Date`。 |
+| M2 | Fixed: 每条 evidence preview 为可键盘选择的 button，`aria-pressed` 反映选择；source 只读取选中行。 |
+
+### TDD and verification
+
+- RED 已在基线隔离副本中确认：Round 2 direct projector/review tests 首轮为 `5 failed, 6 passed`（unknown summary、正文预取、ID fallback、owner gate、archive hash）；新增 read-model link test 首轮因缺少 evidence store 接口失败；API archive missing hash 首轮错误返回 200；rendered evidence-selection 断言在旧 UI 超时。工作树未被 reset/checkout/覆盖。
+- GREEN：direct projector/service/API 与相关 source/lifecycle regressions 合计 `181 passed, 2 warnings`。
+- Rendered owner flow：`npm run test:e2e:memory` → `e2e_owner_memory_flow: PASS`。
+- Desktop smoke：`npm run test:smoke` → `PASS (23 scripts)`。
+- Desktop build：`npm run build` → TypeScript/Vite exit 0，96 modules，只有既有 dynamic-import warnings。
+- Compile/diff：`python3 -m compileall -q src tests` 与 `git diff --check` 通过。
+- 本轮未启动 live/App/Acceptance，未读取真实聊天、Production/Vault/主人数据，未执行打包、安装或 Artifact；因此仍需主人体验验收。
+
+### Commits
+
+- Product/tests：`10287c2`（`fix: close task3 repair round2 contracts`）。
+- Docs/evidence：本轮独立提交；最终 SHA 在提交完成后回填。

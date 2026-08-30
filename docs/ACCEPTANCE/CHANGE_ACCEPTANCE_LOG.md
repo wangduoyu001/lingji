@@ -2803,3 +2803,11 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - TDD RED：旧基线 projector 新断言 6 failures（永久 state、列表 detail read、ID fallback、archive reason、Core action、summary 缺失）；旧基线 cards-summary API 为 404；当前草稿 archive 空 reason 新断言先失败。GREEN 后 focused `52 passed, 1 warning`。
 - 真机合成验证：`npm run test:e2e:memory` PASS；`npm run test:smoke` PASS（23 scripts）；`npm run build` PASS；`python3 -m compileall -q src` PASS；`git diff --check` PASS。E2E 覆盖 full Home counts、2–3 Work Facts、selected message detail request、Core correct/invalidate/archive + fresh GET、409、keyboard/Esc/focus、1280/1024 overflow/layout。
 - 本轮继续禁止 live/App/Acceptance/真实聊天/真实 Vault/Production 数据读取；未执行发布版、Artifact、Mac/Windows 或主人体验验收。最终 `acceptance-sync` 与 `local-handoff` 均 PASS；产品与 docs/evidence 保持分离提交。
+
+## 2026-08-30 · Task 3 Repair Round 2 · re-review I1–I9/M1–M2
+
+- 基线：`f41673f` clean；范围仅为 `task-3-re-review-1.md` 的最小修复。Summary unknown/unavailable 保持 `null`；card detail 只返回 bounded preview；selected evidence 才读取单条 message；revoked action 导航既有 memory-sources 授权；correct 使用 canonical content、fresh replacement GET 并复制现有 evidence/source links；owner gate 在 candidate 写入前；archive hash 必填；event-only fallback 不含 ID；freshness/invalid date、evidence keyboard selection、nested keyboard duplicate GET 均已收口。
+- 自动测试：新增 direct production projector/lifecycle/read-model/API tests；首轮基线 RED 已记录在 Task3 report。最终 direct/projector/service/API/source/lifecycle regressions `181 passed, 2 warnings`。
+- 真机合成 UI：`npm run test:e2e:memory` PASS，覆盖 Home full summary + unknown、Work Facts、candidate confirm/edit/reject、revoked navigation、core correct/invalidate/archive、fresh GET、retention、409 edit preservation、selected-message request count、自动 heading focus/Esc return focus、nested keyboard、1024/1280。
+- 回归门禁：`npm run test:smoke` PASS（23 scripts）；`npm run build` PASS（96 modules，既有 dynamic-import warnings）；`python3 -m compileall -q src tests` PASS；`git diff --check` PASS。完成 docs 后必须复跑 acceptance sync/local handoff，并以最终提交 SHA 回填 report。
+- 真实机/主人观察边界：未启动 live/App/Acceptance，未读取真实聊天、Production/Vault/主人数据；未执行打包、安装或 Artifact。保留原始记录、历史、来源、审计，不执行 DELETE。报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/task-3-report.md`。
