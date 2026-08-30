@@ -6,7 +6,7 @@
 Status: DONE_WITH_CONCERNS
 Base commit: 07382e053882ad63942fa6cb45bae090dbaf1373
 Product/tests commit: 38f5cdd45f7a271549e4edc342e856c0c3cf2cbb
-Docs/evidence commit: 664c7c18127fe7e16d69444e4151e2770173081e
+Docs/evidence commit: dc75a3942ba9865fce2de4de07e55bd851cf14a6
 ```
 
 The invocation-isolation implementation is complete and tested. The only concern is
@@ -282,7 +282,7 @@ The docs/evidence commit is intentionally separate:
 
 ```text
 docs: record validation isolation evidence
-664c7c18127fe7e16d69444e4151e2770173081e
+dc75a3942ba9865fce2de4de07e55bd851cf14a6
 ```
 
 The worktree was checked for a clean status after the docs/evidence commit.
