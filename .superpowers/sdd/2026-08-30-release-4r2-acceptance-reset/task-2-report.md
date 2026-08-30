@@ -205,3 +205,155 @@ Acceptance date: 2026-08-30
 Report branch: codex/owner-real-history-memory-cards
 Report commit: 1df49dd (initial report; metadata update 848f72c)
 ```
+
+## 10. Repair Round 1 (independent review closure)
+
+The independent review `task-2-review.md` identified C1/I1/I2/I3 contract gaps. M1
+remains deferred. This repair changed only the canonical quality contract, measurement
+runner/loader, focused adversarial/closure tests, and this evidence record. It did not
+change retrieval, ranking, query/filter behavior, promotion policy, fixtures, UI/runtime,
+vector provider, schema, or activation quarantine. Low-risk outcomes remain
+`pending_owner_review`; no automatic approval was added.
+
+### 10.1 TDD RED and GREEN
+
+The first adversarial RED was run before the production repair:
+
+```text
+python3 -m pytest -q tests/test_task7o_contract_closure.py tests/test_task7o_contract_adversarial.py --tb=short
+15 failed, 45 passed, 1 warning in 4.97s
+```
+
+The 15 failures were evidence for every required repair contract: C1 (3 blank/duplicate
+intentional-hash-group cases and 4 run/fixture-hash/commit consistency cases), I1
+(orphan projection and malformed active-link relationship identity), I2 (missing service
+candidate identity), I3 (wrong-but-self-consistent category, arbitrary reason,
+StateDB/service status disagreement, StateDB/service category disagreement), and the
+missing per-outcome truth artifact.
+
+After the minimal repair, the focused GREEN was:
+
+```text
+python3 -m pytest -q tests/test_task7o_contract_closure.py tests/test_task7o_contract_adversarial.py --tb=short
+60 passed, 1 warning in 4.78s
+```
+
+The brief's direct matrix was then run before the final product commit:
+
+```text
+python3 -m pytest -q tests/test_task7o_contract_closure.py tests/test_task7o_contract_adversarial.py tests/test_task7n1_scale_admission.py tests/test_task7n2_corruption_retrieval.py tests/test_task7n3_promotion_thin.py tests/test_task7_measurement_repair.py tests/test_task7_quality_scale.py tests/evaluation/test_task4_reset_readiness.py tests/evaluation/test_automatic_memory_end_to_end.py --tb=short
+210 passed, 1 warning in 60.37s
+```
+
+The repair now has one canonical view: recursive unknown fields, booleans/non-finite
+values, blank or duplicate identities, duplicate projections under strict type equality
+(`True` is not `1`), and contradictory/empty/orphan evidence fail closed. All projection
+rows and all imported relationship rows enter validation, including empty/malformed
+identities. Missing `promotion_memory_id` and service `candidate_id` remain failures;
+neither can be synthesized from content hashes. Actual persisted StateDB status/category/
+reason is read and cross-checked against the service return and allowed category/reason
+contract. The artifact publishes 145 strict per-outcome truth records as well as
+aggregate counts.
+
+Static checks before committing the product/tests were:
+
+```text
+python3 -m compileall -q src tests && git diff --check
+PASS
+```
+
+### 10.2 Final product commit and artifact disposition
+
+Product/tests were committed separately before the authorized quality run:
+
+```text
+Product/tests commit: 272fbeb1252cfedf59906eb189de475f481c0eec
+```
+
+The prior `output/validation/task-2-quality.json` is retained as
+`INVALID_HISTORICAL_ARTIFACT`: its top-level `code_commit` is null and its nested
+identity/run ID points to baseline `23a516fdfd1d28c73a819bfcf10e25ed47878672`. It was
+not overwritten and must not be used as evidence for the repair commit.
+
+### 10.3 The single authorized post-fix quality run
+
+With all focused GREEN/direct-matrix checks complete and the final product SHA fixed,
+the newly authorized isolated run was executed exactly once. The old artifact above was
+not rerun or replaced.
+
+```text
+python3 scripts/automatic_memory_quality_gate.py --output output/validation/task-2-quality-repair1.json
+Exit: 1
+functional_status: FAIL
+phase_status: FAIL
+```
+
+The honest failure was the isolated snapshot's existing generic-history adapter parse
+failure (`No approved extraction adapter for source type: generic_ai_history`; malformed
+JSON was reported at line 1 column 3). The new artifact is structurally canonical and
+identity-consistent:
+
+```text
+run_id: quality:bc1812fe64444027:338f5051c43902af:272fbeb1252cfedf
+top-level code_commit: 272fbeb1252cfedf59906eb189de475f481c0eec
+evidence_details.code_commit: 272fbeb1252cfedf59906eb189de475f481c0eec
+corpus fixture SHA256: bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94
+questions fixture SHA256: 338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612
+artifact: output/validation/task-2-quality-repair1.json
+```
+
+The canonical loader accepted the artifact and its 145 per-outcome truth records.
+`readiness_from_envelope` and `load_quality_readiness` then correctly returned
+`BLOCKED_4R2_REQUIRED` for scale admission because the measured functional status is
+FAIL; this is the formal fail-closed readiness result, not an artifact identity or
+schema parse failure. Readiness from the artifact is:
+
+```text
+context_baseline=NOT_MEASURED
+corruption_isolation=FAILED
+gateway_selection=READY
+import_audit=READY
+mac_release=NOT_MEASURED
+mcp_parity=FAILED
+owner_review=NOT_MEASURED
+production_sentinel=NOT_MEASURED
+promotion_provenance=READY
+qdrant_degradation=FAILED
+reboot_recovery=NOT_MEASURED
+scale=NOT_MEASURED
+windows_release=NOT_MEASURED
+```
+
+Measured quality is explicit: `answered_questions=100`, `valid_fact_hits=0/106`,
+`citation_hits=0/106`, and `mcp_successes=0/100`; baseline/rendered/reduction and
+activation accuracy are null because they were not measured. Promotion provenance is
+`READY`, with `expected=145`, `actual=145`, `active=0`, `pending=145`, `rejected=0`,
+`error=0`, all duplicate/missing/extra counters zero, and `outcomes=145`. This does
+not approve any memory or alter quarantine.
+
+Cleanup from this same isolated run was complete:
+
+```text
+cleaned=true, root_exists=false, bytes=4599425, directory_count=118,
+file_count=160, other_count=0, symlink_count=0, remaining_count=0,
+remaining_bytes=0, error=None
+```
+
+### 10.4 Repair handoff and boundaries
+
+After the quality run, only this report and acceptance evidence are changed. The final
+docs/evidence commit is the docs-only commit containing this section. Product/tests and
+docs/evidence therefore remain separate commits; the final clean-tree SHA is recorded in
+the handoff below.
+
+Not run in this repair: 100k/full/release/Artifact, live ports 8766/8767, Production or
+Vault, owner data/real chats, Desktop/UI, retrieval/ranking/query/filter changes, or any
+promotion-policy change. No second quality CLI run was made.
+
+```text
+Repair verdict: DONE
+Product/tests commit: 272fbeb1252cfedf59906eb189de475f481c0eec
+Docs/evidence commit: this docs-only commit (exact SHA in final handoff)
+Report branch: codex/owner-real-history-memory-cards
+Acceptance date: 2026-08-30
+```

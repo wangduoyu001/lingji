@@ -2926,3 +2926,28 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   真实聊天、主人数据、Desktop、包装/安装或主人验收；未下载/安装工具。当前机器无 Windows
   PowerShell 5.1，目标机 reparse/PID parity 仍为 concern。报告：
   `.superpowers/sdd/2026-08-30-release-4r2-acceptance-reset/task-1-report.md`。
+
+## 2026-08-30 · Release / 4R2 reset · Task 2 Repair Round 1 · canonical contract closure
+
+- 本轮严格修复独立审查 `task-2-review.md` 的 C1/I1/I2/I3/I4；M1 deferred。仅修改
+  canonical quality contract、measurement runner/loader、focused tests 与验收证据；不改
+  retrieval/ranking/query/filter、promotion policy、fixtures、UI/runtime/vector/schema 或
+  activation quarantine。产品/tests 提交：`272fbeb1252cfedf59906eb189de475f481c0eec`。
+- TDD RED：`python3 -m pytest -q tests/test_task7o_contract_closure.py
+  tests/test_task7o_contract_adversarial.py --tb=short` → `15 failed, 45 passed, 1 warning`，
+  逐项覆盖 C1/I1/I2/I3 与 per-outcome truth；GREEN 同命令 → `60 passed, 1 warning`。
+  brief direct matrix → `210 passed, 1 warning`。`compileall` 与 `git diff --check` PASS。
+- 根代理明确授权的唯一 post-fix quality CLI：
+  `python3 scripts/automatic_memory_quality_gate.py --output output/validation/task-2-quality-repair1.json`
+  → exit `1`, honest `functional_status=FAIL`, `phase_status=FAIL`；artifact 顶层与嵌套
+  `code_commit` 均等于最终产品 SHA，run ID 为
+  `quality:bc1812fe64444027:338f5051c43902af:272fbeb1252cfedf`，canonical loader PASS。
+  正式 readiness loader 因 FAIL 正确返回 `BLOCKED_4R2_REQUIRED`；未重跑 CLI。旧
+  `output/validation/task-2-quality.json` 保留为 INVALID historical artifact，不覆盖。
+- 新 artifact 使用 145 条 strict per-outcome truth，promotion provenance 为 READY
+  （expected/actual `145/145`，active `0`，pending `145`，rejected/error `0`，重复/缺失/额外
+  counters 均为 0）；隔离 roots 清理完成（root_exists=false、remaining_count=0）。失败是
+  generic_ai_history adapter 既有解析错误，不能据此提升 scale readiness。
+- 未运行 100k/full/release/Artifact、live 8766/8767、Production/Vault、owner data/real
+  chats、Desktop/UI；未改变自动激活 quarantine，未执行第二次 quality CLI。报告：
+  `.superpowers/sdd/2026-08-30-release-4r2-acceptance-reset/task-2-report.md`。
