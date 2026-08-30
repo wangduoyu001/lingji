@@ -63,6 +63,22 @@
 - 以上为真实主人观察缺口，不能将 fixture/API 200/自动 smoke 解释为通过。下一步是产品修复后
   重新构建同类候选与重新观察；本条不授权修改产品代码。
 
+## 2026-08-30 · Owner UI / menu fast-track · Task 2 second candidate activation
+
+- 旧候选 `OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6`（product SHA
+  `6baf4ee6d15256e44164bcbe3f7ce227af0b5d07`）的真实主人结论保持
+  `OWNER_UI_REPAIR_REQUIRED`；旧 acceptance 根 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6`
+  的 backup、DB、fixture、logs 与 evidence 不得删除或复用。旧失败证据继续作为本轮对照事实。
+- 新任务唯一身份：`OWNER_UI_MENU_FAST_TRACK_TASK_2_B299E5B7`，模式
+  `MACOS_OWNER_UI_EXPERIENCE_ONLY`，候选 `OWNER_UI_EXPERIENCE_CANDIDATE`，精确产品 SHA
+  `b299e5b7d30e266e7dbbf4e2a9cc92c8f4d85ae4`，明确 `NOT_A_RELEASE_GATE`。新隔离根固定为
+  `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b`，新 DataRoot/Vault/source
+  fixture/evidence/安装备份必须与旧根物理隔离；authority docs 提交前不得执行构建或切换安装。
+- 新候选必须从 exact SHA 构建 arm64 Tauri app，核对 main+sidecar arm64、strict codesign、hash，
+  新根重新 seed current/superseded/stale/conflict/permanent/candidate、Codex source/scans 与
+  至少 1 pending action；认证 8766 与 Production/Vault pollution=0 必须重新证明。不得用旧 DB
+  验证新 UI；根代理负责 Computer Use 主人观察，本机准备代理不得替主人点击或宣布 PASS。
+
 ## 2026-08-30 · Task 1 Repair Round 2 · Trusted completed-scan aggregate
 
 - 基线：`81c813364985a223ce777592649154bbe9778580`；本轮产品/测试提交：`a8cfcae`。

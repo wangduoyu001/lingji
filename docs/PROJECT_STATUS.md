@@ -18,30 +18,19 @@
 
 ## 当前本机交接状态（2026-08-30）
 
-`OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6` 已激活为唯一 `ACTIVE` 本机任务，执行模式为
+`OWNER_UI_MENU_FAST_TRACK_TASK_2_B299E5B7` 已激活为唯一 `ACTIVE` 本机任务，执行模式为
 `MACOS_OWNER_UI_EXPERIENCE_ONLY`，精确产品 SHA 为
-`6baf4ee6d15256e44164bcbe3f7ce227af0b5d07`，候选标签为
+`b299e5b7d30e266e7dbbf4e2a9cc92c8f4d85ae4`，候选标签为
 `OWNER_UI_EXPERIENCE_CANDIDATE`。本轮只做隔离 macOS arm64 Tauri 候选构建、整包安装备份、
 认证 8766 sidecar 与根代理 UI 交接；它明确是 `NOT_A_RELEASE_GATE`，不得宣称 release、
-Phase 1 PASS、merge 或主人观察 PASS。质量测量继续保持 `MEASURED_FAIL / NOT_RELEASE_READY`。
+Phase 1 PASS、merge 或主人观察 PASS。旧候选 `6baf4ee6` 的 `OWNER_UI_REPAIR_REQUIRED` 失败
+证据、备份与 acceptance 根必须保留，不得删除或复用；质量测量继续保持
+`MEASURED_FAIL / NOT_RELEASE_READY`。
 
-Acceptance 根固定为 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6`，DataRoot、
-Vault、source fixture、evidence 和安装前 `/Applications/灵机.app` 整包备份分离；Production、
+新 Acceptance 根固定为 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b`，DataRoot、
+Vault、source fixture、evidence 和新安装前 `/Applications/灵机.app` 整包备份分离；Production、
 主人真实聊天、真实 Vault、正式记忆与用户配置保持不触碰。根代理随后用 Computer Use 遍历
-四项普通菜单、技术诊断折叠入口、动作/窗口路径并等待主人确认；候选与 sidecar 必须保持打开。
-
-Task 2 本机准备已达到交接态（2026-08-30）：安装候选 whole bundle 的 app inventory SHA256 为
-`2c8a34dcf3250f46e23e538f03762053624d9887be722b3ba517b886a9631939`，main/sidecar 均为 arm64，
-`codesign --verify --deep --strict` 通过。隔离 Desktop PID `44824`、sidecar PID `44832` 和认证
-`127.0.0.1:8766` HTTP 200 正在运行；active packaged DataRoot 为
-`/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6/data-root/acceptance`。API 实测
-8 张 owner cards、2 次 completed scan、1 个未解决主人 pending action；Production/Vault pollution
-均为 0。向量状态保持 unavailable/configuration_required，不伪造索引。根代理主人初验已记录
-`OWNER_UI_REPAIR_REQUIRED`：首页“需要先完成设置”与已有数据矛盾；来源页“尚未获得来源信息”与
-认证 API 数据矛盾；需要我显示 0 与认证 pending=1 矛盾；8 张卡片全部缺失 conclusion；修正提交
-因 Mac 物理输入锁定未完成。高级诊断折叠/打开及较窄窗口布局正常。当前候选仍为
-`OWNER_UI_EXPERIENCE_CANDIDATE`、`NOT_A_RELEASE_GATE`，不代表 release、Phase 1、merge 或主人
-PASS；Desktop `44824`、sidecar `44832`、8766 和 acceptance root 保持运行/保留。
+四项普通菜单、技术诊断折叠入口、动作/窗口路径并等待主人确认；新候选与 sidecar 必须保持打开。
 
 ## 1. 当前唯一产品目标
 

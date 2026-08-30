@@ -1,13 +1,13 @@
 # LingJi 本机执行任务单
 
-> **当前状态：ACTIVE / OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6。**
+> **当前状态：ACTIVE / OWNER_UI_MENU_FAST_TRACK_TASK_2_B299E5B7。**
 >
 > 本文件仍是本机 Codex 的唯一任务入口；只允许执行下方 `status: ACTIVE` 的精确候选。
 
 ## 0. 当前唯一 ACTIVE 任务
 
 ```yaml
-task_id: OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6
+task_id: OWNER_UI_MENU_FAST_TRACK_TASK_2_B299E5B7
 status: ACTIVE
 execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
 candidate_label: OWNER_UI_EXPERIENCE_CANDIDATE
@@ -15,23 +15,23 @@ release_gate: NOT_A_RELEASE_GATE
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 product_branch: codex/owner-real-history-memory-cards
-product_commit: 6baf4ee6d15256e44164bcbe3f7ce227af0b5d07
+product_commit: b299e5b7d30e266e7dbbf4e2a9cc92c8f4d85ae4
 artifact_name: lingji-local-macos-arm64-tauri
-artifact_id: LOCAL_TAURI_BUILD_6BAF4EE6
+artifact_id: LOCAL_TAURI_BUILD_B299E5B7
 artifact_workflow_run_id: LOCAL_ONLY_NOT_CI
 artifact_zip_sha256: PENDING
 dmg_sha256: PENDING
-report_branch: acceptance/owner-ui-menu-fast-track-task-2-6baf4ee6
-report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_EXPERIENCE_ONLY_6baf4ee6.md
-public_summary_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_6baf4ee6.json
-public_hashes_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_6baf4ee6.txt
+report_branch: acceptance/owner-ui-menu-fast-track-task-2-b299e5b
+report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_EXPERIENCE_ONLY_B299E5B7.md
+public_summary_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_B299E5B7.json
+public_hashes_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_B299E5B7.txt
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
-acceptance_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6
-acceptance_data_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6/data-root
-acceptance_vault_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6/vault
-acceptance_source_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6/source-fixture
-acceptance_backup_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6/installed-app-backup
-acceptance_evidence_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6/evidence
+acceptance_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b
+acceptance_data_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/data-root
+acceptance_vault_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/vault
+acceptance_source_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/source-fixture
+acceptance_backup_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/installed-app-backup
+acceptance_evidence_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/evidence
 production_roots_untouched: true
 backup_before_install_required: true
 whole_bundle_replace_required: true
@@ -54,6 +54,12 @@ stale、conflict、raw/vector/permanent 记忆与至少一个真实 pending acti
 Use 全部 UI/菜单/窗口遍历和主人观察；本任务不得替主人宣布 PASS，不得宣称 release、Phase 1
 或 merge 通过。遇到 DMG 失败但 `.app`、arm64 和 strict codesign 均成功时，记录失败并继续
 whole-bundle 安装；其他真实 blocker 立即停止并报告。
+
+旧候选 `OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6`（product SHA
+`6baf4ee6d15256e44164bcbe3f7ce227af0b5d07`）的 `OWNER_UI_REPAIR_REQUIRED` 失败观察、整包备份、
+证据与 Acceptance 根 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6` 必须保留，
+不得删除或复用旧 DB 验证本候选。新候选使用全新根
+`/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b`，与旧根物理隔离。
 
 ## 1. 最近一次任务
 
