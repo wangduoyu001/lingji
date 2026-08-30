@@ -112,6 +112,7 @@
 
 ### Round 3 verification
 
+- RED：在只加入 Round3 projector tests 后，目标失败为 `2 failed, 25 passed, 1 warning`（archived core dead action、memory_sources 异常 provenance fail-open）；rendered E2E 新状态矩阵首轮以缺失 superseded 人话标签失败，归档 fresh-GET 断言首轮以仍显示 archive 按钮失败。修复后再进入 GREEN。
 - Focused/integration：见上方精确命令，`85 passed, 1 warning`。
 - Rendered owner E2E：`npm run test:e2e:memory` → `e2e_owner_memory_flow: PASS`。
 - Desktop smoke：`npm run test:smoke` → `PASS (23 scripts)`；build → PASS（96 modules）。

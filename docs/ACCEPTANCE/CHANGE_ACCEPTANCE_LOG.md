@@ -2817,6 +2817,7 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 基线：`82f5cd7` clean；严格限定于 `task-3-re-review-2.md`。Rendered fixture 补齐 current/pending/superseded/stale/revoked/conflict/no-vector/not-permanent 及 rejected/rolled_back/repair_required/not_yet_current/unknown 人话状态；production projector→DTO probe 与真实 tmp Vault/API integration 已补齐。
 - 真实 API integration 使用同一 `MemoryLifecycleService`、`MemoryReviewService`、`MemoryDatabase`、`SourceReadModel` 和注册 routes，覆盖 candidate confirm/edit/reject、correct replacement/canonical chunks/links/old superseded/source/history/audit、invalidate/archive reason/valid_to/hash、auth/schema/stale 409。
 - 归档/替代后的 fresh GET 改为 `review/查看历史记录`，不渲染无效 archive 按钮；memory_sources/link 异常时 provenance/conclusion fail-closed 为 unknown/review。
+- Round3 RED：projector targeted run `2 failed, 25 passed, 1 warning`（archived dead action、source-link exception fail-open）；rendered E2E 新矩阵与归档 fresh-GET 断言亦先失败，修复后 GREEN。
 - 唯一可复制 focused 命令：
   `python3 -m pytest -q tests/test_owner_memory_corrections.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_review_service.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_project_memory_api.py tests/test_task3_round2_direct.py tests/test_task3_round3_integration.py tests/test_source_read_model.py tests/test_source_service.py --tb=short`
   → `85 passed, 1 warning`。另 `npm run test:e2e:memory` PASS、`npm run test:smoke` PASS（23/23）、`npm run build` PASS、compileall/diff/sync/handoff PASS。
