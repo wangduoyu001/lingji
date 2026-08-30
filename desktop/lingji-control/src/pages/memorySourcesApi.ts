@@ -43,6 +43,38 @@ function rootName(root: string): string {
   return root.trim() ? "你选择的目录" : "来源目录";
 }
 
+function metadataNumber(value: unknown, integer = false): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || (integer && !Number.isInteger(value))) return "尚未获得";
+  return String(value);
+}
+
+function metadataTime(value: unknown): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "尚未获得";
+  const date = new Date(value * 1000);
+  if (!Number.isFinite(date.getTime())) return "尚未获得";
+  return date.toISOString().replace("T", " ").replace(".000Z", " UTC").replace("Z", " UTC");
+}
+
+/**
+ * Convert discovered metadata into owner-safe display values.  This adapter
+ * deliberately has no path, source-id, body, or raw DTO representation.
+ */
+export function sourceMetadataEvidence(source: Pick<DiscoveredSource, "file_count" | "byte_count" | "earliest_mtime" | "latest_mtime">): {
+  fileCount: string;
+  byteCount: string;
+  earliestMtime: string;
+  latestMtime: string;
+} {
+  const fileCount = metadataNumber(source.file_count, true);
+  const byteCount = metadataNumber(source.byte_count);
+  return {
+    fileCount,
+    byteCount: byteCount === "尚未获得" ? byteCount : `${byteCount} 字节`,
+    earliestMtime: metadataTime(source.earliest_mtime),
+    latestMtime: metadataTime(source.latest_mtime),
+  };
+}
+
 export function ownerSourceName(source: { kind?: string | null; display_name?: string | null }): string {
   const kind = String(source.kind ?? "").trim().toLowerCase();
   const displayName = String(source.display_name ?? "").trim();

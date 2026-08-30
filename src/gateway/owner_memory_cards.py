@@ -799,8 +799,20 @@ class OwnerMemoryCardProjector:
         return not scopes or "all" in scopes or getattr(viewer, "agent_id", None) in scopes
 
     @staticmethod
-    def _sort_key(card: OwnerMemoryCard) -> tuple[str, str]:
-        return (str(card.source.get("latest_evidence_at") or ""), card.memory_id)
+    def _sort_key(card: OwnerMemoryCard) -> tuple[int, datetime, str]:
+        """Sort by evidence instant, keeping malformed values at the end.
+
+        ``latest_evidence_at`` may contain offsets from different sources.  A
+        lexical comparison of those ISO strings does not compare instants and
+        therefore makes pagination depend on the spelling of an offset.  The
+        shared temporal parser gives us a timezone-aware UTC value.  The
+        explicit bucket keeps missing/malformed timestamps safely behind all
+        measured evidence while the memory id makes ties deterministic.
+        """
+        instant = parse_instant(card.source.get("latest_evidence_at"))
+        if instant is None:
+            return (0, datetime.min.replace(tzinfo=timezone.utc), card.memory_id)
+        return (1, instant, card.memory_id)
 
     @staticmethod
     def _matches(card: OwnerMemoryCard, state: str | None, action: str | None, source: str | None) -> bool:

@@ -15,7 +15,7 @@ const allStateDiscovered = [
 ].map(([suffix, status]) => ({ kind: `fixture_${suffix}`, display_name: `测试${suffix}`, candidate_root: `/tmp/${suffix}`, status, capability: "metadata_discovery", reason: status === "unsupported" ? "不读取不透明存储" : null }));
 allStateDiscovered.push({ kind: "obsidian", display_name: "Managed Obsidian memory", candidate_root: "/tmp/vault", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "claude_desktop", display_name: "Claude Desktop", candidate_root: "", status: "unsupported", capability: "metadata_discovery", reason: "Claude Desktop has no approved official export schema; opaque storage is not read" });
-allStateDiscovered.push({ kind: "codex_rollout", display_name: "Codex聊天记录", candidate_root: "/tmp/codex", status: "available", file_count: 2, capability: "metadata_discovery", reason: null });
+allStateDiscovered.push({ kind: "codex_rollout", display_name: "Codex聊天记录", candidate_root: "/tmp/codex", status: "available", file_count: 2, byte_count: 2048, earliest_mtime: 1760000000, latest_mtime: 1760003600, capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "chatgpt_export", display_name: "ChatGPT official export", candidate_root: "/tmp/chatgpt", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "generic", display_name: "Generic AI History Inbox", candidate_root: "/tmp/generic", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "mystery_kind", display_name: "Raw Internal Kind", candidate_root: "/tmp/mystery", status: "available", capability: "metadata_discovery", reason: null });
@@ -51,7 +51,7 @@ const server = http.createServer((req, res) => {
   req.on("end", () => {
     if (path === "/api/overview") return json(res, 200, { health: { status: "healthy" }, memory_runtime: { state: "healthy", as_of: new Date().toISOString(), memory: { documents: 1 } }, queue: { stats: {} } });
     if (path === "/api/automatic-memory/discovered") {
-      const response = () => json(res, 200, state.sourceMode === "empty" ? [] : ["claude-only", "claude-consent"].includes(state.sourceMode) ? [{ kind: "claude_desktop", display_name: "Claude Desktop", candidate_root: "", status: state.sourceMode === "claude-consent" ? "consent_required" : "unsupported", capability: "metadata_discovery", reason: "Claude Desktop has no approved official export schema; opaque storage is not read" }] : state.allStates ? allStateDiscovered : [{ kind: "generic_ai_history", display_name: "Generic Inbox", candidate_root: "/tmp/lingji-fixture", status: "available", capability: "metadata_discovery", reason: null }]);
+      const response = () => json(res, 200, state.sourceMode === "empty" ? [] : ["claude-only", "claude-consent"].includes(state.sourceMode) ? [{ kind: "claude_desktop", display_name: "Claude Desktop", candidate_root: "", status: state.sourceMode === "claude-consent" ? "consent_required" : "unsupported", capability: "metadata_discovery", reason: "Claude Desktop has no approved official export schema; opaque storage is not read" }] : state.sourceMode === "codex-unknown" ? [{ kind: "codex_rollout", display_name: "Codex聊天记录", candidate_root: "/tmp/codex", status: "available", file_count: null, byte_count: null, earliest_mtime: null, latest_mtime: null, capability: "metadata_discovery", reason: null }] : state.allStates ? allStateDiscovered : [{ kind: "generic_ai_history", display_name: "Generic Inbox", candidate_root: "/tmp/lingji-fixture", status: "available", capability: "metadata_discovery", reason: null }]);
       if (state.outage) return json(res, 503, { detail: { code: "OFFLINE", message: "source service unavailable" } });
       if (state.onboardingDelay && !state.onboardingRelease) { const timer = setInterval(() => { if (state.onboardingRelease) { clearInterval(timer); response(); } }, 20); return; }
       return response();
@@ -81,7 +81,7 @@ const server = http.createServer((req, res) => {
       return json(res, 200, state.scan ? [{ ...scanDto(state.scan), updated_at: new Date().toISOString() }] : []);
     }
     if (path === "/__test/complete") { state.completeNextRead = true; return json(res, 200, { ok: true }); }
-    if (path === "/__test/all-states") { state.allStates = true; return json(res, 200, { ok: true }); }
+    if (path === "/__test/all-states") { state.sourceMode = "default"; state.allStates = true; return json(res, 200, { ok: true }); }
     if (path === "/__test/omit-home-counts") { state.omitHomeCounts = body.includes("true"); return json(res, 200, { ok: true }); }
     if (path === "/__test/source-mode") { state.sourceMode = body.trim() || "default"; state.allStates = false; state.authorized = false; state.revoked = false; state.scan = null; return json(res, 200, { ok: true, source_mode: state.sourceMode }); }
     if (path === "/__test/current-work-status") { state.currentWorkNull = body.trim() === "null"; state.currentWorkMode = ["empty-scan", "changed-scan"].includes(body.trim()) ? body.trim() : "normal"; state.currentWorkStatus = body.trim() || "accepted"; return json(res, 200, { ok: true, current_work_status: state.currentWorkStatus }); }
@@ -435,7 +435,26 @@ try {
   const codexCard = page.locator('[data-source-kind="codex_rollout"]');
   await codexCard.getByText("Codex聊天记录", { exact: true }).waitFor();
   await codexCard.getByText("发现 2 个本机对话文件。灵机尚未读取对话正文。", { exact: true }).waitFor();
-  await codexCard.getByRole("button", { name: "允许接管 Codex", exact: true }).click();
+  await codexCard.getByText("文件数：2", { exact: true }).waitFor();
+  await codexCard.getByText("占用空间：2048 字节", { exact: true }).waitFor();
+  await codexCard.getByText("最早记录：2025-10-09 08:53:20 UTC", { exact: true }).waitFor();
+  await codexCard.getByText("最近记录：2025-10-09 09:53:20 UTC", { exact: true }).waitFor();
+  const safeMetadata = await codexCard.locator(".memory-source-metadata").innerText();
+  assert.equal(safeMetadata.includes("/tmp/codex"), false, "source metadata must not expose path");
+  assert.equal(safeMetadata.includes("source_id"), false, "source metadata must not expose source ID");
+  assert.equal(safeMetadata.includes("{") || safeMetadata.includes("}"), false, "source metadata must not expose JSON");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "codex-unknown" });
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查", exact: true }).click();
+  const unknownCodexCard = page.locator('[data-source-kind="codex_rollout"]');
+  await unknownCodexCard.getByText("文件数：尚未获得", { exact: true }).waitFor();
+  await unknownCodexCard.getByText("占用空间：尚未获得", { exact: true }).waitFor();
+  await unknownCodexCard.getByText("最早记录：尚未获得", { exact: true }).waitFor();
+  await unknownCodexCard.getByText("最近记录：尚未获得", { exact: true }).waitFor();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/all-states`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
+  await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查", exact: true }).click();
+  await page.locator('[data-source-kind="codex_rollout"]').getByText("文件数：2", { exact: true }).waitFor();
+  const codexCardAfterRestore = page.locator('[data-source-kind="codex_rollout"]');
+  await codexCardAfterRestore.getByRole("button", { name: "允许接管 Codex", exact: true }).click();
   const authorizePayload = await (await fetch(`http://127.0.0.1:${apiPort}/__test/authorize-payload`, { headers: { "X-LingJi-Token": "fixture-token" } })).json();
   assert.equal(authorizePayload.kind, "codex_rollout");
   assert.equal(authorizePayload.root, "/tmp/codex");

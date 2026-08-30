@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.gateway.owner_memory_cards import OwnerMemoryCardProjector
+from src.gateway.owner_memory_cards import OwnerMemoryCard, OwnerMemoryCardProjector
 
 
 class FixtureDatabase:
@@ -470,3 +470,55 @@ def test_card_detail_reads_only_the_selected_memory_evidence():
     OwnerMemoryCardProjector(FixtureDatabase(), sources, FixtureStatistics()).get_card("mem-old")
 
     assert sources.detail_ids == []
+
+
+def _sort_fixture_card(memory_id: str, latest_evidence_at: str | None) -> OwnerMemoryCard:
+    return OwnerMemoryCard(
+        memory_id=memory_id,
+        kind="memory",
+        state="active",
+        topic=memory_id,
+        developments=(),
+        conclusion=None,
+        freshness={},
+        source={"latest_evidence_at": latest_evidence_at},
+        layers={},
+        trust={},
+        action={},
+        projection={},
+        evidence_count=0,
+        permanent_memory="",
+    )
+
+
+def test_card_pagination_sorts_mixed_offsets_by_utc_instant_and_unknown_last():
+    projector = OwnerMemoryCardProjector(FixtureDatabase(), FixtureSources(), FixtureStatistics())
+    cards = [
+        _sort_fixture_card("same-z", "2026-03-01T00:00:00Z"),
+        _sort_fixture_card("offset-later", "2026-02-28T23:30:00-05:00"),
+        _sort_fixture_card("same-a", "2026-03-01T01:00:00+01:00"),
+        _sort_fixture_card("invalid", "not-a-time"),
+        _sort_fixture_card("unknown", None),
+    ]
+    projector._all_cards = lambda _viewer: cards  # type: ignore[method-assign]
+
+    first_page = projector.list_cards(limit=3, offset=0)
+    second_page = projector.list_cards(limit=3, offset=3)
+
+    assert [item["memory_id"] for item in first_page["items"]] == ["offset-later", "same-z", "same-a"]
+    assert [item["memory_id"] for item in second_page["items"]] == ["unknown", "invalid"]
+    assert first_page["pagination"] == {"limit": 3, "offset": 0, "total": 5, "has_more": True}
+    assert second_page["pagination"] == {"limit": 3, "offset": 3, "total": 5, "has_more": False}
+
+
+def test_card_sort_uses_memory_id_as_deterministic_tie_breaker_for_equal_instants():
+    projector = OwnerMemoryCardProjector(FixtureDatabase(), FixtureSources(), FixtureStatistics())
+    cards = [
+        _sort_fixture_card("memory-b", "2026-03-01T00:00:00Z"),
+        _sort_fixture_card("memory-a", "2026-03-01T01:00:00+01:00"),
+    ]
+    projector._all_cards = lambda _viewer: cards  # type: ignore[method-assign]
+
+    result = projector.list_cards(limit=2)
+
+    assert [item["memory_id"] for item in result["items"]] == ["memory-b", "memory-a"]

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { actionEvidence, MemorySourcesApi, mergeSourceFacts, ownerSourceName, scanStatusLabel, scanTerminalEvidence, sourceStateLabel, countLabel } from "../src/pages/memorySourcesApi.ts";
+import { actionEvidence, MemorySourcesApi, mergeSourceFacts, ownerSourceName, scanStatusLabel, scanTerminalEvidence, sourceMetadataEvidence, sourceStateLabel, countLabel } from "../src/pages/memorySourcesApi.ts";
 import { LingJiApi } from "../src/api.ts";
 import { readFileSync } from "node:fs";
 
@@ -47,6 +47,18 @@ assert.equal(ownerSourceName({ kind: "obsidian", display_name: "Managed Obsidian
 assert.equal(sourceStateLabel("available"), "已发现");
 assert.equal(scanStatusLabel("completed"), "已完成");
 assert.equal(countLabel(null), "尚未获得");
+assert.deepEqual(sourceMetadataEvidence({ file_count: 2, byte_count: 2048, earliest_mtime: 1760000000, latest_mtime: 1760003600 }), {
+  fileCount: "2",
+  byteCount: "2048 字节",
+  earliestMtime: "2025-10-09 08:53:20 UTC",
+  latestMtime: "2025-10-09 09:53:20 UTC",
+});
+assert.deepEqual(sourceMetadataEvidence({ file_count: null, byte_count: undefined, earliest_mtime: null, latest_mtime: Number.NaN }), {
+  fileCount: "尚未获得",
+  byteCount: "尚未获得",
+  earliestMtime: "尚未获得",
+  latestMtime: "尚未获得",
+});
 assert.equal(mergeSourceFacts([{ kind: "generic_ai_history", candidate_root: "/tmp/inbox", status: "available" }], [], []).length, 1);
 const running = mergeSourceFacts(responses["/api/automatic-memory/discovered"], responses["/api/automatic-memory/sources"], [{ ...responses["/api/automatic-memory/scans"][0], status: "running", updated_at: "2026-08-27T02:00:00Z" }]);
 assert.equal(actionEvidence({ ...snapshot, sources: running }, "src-codex", "scan"), true);

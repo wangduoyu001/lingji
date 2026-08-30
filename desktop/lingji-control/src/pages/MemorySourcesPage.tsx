@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, type LingJiApi } from "../api";
-import { actionAvailability, actionEvidence, authorizationEvidence, MemorySourcesApi, ownerSourceName, periodicReconciliationNotice, scanCountValue, scanStatusLabel, sourceStateLabel } from "./memorySourcesApi";
+import { actionAvailability, actionEvidence, authorizationEvidence, MemorySourcesApi, ownerSourceName, periodicReconciliationNotice, scanCountValue, scanStatusLabel, sourceMetadataEvidence, sourceStateLabel } from "./memorySourcesApi";
 import type { MemorySourcesSnapshot, SourceFact, SourceState } from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 import { Empty, Notice } from "../components/ui";
@@ -172,6 +172,7 @@ function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }
   const canPause = actions.includes("pause");
   const canRetry = actions.includes("retry");
   const canRevoke = actions.includes("revoke");
+  const metadata = sourceMetadataEvidence(source);
   const invoke = (action: string, operation: () => Promise<unknown>, verify: (next: MemorySourcesSnapshot) => boolean, success?: string) => onAction(`${action}:${key}`, operation, verify, success);
   const showDetail = async () => {
     if (!scan?.scan_id) return;
@@ -180,6 +181,12 @@ function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }
   return <article className={`memory-source-card memory-source-${stateTone[source.state]}`} data-source-kind={source.kind}>
     <div className="memory-source-card-header"><div><span className="memory-source-kind">{source.display_name}</span><h3>{sourceStateLabel(source.state)}</h3></div><span className={`pill ${stateTone[source.state]}`}>{sourceStateLabel(source.state)}</span></div>
     <p className="memory-source-detail">{source.detail}</p>
+    {source.kind === "codex_rollout" && <div className="memory-source-metadata" aria-label="安全元数据">
+      <span>文件数：{metadata.fileCount}</span>
+      <span>占用空间：{metadata.byteCount}</span>
+      <span>最早记录：{metadata.earliestMtime}</span>
+      <span>最近记录：{metadata.latestMtime}</span>
+    </div>}
     {source.state !== "unsupported" && !(source.kind === "claude_desktop" && source.nextAction.startsWith("暂不支持")) && <p className="memory-source-next">下一步：{source.nextAction}</p>}
     <div className="memory-source-actions">
       {canAuthorize && <button className="button primary" disabled={Boolean(busy)} onClick={onAuthorize}>{busy?.startsWith("authorize:") ? "准备中…" : source.kind === "codex_rollout" ? "允许接管 Codex" : source.kind === "chatgpt_export" ? "选择官方导出目录" : isPickerSource(source) ? "选择文件夹并开始记忆" : "开始记忆"}</button>}
