@@ -737,99 +737,122 @@ def _run_quality_gate_impl(
             promotion_bindings=promotion_bindings,
             message_links=message_links,
         )
+        runtime_bindings = {
+            (identity.source_id, identity.conversation_id, identity.message_id): binding
+            for identity, binding in identity_registry.message_to_fact_citation.items()
+        }
         fact_by_memory = {item.fact_id: item for item in corpus}
         citation_ids = {item.citation_id for item in corpus}
-        oracle = FrozenQuestionOracle(frozen_fixture)
+        oracle = FrozenQuestionOracle(frozen_fixture, runtime_bindings=runtime_bindings)
         checkpoint_store = QuestionCheckpointStore(
             temporary_root / "output" / "question-results",
             fixture_hashes=fixture_hashes,
             run_id=f"quality:{fixture_hashes['corpus'][:16]}:{fixture_hashes['questions'][:16]}:{_git_commit()[:16]}",
             code_commit=_git_commit(),
+            questions=questions,
         )
         for question in questions:
+            checkpoint = checkpoint_store.load(question.question_id, question=question)
+            if checkpoint is not None:
+                # A restart reuses the atomic result and does not invoke either
+                # production surface again.  Aggregate counters are recovered
+                # from the bounded diagnostic rather than from caller state.
+                question_diagnostics.append(checkpoint)
+                question_results.append(checkpoint)
+                gateway_calls_completed += 1
+                gateway_selector_calls += 1
+                gateway_selected_evidence += len(checkpoint.gateway_identities)
+                mcp_attempts += 1
+                mcp_successes += int(not checkpoint.mcp_reason.startswith("mcp_parity:"))
+                continue
             arguments = {
                 "query": question.query,
                 "agent_id": "agent-synthetic",
                 "project": "project-lingji",
-                "max_chars": 4000,
+                "max_chars": question.max_chars,
                 "include_core": False,
                 "mode": question.mode,
                 "as_of": question.as_of,
             }
-            # Capture the formal builder's selection-before-bound seam.  This
-            # is the same query/filter path used by build_context_pack and is
-            # intentionally observed before render_markdown applies max_chars.
-            observation = gateway.context_builder.observe_candidates(ContextPackRequest(
-                agent_id=str(arguments["agent_id"]), query=str(arguments["query"]),
-                project=arguments.get("project"), max_chars=int(arguments["max_chars"]),
-                privacy=("public", "private", "restricted", "synthetic"), include_core=False,
-                mode=str(arguments.get("mode") or "current"), as_of=arguments.get("as_of"),
-            ))
-            baseline_payload = list(observation.get("sections") or []) if isinstance(observation, Mapping) else []
-            if not baseline_payload:
-                baseline_available = False
-            else:
-                baseline_measurement = measure_context_baseline(baseline_payload, bounded_pack=None)
-                baseline_context_chars += baseline_measurement.baseline_chars
-            gateway_pack = gateway.build_context_pack(**arguments)
-            gateway_calls_completed += 1
-            if not isinstance(gateway_pack, Mapping):
-                raise ValueError("malformed Gateway response")
-            gateway_sections = gateway_pack.get("sections")
-            if isinstance(gateway_sections, (str, bytes)) or not isinstance(gateway_sections, Sequence):
-                raise ValueError("malformed Gateway sections")
-            gateway_empty_responses += int(not gateway_sections)
-            tracker.mark("scoring")
-            selected_evidence = select_context_evidence(gateway_pack, identity_registry, limit=_SELECTOR_LIMIT)
-            gateway_selector_calls += 1
-            unknown_facts = tuple(fact_id for fact_id in selected_evidence.fact_ids if fact_id not in fact_by_memory)
-            unknown_citations = tuple(citation_id for citation_id in selected_evidence.citation_ids if citation_id not in citation_ids)
-            if unknown_facts or unknown_citations:
-                raise EvidenceIdentityError(
-                    "selector returned unknown evidence identities: "
-                    f"facts={unknown_facts!r}, citations={unknown_citations!r}"
+            try:
+                # Capture the formal builder's selection-before-bound seam.  This
+                # is the same query/filter path used by build_context_pack and is
+                # intentionally observed before render_markdown applies max_chars.
+                observation = gateway.context_builder.observe_candidates(ContextPackRequest(
+                    agent_id=str(arguments["agent_id"]), query=str(arguments["query"]),
+                    project=arguments.get("project"), max_chars=int(arguments["max_chars"]),
+                    privacy=("public", "private", "restricted", "synthetic"), include_core=False,
+                    mode=str(arguments.get("mode") or "current"), as_of=arguments.get("as_of"),
+                ))
+                baseline_payload = list(observation.get("sections") or []) if isinstance(observation, Mapping) else []
+                if not baseline_payload:
+                    baseline_available = False
+                else:
+                    baseline_measurement = measure_context_baseline(baseline_payload, bounded_pack=None)
+                    baseline_context_chars += baseline_measurement.baseline_chars
+                gateway_pack = gateway.build_context_pack(**arguments)
+                gateway_calls_completed += 1
+                if not isinstance(gateway_pack, Mapping):
+                    raise ValueError("malformed Gateway response")
+                gateway_sections = gateway_pack.get("sections")
+                if isinstance(gateway_sections, (str, bytes)) or not isinstance(gateway_sections, Sequence):
+                    raise ValueError("malformed Gateway sections")
+                gateway_empty_responses += int(not gateway_sections)
+                tracker.mark("scoring")
+                selected_evidence = select_context_evidence(gateway_pack, identity_registry, limit=_SELECTOR_LIMIT)
+                gateway_selector_calls += 1
+                unknown_facts = tuple(fact_id for fact_id in selected_evidence.fact_ids if fact_id not in fact_by_memory)
+                unknown_citations = tuple(citation_id for citation_id in selected_evidence.citation_ids if citation_id not in citation_ids)
+                if unknown_facts or unknown_citations:
+                    raise EvidenceIdentityError(
+                        "selector returned unknown evidence identities: "
+                        f"facts={unknown_facts!r}, citations={unknown_citations!r}"
+                    )
+                gateway_selected_evidence += len(selected_evidence.fact_ids)
+                gateway_used = gateway_pack.get("used_chars")
+                if not isinstance(gateway_used, int) or isinstance(gateway_used, bool) or gateway_used < 0:
+                    raise ValueError("Gateway ContextPack used_chars is not measured")
+                if gateway_used > int(arguments["max_chars"]):
+                    raise ValueError("Gateway ContextPack exceeds its declared bound")
+                rendered_context_chars += gateway_used
+                mcp_attempts += 1
+                mcp_pack = _call_formal_mcp(formal_mcp, arguments)
+                mcp_used = mcp_pack.get("used_chars")
+                if not isinstance(mcp_used, int) or isinstance(mcp_used, bool) or mcp_used < 0:
+                    raise ValueError("formal MCP ContextPack used_chars is not measured")
+                if mcp_used > int(arguments["max_chars"]):
+                    raise ValueError("formal MCP ContextPack exceeds its declared bound")
+                parity = measure_mcp_parity(gateway_pack, mcp_pack)
+                if not parity.success:
+                    mcp_parity_failures.append(parity.reason)
+                mcp_selected = select_context_evidence(mcp_pack, identity_registry, limit=_SELECTOR_LIMIT)
+                selected_parity = (
+                    mcp_selected.fact_ids == selected_evidence.fact_ids
+                    and mcp_selected.citation_ids == selected_evidence.citation_ids
                 )
-            gateway_selected_evidence += len(selected_evidence.fact_ids)
-            gateway_used = gateway_pack.get("used_chars")
-            if not isinstance(gateway_used, int) or isinstance(gateway_used, bool) or gateway_used < 0:
-                raise ValueError("Gateway ContextPack used_chars is not measured")
-            if gateway_used > int(arguments["max_chars"]):
-                raise ValueError("Gateway ContextPack exceeds its declared bound")
-            rendered_context_chars += gateway_used
-            mcp_attempts += 1
-            mcp_pack = _call_formal_mcp(formal_mcp, arguments)
-            mcp_used = mcp_pack.get("used_chars")
-            if not isinstance(mcp_used, int) or isinstance(mcp_used, bool) or mcp_used < 0:
-                raise ValueError("formal MCP ContextPack used_chars is not measured")
-            if mcp_used > int(arguments["max_chars"]):
-                raise ValueError("formal MCP ContextPack exceeds its declared bound")
-            parity = measure_mcp_parity(gateway_pack, mcp_pack)
-            if not parity.success:
-                mcp_parity_failures.append(parity.reason)
-            mcp_selected = select_context_evidence(mcp_pack, identity_registry, limit=_SELECTOR_LIMIT)
-            selected_parity = (
-                mcp_selected.fact_ids == selected_evidence.fact_ids
-                and mcp_selected.citation_ids == selected_evidence.citation_ids
-            )
-            if not selected_parity:
-                mcp_parity_failures.append("selected_evidence_mismatch")
-            if parity.success and selected_parity:
-                mcp_successes += 1
-            gateway_observation = observation_from_context_pack(
-                gateway_pack, frozen_fixture, selected_evidence.fact_ids, selected_evidence.citation_ids
-            )
-            mcp_observation = observation_from_context_pack(
-                mcp_pack, frozen_fixture, mcp_selected.fact_ids, mcp_selected.citation_ids,
-                reason_override=(
-                    f"mcp_parity:{parity.reason}"
-                    if not parity.success or not selected_parity else None
-                ),
-            )
-            diagnostic = oracle.evaluate(
-                question, gateway=gateway_observation, mcp=mcp_observation
-            )
+                if not selected_parity:
+                    mcp_parity_failures.append("selected_evidence_mismatch")
+                if parity.success and selected_parity:
+                    mcp_successes += 1
+                gateway_observation = observation_from_context_pack(
+                    gateway_pack, frozen_fixture, selected_evidence.fact_ids, selected_evidence.citation_ids,
+                    runtime_bindings=runtime_bindings,
+                )
+                mcp_observation = observation_from_context_pack(
+                    mcp_pack, frozen_fixture, mcp_selected.fact_ids, mcp_selected.citation_ids,
+                    reason_override=(
+                        f"mcp_parity:{parity.reason}"
+                        if not parity.success or not selected_parity else None
+                    ),
+                    runtime_bindings=runtime_bindings,
+                )
+                diagnostic = oracle.evaluate(
+                    question, gateway=gateway_observation, mcp=mcp_observation
+                )
+            except Exception as exc:
+                diagnostic = oracle.exception_diagnostic(question, exc)
             question_diagnostics.append(diagnostic)
-            checkpoint_store.save(diagnostic)
+            checkpoint_store.save(diagnostic, question=question)
             question_results.append(diagnostic)
         semantic_degradation = measure_semantic_degradation(
             temporary_root, memory_db, read_model, state_db, questions[0].query,
@@ -1007,6 +1030,7 @@ def _run_quality_gate_impl(
             # this additional accepted projection carries the immutable
             # per-question diagnostic stream for Task 3 review.
             "evaluation_report": {
+                "schema_version": 1,
                 "question_diagnostics": [item.to_mapping() for item in question_diagnostics],
                 "grouped_metrics": grouped_question_metrics,
             },
@@ -1098,15 +1122,13 @@ def run_quality_gate(
         )
         canonical = CanonicalFunctionalEvidence.from_runner_payload(raw)
         canonical_details = canonical.to_mapping()
-        diagnostic_payload = raw.get("evaluation_report") if isinstance(raw.get("evaluation_report"), Mapping) else {}
         envelope = replace(envelope, evidence_details=canonical_details,
         run_id=raw.get("run_id"), fixture_hashes=raw.get("fixture_hashes") or {},
-        quality_evidence_readiness=asdict(readiness), code_commit=raw.get("code_commit"),
-        question_diagnostics=tuple(diagnostic_payload.get("question_diagnostics") or ()),
-        grouped_question_metrics=dict(diagnostic_payload.get("grouped_metrics") or {}))
+        quality_evidence_readiness=asdict(readiness), code_commit=raw.get("code_commit"))
         # The temporary machine report is deliberately written beneath the
         # acceptance output root; the caller publishes it only after cleanup.
         payload = dict(raw)
+        payload.pop("evaluation_report", None)
         payload.update(_jsonable(asdict(envelope)))
         tracker.mark("publication_pre")
         _atomic_json(Path(output_path), payload)

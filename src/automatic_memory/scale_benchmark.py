@@ -22,8 +22,8 @@ from src.extraction.adapters.generic_ai_history import HISTORY_SCHEMA, HISTORY_V
 # These are the only fixtures admitted by the frozen Task 7 quality gate.
 # Keeping the identity contract here avoids making the scale loader depend on
 # the runner module (which imports this module).
-CORPUS_SHA256 = "bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94"
-QUESTIONS_SHA256 = "338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612"
+CORPUS_SHA256 = "2a3ea2c14af9e1705a39673efb50826579f35b484f9d6c5442cb40f5f8f2347a"
+QUESTIONS_SHA256 = "35000a5cc56de84ef3caa82114a1b9168e46c1d3b31fd89ba0f2a740ce6f9e31"
 
 
 def build_quality_run_id(code_commit: str, corpus_hash: str, questions_hash: str) -> str:

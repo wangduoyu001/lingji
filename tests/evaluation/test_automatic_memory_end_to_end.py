@@ -96,14 +96,16 @@ def test_real_quality_gate_reports_measured_result(tmp_path: Path, monkeypatch: 
     assert payload["mcp_parity"]["status"] == "failed"
     assert payload["measured_quality"]["valid_fact_hits"] == 0
     assert payload["measured_quality"]["citation_hits"] == 0
-    assert len(envelope.question_diagnostics) == 100
-    assert set(envelope.grouped_question_metrics) == {
+    diagnostic_evidence = envelope.evidence_details["diagnostic_evidence"]
+    assert len(diagnostic_evidence["question_diagnostics"]) == 100
+    assert set(diagnostic_evidence["grouped_metrics"]) == {
         "stable_preference", "current_project_decision", "superseded_decision",
         "cross_session", "authority_conflict", "protected_candidate",
         "scope_negative", "temporal_explanation", "context_dedup",
     }
     assert sum(
-        "mcp" in item["failure_buckets"] for item in envelope.question_diagnostics
+        "mcp_parity_" in " ".join(item["failures"])
+        for item in diagnostic_evidence["question_diagnostics"]
     ) == 100
     serialized = json.dumps(payload, ensure_ascii=False)
     assert "fixture_fact_id" not in serialized
@@ -123,10 +125,12 @@ def test_quality_runner_rejects_unknown_selected_membership(tmp_path: Path, monk
     with temporary_acceptance_roots(base_directory=tmp_path) as roots:
         envelope = run_quality_gate(CORPUS, QUESTIONS, output_path=roots.output_root / "unknown.json", acceptance_roots=roots)
         assert envelope.evaluation_report is None
-        assert envelope.functional_status == envelope.phase_status == envelope.windows_status == "NOT_EVALUATED"
-        assert envelope.blocked_reasons == ("RUNNER_SCORING_FAILED",)
+        assert envelope.functional_status == envelope.phase_status == "FAIL"
+        assert envelope.windows_status == "BLOCKED"
         payload = json.loads((roots.output_root / "unknown.json").read_text(encoding="utf-8"))
-        assert payload["blocked_reasons"] == ["RUNNER_SCORING_FAILED"]
+        diagnostics = payload["evidence_details"]["diagnostic_evidence"]["question_diagnostics"]
+        assert len(diagnostics) == 100
+        assert all(item["failure_buckets"] == ["fallback"] for item in diagnostics)
 
 
 def test_real_import_promotion_storage_snapshot_has_no_evaluation_labels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

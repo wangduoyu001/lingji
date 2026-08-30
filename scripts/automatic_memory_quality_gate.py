@@ -89,10 +89,11 @@ def main() -> int:
         return 1
     print(f"functional quality report: {output}")
     print(f"functional_status={envelope.functional_status}")
+    diagnostic_evidence = envelope.evidence_details.get("diagnostic_evidence", {})
     print(
         "frozen_questions="
-        f"{len(envelope.question_diagnostics)} "
-        f"categories={len(envelope.grouped_question_metrics)}"
+        f"{len(diagnostic_evidence.get('question_diagnostics', ())) if isinstance(diagnostic_evidence, dict) else 0} "
+        f"categories={len(diagnostic_evidence.get('grouped_metrics', {})) if isinstance(diagnostic_evidence, dict) else 0}"
     )
     return 0 if envelope.functional_status == "PASS" else 1
 
