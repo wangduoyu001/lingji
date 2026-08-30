@@ -2883,3 +2883,22 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   `scale-env=0`、`scale-command=0`；本轮临时 validation roots 在测试结束后清理。
 - 未运行：quality CLI、100k、full、release（除 entry-only guard）、Artifact、live 8766/8767、
   Production/Vault、真实聊天、主人数据、Desktop、安装或主人验收。
+
+## 2026-08-30 · Release / 4R2 reset · Task 1 Repair Round 1 · review closure
+
+- 基线：Task 1 独立审查报告 `task-1-review.md`；本轮严格只处理 C1/I1/I2/I3/I4，M1/M2
+  按根代理决定 deferred，不扩大产品范围。产品/tests 提交：`38f5cdd45f7a271549e4edc342e856c0c3cf2cbb`。
+- TDD RED：新增真实 barrier/live-parent、actual PID/PID reuse、root/per-run/latest symlink、
+  outside sentinel、trailing separator 与 marker schema/bounds 回归后，focused 为 `8 failed,
+  10 passed`；另 typed malformed marker 首轮为 `1 failed`。失败均可对应 C1/I1/I2/I3/I4，
+  不是 mock 或静态字符串 fixture。
+- GREEN：修复 selected root/ancestor 与 per-run/latest destinations 的 canonical no-follow 检查、
+  bounded strict owner marker、仅明确 `NoProcessFoundForGivenId` 判 inactive、删除前 path+marker
+  二次核对；real PowerShell barrier 无 sleep 覆盖同秒/跨秒 nested entry-only 与 parent final write。
+  指定 focused 命令 `18 passed`；`compileall`、`diff --check`、local handoff PASS。
+- 私有 PowerShell `/tmp/LingJiToolchain/powershell-7.6.5/pwsh`（7.6.5）parser 为 0 syntax errors；
+  real entry-only guard 非零、`BLOCKED_4R2_REQUIRED`、hook 精确 `preflight`，scale-env/command 均 0。
+- 未运行 quality CLI、100k、full、普通 release、Artifact、live 8766/8767、Production/Vault、
+  真实聊天、主人数据、Desktop、包装/安装或主人验收；未下载/安装工具。当前机器无 Windows
+  PowerShell 5.1，目标机 reparse/PID parity 仍为 concern。报告：
+  `.superpowers/sdd/2026-08-30-release-4r2-acceptance-reset/task-1-report.md`。
