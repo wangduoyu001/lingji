@@ -589,6 +589,7 @@ src/retrieval/context_pack.py
 src/gateway/memory_gateway.py
 src/mcp_server.py
 src/automatic_memory/evaluation.py
+src/automatic_memory/quality_oracle.py
 = existing RAG/ContextPack/MCP extension and frozen 100-question evaluator
 
 src/automatic_memory/quality_gate.py::AcceptanceRoots / run_quality_gate
@@ -615,6 +616,11 @@ src/automatic_memory/quality_gate.py::AcceptanceRoots / run_quality_gate
 composition for corruption isolation through the formal scan/queue/worker/Work Fact/read-model
 path, MCP ordered identity/bounds parity and selection-before-bound baseline evidence.
 `ContextPackBuilder.observe_candidates` is a read-only seam shared with final pack construction.
+`src/automatic_memory/quality_oracle.py` is a deterministic offline oracle only: it validates
+the frozen per-question identity/answer/mode/budget contract, persists one atomic checkpoint
+per question and groups measured failures; it does not retrieve, rank, promote or judge with
+an LLM. `quality_gate.py` adapts the existing Gateway and formally registered MCP pack into
+that closed observation shape.
 `src/automatic_memory/scale_benchmark.py` owns persisted readiness loading and deterministic
 scale-fixture generation/validation (default seed `41041`), and admits only a consistent
 functional envelope; Production/Vault remains nullable for this isolated gate. The

@@ -1,5 +1,26 @@
 # 验收要求变更记录
 
+## 2026-08-30 · Release / 4R2 reset · Task 3 frozen 100-question diagnostic
+
+- 基线：`3cb45340de5afe1d8451aed41eece940954c0db3`；范围仅为冻结 corpus/questions
+  的不可变证据元数据、离线逐题 oracle、既有 Gateway/正式 MCP parity 观测、原子
+  question checkpoint 与质量报告投影。不得修改 query/题意、expected truth、阈值、
+  retrieval/ranking/filter、promotion/runtime/UI/vector/schema、第二系统、100k、full、
+  release、Artifact、live 8766/8767、Production/Vault 或主人数据。
+- fixture audit 必须证明 145 条 corpus、100 条问题的稳定 source/conversation/message
+  identity、content hash、sequence、role、时间、lifecycle、answer atoms、disallowed
+  identities、mode、MCP expectation 与每题字符预算；所有缺失元数据只从现有 corpus
+  绑定补齐，不猜测或改写原事实。
+- TDD：先运行
+  `./.venv/bin/pytest -q tests/test_task7p_frozen_oracle.py tests/evaluation/test_automatic_memory_end_to_end.py --tb=short`
+  的 RED，再执行等价系统 Python（若 `.venv` 不存在）；GREEN 后只允许一次新的隔离
+  frozen quality CLI。逐题结果必须记录 Gateway 与正式注册 MCP 的 identities、used
+  chars、mode/state、reason；异常、forbidden leakage、citation/time mismatch 必须进入
+  `import|retrieval|provenance|temporal|mcp|fallback|context` 失败桶，不能变成普通空结果。
+- 必须回归 direct Task7 matrix、`python3 -m compileall -q src tests`、`git diff --check`、
+  acceptance sync 和 local handoff；产品/tests 与 docs/evidence 分开提交。质量结果只能
+  写 `READY_FOR_100K` 或 `MEASURED_FAIL`，失败时禁止运行 100k 或 release。
+
 ## 2026-08-30 · Release / 4R2 reset · Task 2 strict canonical measurement contract
 
 - 基线：`23a516fdfd1d28c73a819bfcf10e25ed47878672`；产品/测试范围严格限定为
