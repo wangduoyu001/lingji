@@ -96,6 +96,15 @@ def test_real_quality_gate_reports_measured_result(tmp_path: Path, monkeypatch: 
     assert payload["mcp_parity"]["status"] == "failed"
     assert payload["measured_quality"]["valid_fact_hits"] == 0
     assert payload["measured_quality"]["citation_hits"] == 0
+    assert len(envelope.question_diagnostics) == 100
+    assert set(envelope.grouped_question_metrics) == {
+        "stable_preference", "current_project_decision", "superseded_decision",
+        "cross_session", "authority_conflict", "protected_candidate",
+        "scope_negative", "temporal_explanation", "context_dedup",
+    }
+    assert sum(
+        "mcp" in item["failure_buckets"] for item in envelope.question_diagnostics
+    ) == 100
     serialized = json.dumps(payload, ensure_ascii=False)
     assert "fixture_fact_id" not in serialized
     assert "fixture_citation_id" not in serialized

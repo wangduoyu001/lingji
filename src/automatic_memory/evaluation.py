@@ -47,14 +47,16 @@ _CORPUS_KEYS = frozenset(
         "fact_id", "topic_key", "source_id", "conversation_id", "message_id",
         "role", "content", "content_hash", "occurred_at", "lifecycle",
         "supersedes_fact_id", "authority", "project_id", "privacy",
-        "agent_scope", "citation_id", "memory_kind", "risk",
+        "agent_scope", "citation_id", "memory_kind", "risk", "sequence",
     }
 )
 _QUESTION_KEYS = frozenset(
     {
         "question_id", "category", "query", "mode", "as_of",
         "expected_fact_ids", "forbidden_fact_ids", "expected_citation_ids",
-        "requires_owner_review",
+        "requires_owner_review", "expected_source_ids", "expected_message_ids",
+        "disallowed_source_ids", "disallowed_message_ids", "expected_answer_atoms",
+        "negative_expectation", "mcp_expectation", "max_chars",
     }
 )
 _SECRET_KEY = re.compile(
@@ -99,6 +101,7 @@ class CorpusRecord:
     citation_id: str
     memory_kind: str
     risk: str
+    sequence: int = 0
 
 
 @dataclass(frozen=True)
@@ -112,6 +115,14 @@ class EvaluationQuestion:
     forbidden_fact_ids: tuple[str, ...]
     expected_citation_ids: tuple[str, ...]
     requires_owner_review: bool
+    expected_source_ids: tuple[str, ...] = ()
+    expected_message_ids: tuple[str, ...] = ()
+    disallowed_source_ids: tuple[str, ...] = ()
+    disallowed_message_ids: tuple[str, ...] = ()
+    expected_answer_atoms: tuple[str, ...] = ()
+    negative_expectation: bool = False
+    mcp_expectation: str = "strict_parity"
+    max_chars: int = 12000
 
 
 @dataclass(frozen=True)
@@ -246,6 +257,9 @@ def _parse_corpus(value: Mapping[str, Any], index: int) -> CorpusRecord:
         raise EvaluationInputError(f"invalid corpus lifecycle at {index}")
     if value["supersedes_fact_id"] is not None and not isinstance(value["supersedes_fact_id"], str):
         raise EvaluationInputError(f"supersedes_fact_id must be string or null at {index}")
+    sequence = value["sequence"]
+    if type(sequence) is not int or sequence < 0:
+        raise EvaluationInputError(f"invalid corpus sequence at {index}")
     return CorpusRecord(
         fact_id=_required_string(value["fact_id"], "fact_id"),
         topic_key=_required_string(value["topic_key"], "topic_key"),
@@ -265,6 +279,7 @@ def _parse_corpus(value: Mapping[str, Any], index: int) -> CorpusRecord:
         citation_id=_required_string(value["citation_id"], "citation_id"),
         memory_kind=_required_string(value["memory_kind"], "memory_kind"),
         risk=_required_string(value["risk"], "risk"),
+        sequence=sequence,
     )
 
 
@@ -305,8 +320,21 @@ def _parse_question(value: Mapping[str, Any], index: int) -> EvaluationQuestion:
     expected = _string_tuple(value["expected_fact_ids"], "expected_fact_ids", allow_empty=True)
     forbidden = _string_tuple(value["forbidden_fact_ids"], "forbidden_fact_ids", allow_empty=False)
     citations = _string_tuple(value["expected_citation_ids"], "expected_citation_ids", allow_empty=True)
+    expected_sources = _string_tuple(value["expected_source_ids"], "expected_source_ids", allow_empty=True)
+    expected_messages = _string_tuple(value["expected_message_ids"], "expected_message_ids", allow_empty=True)
+    disallowed_sources = _string_tuple(value["disallowed_source_ids"], "disallowed_source_ids", allow_empty=True)
+    disallowed_messages = _string_tuple(value["disallowed_message_ids"], "disallowed_message_ids", allow_empty=True)
+    answer_atoms = _string_tuple(value["expected_answer_atoms"], "expected_answer_atoms", allow_empty=True)
     if set(expected) & set(forbidden):
         raise EvaluationInputError(f"expected and forbidden IDs overlap at {index}")
+    if type(value["negative_expectation"]) is not bool:
+        raise EvaluationInputError(f"negative_expectation must be boolean at {index}")
+    mcp_expectation = value["mcp_expectation"]
+    if not isinstance(mcp_expectation, str) or mcp_expectation not in {"strict_parity", "optional", "not_applicable"}:
+        raise EvaluationInputError(f"invalid mcp expectation at {index}")
+    max_chars = value["max_chars"]
+    if type(max_chars) is not int or not 1000 <= max_chars <= 12000:
+        raise EvaluationInputError(f"invalid question character budget at {index}")
     return EvaluationQuestion(
         question_id=_required_string(value["question_id"], "question_id"),
         category=category,
@@ -317,6 +345,14 @@ def _parse_question(value: Mapping[str, Any], index: int) -> EvaluationQuestion:
         forbidden_fact_ids=forbidden,
         expected_citation_ids=citations,
         requires_owner_review=value["requires_owner_review"],
+        expected_source_ids=expected_sources,
+        expected_message_ids=expected_messages,
+        disallowed_source_ids=disallowed_sources,
+        disallowed_message_ids=disallowed_messages,
+        expected_answer_atoms=answer_atoms,
+        negative_expectation=value["negative_expectation"],
+        mcp_expectation=mcp_expectation,
+        max_chars=max_chars,
     )
 
 

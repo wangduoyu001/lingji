@@ -89,6 +89,11 @@ def main() -> int:
         return 1
     print(f"functional quality report: {output}")
     print(f"functional_status={envelope.functional_status}")
+    print(
+        "frozen_questions="
+        f"{len(envelope.question_diagnostics)} "
+        f"categories={len(envelope.grouped_question_metrics)}"
+    )
     return 0 if envelope.functional_status == "PASS" else 1
 
 

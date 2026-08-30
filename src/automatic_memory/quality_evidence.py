@@ -1506,6 +1506,10 @@ class QualityRunEnvelope:
     fixture_hashes: Mapping[str, str] = field(default_factory=dict)
     quality_evidence_readiness: Mapping[str, Any] = field(default_factory=dict)
     code_commit: str | None = None
+    # Task 3's immutable per-question diagnostics are an additional evidence
+    # projection; canonical Task 2 aggregate fields remain authoritative.
+    question_diagnostics: Sequence[Mapping[str, Any]] = field(default_factory=tuple)
+    grouped_question_metrics: Mapping[str, Mapping[str, int]] = field(default_factory=dict)
 
 
 def _reason_codes(values: Sequence[str]) -> tuple[str, ...]:

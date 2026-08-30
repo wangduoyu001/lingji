@@ -48,9 +48,6 @@ from .evaluation import (
     CorpusRecord,
     EvaluationQuestion,
     EvaluationReport,
-    load_corpus,
-    load_questions,
-    score_question,
 )
 from .quality_evidence import (
     EvidenceState,
@@ -71,6 +68,12 @@ from .quality_evidence import (
 )
 from .quality_degradation import measure_context_baseline, measure_mcp_parity, measure_corruption_isolation_from_runtime, measure_semantic_degradation
 from .quality_promotion import activation_measurement, measure_promotion_fixtures
+from .quality_oracle import (
+    FrozenQuestionOracle,
+    QuestionCheckpointStore,
+    load_frozen_fixtures,
+    observation_from_context_pack,
+)
 from .scale_benchmark import readiness_from_envelope, generate_history_fixture
 
 
@@ -80,8 +83,8 @@ FUNCTIONAL_BLOCKED_REASONS = (
     "mac_m5_p95_reserved_for_task_6",
     "mac_idle_cpu_reserved_for_task_6",
 )
-CORPUS_SHA256 = "bc1812fe6444402762d01fed82f6836889868da89101318beee399b90d58de94"
-QUESTIONS_SHA256 = "338f5051c43902af1ef1358aebeb356ef1d409284a1aac1d6c289625f75d3612"
+CORPUS_SHA256 = "2a3ea2c14af9e1705a39673efb50826579f35b484f9d6c5442cb40f5f8f2347a"
+QUESTIONS_SHA256 = "35000a5cc56de84ef3caa82114a1b9168e46c1d3b31fd89ba0f2a740ce6f9e31"
 _SELECTOR_LIMIT = 2  # One fixed, question-independent selector for every query.
 EXPECTED_QUESTION_COUNT = 100
 
@@ -600,9 +603,10 @@ def _run_quality_gate_impl(
     tracker.mark("root")
     tracker.mark("sentinel")
     tracker.mark("fixture")
-    corpus = load_corpus(corpus_path)
-    questions = load_questions(questions_path, corpus=corpus)
-    fixture_hashes = {"corpus": _sha256(corpus_path), "questions": _sha256(questions_path)}
+    frozen_fixture = load_frozen_fixtures(corpus_path, questions_path)
+    corpus = frozen_fixture.corpus
+    questions = frozen_fixture.questions
+    fixture_hashes = dict(frozen_fixture.file_hashes)
     if fixture_hashes != {"corpus": CORPUS_SHA256, "questions": QUESTIONS_SHA256}:
         raise ValueError("frozen fixture hash mismatch")
 
@@ -635,6 +639,8 @@ def _run_quality_gate_impl(
     mcp_successes = 0
     mcp_parity_failures: list[str] = []
     question_results: list[Any] = []
+    question_diagnostics: list[Any] = []
+    grouped_question_metrics: dict[str, dict[str, int]] = {}
     baseline_context_chars = 0
     baseline_available = True
     rendered_context_chars = 0
@@ -733,6 +739,13 @@ def _run_quality_gate_impl(
         )
         fact_by_memory = {item.fact_id: item for item in corpus}
         citation_ids = {item.citation_id for item in corpus}
+        oracle = FrozenQuestionOracle(frozen_fixture)
+        checkpoint_store = QuestionCheckpointStore(
+            temporary_root / "output" / "question-results",
+            fixture_hashes=fixture_hashes,
+            run_id=f"quality:{fixture_hashes['corpus'][:16]}:{fixture_hashes['questions'][:16]}:{_git_commit()[:16]}",
+            code_commit=_git_commit(),
+        )
         for question in questions:
             arguments = {
                 "query": question.query,
@@ -794,17 +807,30 @@ def _run_quality_gate_impl(
             if not parity.success:
                 mcp_parity_failures.append(parity.reason)
             mcp_selected = select_context_evidence(mcp_pack, identity_registry, limit=_SELECTOR_LIMIT)
-            if mcp_selected.fact_ids != selected_evidence.fact_ids or mcp_selected.citation_ids != selected_evidence.citation_ids:
+            selected_parity = (
+                mcp_selected.fact_ids == selected_evidence.fact_ids
+                and mcp_selected.citation_ids == selected_evidence.citation_ids
+            )
+            if not selected_parity:
                 mcp_parity_failures.append("selected_evidence_mismatch")
-            if parity.success and mcp_selected.fact_ids == selected_evidence.fact_ids and mcp_selected.citation_ids == selected_evidence.citation_ids:
+            if parity.success and selected_parity:
                 mcp_successes += 1
-            question_results.append(score_question(
-                question,
-                fact_by_memory,
-                mcp_selected.fact_ids,
-                mcp_selected.citation_ids,
-                context_chars=mcp_used,
-            ))
+            gateway_observation = observation_from_context_pack(
+                gateway_pack, frozen_fixture, selected_evidence.fact_ids, selected_evidence.citation_ids
+            )
+            mcp_observation = observation_from_context_pack(
+                mcp_pack, frozen_fixture, mcp_selected.fact_ids, mcp_selected.citation_ids,
+                reason_override=(
+                    f"mcp_parity:{parity.reason}"
+                    if not parity.success or not selected_parity else None
+                ),
+            )
+            diagnostic = oracle.evaluate(
+                question, gateway=gateway_observation, mcp=mcp_observation
+            )
+            question_diagnostics.append(diagnostic)
+            checkpoint_store.save(diagnostic)
+            question_results.append(diagnostic)
         semantic_degradation = measure_semantic_degradation(
             temporary_root, memory_db, read_model, state_db, questions[0].query,
             gateway_builder=_build_gateway,
@@ -832,10 +858,29 @@ def _run_quality_gate_impl(
         tracker.mark("evaluator")
         if len(question_results) != EXPECTED_QUESTION_COUNT:
             raise ValueError("quality evaluation did not execute all frozen questions")
-        valid_fact_hits = sum(int(item.recalled_expected_count) for item in question_results)
-        valid_fact_total = sum(int(item.expected_fact_count) for item in question_results)
-        citation_hits = sum(int(item.correct_citation_count) for item in question_results)
-        citation_total = sum(int(item.expected_citation_count) for item in question_results)
+        by_question_id = {item.question_id: item for item in questions}
+        valid_fact_hits = sum(
+            len(set(item.mcp_fact_ids) & set(by_question_id[item.question_id].expected_fact_ids))
+            for item in question_results
+        )
+        valid_fact_total = sum(len(item.expected_fact_ids) for item in questions)
+        # Citation accuracy is intentionally computed from the immutable
+        # identity stream rather than rendered text.  A selected identity is
+        # citation-correct only when its fixture citation is expected.
+        citation_hits = sum(
+            sum(1 for identity in item.mcp_identities
+                if identity.citation_id in set(by_question_id[item.question_id].expected_citation_ids))
+            for item in question_results
+        )
+        citation_total = sum(len(item.expected_citation_ids) for item in questions)
+        grouped_question_metrics = {}
+        for item in question_results:
+            group = grouped_question_metrics.setdefault(item.category, {"questions": 0, "passed": 0, "failed": 0})
+            group["questions"] += 1
+            group["passed"] += int(item.passed)
+            group["failed"] += int(not item.passed)
+            for bucket in item.failure_buckets:
+                group[bucket] = group.get(bucket, 0) + 1
         # A missing selection-before-bound observation is not a zero-length
         # baseline.  Keep the unavailable measurement nullable all the way to
         # the persisted envelope so downstream admission cannot mistake it
@@ -958,6 +1003,13 @@ def _run_quality_gate_impl(
                 "context_reduction": context_reduction,
                 "status": "FAIL" if measured_quality_failure else "PASS",
             },
+            # The canonical Task 2 envelope remains the aggregate authority;
+            # this additional accepted projection carries the immutable
+            # per-question diagnostic stream for Task 3 review.
+            "evaluation_report": {
+                "question_diagnostics": [item.to_mapping() for item in question_diagnostics],
+                "grouped_metrics": grouped_question_metrics,
+            },
             "cleanup_inventory": {"root_exists": True, "cleaned": False},
             "blocked_physical_evidence": list(FUNCTIONAL_BLOCKED_REASONS),
         }
@@ -1046,9 +1098,12 @@ def run_quality_gate(
         )
         canonical = CanonicalFunctionalEvidence.from_runner_payload(raw)
         canonical_details = canonical.to_mapping()
+        diagnostic_payload = raw.get("evaluation_report") if isinstance(raw.get("evaluation_report"), Mapping) else {}
         envelope = replace(envelope, evidence_details=canonical_details,
         run_id=raw.get("run_id"), fixture_hashes=raw.get("fixture_hashes") or {},
-        quality_evidence_readiness=asdict(readiness), code_commit=raw.get("code_commit"))
+        quality_evidence_readiness=asdict(readiness), code_commit=raw.get("code_commit"),
+        question_diagnostics=tuple(diagnostic_payload.get("question_diagnostics") or ()),
+        grouped_question_metrics=dict(diagnostic_payload.get("grouped_metrics") or {}))
         # The temporary machine report is deliberately written beneath the
         # acceptance output root; the caller publishes it only after cleanup.
         payload = dict(raw)
