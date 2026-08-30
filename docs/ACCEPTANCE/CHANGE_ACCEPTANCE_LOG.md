@@ -1,5 +1,29 @@
 # 验收要求变更记录
 
+## 2026-08-30 · Release / 4R2 reset · Task 2 strict canonical measurement contract
+
+- 基线：`23a516fdfd1d28c73a819bfcf10e25ed47878672`；产品/测试范围严格限定为
+  `quality_evidence.py`、`quality_promotion.py`、必要的 `quality_gate.py`/
+  `scale_benchmark.py` contract seam、Task7O focused/adversarial tests 和本条
+  验收文档。不得修改 retrieval/ranking/query/filter、promotion policy、frozen
+  fixtures/questions/thresholds、UI/runtime/vector/schema/第二系统、Production/Vault、
+  Artifact、100k、release 或真实 8766/8767。
+- Canonical evidence 只允许一个 immutable view；loader 对 measured sections 递归拒绝
+  unknown key、bool/NaN/Infinity、missing identity/hash/run/commit，以及 duplicate 或
+  contradictory compatibility projection。Promotion measurement 扫描所有 imported
+  message links，空/重复/extra/missing/orphan audit/projection/link fail-closed；activation
+  仍保持 quarantine，不自动 approve low-risk，并对实际 persisted status、category 与
+  non-empty reason evidence 做校验。
+- TDD 要求：先执行
+  `./.venv/bin/pytest -q tests/test_task7o_contract_closure.py tests/test_task7o_contract_adversarial.py --tb=short`
+  的 adversarial RED，再执行同一 focused GREEN；系统 Python 3.12 可在 `.venv` 不存在时
+  作为等价命令，报告必须注明实际解释器。GREEN 后只允许一次隔离 Acceptance-root
+  quality CLI，诚实保留 FAIL/NOT_MEASURED；禁止第二次重跑、100k/full/release/Artifact/
+  live 服务/主人数据。
+- 必须回归 brief direct matrix、`python3 -m compileall -q src tests`、`git diff --check`、
+  acceptance sync 和 local handoff；产品/tests 与 docs/evidence 分开提交，完整报告为
+  `.superpowers/sdd/2026-08-30-release-4r2-acceptance-reset/task-2-report.md`。
+
 ## 2026-08-30 · Whole-plan review repair · I1/I2
 
 - 产品/测试提交：`8b7c37e6f87561b6013123abb2995a760174c15c`；报告：`.superpowers/sdd/2026-08-29-owner-real-history-memory-cards/whole-plan-repair-report.md`。

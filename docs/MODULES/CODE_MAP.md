@@ -617,7 +617,12 @@ path, MCP ordered identity/bounds parity and selection-before-bound baseline evi
 `ContextPackBuilder.observe_candidates` is a read-only seam shared with final pack construction.
 `src/automatic_memory/scale_benchmark.py` owns persisted readiness loading and deterministic
 scale-fixture generation/validation (default seed `41041`), and admits only a consistent
-functional envelope; Production/Vault remains nullable for this isolated gate. These
+functional envelope; Production/Vault remains nullable for this isolated gate. The
+`CanonicalFunctionalEvidence` loader is the single immutable evidence view: measured sections
+are recursively schema-closed, compatibility projections are compared rather than preferred,
+and promotion/activation identities are checked against actual status, category, reason, link
+and audit observations. Unknown, duplicate, contradictory, orphaned or empty evidence is
+`BLOCKED_4R2_REQUIRED` and cannot become `scale_ready`. These
 modules do not implement a second retriever, importer, evaluator, MCP server or promotion
 policy. Current Task7 measurement remains `FAIL/NOT_ACCEPTED`; Production/Vault pollution is
 nullable because this isolated runner cannot safely read that boundary.
