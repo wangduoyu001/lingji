@@ -26,7 +26,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("focused", "full", "release"), default="release")
     parser.add_argument("--area", default="docs")
+    parser.add_argument("--python-command", default="python")
     parser.add_argument("--hook", type=Path, default=None)
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=None,
+        help="test-only validation root forwarded to the real PowerShell entry",
+    )
+    parser.add_argument(
+        "--output-hint",
+        default=None,
+        help="optional bounded label for this invocation's evidence directory",
+    )
     parser.add_argument(
         "--entry-only",
         action="store_true",
@@ -43,11 +55,15 @@ def main(argv: list[str] | None = None) -> int:
     repo = Path(__file__).resolve().parents[1]
     command = [
         executable, "-NoProfile", "-File", str(repo / "scripts" / "validate.ps1"),
-        "-Mode", args.mode, "-Area", args.area,
+        "-Mode", args.mode, "-Area", args.area, "-PythonCommand", args.python_command,
     ]
     environment = os.environ.copy()
     if args.hook is not None:
         environment["LINGJI_VALIDATE_TEST_HOOK"] = str(args.hook)
+    if args.output_root is not None:
+        environment["LINGJI_VALIDATE_OUTPUT_ROOT"] = str(args.output_root)
+    if args.output_hint is not None:
+        environment["LINGJI_VALIDATE_OUTPUT_HINT"] = args.output_hint
     if args.entry_only:
         environment["LINGJI_VALIDATE_TEST_ENTRY_ONLY"] = "1"
         command.append("-TestReleaseEntryOnly")

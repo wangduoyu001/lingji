@@ -49,11 +49,126 @@ if ($env:GITHUB_HEAD_REF) {
     $branch = $env:GITHUB_HEAD_REF
 }
 
-$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$validationRoot = Join-Path $repoRoot "output\validation"
-$outputRoot = Join-Path $validationRoot ("{0}-{1}-{2}" -f $stamp, $shortCommit, $Mode)
+$configuredValidationRoot = [Environment]::GetEnvironmentVariable("LINGJI_VALIDATE_OUTPUT_ROOT", "Process")
+if ([string]::IsNullOrWhiteSpace($configuredValidationRoot)) {
+    $validationRoot = Join-Path $repoRoot "output\validation"
+}
+else {
+    try {
+        $validationRoot = [IO.Path]::GetFullPath($configuredValidationRoot)
+    }
+    catch {
+        throw "LINGJI_VALIDATE_OUTPUT_ROOT is not a valid path"
+    }
+}
+
+$testClock = [Environment]::GetEnvironmentVariable("LINGJI_VALIDATE_TEST_CLOCK", "Process")
+if ($testClock -match "^\d{8}-\d{6}$") {
+    $stamp = $testClock
+}
+else {
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+}
+
+# The GUID is the ownership boundary. The timestamp remains useful to humans,
+# but never determines identity or cleanup ownership by itself.
+$invocationId = [Guid]::NewGuid().ToString("N")
+$outputHint = [Environment]::GetEnvironmentVariable("LINGJI_VALIDATE_OUTPUT_HINT", "Process")
+$hintPrefix = ""
+if ($outputHint -match "^[A-Za-z0-9_.-]{1,64}$") {
+    $hintPrefix = "{0}-" -f $outputHint
+}
+$outputRoot = Join-Path $validationRoot ("{0}{1}-{2}-{3}-{4}" -f $hintPrefix, $stamp, $invocationId, $shortCommit, $Mode)
 $logsRoot = Join-Path $outputRoot "logs"
-New-Item -ItemType Directory -Force -Path $logsRoot | Out-Null
+
+New-Item -ItemType Directory -Force -Path $validationRoot | Out-Null
+
+$ownerMarkerPath = Join-Path $outputRoot ".owner.json"
+$invocationStartedAt = (Get-Date).ToUniversalTime().ToString("o")
+$processStartedAt = $null
+try {
+    $processStartedAt = (Get-Process -Id $PID -ErrorAction Stop).StartTime.ToUniversalTime().ToString("o")
+}
+catch {
+    # A missing process start time is safe: a completed marker with no proof of
+    # process identity will be retained by stale cleanup.
+}
+
+function Write-ValidationOwnerMarker {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet("running", "completed", "failed")][string]$State
+    )
+
+    $marker = [ordered]@{
+        schema_version = 1
+        invocation_id = $invocationId
+        process_id = [int]$PID
+        process_started_at = $processStartedAt
+        state = $State
+        started_at = $invocationStartedAt
+    }
+    if ($State -ne "running") {
+        $marker.ended_at = (Get-Date).ToUniversalTime().ToString("o")
+    }
+
+    $json = $marker | ConvertTo-Json -Compress
+    if ($json.Length -gt 4096) {
+        throw "validation owner marker exceeded bounded size"
+    }
+    Set-Content -LiteralPath $ownerMarkerPath -Value $json -Encoding UTF8
+}
+
+function Read-ValidationOwnerMarker {
+    param([Parameter(Mandatory = $true)][string]$DirectoryPath)
+
+    $markerPath = Join-Path $DirectoryPath ".owner.json"
+    try {
+        if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf)) {
+            return $null
+        }
+        $raw = Get-Content -LiteralPath $markerPath -Raw -ErrorAction Stop
+        if ($raw.Length -gt 4096) {
+            return $null
+        }
+        return ($raw | ConvertFrom-Json -ErrorAction Stop)
+    }
+    catch {
+        return $null
+    }
+}
+
+function Test-ValidationMarkerActive {
+    param([Parameter(Mandatory = $true)]$Marker)
+
+    # Unknown, running, malformed, or non-terminal markers are retained. This
+    # is deliberately fail-closed so a nested validation cannot delete a live
+    # parent whose marker is being written or is otherwise unreadable.
+    if ($null -eq $Marker -or $Marker.state -ne "completed") {
+        return $true
+    }
+
+    $processId = 0
+    if (-not [int]::TryParse([string]$Marker.process_id, [ref]$processId) -or $processId -le 0) {
+        return $false
+    }
+
+    try {
+        $process = Get-Process -Id $processId -ErrorAction Stop
+        $markerStart = [DateTimeOffset]::MinValue
+        if (-not [DateTimeOffset]::TryParse(
+                [string]$Marker.process_started_at,
+                $null,
+                [Globalization.DateTimeStyles]::RoundtripKind,
+                [ref]$markerStart)) {
+            return $true
+        }
+        $processStart = [DateTimeOffset]::new($process.StartTime.ToUniversalTime())
+        return ([Math]::Abs(($processStart - $markerStart.ToUniversalTime()).TotalSeconds) -lt 1)
+    }
+    catch {
+        return $false
+    }
+}
 
 function Remove-StaleValidationRuns {
     if (-not (Test-Path $validationRoot)) {
@@ -62,10 +177,46 @@ function Remove-StaleValidationRuns {
 
     Get-ChildItem -Path $validationRoot -Directory -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -ne $outputRoot } |
-        ForEach-Object { Remove-Item $_.FullName -Recurse -Force }
+        ForEach-Object {
+            $entry = $_
+            try {
+                $entryPath = [IO.Path]::GetFullPath($entry.FullName)
+                $rootPath = [IO.Path]::GetFullPath($validationRoot)
+                if ((Split-Path -Parent $entryPath) -ne $rootPath) {
+                    return
+                }
+                if (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    return
+                }
+
+                $marker = Read-ValidationOwnerMarker -DirectoryPath $entryPath
+                if (Test-ValidationMarkerActive -Marker $marker) {
+                    return
+                }
+
+                $endedAt = [DateTimeOffset]::MinValue
+                if (-not [DateTimeOffset]::TryParse(
+                        [string]$marker.ended_at,
+                        $null,
+                        [Globalization.DateTimeStyles]::RoundtripKind,
+                        [ref]$endedAt)) {
+                    return
+                }
+                if (([DateTimeOffset]::UtcNow - $endedAt.ToUniversalTime()).TotalHours -lt 24) {
+                    return
+                }
+                Remove-Item -LiteralPath $entryPath -Recurse -Force -ErrorAction Stop
+            }
+            catch {
+                # Unresolved, foreign, or partially-written entries are not
+                # proven stale and must remain available for diagnosis.
+            }
+        }
 }
 
 Remove-StaleValidationRuns
+New-Item -ItemType Directory -Force -Path $logsRoot | Out-Null
+Write-ValidationOwnerMarker -State "running"
 
 function Write-ValidationSummary {
     param([string]$Overall)
@@ -117,6 +268,12 @@ function Write-ValidationSummary {
 
     Copy-Item -Path $jsonPath -Destination $latestJsonPath -Force
     Copy-Item -Path $markdownPath -Destination $latestMarkdownPath -Force
+    if ($Overall -eq "PASS") {
+        Write-ValidationOwnerMarker -State "completed"
+    }
+    else {
+        Write-ValidationOwnerMarker -State "failed"
+    }
 
     return $latestJsonPath
 }

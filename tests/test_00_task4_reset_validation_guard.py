@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -102,3 +103,45 @@ def test_release_entry_only_is_double_opt_in_and_launcher_passes_real_switch() -
     assert 'LINGJI_VALIDATE_TEST_HOOK", "Process"' in validation_script
     assert 'parser.add_argument(\n        "--entry-only"' in launcher
     assert 'command.append("-TestReleaseEntryOnly")' in launcher
+
+
+def test_entry_only_guard_publishes_its_own_failure_evidence(tmp_path: Path) -> None:
+    private_powershell = Path("/tmp/LingJiToolchain/powershell-7.6.5/pwsh")
+    executable = str(private_powershell) if private_powershell.is_file() else next(
+        (shutil.which(candidate) for candidate in ("pwsh", "powershell", "powershell.exe") if shutil.which(candidate)),
+        None,
+    )
+    if executable is None:
+        return
+
+    validation_root = tmp_path / "validation"
+    hook = validation_root / "hook.txt"
+    environment = os.environ.copy()
+    environment["PATH"] = str(Path(executable).parent) + os.pathsep + environment.get("PATH", "")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_powershell_validation.py",
+            "--mode",
+            "release",
+            "--entry-only",
+            "--hook",
+            str(hook),
+            "--output-root",
+            str(validation_root),
+            "--python-command",
+            sys.executable,
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "BLOCKED_4R2_REQUIRED" in result.stdout + result.stderr
+    assert hook.read_text(encoding="utf-8").splitlines() == ["preflight"]
+    directories = [path for path in validation_root.iterdir() if path.is_dir()]
+    assert len(directories) == 1
+    assert (directories[0] / ".owner.json").is_file()
+    assert (directories[0] / "summary.json").is_file()
+    assert any(directories[0].joinpath("logs").glob("*.log"))
