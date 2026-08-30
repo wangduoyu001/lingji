@@ -170,3 +170,63 @@ sidecar 运行态为 `running`，scheduler/worker heartbeat 健康；health 的 
 - 不关闭 `/Applications/灵机.app`、Desktop PID `44824`、sidecar PID `44832` 或 8766；不清理
   Acceptance fixture、raw、Vault、DB、日志、备份和失败证据，直到根代理完成交接并收到主人明确
   PASS/FAIL；当前已收到 `OWNER_UI_REPAIR_REQUIRED`，仍按要求保持运行与保留证据。
+
+## Task 2 Repair Round 1 追加记录（2026-08-30）
+
+### 范围与实现
+
+本轮严格限制在 Desktop 普通页面、既有 polling hook、owner-facing 纯函数及真实 rendered
+tests：
+
+- 首页以现有 Core `health.status` 优先于局部 `memory_runtime.state`，因此整体健康而向量配置
+  不完整时仍显示整体可用，向量数字继续按现有卡片摘要事实展示。
+- 既有 `usePollingResource` 在页面 active 且文档 hidden 时执行一次真实激活读取，随后继续暂停
+  隐藏轮询；手动 pause 不触发这次 hidden 激活读取。Overview、Attention、MemorySources
+  继续共用该 hook。
+- 首页与“需要我”通过同一 `pendingActionsFrom` 读取事实；缺少列表、错误或过期均保持“暂时无法
+  确认”，不会把未加载误报为 0。
+- `ownerFacingConclusion` 是卡片与详情共用的纯函数：优先真实 `conclusion`，否则只使用已有的
+  lifecycle/trust/development/evidence 字段生成“当前状态”或“当前可确认”，没有事实时显示
+  “当前结论：尚未获得”；freshness 时间缺失时回退至 source 最新证据时间。
+- 未修改 backend/API/data model/retrieval/vector/quality gate，未新增功能；未改变现有修正、确认、
+  来源读取、关闭/Escape/focus 或四菜单动作接线。
+
+### TDD RED / GREEN
+
+- RED：先在真实 `owner-ui-menu-fast-track-smoke.mjs` 将 fixture 设为
+  `health.status=healthy`、`memory_runtime.state=configuration_required`，并等待首页真实渲染的
+  `灵机运行正常`；`npm run test:owner-ui-menu-fast-track` 首次失败为
+  `locator.waitFor: Timeout 30000ms exceeded`，精确 `1 failed` assertion。该失败复现了 active
+  页面第一次读取后把整体健康误判为设置缺失。
+- GREEN：最小修复后，真实 rendered `npm run test:owner-ui-menu-fast-track` 为
+  `owner-ui-menu-fast-track-smoke: PASS`；`npm run test:e2e:memory` 为
+  `e2e_owner_memory_flow: PASS`。fixture 同时覆盖 hidden active-route 首次来源读取、pending=1
+  首页/需要我一致性、pending outage unknown、current/superseded/stale/conflict null conclusion
+  卡片与详情、source 时间回退和现有动作/焦点/技术字段脱敏。
+- 中间一次详情断言失败仅为测试期望漏写共享函数产生的“当前状态：”标签，已改为直接按渲染
+  contract 断言；另一次 outage 分支等待了不存在的 Panel 标题，已改为断言首屏 unknown 文案，
+  均不是产品 blocker。最终 E2E 已重跑通过。
+
+### 验证命令计数与结果
+
+- 真实 rendered focused：`npm run test:owner-ui-menu-fast-track` 最终 PASS（最终修复后 1 次）；
+  `npm run test:e2e:memory` 最终 PASS（最终修复后 1 次）。
+- 来源/相关 Desktop smoke：`npm run test:memory-sources` PASS、
+  `npm run test:memory-sources-repair` PASS、`npm run test:work-fact` PASS。
+- 23-script：`npm run test:smoke` PASS（23 scripts，包含 owner rendered E2E）。
+- build：`npm run build` PASS（TypeScript/Vite，97 modules；仅保留既有 dynamic-import warnings）。
+- Python focused：
+  `python3 -m pytest -q tests/test_owner_memory_corrections.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_review_service.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_project_memory_api.py tests/test_task3_round2_direct.py tests/test_task3_round3_integration.py tests/test_source_read_model.py tests/test_source_service.py --tb=short`
+  → `87 passed, 1 warning`。
+- 其它门禁：`python3 -m compileall -q src tests` PASS、`git diff --check` PASS。另有一次先在
+  worktree 根执行 npm 的错误目录命令，得到 3 个 ENOENT；未接触服务，随后在
+  `desktop/lingji-control` 目录按上列命令全部重跑通过。
+
+### 提交与未运行项目
+
+- 产品/tests 提交：`0b0e2fcf4881deea9803c51280e6e3fd8d4f26a4`。
+- 本追加报告及验收同步条目在产品提交后单独提交 docs/evidence；本轮不更新、不执行
+  `LOCAL_EXECUTION_TASK.md` 中的候选 SHA。
+- 未运行或触碰：`/Applications/灵机.app`、Desktop PID `44824`、sidecar PID `44832`、8766/8767、
+  Acceptance root/fixture、Production/Vault、主人真实数据、真实 API、打包/安装、live owner
+  observation；未宣称主人验收或 release 通过。独立审查及后续候选重建由根代理调度。

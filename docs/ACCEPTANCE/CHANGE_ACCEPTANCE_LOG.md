@@ -3132,3 +3132,24 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 未运行 100k/full/release/Artifact、live 8766/8767、Production/Vault、owner data/real
   chats、Desktop/UI；未改变自动激活 quarantine，未执行第二次 Round2 quality CLI。报告：
   `.superpowers/sdd/2026-08-30-release-4r2-acceptance-reset/task-2-report.md`。
+
+## 2026-08-30 · Owner UI / menu fast-track · Task 2 Repair Round 1
+
+- 基线为 `3dd9295`；本轮产品/tests 提交：`0b0e2fcf4881deea9803c51280e6e3fd8d4f26a4`。
+  仅修改 Desktop 普通页面、既有 polling hook、owner-facing 纯函数、真实 rendered fixtures
+  与测试；不修改 backend/API/data model/retrieval/vector/quality gate，不增加功能。
+- TDD RED：先把 rendered fixture 设为 `health.status=healthy`、局部
+  `memory_runtime.state=configuration_required`，`npm run test:owner-ui-menu-fast-track` 精确
+  `1 failed`，首页 `灵机运行正常` 首次 active 读取断言超时。GREEN：同一真实 rendered smoke、
+  `npm run test:e2e:memory`、`npm run test:memory-sources`、
+  `npm run test:memory-sources-repair`、`npm run test:work-fact`、`npm run test:smoke`（23 scripts）
+  和 `npm run build` 均 PASS。
+- 真实 rendered fixture 覆盖 hidden active-route 首次读取、pending=1 首页/需要我一致性与 outage
+  unknown、null conclusion 的 current/superseded/stale/conflict 卡片和详情、freshness 时间回退，
+  并保留四菜单、动作、focus/Escape 和技术字段脱敏约束。`ownerFacingConclusion` 在卡片与详情
+  共享，所有状态句均来自现有 lifecycle/trust/evidence 字段。
+- Python focused 矩阵（owner corrections/card projector/card API/review/inspector/project/source）
+  → `87 passed, 1 warning`；`python3 -m compileall -q src tests` 与 `git diff --check` PASS。
+  报告：`.superpowers/sdd/2026-08-30-owner-ui-menu-fast-track/task-2-report.md`。
+- 本轮未运行/触碰 live App、PID `44824/44832`、8766/8767、Acceptance root、Production/Vault、
+  主人数据、真实 API、打包/安装或主人观察；不更新、不执行 `LOCAL_EXECUTION_TASK.md` 中候选 SHA。
