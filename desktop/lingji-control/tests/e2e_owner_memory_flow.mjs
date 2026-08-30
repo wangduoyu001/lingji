@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const state = { authorized: false, revoked: false, codexAuthorized: false, lastAuthorize: null, scan: null, scanReads: 0, scanRequests: 0, cardListRequests: 0, cardDetailRequests: 0, messageDetailRequests: 0, cardMutations: [], cardConflict: false, cardActionStates: {}, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", currentWorkMode: "normal", activityMode: "normal", detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, unknownCardSummary: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed" };
+const state = { authorized: false, revoked: false, codexAuthorized: false, lastAuthorize: null, scan: null, scanReads: 0, scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, cardDetailRequests: 0, messageDetailRequests: 0, cardMutations: [], cardConflict: false, cardActionStates: {}, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", currentWorkMode: "normal", activityMode: "normal", detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, unknownCardSummary: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed" };
 const memoryCardTopics = ["发布计划", "每周摘要", "代码审查", "家庭安排", "阅读清单", "旅行计划", "饮食偏好", "会议决策", "预算安排", "学习目标", "设备维护", "写作习惯"];
 const memoryCardFreshnessStates = ["current", "overdue", "current", "overdue", "source_revoked", "current", "superseded", "current", "rejected", "rolled_back", "repair_required", "not_yet_current", "unknown"];
 const memoryCardActions = ["correct", "invalidate", "archive", "confirm", "reauthorize_source", "correct", "review", "none", "review", "review", "review", "review", "review"];
@@ -51,12 +51,14 @@ const server = http.createServer((req, res) => {
   req.on("end", () => {
     if (path === "/api/overview") return json(res, 200, { health: { status: "healthy" }, memory_runtime: { state: "healthy", as_of: new Date().toISOString(), memory: { documents: 1 } }, queue: { stats: {} } });
     if (path === "/api/automatic-memory/discovered") {
+      state.sourceReads += 1;
       const response = () => json(res, 200, state.sourceMode === "empty" ? [] : ["claude-only", "claude-consent"].includes(state.sourceMode) ? [{ kind: "claude_desktop", display_name: "Claude Desktop", candidate_root: "", status: state.sourceMode === "claude-consent" ? "consent_required" : "unsupported", capability: "metadata_discovery", reason: "Claude Desktop has no approved official export schema; opaque storage is not read" }] : state.sourceMode === "codex-unknown" ? [{ kind: "codex_rollout", display_name: "Codex聊天记录", candidate_root: "/tmp/codex", status: "available", file_count: null, byte_count: null, earliest_mtime: null, latest_mtime: null, capability: "metadata_discovery", reason: null }] : state.allStates ? allStateDiscovered : [{ kind: "generic_ai_history", display_name: "Generic Inbox", candidate_root: "/tmp/lingji-fixture", status: "available", capability: "metadata_discovery", reason: null }]);
       if (state.outage) return json(res, 503, { detail: { code: "OFFLINE", message: "source service unavailable" } });
       if (state.onboardingDelay && !state.onboardingRelease) { const timer = setInterval(() => { if (state.onboardingRelease) { clearInterval(timer); response(); } }, 20); return; }
       return response();
     }
     if (path === "/api/automatic-memory/sources") {
+      state.sourceReads += 1;
       const response = () => state.sourceMode !== "default" ? json(res, 200, []) : state.onboardingFailures > 0
         ? (state.onboardingFailures -= 1, json(res, 503, { detail: { code: "TEMPORARY", message: "temporary source read failure" } }))
         : json(res, 200, state.allStates ? (state.codexAuthorized ? [{ source_id: "src-codex", kind: "codex_rollout", root: "/tmp/codex", status: "authorized", capability: "metadata_discovery" }, ...allStateSources] : allStateSources) : state.revoked ? [{ source_id: "src-fixture", kind: "generic_ai_history", root: "/tmp/lingji-fixture", status: "revoked", capability: "metadata_discovery" }] : state.authorized ? [{ source_id: "src-fixture", kind: "generic_ai_history", root: "/tmp/lingji-fixture", status: "authorized", capability: "metadata_discovery" }] : []);
@@ -65,6 +67,7 @@ const server = http.createServer((req, res) => {
       return response();
     }
     if (path === "/api/automatic-memory/summary") {
+      state.sourceReads += 1;
       const latest = state.allStates ? scanDto(allStateScans[1]) : state.scan ? scanDto(state.scan) : null;
       if (state.omitHomeCounts && latest) {
         delete latest.queued;
@@ -74,8 +77,9 @@ const server = http.createServer((req, res) => {
       }
       return json(res, 200, { counts: state.allStates ? { completed: 1, failed: 1 } : state.scan ? { [state.scan.status]: 1 } : {}, total: state.allStates ? allStateScans.length : state.scan ? 1 : 0, latest, progress: state.scan ? { current: state.scan.progress, total: 1 } : { current: null, total: null }, last_error: state.scan?.last_error ?? null, next_action: "wait" });
     }
-    if (path === "/api/automatic-memory/runtime") return json(res, 200, { state: state.cleanupPending ? "degraded" : "running", running: true, paused: false, worker_state: true, authorized_watcher_count: 1, automation_mode: "periodic_reconciliation", event_watcher_enabled: false, next_reconciliation_seconds: 900, cleanup_pending: state.cleanupPending, cleanup_error: state.cleanupPending ? "cleanup_scan_failed" : null });
+    if (path === "/api/automatic-memory/runtime") { state.sourceReads += 1; return json(res, 200, { state: state.cleanupPending ? "degraded" : "running", running: true, paused: false, worker_state: true, authorized_watcher_count: 1, automation_mode: "periodic_reconciliation", event_watcher_enabled: false, next_reconciliation_seconds: 900, cleanup_pending: state.cleanupPending, cleanup_error: state.cleanupPending ? "cleanup_scan_failed" : null }); }
     if (path === "/api/automatic-memory/scans") {
+      state.sourceReads += 1;
       if (state.allStates) return json(res, 200, allStateScans.map(scanDto));
       if (state.scan?.status === "running" && state.completeNextRead) state.scan = { ...state.scan, status: "completed", progress: 1, total: 1, queued: 1, reused: 0, failed: 0, updated: 2, skipped: 3 };
       return json(res, 200, state.scan ? [{ ...scanDto(state.scan), updated_at: new Date().toISOString() }] : []);
@@ -136,6 +140,7 @@ const server = http.createServer((req, res) => {
     }
     if (path === "/api/work/pending-actions") {
       if (state.pendingOutage) return json(res, 503, { detail: { code: "PENDING_OFFLINE", message: "pending service unavailable" } });
+      state.pendingReads += 1;
       return json(res, 200, { pending_actions: state.pendingResolved ? [] : [{ action_id: "action-1", work_id: "work-capture-1", description: "确认这条会议决定是否进入长期记忆", actor: "owner", resolved: false, created_at: "2026-08-28T08:01:00Z" }] });
     }
     if (path === "/api/work/pending-actions/action-1/resolve") { state.pendingResolved = true; return json(res, 200, { action_id: "action-1", work_id: "work-capture-1", resolved: true }); }
@@ -154,8 +159,8 @@ const server = http.createServer((req, res) => {
         memory_id: `card-${index + 1}`,
         topic: memoryCardTopics[index] ?? `主题${index + 1}`,
         developments: ["先讨论方案", "根据来源做出决定", "记录后续结果"],
-        conclusion: "最新结论已从来源核对",
-        freshness: { state: memoryCardFreshnessStates[index] ?? "current", reason: index === 3 ? "已有一段时间没有新证据" : memoryCardFreshnessStates[index] === "unknown" ? "时效尚未判断" : "最近证据仍有效", latest_evidence_at: index === 5 ? "not-a-time" : "2026-08-28T08:03:00Z" },
+        conclusion: [0, 3, 5, 6].includes(index) ? null : "最新结论已从来源核对",
+        freshness: { state: memoryCardFreshnessStates[index] ?? "current", reason: index === 3 ? "已有一段时间没有新证据" : memoryCardFreshnessStates[index] === "unknown" ? "时效尚未判断" : "最近证据仍有效", latest_evidence_at: index === 0 ? null : index === 5 ? "not-a-time" : "2026-08-28T08:03:00Z" },
         source: { label: index % 2 ? "Codex 工作会话" : "ChatGPT 导出记录", message_count: 3, latest_evidence_at: "2026-08-28T08:03:00Z" },
         layers: { raw: { state: "available" }, structured: { state: "available" }, vector: { state: index === 4 ? "unavailable" : "complete" }, permanent: { state: index === 2 ? "pending_owner_review" : index === 7 ? "not_permanent" : "complete" } },
         trust: { state: index === 5 ? "conflict" : "trusted" },
@@ -199,7 +204,7 @@ const server = http.createServer((req, res) => {
       const topic = memoryCardTopics[cardIndex] ?? "发布计划";
       const permanentState = action === "confirm" ? "pending_owner_review" : cardIndex === 7 ? "not_permanent" : "available";
       const sourceRevoked = action === "reauthorize_source";
-      return json(res, 200, { item: { memory_id: id, topic, kind: action === "confirm" ? "candidate" : "memory", state: cardState, developments: ["先讨论方案", "根据来源做出决定"], conclusion: "最新结论已从来源核对", freshness: { state: freshnessState, reason: freshnessState === "unknown" ? "时效尚未判断" : freshnessState === "source_revoked" ? "来源已撤销" : freshnessState === "archived" ? "已移出当前记忆" : "最近证据仍有效", latest_evidence_at: "2026-08-28T08:03:00Z" }, source: { label: sourceRevoked ? "已停止的来源" : "Codex 工作会话", status: sourceRevoked ? "revoked" : "active", message_count: 3 }, layers: { raw: { state: "available" }, structured: { state: "available" }, vector: { state: cardIndex === 4 ? "unavailable" : "complete" }, permanent: { state: permanentState } }, trust: { state: cardIndex === 5 ? "conflict" : "trusted" }, action: { type: projectedAction, label: memoryCardActionLabels[projectedAction], reason: "请核对后决定" }, current_hash: `hash-${id}`, evidence: [{ message_id: "message-card-1", preview: "来源证据摘要一", occurred_at: "2026-08-28T08:03:00Z" }, { message_id: "message-card-2", preview: "来源证据摘要二", occurred_at: "2026-08-28T08:04:00Z" }] } });
+      return json(res, 200, { item: { memory_id: id, topic, kind: action === "confirm" ? "candidate" : "memory", state: cardState, developments: ["先讨论方案", "根据来源做出决定"], conclusion: [0, 3, 5, 6].includes(cardIndex) ? null : "最新结论已从来源核对", freshness: { state: freshnessState, reason: freshnessState === "unknown" ? "时效尚未判断" : freshnessState === "source_revoked" ? "来源已撤销" : freshnessState === "archived" ? "已移出当前记忆" : "最近证据仍有效", latest_evidence_at: cardIndex === 0 ? null : "2026-08-28T08:03:00Z" }, source: { label: sourceRevoked ? "已停止的来源" : "Codex 工作会话", status: sourceRevoked ? "revoked" : "active", message_count: 3 }, layers: { raw: { state: "available" }, structured: { state: "available" }, vector: { state: cardIndex === 4 ? "unavailable" : "complete" }, permanent: { state: permanentState } }, trust: { state: cardIndex === 5 ? "conflict" : "trusted" }, action: { type: projectedAction, label: memoryCardActionLabels[projectedAction], reason: "请核对后决定" }, current_hash: `hash-${id}`, evidence: [{ message_id: "message-card-1", preview: "来源证据摘要一", occurred_at: "2026-08-28T08:03:00Z" }, { message_id: "message-card-2", preview: "来源证据摘要二", occurred_at: "2026-08-28T08:04:00Z" }] } });
     }
     if (path === "/api/memory/inspector/messages/message-card-1" || path === "/api/memory/inspector/messages/message-card-2") { state.messageDetailRequests += 1; return json(res, 200, { item: { message_id: path.endsWith("2") ? "message-card-2" : "message-card-1", content: path.endsWith("2") ? "这是第二条选定的来源消息正文。" : "这是选定的来源消息正文。" } }); }
     if (path === "/api/memory/inspector/status") return json(res, 200, { as_of: "2026-08-28T08:03:00Z", sources: { sources: 1, conversations: 1, messages: 1 }, memory: { documents: 1, chunks: 1 }, vector: { state: "available", coverage: 1, rebuild_required: false } });
@@ -605,6 +610,7 @@ try {
   await pendingNextStep.getByText("需要你处理：确认这条会议决定是否进入长期记忆", { exact: true }).waitFor();
   await pendingNextStep.getByRole("button", { name: "去处理", exact: true }).click();
   await page.getByRole("heading", { name: "需要我处理", exact: true }).waitFor();
+  await page.getByText("确认这条会议决定是否进入长期记忆", { exact: true }).waitFor();
   await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
   await page.locator("h1").filter({ hasText: "需要我" }).waitFor();
   await page.getByText("确认这条会议决定是否进入长期记忆", { exact: true }).waitFor();
@@ -615,7 +621,11 @@ try {
   await page.getByRole("button", { name: "首页" }).click();
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   await page.getByText("待办状态暂时无法确认，正在重试", { exact: true }).waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
+  await page.getByText("暂时无法确认需要你处理的事项，正在重试。", { exact: true }).waitFor();
+  assert.equal(await page.getByText("现在没有需要你处理的事项。灵机会继续自动工作。", { exact: true }).count(), 0, "attention page must not turn an outage into an empty state");
   await fetch(`http://127.0.0.1:${apiPort}/__test/pending-outage`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
+  await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   await page.getByText("你现在不用做任何事", { exact: true }).waitFor();
@@ -643,12 +653,20 @@ try {
   assert.ok((await page.locator(".memory-cards-summary").innerText()).includes("已显示 20 / 共 21 条"), "card total must be exact");
   const cardsText = await page.locator(".owner-memory-card-grid").innerText();
   for (const topic of ["发布计划", "每周摘要", "代码审查", "家庭安排", "阅读清单", "旅行计划", "饮食偏好", "会议决策", "预算安排", "学习目标", "设备维护", "写作习惯"]) assert.ok(cardsText.includes(topic), `card topic ${topic} must be readable`);
-  for (const field of ["最新结论：", "来源：", "原始记录：", "结构记录：", "语义向量：", "长期记忆：", "可信提示：", "建议："]) assert.ok(cardsText.includes(field), `memory card must expose the owner field ${field}`);
+  for (const field of ["最新结论：", "当前可确认：", "来源：", "原始记录：", "结构记录：", "语义向量：", "长期记忆：", "可信提示：", "建议："]) assert.ok(cardsText.includes(field), `memory card must expose the owner field ${field}`);
+  assert.ok(cardsText.includes("当前可确认：先讨论方案"), "current cards without conclusion must show their first sourced development line");
+  assert.equal(await page.locator(".owner-memory-card").first().locator(".owner-memory-freshness").innerText().then((value) => value.includes("时间尚未获得")), false, "freshness time must fall back to source latest evidence");
   for (const label of ["已被新版本替代", "尚未加入", "已拒绝", "已回滚", "需要修复", "尚未生效", "尚未判断"]) assert.ok(cardsText.includes(label), `complete lifecycle label ${label} must be readable`);
   assert.equal(await page.locator(".owner-memory-card").nth(6).getByRole("button", { name: /查看历史记录：/ }).count(), 1, "superseded cards must expose review/history, not a mutation action");
+  const nullConclusionExpectations = {
+    6: "当前状态：这条内容已被更新版本替代，请以当前版本为准。",
+    3: "当前状态：这条内容可能已经过时，请根据最近证据核对。",
+    5: "当前状态：来源之间存在冲突，当前内容需要核对。",
+  };
   for (const index of [6, 7, 8, 9, 10, 11, 12]) {
     await page.locator(".owner-memory-card").nth(index).getByRole("button", { name: /^(查看历史记录|目前无需处理)：/ }).click();
     await page.getByRole("dialog").waitFor();
+    if (nullConclusionExpectations[index]) await page.getByRole("dialog").getByText(nullConclusionExpectations[index], { exact: true }).waitFor();
     for (const mutation of ["修正内容", "标记已经过时", "移出当前记忆"]) assert.equal(await page.getByRole("dialog").getByRole("button", { name: mutation, exact: true }).count(), 0, `card-${index + 1} detail must not expose ${mutation}`);
     await page.keyboard.press("Escape");
   }
@@ -663,6 +681,7 @@ try {
   await page.locator(".owner-memory-card").first().getByText("发布计划", { exact: true }).waitFor();
   await page.locator(".owner-memory-card").first().getByRole("button", { name: "发布计划", exact: true }).click();
   await page.getByRole("dialog").waitFor();
+  await page.getByRole("dialog").getByText("当前可确认：先讨论方案", { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => document.activeElement?.id), "owner-memory-detail-title", "opening detail must focus the heading automatically");
   assert.equal(await page.getByRole("dialog").getAttribute("aria-modal"), "true", "detail must be modal and labelled");
   assert.equal(state.messageDetailRequests, 0, "opening detail must not prefetch evidence message bodies");

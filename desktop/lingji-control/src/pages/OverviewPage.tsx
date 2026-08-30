@@ -6,8 +6,7 @@ import { MemorySourcesApi, ownerSourceName, periodicReconciliationNotice, scanCo
 import type { MemorySourcesSnapshot, ScanRun } from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { PageId, Row } from "../types";
-import type { PendingAction } from "../contracts/workFact";
-import type { WorkHistoryResponse } from "../contracts/workFact";
+import { pendingActionsFrom, type PendingActionsResponse, type WorkHistoryResponse } from "../contracts/workFact";
 import { OwnerMemoryCardsApi } from "./ownerMemoryCardsApi";
 
 const display = (value: unknown, fallback = "检查结果尚未获得") => value === null || value === undefined || value === "" ? fallback : String(value);
@@ -51,7 +50,7 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
   const cardsApi = useMemo(() => new OwnerMemoryCardsApi(api), [api]);
   const loadSources = useCallback(() => sourceApi.snapshot(), [sourceApi]);
   const sourceResource = usePollingResource<MemorySourcesSnapshot>({ fetcher: loadSources, enabled: active, intervalMs: 10_000, staleAfterMs: 30_000 });
-  const loadPending = useCallback((signal: AbortSignal) => api.get<{ pending_actions?: PendingAction[] }>("/api/work/pending-actions", { signal }), [api]);
+  const loadPending = useCallback((signal: AbortSignal) => api.get<PendingActionsResponse>("/api/work/pending-actions", { signal }), [api]);
   const pendingResource = usePollingResource({ fetcher: loadPending, enabled: active, intervalMs: 8_000, staleAfterMs: 25_000, pauseWhenHidden: true });
   const cardSummaryResource = usePollingResource({ fetcher: useCallback((signal: AbortSignal) => cardsApi.summary(signal), [cardsApi]), enabled: active, intervalMs: 20_000, staleAfterMs: 45_000, pauseWhenHidden: true });
   const workHistoryResource = usePollingResource<WorkHistoryResponse>({ fetcher: useCallback((signal: AbortSignal) => api.get<WorkHistoryResponse>("/api/work/history?limit=3&offset=0", { signal }), [api]), enabled: active, intervalMs: 15_000, staleAfterMs: 30_000, pauseWhenHidden: true });
@@ -59,12 +58,13 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
   const d = data as Record<string, unknown>;
   const health = (d.health ?? {}) as Record<string, unknown>;
   const memoryRuntime = (d.memory_runtime ?? {}) as Record<string, unknown>;
-  const runtimeState = memoryRuntime.state ?? health.status;
+  const runtimeState = health.status ?? memoryRuntime.state;
   const sourceSnapshot = sourceResource.data;
   const latest = sourceSnapshot?.summary?.latest;
   const latestSource = latest ? sourceSnapshot?.sources.find((item) => item.source_id === latest.source_id) : undefined;
-  const pendingUnavailable = Boolean(pendingResource.error || pendingResource.stale || !pendingResource.data);
-  const pendingActions = pendingResource.data?.pending_actions ?? [];
+  const pendingList = pendingActionsFrom(pendingResource.data);
+  const pendingUnavailable = Boolean(pendingResource.error || pendingResource.stale || pendingList === null);
+  const pendingActions = pendingList ?? [];
   const currentNames = sourceSnapshot?.sources.filter((item) => item.state === "current").map(ownerSourceName) ?? [];
   const periodicNotice = periodicReconciliationNotice(sourceSnapshot?.runtime);
   const cardSummary = cardSummaryResource.data;

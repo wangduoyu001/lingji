@@ -72,6 +72,7 @@ export function usePollingResource<T>(options: PollingResourceOptions<T>): Polli
   const controllerRef = useRef<AbortController | null>(null);
   const inFlightRef = useRef<Promise<void> | null>(null);
   const requestIdentityRef = useRef<object | null>(null);
+  const activationReadRef = useRef(false);
   const failureCountRef = useRef(0);
   const lastErrorRef = useRef<ResourceError | null>(null);
   const lastSuccessAtRef = useRef<string | null>(null);
@@ -152,7 +153,8 @@ export function usePollingResource<T>(options: PollingResourceOptions<T>): Polli
 
   const pause = useCallback(() => setManuallyPaused(true), []);
   const resume = useCallback(() => setManuallyPaused(false), []);
-  const effectivelyPaused = manuallyPaused || (pauseWhenHidden && hidden);
+  const hiddenPaused = pauseWhenHidden && hidden;
+  const effectivelyPaused = manuallyPaused || hiddenPaused;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -173,15 +175,29 @@ export function usePollingResource<T>(options: PollingResourceOptions<T>): Polli
 
   useEffect(() => {
     if (!enabled) {
+      activationReadRef.current = false;
       clearPollTimer();
       controllerRef.current?.abort();
       setState((current) => ({ ...current, loading: false, refreshing: false }));
       return;
     }
+    const needsActivationRead = !activationReadRef.current;
     if (effectivelyPaused) {
       clearPollTimer();
-      return;
+      // A hidden document may be the first active view after navigation. Do
+      // one real read for that activation, then let visibility pause cadence.
+      if (hiddenPaused && needsActivationRead) {
+        // Use a cancellable timer so React StrictMode's setup/cleanup probe
+        // cannot abort the only activation request before the second setup.
+        timerRef.current = window.setTimeout(() => {
+          timerRef.current = null;
+          activationReadRef.current = true;
+          void refresh({ force: true });
+        }, 0);
+      }
+      return () => clearPollTimer();
     }
+    activationReadRef.current = true;
 
     let cancelled = false;
     const normalInterval = Math.max(intervalMs, 250);

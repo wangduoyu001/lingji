@@ -43,6 +43,15 @@ export type PendingAction = {
   created_at?: string;
 };
 
+export type PendingActionsResponse = {
+  pending_actions?: PendingAction[];
+};
+
+/** A missing list is an unknown read, not evidence that there are no actions. */
+export function pendingActionsFrom(response: PendingActionsResponse | null | undefined): PendingAction[] | null {
+  return Array.isArray(response?.pending_actions) ? response.pending_actions : null;
+}
+
 export type Failure = {
   failure_id: string;
   work_id: string;

@@ -59,8 +59,8 @@ const card = {
   state: "active",
   topic: "发布计划",
   developments: ["团队讨论了发布日期", "确认发布前的检查清单"],
-  conclusion: "当前结论是下周三发布。",
-  freshness: { state: "current", reason: "最近证据仍有效", latest_evidence_at: "2026-08-28T08:03:00Z" },
+  conclusion: null,
+  freshness: { state: "current", reason: "最近证据仍有效", latest_evidence_at: null },
   source: { label: "Codex聊天记录", status: "active", message_count: 2, latest_evidence_at: "2026-08-28T08:03:00Z", source_id: source.source_id },
   layers: {
     raw: { state: "available" },
@@ -73,7 +73,7 @@ const card = {
   current_hash: "hash-memory-card-1",
   evidence: [{ message_id: "message-1", preview: "下周三发布", occurred_at: "2026-08-28T08:03:00Z" }],
 };
-const state = { scanRequests: 0, pauseFailure: false, pendingActions: [] };
+const state = { scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, pauseFailure: false, pendingActions: [] };
 
 const json = (body) => JSON.stringify(body);
 const fulfill = (route, body, status = 200) => route.fulfill({
@@ -113,19 +113,19 @@ try {
     const url = new URL(request.url());
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, X-LingJi-Token", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" } });
     if (request.headers()["x-lingji-token"] !== "fixture-token") return fulfill(route, { detail: { code: "UNAUTHORIZED", message: "token required" } }, 401);
-    if (url.pathname === "/api/overview") return fulfill(route, { health: { status: "healthy" }, memory_runtime: { state: "healthy", as_of: "2026-08-28T08:03:00Z" }, queue: { stats: {} } });
-    if (url.pathname === "/api/automatic-memory/discovered") return fulfill(route, [discovered, detectedOnly]);
-    if (url.pathname === "/api/automatic-memory/sources") return fulfill(route, [source]);
-    if (url.pathname === "/api/automatic-memory/scans") return fulfill(route, state.scanRequests ? [{ ...scan, status: "running" }, { ...scanRunning }] : [scan, scanRunning]);
+    if (url.pathname === "/api/overview") return fulfill(route, { health: { status: "healthy" }, memory_runtime: { state: "configuration_required", as_of: "2026-08-28T08:03:00Z" }, queue: { stats: {} } });
+    if (url.pathname === "/api/automatic-memory/discovered") { state.sourceReads += 1; return fulfill(route, [discovered, detectedOnly]); }
+    if (url.pathname === "/api/automatic-memory/sources") { state.sourceReads += 1; return fulfill(route, [source]); }
+    if (url.pathname === "/api/automatic-memory/scans") { state.sourceReads += 1; return fulfill(route, state.scanRequests ? [{ ...scan, status: "running" }, { ...scanRunning }] : [scan, scanRunning]); }
     if (url.pathname === "/api/automatic-memory/scans/scan-codex") return fulfill(route, { ...scan, status: "failed", last_error: "fixture failure: /private/secret" });
-    if (url.pathname === "/api/automatic-memory/summary") return fulfill(route, { counts: { completed: 3, running: 1, failed: 1 }, total: 5, latest: scan, progress: { current: 1, total: 2 }, next_action: "wait" });
-    if (url.pathname === "/api/automatic-memory/runtime") return fulfill(route, { state: "running", running: true, paused: false, automation_mode: "periodic_reconciliation", event_watcher_enabled: false, next_reconciliation_seconds: 900 });
+    if (url.pathname === "/api/automatic-memory/summary") { state.sourceReads += 1; return fulfill(route, { counts: { completed: 3, running: 1, failed: 1 }, total: 5, latest: scan, progress: { current: 1, total: 2 }, next_action: "wait" }); }
+    if (url.pathname === "/api/automatic-memory/runtime") { state.sourceReads += 1; return fulfill(route, { state: "running", running: true, paused: false, automation_mode: "periodic_reconciliation", event_watcher_enabled: false, next_reconciliation_seconds: 900 }); }
     if (url.pathname === "/api/automatic-memory/scan" && request.method() === "POST") { state.scanRequests += 1; return fulfill(route, { ...scan, status: "running" }); }
     if (url.pathname === "/api/automatic-memory/pause" && request.method() === "POST" && state.pauseFailure) return fulfill(route, { detail: { code: "PAUSE_FAILED", message: "raw backend detail /private/secret" } }, 503);
     if (url.pathname === "/api/memory/inspector/cards-summary") return fulfill(route, { cards: 1, conversations: 1, messages: 2, permanent: 1, vectorized: 1, owner_review: 0 });
-    if (url.pathname === "/api/memory/inspector/cards") return fulfill(route, { items: [card], pagination: { limit: 20, offset: 0, total: 1, has_more: false } });
+    if (url.pathname === "/api/memory/inspector/cards") { state.cardListRequests += 1; return fulfill(route, { items: [card], pagination: { limit: 20, offset: 0, total: 1, has_more: false } }); }
     if (url.pathname === "/api/memory/inspector/cards/memory-card-1") return fulfill(route, { item: card });
-    if (url.pathname === "/api/work/pending-actions") return fulfill(route, { pending_actions: state.pendingActions });
+    if (url.pathname === "/api/work/pending-actions") { state.pendingReads += 1; return fulfill(route, { pending_actions: state.pendingActions }); }
     if (url.pathname === "/api/work/current") return fulfill(route, { work: null, events: [], outcome: null, next_action: null });
     if (url.pathname === "/api/work/history") return fulfill(route, { items: [], total: 0, has_more: false, limit: 3, offset: 0 });
     return fulfill(route, { detail: "not found" }, 404);
@@ -133,6 +133,7 @@ try {
 
   await page.goto(viteOrigin, { waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+  assert.equal(await page.getByRole("heading", { name: "需要先完成设置", exact: true }).count(), 0, "healthy Core must not be presented as setup required by a memory runtime warning");
 
   const sidebarStatusText = await page.locator(".desktop-sidebar-status").innerText();
   assert.equal(sidebarStatusText.includes("8766"), false, "ordinary runtime warning must not expose the control port");
@@ -161,6 +162,8 @@ try {
   await pendingNextStep.getByText("需要你处理：确认发布计划", { exact: true }).waitFor();
   await pendingNextStep.getByRole("button", { name: "去处理", exact: true }).click();
   await page.getByRole("heading", { name: "需要我处理", exact: true }).waitFor();
+  await page.getByText("确认发布计划", { exact: true }).waitFor();
+  assert.ok(state.pendingReads > 0, "attention page must read the shared pending-actions endpoint on activation");
   state.pendingActions = [];
   await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
   await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
@@ -169,15 +172,23 @@ try {
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆内容" }).click();
   await page.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor();
   const cardsText = await page.locator(".owner-memory-card-grid").innerText();
-  for (const field of ["最新结论：", "来源：", "原始记录：", "结构记录：", "语义向量：", "长期记忆：", "可信提示：", "建议："]) assert.ok(cardsText.includes(field), `memory card must show ${field}`);
+  assert.ok(cardsText.includes("当前可确认：团队讨论了发布日期"), "a current card without a conclusion must show a sourced, honest current fact");
+  assert.ok(cardsText.includes("2026"), "missing freshness time must fall back to the source evidence time");
+  for (const field of ["当前可确认：", "来源：", "原始记录：", "结构记录：", "语义向量：", "长期记忆：", "可信提示：", "建议："]) assert.ok(cardsText.includes(field), `memory card must show ${field}`);
   assert.equal(/memory-card-1|source-codex|\{/.test(cardsText), false, "memory card ordinary copy must not expose IDs or JSON");
   await page.locator(".owner-memory-card-title").click();
   await page.getByRole("dialog").waitFor();
+  await page.getByRole("dialog").getByText("当前可确认：团队讨论了发布日期", { exact: true }).waitFor();
   await page.keyboard.press("Escape");
 
+  await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange")); });
+  const hiddenSourceReads = state.sourceReads;
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
   await page.getByRole("heading", { name: "选择灵机要记住的内容", exact: true }).waitFor();
   const sourceCard = page.locator('[data-source-kind="codex_rollout"]');
+  await sourceCard.waitFor();
+  assert.ok(state.sourceReads > hiddenSourceReads, "activating a hidden source page must still perform its first real read");
+  await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: false }); document.dispatchEvent(new Event("visibilitychange")); });
   const sourceSummary = await page.locator(".memory-sources-summary").innerText();
   for (const phrase of ["发现 2 个来源", "已授权 1 个", "已接管 1 个", "已完成检查 3 次"]) assert.ok(sourceSummary.includes(phrase), `source aggregate must show ${phrase}`);
   assert.ok(sourceSummary.includes("发现 2 个来源") && sourceSummary.includes("已接管 1 个"), "detection and takeover counts must stay distinct");

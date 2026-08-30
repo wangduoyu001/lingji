@@ -2,19 +2,20 @@ import { useCallback, useState } from "react";
 import { Empty, Panel, Notice } from "../components/ui";
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { LingJiApi } from "../api";
-import type { PendingAction } from "../contracts/workFact";
+import { pendingActionsFrom, type PendingActionsResponse } from "../contracts/workFact";
 
 export default function AttentionPage({ api, active }: { api: LingJiApi; active: boolean }) {
-  const load = useCallback((signal: AbortSignal) => api.get<{ pending_actions?: PendingAction[] }>("/api/work/pending-actions", { signal }), [api]);
+  const load = useCallback((signal: AbortSignal) => api.get<PendingActionsResponse>("/api/work/pending-actions", { signal }), [api]);
   const resource = usePollingResource({ fetcher: load, enabled: active, intervalMs: 8000, staleAfterMs: 25000, pauseWhenHidden: true });
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   if (!active) return <Empty text="连接灵机后会显示需要你处理的事项。" />;
-  if (resource.error && !resource.data) return <Notice kind="error">暂时无法读取需要你处理的事项，请稍后重试。</Notice>;
+  if (resource.error && !resource.data) return <Notice kind="warning">暂时无法确认需要你处理的事项，正在重试。</Notice>;
   if (resource.loading && !resource.data) return <Notice>正在读取待处理事项…</Notice>;
 
-  const actions = resource.data?.pending_actions ?? [];
+  const actions = pendingActionsFrom(resource.data);
+  if (resource.error || resource.stale || actions === null) return <Notice kind="warning">暂时无法确认需要你处理的事项，正在重试。</Notice>;
 
   return (
     <div className="stack observation-page">
