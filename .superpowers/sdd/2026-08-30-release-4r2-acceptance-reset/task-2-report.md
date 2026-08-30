@@ -177,12 +177,14 @@ Product/tests are separate from docs/evidence:
 
 ```text
 Product/tests commit: 4ce408b
-Docs/evidence commit: PENDING (this report is force-added because .superpowers/ is ignored)
+Docs/evidence commit: 1df49dd (initial docs/report commit)
+Report identity update commit: PENDING (this docs-only commit)
 ```
 
-The final docs commit SHA and clean status are filled in by the docs-only commit that
-adds this report. No unrelated tracked changes are included. Ignored interpreter caches,
-pytest cache and the retained quality artifact are not product changes.
+The report identity update is a docs-only follow-up because the report must record the
+already-created docs commit without claiming a hash before Git creates it. No unrelated
+tracked changes are included. Ignored interpreter caches, pytest cache and the retained
+quality artifact are not product changes.
 
 ## 8. Final known concern
 
@@ -200,5 +202,5 @@ Codex executor: Task 2 implementation agent
 Owner confirmation: pending
 Acceptance date: 2026-08-30
 Report branch: codex/owner-real-history-memory-cards
-Report commit: pending docs-only commit
+Report commit: 1df49dd (report contents; identity update pending)
 ```
