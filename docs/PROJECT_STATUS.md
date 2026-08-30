@@ -16,6 +16,20 @@
 > Future backlog: `docs/MODULES/FUTURE_DEVELOPMENT_TODO.md`
 > Acceptance authority: `docs/ACCEPTANCE/README.md`
 
+## 当前本机交接状态（2026-08-30）
+
+`OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6` 已激活为唯一 `ACTIVE` 本机任务，执行模式为
+`MACOS_OWNER_UI_EXPERIENCE_ONLY`，精确产品 SHA 为
+`6baf4ee6d15256e44164bcbe3f7ce227af0b5d07`，候选标签为
+`OWNER_UI_EXPERIENCE_CANDIDATE`。本轮只做隔离 macOS arm64 Tauri 候选构建、整包安装备份、
+认证 8766 sidecar 与根代理 UI 交接；它明确是 `NOT_A_RELEASE_GATE`，不得宣称 release、
+Phase 1 PASS、merge 或主人观察 PASS。质量测量继续保持 `MEASURED_FAIL / NOT_RELEASE_READY`。
+
+Acceptance 根固定为 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6`，DataRoot、
+Vault、source fixture、evidence 和安装前 `/Applications/灵机.app` 整包备份分离；Production、
+主人真实聊天、真实 Vault、正式记忆与用户配置保持不触碰。根代理随后用 Computer Use 遍历
+四项普通菜单、技术诊断折叠入口、动作/窗口路径并等待主人确认；候选与 sidecar 必须保持打开。
+
 ## 1. 当前唯一产品目标
 
 当前只做一件事：**把灵机的第二大脑做成完整、可理解、可追踪、可验证的正式产品，并完成全部规定验收。**

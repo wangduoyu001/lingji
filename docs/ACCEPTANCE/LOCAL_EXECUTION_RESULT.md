@@ -1,5 +1,43 @@
 # LingJi 本机执行结果回执
 
+> 当前任务正在执行：`OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6`。
+> 当前候选仅为 `OWNER_UI_EXPERIENCE_CANDIDATE`，`NOT_A_RELEASE_GATE`；
+> `MEASURED_FAIL / NOT_RELEASE_READY` 质量事实保持延期。下方旧任务回执仅作历史记录，
+> 不覆盖当前 ACTIVE 任务。
+
+## 0. 当前 ACTIVE 任务回执
+
+```yaml
+task_id: OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6
+status: PENDING
+verdict: PENDING
+execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
+repository: wangduoyu001/lingji
+product_pr: NONE_NOT_A_RELEASE_GATE
+product_commit: 6baf4ee6d15256e44164bcbe3f7ce227af0b5d07
+task_instruction_commit: PENDING
+report_branch: acceptance/owner-ui-menu-fast-track-task-2-6baf4ee6
+report_commit: PENDING
+report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_EXPERIENCE_ONLY_6baf4ee6.md
+public_summary_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_6baf4ee6.json
+public_hashes_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_6baf4ee6.txt
+cleanup_before: PENDING
+cleanup_after: PENDING
+remote_branch_verified: false
+remote_commit_verified: false
+remote_report_verified: false
+remote_result_verified: false
+pr_comment_verified: false
+local_temp_root_absent: false
+owner_observation: PENDING
+started_at: PENDING
+finished_at: PENDING
+```
+
+Acceptance 根目录固定为 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6`，
+其中 DataRoot、Vault、source fixture、evidence 与整包安装备份物理分离；当前保留应用和
+sidecar 供根代理观察，未执行清理或回滚。
+
 > 最近一次任务已完成。权威结论：`COMPLETED / FAIL / DO NOT MERGE`。
 >
 > 原始验收分支：`acceptance/pr88-m5-owner-workbench-v4-bd1e7a17`。报告提交为 `5793e4ae22e17d1f4db2c57ecc66bf18ec65af2e`，清理/最终结果回执提交为 `3011d796ff1bb5bff7d5e37c24e0c6236ee51d34`。原报告正文中自引用字段仍保留 `PENDING` 占位；最终状态以本回执、验收分支最终 `LOCAL_EXECUTION_RESULT.md` 与 PR #88 评论 `5306178636` 为准。

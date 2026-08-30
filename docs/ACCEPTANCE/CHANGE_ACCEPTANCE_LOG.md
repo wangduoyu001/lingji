@@ -1,5 +1,37 @@
 # 验收要求变更记录
 
+## 2026-08-30 · Owner UI / menu fast-track · Task 2 local activation
+
+- 本机任务唯一身份：`OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6`，模式
+  `MACOS_OWNER_UI_EXPERIENCE_ONLY`，候选标签 `OWNER_UI_EXPERIENCE_CANDIDATE`，精确产品
+  SHA `6baf4ee6d15256e44164bcbe3f7ce227af0b5d07`。本任务明确
+  `NOT_A_RELEASE_GATE`；旧质量结论继续为 `MEASURED_FAIL / NOT_RELEASE_READY`，不得写成
+  release、Phase 1 或 merge PASS。
+- 执行前必须仅处理本任务可证明的临时残留，创建唯一 Acceptance 根
+  `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6`，并物理隔离
+  `data-root`、`vault`、`source-fixture`、`evidence` 与 `installed-app-backup`。先确认并
+  复制现有 `/Applications/灵机.app` 整包到本任务备份根；禁止卸载、删除主人数据或覆盖旧备份。
+  回滚只能把该轮备份整包恢复到 `/Applications/灵机.app`，失败证据与备份不得静默丢失。
+- 本机必须运行既有 Desktop focused/build 与 macOS release smoke，使用 exact SHA 构建
+  `aarch64-apple-darwin` Tauri `.app`（DMG 若失败但 `.app`、main/sidecar arm64、strict
+  codesign 成功，记录 `DMG_FAIL_APP_INSTALL_CONTINUED` 后继续整包替换）。必须核对主程序、
+  sidecar、bundle 架构、`codesign --verify --deep --strict`、签名身份和候选 SHA；禁止修改产品代码。
+- Acceptance source fixture 至少有可读的 current、superseded、stale、conflict、raw/vector/
+  permanent 记忆以及一个真实 pending action，并经认证 `127.0.0.1:8766` sidecar 读取；记录
+  Desktop/sidecar PID、8766 loopback ping、DataRoot/Vault/source 路径与 Production/Vault
+  pollution 计数（目标 0）。不得访问主人真实聊天、真实 Vault、真实数据库或凭证。
+- 根代理负责真实发布版 UI 的四项普通菜单、技术诊断折叠入口、所有可见 enabled 控件、动作
+  后端状态、1024/常规窗口、菜单/快捷键/Dock 重开和主人观察；本机准备代理不得替根代理点击，
+  不得关闭 App/sidecar/8766，不得清理 Acceptance fixture，直到主人明确 PASS/FAIL。
+- 必跑自动门禁：`npm run test:macos-release`、`npm run test:owner-ui-menu-fast-track`、
+  `npm run test:e2e:memory`、`npm run test:smoke`、`npm run build`、对应 Python focused/
+  `compileall`、`git diff --check`、`python3 scripts/check_acceptance_sync.py`、
+  `python3 scripts/check_local_execution_handoff.py`；完整 UI 真实观察不由自动 smoke 代替。
+- 报告：详细记录写入
+  `.superpowers/sdd/2026-08-30-owner-ui-menu-fast-track/task-2-report.md`，同步
+  `LOCAL_EXECUTION_RESULT.md`、`PROJECT_STATUS.md` 与本条；最终只能报告候选技术事实及
+  `PASS/FAIL/BLOCKED/NOT_TESTED`，不能替主人宣称体验通过。
+
 ## 2026-08-30 · Task 1 Repair Round 2 · Trusted completed-scan aggregate
 
 - 基线：`81c813364985a223ce777592649154bbe9778580`；本轮产品/测试提交：`a8cfcae`。

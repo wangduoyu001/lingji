@@ -1,8 +1,59 @@
 # LingJi 本机执行任务单
 
-> **当前状态：IDLE / NO ACTIVE LOCAL TASK。**
+> **当前状态：ACTIVE / OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6。**
 >
-> `PR88-M5-OWNER-WORKBENCH-V4-BD1E7A17` 已在真实 M5 上完成，最终结论为 `FAIL / DO NOT MERGE`。本文件仍是本机 Codex 的唯一任务入口；`status: IDLE` 时不得下载、安装、启动或重跑任何 Artifact，也不得从历史报告自行推断下一任务。
+> 本文件仍是本机 Codex 的唯一任务入口；只允许执行下方 `status: ACTIVE` 的精确候选。
+
+## 0. 当前唯一 ACTIVE 任务
+
+```yaml
+task_id: OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6
+status: ACTIVE
+execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
+candidate_label: OWNER_UI_EXPERIENCE_CANDIDATE
+release_gate: NOT_A_RELEASE_GATE
+repository: wangduoyu001/lingji
+product_pr: NONE_NOT_A_RELEASE_GATE
+product_branch: codex/owner-real-history-memory-cards
+product_commit: 6baf4ee6d15256e44164bcbe3f7ce227af0b5d07
+artifact_name: lingji-local-macos-arm64-tauri
+artifact_id: LOCAL_TAURI_BUILD_6BAF4EE6
+artifact_workflow_run_id: LOCAL_ONLY_NOT_CI
+artifact_zip_sha256: PENDING
+dmg_sha256: PENDING
+report_branch: acceptance/owner-ui-menu-fast-track-task-2-6baf4ee6
+report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_EXPERIENCE_ONLY_6baf4ee6.md
+public_summary_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_6baf4ee6.json
+public_hashes_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_6baf4ee6.txt
+result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
+acceptance_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6
+acceptance_data_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6/data-root
+acceptance_vault_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6/vault
+acceptance_source_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6/source-fixture
+acceptance_backup_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6/installed-app-backup
+acceptance_evidence_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6/evidence
+production_roots_untouched: true
+backup_before_install_required: true
+whole_bundle_replace_required: true
+rollback: restore the pre-install whole /Applications/灵机.app bundle from acceptance_backup_root only; never delete or overwrite an existing backup
+cleanup_before_required: true
+cleanup_after_required: true
+remote_verification_required: true
+owner_confirmation_required: true
+product_code_changes_forbidden: true
+secret_export_count_required: 0
+production_pollution_count_required: 0
+quality_gate: MEASURED_FAIL_NOT_RELEASE_READY_DEFERRED
+keep_app_and_sidecar_open_for_owner: true
+```
+
+本任务只负责 macOS arm64 Tauri 构建、严格签名核验、现有安装包整包备份/替换、Acceptance
+物理隔离、认证 `127.0.0.1:8766` sidecar 健康证明和交接准备。必须覆盖 current、superseded、
+stale、conflict、raw/vector/permanent 记忆与至少一个真实 pending action；Production、主人
+真实聊天、真实 Vault、正式记忆、用户配置和未知进程均不得读取或修改。根代理负责 Computer
+Use 全部 UI/菜单/窗口遍历和主人观察；本任务不得替主人宣布 PASS，不得宣称 release、Phase 1
+或 merge 通过。遇到 DMG 失败但 `.app`、arm64 和 strict codesign 均成功时，记录失败并继续
+whole-bundle 安装；其他真实 blocker 立即停止并报告。
 
 ## 1. 最近一次任务
 
