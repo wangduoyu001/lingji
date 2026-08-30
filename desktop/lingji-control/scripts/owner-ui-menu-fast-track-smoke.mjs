@@ -52,6 +52,7 @@ const scan = {
   counts_present: ["queued", "reused"],
   updated_at: "2026-08-28T08:03:00Z",
 };
+const scanRunning = { ...scan, scan_id: "scan-running", source_id: "source-other", status: "running", progress: 1, total: 4 };
 const card = {
   memory_id: "memory-card-1",
   kind: "memory",
@@ -115,9 +116,9 @@ try {
     if (url.pathname === "/api/overview") return fulfill(route, { health: { status: "healthy" }, memory_runtime: { state: "healthy", as_of: "2026-08-28T08:03:00Z" }, queue: { stats: {} } });
     if (url.pathname === "/api/automatic-memory/discovered") return fulfill(route, [discovered, detectedOnly]);
     if (url.pathname === "/api/automatic-memory/sources") return fulfill(route, [source]);
-    if (url.pathname === "/api/automatic-memory/scans") return fulfill(route, [{ ...scan, status: state.scanRequests ? "running" : scan.status }]);
+    if (url.pathname === "/api/automatic-memory/scans") return fulfill(route, state.scanRequests ? [{ ...scan, status: "running" }, { ...scanRunning }] : [scan, scanRunning]);
     if (url.pathname === "/api/automatic-memory/scans/scan-codex") return fulfill(route, { ...scan, status: "failed", last_error: "fixture failure: /private/secret" });
-    if (url.pathname === "/api/automatic-memory/summary") return fulfill(route, { counts: { completed: 1 }, total: 1, latest: scan, progress: { current: 1, total: 2 }, next_action: "wait" });
+    if (url.pathname === "/api/automatic-memory/summary") return fulfill(route, { counts: { completed: 3, running: 1, failed: 1 }, total: 5, latest: scan, progress: { current: 1, total: 2 }, next_action: "wait" });
     if (url.pathname === "/api/automatic-memory/runtime") return fulfill(route, { state: "running", running: true, paused: false, automation_mode: "periodic_reconciliation", event_watcher_enabled: false, next_reconciliation_seconds: 900 });
     if (url.pathname === "/api/automatic-memory/scan" && request.method() === "POST") { state.scanRequests += 1; return fulfill(route, { ...scan, status: "running" }); }
     if (url.pathname === "/api/automatic-memory/pause" && request.method() === "POST" && state.pauseFailure) return fulfill(route, { detail: { code: "PAUSE_FAILED", message: "raw backend detail /private/secret" } }, 503);
@@ -178,8 +179,9 @@ try {
   await page.getByRole("heading", { name: "选择灵机要记住的内容", exact: true }).waitFor();
   const sourceCard = page.locator('[data-source-kind="codex_rollout"]');
   const sourceSummary = await page.locator(".memory-sources-summary").innerText();
-  for (const phrase of ["发现 2 个来源", "已授权 1 个", "已接管 1 个", "已完成检查 1 次"]) assert.ok(sourceSummary.includes(phrase), `source aggregate must show ${phrase}`);
+  for (const phrase of ["发现 2 个来源", "已授权 1 个", "已接管 1 个", "已完成检查 3 次"]) assert.ok(sourceSummary.includes(phrase), `source aggregate must show ${phrase}`);
   assert.ok(sourceSummary.includes("发现 2 个来源") && sourceSummary.includes("已接管 1 个"), "detection and takeover counts must stay distinct");
+  assert.equal(sourceSummary.includes("已完成检查 2 次"), false, "completed aggregate must not use the truncated mixed-status scan list length");
   await sourceCard.getByText("文件数：2", { exact: true }).waitFor();
   await sourceCard.getByText("占用空间：2048 字节", { exact: true }).waitFor();
   assert.equal((await sourceCard.locator(".memory-source-metadata").innerText()).includes("/safe/fixture"), false, "source truth must not expose a filesystem path");

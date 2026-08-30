@@ -454,8 +454,9 @@ try {
   await page.locator(".memory-sources-intro").getByRole("button", { name: "现在检查", exact: true }).click();
   await page.locator('[data-source-kind="codex_rollout"]').getByText("文件数：2", { exact: true }).waitFor();
   const allStatesSourceSummary = await page.locator(".memory-sources-summary").innerText();
-  for (const phrase of ["发现 17 个来源", "已授权 12 个", "已接管 1 个", "已完成检查 4 次"]) assert.ok(allStatesSourceSummary.includes(phrase), `source aggregate must show ${phrase}`);
+  for (const phrase of ["发现 17 个来源", "已授权 12 个", "已接管 1 个", "已完成检查 1 次"]) assert.ok(allStatesSourceSummary.includes(phrase), `source aggregate must show ${phrase}`);
   assert.ok(allStatesSourceSummary.includes("发现 17 个来源") && allStatesSourceSummary.includes("已接管 1 个"), "source detection and takeover counts must remain distinct");
+  assert.equal(allStatesSourceSummary.includes("已完成检查 4 次"), false, "completed aggregate must ignore running, failed, and paused scan records");
   const codexCardAfterRestore = page.locator('[data-source-kind="codex_rollout"]');
   await codexCardAfterRestore.getByRole("button", { name: "允许接管 Codex", exact: true }).click();
   const authorizePayload = await (await fetch(`http://127.0.0.1:${apiPort}/__test/authorize-payload`, { headers: { "X-LingJi-Token": "fixture-token" } })).json();

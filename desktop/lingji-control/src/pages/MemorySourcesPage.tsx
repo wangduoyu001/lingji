@@ -137,7 +137,7 @@ function sourceSummary(snapshot: MemorySourcesSnapshot): string {
   const discoveredCount = countLabel(Array.isArray(snapshot.discovered) ? snapshot.discovered.length : undefined);
   const authorizedCount = countLabel(Array.isArray(snapshot.authorized) ? snapshot.authorized.length : undefined);
   const takenOverCount = countLabel(Array.isArray(snapshot.sources) ? sources.filter((item) => item.state === "current").length : undefined);
-  const scanCount = countLabel(Array.isArray(snapshot.scans) ? snapshot.scans.length : undefined);
+  const scanCount = countLabel(snapshot.summary?.counts?.completed);
   const current = sources.filter((item) => item.state === "current").map(ownerSourceName);
   const counts = `发现 ${discoveredCount} 个来源 · 已授权 ${authorizedCount} 个 · 已接管 ${takenOverCount} 个 · 已完成检查 ${scanCount} 次。`;
   if (current.length) return `${counts}正在记住：${current.join("、")}。`;
