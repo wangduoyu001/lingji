@@ -1,5 +1,20 @@
 # 验收要求变更记录
 
+## 2026-09-01 · Owner memory detail drilldown · Release gate activation
+
+- 本轮唯一 ACTIVE 本机任务为 `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE`，执行模式
+  `RELEASE_VALIDATION_ONLY`；候选固定为当前 HEAD `4f0d2a7738c6cba12d0766cb7ed6b38cbd32e543`，
+  产品/测试代码提交为 `81256c4242a6bb8062f1b591832a3313948e9ff9`。本轮不修改产品代码、不创建或安装
+  Artifact、不启动 Desktop/sidecar、不接触 live 8766/8767、Production/Vault、真实聊天/数据库或主人数据。
+- `scripts/validate.ps1 -Mode release` 自含 full；不得单独重复运行 `-Mode full`。当前 Mac 无系统
+  `pwsh`，仅允许在全新 `/tmp/LingJiAcceptance/owner-memory-detail-release-gate/tooling` 隔离根下载并记录微软
+  官方 PowerShell GitHub release 的 arm64 macOS portable tar.gz URL、版本和 SHA256，使用解压后的真实
+  `pwsh` 执行，禁止全局安装、修改 PATH 或 Python 冒充 PowerShell。
+- 执行前仅清理本轮新临时根/可证明残留 validation 进程并精确核查 8766/8767；执行后必须无服务监听。无论
+  PASS/FAIL 均只读取 `output/validation/latest-summary.json|md` 和失败日志尾部。已知
+  `automatic-memory-4r2-readiness` 为 `MEASURED_FAIL`，若 release 被其阻断必须如实记录为 FAIL/BLOCKED，
+  不得写 PASS。报告：`docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_GATE.md`。
+
 ## 2026-09-01 · Owner memory detail drilldown · Final Repair 3
 
 - 产品/测试提交：`81256c4242a6bb8062f1b591832a3313948e9ff9`。本轮仅收口 provenance sanitizer 的敏感键和 malformed URI 边界：正则由现有 sensitive reference/query token 集合统一生成，覆盖大小写、空白、`:`/`=` 与空值形态（含 `auth_metadata/session/signature/sig`），`urlsplit` 对坏 URI 失败关闭；普通 `关于 Cookie 设置的讨论` 保持可见。

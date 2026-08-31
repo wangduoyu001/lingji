@@ -1,8 +1,70 @@
 # LingJi 本机执行任务单
 
-> **当前状态：IDLE（最近 focused 任务 `OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION` 已完成收口）。**
+> **当前状态：ACTIVE（`OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE`）。**
 >
-> 本文件仍是本机 Codex 的唯一任务入口；当前没有 `status: ACTIVE` 任务。
+> 本文件仍是本机 Codex 的唯一任务入口；本轮只允许执行下方第 0 节的 release gate。
+
+## 0. 当前唯一 ACTIVE 任务
+
+```yaml
+task_id: OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE
+status: ACTIVE
+execution_mode: RELEASE_VALIDATION_ONLY
+candidate_label: OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_CANDIDATE_4F0D2A77
+release_gate: RELEASE_INCLUDES_FULL
+repository: wangduoyu001/lingji
+product_pr: NONE_NOT_A_RELEASE_GATE
+product_branch: codex/owner-memory-detail-drilldown
+product_commit: 4f0d2a7738c6cba12d0766cb7ed6b38cbd32e543
+product_tests_commit: 81256c4242a6bb8062f1b591832a3313948e9ff9
+artifact_name: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+artifact_id: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+artifact_workflow_run_id: LOCAL_ONLY_RELEASE_VALIDATION
+artifact_zip_sha256: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+dmg_sha256: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+report_branch: acceptance/owner-memory-detail-drilldown-release-gate-4f0d2a77
+report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_GATE.md
+public_summary_path: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+public_hashes_path: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
+acceptance_root: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+acceptance_data_root: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+acceptance_vault_root: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+acceptance_source_root: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+acceptance_backup_root: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+acceptance_evidence_root: /tmp/LingJiAcceptance/owner-memory-detail-release-gate
+production_roots_untouched: true
+backup_before_install_required: false
+whole_bundle_replace_required: false
+rollback: no installation or runtime mutation is permitted
+cleanup_before_required: true
+cleanup_after_required: true
+remote_verification_required: true
+owner_confirmation_required: true
+product_code_changes_forbidden: true
+secret_export_count_required: 0
+production_pollution_count_required: 0
+live_8766_8767_forbidden: true
+install_forbidden: true
+owner_data_forbidden: true
+full_is_included_by_release: true
+duplicate_full_run_forbidden: true
+power_shell_scope: isolated portable arm64 macOS tar.gz under acceptance_evidence_root/tooling
+python_command: python3
+keep_app_and_sidecar_open_for_owner: false
+owner_observation_required: false
+preserve_old_failed_evidence: true
+quality_gate: automatic-memory-4r2-readiness MEASURED_FAIL; release must not be reported PASS if blocked
+```
+
+本轮是纯 release validation gate：候选固定为当前 HEAD `4f0d2a7738c6cba12d0766cb7ed6b38cbd32e543`，产品/测试代码提交为
+`81256c4242a6bb8062f1b591832a3313948e9ff9`，不修改产品代码，不创建 Artifact，不安装，不启动 Desktop/sidecar，
+不接触 live 8766/8767、Production/Vault、真实聊天/数据库或主人数据。`scripts/validate.ps1 -Mode release` 自含
+full，不得另行重复运行 `-Mode full`。由于当前 Mac 没有系统 `pwsh`，只能在新的隔离临时根下载并记录微软官方
+PowerShell GitHub release 的 arm64 macOS portable tar.gz URL、版本和 SHA256，解压后以该绝对路径执行真实
+PowerShell；不得全局安装、修改系统 PATH 或用 Python 冒充 PowerShell。执行后必须确认无服务监听，并只读取
+`output/validation/latest-summary.json|md` 与失败日志尾部；automatic-memory-4r2-readiness 已知 measured fail
+时必须如实记录 release 阻断，不得写 PASS。
 
 ## 0. 最近收口任务（当前无 ACTIVE 任务）
 

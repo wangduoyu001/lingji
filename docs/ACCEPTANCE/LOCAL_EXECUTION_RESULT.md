@@ -1,13 +1,46 @@
 # LingJi 本机执行结果回执
 
-> 最近任务已收口：`OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION`（focused implementation complete）。
-> 本轮仅执行 focused/product implementation，基线为
-> `94461d56c64f31e1af6c7cdece51e959ddc0e8b1`，未启动 live 8766/8767、未 package/install 候选、
-> 未读取真实聊天/Vault/数据库或操作主人数据。下方旧任务回执仅作历史记录。
+> 当前任务 `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE` 正在执行；下方第 0 节是本轮唯一权威回执。
+> 本轮仅执行隔离的真实 PowerShell `scripts/validate.ps1 -Mode release`，不启动 live 8766/8767、
+> 不 package/install、不读取真实聊天/Vault/数据库或主人数据。下方旧任务回执仅作历史记录。
 
 Prior candidate `43009a0dfdf3cd7b949d871cc9054286f17d607e` is explicitly
 recorded as `OWNER_UI_REPAIR_REQUIRED` for raw source titles/English error and
 duplicate macOS lexical-alias source cards; it is not a PASS result.
+
+## 0. 当前任务回执
+
+```yaml
+task_id: OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE
+status: RUNNING
+verdict: PENDING
+execution_mode: RELEASE_VALIDATION_ONLY
+repository: wangduoyu001/lingji
+product_pr: NONE_NOT_A_RELEASE_GATE
+product_commit: 4f0d2a7738c6cba12d0766cb7ed6b38cbd32e543
+product_tests_commit: 81256c4242a6bb8062f1b591832a3313948e9ff9
+task_instruction_commit: PENDING
+report_branch: acceptance/owner-memory-detail-drilldown-release-gate-4f0d2a77
+report_commit: PENDING
+report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_GATE.md
+public_summary_path: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+public_hashes_path: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+cleanup_before: PASS
+cleanup_after: PENDING
+remote_branch_verified: false
+remote_commit_verified: false
+remote_report_verified: false
+remote_result_verified: false
+pr_comment_verified: false
+local_temp_root_absent: PENDING
+owner_observation: NOT_REQUIRED
+started_at: PENDING
+finished_at: PENDING
+```
+
+本回执中的 `task_instruction_commit` 在任务激活文档提交后回填；release validation 无 Artifact、安装、主人观察或
+远程 PR 评论，且不得将已知 `automatic-memory-4r2-readiness` measured fail 伪装为通过。`release` 自含 `full`，不另跑
+重复的 `full`。
 
 ## 0. 最近收口任务回执（当前无 ACTIVE 任务）
 
