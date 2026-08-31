@@ -160,6 +160,16 @@ The known, unchanged promotion recovery case 06 remains a baseline failure
 was neither modified nor hidden. No live 8766/8767, Desktop, Artifact,
 Acceptance, Production/Vault, real chat, or owner data was accessed.
 
+## Live repair handoff — 2026-08-31
+
+The packaged `43009a0d` candidate was observed with raw Home activity titles
+(`扫描 codex_rollout`, `扫描 chatgpt_history`) and raw unsupported-source
+English, plus duplicate Codex source cards from `/tmp` and `/private/tmp`.
+Candidate `6ea11e491868e227a0c454e87f73ebd92a99b788` contains the bounded
+owner-facing humanization and macOS lexical-alias repair. Focused tests,
+build, rendered E2E and the 23-script smoke suite passed. This is a new
+isolated Mac acceptance candidate, not release or Phase 1 completion evidence.
+
 ## Repair Round 3 (review baseline `2fc6a5b`)
 
 ### RED evidence

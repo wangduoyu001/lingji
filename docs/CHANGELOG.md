@@ -4,6 +4,12 @@
 
 ## 2026-08-31
 
+### Owner 自动记忆成果文案与来源去重修复
+
+- 首页与当前工作区将 Codex、ChatGPT、Obsidian 和其他聊天来源的自动成果显示为主人可读中文，不再暴露内部 source kind 或英文错误。
+- macOS `/tmp`/`/private/tmp` 与 `/var`/`/private/var` 别名合并为同一来源卡片；Windows 路径语义保持不变。
+- 代码与 Desktop smoke/build/E2E 已通过；Mac 主人体验仍待本轮候选验收。
+
 ### Owner 记忆体验重设计
 
 - 普通导航收敛为首页、记忆内容、需要我、记忆来源四项，并补齐窄窗口无障碍名称。

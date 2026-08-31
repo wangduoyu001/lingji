@@ -1,37 +1,37 @@
 # LingJi 本机执行任务单
 
-> **当前状态：ACTIVE / OWNER_UI_REDESIGN_MAC_43009A0D。**
+> **当前状态：ACTIVE / OWNER_UI_LIVE_REPAIR_MAC_6EA11E4。**
 >
 > 本文件仍是本机 Codex 的唯一任务入口；只允许执行下方 `status: ACTIVE` 的精确候选。
 
 ## 0. 当前唯一 ACTIVE 任务
 
 ```yaml
-task_id: OWNER_UI_REDESIGN_MAC_43009A0D
+task_id: OWNER_UI_LIVE_REPAIR_MAC_6EA11E4
 status: ACTIVE
 execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
-candidate_label: OWNER_UI_REDESIGN_CANDIDATE
+candidate_label: OWNER_UI_LIVE_REPAIR_CANDIDATE
 release_gate: NOT_A_RELEASE_GATE
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 product_branch: codex/owner-real-history-memory-cards
-product_commit: 43009a0dfdf3cd7b949d871cc9054286f17d607e
+product_commit: 6ea11e491868e227a0c454e87f73ebd92a99b788
 artifact_name: lingji-local-macos-arm64-tauri
-artifact_id: LOCAL_TAURI_BUILD_43009A0D
+artifact_id: LOCAL_TAURI_BUILD_6EA11E4
 artifact_workflow_run_id: LOCAL_ONLY_NOT_CI
 artifact_zip_sha256: PENDING
 dmg_sha256: PENDING
-report_branch: acceptance/owner-ui-redesign-43009a0d
-report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_REDESIGN_43009A0D.md
+report_branch: acceptance/owner-ui-live-repair-6ea11e4
+report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_LIVE_REPAIR_6EA11E4.md
 public_summary_path: PENDING
 public_hashes_path: PENDING
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
-acceptance_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0
-acceptance_data_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0/data-root
-acceptance_vault_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0/vault
-acceptance_source_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0/source-fixture
-acceptance_backup_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0/installed-app-backup
-acceptance_evidence_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0/evidence
+acceptance_root: /tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4
+acceptance_data_root: /tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4/data-root
+acceptance_vault_root: /tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4/vault
+acceptance_source_root: /tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4/source-fixture
+acceptance_backup_root: /tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4/installed-app-backup
+acceptance_evidence_root: /tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4/evidence
 production_roots_untouched: true
 backup_before_install_required: true
 whole_bundle_replace_required: true

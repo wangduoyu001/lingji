@@ -3222,3 +3222,10 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - TDD evidence: RED `npm run test:e2e:memory` failed at the page-two assertion (`20 !== 16`); GREEN passed after the bounded product/test repair.
 - Exact validations: `npm run test:owner-ui-menu-fast-track`, `npm run test:e2e:memory`, `npm run test:smoke` (23 scripts), `npm run build` (97 modules), `python3 -m pytest -q tests/test_owner_memory_card_api.py tests/test_owner_memory_card_projector.py` (`30 passed, 1 warning`), and `git diff --check`.
 - Mac owner experience remains pending; this is not a release gate and does not imply Phase 1 or owner PASS.
+
+## 2026-08-31 · Owner UI live repair · product `6ea11e4`
+
+- Live packaged observation of candidate `43009a0d` found `OWNER_UI_REPAIR_REQUIRED`: Home recent automatic outcomes exposed raw titles (`扫描 codex_rollout`, `扫描 chatgpt_history`) and the raw English unsupported-source error; Memory Sources rendered duplicate Codex cards because `/tmp` and `/private/tmp` lexical aliases were treated as distinct.
+- Repair commit `6ea11e491868e227a0c454e87f73ebd92a99b788` humanizes owner-facing automatic activity through shared presentation helpers and canonicalizes only macOS `/tmp`/`/private/tmp` and `/var`/`/private/var` aliases. No backend, data model, feature, live app, or acceptance data changes.
+- TDD RED covered missing title helper and distinct alias keys; GREEN: `npm run test:work-fact`, `npm run test:memory-sources`, `npm run build`, `npm run test:owner-ui-menu-fast-track`, `npm run test:e2e:memory`, `npm run test:smoke` (23 scripts), and `git diff --check` all PASS.
+- New macOS candidate is activated for isolated rebuild/owner observation only; not release-ready and not a Phase 1 gate.
