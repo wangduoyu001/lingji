@@ -10,7 +10,7 @@ Merge recommendation: DO NOT MERGE
 Product commit: 4ce1e00acb17bc5e4e4c183f58d30551ef76b101
 Artifact: local macOS arm64 Tauri application rebuilt from the exact product commit
 Artifact ID: LOCAL_ONLY_NOT_CI
-Report commit: PENDING_CLOSEOUT_COMMIT
+Report commit: 33b1d83e3446a57ee503043b8f25ee86a940b63b
 Release gate: NOT_A_RELEASE_GATE
 Quality: MEASURED_FAIL / NOT_RELEASE_READY
 Owner observation: OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED
@@ -398,5 +398,5 @@ Codex executor: root-agent + Luna acceptance report agent
 Owner confirmation: FAIL — OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED
 Acceptance date: 2026-08-31
 Report branch: acceptance/owner-ui-source-filter-repair-4ce1e00a
-Report commit: PENDING_CLOSEOUT_COMMIT
+Report commit: 33b1d83e3446a57ee503043b8f25ee86a940b63b
 ```

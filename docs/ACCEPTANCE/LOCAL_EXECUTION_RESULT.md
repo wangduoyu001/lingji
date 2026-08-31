@@ -27,7 +27,7 @@ product_pr: NONE_NOT_A_RELEASE_GATE
 product_commit: 4ce1e00acb17bc5e4e4c183f58d30551ef76b101
 task_instruction_commit: 8bc1bce20636135018df302ab931cb37707d6376
 report_branch: acceptance/owner-ui-source-filter-repair-4ce1e00a
-report_commit: PENDING_CLOSEOUT_COMMIT
+report_commit: 33b1d83e3446a57ee503043b8f25ee86a940b63b
 report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A.md
 public_summary_path: docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_SUMMARY.json
 public_hashes_path: docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_HASHES.txt
