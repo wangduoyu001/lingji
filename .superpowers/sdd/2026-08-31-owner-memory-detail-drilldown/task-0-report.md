@@ -9,7 +9,7 @@ base_branch: codex/owner-real-history-memory-cards
 base_commit: 94461d56c64f31e1af6c7cde51e959ddc0e8b1
 product_code_baseline: 4ce1e00acb17bc5e4e4c183f58d30551ef76b101
 scope: planning/docs-only
-plan_tasks: 9
+plan_tasks: 4 (3 implementation + 1 closeout)
 implementation_commit: not created in Task 0
 ```
 
@@ -47,3 +47,22 @@ acceptance 交接。计划固定了接口名称、字段、RED/GREEN 命令和�
 提交前运行并记录：`git diff --check`、`python3 scripts/check_acceptance_sync.py`、
 `python3 scripts/check_local_execution_handoff.py`。本报告所在 docs-only 提交的 SHA 由最终 Git
 提交返回值确定，并随交接消息回传。
+
+## Plan Repair 1
+
+根代理预检指出原计划过度拆分并混入接口冲突，已在同一 worktree 收束修订：
+
+- 计划从 9 个任务改为 3 个实现任务 + 1 个收口任务，共 4 个任务。
+- 删除 `get_memory_detail()` 及把 card conclusion/freshness/layers/action 混入
+  `/memories/{id}` 的设计；Desktop 明确组合 `/cards/{id}`、bounded `/memories/{id}`、`/vector`、
+  `/source` 与唯一 evidence route。
+- evidence route 固定默认 20、最大 50、excerpt<=240、content<=4000、单页 content<=24000，
+  带 `truncated`；完整单条正文继续走 `/messages/{id}`。
+- conversation-only 由前端依据 card kind/source conversation_id 处理，不调用 canonical；安全测试
+  改为未授权/撤销来源正文不泄漏、safe refs only、绝对路径/cookie/auth metadata 不出现。
+- `.superpowers` 报告保持 ignored，不列为 git add 目标；正式 report 路径固定在 `docs/TEST_REPORTS/`。
+
+本轮未运行产品测试、live 服务、安装、Artifact 或主人数据，仅执行文档自检与治理门禁。
+
+Plan Repair 1 的 docs-only 修订提交为 `b03857fdd84675bf144b4ae8f240ecc0fe5d6471`；报告文件按
+`.superpowers` ignored-workspace 规则保留在本机，不作为该提交的 git add 目标。
