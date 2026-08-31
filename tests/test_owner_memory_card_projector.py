@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.gateway.owner_memory_cards import OwnerMemoryCard, OwnerMemoryCardProjector
+from src.retrieval.memory_db import MemoryDatabase
 
 
 class FixtureDatabase:
@@ -166,6 +167,66 @@ class MessageFixtureSources(FixtureSources):
 
     def list_messages(self, **kwargs):
         return {"items": [], "pagination": {"total": 0}}
+
+
+class SqliteConclusionSources(FixtureSources):
+    def memory_sources(self, memory_id, **kwargs):
+        return {"links": [{"message_id": "msg-conclusion", "content_preview": "已核对的证据", "content_hash": "hash-msg-conclusion"}]}
+
+
+class SqliteNoEvidenceSources(SqliteConclusionSources):
+    def memory_sources(self, memory_id, **kwargs):
+        return {"links": []}
+
+
+@pytest.mark.parametrize("field", ["conclusion", "current_conclusion", "summary"])
+@pytest.mark.parametrize("entry_value,property_value,expected", [
+    ("entry conclusion", "property conclusion", "entry conclusion"),
+    (None, "property conclusion", "property conclusion"),
+])
+def test_sqlite_roundtrip_preserves_owner_conclusion_with_verified_evidence(
+    tmp_path, field, entry_value, property_value, expected
+):
+    note = tmp_path / "03-Knowledge" / "conclusion.md"
+    note.parent.mkdir()
+    note.write_text("# Conclusion\n\n正文证据。\n", encoding="utf-8")
+    properties = {
+        "memory_tier": "derived",
+        "valid_from": "2026-01-01T00:00:00Z",
+        field: property_value,
+    }
+    entry = {
+        "id": "sqlite-conclusion",
+        "relative_path": "03-Knowledge/conclusion.md",
+        "title": "Conclusion",
+        "memory_type": "knowledge",
+        "memory_tier": "derived",
+        "status": "active",
+        "review_status": "approved",
+        "privacy": "private",
+        "confidence": "0.96",
+        "valid_from": "2026-01-01T00:00:00Z",
+        "content_hash": "hash-conclusion",
+        "source_id": "src-codex",
+        "evidence_refs": [{"kind": "message", "value": "msg-conclusion", "content_hash": "hash-msg-conclusion"}],
+        "properties": properties,
+    }
+    if entry_value is not None:
+        entry[field] = entry_value
+
+    database = MemoryDatabase(tmp_path / "memory.db")
+    database.upsert_from_entry(entry, note)
+    stored = database.list_documents()[0]
+    assert stored["relationships"][field] == expected
+    projector = OwnerMemoryCardProjector(database, SqliteConclusionSources(), FixtureStatistics())
+    listed = next(item for item in projector.list_cards(limit=20)["items"] if item["memory_id"] == "sqlite-conclusion")
+    detailed = projector.get_card("sqlite-conclusion")["item"]
+    assert listed["conclusion"] == expected
+    assert detailed["conclusion"] == expected
+    assert listed["conclusion"] == detailed["conclusion"]
+
+    no_evidence = OwnerMemoryCardProjector(database, SqliteNoEvidenceSources(), FixtureStatistics())
+    assert no_evidence.get_card("sqlite-conclusion")["item"]["conclusion"] is None
 
 
 class FalseSemantic:

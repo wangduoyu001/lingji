@@ -840,6 +840,7 @@ class MemoryDatabase:
             "authority", "evidence_refs", "supersession_reason", "invalidating_reason", "supersedes",
             "created_by", "confirmed_by", "policy_version", "extractor_version",
             "conflict_key", "topic_key", "decision_key",
+            "conclusion", "current_conclusion", "summary",
             "structured_source_type", "source_id", "source_external_id", "source_status",
             "automatic_memory_source_id",
             "conversation_id", "conversation_external_id", "message_id",
