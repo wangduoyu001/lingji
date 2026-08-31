@@ -1,5 +1,11 @@
 # 验收要求变更记录
 
+## 2026-08-31 · Owner memory detail drilldown · Final Repair 2
+
+- 产品/测试提交：`f1bb64c0fe9bfec99061e030df7c4aeb30e945ab`。本轮仅收口 I-3 provenance label 安全：来源显示名/会话标题做空白归一化与 `<=160` 限制，拒绝绝对/Windows/UNC/URI/穿越/编码路径、JSON object/array、控制字符和敏感键值形态；`source_type` 只接受既有短 enum，异常值 fail-closed 并由前端显示人话 fallback。普通自然语言 `关于 Cookie 设置的讨论` 保留。
+- TDD RED 为 adversarial backend contract 在 `/Users/owner/secret.json` 上暴露不安全标签；GREEN 为相关 Python `90 passed`、owner smoke、必要 `test:e2e:memory`、build、compileall、diff-check。live/package/install/Mac/owner observation 保持 `NOT_TESTED`；无新增 endpoint、数据库、菜单或删除动作。
+- 报告：`.superpowers/sdd/2026-08-31-owner-memory-detail-drilldown/final-repair-2-report.md`。`check_local_execution_handoff.py` 与进程清理检查通过。
+
 ## 2026-08-31 · Owner memory detail drilldown · Final Repair 1
 
 - 产品/测试提交：`15418442c8c50995b84d4d9c6c69a312da404962`。本轮仅收口 final review I-1/I-2/I-3/M-1：初始来源 503 的“重试读取来源”会重新请求有界 `limit=20&offset=0`；正文 503 提供“重试读取正文”并复用选中详情读取，保留主人草稿与 selected-generation/abort 防护；来源证据每行携带已授权可见来源的安全 `source_label/source_type/conversation_title`，前端按行渲染，不暴露路径、raw ID、JSON 或内部枚举文案。
