@@ -309,6 +309,39 @@ def test_evidence_raw_reference_rejects_sensitive_json_and_absolute_values():
         assert items["m-01"]["raw_reference"] == ""
         assert items["m-02"]["raw_reference"] == ""
         assert items["m-03"]["raw_reference"] == ""
+        for message_id, raw_reference in {
+            "m-04": "raw:C:/Users/owner/private.json",
+            "m-05": r"vault:c:\Users\owner\private.json",
+            "m-06": "raw://server/share/private.json",
+            "m-07": r"vault:\\server\share\private.json",
+            "m-01": "file:///C:/Users/owner/private.json",
+            "m-02": "vault:file%3A%2F%2FC%3A%2FUsers%2Fowner%2Fprivate.json",
+        }.items():
+            with read_model._connection() as connection:
+                connection.execute(
+                    "UPDATE message_records SET raw_reference = ? WHERE message_id = ?",
+                    (raw_reference, message_id),
+                )
+            path_items = {
+                item["message_id"]: item
+                for item in facade.list_memory_evidence("memory-1", limit=50)["items"]
+            }
+            assert path_items[message_id]["raw_reference"] == ""
+        with read_model._connection() as connection:
+            connection.execute(
+                "UPDATE message_records SET raw_reference = ? WHERE message_id = ?",
+                ("raw:relative/path.json", "m-01"),
+            )
+            connection.execute(
+                "UPDATE message_records SET raw_reference = ? WHERE message_id = ?",
+                ("vault:folder/note.md", "m-02"),
+            )
+        legal_items = {
+            item["message_id"]: item
+            for item in facade.list_memory_evidence("memory-1", limit=50)["items"]
+        }
+        assert legal_items["m-01"]["raw_reference"] == "raw:relative/path.json"
+        assert legal_items["m-02"]["raw_reference"] == "vault:folder/note.md"
         serialized = str(items)
         assert "SECRET" not in serialized
         assert "/Users/owner" not in serialized

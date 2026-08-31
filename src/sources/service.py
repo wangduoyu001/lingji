@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, Any
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
 if TYPE_CHECKING:
     from src.gateway.profiles import AIProfileRegistry
@@ -530,10 +530,22 @@ class SourceQueryService:
         if not safe_lowered.startswith(("raw:", "vault:")):
             return None
         _prefix, relative = safe.split(":", 1)
+        relative = unquote(relative)
+        relative_lowered = relative.casefold()
+        if (
+            relative.startswith(("{", "["))
+            or relative.endswith(("}", "]"))
+            or any(token in relative_lowered for token in _SENSITIVE_REFERENCE_TOKENS)
+        ):
+            return None
+        windows_path = PureWindowsPath(relative)
         if (
             not relative
             or relative.startswith(("/", "\\"))
             or "\\" in relative
+            or windows_path.is_absolute()
+            or bool(windows_path.drive)
+            or Path(relative).is_absolute()
             or any(part in {"", ".", ".."} for part in relative.split("/"))
         ):
             return None
