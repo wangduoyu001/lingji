@@ -71,11 +71,12 @@ whole-bundle 安装；其他真实 blocker 立即停止并报告。
 均须只读保留，不得删除、复用或冒充当前候选。新候选使用全新根
 `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`，与全部旧根物理隔离。
 
-本轮合成 seed 固定为 37 张记忆卡（其中 3 张 history）、13 条 permanent、3 个
-conversation、36 条 message，以及仅 1 条 owner high-risk pending action；不得通过
-自动扫描制造 failure pending。至少 8 个主题必须有不同、主人可读的 conclusion，并在证据中
-明确标注 synthetic。discovered 需同时包含 available sessions 与 `not_found` archive；普通
-来源页只断言 1 张 Codex card，found count 必须等于 visible cards。Mac rebuild、full-root
+本轮合成 seed 固定为 37 张 current 记忆卡，另有 3 张 history（普通 current-only 页为
+20+17，history 泄漏为 0）、13 条 permanent、3 个 conversation、36 条 message，以及仅 1 条
+owner high-risk pending action；不得通过自动扫描制造 failure pending。至少 8 个主题必须有不同、
+主人可读的 conclusion，并在证据中明确标注 synthetic。raw discovery 预期 5 个来源，其中 1 个
+为 `not_found` archive；普通 visible source facts/found count 预期为 4 个，其中只有 1 张 Codex
+card；seed 授权完成后 authorized/current 预期为 1。Mac rebuild、full-root
 Computer Use 与主人观察均保持 PENDING，完成后必须保持 app/sidecar 打开等待主人确认。
 
 ## 1. 最近一次任务

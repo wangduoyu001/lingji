@@ -22,7 +22,7 @@ execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 product_commit: 4ce1e00acb17bc5e4e4c183f58d30551ef76b101
-task_instruction_commit: d3bbf9c82e185f846ac8b3349f7e7ee6f786cd39
+task_instruction_commit: 8bc1bce20636135018df302ab931cb37707d6376
 report_branch: acceptance/owner-ui-source-filter-repair-4ce1e00a
 report_commit: PENDING
 report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A.md
@@ -68,10 +68,12 @@ owner_observation_page: PENDING
 
 `6ea11e4` 的真实 Mac 来源页失败证据已保留：discovery 同时返回可用 Codex sessions
 和 `not_found` archived_sessions，但普通页面显示两个同名 Codex cards，并把不存在目录
-描述为已发现；该候选不构成本轮 PASS。新 seed 固定为 37 cards（3 history）、13 permanent、
-3 conversations、36 messages、1 owner high-risk pending action only；至少 8 个 synthetic
-主题使用不同的主人可读 conclusions，不得制造自动扫描 failure pending。普通来源页断言
-available sessions + `not_found` archive 仅产生 1 个 Codex card，found count 与 visible count 一致。
+描述为已发现；该候选不构成本轮 PASS。新 seed 固定为 37 张 current 记忆卡，另有 3 张 history
+（普通 current-only 页 20+17，history 泄漏 0）、13 permanent、3 conversations、36 messages、
+1 owner high-risk pending action only；至少 8 个 synthetic 主题使用不同的主人可读 conclusions，
+不得制造自动扫描 failure pending。raw discovery 预期 5 个来源（含 1 个 `not_found` archive），
+普通 visible source facts/found count 预期 4 个（仅 1 张 Codex card），seed 授权完成后
+authorized/current 预期为 1。
 
 > 最近一次任务已完成。权威结论：`COMPLETED / FAIL / DO NOT MERGE`。
 >
