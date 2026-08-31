@@ -10,7 +10,7 @@
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
-> Current engineering gate: `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE — COMPLETED / FAIL (embedded full blocked; release preflight not reached)`
+> Current engineering gate: `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE — COMPLETED / FAIL`; focused repair Group 1 is complete, full/release has not been rerun
 > Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`

@@ -11,6 +11,11 @@
   `pending_review_count`。
 - 只运行五项失败项及直接相关回归、compile/static/diff/acceptance-sync/handoff；禁止
   full/release/live/Artifact/安装，禁止触碰 Production/Vault/真实聊天/主人数据。
+- 结果：产品/测试提交 `0b35123402dbda57b2ab19896a0b6d95d3cbaefa`。RED 五节点为
+  `4 failed, 1 passed`；GREEN 为 `5 passed`。以上轮隔离 portable PowerShell 所在目录仅注入
+  当次子进程 PATH 的真实 entry-only 验证为 `1 passed`；直接回归为
+  `37 passed, 11 deselected, 2 warnings`。未运行 full/release/live，未安装工具或触碰主人数据。
+  报告：`docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP1.md`。
 
 ## 2026-09-01 · Owner memory detail drilldown · Release gate activation
 

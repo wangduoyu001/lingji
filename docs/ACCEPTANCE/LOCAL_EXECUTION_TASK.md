@@ -1,6 +1,6 @@
 # LingJi 本机执行任务单
 
-> **当前状态：ACTIVE（`OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1`）。**
+> **当前状态：IDLE（`OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1` 已完成 focused 收口）。**
 >
 > 本文件仍是本机 Codex 的唯一任务入口；下方第 0 节是当前唯一可执行的有界修复任务。
 
@@ -8,15 +8,26 @@
 
 ```yaml
 task_id: OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1
-status: ACTIVE
+status: IDLE
 execution_mode: FOCUSED_TEST_AND_ENVIRONMENT_CONTRACT_REPAIR_ONLY
 repository: wangduoyu001/lingji
 product_branch: codex/owner-memory-detail-drilldown
 baseline_commit: b3427d26b6b192461290a167495c8720ff4835f4
+product_commit: 0b35123402dbda57b2ab19896a0b6d95d3cbaefa
+product_pr: NONE_NOT_A_RELEASE_GATE
 release_gate: NOT_A_RELEASE_GATE
 artifact_name: NOT_APPLICABLE
 artifact_id: NOT_APPLICABLE
+report_branch: acceptance/owner-memory-detail-release-full-repair-group1
+report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP1.md
+public_summary_path: NOT_APPLICABLE
+public_hashes_path: NOT_APPLICABLE
+result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
 acceptance_root: NOT_APPLICABLE
+cleanup_before_required: true
+cleanup_after_required: true
+remote_verification_required: true
+owner_confirmation_required: true
 live_8766_8767_forbidden: true
 install_forbidden: true
 owner_data_forbidden: true
@@ -29,6 +40,11 @@ Attention 当前 `/api/work/pending-actions` + `usePollingResource` 契约。禁
 降低安全/业务断言、删除测试或改为 skip；禁止运行 full/release/live、安装工具或读取
 Production/Vault/真实聊天和主人数据。必须先复现 RED，再做最小修复，最后运行五个失败项
 及直接回归、compile/static/diff/acceptance-sync/handoff。
+
+本任务已按范围收口：产品/测试提交为
+`0b35123402dbda57b2ab19896a0b6d95d3cbaefa`。五个指定节点为 `5 passed`；直接回归为
+`37 passed, 11 deselected, 2 warnings`，11 个 deselected 是本组明确不处理的 Task4R stage-exception
+参数矩阵。本结论不表示 full/release 已通过，上轮 release 仍是 `COMPLETED / FAIL`。
 
 ## 0A. 最近 release gate（已收口）
 

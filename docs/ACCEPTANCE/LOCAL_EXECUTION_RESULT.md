@@ -1,8 +1,8 @@
 # LingJi 本机执行结果回执
 
-> 当前任务 `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE` 已收口；下方第 0 节是本轮唯一权威回执。
-> 本轮仅执行隔离的真实 PowerShell `scripts/validate.ps1 -Mode release`，不启动 live 8766/8767、
-> 不 package/install、不读取真实聊天/Vault/数据库或主人数据。下方旧任务回执仅作历史记录。
+> 当前最近任务 `OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1` 已完成 focused 收口；
+> 下方第 0 节是当前回执。本轮未运行 full/release/live/package/install，未读取真实聊天/
+> Vault/数据库或主人数据。下方旧任务回执仅作历史记录。
 
 Prior candidate `43009a0dfdf3cd7b949d871cc9054286f17d607e` is explicitly
 recorded as `OWNER_UI_REPAIR_REQUIRED` for raw source titles/English error and
@@ -11,49 +11,43 @@ duplicate macOS lexical-alias source cards; it is not a PASS result.
 ## 0. 当前任务回执
 
 ```yaml
-task_id: OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE
-status: COMPLETED
-verdict: FAIL
-execution_mode: RELEASE_VALIDATION_ONLY
+task_id: OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1
+status: PENDING
+verdict: PENDING
+execution_mode: FOCUSED_TEST_AND_ENVIRONMENT_CONTRACT_REPAIR_ONLY
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
-product_commit: 4f0d2a7738c6cba12d0766cb7ed6b38cbd32e543
-product_tests_commit: 81256c4242a6bb8062f1b591832a3313948e9ff9
-task_instruction_commit: a8d50b5f2f138cf97333dad8aeac38057965ff1f
-report_branch: acceptance/owner-memory-detail-drilldown-release-gate-4f0d2a77
-report_commit: 4c696f97cb8296ff6117f559232b01390e007e93
-report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_GATE.md
-public_summary_path: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
-public_hashes_path: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
+product_commit: 0b35123402dbda57b2ab19896a0b6d95d3cbaefa
+product_tests_commit: 0b35123402dbda57b2ab19896a0b6d95d3cbaefa
+task_instruction_commit: 6c7834af74d90e6406629a7b04cd4eabe5f2fdf9
+report_branch: acceptance/owner-memory-detail-release-full-repair-group1
+report_commit: PENDING
+report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP1.md
+public_summary_path: NOT_APPLICABLE
+public_hashes_path: NOT_APPLICABLE
 cleanup_before: PASS
 cleanup_after: PASS
-remote_branch_verified: true
-remote_commit_verified: true
-remote_report_verified: true
-remote_result_verified: true
-pr_comment_verified: true
+remote_branch_verified: false
+remote_commit_verified: false
+remote_report_verified: false
+remote_result_verified: false
+pr_comment_verified: false
 local_temp_root_absent: true
 owner_observation: NOT_REQUIRED
-started_at: 2026-08-31T16:48:25Z
-finished_at: 2026-08-31T16:53:03Z
-validated_checkout_head: 33db87612043062cbe336b6cafd684a7f8981ec1
-full_result: FAIL
-release_preflight: NOT_REACHED_BLOCKED_BY_FULL
-release_exit_code: 1
-release_duration_seconds: 278
-python_full_summary: 13 failed, 1622 passed, 11 skipped, 7 warnings
-power_shell_version: 7.6.5
-power_shell_architecture: Arm64
-power_shell_asset_sha256: 8196d4b4e7c21b7f6df9d45687bb4e42dc8335f330b580d9eb15f3ef5042a8c3
-live_8766_8767: FREE_AFTER_RUN
+started_at: PENDING
+finished_at: PENDING
+focused_result: PASS
+focused_summary: 5 passed; direct regression 37 passed, 11 deselected, 2 warnings
+full_result: NOT_RUN
+release_result: NOT_RUN
+live_8766_8767: NOT_RUN
 install_performed: false
 owner_data_touched: false
 production_pollution_count: 0
 ```
 
-本回执中的 `task_instruction_commit` 在任务激活文档提交后回填；release validation 无 Artifact、安装、主人观察或
-远程 PR 评论，且不得将已知 `automatic-memory-4r2-readiness` measured fail 伪装为通过。`release` 自含 `full`，不另跑
-重复的 `full`。
+本 focused 任务无 Artifact、安装、主人观察或远程提交回执，因此远程字段保持 false、
+`report_commit` 保持 `PENDING`。这不改写上轮 release `COMPLETED / FAIL`，也不表示 full/release PASS。
 
 ## 0. 最近收口任务回执（当前无 ACTIVE 任务）
 
