@@ -3229,3 +3229,38 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - Repair commit `6ea11e491868e227a0c454e87f73ebd92a99b788` humanizes owner-facing automatic activity through shared presentation helpers and canonicalizes only macOS `/tmp`/`/private/tmp` and `/var`/`/private/var` aliases. No backend, data model, feature, live app, or acceptance data changes.
 - TDD RED covered missing title helper and distinct alias keys; GREEN: `npm run test:work-fact`, `npm run test:memory-sources`, `npm run build`, `npm run test:owner-ui-menu-fast-track`, `npm run test:e2e:memory`, `npm run test:smoke` (23 scripts), and `git diff --check` all PASS.
 - New macOS candidate is activated for isolated rebuild/owner observation only; not release-ready and not a Phase 1 gate.
+
+## 2026-08-31 · Owner UI source filter + conclusion persistence · product `4ce1e00a`
+
+- Independent final review of `8ec447e06a846c3c3edb345ae979b5ee65fb7379` and
+  `4ce1e00acb17bc5e4e4c183f58d30551ef76b101` is recorded at
+  `.superpowers/sdd/2026-08-30-owner-ui-menu-fast-track/owner-ui-source-conclusion-final-review.md`:
+  `Spec PASS`, `Quality APPROVED`, `Critical 0 / Important 0 / Minor 0`.
+- `not_found` discovery records remain in raw discovery diagnostics but are omitted from ordinary
+  source cards unless a matching authorized lifecycle exists. Available, consent-required and
+  unsupported candidates remain visible; authorized/revoked lifecycle cards survive discovery
+  not-found; the owner found count uses the visible card projection. macOS `/tmp` and `/private/tmp`
+  (and `/var` aliases) remain narrowly canonicalized without changing Windows path semantics.
+- Existing `conclusion`, `current_conclusion` and `summary` are persisted through the existing
+  `memory_documents.relationships_json` projection with entry-over-properties precedence. List and
+  detail share the projector result; conclusion display is gated on verified evidence and remains
+  fail-closed `None` for missing evidence, mismatches or projection faults. No new table, source,
+  queue or architecture boundary was added.
+- Fresh validation: Python owner card API/projector `36 passed, 1 warning`; source smoke PASS;
+  owner UI fast-track PASS; `test:e2e:memory` PASS; full Desktop `test:smoke` PASS (23 scripts);
+  `npm run build` PASS (97 modules, existing Vite dynamic-import warnings); affected compileall and
+  `git diff --check` PASS.
+- The previous `6ea11e4` Mac owner observation remains `OWNER_UI_REPAIR_REQUIRED` evidence: raw
+  discovery returned available Codex sessions plus `not_found` archived sessions, while ordinary UI
+  rendered two same-named Codex cards and described the missing directory as discovered. It remains
+  read-only and must not be reused.
+- New unique ACTIVE task is `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`, exact product commit
+  `4ce1e00acb17bc5e4e4c183f58d30551ef76b101`, acceptance root
+  `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`; result receipt resets to `PENDING` with
+  `acceptance_memory_cards=0`, `acceptance_completed_scans=0`, and `acceptance_pending_actions=0`.
+- New seed requirements: 37 cards with 3 history, 13 permanent, 3 conversations, 36 messages and
+  exactly 1 owner high-risk pending action; at least 8 varied, owner-readable synthetic conclusions;
+  no automatic-scan failure pending may be manufactured. discovered must include available sessions
+  and a not-found archive; ordinary source UI must show exactly 1 Codex card and found count must
+  equal visible count. Mac rebuild and full-root Computer Use remain pending; app/sidecar must stay
+  open for owner confirmation after the rebuild.

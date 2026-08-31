@@ -4,6 +4,12 @@
 
 ## 2026-08-31
 
+### Owner 来源过滤与记忆结论持久化修复
+
+- 未授权且已不存在的来源只保留在原始发现诊断中，不再伪装成普通来源卡片、授权入口或 found count；已授权/撤销生命周期仍可见，macOS `/tmp` 别名去重保持不变。
+- 记忆卡从现有 `memory_documents.relationships_json` 恢复 `conclusion`、`current_conclusion` 和 `summary`，entry 值优先于 properties；证据缺失或异常时继续不显示结论。
+- 相关 Python/来源 smoke、rendered E2E、23 项 Desktop smoke、TypeScript build 与静态编译已通过；新的 macOS 候选重建和主人观察仍待执行。
+
 ### Owner 自动记忆成果文案与来源去重修复
 
 - 首页与当前工作区将 Codex、ChatGPT、Obsidian 和其他聊天来源的自动成果显示为主人可读中文，不再暴露内部 source kind 或英文错误。

@@ -1,9 +1,9 @@
 # LingJi 本机执行结果回执
 
-> 当前任务正在执行：`OWNER_UI_LIVE_REPAIR_MAC_6EA11E4`。
-> 当前候选仅为 `OWNER_UI_LIVE_REPAIR_CANDIDATE`，`NOT_A_RELEASE_GATE`；
-> prior candidates `43009a0d`/`6baf4ee6` 的主人体验结论为 `OWNER_UI_REPAIR_REQUIRED`；
-> 新候选 `6ea11e4` 尚未运行，当前仅等待隔离构建与验收，
+> 当前任务正在执行：`OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`。
+> 当前候选仅为 `OWNER_UI_SOURCE_FILTER_REPAIR_CANDIDATE`，`NOT_A_RELEASE_GATE`；
+> prior candidates `6ea11e4`/`43009a0d`/`6baf4ee6` 的主人体验结论为 `OWNER_UI_REPAIR_REQUIRED`；
+> 新候选 `4ce1e00a` 尚未运行，当前仅等待隔离构建与验收，
 > `MEASURED_FAIL / NOT_RELEASE_READY`
 > 质量事实保持延期。下方旧任务回执仅作历史记录，
 > 不覆盖当前 ACTIVE 任务。
@@ -15,17 +15,17 @@ duplicate macOS lexical-alias source cards; it is not a PASS result.
 ## 0. 当前 ACTIVE 任务回执
 
 ```yaml
-task_id: OWNER_UI_LIVE_REPAIR_MAC_6EA11E4
+task_id: OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A
 status: PENDING
 verdict: PENDING
 execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
-product_commit: 6ea11e491868e227a0c454e87f73ebd92a99b788
+product_commit: 4ce1e00acb17bc5e4e4c183f58d30551ef76b101
 task_instruction_commit: d3bbf9c82e185f846ac8b3349f7e7ee6f786cd39
-report_branch: acceptance/owner-ui-live-repair-6ea11e4
+report_branch: acceptance/owner-ui-source-filter-repair-4ce1e00a
 report_commit: PENDING
-report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_LIVE_REPAIR_6EA11E4.md
+report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A.md
 public_summary_path: PENDING
 public_hashes_path: PENDING
 cleanup_before: PENDING
@@ -46,8 +46,8 @@ dmg_sha256: PENDING
 desktop_pid: 0
 sidecar_pid: 0
 control_api_ping: PENDING
-acceptance_root: /tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4
-acceptance_effective_data_root: /tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4/data-root/acceptance
+acceptance_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a
+acceptance_effective_data_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a/data-root/acceptance
 acceptance_memory_cards: 0
 acceptance_completed_scans: 0
 acceptance_pending_actions: 0
@@ -56,7 +56,7 @@ vault_pollution_count: 0
 owner_observation_page: PENDING
 ```
 
-当前 Acceptance 根目录为 `/tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4`，尚未运行；
+当前 Acceptance 根目录为 `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`，尚未运行；
 其 DataRoot、Vault、source fixture、evidence 与整包安装备份将在执行时物理分离。旧根
 `/tmp/LingJiAcceptance/owner-ui-redesign-43009a0`、`/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6`
 和 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b` 及其 backup/evidence/DB/logs
@@ -64,7 +64,14 @@ owner_observation_page: PENDING
 
 旧候选 `OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6` 与 `OWNER_UI_REDESIGN_MAC_43009A0D` 的
 `OWNER_UI_REPAIR_REQUIRED` 失败记录、备份、fixture、DB、日志与 evidence 根必须保留，不得删除
-或用于新候选验证。新候选的全部结果只写入 `/tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4`。
+或用于新候选验证。新候选的全部结果只写入 `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`。
+
+`6ea11e4` 的真实 Mac 来源页失败证据已保留：discovery 同时返回可用 Codex sessions
+和 `not_found` archived_sessions，但普通页面显示两个同名 Codex cards，并把不存在目录
+描述为已发现；该候选不构成本轮 PASS。新 seed 固定为 37 cards（3 history）、13 permanent、
+3 conversations、36 messages、1 owner high-risk pending action only；至少 8 个 synthetic
+主题使用不同的主人可读 conclusions，不得制造自动扫描 failure pending。普通来源页断言
+available sessions + `not_found` archive 仅产生 1 个 Codex card，found count 与 visible count 一致。
 
 > 最近一次任务已完成。权威结论：`COMPLETED / FAIL / DO NOT MERGE`。
 >
