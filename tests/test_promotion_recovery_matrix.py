@@ -287,8 +287,38 @@ def test_recovery_case_05_restart_after_prepare_before_links_removes_projection(
 def test_recovery_case_06_restart_after_link_commit_activates_after_verification(tmp_path: Path) -> None:
     memory_path, state, memory, source = _stores(tmp_path)
     messages = _messages(source, 1)
-    _, _, decision_id, refs = _saga(state, memory, source, messages)
-    source.link_message_memory_batch(refs, "memory-1", decision_id=decision_id)
+    candidate = ReviewCandidate(
+        **{
+            **_candidate().__dict__,
+            "source_refs": tuple(item["message_id"] for item in messages),
+        }
+    )
+    service = AutoMemoryPromotionService(
+        state_db=state,
+        memory_db=memory,
+        evidence_store=source,
+    )
+    pending = service.evaluate(candidate)
+    decision_id = service._decision_id(
+        service._normalize(candidate), "owner_approved", service.policy_version
+    )
+    original_activate = memory.activate_derived_projection
+
+    def crash_after_link_commit(*args, **kwargs):
+        assert len(source.memory_links("memory-1")) == 1
+        raise SystemExit("simulated process exit after durable links")
+
+    memory.activate_derived_projection = crash_after_link_commit
+    with pytest.raises(SystemExit, match="simulated process exit"):
+        service.approve(
+            pending["candidate_id"],
+            expected_content_hash=pending["content_hash"],
+            owner_confirmed=True,
+        )
+    memory.activate_derived_projection = original_activate
+    assert _event_count(state, "memory_promotion_owner_confirmed", decision_id) == 1
+    assert state.release_promotion_lease(decision_id, service._operation_owner)
+
     reopened_memory = MemoryDatabase(memory_path)
     reopened_source = SourceReadModel(reopened_memory)
     evidence = AutoMemoryPromotionService(

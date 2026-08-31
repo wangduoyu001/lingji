@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import inspect
-import sys
-import types
-from pathlib import Path
 
 
 class FakeMCP:
@@ -31,26 +28,7 @@ class FakeService:
         return {"session_id": session_id, **kwargs}
 
 
-def test_codex_mcp_tools_exist_and_do_not_expose_core_memory_writes(monkeypatch):
-    config = types.ModuleType("src.config")
-    config.settings = types.SimpleNamespace(storage_path=Path("/tmp"))
-    extraction = types.ModuleType("src.extraction")
-    extraction.build_extraction_pipeline = lambda *args, **kwargs: None
-    gateway = types.ModuleType("src.gateway.bootstrap")
-    gateway.build_memory_gateway = lambda *args, **kwargs: None
-    index = types.ModuleType("src.indexer.index")
-    index.PEMISIndex = object
-    retrieval = types.ModuleType("src.retrieval")
-    retrieval.MarkdownChunker = object
-    skills = types.ModuleType("src.skills")
-    skills.SkillRegistry = object
-    monkeypatch.setitem(sys.modules, "src.config", config)
-    monkeypatch.setitem(sys.modules, "src.extraction", extraction)
-    monkeypatch.setitem(sys.modules, "src.gateway.bootstrap", gateway)
-    monkeypatch.setitem(sys.modules, "src.indexer.index", index)
-    monkeypatch.setitem(sys.modules, "src.retrieval", retrieval)
-    monkeypatch.setitem(sys.modules, "src.skills", skills)
-    sys.modules.pop("src.mcp_server", None)
+def test_codex_mcp_tools_exist_and_do_not_expose_core_memory_writes():
     from src.mcp_server import register_codex_mcp_tools
 
     mcp = FakeMCP()

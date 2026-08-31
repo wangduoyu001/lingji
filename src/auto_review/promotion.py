@@ -201,6 +201,19 @@ class AutoMemoryPromotionService:
             result = self._result(selected, decision_id, PromotionStatus.PENDING_OWNER_REVIEW, ["structured_message_provenance_required"], mutation=False)
             self._append("memory_promotion_owner_approved", selected.memory_id, result)
             return result
+        try:
+            self._record_owner_confirmation(selected, decision_id, provenance)
+        except Exception:
+            result = self._result(
+                selected,
+                decision_id,
+                PromotionStatus.ERROR,
+                ["promotion_confirmation_event_failed"],
+                mutation=False,
+                error="",
+            )
+            self._append("memory_promotion_projection_error", selected.memory_id, result)
+            return result
         result = self._result(selected, decision_id, PromotionStatus.ACTIVE, [], mutation=False)
         if not self._claim_lease(decision_id):
             return self._result(selected, decision_id, PromotionStatus.ERROR, ["promotion_lease_conflict"], mutation=False)
@@ -674,16 +687,70 @@ class AutoMemoryPromotionService:
         if not wanted_id or not wanted_hash:
             return False
         for row in self.state_db.recent_events(limit=100000):
-            if row.get("event_type") != "memory_promotion_owner_approved":
+            event_type = str(row.get("event_type") or "")
+            if event_type not in {
+                "memory_promotion_owner_confirmed",
+                "memory_promotion_owner_approved",
+            }:
                 continue
             payload = self._payload(row)
             if (
                 str(payload.get("candidate_id") or "") == wanted_id
                 and str(payload.get("content_hash") or "") == wanted_hash
-                and str(payload.get("status") or "") == PromotionStatus.ACTIVE.value
+                and (
+                    (
+                        event_type == "memory_promotion_owner_confirmed"
+                        and str(payload.get("state") or "") == "confirmed"
+                    )
+                    or (
+                        event_type == "memory_promotion_owner_approved"
+                        and str(payload.get("status") or "") == PromotionStatus.ACTIVE.value
+                    )
+                )
             ):
                 return True
         return False
+
+    def _record_owner_confirmation(
+        self,
+        candidate: ReviewCandidate,
+        decision_id: str,
+        provenance: ResolvedProvenance,
+    ) -> str:
+        """Persist owner authority before any projection side effect."""
+        recorder = getattr(self.state_db, "record_promotion_event_once", None)
+        if not callable(recorder):
+            raise RuntimeError("safe promotion event recorder unavailable")
+        return str(
+            recorder(
+                decision_id,
+                "memory_promotion_owner_confirmed",
+                candidate.memory_id,
+                {
+                    "candidate_id": candidate.memory_id,
+                    "decision_id": decision_id,
+                    "memory_id": candidate.memory_id,
+                    "content_hash": candidate.content_hash,
+                    "policy_version": self.policy_version,
+                    "state": "confirmed",
+                    "messages": [
+                        {
+                            "message_id": ref.message_id,
+                            "content_hash": ref.content_hash,
+                            "external_key": {
+                                "source_external_id": ref.external_key.source_external_id,
+                                "conversation_external_id": ref.external_key.conversation_external_id,
+                                "message_external_id": ref.external_key.message_external_id,
+                            },
+                        }
+                        for ref in sorted(
+                            provenance.linkable_messages,
+                            key=lambda item: item.message_id,
+                        )
+                    ],
+                },
+            )
+        )
 
     @staticmethod
     def _quarantine_existing_result(existing: Mapping[str, Any]) -> dict[str, Any]:
