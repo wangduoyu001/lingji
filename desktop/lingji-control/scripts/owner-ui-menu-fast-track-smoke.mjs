@@ -264,7 +264,7 @@ try {
   await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange")); });
   const hiddenSourceReads = state.sourceReads;
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
-  await page.getByRole("heading", { name: "记忆来源", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "记忆来源", exact: true }).first().waitFor();
   const sourceCard = page.locator('[data-source-kind="codex_rollout"]');
   await sourceCard.waitFor();
   assert.ok(state.sourceReads > hiddenSourceReads, "activating a hidden source page must still perform its first real read");
