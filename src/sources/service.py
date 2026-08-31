@@ -40,8 +40,13 @@ _SENSITIVE_REFERENCE_TOKENS = (
     "session",
     "signature",
 )
+_SENSITIVE_DISPLAY_TOKENS = frozenset(_SENSITIVE_REFERENCE_TOKENS) | frozenset(
+    _SENSITIVE_QUERY_KEYS
+)
 _OWNER_DISPLAY_SENSITIVE_PATTERN = re.compile(
-    r"(?:token|credential|authorization|password|cookie|secret|api[_-]?key)\s*(?:=|:)\s*\S+",
+    r"(?<![a-z0-9_])(?:"
+    + "|".join(re.escape(token) for token in sorted(_SENSITIVE_DISPLAY_TOKENS, key=len, reverse=True))
+    + r")(?:\s*)(?:=|:)\s*",
     re.IGNORECASE,
 )
 _OWNER_SOURCE_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
@@ -604,7 +609,10 @@ class SourceQueryService:
         windows_path = PureWindowsPath(text)
         if windows_path.is_absolute() or bool(windows_path.drive):
             return None
-        parsed = urlsplit(text)
+        try:
+            parsed = urlsplit(text)
+        except (TypeError, ValueError):
+            return None
         if parsed.scheme or "://" in text:
             return None
         if any(part == ".." for part in text.replace("\\", "/").split("/")):

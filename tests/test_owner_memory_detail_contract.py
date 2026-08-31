@@ -241,6 +241,16 @@ def test_evidence_display_labels_fail_closed_for_paths_json_and_sensitive_values
             "../private/secret",
             "control\x00label",
             "x" * 161,
+            "http://[::1",
+        )
+        unsafe_values += tuple(
+            form
+            for token in (
+                "token", "credential", "authorization", "auth_metadata",
+                "password", "cookie", "secret", "api_key", "apikey",
+                "session", "signature", "sig",
+            )
+            for form in (f"{token}=abc", f"{token.upper()} : ", f"{token} =   ")
         )
         for value in unsafe_values:
             with read_model._connection() as connection:
