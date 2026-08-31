@@ -19,7 +19,7 @@ repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 product_commit: 4f0d2a7738c6cba12d0766cb7ed6b38cbd32e543
 product_tests_commit: 81256c4242a6bb8062f1b591832a3313948e9ff9
-task_instruction_commit: PENDING
+task_instruction_commit: a8d50b5f2f138cf97333dad8aeac38057965ff1f
 report_branch: acceptance/owner-memory-detail-drilldown-release-gate-4f0d2a77
 report_commit: PENDING
 report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_GATE.md
