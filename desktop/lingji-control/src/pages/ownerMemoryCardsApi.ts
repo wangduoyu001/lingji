@@ -22,7 +22,7 @@ export class OwnerMemoryCardsApi {
     return this.api.get<{ cards?: number | null; conversations?: number | null; messages?: number | null; permanent?: number | null; vectorized?: number | null; owner_review?: number | null }>("/api/memory/inspector/cards-summary", { signal });
   }
   detail(id: string, signal?: AbortSignal) {
-    return this.api.get<{ item: OwnerMemoryCard }>(`/api/memory/inspector/cards/${encodeURIComponent(id)}`, { signal });
+    return this.api.get<{ as_of?: string | null; item: OwnerMemoryCard }>(`/api/memory/inspector/cards/${encodeURIComponent(id)}`, { signal });
   }
   canonical(id: string, signal?: AbortSignal) {
     return this.api.get<CanonicalResponse>(`/api/memory/inspector/memories/${encodeURIComponent(id)}?chunk_limit=20&max_chars=12000`, { signal });
@@ -49,7 +49,7 @@ export class OwnerMemoryCardsApi {
       ? [this.getOwnerMemorySource(memoryId, options.signal), this.getOwnerMemoryConversationMessages(card.source?.conversation_id ?? "", options.signal)]
       : [this.canonical(memoryId, options.signal), this.getOwnerMemoryVector(memoryId, options.signal), this.getOwnerMemorySource(memoryId, options.signal), this.getOwnerMemoryEvidence(memoryId, { signal: options.signal })];
     const resources = await Promise.allSettled(resourcePromises);
-    const asOf = card.as_of ?? null;
+    const asOf = selectedResponse.as_of ?? card.as_of ?? null;
     const canonicalResult = conversationOnly ? null : resources[0];
     const vectorResult = conversationOnly ? null : resources[1];
     const sourceResult = conversationOnly ? resources[0] : resources[2];
