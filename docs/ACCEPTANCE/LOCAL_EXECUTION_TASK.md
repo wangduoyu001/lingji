@@ -1,37 +1,37 @@
 # LingJi 本机执行任务单
 
-> **当前状态：ACTIVE / OWNER_UI_MENU_FAST_TRACK_TASK_2_B299E5B7。**
+> **当前状态：ACTIVE / OWNER_UI_REDESIGN_MAC_43009A0D。**
 >
 > 本文件仍是本机 Codex 的唯一任务入口；只允许执行下方 `status: ACTIVE` 的精确候选。
 
 ## 0. 当前唯一 ACTIVE 任务
 
 ```yaml
-task_id: OWNER_UI_MENU_FAST_TRACK_TASK_2_B299E5B7
+task_id: OWNER_UI_REDESIGN_MAC_43009A0D
 status: ACTIVE
 execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
-candidate_label: OWNER_UI_EXPERIENCE_CANDIDATE
+candidate_label: OWNER_UI_REDESIGN_CANDIDATE
 release_gate: NOT_A_RELEASE_GATE
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 product_branch: codex/owner-real-history-memory-cards
-product_commit: b299e5b7d30e266e7dbbf4e2a9cc92c8f4d85ae4
+product_commit: 43009a0dfdf3cd7b949d871cc9054286f17d607e
 artifact_name: lingji-local-macos-arm64-tauri
-artifact_id: LOCAL_TAURI_BUILD_B299E5B7
+artifact_id: LOCAL_TAURI_BUILD_43009A0D
 artifact_workflow_run_id: LOCAL_ONLY_NOT_CI
 artifact_zip_sha256: PENDING
 dmg_sha256: PENDING
-report_branch: acceptance/owner-ui-menu-fast-track-task-2-b299e5b
-report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_EXPERIENCE_ONLY_B299E5B7.md
-public_summary_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_B299E5B7.json
-public_hashes_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_B299E5B7.txt
+report_branch: acceptance/owner-ui-redesign-43009a0d
+report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_REDESIGN_43009A0D.md
+public_summary_path: PENDING
+public_hashes_path: PENDING
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
-acceptance_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b
-acceptance_data_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/data-root
-acceptance_vault_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/vault
-acceptance_source_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/source-fixture
-acceptance_backup_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/installed-app-backup
-acceptance_evidence_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/evidence
+acceptance_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0
+acceptance_data_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0/data-root
+acceptance_vault_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0/vault
+acceptance_source_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0/source-fixture
+acceptance_backup_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0/installed-app-backup
+acceptance_evidence_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0/evidence
 production_roots_untouched: true
 backup_before_install_required: true
 whole_bundle_replace_required: true
@@ -45,6 +45,8 @@ secret_export_count_required: 0
 production_pollution_count_required: 0
 quality_gate: MEASURED_FAIL_NOT_RELEASE_READY_DEFERRED
 keep_app_and_sidecar_open_for_owner: true
+owner_observation_required: true
+preserve_old_failed_evidence: true
 ```
 
 本任务只负责 macOS arm64 Tauri 构建、严格签名核验、现有安装包整包备份/替换、Acceptance

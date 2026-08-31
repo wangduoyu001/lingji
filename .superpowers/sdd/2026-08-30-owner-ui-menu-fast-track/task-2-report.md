@@ -392,3 +392,17 @@ Production path 不存在，`production_pollution_count=0`；新 effective vault
   即为真实失败信号，等待 repair 重建后再验。该规则不改变本机已完成的技术证据，也不允许将
   fixture/API 健康或进程运行误写成主人 PASS。新候选主人未完成项是根代理 Computer Use 观察
   与 repair 后的主人最终结论。
+
+### 2026-08-31 reviewed candidate `43009a0d`
+
+The reviewed product/tests head is `43009a0dfdf3cd7b949d871cc9054286f17d607e`. It supersedes the
+previous candidate for the next Mac owner-experience run. Automated evidence is complete for the
+bounded scope: current-card pagination and 20-second refresh offset preservation, exact compact
+primary navigation labels, Overview current-versus-imported scope copy, and the Attention label
+`我已确认，继续处理`. TDD RED reproduced the page reset (`20 !== 16`); GREEN passed
+`npm run test:owner-ui-menu-fast-track`, `npm run test:e2e:memory`, `npm run test:smoke` (23 scripts),
+`npm run build` (97 modules), focused Python (`30 passed, 1 warning`), and `git diff --check`.
+No Mac build/install/live run or owner observation was performed here. New acceptance task:
+`OWNER_UI_REDESIGN_MAC_43009A0D`, root `/tmp/LingJiAcceptance/owner-ui-redesign-43009a0`,
+report branch `acceptance/owner-ui-redesign-43009a0`; preserve all prior failed evidence and keep
+the app open for owner confirmation.

@@ -3215,3 +3215,10 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   fixture、API 或进程健康，也不得将技术健康写成主人通过。
 - 交接回执保持 `RUNNING / PENDING / OWNER_UI_REPAIR_REQUIRED`，新 app、sidecar、8766、旧
   `6baf4ee6` evidence 与新 root 均保持；不修改产品、不停止实例、不清理 acceptance 数据。
+## 2026-08-31 · Owner UI redesign · product `43009a0d`
+
+- Current-only memory cards now paginate at 20, preserve page offset across the 20-second refresh, and keep historical/noncurrent cards out of the ordinary stream; Overview copy separates current cards/permanent memory from all imported conversations/messages.
+- Primary navigation has exactly four owner-facing entries with exact `aria-label`s at compact width; Attention confirmation is `我已确认，继续处理`.
+- TDD evidence: RED `npm run test:e2e:memory` failed at the page-two assertion (`20 !== 16`); GREEN passed after the bounded product/test repair.
+- Exact validations: `npm run test:owner-ui-menu-fast-track`, `npm run test:e2e:memory`, `npm run test:smoke` (23 scripts), `npm run build` (97 modules), `python3 -m pytest -q tests/test_owner_memory_card_api.py tests/test_owner_memory_card_projector.py` (`30 passed, 1 warning`), and `git diff --check`.
+- Mac owner experience remains pending; this is not a release gate and does not imply Phase 1 or owner PASS.

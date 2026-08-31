@@ -1,6 +1,6 @@
 # LingJi 本机执行结果回执
 
-> 当前任务正在执行：`OWNER_UI_MENU_FAST_TRACK_TASK_2_B299E5B7`。
+> 当前任务正在执行：`OWNER_UI_REDESIGN_MAC_43009A0D`。
 > 当前候选仅为 `OWNER_UI_EXPERIENCE_CANDIDATE`，`NOT_A_RELEASE_GATE`；
 > 旧候选 `6baf4ee6` 的主人体验结论为 `OWNER_UI_REPAIR_REQUIRED`；新候选当前验收暂停，
 > 默认记忆页出现 `superseded`/`stale` 历史卡片，已记录为 `OWNER_UI_REPAIR_REQUIRED`，
@@ -11,20 +11,20 @@
 ## 0. 当前 ACTIVE 任务回执
 
 ```yaml
-task_id: OWNER_UI_MENU_FAST_TRACK_TASK_2_B299E5B7
-status: RUNNING
+task_id: OWNER_UI_REDESIGN_MAC_43009A0D
+status: PENDING
 verdict: PENDING
 execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
-product_commit: b299e5b7d30e266e7dbbf4e2a9cc92c8f4d85ae4
-task_instruction_commit: cbdbbbe29a98cdde1dcf694ac9108dc573da9ef3
-report_branch: acceptance/owner-ui-menu-fast-track-task-2-b299e5b
+product_commit: 43009a0dfdf3cd7b949d871cc9054286f17d607e
+task_instruction_commit: PENDING
+report_branch: acceptance/owner-ui-redesign-43009a0d
 report_commit: PENDING
-report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_EXPERIENCE_ONLY_B299E5B7.md
-public_summary_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_B299E5B7.json
-public_hashes_path: docs/TEST_REPORTS/evidence/MACOS_OWNER_UI_EXPERIENCE_ONLY_B299E5B7.txt
-cleanup_before: PASS
+report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_REDESIGN_43009A0D.md
+public_summary_path: PENDING
+public_hashes_path: PENDING
+cleanup_before: PENDING
 cleanup_after: PENDING
 remote_branch_verified: false
 remote_commit_verified: false
@@ -32,7 +32,7 @@ remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
 local_temp_root_absent: false
-owner_observation: OWNER_UI_REPAIR_REQUIRED
+owner_observation: PENDING
 started_at: PENDING
 finished_at: PENDING
 installed_app_hash: 48b03e49d5ed8b3eb0bd7c6ec716bcb577f775bffdac83ce0d09bf892c57a721
@@ -42,7 +42,7 @@ dmg_sha256: NOT_RUN_APP_ONLY
 desktop_pid: 55746
 sidecar_pid: 55764
 control_api_ping: HTTP_200_STATUS_OK
-acceptance_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b
+acceptance_root: /tmp/LingJiAcceptance/owner-ui-redesign-43009a0
 acceptance_effective_data_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/data-root/acceptance
 acceptance_memory_cards: 8
 acceptance_completed_scans: 1
