@@ -39,7 +39,10 @@ export type CanonicalBody = {
 
 export type EvidenceItem = {
   source_id?: string | null;
+  source_label?: string | null;
+  source_type?: string | null;
   conversation_id?: string | null;
+  conversation_title?: string | null;
   message_id?: string | null;
   role?: string | null;
   sequence?: number | null;

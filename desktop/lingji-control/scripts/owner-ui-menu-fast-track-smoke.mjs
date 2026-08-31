@@ -92,7 +92,7 @@ const historyCards = Array.from({ length: 3 }, (_, index) => ({ ...card, memory_
 const historyNoise = Array.from({ length: 19 }, (_, index) => ({ ...card, memory_id: `memory-history-noise-${index + 1}`, topic: `不匹配历史元数据${index + 1}`, freshness: { state: "superseded", reason: "由其他版本替代", replacement_id: `other-current-${index + 1}` }, action: { type: "history", label: "查看历史" } }));
 const detailCards = [card, conversationOnlyCard, noVectorCard, longBodyCard, restrictedCard, staleBCard, ...actionCards, ...additionalCurrentCards, ...historyCards];
 const actionCardsById = new Map(actionCards.map((item) => [item.memory_id, item]));
-const state = { scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, pauseFailure: false, mutationFail: false, detailUnauthorized: false, evidenceFailure: true, evidenceDelay: false, mutations: [], pendingActions: [], requests: [] };
+const state = { scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, pauseFailure: false, mutationFail: false, detailUnauthorized: false, initialEvidenceFailure: false, canonicalFailure: false, evidenceFailure: true, evidenceDelay: false, mutations: [], pendingActions: [], requests: [] };
 
 const json = (body) => JSON.stringify(body);
 const fulfill = (route, body, status = 200) => route.fulfill({
@@ -147,16 +147,18 @@ try {
     if (url.pathname === "/api/memory/inspector/cards/memory-card-1" && state.detailUnauthorized) return fulfill(route, { detail: { code: "UNAUTHORIZED", message: "token required" } }, 401);
     if (url.pathname === "/api/memory/inspector/cards/memory-card-1") return fulfill(route, { item: { ...card, as_of: "2026-08-28T08:05:00Z", content_hash: "hash-memory-card-1" } });
     if (url.pathname.startsWith("/api/memory/inspector/cards/memory-history-")) { const id = url.pathname.split("/").pop(); return fulfill(route, { item: historyCards.find((item) => item.memory_id === id) }); }
-    if (url.pathname === "/api/memory/inspector/memories/memory-card-1") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", item: { memory_id: "memory-card-1", chunks: [{ chunk_id: "chunk-1", text: "下周三发布新版。发布前完成检查清单。", content_hash: "hash-memory-card-1", truncated: false }] } });
+    if (url.pathname === "/api/memory/inspector/memories/memory-card-1") { if (state.canonicalFailure) { state.canonicalFailure = false; return fulfill(route, { detail: { code: "TEMPORARY", message: "temporary canonical failure" } }, 503); } return fulfill(route, { as_of: "2026-08-28T08:05:00Z", item: { memory_id: "memory-card-1", chunks: [{ chunk_id: "chunk-1", text: "下周三发布新版。发布前完成检查清单。", content_hash: "hash-memory-card-1", truncated: false }] } }); }
     if (url.pathname === "/api/memory/inspector/memories/memory-card-1/vector") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", memory_id: "memory-card-1", vector: { state: "available", chunks: [{ chunk_id: "chunk-1", exists: true, source: "live" }] } });
     if (url.pathname === "/api/memory/inspector/memories/memory-card-1/source") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", memory_id: "memory-card-1", canonical: { relative_path: "01-Inbox/release.md", citations: [{ chunk_id: "chunk-1", start_line: 1, end_line: 2 }] }, links: [{ source_id: "source-codex", conversation_id: "conversation-1" }] });
     if (url.pathname === "/api/memory/inspector/memories/memory-card-1/evidence") {
       const offset = Number(url.searchParams.get("offset") || 0);
+      if (offset === 0 && state.initialEvidenceFailure) { state.initialEvidenceFailure = false; return fulfill(route, { detail: { code: "TEMPORARY", message: "temporary initial evidence failure" } }, 503); }
       if (offset === 20 && state.evidenceFailure) { state.evidenceFailure = false; return fulfill(route, { detail: { code: "TEMPORARY", message: "temporary evidence failure" } }, 503); }
       const items = Array.from({ length: 20 }, (_, index) => {
         const sequence = offset === 20 && index < 2 ? 19 + index : offset + index + 1;
         const messageId = offset === 0 && index < 2 ? `message-card-${index + 1}` : `message-${sequence}`;
-        return { source_id: "source-codex", conversation_id: "conversation-1", message_id: messageId, role: index % 2 ? "assistant" : "user", sequence, occurred_at: `2026-08-28T08:${String(sequence).padStart(2, "0")}:00Z`, excerpt: `第 ${sequence} 条来源摘要。`, content: `第 ${sequence} 条来源正文。`, content_hash: `message-hash-${sequence}`, raw_reference: `conversation-1/${messageId}`, truncated: false };
+        const alternate = offset === 0 && index === 1;
+        return { source_id: alternate ? "source-chatgpt" : "source-codex", source_label: alternate ? "ChatGPT聊天记录" : "Codex聊天记录", source_type: alternate ? "chatgpt" : "codex_rollout", conversation_id: alternate ? "conversation-2" : "conversation-1", conversation_title: alternate ? "另一个来源会话" : "发布计划讨论", message_id: messageId, role: index % 2 ? "assistant" : "user", sequence, occurred_at: `2026-08-28T08:${String(sequence).padStart(2, "0")}:00Z`, excerpt: `第 ${sequence} 条来源摘要。`, content: `第 ${sequence} 条来源正文。`, content_hash: `message-hash-${sequence}`, raw_reference: `conversation-1/${messageId}`, truncated: false };
       });
       const result = { as_of: "2026-08-28T08:05:00Z", memory_id: "memory-card-1", items, pagination: { limit: 20, offset, total: 40, has_more: offset === 0 } };
       return state.evidenceDelay && offset === 20 ? setTimeout(() => fulfill(route, result), 500) : fulfill(route, result);
@@ -277,6 +279,9 @@ try {
   assert(state.requests.some((url) => url.endsWith("/api/memory/inspector/memories/memory-card-1/evidence?limit=20&offset=0")), "selected detail must request only the first bounded evidence page");
   assert.equal(state.requests.some((url) => url.includes("/evidence?limit=20&offset=20")), false, "later evidence pages must not be prefetched");
   assert.equal(await page.locator('[data-testid="evidence-item"]').count(), 20, "first evidence page must be bounded to 20 items");
+  const provenanceText = await page.getByRole("dialog").innerText();
+  assert.ok(provenanceText.includes("ChatGPT聊天记录") && provenanceText.includes("另一个来源会话"), "each evidence row must render its own source and conversation provenance");
+  assert.equal(/source-chatgpt|conversation-2|chatgpt|\{"/.test(provenanceText), false, "evidence provenance must not expose internal IDs, enums, or JSON");
   await page.getByRole("dialog").getByRole("button", { name: "加载更多来源", exact: true }).click();
   assert.equal(await page.locator('[data-testid="evidence-item"]').count(), 20, "a failed next page must preserve the first page");
   await page.getByRole("dialog").getByRole("button", { name: "重试读取来源", exact: true }).click();
@@ -332,6 +337,22 @@ try {
   await page.getByRole("dialog").getByText("这是第二条独特原文。", { exact: true }).waitFor();
   assert.equal(state.requests.filter((url) => url.endsWith("/messages/message-card-1")).length, 1, "first source message must be read exactly once");
   assert.equal(state.requests.filter((url) => url.endsWith("/messages/message-card-2")).length, 1, "second source message must be read exactly once");
+  await page.keyboard.press("Escape");
+  state.initialEvidenceFailure = true;
+  const initialEvidenceBefore = state.requests.filter((url) => url.includes("/memories/memory-card-1/evidence?limit=20&offset=0")).length;
+  await page.getByRole("button", { name: "发布计划", exact: true }).click();
+  await page.getByRole("dialog").getByText("来源暂时无法读取，正文不会因此消失。", { exact: true }).waitFor();
+  await page.getByRole("dialog").getByRole("button", { name: "重试读取来源", exact: true }).click();
+  await page.getByRole("dialog").locator('[data-testid="evidence-item"]').first().waitFor();
+  assert.equal(state.requests.filter((url) => url.includes("/memories/memory-card-1/evidence?limit=20&offset=0")).length, initialEvidenceBefore + 2, "initial evidence retry must repeat bounded offset zero");
+  await page.keyboard.press("Escape");
+  state.canonicalFailure = true;
+  const canonicalBefore = state.requests.filter((url) => url.includes("/memories/memory-card-1?chunk_limit=20&max_chars=12000")).length;
+  await page.getByRole("button", { name: "发布计划", exact: true }).click();
+  await page.getByRole("dialog").getByText("正文暂时无法读取，原始记录仍保留。", { exact: true }).waitFor();
+  await page.getByRole("dialog").getByRole("button", { name: "重试读取正文", exact: true }).click();
+  await page.getByRole("dialog").getByText("下周三发布新版。发布前完成检查清单。", { exact: true }).waitFor();
+  assert.equal(state.requests.filter((url) => url.includes("/memories/memory-card-1?chunk_limit=20&max_chars=12000")).length, canonicalBefore + 2, "canonical retry must issue a bounded reread");
   await page.setViewportSize({ width: 1024, height: 900 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "1024px detail must not overflow horizontally");
   await page.setViewportSize({ width: 1280, height: 900 });

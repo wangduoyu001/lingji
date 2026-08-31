@@ -342,7 +342,14 @@ class SourceQueryService:
             )
             if not self._is_visible(conversation, selected):
                 continue
-            visible.append({"link": link, "message": message, "source": source})
+            visible.append(
+                {
+                    "link": link,
+                    "message": message,
+                    "source": source,
+                    "conversation": conversation,
+                }
+            )
 
         visible.sort(key=self._evidence_sort_key)
         page_rows = visible[selected_offset : selected_offset + selected_limit]
@@ -352,6 +359,7 @@ class SourceQueryService:
             message = row["message"]
             link = row["link"]
             source = row["source"] or {}
+            conversation = row["conversation"] or {}
             content = ""
             truncated = False
             if include_content:
@@ -368,7 +376,10 @@ class SourceQueryService:
             excerpt = " ".join(excerpt_source.split())[:240]
             item: dict[str, Any] = {
                 "source_id": message.get("source_id"),
+                "source_label": str(source.get("display_name") or "").strip() or None,
+                "source_type": str(source.get("source_type") or "").strip() or None,
                 "conversation_id": message.get("conversation_id"),
+                "conversation_title": str(conversation.get("title") or "").strip() or None,
                 "message_id": message.get("message_id"),
                 "role": message.get("role"),
                 "sequence": message.get("sequence"),

@@ -209,6 +209,24 @@ def test_evidence_page_has_bounded_stable_order_and_pagination():
         temp_dir.cleanup()
 
 
+def test_evidence_page_includes_safe_per_row_source_and_conversation_labels():
+    facade, temp_dir, read_model = _seeded_facade()
+    try:
+        with read_model._connection() as connection:
+            connection.execute(
+                "UPDATE conversation_records SET title = ? WHERE conversation_id = ?",
+                ("Visible conversation", "conversation-visible"),
+            )
+        page = facade.list_memory_evidence("memory-1", limit=2, offset=0)
+        assert page["items"][0]["source_label"] == "Visible source"
+        assert page["items"][0]["source_type"] == "chatgpt"
+        assert page["items"][0]["conversation_title"] == "Visible conversation"
+        assert all("raw_reference" in item for item in page["items"])
+        assert all("metadata" not in item and "path" not in item for item in page["items"])
+    finally:
+        temp_dir.cleanup()
+
+
 def test_evidence_page_rechecks_authority_and_safe_references():
     facade, temp_dir, _read_model = _seeded_facade()
     try:
