@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import json
 from pathlib import Path, PureWindowsPath
+import re
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
@@ -37,6 +39,27 @@ _SENSITIVE_REFERENCE_TOKENS = (
     "apikey",
     "session",
     "signature",
+)
+_OWNER_DISPLAY_SENSITIVE_PATTERN = re.compile(
+    r"(?:token|credential|authorization|password|cookie|secret|api[_-]?key)\s*(?:=|:)\s*\S+",
+    re.IGNORECASE,
+)
+_OWNER_SOURCE_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+_OWNER_SOURCE_TYPES = frozenset(
+    {
+        "chatgpt",
+        "chatgpt_export",
+        "claude_desktop",
+        "codex",
+        "codex_history",
+        "codex_report",
+        "codex_rollout",
+        "codex_session",
+        "codex_transcript",
+        "generic_ai_history",
+        "history_inbox",
+        "obsidian",
+    }
 )
 
 
@@ -376,10 +399,10 @@ class SourceQueryService:
             excerpt = " ".join(excerpt_source.split())[:240]
             item: dict[str, Any] = {
                 "source_id": message.get("source_id"),
-                "source_label": str(source.get("display_name") or "").strip() or None,
-                "source_type": str(source.get("source_type") or "").strip() or None,
+                "source_label": self._safe_owner_display_text(source.get("display_name")),
+                "source_type": self._safe_owner_source_type(source.get("source_type")),
                 "conversation_id": message.get("conversation_id"),
-                "conversation_title": str(conversation.get("title") or "").strip() or None,
+                "conversation_title": self._safe_owner_display_text(conversation.get("title")),
                 "message_id": message.get("message_id"),
                 "role": message.get("role"),
                 "sequence": message.get("sequence"),
@@ -561,6 +584,43 @@ class SourceQueryService:
         ):
             return None
         return safe
+
+    @staticmethod
+    def _safe_owner_display_text(value: Any) -> str | None:
+        """Return short, owner-readable labels without paths or secret-like text."""
+        text = str(value or "")
+        for _ in range(3):
+            decoded = unquote(text)
+            if decoded == text:
+                break
+            text = decoded
+        if any(ord(character) < 32 or ord(character) == 127 for character in text):
+            return None
+        text = " ".join(text.split())
+        if not text or len(text) > 160 or _OWNER_DISPLAY_SENSITIVE_PATTERN.search(text):
+            return None
+        if text.startswith(("/", "\\", "~")):
+            return None
+        windows_path = PureWindowsPath(text)
+        if windows_path.is_absolute() or bool(windows_path.drive):
+            return None
+        parsed = urlsplit(text)
+        if parsed.scheme or "://" in text:
+            return None
+        if any(part == ".." for part in text.replace("\\", "/").split("/")):
+            return None
+        try:
+            parsed_json = json.loads(text)
+        except (TypeError, ValueError):
+            parsed_json = None
+        if isinstance(parsed_json, (dict, list)):
+            return None
+        return text
+
+    @staticmethod
+    def _safe_owner_source_type(value: Any) -> str | None:
+        text = str(value or "").strip().casefold()
+        return text if _OWNER_SOURCE_TYPE_PATTERN.fullmatch(text) and text in _OWNER_SOURCE_TYPES else None
 
     @staticmethod
     def _safe_http_url(value: str) -> str | None:

@@ -227,6 +227,60 @@ def test_evidence_page_includes_safe_per_row_source_and_conversation_labels():
         temp_dir.cleanup()
 
 
+def test_evidence_display_labels_fail_closed_for_paths_json_and_sensitive_values():
+    facade, temp_dir, read_model = _seeded_facade()
+    try:
+        unsafe_values = (
+            "/Users/owner/secret.json",
+            r"C:\Users\owner\secret.json",
+            r"\\server\share\secret.json",
+            '{"cookie":"SECRET"}',
+            '["secret"]',
+            "token=abc",
+            "vault:%2FUsers%2Fowner%2Fsecret.json",
+            "../private/secret",
+            "control\x00label",
+            "x" * 161,
+        )
+        for value in unsafe_values:
+            with read_model._connection() as connection:
+                connection.execute(
+                    "UPDATE source_records SET display_name = ?, source_type = ? WHERE source_id = ?",
+                    (value, value, "source-visible"),
+                )
+                connection.execute(
+                    "UPDATE conversation_records SET title = ? WHERE conversation_id = ?",
+                    (value, "conversation-visible"),
+                )
+            item = facade.list_memory_evidence("memory-1", limit=1)["items"][0]
+            assert item["source_label"] is None
+            assert item["source_type"] is None
+            assert item["conversation_title"] is None
+            assert value not in str(item)
+
+        with read_model._connection() as connection:
+            connection.execute(
+                "UPDATE source_records SET display_name = ?, source_type = ? WHERE source_id = ?",
+                ("  Codex   发布计划  ", "codex_rollout", "source-visible"),
+            )
+            connection.execute(
+                "UPDATE conversation_records SET title = ? WHERE conversation_id = ?",
+                ("关于 Cookie 设置的讨论", "conversation-visible"),
+            )
+        item = facade.list_memory_evidence("memory-1", limit=1)["items"][0]
+        assert item["source_label"] == "Codex 发布计划"
+        assert item["source_type"] == "codex_rollout"
+        assert item["conversation_title"] == "关于 Cookie 设置的讨论"
+        with read_model._connection() as connection:
+            connection.execute(
+                "UPDATE source_records SET source_type = ? WHERE source_id = ?",
+                ("metadata", "source-visible"),
+            )
+        assert facade.list_memory_evidence("memory-1", limit=1)["items"][0]["source_type"] is None
+    finally:
+        temp_dir.cleanup()
+
+
 def test_evidence_page_rechecks_authority_and_safe_references():
     facade, temp_dir, _read_model = _seeded_facade()
     try:

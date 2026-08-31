@@ -92,7 +92,7 @@ const historyCards = Array.from({ length: 3 }, (_, index) => ({ ...card, memory_
 const historyNoise = Array.from({ length: 19 }, (_, index) => ({ ...card, memory_id: `memory-history-noise-${index + 1}`, topic: `不匹配历史元数据${index + 1}`, freshness: { state: "superseded", reason: "由其他版本替代", replacement_id: `other-current-${index + 1}` }, action: { type: "history", label: "查看历史" } }));
 const detailCards = [card, conversationOnlyCard, noVectorCard, longBodyCard, restrictedCard, staleBCard, ...actionCards, ...additionalCurrentCards, ...historyCards];
 const actionCardsById = new Map(actionCards.map((item) => [item.memory_id, item]));
-const state = { scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, pauseFailure: false, mutationFail: false, detailUnauthorized: false, initialEvidenceFailure: false, canonicalFailure: false, evidenceFailure: true, evidenceDelay: false, mutations: [], pendingActions: [], requests: [] };
+const state = { scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, pauseFailure: false, mutationFail: false, detailUnauthorized: false, initialEvidenceFailure: false, canonicalFailure: false, unsafeEvidenceLabels: false, evidenceFailure: true, evidenceDelay: false, mutations: [], pendingActions: [], requests: [] };
 
 const json = (body) => JSON.stringify(body);
 const fulfill = (route, body, status = 200) => route.fulfill({
@@ -158,7 +158,7 @@ try {
         const sequence = offset === 20 && index < 2 ? 19 + index : offset + index + 1;
         const messageId = offset === 0 && index < 2 ? `message-card-${index + 1}` : `message-${sequence}`;
         const alternate = offset === 0 && index === 1;
-        return { source_id: alternate ? "source-chatgpt" : "source-codex", source_label: alternate ? "ChatGPT聊天记录" : "Codex聊天记录", source_type: alternate ? "chatgpt" : "codex_rollout", conversation_id: alternate ? "conversation-2" : "conversation-1", conversation_title: alternate ? "另一个来源会话" : "发布计划讨论", message_id: messageId, role: index % 2 ? "assistant" : "user", sequence, occurred_at: `2026-08-28T08:${String(sequence).padStart(2, "0")}:00Z`, excerpt: `第 ${sequence} 条来源摘要。`, content: `第 ${sequence} 条来源正文。`, content_hash: `message-hash-${sequence}`, raw_reference: `conversation-1/${messageId}`, truncated: false };
+        return { source_id: alternate ? "source-chatgpt" : "source-codex", source_label: state.unsafeEvidenceLabels ? null : alternate ? "ChatGPT聊天记录" : "Codex聊天记录", source_type: state.unsafeEvidenceLabels ? "unknown" : alternate ? "chatgpt" : "codex_rollout", conversation_id: alternate ? "conversation-2" : "conversation-1", conversation_title: state.unsafeEvidenceLabels ? null : alternate ? "关于 Cookie 设置的讨论" : "发布计划讨论", message_id: messageId, role: index % 2 ? "assistant" : "user", sequence, occurred_at: `2026-08-28T08:${String(sequence).padStart(2, "0")}:00Z`, excerpt: `第 ${sequence} 条来源摘要。`, content: `第 ${sequence} 条来源正文。`, content_hash: `message-hash-${sequence}`, raw_reference: `conversation-1/${messageId}`, truncated: false };
       });
       const result = { as_of: "2026-08-28T08:05:00Z", memory_id: "memory-card-1", items, pagination: { limit: 20, offset, total: 40, has_more: offset === 0 } };
       return state.evidenceDelay && offset === 20 ? setTimeout(() => fulfill(route, result), 500) : fulfill(route, result);
@@ -280,7 +280,7 @@ try {
   assert.equal(state.requests.some((url) => url.includes("/evidence?limit=20&offset=20")), false, "later evidence pages must not be prefetched");
   assert.equal(await page.locator('[data-testid="evidence-item"]').count(), 20, "first evidence page must be bounded to 20 items");
   const provenanceText = await page.getByRole("dialog").innerText();
-  assert.ok(provenanceText.includes("ChatGPT聊天记录") && provenanceText.includes("另一个来源会话"), "each evidence row must render its own source and conversation provenance");
+  assert.ok(provenanceText.includes("ChatGPT聊天记录") && provenanceText.includes("关于 Cookie 设置的讨论"), "each evidence row must render its own source and conversation provenance");
   assert.equal(/source-chatgpt|conversation-2|chatgpt|\{"/.test(provenanceText), false, "evidence provenance must not expose internal IDs, enums, or JSON");
   await page.getByRole("dialog").getByRole("button", { name: "加载更多来源", exact: true }).click();
   assert.equal(await page.locator('[data-testid="evidence-item"]').count(), 20, "a failed next page must preserve the first page");
@@ -353,6 +353,14 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "重试读取正文", exact: true }).click();
   await page.getByRole("dialog").getByText("下周三发布新版。发布前完成检查清单。", { exact: true }).waitFor();
   assert.equal(state.requests.filter((url) => url.includes("/memories/memory-card-1?chunk_limit=20&max_chars=12000")).length, canonicalBefore + 2, "canonical retry must issue a bounded reread");
+  await page.keyboard.press("Escape");
+  state.unsafeEvidenceLabels = true;
+  await page.getByRole("button", { name: "发布计划", exact: true }).click();
+  await page.getByRole("dialog").locator('[data-testid="evidence-item"]').first().waitFor();
+  const sanitizedEvidenceText = await page.getByRole("dialog").innerText();
+  for (const unsafe of ["/Users/owner/secret.json", "C:\\Users\\owner\\secret.json", "\\\\server\\share", "{\"cookie\":\"SECRET\"}", "[\"secret\"]", "token=abc", "vault:%2FUsers%2Fowner%2Fsecret.json", "../private/secret"]) assert.equal(sanitizedEvidenceText.includes(unsafe), false, `unsafe provenance must stay out of rendered owner copy: ${unsafe}`);
+  assert.ok(sanitizedEvidenceText.includes("来源未知") && sanitizedEvidenceText.includes("未命名对话"), "unsafe provenance must use owner-safe fallbacks");
+  state.unsafeEvidenceLabels = false;
   await page.setViewportSize({ width: 1024, height: 900 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "1024px detail must not overflow horizontally");
   await page.setViewportSize({ width: 1280, height: 900 });
