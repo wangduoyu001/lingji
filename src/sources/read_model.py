@@ -661,9 +661,25 @@ class SourceReadModel:
 
     def get_message(self, message_id: str, *, include_content: bool) -> dict[str, Any] | None:
         with self._connection() as connection:
-            row = connection.execute(
-                "SELECT * FROM message_records WHERE message_id = ?", (message_id,)
-            ).fetchone()
+            if include_content:
+                query = "SELECT * FROM message_records WHERE message_id = ?"
+            else:
+                # Keep metadata reads genuinely body-free.  In particular,
+                # do not SELECT the potentially very large content column;
+                # only a bounded preview and its length are projected.
+                query = """
+                    SELECT message_id, conversation_id, source_id, external_id,
+                           role, author, occurred_at, sequence,
+                           length(content) AS content_length,
+                           substr(replace(replace(content, char(13), ' '), char(10), ' '), 1, 200)
+                               AS content_preview,
+                           content_hash, raw_reference, privacy, projects_json,
+                           agent_scope_json, privacy_inherited, projects_inherited,
+                           agent_scope_inherited, created_at, updated_at, metadata_json
+                    FROM message_records
+                    WHERE message_id = ?
+                """
+            row = connection.execute(query, (message_id,)).fetchone()
         return self._message_dict(row, include_content=include_content) if row else None
 
     def list_sources(
@@ -1700,9 +1716,16 @@ class SourceReadModel:
         item = dict(row)
         item.pop("ingestion_batch_id", None)
         item.pop("ingestion_ordinal", None)
+        has_content = "content" in item
         content = str(item.pop("content", "") or "")
-        item["content_length"] = len(content)
-        item["content_preview"] = " ".join(content.split())[:200]
+        if has_content:
+            item["content_length"] = len(content)
+            item["content_preview"] = " ".join(content.split())[:200]
+        else:
+            item["content_length"] = int(item.get("content_length") or 0)
+            item["content_preview"] = " ".join(
+                str(item.get("content_preview") or "").split()
+            )[:200]
         if include_content:
             item["content"] = content
         item["projects"] = cls._loads(item.pop("projects_json", "[]"), [])

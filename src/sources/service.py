@@ -25,6 +25,19 @@ _SENSITIVE_QUERY_KEYS = {
     "session",
     "cookie",
 }
+_SENSITIVE_REFERENCE_TOKENS = (
+    "token",
+    "credential",
+    "authorization",
+    "auth_metadata",
+    "password",
+    "cookie",
+    "secret",
+    "api_key",
+    "apikey",
+    "session",
+    "signature",
+)
 
 
 @dataclass(frozen=True)
@@ -362,7 +375,7 @@ class SourceQueryService:
                 "occurred_at": message.get("occurred_at"),
                 "excerpt": excerpt,
                 "content_hash": message.get("content_hash") or "",
-                "raw_reference": self._safe_reference(
+                "raw_reference": self._safe_evidence_reference(
                     message.get("raw_reference") or source.get("raw_reference")
                 )
                 or "",
@@ -499,6 +512,32 @@ class SourceQueryService:
             except ValueError:
                 continue
         return None
+
+    def _safe_evidence_reference(self, value: Any) -> str | None:
+        """Allow only canonical, relative references for owner evidence."""
+        text = str(value or "").strip()
+        if not text:
+            return None
+        lowered = text.casefold()
+        if any(token in lowered for token in _SENSITIVE_REFERENCE_TOKENS):
+            return None
+        safe = self._safe_reference(text)
+        if not safe:
+            return None
+        safe_lowered = safe.casefold()
+        if safe_lowered.startswith(("http://", "https://")):
+            return safe
+        if not safe_lowered.startswith(("raw:", "vault:")):
+            return None
+        _prefix, relative = safe.split(":", 1)
+        if (
+            not relative
+            or relative.startswith(("/", "\\"))
+            or "\\" in relative
+            or any(part in {"", ".", ".."} for part in relative.split("/"))
+        ):
+            return None
+        return safe
 
     @staticmethod
     def _safe_http_url(value: str) -> str | None:

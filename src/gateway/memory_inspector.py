@@ -305,6 +305,9 @@ class MemoryInspectorFacade:
         include_content: bool = True,
     ) -> EvidencePage:
         """Return only the bounded evidence page for one selected memory."""
+        fetch_memory = getattr(self.database, "fetch_memory", None)
+        if callable(fetch_memory) and fetch_memory(memory_id, include_chunks=False) is None:
+            raise LookupError("memory not found")
         # Deliberately call the paged authority seam; the legacy unbounded
         # memory_evidence() path is reserved for ContextPack compatibility.
         return self.source_service.list_memory_evidence_page(
