@@ -57,6 +57,14 @@ macOS Artifact: 9258682849 / DO NOT RETRY
 
 主人明确观察：看不出灵机实际做了什么、接管了什么，与旧版没有明显差异。
 
+当前唯一可执行任务为 `OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION`，执行模式为
+`FOCUSED_PRODUCT_IMPLEMENTATION_ONLY`，基线为文档同步后的 `94461d56c64f31e1af6c7cdece51e959ddc0e8b1`
+（产品代码基线 `4ce1e00acb17bc5e4e4c183f58d30551ef76b101`）。它只允许 focused/product
+implementation，不允许 live 8766/8767、安装、真实聊天/Vault/数据库或主人数据。
+
+旧 Mac 候选 `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A` 已明确记录为 `COMPLETED / FAIL`，不再
+`ACTIVE`；其失败 evidence、备份和 Acceptance 根只能保留，不能复用或冒充通过。
+
 主要阻塞：
 
 - 首页候选与“需要我 0 待办”矛盾；
@@ -177,4 +185,7 @@ Codex 负责命令、安装、进程、端口、哈希、日志、Git、报告�
 
 产品 PR 只有在当前候选对应的精确自动门禁、同 SHA Artifact、真机、主人观察、Production 隔离、报告闭环和清理全部通过后，才允许进入最终合并判断。
 
-当前仍没有 ACTIVE 本机任务。旧失败 Artifact 永久 `DO NOT RETRY`。
+当前 `LOCAL_EXECUTION_TASK.md` 的 `ACTIVE` 任务只能是 Owner memory detail drilldown focused
+实现。实现完成后，必须先产生新的产品 SHA 并通过 focused/full/release，才能创建新的 Mac
+acceptance task；新 Mac 任务必须同 SHA 构建/安装、Computer Use 全页遍历，至少打开五种不同类型
+记忆并展开多个来源原文，主人明确确认前不得写验收完成。旧失败 Artifact 永久 `DO NOT RETRY`。

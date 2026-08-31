@@ -3,13 +3,13 @@
 > Updated: 2026-08-31
 > Formal/default branch: `master`
 > Phase 1 implementation base: `d12c1fb837257e83835a7cdb899bb29a9c675c3d`
-> Current bounded candidate product/tests head: `4ce1e00acb17bc5e4e4c183f58d30551ef76b101` (owner UI source/conclusion repair)
+> Current bounded candidate product/tests head: `4ce1e00acb17bc5e4e4c183f58d30551ef76b101` (previous Mac candidate; FAIL, no longer active)
 > Current reviewed evidence head: `7a23da197d1728253bf1009775872b1217600171`
-> Current implementation branch: `codex/owner-real-history-memory-cards`
+> Current implementation branch: `codex/owner-memory-detail-drilldown`
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
-> Current engineering gate: `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A — MAC OWNER EXPERIENCE PENDING`
+> Current engineering gate: `OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION — FOCUSED PRODUCT IMPLEMENTATION ACTIVE`
 > Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
@@ -18,26 +18,23 @@
 
 ## 当前本机交接状态（2026-08-31）
 
-`OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A` 已激活为唯一 `ACTIVE` 本机任务，执行模式为
-`MACOS_OWNER_UI_EXPERIENCE_ONLY`，精确产品 SHA 为
-`4ce1e00acb17bc5e4e4c183f58d30551ef76b101`，候选标签为
-`OWNER_UI_SOURCE_FILTER_REPAIR_CANDIDATE`。本轮只做隔离 macOS arm64 Tauri 候选构建、整包安装备份、
-认证 8766 sidecar 与根代理 UI 交接；它明确是 `NOT_A_RELEASE_GATE`，不得宣称 release、
-Phase 1 PASS、merge 或主人观察 PASS。旧候选 `6ea11e4`、`6baf4ee6` 的 `OWNER_UI_REPAIR_REQUIRED` 失败
-证据、备份与 acceptance 根必须保留，不得删除或复用；质量测量继续保持
+`OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION` 已激活为唯一 `ACTIVE` 本机任务，执行模式为
+`FOCUSED_PRODUCT_IMPLEMENTATION_ONLY`，基线产品 SHA 为
+`94461d56c64f31e1af6c7cdece51e959ddc0e8b1`，其中产品代码基线为
+`4ce1e00acb17bc5e4e4c183f58d30551ef76b101`。本轮只允许 focused/product implementation，
+不得启动 live 8766/8767、安装候选、读取真实聊天/Vault/数据库或操作主人数据。旧
+`OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A` Mac 候选明确为 `COMPLETED / FAIL`、不再 ACTIVE；其
+失败证据、备份与 acceptance 根必须保留，不得删除、复用或冒充通过。质量测量继续保持
 `MEASURED_FAIL / NOT_RELEASE_READY`。
 
-新 Acceptance 根固定为 `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`，DataRoot、
-Vault、source fixture、evidence 和新安装前 `/Applications/灵机.app` 整包备份分离；Production、
-主人真实聊天、真实 Vault、正式记忆与用户配置保持不触碰。Mac rebuild、full-root Computer
-Use 和主人观察保持待执行；新候选与 sidecar 完成交接后必须保持打开，等待主人确认。
+本轮不创建 Acceptance 根，不构建或安装 Mac 候选，也不接触 live sidecar。实现完成并通过
+focused/full/release 后，才允许由根代理基于新的产品 SHA 创建全新 Mac acceptance task；该任务
+必须使用新隔离根、同 SHA Artifact、全包安装、Computer Use 全页遍历，至少打开五种不同类型记忆
+并展开多个来源原文，且主人确认前不能写完成。
 
-当前 reviewed candidate 已由本轮独立 review 允许从 `4ce1e00a` 重建；旧候选失败证据必须保留，
-不得冒充本轮结果。新隔离 fixture 要求 37 张记忆卡（3 history）、13 permanent、3 conversations、
-36 messages、1 条 owner high-risk pending action only，至少 8 个不同 synthetic conclusions；
-discovered 同时保留 available sessions 与 `not_found` archive，普通来源页只显示 1 张 Codex card，
-found count 与 visible count 一致。当前状态仍为 `PENDING / NOT_TESTED`，绝不表示主人 PASS、release
-或 Phase 1 PASS。
+当前实现交付计划为 `docs/superpowers/plans/2026-08-31-owner-memory-detail-drilldown.md`，包含
+9 个可独立测试的 TDD 任务。实现阶段的结论只能是 focused/product implementation 的代码与合成
+fixture 结果，不表示 Artifact、真实 UI、主人观察、release 或 Phase 1 PASS。
 旧 `6baf4ee6` 候选的 `OWNER_UI_REPAIR_REQUIRED` 报告、backup、fixture、DB、日志与 evidence
 必须继续保留。
 
@@ -64,7 +61,8 @@ Phase 1 PASS 后，Phase 2 第一优先级固定为 **Opportunity Center / 机�
 
 此前唯一已复现的 P0 缺口是：一次终态失败已经产生主人待办后，实时生命周期 callback 随即成功时，成功 Outcome 会立即写入，但旧 PendingAction 要等后续 `WorkStore` 重放/读取才被解决。Task 1 已通过单一事务转换和 callback/replay/restart/乱序矩阵修复并回归验证；剩余执行权威为 `docs/superpowers/plans/2026-08-26-phase1-automatic-memory-followup.md`。
 
-当前 `LOCAL_EXECUTION_TASK.md` 为新的 `ACTIVE` 来源过滤/结论修复任务；在新候选重建、主人观察和清理闭环前，不执行 release 或 Phase 1 合并判断。
+当前 `LOCAL_EXECUTION_TASK.md` 为唯一 `ACTIVE` 的 Owner memory detail drilldown focused
+实现任务；在实现、新产品 SHA 及后续验收闭环前，不执行 Mac 安装或 Phase 1 合并判断。
 
 Task 3 Repair Round 1 已在本分支产品提交 `f2f7312` 完成八项重要缺口修复；最终 Repair Round 2 产品提交 `7058da0` 补齐 BOM/CRLF frontmatter、自动 Generic AI 跨来源身份命名空间和暂停恢复 Work Fact 计数。该状态仅表示代码与合成 fixture 验证通过；不表示 Artifact、真实 UI、主人观察或 Production/Vault 验收完成。Task 2 的 stale scheduler cleanup-state 边界已由 Task 6A 产品/测试提交 `15eb4433c9d6c3ba218e89d50bec84987ad35915` 收口；自动晋级 seam 仍禁止调用。
 

@@ -1,5 +1,37 @@
 # 验收要求变更记录
 
+## 2026-08-31 · Owner memory detail drilldown · focused implementation activation
+
+- 当前唯一产品开发任务：`OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION`，执行模式
+  `FOCUSED_PRODUCT_IMPLEMENTATION_ONLY`，基线文档/产品树为
+  `94461d56c64f31e1af6c7cdece51e959ddc0e8b1`，产品代码基线为
+  `4ce1e00acb17bc5e4e4c183f58d30551ef76b101`。本轮允许修改产品代码，但只运行 focused
+  实现和合成 fixture；禁止 live 8766/8767、安装/Artifact、真实聊天/Vault/数据库和主人数据。
+- 变更范围固定：普通导航仍为 `首页 / 记忆内容 / 需要我 / 记忆来源`，普通列表仍
+  `state=current`；选中单条记忆后显示 canonical 正文、当前结论、稳定时间线、来源软件/会话/
+  时间/角色/原文、raw/structured/vector/permanent 四层状态和主人处理语义。修正、过时、移出、
+  拒绝只能在底部折叠“备用操作”，不新增日常按钮或物理删除。
+- 唯一新增后端能力为认证、有界、分页 linked-evidence route，默认 `limit=20`、最大 `50`、
+  稳定排序、bounded excerpt/body；复用现有 `MemoryInspectorFacade`、`SourceReadModel`、
+  `SourceQueryService`、`lingji_memory.db`、canonical/vector/source/message/conversation routes，
+  不暴露当前无界 `memory_evidence()`，不新建数据库、projector、状态源、队列或端口。
+- canonical body 只在选中单卡后读取；超长正文必须报告截断/继续查看；无 canonical 的
+  `conversation_evidence` 显示“这是原始会话，尚未形成长期记忆”并复用 conversation messages
+  分页。raw absolute path/token/cookie/JSON 不显示，technical IDs 默认折叠；权限、source authority、
+  revoked/expired/hash mismatch 均 fail-closed。
+- TDD 必须先 RED 后 GREEN，覆盖后端 auth/limit/pagination/stable order/privacy/source authority、
+  前端真实 detail/body/timeline/layers/fallback action/load more/no prefetch、rendered E2E 的
+  1024/1280、长文、unknown/error/409、现有动作与 current/history 隔离。局部命令为：
+  `python3 -m pytest -q tests/test_owner_memory_detail_contract.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_source_service.py tests/test_owner_memory_corrections.py tests/test_project_memory_api.py --tb=short`；
+  `cd desktop/lingji-control && npm run test:e2e:memory && npm run test:owner-ui-menu-fast-track && npm run test:smoke && npm run build`；
+  `python3 -m compileall -q src tests`；`git diff --check`；`python3 scripts/check_acceptance_sync.py`；
+  `python3 scripts/check_local_execution_handoff.py`。
+- 旧 Mac 候选 `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`（4ce1e00a）明确为
+  `COMPLETED / FAIL`、不再 ACTIVE；其 evidence/backup/fixture/DB/logs/Acceptance 根必须保留，
+  不得复用或冒充通过。只有新产品 SHA 通过 focused/full/release 后，才可另建 Mac acceptance
+  task；该任务必须同 SHA 全包 arm64 构建/安装、Computer Use 全页遍历，至少打开五种不同类型
+  记忆并展开多个来源原文，主人确认前不得写完成。实现任务的回滚仅限该分支代码/docs，不能触碰主人数据。
+
 ## 2026-08-30 · Owner UI / menu fast-track · Task 2 local activation
 
 - 本机任务唯一身份：`OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6`，模式

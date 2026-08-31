@@ -1,12 +1,9 @@
 # LingJi 本机执行结果回执
 
-> 当前任务正在执行：`OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`。
-> 当前候选仅为 `OWNER_UI_SOURCE_FILTER_REPAIR_CANDIDATE`，`NOT_A_RELEASE_GATE`；
-> prior candidates `6ea11e4`/`43009a0d`/`6baf4ee6` 的主人体验结论为 `OWNER_UI_REPAIR_REQUIRED`；
-> 新候选 `4ce1e00a` 尚未运行，当前仅等待隔离构建与验收，
-> `MEASURED_FAIL / NOT_RELEASE_READY`
-> 质量事实保持延期。下方旧任务回执仅作历史记录，
-> 不覆盖当前 ACTIVE 任务。
+> 当前任务正在执行：`OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION`。
+> 当前仅允许 focused/product implementation，基线为
+> `94461d56c64f31e1af6c7cdece51e959ddc0e8b1`，不得启动 live 8766/8767、安装候选、
+> 读取真实聊天/Vault/数据库或操作主人数据。下方旧任务回执仅作历史记录，不覆盖当前 ACTIVE 任务。
 
 Prior candidate `43009a0dfdf3cd7b949d871cc9054286f17d607e` is explicitly
 recorded as `OWNER_UI_REPAIR_REQUIRED` for raw source titles/English error and
@@ -15,19 +12,19 @@ duplicate macOS lexical-alias source cards; it is not a PASS result.
 ## 0. 当前 ACTIVE 任务回执
 
 ```yaml
-task_id: OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A
+task_id: OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION
 status: PENDING
 verdict: PENDING
-execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
+execution_mode: FOCUSED_PRODUCT_IMPLEMENTATION_ONLY
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
-product_commit: 4ce1e00acb17bc5e4e4c183f58d30551ef76b101
-task_instruction_commit: 8bc1bce20636135018df302ab931cb37707d6376
-report_branch: acceptance/owner-ui-source-filter-repair-4ce1e00a
+product_commit: 94461d56c64f31e1af6c7cdece51e959ddc0e8b1
+task_instruction_commit: PENDING
+report_branch: acceptance/owner-memory-detail-drilldown-implementation
 report_commit: PENDING
-report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A.md
-public_summary_path: PENDING
-public_hashes_path: PENDING
+report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION.md
+public_summary_path: NOT_APPLICABLE_FOCUSED_ONLY
+public_hashes_path: NOT_APPLICABLE_FOCUSED_ONLY
 cleanup_before: PENDING
 cleanup_after: PENDING
 remote_branch_verified: false
@@ -39,32 +36,33 @@ local_temp_root_absent: false
 owner_observation: PENDING
 started_at: PENDING
 finished_at: PENDING
-installed_app_hash: PENDING
-installed_main_sha256: PENDING
-installed_sidecar_sha256: PENDING
-dmg_sha256: PENDING
+installed_app_hash: NOT_APPLICABLE_FOCUSED_ONLY
+installed_main_sha256: NOT_APPLICABLE_FOCUSED_ONLY
+installed_sidecar_sha256: NOT_APPLICABLE_FOCUSED_ONLY
+dmg_sha256: NOT_APPLICABLE_FOCUSED_ONLY
 desktop_pid: 0
 sidecar_pid: 0
-control_api_ping: PENDING
-acceptance_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a
-acceptance_effective_data_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a/data-root/acceptance
-acceptance_memory_cards: 0
-acceptance_completed_scans: 0
-acceptance_pending_actions: 0
+control_api_ping: NOT_RUN_FOCUSED_ONLY
+acceptance_root: NOT_APPLICABLE_FOCUSED_ONLY
+acceptance_effective_data_root: NOT_APPLICABLE_FOCUSED_ONLY
+acceptance_memory_cards: NOT_APPLICABLE_FOCUSED_ONLY
+acceptance_completed_scans: NOT_APPLICABLE_FOCUSED_ONLY
+acceptance_pending_actions: NOT_APPLICABLE_FOCUSED_ONLY
 production_pollution_count: 0
 vault_pollution_count: 0
-owner_observation_page: PENDING
+owner_observation_page: NOT_APPLICABLE_FOCUSED_ONLY
 ```
 
-当前 Acceptance 根目录为 `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`，尚未运行；
-其 DataRoot、Vault、source fixture、evidence 与整包安装备份将在执行时物理分离。旧根
+本任务不创建 Acceptance 根、Artifact、Desktop/sidecar 进程或 owner observation；focused 测试
+证据写入 `.superpowers/sdd/2026-08-31-owner-memory-detail-drilldown/`。旧根
 `/tmp/LingJiAcceptance/owner-ui-redesign-43009a0`、`/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6`
 和 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b` 及其 backup/evidence/DB/logs
-必须原样只读保留，prior candidate failures 与当前 PENDING receipt 分离。
+必须原样只读保留，与当前 PENDING implementation receipt 分离。
 
-旧候选 `OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6` 与 `OWNER_UI_REDESIGN_MAC_43009A0D` 的
-`OWNER_UI_REPAIR_REQUIRED` 失败记录、备份、fixture、DB、日志与 evidence 根必须保留，不得删除
-或用于新候选验证。新候选的全部结果只写入 `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`。
+旧候选 `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`、`OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6`
+与 `OWNER_UI_REDESIGN_MAC_43009A0D` 的 `OWNER_UI_REPAIR_REQUIRED` 失败记录、备份、fixture、DB、
+日志与 evidence 根必须保留，不得删除、复用或冒充通过。新 Mac 候选必须使用新的产品 SHA
+和全新 Acceptance 根，不能使用本 implementation receipt 的路径。
 
 `6ea11e4` 的真实 Mac 来源页失败证据已保留：discovery 同时返回可用 Codex sessions
 和 `not_found` archived_sessions，但普通页面显示两个同名 Codex cards，并把不存在目录
@@ -73,7 +71,7 @@ owner_observation_page: PENDING
 1 owner high-risk pending action only；至少 8 个 synthetic 主题使用不同的主人可读 conclusions，
 不得制造自动扫描 failure pending。raw discovery 预期 5 个来源（含 1 个 `not_found` archive），
 普通 visible source facts/found count 预期 4 个（仅 1 张 Codex card），seed 授权完成后
-authorized/current 预期为 1。
+authorized/current 预期为 1；这些要求只属于未来的新 Mac acceptance，不属于当前 focused implementation。
 
 > 最近一次任务已完成。权威结论：`COMPLETED / FAIL / DO NOT MERGE`。
 >

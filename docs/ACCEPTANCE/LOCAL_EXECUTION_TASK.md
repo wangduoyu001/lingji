@@ -1,83 +1,73 @@
 # LingJi 本机执行任务单
 
-> **当前状态：ACTIVE / OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A。**
+> **当前状态：ACTIVE / OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION。**
 >
 > 本文件仍是本机 Codex 的唯一任务入口；只允许执行下方 `status: ACTIVE` 的精确候选。
 
 ## 0. 当前唯一 ACTIVE 任务
 
 ```yaml
-task_id: OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A
+task_id: OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION
 status: ACTIVE
-execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
-candidate_label: OWNER_UI_SOURCE_FILTER_REPAIR_CANDIDATE
+execution_mode: FOCUSED_PRODUCT_IMPLEMENTATION_ONLY
+candidate_label: OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION_BASELINE
 release_gate: NOT_A_RELEASE_GATE
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
-product_branch: codex/owner-real-history-memory-cards
-product_commit: 4ce1e00acb17bc5e4e4c183f58d30551ef76b101
-artifact_name: PENDING_REBUILD_FROM_4CE1E00A
-artifact_id: PENDING_REBUILD_FROM_4CE1E00A
-artifact_workflow_run_id: LOCAL_ONLY_NOT_CI
+product_branch: codex/owner-memory-detail-drilldown
+product_commit: 94461d56c64f31e1af6c7cdece51e959ddc0e8b1
+artifact_name: NOT_APPLICABLE_FOCUSED_ONLY
+artifact_id: NOT_APPLICABLE_FOCUSED_ONLY
+artifact_workflow_run_id: LOCAL_ONLY_FOCUSED_IMPLEMENTATION
 artifact_zip_sha256: PENDING
 dmg_sha256: PENDING
-report_branch: acceptance/owner-ui-source-filter-repair-4ce1e00a
-report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A.md
-public_summary_path: PENDING
-public_hashes_path: PENDING
+report_branch: acceptance/owner-memory-detail-drilldown-implementation
+report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION.md
+public_summary_path: NOT_APPLICABLE_FOCUSED_ONLY
+public_hashes_path: NOT_APPLICABLE_FOCUSED_ONLY
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
-acceptance_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a
-acceptance_data_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a/data-root
-acceptance_vault_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a/vault
-acceptance_source_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a/source-fixture
-acceptance_backup_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a/installed-app-backup
-acceptance_evidence_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a/evidence
+acceptance_root: NOT_APPLICABLE_FOCUSED_ONLY
+acceptance_data_root: NOT_APPLICABLE_FOCUSED_ONLY
+acceptance_vault_root: NOT_APPLICABLE_FOCUSED_ONLY
+acceptance_source_root: NOT_APPLICABLE_FOCUSED_ONLY
+acceptance_backup_root: NOT_APPLICABLE_FOCUSED_ONLY
+acceptance_evidence_root: .superpowers/sdd/2026-08-31-owner-memory-detail-drilldown
 production_roots_untouched: true
-backup_before_install_required: true
-whole_bundle_replace_required: true
-rollback: restore the pre-install whole /Applications/灵机.app bundle from acceptance_backup_root only; never delete or overwrite an existing backup
+backup_before_install_required: false
+whole_bundle_replace_required: false
+rollback: no installation or runtime mutation is permitted; revert only this focused implementation branch if explicitly authorized
 cleanup_before_required: true
 cleanup_after_required: true
 remote_verification_required: true
 owner_confirmation_required: true
-product_code_changes_forbidden: true
+product_code_changes_forbidden: false
 secret_export_count_required: 0
 production_pollution_count_required: 0
 quality_gate: MEASURED_FAIL_NOT_RELEASE_READY_DEFERRED
-keep_app_and_sidecar_open_for_owner: true
-owner_observation_required: true
+keep_app_and_sidecar_open_for_owner: false
+owner_observation_required: false
 preserve_old_failed_evidence: true
 ```
 
-本任务建立于 2026-08-31 的产品修复之后，精确产品提交为 `4ce1e00a`（包含前置来源过滤提交
-`8ec447e0`）。必须先从该 SHA 重建新的 macOS arm64 候选，再执行任何真实安装或主人观察。
-此前 `6ea11e4` 真机来源页已失败：discovery 返回可用 Codex sessions 与 `not_found` 的
-archived_sessions，普通来源页错误显示两个同名 Codex 并把不存在目录说成已发现；该失败证据与
-旧根 `/tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4` 必须保留，不得复用。新根
-`/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a` 仅供重建后的候选使用，当前尚未运行。
-本任务明确不得宣称 release、Phase 1 PASS、merge 或主人体验 PASS。
+本任务只负责 Owner memory detail drilldown 的产品代码、测试与验收文档，具体实施计划为
+`docs/superpowers/plans/2026-08-31-owner-memory-detail-drilldown.md`。允许修改产品代码，但
+仅运行 focused/product implementation 和合成 fixture；不得启动 live 8766/8767、构建或安装
+候选、读取真实聊天/Vault/数据库、操作主人数据或宣布主人体验/release/Phase 1 PASS。
 
-本任务只负责 macOS arm64 Tauri 构建、严格签名核验、现有安装包整包备份/替换、Acceptance
-物理隔离、认证 `127.0.0.1:8766` sidecar 健康证明和交接准备。必须覆盖 current、superseded、
-stale、conflict、raw/vector/permanent 记忆与至少一个真实 pending action；Production、主人
-真实聊天、真实 Vault、正式记忆、用户配置和未知进程均不得读取或修改。根代理负责 Computer
-Use 全部 UI/菜单/窗口遍历和主人观察；本任务不得替主人宣布 PASS，不得宣称 release、Phase 1
-或 merge 通过。遇到 DMG 失败但 `.app`、arm64 和 strict codesign 均成功时，记录失败并继续
-whole-bundle 安装；其他真实 blocker 立即停止并报告。
+范围固定为：四项普通导航和 current-only 列表不变；单卡详情按需显示 canonical 正文、当前结论、
+稳定时间线、来源原文、raw/structured/vector/permanent 状态与主人处理语义；唯一新增后端能力是
+复用 `MemoryInspectorFacade`/`SourceReadModel` 的认证 bounded paginated linked-evidence route，
+默认 20、最大 50，不能暴露无界 `memory_evidence()`；不新建数据库、projector、状态源或 DELETE。
 
-旧候选 `OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6`（product SHA
-`6baf4ee6d15256e44164bcbe3f7ce227af0b5d07`）、旧候选 `43009a0d` 及其旧根与 evidence，
-以及中间候选 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b` 的 evidence/DB/logs
-均须只读保留，不得删除、复用或冒充当前候选。新候选使用全新根
-`/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`，与全部旧根物理隔离。
+旧 Mac 候选 `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`（product SHA
+`4ce1e00acb17bc5e4e4c183f58d30551ef76b101`）明确记录为 `COMPLETED / FAIL`，不再 ACTIVE；其
+failure evidence、backup、fixture、DB、logs 与 Acceptance 根必须原样只读保留，不能复用或冒充
+通过。该旧候选的主人结论为 `OWNER_UI_REPAIR_REQUIRED`，质量事实仍为
+`MEASURED_FAIL / NOT_RELEASE_READY`。
 
-本轮合成 seed 固定为 37 张 current 记忆卡，另有 3 张 history（普通 current-only 页为
-20+17，history 泄漏为 0）、13 条 permanent、3 个 conversation、36 条 message，以及仅 1 条
-owner high-risk pending action；不得通过自动扫描制造 failure pending。至少 8 个主题必须有不同、
-主人可读的 conclusion，并在证据中明确标注 synthetic。raw discovery 预期 5 个来源，其中 1 个
-为 `not_found` archive；普通 visible source facts/found count 预期为 4 个，其中只有 1 张 Codex
-card；seed 授权完成后 authorized/current 预期为 1。Mac rebuild、full-root
-Computer Use 与主人观察均保持 PENDING，完成后必须保持 app/sidecar 打开等待主人确认。
+只有本任务产生新的产品 SHA 且 focused/full/release 门禁通过后，才允许创建新的 Mac acceptance
+task。新任务须使用新隔离根、同 SHA arm64 全包构建/安装和 Computer Use 全页遍历，至少打开五种
+不同类型记忆并展开多个来源原文；主人明确确认前不得写完成。
 
 ## 1. 最近一次任务
 

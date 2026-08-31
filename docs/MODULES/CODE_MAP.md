@@ -420,6 +420,39 @@ desktop/lingji-control/src/navigation.ts
 
 Focused tests: `tests/test_owner_real_history_discovery.py`, `tests/test_owner_codex_rollout_adapter.py`, `tests/test_owner_real_history_import_flow.py`, `tests/test_owner_memory_card_projector.py`, `tests/test_owner_memory_card_api.py`, `tests/test_owner_memory_corrections.py`, `tests/test_project_memory_api.py`, `tests/test_task3_round2_direct.py`, `tests/test_task3_round3_integration.py`; rendered/UI: `cd desktop/lingji-control && npm run test:e2e:memory && npm run test:owner-ui-menu-fast-track && npm run test:smoke && npm run build`. The owner menu fast-track smoke exercises the four ordinary destinations, collapsed advanced disclosure, owner next-step copy, card/source/attention rendered behavior, existing actions, and 1024/1280 overflow boundaries.
 
+### Owner memory detail drilldown（当前唯一 focused implementation）
+
+当前任务为 `OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION`，基线产品代码为
+`4ce1e00acb17bc5e4e4c183f58d30551ef76b101`，文档同步基线为
+`94461d56c64f31e1af6c7cdece51e959ddc0e8b1`。普通导航和 `state=current` 列表保持不变；点击单条
+记忆后，详情按需组合现有 canonical/source/vector 路由与新增认证、有界分页 evidence route。
+不得新增数据库、projector、永久事实源、端口、DELETE 或 Desktop 直连数据库。
+
+```text
+src/gateway/memory_inspector.py::MemoryInspectorFacade.list_memory_evidence
+src/sources/service.py::SourceQueryService.list_memory_evidence_page
+src/control/api.py::GET /api/memory/inspector/memories/{memory_id}/evidence
+= bounded linked-message pages (default 20, max 50), stable UTC order, source/privacy authority
+
+desktop/lingji-control/src/pages/ownerMemoryCardsTypes.ts
+desktop/lingji-control/src/pages/ownerMemoryCardsApi.ts
+desktop/lingji-control/src/pages/OwnerMemoryCardsPage.tsx
+desktop/lingji-control/src/pages/LocalMemoryLoop.css
+= selected-only canonical/evidence/vector/source reads, detail sections, truncation and safe actions
+```
+
+Focused backend coverage: `tests/test_owner_memory_detail_contract.py`,
+`tests/test_owner_memory_card_projector.py`, `tests/test_owner_memory_card_api.py`,
+`tests/test_memory_inspector_api.py`, `tests/test_memory_inspector_facade.py`,
+`tests/test_source_service.py`, `tests/test_owner_memory_corrections.py` and
+`tests/test_project_memory_api.py`. Rendered/UI coverage is in
+`desktop/lingji-control/tests/e2e_owner_memory_flow.mjs` and
+`desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs`; run
+`cd desktop/lingji-control && npm run test:e2e:memory && npm run test:owner-ui-menu-fast-track && npm run test:smoke && npm run build`.
+The implementation task is focused-only: no live 8766/8767, installation, real chat/Vault/database,
+or owner data. A new Mac acceptance task is permitted only after a new product SHA passes full/release,
+and must verify at least five memory types plus multiple expanded source originals in the rendered app.
+
 Task 5:
 src/obsidian/memory_scope.py
 src/obsidian/memory_migration.py
