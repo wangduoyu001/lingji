@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { actionEvidence, MemorySourcesApi, mergeSourceFacts, ownerSourceName, scanStatusLabel, scanTerminalEvidence, sourceMetadataEvidence, sourceStateLabel, countLabel } from "../src/pages/memorySourcesApi.ts";
+import { actionEvidence, MemorySourcesApi, mergeSourceFacts, ownerSourceName, scanStatusLabel, scanTerminalEvidence, sourceMetadataEvidence, sourceStateLabel, countLabel, canonicalSourceKey } from "../src/pages/memorySourcesApi.ts";
 import { LingJiApi } from "../src/api.ts";
 import { readFileSync } from "node:fs";
 
@@ -44,6 +44,14 @@ assert.equal(snapshot.sources.find((item) => item.kind === "claude_desktop")?.st
 assert.equal(snapshot.sources.find((item) => item.kind === "claude_desktop")?.detail, "Claude 暂不支持自动导入旧记录；灵机不会读取它的内部数据库。");
 assert.match(snapshot.sources.find((item) => item.kind === "claude_desktop")?.nextAction ?? "", /暂不支持|不要读取|官方导出/);
 assert.equal(ownerSourceName({ kind: "obsidian", display_name: "Managed Obsidian memory" }), "Obsidian 长期记忆区");
+assert.equal(canonicalSourceKey("codex_rollout", "/tmp/LingJi/Codex"), canonicalSourceKey("codex_rollout", "/private/tmp/LingJi/Codex"), "macOS /tmp aliases must share a source key");
+assert.equal(canonicalSourceKey("generic", "/var/lib/lingji"), canonicalSourceKey("generic", "/private/var/lib/lingji"), "macOS /var aliases must share a source key");
+assert.notEqual(canonicalSourceKey("generic", "C:\\tmp\\LingJi"), canonicalSourceKey("generic", "C:\\private\\tmp\\LingJi"), "Windows paths must not use macOS aliasing");
+assert.equal(mergeSourceFacts(
+  [{ kind: "codex_rollout", display_name: "Codex", candidate_root: "/tmp/LingJi/Codex", status: "available" }],
+  [{ source_id: "src-codex", kind: "codex_rollout", root: "/private/tmp/LingJi/Codex", status: "authorized" }],
+  [],
+).length, 1, "macOS lexical aliases must not render duplicate source cards");
 assert.equal(sourceStateLabel("available"), "已发现");
 assert.equal(scanStatusLabel("completed"), "已完成");
 assert.equal(countLabel(null), "尚未获得");

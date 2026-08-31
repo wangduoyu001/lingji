@@ -3,16 +3,12 @@ import { Notice } from "../components/ui";
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { LingJiApi } from "../api";
 import type { WorkFact } from "../contracts/workFact";
-import { formatWorkFactResult } from "./workFactPresentation";
+import { formatWorkFactResult, formatWorkFactTitle } from "./workFactPresentation";
 
 export type CurrentWorkFact = WorkFact;
 
 const text = (value: unknown, fallback = "检查结果尚未获得") =>
   value === null || value === undefined || value === "" ? fallback : String(value);
-const readableWorkTitle = (value: unknown): string => {
-  const title = String(value ?? "");
-  return /^扫描\s+obsidian$/i.test(title) ? "Obsidian 长期记忆区" : title;
-};
 const readableNextAction = (action: WorkFact["next_action"] | undefined): string => {
   if (!action) return "暂时没有下一步";
   if (action.actor === "system") return "灵机会继续自动检查";
@@ -55,7 +51,7 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
       <div className="current-work-heading">
         <div>
           <h2>正在做什么</h2>
-          <p className="current-work-readable">{hasWork ? readableWorkTitle(work?.title) : "目前没有正在处理的事情。"}</p>
+          <p className="current-work-readable">{hasWork ? formatWorkFactTitle(work?.title) : "目前没有正在处理的事情。"}</p>
         </div>
         <span className="pill">{status}</span>
       </div>

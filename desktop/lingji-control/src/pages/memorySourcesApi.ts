@@ -29,11 +29,14 @@ export function sourceStateLabel(state: string | null | undefined): string {
 
 export function canonicalSourceKey(kind: unknown, root: unknown): string {
   const normalizedKind = String(kind ?? "").trim().toLowerCase();
-  const normalizedRoot = String(root ?? "")
+  let normalizedRoot = String(root ?? "")
     .trim()
     .replaceAll("\\", "/")
     .replace(/\/+/g, "/")
     .replace(/\/$/, "");
+  // macOS exposes /tmp and /var through lexical /private aliases. Collapse
+  // only those POSIX aliases; Windows path semantics remain untouched.
+  normalizedRoot = normalizedRoot.replace(/^\/private\/(tmp|var)(?=\/|$)/i, "/$1");
   return `${normalizedKind}|${normalizedRoot.toLowerCase()}`;
 }
 

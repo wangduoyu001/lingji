@@ -7,6 +7,26 @@ const EMPTY_SCAN_SUMMARIES = [
 
 const GENERIC_SUCCESS = new Set(["成功", "已完成", "completed", "success"]);
 
+const automaticMemoryTitles: Record<string, string> = {
+  codex_rollout: "检查 Codex聊天记录",
+  codex_transcript: "检查 Codex聊天记录",
+  codex_history: "检查 Codex聊天记录",
+  codex: "检查 Codex聊天记录",
+  chatgpt_export: "检查 ChatGPT 导出记录",
+  chatgpt_history: "检查 ChatGPT 导出记录",
+  obsidian: "检查 Obsidian 长期记忆区",
+  generic: "检查其他聊天来源",
+  generic_ai_history: "检查其他聊天来源",
+};
+
+/** Keep internal automatic-memory work names out of ordinary owner surfaces. */
+export function formatWorkFactTitle(value: unknown): string {
+  const title = String(value ?? "").trim();
+  const match = title.match(/^扫描\s+([^\s]+)$/i);
+  if (match) return automaticMemoryTitles[match[1].toLowerCase()] ?? "检查其他聊天来源";
+  return title;
+}
+
 function finiteEvidenceNumber(evidence: Record<string, unknown> | undefined, key: string): number | undefined {
   const value = evidence?.[key];
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
@@ -25,6 +45,10 @@ export function formatWorkFactResult(fact: WorkFact): string {
   const jobs = finiteEvidenceNumber(evidence, "jobs");
   const queued = finiteEvidenceNumber(evidence, "queued");
   const summaryIsEmpty = EMPTY_SCAN_SUMMARIES.some((pattern) => pattern.test(outcomeSummary));
+
+  if (/^unsupported automatic-memory source kind:\s*[^\s]+$/i.test(outcomeSummary)) {
+    return "这个来源暂不支持自动接入，其他记忆不受影响";
+  }
 
   if ((status === "completed" || status === "success") && ((jobs === 0 && queued === 0) || summaryIsEmpty)) {
     return "检查完成，未发现新内容";
