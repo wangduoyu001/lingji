@@ -1,5 +1,24 @@
 # 验收要求变更记录
 
+## 2026-08-31 · Owner memory detail drilldown · focused implementation closeout
+
+- 最终产品/测试 HEAD 为 `c7388c08b495b1fbf1598358d76fe4176552f9ab`；Task 1 产品链为
+  `b46229eb` → `b7f4829f` → `b7b70468`，Task 2 为 `38f02686` → `734e1eb9` → `6102fb80`
+  → `d974360c` → `ed5d5fa3`，Task 3 为 `bb2ff3e2` → `b865f087` → `22545e92` → `c7388c08`。
+  Task 1 Repair 2 scoped re-review 为 `ADDRESSED / 0 open findings`；Task 2 Repair 2 与 Task 3
+  Repair 3 final review 均为 `Spec Compliance: PASS / APPROVED / Critical 0 / Important 0 / Minor 0`。
+- focused 实现范围已完成：普通 UI 仍四项导航与 `state=current` current-only；单卡详情按需读取
+  canonical/current conclusion/development/source original/four layers/owner handling。唯一新增
+  route 为 `GET /api/memory/inspector/memories/{memory_id}/evidence`，默认/最大分页 `20/50`，
+  item `excerpt<=240`、`content<=4000`、单页 content `<=24000`；canonical 使用真实 bounded
+  cursor。技术/备用信息折叠，history 按需且不带 current 语义，动作仅在底部折叠 `备用操作`，无
+  删除、新菜单、新后端状态源。conversation-only 文案为“这是原始会话，尚未形成长期记忆”。
+- 本轮 focused 自动化不触碰 live 8766/8767、package/install、Mac、Production/Vault、真实聊天/数据库
+  或主人数据；这些以及 owner observation 均为 `NOT_TESTED`。旧 `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`
+  (`4ce1e00a`) 保持历史 `COMPLETED / FAIL`，不得重开、复用或伪装通过。根代理完成 full/release 后，
+  才可另建全新 Mac acceptance task；该任务需同 SHA 全包 arm64 安装、全页遍历、五种记忆类型及多个
+  来源原文展开，并在主人确认前保持未完成。
+
 ## 2026-08-31 · Owner memory detail drilldown · focused implementation activation
 
 - 当前唯一产品开发任务：`OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION`，执行模式

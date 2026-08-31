@@ -450,9 +450,16 @@ Focused backend coverage: `tests/test_owner_memory_detail_contract.py`,
 `desktop/lingji-control/tests/e2e_owner_memory_flow.mjs` and
 `desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs`; run
 `cd desktop/lingji-control && npm run test:e2e:memory && npm run test:owner-ui-menu-fast-track && npm run test:smoke && npm run build`.
-The implementation task is focused-only: no live 8766/8767, installation, real chat/Vault/database,
-or owner data. A new Mac acceptance task is permitted only after a new product SHA passes full/release,
-and must verify at least five memory types plus multiple expanded source originals in the rendered app.
+The implementation task is now focused-complete at product/test HEAD
+`c7388c08b495b1fbf1598358d76fe4176552f9ab`. Ordinary UI remains current-only; detail is selected-only
+and composes canonical body/current conclusion/development/source originals/four layer states/owner
+handling. The evidence route is bounded at `limit=20` by default and `50` maximum, with
+`excerpt<=240`, `content<=4000`, and page content `<=24000`; canonical continuation uses a real cursor.
+Technical/backup information is folded, history is on-demand and semantically isolated, and actions remain
+inside bottom-collapsed `备用操作`; there is no delete/new menu/new backend state source. Focused implementation
+is complete, but no live 8766/8767, installation, real chat/Vault/database, owner data, or owner observation
+was run. A new Mac acceptance task is permitted only after the root agent completes full/release on this
+new product SHA, and must verify at least five memory types plus multiple expanded source originals.
 
 Task 5:
 src/obsidian/memory_scope.py

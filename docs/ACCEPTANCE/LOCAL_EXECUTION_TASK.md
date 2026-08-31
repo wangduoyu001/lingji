@@ -1,26 +1,26 @@
 # LingJi 本机执行任务单
 
-> **当前状态：ACTIVE / OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION。**
+> **当前状态：IDLE（最近 focused 任务 `OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION` 已完成收口）。**
 >
-> 本文件仍是本机 Codex 的唯一任务入口；只允许执行下方 `status: ACTIVE` 的精确候选。
+> 本文件仍是本机 Codex 的唯一任务入口；当前没有 `status: ACTIVE` 任务。
 
-## 0. 当前唯一 ACTIVE 任务
+## 0. 最近收口任务（当前无 ACTIVE 任务）
 
 ```yaml
 task_id: OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION
-status: ACTIVE
+status: IDLE
 execution_mode: FOCUSED_PRODUCT_IMPLEMENTATION_ONLY
 candidate_label: OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION_BASELINE
 release_gate: NOT_A_RELEASE_GATE
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 product_branch: codex/owner-memory-detail-drilldown
-product_commit: 94461d56c64f31e1af6c7cdece51e959ddc0e8b1
+product_commit: c7388c08b495b1fbf1598358d76fe4176552f9ab
 artifact_name: NOT_APPLICABLE_FOCUSED_ONLY
 artifact_id: NOT_APPLICABLE_FOCUSED_ONLY
 artifact_workflow_run_id: LOCAL_ONLY_FOCUSED_IMPLEMENTATION
-artifact_zip_sha256: PENDING
-dmg_sha256: PENDING
+artifact_zip_sha256: NOT_APPLICABLE_FOCUSED_ONLY
+dmg_sha256: NOT_APPLICABLE_FOCUSED_ONLY
 report_branch: acceptance/owner-memory-detail-drilldown-implementation
 report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION.md
 public_summary_path: NOT_APPLICABLE_FOCUSED_ONLY
@@ -49,11 +49,11 @@ owner_observation_required: false
 preserve_old_failed_evidence: true
 ```
 
-本任务只负责 Owner memory detail drilldown 的产品代码、测试与验收文档，具体实施计划为
+本任务负责的 Owner memory detail drilldown 产品代码、测试与验收文档已完成 focused 收口，具体实施计划为
 `docs/superpowers/plans/2026-08-31-owner-memory-detail-drilldown.md`，已收束为 3 个实现任务 + 1 个
 收口任务，共 4 个任务。允许修改产品代码，但
-仅运行 focused/product implementation 和合成 fixture；不得启动 live 8766/8767、构建或安装
-候选、读取真实聊天/Vault/数据库、操作主人数据或宣布主人体验/release/Phase 1 PASS。
+本轮仅运行 focused/product implementation 和合成 fixture；未启动 live 8766/8767、未进行 package/install、
+未读取真实聊天/Vault/数据库、未操作主人数据。不得据此宣布主人体验/release/Phase 1 PASS。
 
 范围固定为：四项普通导航和 current-only 列表不变；单卡详情通过现有 `/cards/{id}`、bounded
 `/memories/{id}`、`/vector`、`/source` 与唯一新增的
@@ -71,8 +71,8 @@ failure evidence、backup、fixture、DB、logs 与 Acceptance 根必须原样�
 通过。该旧候选的主人结论为 `OWNER_UI_REPAIR_REQUIRED`，质量事实仍为
 `MEASURED_FAIL / NOT_RELEASE_READY`。
 
-只有本任务产生新的产品 SHA 且 focused/full/release 门禁通过后，才允许创建新的 Mac acceptance
-task。新任务须使用新隔离根、同 SHA arm64 全包构建/安装和 Computer Use 全页遍历，至少打开五种
+本任务产生的新产品 SHA 为 `c7388c08b495b1fbf1598358d76fe4176552f9ab`；只有该 SHA 通过根代理的
+full/release 门禁后，才允许创建新的 Mac acceptance task。新任务须使用新隔离根、同 SHA arm64 全包构建/安装和 Computer Use 全页遍历，至少打开五种
 不同类型记忆并展开多个来源原文；主人明确确认前不得写完成。
 
 ## 1. 最近一次任务

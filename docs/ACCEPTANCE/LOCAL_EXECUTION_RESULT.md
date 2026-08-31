@@ -1,38 +1,40 @@
 # LingJi 本机执行结果回执
 
-> 当前任务正在执行：`OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION`。
-> 当前仅允许 focused/product implementation，基线为
-> `94461d56c64f31e1af6c7cdece51e959ddc0e8b1`，不得启动 live 8766/8767、安装候选、
-> 读取真实聊天/Vault/数据库或操作主人数据。下方旧任务回执仅作历史记录，不覆盖当前 ACTIVE 任务。
+> 最近任务已收口：`OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION`（focused implementation complete）。
+> 本轮仅执行 focused/product implementation，基线为
+> `94461d56c64f31e1af6c7cdece51e959ddc0e8b1`，未启动 live 8766/8767、未 package/install 候选、
+> 未读取真实聊天/Vault/数据库或操作主人数据。下方旧任务回执仅作历史记录。
 
 Prior candidate `43009a0dfdf3cd7b949d871cc9054286f17d607e` is explicitly
 recorded as `OWNER_UI_REPAIR_REQUIRED` for raw source titles/English error and
 duplicate macOS lexical-alias source cards; it is not a PASS result.
 
-## 0. 当前 ACTIVE 任务回执
+## 0. 最近收口任务回执（当前无 ACTIVE 任务）
 
 ```yaml
 task_id: OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION
 status: PENDING
 verdict: PENDING
+implementation_status: COMPLETED_FOCUSED_ONLY
+owner_result: NOT_TESTED
 execution_mode: FOCUSED_PRODUCT_IMPLEMENTATION_ONLY
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
-product_commit: 94461d56c64f31e1af6c7cdece51e959ddc0e8b1
-task_instruction_commit: PENDING
+product_commit: c7388c08b495b1fbf1598358d76fe4176552f9ab
+task_instruction_commit: 662b77ee27e735e345879495affc3fe281d1edf0
 report_branch: acceptance/owner-memory-detail-drilldown-implementation
 report_commit: PENDING
 report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION.md
 public_summary_path: NOT_APPLICABLE_FOCUSED_ONLY
 public_hashes_path: NOT_APPLICABLE_FOCUSED_ONLY
-cleanup_before: PENDING
-cleanup_after: PENDING
+cleanup_before: PASS
+cleanup_after: PASS
 remote_branch_verified: false
 remote_commit_verified: false
 remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
-local_temp_root_absent: false
+local_temp_root_absent: true
 owner_observation: PENDING
 started_at: PENDING
 finished_at: PENDING
@@ -42,7 +44,7 @@ installed_sidecar_sha256: NOT_APPLICABLE_FOCUSED_ONLY
 dmg_sha256: NOT_APPLICABLE_FOCUSED_ONLY
 desktop_pid: 0
 sidecar_pid: 0
-control_api_ping: NOT_RUN_FOCUSED_ONLY
+control_api_ping: NOT_TESTED
 acceptance_root: NOT_APPLICABLE_FOCUSED_ONLY
 acceptance_effective_data_root: NOT_APPLICABLE_FOCUSED_ONLY
 acceptance_memory_cards: NOT_APPLICABLE_FOCUSED_ONLY
@@ -50,14 +52,14 @@ acceptance_completed_scans: NOT_APPLICABLE_FOCUSED_ONLY
 acceptance_pending_actions: NOT_APPLICABLE_FOCUSED_ONLY
 production_pollution_count: 0
 vault_pollution_count: 0
-owner_observation_page: NOT_APPLICABLE_FOCUSED_ONLY
+owner_observation_page: NOT_TESTED
 ```
 
 本任务不创建 Acceptance 根、Artifact、Desktop/sidecar 进程或 owner observation；focused 测试
 证据写入 `.superpowers/sdd/2026-08-31-owner-memory-detail-drilldown/`。旧根
 `/tmp/LingJiAcceptance/owner-ui-redesign-43009a0`、`/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6`
 和 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b` 及其 backup/evidence/DB/logs
-必须原样只读保留，与当前 PENDING implementation receipt 分离。
+必须原样只读保留，与本轮 focused implementation receipt 分离。
 
 旧候选 `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`、`OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6`
 与 `OWNER_UI_REDESIGN_MAC_43009A0D` 的 `OWNER_UI_REPAIR_REQUIRED` 失败记录、备份、fixture、DB、
