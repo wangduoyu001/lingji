@@ -1,4 +1,5 @@
 import os
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -80,13 +81,15 @@ class TestBrainStatusApiContract:
         assert response.status_code == 401
 
     def test_frontend_dist_exists(self):
-        """Frontend dist directory has compiled JS bundles when a build ran first."""
+        """Every JavaScript entry referenced by the built HTML exists."""
         dist = os.path.join("desktop", "lingji-control", "dist")
         if not os.path.isdir(dist):
             pytest.skip("Frontend dist not built – run UI build first")
         index = os.path.join(dist, "index.html")
         assert os.path.isfile(index), "index.html missing"
-        assets_dir = os.path.join(dist, "assets")
-        assert os.path.isdir(assets_dir), "assets dir missing"
-        js_files = [name for name in os.listdir(assets_dir) if name.endswith(".js")]
-        assert len(js_files) >= 2, f"Expected >=2 JS bundles, got {len(js_files)}"
+        html = open(index, encoding="utf-8").read()
+        entries = re.findall(r'<script\b[^>]*\bsrc=["\']([^"\']+\.js)["\']', html)
+        assert entries, "index.html does not reference a JavaScript entry"
+        for entry in entries:
+            relative = entry.split("?", 1)[0].split("#", 1)[0].lstrip("/")
+            assert os.path.isfile(os.path.join(dist, relative)), f"Referenced JS entry missing: {entry}"

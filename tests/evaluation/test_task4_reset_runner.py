@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -234,7 +235,7 @@ def test_public_cli_uses_private_temporary_factory_not_arbitrary_roots() -> None
 
 def test_release_preflight_is_executable_and_prevents_scale_invocation() -> None:
     result = subprocess.run(
-        ["./.venv/bin/python", "scripts/automatic_memory_quality_gate.py", "--check-4r2"],
+        [sys.executable, "scripts/automatic_memory_quality_gate.py", "--check-4r2"],
         capture_output=True,
         text=True,
         check=False,

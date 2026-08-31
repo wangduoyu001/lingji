@@ -2,6 +2,7 @@
 
 import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -110,7 +111,7 @@ class SecondBrainTests(unittest.TestCase):
         startup = "\n".join((ROOT / name).read_text(encoding="utf-8-sig") for name in ("start_lingji.py", "run_service.py"))
         self.assertNotIn("second_brain", startup)
         result = subprocess.run(
-            ["python", "-c", "from main import PEMISCore; PEMISCore(); print('ORIGINAL_INIT_OK')"],
+            [sys.executable, "-c", "from main import PEMISCore; PEMISCore(); print('ORIGINAL_INIT_OK')"],
             cwd=ROOT,
             check=True,
             capture_output=True,
