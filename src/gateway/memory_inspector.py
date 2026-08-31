@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from src.sources.service import SourceQueryService, ViewerContext
+from src.sources.service import EvidencePage, SourceQueryService, ViewerContext
 from .owner_memory_cards import OwnerMemoryCardProjector
 
 
@@ -214,7 +214,13 @@ class MemoryInspectorFacade:
         return self.card_projector.summary(viewer=viewer)
 
     def get_memory(
-        self, memory_id: str, *, viewer: ViewerContext | None = None
+        self,
+        memory_id: str,
+        *,
+        viewer: ViewerContext | None = None,
+        chunk_limit: int | None = None,
+        max_chars: int | None = None,
+        cursor: str | None = None,
     ) -> dict[str, Any]:
         selected = viewer or self.source_service.owner_viewer()
         try:
@@ -233,6 +239,46 @@ class MemoryInspectorFacade:
             raise LookupError("memory not found")
         self._check_memory_visibility(memory, selected)
         detail = dict(memory)
+        chunks = [dict(chunk) for chunk in detail.get("chunks") or []]
+        bounded = chunk_limit is not None or max_chars is not None or cursor is not None
+        if chunk_limit is not None:
+            chunk_limit = int(chunk_limit)
+            if chunk_limit < 1 or chunk_limit > 50:
+                raise ValueError("chunk_limit must be between 1 and 50")
+        if max_chars is not None:
+            max_chars = int(max_chars)
+            if max_chars < 1 or max_chars > 24_000:
+                raise ValueError("max_chars must be between 1 and 24000")
+        if cursor is not None:
+            cursor = str(cursor).strip()
+            if len(cursor) > 200:
+                raise ValueError("cursor is too long")
+            if cursor:
+                start = next(
+                    (
+                        index + 1
+                        for index, chunk in enumerate(chunks)
+                        if str(chunk.get("chunk_id") or "") == cursor
+                    ),
+                    None,
+                )
+                if start is None and cursor.isdigit():
+                    start = int(cursor)
+                if start is None:
+                    raise ValueError("cursor does not identify a canonical chunk")
+                chunks = chunks[start:]
+        if chunk_limit is not None:
+            chunks = chunks[:chunk_limit]
+        if max_chars is not None:
+            for chunk in chunks:
+                text = str(chunk.get("text") or "")
+                if len(text) > max_chars:
+                    chunk["text"] = text[:max_chars]
+                    chunk["truncated"] = True
+                else:
+                    chunk["truncated"] = False
+        if bounded:
+            detail["chunks"] = chunks
         detail["citations"] = [
             {
                 "chunk_id": chunk.get("chunk_id"),
@@ -248,6 +294,24 @@ class MemoryInspectorFacade:
                 "viewer_agent_id": selected.agent_id,
                 "item": detail,
             }
+        )
+
+    def list_memory_evidence(
+        self,
+        memory_id: str,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        include_content: bool = True,
+    ) -> EvidencePage:
+        """Return only the bounded evidence page for one selected memory."""
+        # Deliberately call the paged authority seam; the legacy unbounded
+        # memory_evidence() path is reserved for ContextPack compatibility.
+        return self.source_service.list_memory_evidence_page(
+            memory_id,
+            limit=limit,
+            offset=offset,
+            include_content=include_content,
         )
 
     def memory_source(

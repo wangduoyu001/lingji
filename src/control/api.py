@@ -418,10 +418,40 @@ def create_control_app(
         except Exception as exc:
             raise translate_error(exc) from exc
 
-    @app.get("/api/memory/inspector/memories/{memory_id}", dependencies=secured)
-    def inspector_memory(memory_id: str) -> dict[str, Any]:
+    @app.get(
+        "/api/memory/inspector/memories/{memory_id}/evidence",
+        dependencies=secured,
+    )
+    def inspector_memory_evidence(
+        memory_id: str,
+        limit: int = Query(default=20, ge=1, le=50),
+        offset: int = Query(default=0, ge=0),
+        include_content: bool = Query(default=True),
+    ) -> dict[str, Any]:
         try:
-            return memory_inspector().get_memory(memory_id)
+            return memory_inspector().list_memory_evidence(
+                memory_id,
+                limit=limit,
+                offset=offset,
+                include_content=include_content,
+            ).to_dict()
+        except Exception as exc:
+            raise translate_error(exc) from exc
+
+    @app.get("/api/memory/inspector/memories/{memory_id}", dependencies=secured)
+    def inspector_memory(
+        memory_id: str,
+        chunk_limit: int | None = Query(default=None, ge=1, le=50),
+        max_chars: int | None = Query(default=None, ge=1, le=24000),
+        cursor: str | None = Query(default=None, max_length=200),
+    ) -> dict[str, Any]:
+        try:
+            return memory_inspector().get_memory(
+                memory_id,
+                chunk_limit=chunk_limit,
+                max_chars=max_chars,
+                cursor=cursor,
+            )
         except Exception as exc:
             raise translate_error(exc) from exc
 

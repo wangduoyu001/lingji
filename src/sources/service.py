@@ -35,6 +35,27 @@ class ViewerContext:
     owner: bool
 
 
+@dataclass(frozen=True)
+class EvidencePage:
+    """A bounded, serializable page of linked source evidence."""
+
+    as_of: str
+    memory_id: str
+    items: tuple[dict[str, Any], ...]
+    pagination: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "as_of": self.as_of,
+            "memory_id": self.memory_id,
+            "items": list(self.items),
+            "pagination": dict(self.pagination),
+        }
+
+    def __getitem__(self, key: str) -> Any:
+        return self.to_dict()[key]
+
+
 class SourceQueryService:
     """Workspace-aware, permission-aware queries over the derived source index."""
 
@@ -268,6 +289,139 @@ class SourceQueryService:
             )
         )
         return self._envelope({"memory_id": memory_id, "items": items}, selected)
+
+    def list_memory_evidence_page(
+        self,
+        memory_id: str,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        include_content: bool = True,
+        viewer: ViewerContext | None = None,
+    ) -> EvidencePage:
+        """Return a bounded page of visible linked messages.
+
+        Link metadata is filtered and sorted before any message body is read.
+        This keeps pagination deterministic while ensuring that a request can
+        never cause an unbounded body read or bypass source authority.
+        """
+        selected = viewer or self.owner_viewer()
+        selected_limit = int(limit)
+        selected_offset = int(offset)
+        if selected_limit < 1 or selected_limit > 50:
+            raise ValueError("limit must be between 1 and 50")
+        if selected_offset < 0:
+            raise ValueError("offset must be greater than or equal to zero")
+
+        visible: list[dict[str, Any]] = []
+        for link in self.read_model.memory_links(str(memory_id)):
+            message_id = str(link.get("message_id") or "").strip()
+            if not message_id:
+                continue
+            message = self.read_model.get_message(message_id, include_content=False)
+            if not self._is_visible(message, selected) or message is None:
+                continue
+            source = self.read_model.get_source(str(message.get("source_id") or ""))
+            if not self._is_authoritative_source(source, selected):
+                continue
+            conversation = self.read_model.get_conversation(
+                str(message.get("conversation_id") or "")
+            )
+            if not self._is_visible(conversation, selected):
+                continue
+            visible.append({"link": link, "message": message, "source": source})
+
+        visible.sort(key=self._evidence_sort_key)
+        page_rows = visible[selected_offset : selected_offset + selected_limit]
+        items: list[dict[str, Any]] = []
+        remaining_content = 24_000
+        for row in page_rows:
+            message = row["message"]
+            link = row["link"]
+            source = row["source"] or {}
+            content = ""
+            truncated = False
+            if include_content:
+                full_message = self.read_model.get_message(
+                    str(message["message_id"]), include_content=True
+                ) or {}
+                content = str(full_message.get("content") or "")
+                allowed = min(4_000, remaining_content)
+                if len(content) > allowed:
+                    content = content[:allowed]
+                    truncated = True
+                remaining_content -= len(content)
+            excerpt_source = str(message.get("content_preview") or "")
+            excerpt = " ".join(excerpt_source.split())[:240]
+            item: dict[str, Any] = {
+                "source_id": message.get("source_id"),
+                "conversation_id": message.get("conversation_id"),
+                "message_id": message.get("message_id"),
+                "role": message.get("role"),
+                "sequence": message.get("sequence"),
+                "occurred_at": message.get("occurred_at"),
+                "excerpt": excerpt,
+                "content_hash": message.get("content_hash") or "",
+                "raw_reference": self._safe_reference(
+                    message.get("raw_reference") or source.get("raw_reference")
+                )
+                or "",
+                "truncated": truncated,
+            }
+            if include_content:
+                item["content"] = content
+            items.append(item)
+
+        as_of = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        return EvidencePage(
+            as_of=as_of,
+            memory_id=str(memory_id),
+            items=tuple(items),
+            pagination={
+                "limit": selected_limit,
+                "offset": selected_offset,
+                "total": len(visible),
+                "has_more": selected_offset + len(items) < len(visible),
+            },
+        )
+
+    @staticmethod
+    def _is_authoritative_source(
+        source: dict[str, Any] | None, viewer: ViewerContext
+    ) -> bool:
+        if not SourceQueryService._is_visible(source, viewer):
+            return False
+        # Source lifecycle is query-time authority. Only active records may
+        # expose message bodies; revoked/expired/unavailable states fail closed.
+        return str(source.get("status") or "").strip().casefold() == "active"
+
+    @classmethod
+    def _evidence_sort_key(cls, row: dict[str, Any]) -> tuple[Any, ...]:
+        message = row["message"]
+        occurred_at = cls._utc_datetime(message.get("occurred_at"))
+        source_id = str(message.get("source_id") or "")
+        conversation_id = str(message.get("conversation_id") or "")
+        message_id = str(message.get("message_id") or "")
+        try:
+            sequence = int(message.get("sequence") or 0)
+        except (TypeError, ValueError):
+            sequence = 0
+        if occurred_at is None:
+            return (1, 0.0, sequence, source_id, conversation_id, message_id)
+        return (0, occurred_at.timestamp(), sequence, source_id, conversation_id, message_id)
+
+    @staticmethod
+    def _utc_datetime(value: Any) -> datetime | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
 
     @staticmethod
     def _privacy_filter(viewer: ViewerContext, requested: str | None) -> tuple[str, ...]:
