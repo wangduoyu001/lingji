@@ -1,5 +1,17 @@
 # 验收要求变更记录
 
+## 2026-09-01 · Owner memory detail drilldown · Release full repair Group 1 activation
+
+- 当前唯一 ACTIVE 任务为 `OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1`，基线
+  `b3427d26b6b192461290a167495c8720ff4835f4`；只修复上轮 full 中五项测试/环境契约，不修改
+  记忆详情功能、不扩大产品范围。
+- 必须先复现 RED：Task4R preflight 与 second-brain 使用当前解释器；隔离 PowerShell
+  entry-only 显式传入当前 Python；frontend dist 验证 `index.html` 实际引用且存在的 JS；
+  Desktop Attention 以当前 pending-actions + shared polling 为准，不恢复旧
+  `pending_review_count`。
+- 只运行五项失败项及直接相关回归、compile/static/diff/acceptance-sync/handoff；禁止
+  full/release/live/Artifact/安装，禁止触碰 Production/Vault/真实聊天/主人数据。
+
 ## 2026-09-01 · Owner memory detail drilldown · Release gate activation
 
 - 本轮唯一 ACTIVE 本机任务为 `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE`，执行模式

@@ -1,10 +1,36 @@
 # LingJi 本机执行任务单
 
-> **当前状态：IDLE（最近任务 `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE` 已收口为 `COMPLETED / FAIL`）。**
+> **当前状态：ACTIVE（`OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1`）。**
 >
-> 本文件仍是本机 Codex 的唯一任务入口；下方第 0 节保留最近 release gate 的完整身份与结论。
+> 本文件仍是本机 Codex 的唯一任务入口；下方第 0 节是当前唯一可执行的有界修复任务。
 
-## 0. 最近 release gate（已收口）
+## 0. 当前 ACTIVE 任务
+
+```yaml
+task_id: OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1
+status: ACTIVE
+execution_mode: FOCUSED_TEST_AND_ENVIRONMENT_CONTRACT_REPAIR_ONLY
+repository: wangduoyu001/lingji
+product_branch: codex/owner-memory-detail-drilldown
+baseline_commit: b3427d26b6b192461290a167495c8720ff4835f4
+release_gate: NOT_A_RELEASE_GATE
+artifact_name: NOT_APPLICABLE
+artifact_id: NOT_APPLICABLE
+acceptance_root: NOT_APPLICABLE
+live_8766_8767_forbidden: true
+install_forbidden: true
+owner_data_forbidden: true
+full_release_forbidden: true
+```
+
+本任务只收口上轮 full 的五项测试/环境契约：当前 Python 解释器传递、真实
+PowerShell entry-only 解释器传递、Desktop `dist/index.html` 实际 JS 入口契约，以及
+Attention 当前 `/api/work/pending-actions` + `usePollingResource` 契约。禁止修改记忆详情产品、
+降低安全/业务断言、删除测试或改为 skip；禁止运行 full/release/live、安装工具或读取
+Production/Vault/真实聊天和主人数据。必须先复现 RED，再做最小修复，最后运行五个失败项
+及直接回归、compile/static/diff/acceptance-sync/handoff。
+
+## 0A. 最近 release gate（已收口）
 
 ```yaml
 task_id: OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE
