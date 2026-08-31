@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const state = { authorized: false, revoked: false, codexAuthorized: false, lastAuthorize: null, scan: null, scanReads: 0, scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, cardDetailRequests: 0, messageDetailRequests: 0, cardMutations: [], cardConflict: false, cardActionStates: {}, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", currentWorkMode: "normal", activityMode: "normal", detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, unknownCardSummary: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed" };
+const state = { authorized: false, revoked: false, codexAuthorized: false, lastAuthorize: null, scan: null, scanReads: 0, scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, cardDetailRequests: 0, messageDetailRequests: 0, cardMutations: [], cardConflict: false, cardActionStates: {}, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", currentWorkMode: "normal", activityMode: "normal", detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, unknownCardSummary: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed", requests: [] };
 const memoryCardTopics = ["发布计划", "每周摘要", "代码审查", "家庭安排", "阅读清单", "旅行计划", "饮食偏好", "会议决策", "预算安排", "学习目标", "设备维护", "写作习惯"];
 const memoryCardFreshnessStates = ["current", "overdue", "current", "overdue", "source_revoked", "current", "superseded", "current", "rejected", "rolled_back", "repair_required", "not_yet_current", "unknown"];
 const memoryCardActions = ["correct", "invalidate", "archive", "confirm", "reauthorize_source", "correct", "review", "none", "review", "review", "review", "review", "review"];
@@ -84,6 +84,7 @@ const terminateProcessGroup = async (child, timeoutMs = 5_000) => {
   });
 };
 const server = http.createServer((req, res) => {
+  if (req.method !== "OPTIONS") state.requests.push(req.url ?? "");
   const path = new URL(req.url, "http://127.0.0.1").pathname;
   if (req.method === "OPTIONS") { res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, X-LingJi-Token", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" }); return res.end(); }
   if (req.headers["x-lingji-token"] !== "fixture-token") return json(res, 401, { detail: { code: "UNAUTHORIZED", message: "token required" } });
@@ -216,6 +217,11 @@ const server = http.createServer((req, res) => {
       return json(res, 200, { items: cards.slice(offset, offset + limit), pagination: { limit, offset, total: cards.length, has_more: offset + limit < cards.length } });
     }
     if (path === "/api/memory/inspector/cards-summary") return json(res, 200, state.unknownCardSummary ? { cards: null, conversations: null, messages: null, permanent: null, vectorized: null, owner_review: null } : { cards: 36, conversations: 7, messages: 42, permanent: 8, vectorized: 18, owner_review: 3 });
+    if (path === "/api/memory/inspector/memories/card-1/evidence") {
+      const url = new URL(req.url, "http://127.0.0.1"); const pageOffset = Number(url.searchParams.get("offset") || 0);
+      const items = Array.from({ length: 20 }, (_, index) => ({ source_id: "source-codex", conversation_id: "conversation-1", message_id: pageOffset === 0 && index < 2 ? `message-card-${index + 1}` : `message-page-${pageOffset + index + 1}`, role: index % 2 ? "assistant" : "user", sequence: pageOffset + index + 1, occurred_at: `2026-08-28T08:${String(pageOffset + index).padStart(2, "0")}:00Z`, excerpt: pageOffset === 0 && index === 0 ? "来源证据摘要一" : pageOffset === 0 && index === 1 ? "来源证据摘要二" : `来源证据摘要${pageOffset + index + 1}`, content: `第 ${pageOffset + index + 1} 条来源消息正文。`, raw_reference: `conversation-1/message-page-${pageOffset + index + 1}`, truncated: false }));
+      return json(res, 200, { as_of: "2026-08-28T08:05:00Z", memory_id: "card-1", items, pagination: { limit: 20, offset: pageOffset, total: 40, has_more: pageOffset === 0 } });
+    }
     if (path.startsWith("/api/memory/review/candidates/") && ["approve", "edit-approve", "reject"].some((action) => path.endsWith(`/${action}`))) {
       const segments = path.split("/");
       const id = segments[5];
@@ -788,6 +794,13 @@ try {
   assert.equal(await page.evaluate(() => document.activeElement?.id), "owner-memory-detail-title", "opening detail must focus the heading automatically");
   assert.equal(await page.getByRole("dialog").getAttribute("aria-modal"), "true", "detail must be modal and labelled");
   assert.equal(state.messageDetailRequests, 0, "opening detail must not prefetch evidence message bodies");
+  assert.equal(state.requests.some((url) => url.includes("/api/memory/inspector/memories/card-1/evidence?limit=20&offset=20")), false, "later evidence pages must not be prefetched");
+  assert.equal(await page.getByRole("dialog").locator('[data-testid="evidence-item"]').count(), 20, "detail must start with one bounded evidence page");
+  await page.getByRole("dialog").getByRole("button", { name: "加载更多来源", exact: true }).click();
+  await page.getByRole("dialog").locator('[data-testid="evidence-item"]').nth(39).waitFor();
+  assert.equal(await page.getByRole("dialog").locator('[data-testid="evidence-item"]').count(), 40, "load more must append one page");
+  assert.equal(state.requests.filter((url) => url.includes("/api/memory/inspector/memories/card-1/evidence?limit=20&offset=20")).length, 1, `load more must request the next page exactly once: ${JSON.stringify(state.requests.filter((url) => url.includes("/api/memory/inspector/memories/card-1/evidence")))}`);
+  assert.equal(state.requests.some((url) => url.includes("/api/memory/inspector/memories/card-1/evidence?limit=20&offset=40")), false, "load more must not prefetch a third page");
   const messageRequestBefore = state.messageDetailRequests;
   await page.getByRole("button", { name: /来源证据摘要二/ }).click();
   await page.getByRole("button", { name: "查看来源", exact: true }).click();
@@ -838,10 +851,16 @@ try {
   await page.getByRole("dialog").getByRole("textbox", { name: "修正内容" }).fill("本地未提交修正");
   await page.getByRole("dialog").getByRole("textbox", { name: "修正原因" }).fill("冲突测试");
   await page.getByRole("dialog").getByRole("button", { name: "修正内容", exact: true }).click();
-  await page.locator(".owner-memory-feedback").filter({ hasText: "这条内容刚刚发生变化，请刷新后再决定。" }).waitFor();
+  await page.locator(".owner-memory-feedback").filter({ hasText: "详情版本已变化，请重新读取" }).waitFor();
   assert.equal(await page.getByRole("dialog").getByRole("textbox", { name: "修正内容" }).inputValue(), "本地未提交修正", "409 must preserve the owner's unsubmitted edit");
+  await page.getByRole("dialog").getByRole("button", { name: "刷新当前详情", exact: true }).waitFor();
   assert.equal(await page.locator(".owner-memory-card").first().getByText("发布计划", { exact: true }).count(), 1, "stale conflict must not overwrite the card");
   await fetch(`http://127.0.0.1:${apiPort}/__test/card-conflict`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
+  await page.getByRole("dialog").getByRole("button", { name: "刷新当前详情", exact: true }).click();
+  const refreshedActions = page.getByRole("dialog").locator("details.owner-memory-fallback-actions");
+  await refreshedActions.locator("summary").click();
+  await page.getByRole("dialog").getByRole("textbox", { name: "修正内容" }).waitFor();
+  assert.equal(await page.getByRole("dialog").getByRole("textbox", { name: "修正内容" }).inputValue(), "本地未提交修正", "refresh must preserve an unsubmitted correction draft");
   await page.keyboard.press("Escape");
 
   const openAdvancedDiagnostics = async () => {
