@@ -1,6 +1,6 @@
 # LingJi 本机执行结果回执
 
-> 当前任务 `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE` 正在执行；下方第 0 节是本轮唯一权威回执。
+> 当前任务 `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE` 已收口；下方第 0 节是本轮唯一权威回执。
 > 本轮仅执行隔离的真实 PowerShell `scripts/validate.ps1 -Mode release`，不启动 live 8766/8767、
 > 不 package/install、不读取真实聊天/Vault/数据库或主人数据。下方旧任务回执仅作历史记录。
 
@@ -12,8 +12,8 @@ duplicate macOS lexical-alias source cards; it is not a PASS result.
 
 ```yaml
 task_id: OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE
-status: RUNNING
-verdict: PENDING
+status: COMPLETED
+verdict: FAIL
 execution_mode: RELEASE_VALIDATION_ONLY
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
@@ -26,16 +26,16 @@ report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_GATE.md
 public_summary_path: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
 public_hashes_path: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
 cleanup_before: PASS
-cleanup_after: PENDING
+cleanup_after: PASS
 remote_branch_verified: false
 remote_commit_verified: false
 remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
-local_temp_root_absent: PENDING
+local_temp_root_absent: true
 owner_observation: NOT_REQUIRED
-started_at: PENDING
-finished_at: PENDING
+started_at: 2026-08-31T16:48:25Z
+finished_at: 2026-08-31T16:53:03Z
 ```
 
 本回执中的 `task_instruction_commit` 在任务激活文档提交后回填；release validation 无 Artifact、安装、主人观察或

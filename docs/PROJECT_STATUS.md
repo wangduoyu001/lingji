@@ -10,7 +10,7 @@
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
-> Current engineering gate: `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE — RELEASE VALIDATION RUNNING (release includes full)`
+> Current engineering gate: `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE — COMPLETED / FAIL (embedded full blocked; release preflight not reached)`
 > Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
@@ -25,9 +25,9 @@
 Critical/Important/Minor；Task 1 Repair 2 scoped re-review 为 `ADDRESSED — 0 open findings`，Task 2
 Repair 2 与 Task 3 Repair 3 均为 `Spec Compliance: PASS / Approval: APPROVED`。实现结果只覆盖
 合成 fixture 与 focused/rendered 自动化；live 8766/8767、package/install、Mac、Production/Vault、
-真实聊天/数据库和主人观察均为 `NOT_TESTED`。当前由唯一 ACTIVE 任务
-`OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE` 执行隔离的真实 PowerShell release（自含 full），结果待回填；
-不得把 focused 结果写成 release 或 owner PASS。
+真实聊天/数据库和主人观察均为 `NOT_TESTED`。`OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE` 已完成隔离的真实
+PowerShell release（自含 full），结果为 `COMPLETED / FAIL`：embedded full 的 `python-full` 为
+`13 failed, 1622 passed, 11 skipped`，release preflight 未到达；不得把 focused 结果写成 release 或 owner PASS。
 
 `OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION` 已完成并切回 `IDLE`，执行模式为
 `FOCUSED_PRODUCT_IMPLEMENTATION_ONLY`，最终产品 SHA 为

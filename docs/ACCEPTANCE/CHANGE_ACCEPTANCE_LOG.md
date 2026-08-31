@@ -14,6 +14,11 @@
   PASS/FAIL 均只读取 `output/validation/latest-summary.json|md` 和失败日志尾部。已知
   `automatic-memory-4r2-readiness` 为 `MEASURED_FAIL`，若 release 被其阻断必须如实记录为 FAIL/BLOCKED，
   不得写 PASS。报告：`docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_GATE.md`。
+- 实际结果：`COMPLETED / FAIL`。真实 PowerShell `7.6.5` arm64 portable tarball 已隔离下载，SHA256 为
+  `8196d4b4e7c21b7f6df9d45687bb4e42dc8335f330b580d9eb15f3ef5042a8c3`；release 自含 full，未另跑 full。
+  `git-diff-check` 与 `clean-install-contracts` 通过，`python-full` 失败（`13 failed, 1622 passed,
+  11 skipped, 7 warnings`，273.68 秒），故 release preflight 未到达；8766/8767 运行后均 FREE，未启动
+  live、安装、Artifact、Production/Vault 或主人数据。详细报告记录 canonical `/private/tmp` root 与失败尾部。
 
 ## 2026-09-01 · Owner memory detail drilldown · Final Repair 3
 

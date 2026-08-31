@@ -1,14 +1,14 @@
 # LingJi 本机执行任务单
 
-> **当前状态：ACTIVE（`OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE`）。**
+> **当前状态：IDLE（最近任务 `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE` 已收口为 `COMPLETED / FAIL`）。**
 >
-> 本文件仍是本机 Codex 的唯一任务入口；本轮只允许执行下方第 0 节的 release gate。
+> 本文件仍是本机 Codex 的唯一任务入口；下方第 0 节保留最近 release gate 的完整身份与结论。
 
-## 0. 当前唯一 ACTIVE 任务
+## 0. 最近 release gate（已收口）
 
 ```yaml
 task_id: OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE
-status: ACTIVE
+status: IDLE
 execution_mode: RELEASE_VALIDATION_ONLY
 candidate_label: OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_CANDIDATE_4F0D2A77
 release_gate: RELEASE_INCLUDES_FULL
@@ -57,7 +57,7 @@ preserve_old_failed_evidence: true
 quality_gate: automatic-memory-4r2-readiness MEASURED_FAIL; release must not be reported PASS if blocked
 ```
 
-本轮是纯 release validation gate：候选固定为当前 HEAD `4f0d2a7738c6cba12d0766cb7ed6b38cbd32e543`，产品/测试代码提交为
+本轮是纯 release validation gate（已 `COMPLETED / FAIL`）：候选固定为当前 HEAD `4f0d2a7738c6cba12d0766cb7ed6b38cbd32e543`，产品/测试代码提交为
 `81256c4242a6bb8062f1b591832a3313948e9ff9`，不修改产品代码，不创建 Artifact，不安装，不启动 Desktop/sidecar，
 不接触 live 8766/8767、Production/Vault、真实聊天/数据库或主人数据。`scripts/validate.ps1 -Mode release` 自含
 full，不得另行重复运行 `-Mode full`。由于当前 Mac 没有系统 `pwsh`，只能在新的隔离临时根下载并记录微软官方
