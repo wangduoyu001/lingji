@@ -1,14 +1,14 @@
 # LingJi 本机执行任务单
 
-> **当前状态：ACTIVE / OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A。**
+> **当前状态：IDLE（最近任务 `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A` 已完成收口）。**
 >
-> 本文件仍是本机 Codex 的唯一任务入口；只允许执行下方 `status: ACTIVE` 的精确候选。
+> 本文件仍是本机 Codex 的唯一任务入口；当前没有 `status: ACTIVE` 任务。
 
-## 0. 当前唯一 ACTIVE 任务
+## 0. 最近收口任务（当前无 ACTIVE 任务）
 
 ```yaml
 task_id: OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A
-status: ACTIVE
+status: IDLE
 execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
 candidate_label: OWNER_UI_SOURCE_FILTER_REPAIR_CANDIDATE
 release_gate: NOT_A_RELEASE_GATE
@@ -16,11 +16,11 @@ repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 product_branch: codex/owner-real-history-memory-cards
 product_commit: 4ce1e00acb17bc5e4e4c183f58d30551ef76b101
-artifact_name: PENDING_REBUILD_FROM_4CE1E00A
-artifact_id: PENDING_REBUILD_FROM_4CE1E00A
+artifact_name: lingji-macos-arm64-owner-ui-source-filter-4ce1e00a
+artifact_id: LOCAL_ONLY_NOT_CI
 artifact_workflow_run_id: LOCAL_ONLY_NOT_CI
-artifact_zip_sha256: PENDING
-dmg_sha256: PENDING
+artifact_zip_sha256: NOT_APPLICABLE_LOCAL_APP_ONLY
+dmg_sha256: 351557a1efd38c66941ba80ed65616a515852fe5e689a220428cd5363dd11991
 report_branch: acceptance/owner-ui-source-filter-repair-4ce1e00a
 report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A.md
 public_summary_path: docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_SUMMARY.json
@@ -43,9 +43,10 @@ owner_confirmation_required: true
 product_code_changes_forbidden: true
 secret_export_count_required: 0
 production_pollution_count_required: 0
-quality_gate: MEASURED_FAIL_NOT_RELEASE_READY_DEFERRED
-keep_app_and_sidecar_open_for_owner: true
+quality_gate: MEASURED_FAIL_NOT_RELEASE_READY
+keep_app_and_sidecar_open_for_owner: false
 owner_observation_required: true
+owner_observation_result: FAIL_OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED
 preserve_old_failed_evidence: true
 ```
 
@@ -76,8 +77,9 @@ whole-bundle 安装；其他真实 blocker 立即停止并报告。
 owner high-risk pending action；不得通过自动扫描制造 failure pending。至少 8 个主题必须有不同、
 主人可读的 conclusion，并在证据中明确标注 synthetic。raw discovery 预期 5 个来源，其中 1 个
 为 `not_found` archive；普通 visible source facts/found count 预期为 4 个，其中只有 1 张 Codex
-card；seed 授权完成后 authorized/current 预期为 1。Mac rebuild、full-root
-Computer Use 与主人观察均保持 PENDING，完成后必须保持 app/sidecar 打开等待主人确认。
+card；seed 授权完成后 authorized/current 预期为 1。Mac rebuild、full-root Computer Use 与主人观察
+已完成；最新主人反馈将结果定为 `COMPLETED / FAIL / OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED /
+NOT_RELEASE_READY`。本任务已切回 `IDLE`，不得据此宣称 release、Phase 1 PASS、merge 或主人体验 PASS。
 
 ## 1. 最近一次任务
 

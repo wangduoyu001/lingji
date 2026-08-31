@@ -3,22 +3,25 @@
 ## 1. Executive Verdict
 
 ```text
-Status: RUNNING / READY_FOR_OWNER_CONFIRMATION
-Verdict: PENDING
+Status: COMPLETED
+Verdict: FAIL
+Owner result: OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED
 Merge recommendation: DO NOT MERGE
 Product commit: 4ce1e00acb17bc5e4e4c183f58d30551ef76b101
 Artifact: local macOS arm64 Tauri application rebuilt from the exact product commit
 Artifact ID: LOCAL_ONLY_NOT_CI
-Report commit: PENDING
+Report commit: PENDING_CLOSEOUT_COMMIT
 Release gate: NOT_A_RELEASE_GATE
 Quality: MEASURED_FAIL / NOT_RELEASE_READY
-Owner observation: root_agent_pass_owner_pending
+Owner observation: OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED
 ```
 
-The technical candidate build, installation, authenticated sidecar, synthetic data contract,
-and root-agent Computer Use traversal are ready for the owner's final confirmation. This is not
-a release, Phase 1, or merge result. The app and sidecar remain open as required, so final cleanup
-and the terminal owner verdict are intentionally pending.
+The technical candidate build, installation, authenticated sidecar, synthetic data contract, and
+bounded root-agent Computer Use traversal completed successfully. The latest owner feedback does
+not accept the memory experience as sufficiently understandable: a clear owner-facing memory
+detail drilldown is still required to show what was concluded, how it developed, and the
+verifiable source. Therefore this acceptance is closed as `COMPLETED / FAIL`, with owner result
+`OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED`; it is not a release, Phase 1, or merge result.
 
 The first packaging attempt failed in the `tauri.macos.conf` app-only packaging path. It is
 recorded as `FAIL_REPAIRED`, not hidden or counted as a pass. A sidecar-config rebuild then
@@ -63,8 +66,9 @@ Public hash evidence is in `docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_RE
 - Pre-run cleanup: completed by the Mac execution owner for task-owned state; old failed roots and
   backups were preserved read-only.
 - Whole-app backup: preserved in the task acceptance root before replacement; no uninstall was used.
-- Post-run cleanup: `NOT_EXECUTED` by design because the app and sidecar must remain open for owner
-  confirmation. Do not remove the root, evidence, fixture, backup, or running processes yet.
+- Post-run cleanup: runtime closeout completed after exact verification of candidate PIDs `37148`
+  (Desktop) and `37132` (sidecar). The acceptance root, evidence, fixture, backup, and all old
+  acceptance roots remain preserved.
 - Production pollution count: `0`.
 - Vault pollution count: `0`.
 - Temporary credentials/config contents: not exported into the report; token files remain private
@@ -113,16 +117,16 @@ substituted for the live owner observation.
 
 The candidate was rebuilt from the exact product commit and installed by whole-bundle replacement
 after preserving the existing app bundle backup. The installed bundle contains the expected main
-binary and both arm64 sidecar locations, and deep strict codesign passed. The final candidate is
-left open for owner confirmation. No production data, real Vault, real chat, or user configuration
-was used or modified.
+binary and both arm64 sidecar locations, and deep strict codesign passed. Runtime closeout stopped
+only the verified candidate processes after the owner-detail feedback was recorded. No production
+data, real Vault, real chat, or user configuration was used or modified.
 
 ## 8. Runtime, Processes and Ports
 
 | Check | Actual | Result |
 |---|---|---|
-| Desktop | PID `37148`, installed candidate | PASS |
-| Core/sidecar | PID `37132`, acceptance DataRoot, `127.0.0.1:8766` | PASS |
+| Desktop | PID `37148`, installed candidate; stopped at closeout | PASS / CLOSED |
+| Core/sidecar | PID `37132`, acceptance DataRoot, `127.0.0.1:8766`; stopped at closeout | PASS / CLOSED |
 | Authenticated runtime ping | HTTP `200` | PASS |
 | Unauthenticated runtime ping | HTTP `401` | PASS |
 | 8766 listener | loopback only | PASS |
@@ -149,8 +153,9 @@ Root-agent Computer Use completed the following bounded traversal on the install
   raw discovery remained 5 including one `not_found` archive. Backup controls stayed collapsed.
 - All 18 advanced pages opened successfully. The warm sage visual layout was inspected; the final
   page was left on `记忆内容` with advanced diagnostics collapsed.
-- No backup, source authorization, or owner-confirmation mutation button was clicked. The owner has
-  not yet supplied final confirmation.
+- No backup, source authorization, or owner-confirmation mutation button was clicked. Latest owner
+  feedback requires a clearer memory detail drilldown; this is the terminal owner-experience
+  disposition for this candidate.
 
 OS-level Window Recovery menu/shortcut/Dock observations are not claimed by this handoff unless the
 owner records them separately.
@@ -240,7 +245,7 @@ and loopback boundary only; it does not claim three Core restarts or Windows reb
 | Automatic Core Memory write | PASS / not invoked | owner confirmation not clicked |
 | Rollback damaging user config | NOT_TESTED | no rollback invoked |
 | Production pollution | PASS (`0`) | root verification summary |
-| Change-log required regressions | PENDING | docs sync/handoff run after edits |
+| Change-log required regressions | PASS | docs sync/handoff verified for this closeout |
 
 ## 18. Security and Secret-Redaction Audit
 
@@ -326,9 +331,10 @@ Name: Owner confirmation boundary
 Preconditions: One high-risk owner action
 Method: Observe Need Me and leave confirmation controls untouched
 Expected: Exactly one pending action; no mutation without owner confirmation
-Actual: One high-risk action; no backup/source/confirmation control clicked
+Actual: One high-risk action; no backup/source/confirmation control clicked; owner detail drilldown
+  requirement remains unmet
 Evidence: private evidence/pending.json; root-agent Computer Use result
-Verdict: READY_FOR_OWNER_CONFIRMATION
+Verdict: FAIL — OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED
 ```
 
 ## 21. Known Non-Blocking Limitations
@@ -338,24 +344,31 @@ Verdict: READY_FOR_OWNER_CONFIRMATION
 - Optional ffmpeg, ffprobe, and Ollama health checks warn/degrade but are outside this UI source-filter
   scope.
 - 8767 is absent because MCP HTTP is not part of this task.
-- Final cleanup is deferred while the app and sidecar remain open for owner confirmation.
+- Runtime cleanup is complete for the two exact candidate PIDs; acceptance roots and evidence remain
+  intentionally preserved for audit and the next repair.
 
 ## 22. Blocking Defects
 
-No new product defect was observed in the bounded source/conclusion traversal. The acceptance gate
-itself remains open:
+The bounded source/conclusion traversal met its synthetic API and pagination contract, but the
+latest owner feedback leaves the owner-readable memory detail experience unaccepted. The gate is
+closed as a measured failure pending a future product-level drilldown repair and a fresh owner
+observation:
 
 ```text
-Defect ID: OWNER-CONFIRMATION-PENDING
+Defect ID: OWNER-MEMORY-DETAIL-DRILLDOWN-REQUIRED
 Severity: Acceptance gate
-Affected scope: Final owner sign-off and cleanup/remote closeout
-Reproduction: Owner confirmation has not yet been supplied
-Expected: Owner confirms the visible UI result and any OS-level observations
-Actual: root_agent_pass_owner_pending
-Evidence: root-agent Computer Use handoff; app and sidecar intentionally still running
+Affected scope: Owner-readable memory detail and final owner sign-off
+Reproduction: Open a current memory card and require a clear, understandable detail view containing
+  its conclusion, development/context, and verifiable source
+Expected: Owner can tell what LingJi concluded, why, and where the evidence came from
+Actual: Latest owner feedback still requires this drilldown; bounded traversal evidence alone is
+  insufficient for acceptance
+Evidence: root-agent Computer Use handoff and private acceptance evidence; owner feedback
 Data/security impact: None observed; mutation controls were not clicked
-Required fix: Owner must inspect the open candidate and explicitly confirm or reject it
-Retest scope: Owner observation, then cleanup and final receipt update
+Required fix: Product-level memory detail drilldown repair, then fresh isolated Mac build and owner
+  observation
+Retest scope: Rebuild exact product SHA successor, repeat memory detail/source observation, and
+  obtain explicit owner confirmation
 ```
 
 The global quality gate remains `MEASURED_FAIL / NOT_RELEASE_READY`; this report does not waive it.
@@ -364,22 +377,26 @@ The global quality gate remains `MEASURED_FAIL / NOT_RELEASE_READY`; this report
 
 ```text
 Product commit: 4ce1e00acb17bc5e4e4c183f58d30551ef76b101
-Verdict: READY_FOR_OWNER_CONFIRMATION (not final PASS)
+Acceptance status: COMPLETED
+Verdict: FAIL
+Owner result: OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED
+Release status: NOT_RELEASE_READY
 Merge recommendation: DO NOT MERGE
-Owner observation complete: NO
+Owner observation complete: YES — FAILED DETAIL DRILLDOWN REQUIREMENT
 Required clients covered: synthetic Codex source-filter projection only
 Skipped clients: ChatGPT SKIPPED_NOT_INSTALLED; Claude Desktop SKIPPED_NOT_INSTALLED
-Blocking defects: owner confirmation pending; global quality gate remains MEASURED_FAIL
+Blocking defects: owner memory detail drilldown required; global quality gate remains
+  MEASURED_FAIL / NOT_RELEASE_READY
 Acceptance docs synchronized: PENDING until post-edit checks
-Temporary evidence cleaned: NO — app and sidecar must remain open
+Temporary evidence cleaned: NO — acceptance root/evidence/backups intentionally preserved
 ```
 
 ## 24. Sign-off
 
 ```text
 Codex executor: root-agent + Luna acceptance report agent
-Owner confirmation: PENDING
+Owner confirmation: FAIL — OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED
 Acceptance date: 2026-08-31
 Report branch: acceptance/owner-ui-source-filter-repair-4ce1e00a
-Report commit: PENDING
+Report commit: PENDING_CLOSEOUT_COMMIT
 ```

@@ -9,7 +9,7 @@
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
-> Current engineering gate: `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A — MAC OWNER EXPERIENCE PENDING`
+> Current engineering gate: `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A — COMPLETED / FAIL / OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED / NOT_RELEASE_READY`
 > Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
@@ -18,27 +18,28 @@
 
 ## 当前本机交接状态（2026-08-31）
 
-`OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A` 已激活为唯一 `ACTIVE` 本机任务，执行模式为
+`OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A` 已完成唯一本机交接任务，执行模式为
 `MACOS_OWNER_UI_EXPERIENCE_ONLY`，精确产品 SHA 为
 `4ce1e00acb17bc5e4e4c183f58d30551ef76b101`，候选标签为
 `OWNER_UI_SOURCE_FILTER_REPAIR_CANDIDATE`。本轮只做隔离 macOS arm64 Tauri 候选构建、整包安装备份、
-认证 8766 sidecar 与根代理 UI 交接；它明确是 `NOT_A_RELEASE_GATE`，不得宣称 release、
-Phase 1 PASS、merge 或主人观察 PASS。旧候选 `6ea11e4`、`6baf4ee6` 的 `OWNER_UI_REPAIR_REQUIRED` 失败
-证据、备份与 acceptance 根必须保留，不得删除或复用；质量测量继续保持
-`MEASURED_FAIL / NOT_RELEASE_READY`。
+认证 8766 sidecar 与根代理 UI 交接；结果为
+`COMPLETED / FAIL / OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED / NOT_RELEASE_READY`。最新主人反馈仍要求
+清楚的主人可读 memory detail drilldown，不得宣称 release、Phase 1 PASS、merge 或主人体验 PASS。
+旧候选 `6ea11e4`、`6baf4ee6` 的 `OWNER_UI_REPAIR_REQUIRED` 失败证据、备份与 acceptance 根必须保留，
+不得删除或复用；质量测量继续保持 `MEASURED_FAIL / NOT_RELEASE_READY`。
 
 新 Acceptance 根固定为 `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`，DataRoot、
 Vault、source fixture、evidence 和新安装前 `/Applications/灵机.app` 整包备份分离；Production、
 主人真实聊天、真实 Vault、正式记忆与用户配置保持不触碰。Mac arm64 rebuild、安装、认证
-sidecar 与 full-root Computer Use 已完成；新候选与 sidecar 保持打开，等待主人确认，
-`cleanup_after` 暂不执行。
+sidecar 与 full-root Computer Use 已完成；最新反馈收口后仅精确停止候选 PID `37148`/`37132`，
+8766/8767 均无监听。新根、证据、备份和旧根均保留。
 
 当前 reviewed candidate 已由本轮独立 review 允许从 `4ce1e00a` 重建；旧候选失败证据必须保留，
 不得冒充本轮结果。新隔离 fixture 要求 37 张记忆卡（3 history）、13 permanent、3 conversations、
 36 messages、1 条 owner high-risk pending action only，至少 8 个不同 synthetic conclusions；
 discovered 同时保留 available sessions 与 `not_found` archive，普通来源页只显示 1 张 Codex card，
-found count 与 visible count 一致。当前状态为 `RUNNING / READY_FOR_OWNER_CONFIRMATION`，根代理观察标记
-`root_agent_pass_owner_pending`；绝不表示主人 PASS、release 或 Phase 1 PASS。
+found count 与 visible count 一致。当前状态为 `COMPLETED / FAIL`，根代理观察结果为
+`OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED`；绝不表示主人 PASS、release 或 Phase 1 PASS。
 旧 `6baf4ee6` 候选的 `OWNER_UI_REPAIR_REQUIRED` 报告、backup、fixture、DB、日志与 evidence
 必须继续保留。
 

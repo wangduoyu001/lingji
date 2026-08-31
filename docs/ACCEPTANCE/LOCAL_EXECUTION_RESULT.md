@@ -1,51 +1,55 @@
 # LingJi 本机执行结果回执
 
-> 当前任务正在执行：`OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`。
+> 当前任务已收口：`OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`（`COMPLETED / FAIL`）。
 > 当前候选仅为 `OWNER_UI_SOURCE_FILTER_REPAIR_CANDIDATE`，`NOT_A_RELEASE_GATE`；
 > prior candidates `6ea11e4`/`43009a0d`/`6baf4ee6` 的主人体验结论为 `OWNER_UI_REPAIR_REQUIRED`；
-> 新候选 `4ce1e00a` 已完成隔离构建、安装、认证 sidecar 和根代理 UI 遍历，当前仅等待主人确认，
-> `MEASURED_FAIL / NOT_RELEASE_READY`
+> 新候选 `4ce1e00a` 已完成隔离构建、安装、认证 sidecar 和根代理 UI 遍历；最新主人反馈要求
+> `OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED`，因此 `MEASURED_FAIL / NOT_RELEASE_READY`。
 > 质量事实保持延期。下方旧任务回执仅作历史记录，
-> 不覆盖当前 ACTIVE 任务。
+> 不覆盖当前已收口任务。
 
 Prior candidate `43009a0dfdf3cd7b949d871cc9054286f17d607e` is explicitly
 recorded as `OWNER_UI_REPAIR_REQUIRED` for raw source titles/English error and
 duplicate macOS lexical-alias source cards; it is not a PASS result.
 
-## 0. 当前 ACTIVE 任务回执
+## 0. 最近收口任务回执（当前无 ACTIVE 任务）
 
 ```yaml
 task_id: OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A
-status: RUNNING
-verdict: PENDING
-owner_readiness: READY_FOR_OWNER_CONFIRMATION
+status: COMPLETED
+verdict: FAIL
+owner_result: OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED
+release_status: NOT_RELEASE_READY
+owner_readiness: NOT_READY_FOR_RELEASE
 execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 product_commit: 4ce1e00acb17bc5e4e4c183f58d30551ef76b101
 task_instruction_commit: 8bc1bce20636135018df302ab931cb37707d6376
 report_branch: acceptance/owner-ui-source-filter-repair-4ce1e00a
-report_commit: 52e8b8f38d5026b08e4fc7258fb1d79fe0fd2b6a
+report_commit: PENDING_CLOSEOUT_COMMIT
 report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A.md
 public_summary_path: docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_SUMMARY.json
 public_hashes_path: docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_HASHES.txt
 cleanup_before: PASS
-cleanup_after: NOT_EXECUTED_APP_AND_SIDECAR_MUST_REMAIN_OPEN
+cleanup_after: PASS
+cleanup_after_detail: EXACT_CANDIDATE_PIDS_STOPPED_37148_37132; ACCEPTANCE_ROOT_PRESERVED
 remote_branch_verified: true
 remote_commit_verified: true
 remote_report_verified: true
 remote_result_verified: true
 pr_comment_verified: false
 local_temp_root_absent: false
-owner_observation: root_agent_pass_owner_pending
-started_at: 2026-08-31 (time not recorded in public evidence)
-finished_at: PENDING_OWNER_CONFIRMATION
+owner_observation: FAIL
+owner_result: OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED
+started_at: 2026-08-31T16:20:00+08:00
+finished_at: 2026-08-31T17:49:51+08:00
 installed_app_hash: see installed_main_sha256/installed_sidecar_sha256 and public hash evidence
 installed_main_sha256: 6fb5e44a27dc65108d4b91ddb5af83cb341a967a9fe9e88b1b1b5a6cec1291a3
 installed_sidecar_sha256: fb83470f1b29c97cb40a342e82f4ee11ea4b7d897907964dd880b184b23f1dbb
 dmg_sha256: 351557a1efd38c66941ba80ed65616a515852fe5e689a220428cd5363dd11991
-desktop_pid: 37148
-sidecar_pid: 37132
+desktop_pid: 37148_STOPPED_AT_CLOSEOUT
+sidecar_pid: 37132_STOPPED_AT_CLOSEOUT
 control_api_ping: 200_authenticated_401_unauthenticated
 acceptance_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a
 acceptance_effective_data_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a/data-root/acceptance
@@ -54,7 +58,7 @@ acceptance_completed_scans: 1
 acceptance_pending_actions: 1_high_risk_owner_only
 production_pollution_count: 0
 vault_pollution_count: 0
-owner_observation_page: PENDING
+owner_observation_page: FAIL_MEMORY_DETAIL_DRILLDOWN_REQUIRED
 ```
 
 当前 Acceptance 根目录为 `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`，已完成本轮隔离构建、安装与 UI 交接；
@@ -81,8 +85,9 @@ authorized/current 预期为 1。
 认证 8766 返回 200，未认证返回 401，8767 缺席。四项普通菜单、Home 统计与成功文案、当前记忆两页
 分页（20+17，等待 21 秒仍稳定）、来源/结论/层状态/来源消息钻取、Need Me 单一高风险待办、来源
 过滤（raw discovery 5、ordinary visible 4、Codex card 1）、18 个高级页面和 warm sage 布局均已由根代理
-观察通过。未点击备份、来源授权或主人确认等变更控件；app/sidecar 必须保持打开，`owner_observation`
-固定为 `root_agent_pass_owner_pending`，`cleanup_after` 不执行，等待主人确认。
+观察通过。未点击备份、来源授权或主人确认等变更控件；最新主人反馈要求
+`OWNER_MEMORY_DETAIL_DRILLDOWN_REQUIRED`。已精确核验并停止候选 app/sidecar PID `37148`/`37132`，
+`cleanup_after` 仅停止运行实例，Acceptance 根、证据与备份继续保留。
 
 > 最近一次任务已完成。权威结论：`COMPLETED / FAIL / DO NOT MERGE`。
 >
