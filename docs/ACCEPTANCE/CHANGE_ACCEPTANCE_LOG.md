@@ -1,5 +1,11 @@
 # 验收要求变更记录
 
+## 2026-08-31 · Owner memory detail drilldown · Final Repair 1
+
+- 产品/测试提交：`15418442c8c50995b84d4d9c6c69a312da404962`。本轮仅收口 final review I-1/I-2/I-3/M-1：初始来源 503 的“重试读取来源”会重新请求有界 `limit=20&offset=0`；正文 503 提供“重试读取正文”并复用选中详情读取，保留主人草稿与 selected-generation/abort 防护；来源证据每行携带已授权可见来源的安全 `source_label/source_type/conversation_title`，前端按行渲染，不暴露路径、raw ID、JSON 或内部枚举文案。
+- TDD：RED 为 focused owner smoke 在多来源证据行断言失败；GREEN 为 `npm run test:owner-ui-menu-fast-track`、`npm run test:e2e:memory`、`npm run test:smoke`（23 scripts）、`npm run build`、相关 Python focused `89 passed`、`python3 -m compileall -q src tests`、`git diff --check`。真实 live/package/install/Mac/owner observation 仍 `NOT_TESTED`；无新增 endpoint、数据库、菜单或删除动作。
+- 报告：`.superpowers/sdd/2026-08-31-owner-memory-detail-drilldown/final-repair-1-report.md`；本轮只读/清理检查无孤儿测试进程，`check_local_execution_handoff.py` 通过。验收同步检查由本条目完成后复跑。
+
 ## 2026-08-31 · Owner memory detail drilldown · focused implementation closeout
 
 - 最终产品/测试 HEAD 为 `c7388c08b495b1fbf1598358d76fe4176552f9ab`；Task 1 产品链为
