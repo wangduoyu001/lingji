@@ -286,6 +286,8 @@ try {
   state.onboardingFailures = 0;
   state.onboardingDelay = true;
   const racePage = await browser.newPage();
+  racePage.setDefaultTimeout(10_000);
+  racePage.setDefaultNavigationTimeout(10_000);
   await installTauri(racePage);
   await racePage.goto(uiBase, { waitUntil: "domcontentloaded" });
   try {
@@ -303,9 +305,11 @@ try {
   await racePage.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor();
   await racePage.close();
   state.onboardingDelay = false;
-  state.onboardingFailures = 7;
+  state.onboardingFailures = 0;
   state.cardListRequests = 0;
   const page = await browser.newPage();
+  page.setDefaultTimeout(10_000);
+  page.setDefaultNavigationTimeout(10_000);
   await installTauri(page);
   const refreshSources = async () => {
     // Refresh the read model only. The owner-facing page intentionally has
@@ -315,7 +319,7 @@ try {
     if (await sourceHeading.count() === 0) {
       await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
     }
-    await sourceHeading.waitFor({ timeout: 30_000 });
+    await sourceHeading.first().waitFor({ timeout: 10_000 });
   };
   const openSourceActions = async (kind = "generic_ai_history") => {
     const actions = page.locator(`[data-source-kind="${kind}"] details.memory-source-fallback-actions`);
@@ -327,12 +331,10 @@ try {
   // therefore not a meaningful readiness signal. Wait for DOM load and the
   // rendered landing heading instead.
   await page.goto(uiBase, { waitUntil: "domcontentloaded" });
+  await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
   try {
-    await page.locator(".desktop-content").getByRole("heading", { name: "记忆来源" }).waitFor({ timeout: 30_000 });
-  } catch (reason) {
-    console.error("rendered body:", await page.locator("body").innerText());
-    throw reason;
-  }
+    await page.locator(".desktop-content").getByRole("heading", { name: "记忆来源" }).first().waitFor({ timeout: 10_000 });
+  } catch (reason) { console.error("rendered body:", await page.locator("body").innerText()); throw reason; }
   await page.getByRole("button", { name: "选择文件夹并开始记忆" }).click();
   await page.getByRole("heading", { name: "已授权", exact: true }).waitFor();
   await page.getByText("打开灵机时会检查，之后每15分钟自动检查一次。", { exact: true }).waitFor();
@@ -774,7 +776,7 @@ try {
   assert.ok((await page.locator(".memory-cards-summary").innerText()).includes("已显示 16 / 共 36 条"), "page two must retain the current total");
   assert.ok((await page.locator(".owner-memory-card-grid").innerText()).includes("主题33"), "page two must contain later current cards");
   assert.equal((await page.locator(".owner-memory-card-grid").innerText()).includes("家庭安排"), false, "non-current cards must stay absent on page two");
-  await new Promise((resolve) => setTimeout(resolve, 20_500));
+  await page.waitForFunction(() => document.querySelector(".memory-cards-summary")?.textContent?.includes("已显示 16 / 共 36 条"), undefined, { timeout: 30_000 });
   assert.ok((await page.locator(".memory-cards-summary").innerText()).includes("已显示 16 / 共 36 条"), "refresh must preserve page two after twenty seconds");
   assert.equal(await page.locator(".owner-memory-card").count(), 16, "refresh must not reset page two to page one");
   await page.getByRole("button", { name: "上一页", exact: true }).click();

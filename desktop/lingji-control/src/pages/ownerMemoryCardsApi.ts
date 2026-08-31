@@ -11,7 +11,10 @@ type ConversationMessagesResponse = { items?: ConversationMessage[] };
 const loadState = (status: DetailLoadState["status"], error: unknown = null): DetailLoadState => ({ status, error: error instanceof Error ? error.message : error ? String(error) : null });
 
 export class OwnerMemoryCardsApi {
+  private mutationSignal?: AbortSignal;
   constructor(private readonly api: LingJiApi) {}
+  setMutationSignal(signal: AbortSignal) { this.mutationSignal = signal; }
+  clearMutationSignal(signal: AbortSignal) { if (this.mutationSignal === signal) this.mutationSignal = undefined; }
   list(offset = 0, signal?: AbortSignal, limit = 20, state = "current") {
     const boundedLimit = Math.min(Math.max(1, limit), 50);
     const stateQuery = state ? `&state=${encodeURIComponent(state)}` : "";
@@ -62,21 +65,21 @@ export class OwnerMemoryCardsApi {
     return this.api.get<{ item: { content?: string | null; preview?: string | null; [key: string]: unknown } }>(`/api/memory/inspector/messages/${encodeURIComponent(id)}`, { signal });
   }
   approve(id: string, hash: string, signal?: AbortSignal) {
-    return this.api.post(`/api/memory/review/candidates/${encodeURIComponent(id)}/approve`, { owner_confirmed: true, expected_content_hash: hash }, { signal });
+    return this.api.post(`/api/memory/review/candidates/${encodeURIComponent(id)}/approve`, { owner_confirmed: true, expected_content_hash: hash }, { signal: signal ?? this.mutationSignal });
   }
   editApprove(id: string, hash: string, content: string, signal?: AbortSignal) {
-    return this.api.post(`/api/memory/review/candidates/${encodeURIComponent(id)}/edit-approve`, { owner_confirmed: true, expected_content_hash: hash, content }, { signal });
+    return this.api.post(`/api/memory/review/candidates/${encodeURIComponent(id)}/edit-approve`, { owner_confirmed: true, expected_content_hash: hash, content }, { signal: signal ?? this.mutationSignal });
   }
   reject(id: string, hash: string, reason: string, signal?: AbortSignal) {
-    return this.api.post(`/api/memory/review/candidates/${encodeURIComponent(id)}/reject`, { owner_confirmed: true, expected_content_hash: hash, reason }, { signal });
+    return this.api.post(`/api/memory/review/candidates/${encodeURIComponent(id)}/reject`, { owner_confirmed: true, expected_content_hash: hash, reason }, { signal: signal ?? this.mutationSignal });
   }
   correct(id: string, hash: string, content: string, reason: string, signal?: AbortSignal) {
-    return this.api.post(`/api/memory/core/${encodeURIComponent(id)}/correct`, { owner_confirmed: true, expected_content_hash: hash, content, reason }, { signal });
+    return this.api.post(`/api/memory/core/${encodeURIComponent(id)}/correct`, { owner_confirmed: true, expected_content_hash: hash, content, reason }, { signal: signal ?? this.mutationSignal });
   }
   invalidate(id: string, hash: string, reason: string, signal?: AbortSignal) {
-    return this.api.post(`/api/memory/core/${encodeURIComponent(id)}/invalidate`, { owner_confirmed: true, expected_content_hash: hash, reason }, { signal });
+    return this.api.post(`/api/memory/core/${encodeURIComponent(id)}/invalidate`, { owner_confirmed: true, expected_content_hash: hash, reason }, { signal: signal ?? this.mutationSignal });
   }
   archive(id: string, hash: string, reason: string, signal?: AbortSignal) {
-    return this.api.post(`/api/memory/core/${encodeURIComponent(id)}/archive`, { owner_confirmed: true, expected_content_hash: hash, reason }, { signal });
+    return this.api.post(`/api/memory/core/${encodeURIComponent(id)}/archive`, { owner_confirmed: true, expected_content_hash: hash, reason }, { signal: signal ?? this.mutationSignal });
   }
 }

@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
 from src.control.api import create_control_app
 from src.gateway.memory_inspector import MemoryInspectorFacade
@@ -223,6 +224,56 @@ def test_evidence_page_rechecks_authority_and_safe_references():
         temp_dir.cleanup()
 
 
+def test_canonical_cursor_pages_split_long_chunks_without_loss_or_duplicates():
+    facade, temp_dir, _read_model = _seeded_facade()
+    expected = "A" * 250 + "B" * 30
+    try:
+        with facade.database._connection() as connection:
+            connection.execute("DELETE FROM memory_chunks WHERE memory_id = ?", ("memory-1",))
+            connection.executemany(
+                """
+                INSERT INTO memory_chunks(
+                    chunk_id, memory_id, ordinal, heading, text, start_line,
+                    end_line, char_count, content_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    ("long-1", "memory-1", 0, "Long", "A" * 250, 1, 20, 250, "hash-a"),
+                    ("long-2", "memory-1", 1, "Next", "B" * 30, 21, 24, 30, "hash-b"),
+                ],
+            )
+        cursor = None
+        pages: list[dict] = []
+        for _ in range(10):
+            item = facade.get_memory(
+                "memory-1", chunk_limit=2, max_chars=100, cursor=cursor
+            )["item"]
+            pages.append(item)
+            assert sum(len(str(chunk.get("text") or "")) for chunk in item["chunks"]) <= 100
+            next_cursor = item.get("next_cursor")
+            if next_cursor is None:
+                break
+            assert next_cursor != cursor
+            assert len(next_cursor) <= 200
+            assert "/" not in next_cursor and "A" not in next_cursor and "B" not in next_cursor
+            cursor = next_cursor
+        assert pages[-1].get("next_cursor") is None
+        assert "".join(
+            str(chunk.get("text") or "") for page in pages for chunk in page["chunks"]
+        ) == expected
+    finally:
+        temp_dir.cleanup()
+
+
+def test_canonical_cursor_rejects_unknown_values():
+    facade, temp_dir, _read_model = _seeded_facade()
+    try:
+        with pytest.raises(ValueError, match="cursor"):
+            facade.get_memory("memory-1", chunk_limit=2, max_chars=100, cursor="not-a-cursor")
+    finally:
+        temp_dir.cleanup()
+
+
 class _Inspector:
     def __init__(self, facade):
         self.facade = facade
@@ -263,6 +314,12 @@ def test_evidence_route_is_authenticated_and_canonical_route_accepts_bounds():
             assert {"memory_id", "chunks"}.issubset(item)
             assert "layers" not in item and "action" not in item
             assert item["chunks"][0]["truncated"] is True
+            assert item["next_cursor"]
+            bad_cursor = client.get(
+                "/api/memory/inspector/memories/memory-1?chunk_limit=1&max_chars=80&cursor=bad",
+                headers={"X-LingJi-Token": "secret"},
+            )
+            assert bad_cursor.status_code == 422
     finally:
         temp_dir.cleanup()
 

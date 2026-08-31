@@ -124,6 +124,9 @@ class FixtureSources:
     def get_source(self, source_id):
         return {"item": {"source_id": source_id, "source_type": "codex_rollout", "display_name": "Codex 历史", "status": "active"}}
 
+    def get_conversation(self, conversation_id, **kwargs):
+        return {"item": {"conversation_id": conversation_id, "source_id": "src-codex", "title": "发布计划讨论"}}
+
     def get_message(self, message_id, **kwargs):
         return {"item": {"message_id": message_id, "role": "assistant", "occurred_at": "2026-03-01T10:00:00Z", "content": "Evidence line", "content_hash": f"hash-{message_id}"}}
 
@@ -352,6 +355,13 @@ def test_all_provenance_refs_are_verified_even_when_preview_is_bounded():
     card = OwnerMemoryCardProjector(database, MessageFixtureSources(messages), FixtureStatistics()).get_card("mem-active")["item"]
     assert card["trust"]["provenance"] == "mismatch"
     assert card["evidence_count"] == 4
+
+
+def test_memory_card_source_includes_safe_conversation_title():
+    database = FixtureDatabase()
+    database.documents[0]["relationships"]["conversation_id"] = "conv-1"
+    card = OwnerMemoryCardProjector(database, MessageFixtureSources(), FixtureStatistics()).get_card("mem-active")["item"]
+    assert card["source"]["conversation_title"] == "发布计划讨论"
 
 
 def test_latest_evidence_time_uses_timezone_aware_instants():

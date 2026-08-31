@@ -533,7 +533,17 @@ class OwnerMemoryCardProjector:
         latest = self._latest_time(evidence)
         conversation_id = self._relationship(document, "conversation_id") or str(next((item.get("conversation_id") for item in evidence if item.get("conversation_id")), ""))
         count = len(evidence)
+        conversation_title: str | None = None
         if conversation_id:
+            try:
+                try:
+                    conversation_response = self.source_service.get_conversation(conversation_id, viewer=viewer)
+                except TypeError:
+                    conversation_response = self.source_service.get_conversation(conversation_id)
+                conversation_item = self._item(conversation_response)
+                conversation_title = str(conversation_item.get("title") or "").strip() or None
+            except Exception:
+                conversation_title = None
             messages = self._conversation_messages(conversation_id, viewer)
             count = int(self._pagination(self.source_service.list_messages(viewer=viewer, conversation_id=conversation_id, limit=1, offset=0)).get("total") or len(messages))
             latest = self._latest_time(self._message_evidence(messages)) or latest
@@ -543,6 +553,7 @@ class OwnerMemoryCardProjector:
             "type": source_item.get("source_type") or relationships.get("structured_source_type") or None,
             "status": source_item.get("status") or relationships.get("source_status") or "unknown",
             "conversation_id": conversation_id or None,
+            "conversation_title": conversation_title,
             "message_count": count,
             "latest_evidence_at": latest,
         }
@@ -569,6 +580,7 @@ class OwnerMemoryCardProjector:
             "type": source_item.get("source_type"),
             "status": source_item.get("status") or "unknown",
             "conversation_id": str(conversation.get("conversation_id") or "") or None,
+            "conversation_title": str(conversation.get("title") or "").strip() or None,
             "message_count": int(conversation.get("message_count") or len(messages)),
             "latest_evidence_at": latest,
         }

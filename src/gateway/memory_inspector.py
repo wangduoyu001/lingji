@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -249,35 +250,70 @@ class MemoryInspectorFacade:
             max_chars = int(max_chars)
             if max_chars < 1 or max_chars > 24_000:
                 raise ValueError("max_chars must be between 1 and 24000")
+        cursor_position: tuple[int, int] | None = None
         if cursor is not None:
             cursor = str(cursor).strip()
             if len(cursor) > 200:
                 raise ValueError("cursor is too long")
             if cursor:
-                start = next(
-                    (
-                        index + 1
-                        for index, chunk in enumerate(chunks)
-                        if str(chunk.get("chunk_id") or "") == cursor
-                    ),
-                    None,
-                )
-                if start is None and cursor.isdigit():
-                    start = int(cursor)
-                if start is None:
-                    raise ValueError("cursor does not identify a canonical chunk")
-                chunks = chunks[start:]
-        if chunk_limit is not None:
-            chunks = chunks[:chunk_limit]
-        if max_chars is not None:
-            for chunk in chunks:
-                text = str(chunk.get("text") or "")
-                if len(text) > max_chars:
-                    chunk["text"] = text[:max_chars]
-                    chunk["truncated"] = True
+                continuation = re.fullmatch(r"canonical:(\d+):(\d+)", cursor)
+                if continuation:
+                    chunk_index = int(continuation.group(1))
+                    text_offset = int(continuation.group(2))
+                    if chunk_index >= len(chunks):
+                        raise ValueError("cursor does not identify a canonical chunk")
+                    chunk_text = str(chunks[chunk_index].get("text") or "")
+                    if text_offset >= len(chunk_text):
+                        raise ValueError("cursor does not identify a canonical offset")
+                    cursor_position = (chunk_index, text_offset)
                 else:
-                    chunk["truncated"] = False
+                    start = next(
+                        (
+                            index + 1
+                            for index, chunk in enumerate(chunks)
+                            if str(chunk.get("chunk_id") or "") == cursor
+                        ),
+                        None,
+                    )
+                    if start is None and cursor.isdigit():
+                        start = int(cursor)
+                    if start is None or start > len(chunks):
+                        raise ValueError("cursor does not identify a canonical chunk")
+                    cursor_position = (start, 0)
         if bounded:
+            start_index, start_offset = cursor_position or (0, 0)
+            page_chunks: list[dict[str, Any]] = []
+            emitted = 0
+            remaining_chars = max_chars if max_chars is not None else 24_000
+            next_cursor: str | None = None
+            while start_index < len(chunks):
+                if chunk_limit is not None and emitted >= chunk_limit:
+                    next_cursor = f"canonical:{start_index}:{start_offset}"
+                    break
+                if remaining_chars == 0:
+                    next_cursor = f"canonical:{start_index}:{start_offset}"
+                    break
+                original = chunks[start_index]
+                original_text = str(original.get("text") or "")
+                available = len(original_text) - start_offset
+                take = min(available, remaining_chars) if remaining_chars is not None else available
+                chunk = dict(original)
+                chunk["text"] = original_text[start_offset : start_offset + take]
+                chunk["truncated"] = take < available
+                page_chunks.append(chunk)
+                emitted += 1
+                if remaining_chars is not None:
+                    remaining_chars -= take
+                if take < available:
+                    next_cursor = f"canonical:{start_index}:{start_offset + take}"
+                    break
+                start_index += 1
+                start_offset = 0
+                if chunk_limit is not None and emitted >= chunk_limit and start_index < len(chunks):
+                    next_cursor = f"canonical:{start_index}:0"
+                    break
+            chunks = page_chunks
+            detail["next_cursor"] = next_cursor
             detail["chunks"] = chunks
         detail["citations"] = [
             {
