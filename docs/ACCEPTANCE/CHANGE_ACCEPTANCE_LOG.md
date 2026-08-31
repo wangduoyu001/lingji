@@ -1,5 +1,11 @@
 # 验收要求变更记录
 
+## 2026-09-01 · Owner memory detail drilldown · Final Repair 3
+
+- 产品/测试提交：`81256c4242a6bb8062f1b591832a3313948e9ff9`。本轮仅收口 provenance sanitizer 的敏感键和 malformed URI 边界：正则由现有 sensitive reference/query token 集合统一生成，覆盖大小写、空白、`:`/`=` 与空值形态（含 `auth_metadata/session/signature/sig`），`urlsplit` 对坏 URI 失败关闭；普通 `关于 Cookie 设置的讨论` 保持可见。
+- TDD RED 为新增参数化断言暴露 `sig=abc` 漏洞；GREEN 为相关 Python `90 passed, 1 warning`、owner smoke、build、compileall、diff-check。live/package/install/Mac/owner observation 仍 `NOT_TESTED`；无新增 endpoint、数据库、菜单或删除动作。
+- 报告：`.superpowers/sdd/2026-08-31-owner-memory-detail-drilldown/final-repair-3-report.md`；handoff 与孤儿进程检查通过。
+
 ## 2026-08-31 · Owner memory detail drilldown · Final Repair 2
 
 - 产品/测试提交：`f1bb64c0fe9bfec99061e030df7c4aeb30e945ab`。本轮仅收口 I-3 provenance label 安全：来源显示名/会话标题做空白归一化与 `<=160` 限制，拒绝绝对/Windows/UNC/URI/穿越/编码路径、JSON object/array、控制字符和敏感键值形态；`source_type` 只接受既有短 enum，异常值 fail-closed 并由前端显示人话 fallback。普通自然语言 `关于 Cookie 设置的讨论` 保留。
