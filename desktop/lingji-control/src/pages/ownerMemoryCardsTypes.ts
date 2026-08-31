@@ -8,14 +8,85 @@ export type OwnerMemoryCard = {
   evidence_lines?: string[] | null;
   conclusion?: string | null;
   freshness?: { state?: string | null; label?: string | null; reason?: string | null; latest_evidence_at?: string | null; replacement_id?: string | null } | null;
-  source?: { label?: string | null; status?: string | null; message_count?: number | null; latest_evidence_at?: string | null; source_id?: string | null } | null;
+  source?: { label?: string | null; status?: string | null; message_count?: number | null; latest_evidence_at?: string | null; source_id?: string | null; conversation_id?: string | null; type?: string | null } | null;
   layers?: Record<string, OwnerMemoryLayer> | null;
   trust?: { state?: string | null; confidence?: number | null; conflict?: string | null; provenance?: string | null } | null;
   action?: { type?: string | null; label?: string | null; reason?: string | null } | null;
   permanent_memory?: string | null;
   evidence_count?: number;
-  evidence?: Array<{ message_id?: string | null; preview?: string | null; occurred_at?: string | null; role?: string | null }>;
+  evidence?: Array<{ message_id?: string | null; preview?: string | null; occurred_at?: string | null; role?: string | null; conversation_id?: string | null; source_id?: string | null; sequence?: number | null }>;
   current_hash?: string | null;
+  as_of?: string | null;
+  content_hash?: string | null;
+};
+
+export type CanonicalChunk = {
+  chunk_id?: string | null;
+  text?: string | null;
+  content_hash?: string | null;
+  start_line?: number | null;
+  end_line?: number | null;
+  truncated?: boolean;
+};
+
+export type CanonicalBody = {
+  asOf: string | null;
+  contentHash: string | null;
+  chunks: CanonicalChunk[];
+  truncated: boolean;
+  nextCursor: string | null;
+};
+
+export type EvidenceItem = {
+  source_id?: string | null;
+  conversation_id?: string | null;
+  message_id?: string | null;
+  role?: string | null;
+  sequence?: number | null;
+  occurred_at?: string | null;
+  excerpt?: string | null;
+  content?: string | null;
+  content_hash?: string | null;
+  raw_reference?: string | null;
+  truncated?: boolean;
+};
+
+export type EvidencePage = {
+  asOf: string | null;
+  memoryId: string;
+  items: EvidenceItem[];
+  limit: number;
+  offset: number;
+  total: number | null;
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export type ConversationMessage = {
+  message_id?: string | null;
+  role?: string | null;
+  occurred_at?: string | null;
+  content?: string | null;
+  content_preview?: string | null;
+};
+
+export type LayerState = OwnerMemoryLayer & { state: string | null };
+export type DetailLoadState = {
+  status: "idle" | "loading" | "ready" | "error" | "unknown";
+  error?: string | null;
+};
+
+export type OwnerMemoryDetail = {
+  memoryId: string;
+  asOf: string | null;
+  contentHash: string | null;
+  card: OwnerMemoryCard;
+  canonical: CanonicalBody | null;
+  vector: Record<string, unknown> | null;
+  source: Record<string, unknown> | null;
+  evidence: EvidencePage | null;
+  conversationMessages?: ConversationMessage[];
+  loads: { card: DetailLoadState; canonical: DetailLoadState; vector: DetailLoadState; source: DetailLoadState; evidence: DetailLoadState };
 };
 
 export type OwnerFacingConclusion = {

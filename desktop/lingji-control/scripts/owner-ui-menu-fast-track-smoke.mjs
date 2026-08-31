@@ -74,7 +74,7 @@ const card = {
   evidence: [{ message_id: "message-1", preview: "下周三发布", occurred_at: "2026-08-28T08:03:00Z" }],
 };
 const historicalCard = { ...card, memory_id: "memory-card-old", topic: "旧版发布计划", conclusion: "旧结论", freshness: { state: "superseded", reason: "已被新结论覆盖" }, action: { type: "history", label: "查看历史" } };
-const state = { scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, pauseFailure: false, pendingActions: [] };
+const state = { scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, pauseFailure: false, pendingActions: [], requests: [] };
 
 const json = (body) => JSON.stringify(body);
 const fulfill = (route, body, status = 200) => route.fulfill({
@@ -112,6 +112,7 @@ try {
   await page.route(`${apiOrigin}/**`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    state.requests.push(url.pathname + (url.search || ""));
     if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, X-LingJi-Token", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" } });
     if (request.headers()["x-lingji-token"] !== "fixture-token") return fulfill(route, { detail: { code: "UNAUTHORIZED", message: "token required" } }, 401);
     if (url.pathname === "/api/overview") return fulfill(route, { health: { status: "healthy" }, memory_runtime: { state: "configuration_required", as_of: "2026-08-28T08:03:00Z" }, queue: { stats: {} } });
@@ -125,7 +126,11 @@ try {
     if (url.pathname === "/api/automatic-memory/pause" && request.method() === "POST" && state.pauseFailure) return fulfill(route, { detail: { code: "PAUSE_FAILED", message: "raw backend detail /private/secret" } }, 503);
     if (url.pathname === "/api/memory/inspector/cards-summary") return fulfill(route, { cards: 1, conversations: 1, messages: 2, permanent: 1, vectorized: 1, owner_review: 0 });
     if (url.pathname === "/api/memory/inspector/cards") { state.cardListRequests += 1; return fulfill(route, { items: [card, historicalCard], pagination: { limit: 20, offset: 0, total: 1, has_more: false } }); }
-    if (url.pathname === "/api/memory/inspector/cards/memory-card-1") return fulfill(route, { item: card });
+    if (url.pathname === "/api/memory/inspector/cards/memory-card-1") return fulfill(route, { item: { ...card, as_of: "2026-08-28T08:05:00Z", content_hash: "hash-memory-card-1" } });
+    if (url.pathname === "/api/memory/inspector/memories/memory-card-1") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", item: { memory_id: "memory-card-1", chunks: [{ chunk_id: "chunk-1", text: "下周三发布新版。发布前完成检查清单。", content_hash: "hash-memory-card-1", truncated: false }] } });
+    if (url.pathname === "/api/memory/inspector/memories/memory-card-1/vector") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", memory_id: "memory-card-1", vector: { state: "available", chunks: [{ chunk_id: "chunk-1", exists: true, source: "live" }] } });
+    if (url.pathname === "/api/memory/inspector/memories/memory-card-1/source") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", memory_id: "memory-card-1", canonical: { relative_path: "01-Inbox/release.md", citations: [{ chunk_id: "chunk-1", start_line: 1, end_line: 2 }] }, links: [{ source_id: "source-codex", conversation_id: "conversation-1" }] });
+    if (url.pathname === "/api/memory/inspector/memories/memory-card-1/evidence") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", memory_id: "memory-card-1", items: [{ source_id: "source-codex", conversation_id: "conversation-1", message_id: "message-1", role: "user", sequence: 1, occurred_at: "2026-08-28T08:03:00Z", excerpt: "下周三发布新版。", content: "我们确认下周三发布新版。", content_hash: "message-hash-1", raw_reference: "conversation-1/message-1", truncated: false }], pagination: { limit: 20, offset: 0, total: 1, has_more: false } });
     if (url.pathname === "/api/work/pending-actions") { state.pendingReads += 1; return fulfill(route, { pending_actions: state.pendingActions }); }
     if (url.pathname === "/api/work/current") return fulfill(route, { work: null, events: [], outcome: null, next_action: null });
     if (url.pathname === "/api/work/history") return fulfill(route, { items: [], total: 0, has_more: false, limit: 3, offset: 0 });
@@ -191,6 +196,8 @@ try {
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆内容" }).click();
   await page.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor();
   const cardsText = await page.locator(".owner-memory-card-grid").innerText();
+  assert.equal(state.requests.some((url) => url.includes("/api/memory/inspector/memories/")), false, "ordinary card rendering must not prefetch canonical, vector, source or evidence bodies");
+  assert.equal(state.requests.some((url) => url.includes("/api/memory/inspector/messages/")), false, "ordinary card rendering must not prefetch message bodies");
   assert.equal(await page.getByText("旧版发布计划", { exact: true }).count(), 0, "ordinary memory stream must never show superseded cards");
   assert.equal(await page.locator(".owner-memory-card").count(), 1, "ordinary memory stream must keep only current cards");
   assert.equal(await page.locator(".owner-memory-card-grid").getByRole("button", { name: /确认|扫描|暂停|删除|移出/ }).count(), 0, "routine card actions must stay out of the main card surface");
@@ -201,6 +208,14 @@ try {
   await page.locator(".owner-memory-card-title").click();
   await page.getByRole("dialog").waitFor();
   await page.getByRole("dialog").getByText("当前可确认：团队讨论了发布日期", { exact: true }).waitFor();
+  assert(state.requests.some((url) => url.endsWith("/api/memory/inspector/cards/memory-card-1")), "selected detail must re-read the selected card");
+  assert(state.requests.some((url) => url.endsWith("/api/memory/inspector/memories/memory-card-1?chunk_limit=20&max_chars=12000")), "selected detail must request bounded canonical content");
+  assert(state.requests.some((url) => url.endsWith("/api/memory/inspector/memories/memory-card-1/vector")), "selected detail must request vector state");
+  assert(state.requests.some((url) => url.endsWith("/api/memory/inspector/memories/memory-card-1/source")), "selected detail must request canonical/source provenance");
+  assert(state.requests.some((url) => url.endsWith("/api/memory/inspector/memories/memory-card-1/evidence?limit=20&offset=0")), "selected detail must request only the first bounded evidence page");
+  const detailText = await page.getByRole("dialog").innerText();
+  for (const section of ["灵机当前记住的内容", "当前结论", "事情怎么发展", "来源与核对", "原始记录", "结构记录", "语义向量", "长期记忆", "需要不需要主人处理", "备用操作"]) assert.ok(detailText.includes(section), `detail must show ${section}`);
+  assert.equal(await page.getByRole("dialog").getByRole("button", { name: "删除", exact: true }).count(), 0, "detail must not expose physical deletion");
   await page.keyboard.press("Escape");
 
   await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange")); });
