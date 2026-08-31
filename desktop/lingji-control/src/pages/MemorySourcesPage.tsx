@@ -135,7 +135,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
 
 function sourceSummary(snapshot: MemorySourcesSnapshot): string {
   const sources = Array.isArray(snapshot.sources) ? snapshot.sources : [];
-  const discoveredCount = countLabel(Array.isArray(snapshot.discovered) ? snapshot.discovered.length : undefined);
+  const discoveredCount = countLabel(sources.length);
   const authorizedCount = countLabel(Array.isArray(snapshot.authorized) ? snapshot.authorized.filter((item) => ["authorized", "scanning", "current"].includes(String(item.status))).length : undefined);
   const takenOverCount = countLabel(Array.isArray(snapshot.sources) ? sources.filter((item) => item.state === "current").length : undefined);
   const scanCount = countLabel(snapshot.summary?.counts?.completed);

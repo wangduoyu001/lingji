@@ -152,6 +152,7 @@ export function mergeSourceFacts(
   }
   for (const candidate of candidates) {
     const key = canonicalSourceKey(candidate.kind, candidate.candidate_root);
+    if (candidate.status === "not_found" && !authorizedByKey.has(key)) continue;
     if (seen.has(key)) continue;
     seen.add(key);
     const source = authorizedByKey.get(key);

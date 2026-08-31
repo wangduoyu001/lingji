@@ -68,6 +68,18 @@ assert.deepEqual(sourceMetadataEvidence({ file_count: null, byte_count: undefine
   latestMtime: "尚未获得",
 });
 assert.equal(mergeSourceFacts([{ kind: "generic_ai_history", candidate_root: "/tmp/inbox", status: "available" }], [], []).length, 1);
+const notFoundCandidate = { kind: "codex_rollout", display_name: "Codex", candidate_root: "/tmp/missing-codex", status: "not_found", capability: "metadata_discovery", reason: "目录不存在" };
+assert.equal(mergeSourceFacts([notFoundCandidate], [], []).length, 0, "unauthorized not_found candidates must stay out of ordinary source cards");
+assert.equal(mergeSourceFacts([notFoundCandidate], [], []).some((item) => item.nextAction.includes("允许接管")), false, "not_found candidates must not offer takeover");
+assert.equal(mergeSourceFacts([
+  { ...notFoundCandidate, kind: "available-kind", candidate_root: "/tmp/available", status: "available" },
+  { ...notFoundCandidate, kind: "consent-kind", candidate_root: "/tmp/consent", status: "consent_required" },
+  { ...notFoundCandidate, kind: "unsupported-kind", candidate_root: "/tmp/unsupported", status: "unsupported" },
+], [], []).length, 3, "available, consent_required, and unsupported candidates remain visible");
+const notFoundLifecycle = mergeSourceFacts([notFoundCandidate], [{ source_id: "src-missing-codex", kind: "codex_rollout", root: "/tmp/missing-codex", status: "revoked" }], []);
+assert.equal(notFoundLifecycle.length, 1, "not_found discovery must not erase an existing lifecycle card");
+assert.equal(notFoundLifecycle[0].state, "revoked");
+assert.match(pageSource, /const discoveredCount = countLabel\(sources\.length\)/, "owner-facing found count must use visible source facts");
 const running = mergeSourceFacts(responses["/api/automatic-memory/discovered"], responses["/api/automatic-memory/sources"], [{ ...responses["/api/automatic-memory/scans"][0], status: "running", updated_at: "2026-08-27T02:00:00Z" }]);
 assert.equal(actionEvidence({ ...snapshot, sources: running }, "src-codex", "scan"), true);
 assert.equal(scanTerminalEvidence({ ...snapshot, sources: running }, "src-codex"), false, "running scan cannot show terminal success");
