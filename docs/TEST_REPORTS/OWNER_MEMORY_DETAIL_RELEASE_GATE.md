@@ -84,6 +84,31 @@ observation is retained as an additional release-integrity concern; no commit or
 An initial invocation using `/tmp/.../validation` was rejected by the script's reparse-point guard at startup
 (`VALIDATION_OUTPUT_ROOT_REPARSE`) before any suite ran. The final invocation used the canonical `/private/tmp` path.
 
+### Failure classification
+
+The failure tail was inspected only around the 13 reported failures. Classification is evidence-based and does not
+authorize product changes during this release-only task:
+
+| Failure | Classification | Reason |
+|---|---|---|
+| Task4 reset runner: executable preflight | `env` | Test invokes missing `./.venv/bin/python` on this Mac. |
+| Task4 reset runner: stage exception envelope | `baseline` | Existing generic-ai adapter parse error produces `FAIL` where the historical test expects `BLOCKED`; unrelated to this release gate. |
+| Packaged automatic-memory flow | `baseline` | Existing clean-root event scan timed out with no new terminal scan; no service was started by this release gate. |
+| Release entry real PowerShell guard | `env` | Test helper searches for a `powershell` command while only isolated portable `pwsh` was allowed; no global alias/PATH was added. |
+| Brain status frontend dist | `candidate regression` | Candidate checkout's committed frontend has one JS bundle while the contract requires at least two. |
+| P2.08 shared polling dashboard | `candidate regression` | Candidate Desktop source no longer contains the asserted `pending_review_count` projection. |
+| Promotion recovery case 06 | `baseline` | Existing restart-after-link path rolled back instead of activating; no related files changed in this gate. |
+| Second-brain original start chain | `env` | Test launches missing `python` executable. |
+| Structured evidence MCP citation | `baseline` | Existing `SimpleNamespace` fixture lacks `vault_path`; failure occurs before release code runs. |
+| Structured evidence revoke/expiry | `baseline` | Same fixture construction failure (`vault_path`) as the preceding test. |
+| Task7N1 nullable runtime baseline | `baseline` | Historical quality-contract payload lacks `context_baseline`; this is the known deferred measurement gate. |
+| Task7O nullable MCP/baseline contract | `baseline` | Historical quality envelope remains `NOT_MEASURED` where the old assertion expects `FAILED`; known deferred gate. |
+| Task7P frozen oracle diagnostics | `baseline` | Historical canonical artifact lacks `diagnostic_evidence`; known deferred 4R2 quality contract. |
+
+The `candidate regression` labels identify contracts currently failing on the candidate tree; `env` labels are local
+toolchain/fixture assumptions; `baseline` labels are pre-existing or explicitly deferred contracts. Regardless of
+classification, the embedded full gate is FAIL and the release preflight was not reached.
+
 ## 4. Scope and Cleanup
 
 ```text
@@ -98,8 +123,9 @@ Separate `full` command: forbidden and not run
 ```
 
 The release gate did not start a service, read real data, install software, or create an Artifact. Temporary tooling,
-validation output and command logs are private acceptance evidence and are removed during post-report cleanup; the
-summary metrics, command, failure tail and identity are preserved in this report and the canonical result receipt.
+validation output and command logs were moved to the user's Trash after evidence extraction (recoverable cleanup); the
+acceptance root is absent. The summary metrics, command, failure tail and identity are preserved in this report and the
+canonical result receipt.
 
 ## 5. Blocking Defects
 
@@ -125,7 +151,7 @@ Owner observation complete: NOT_REQUIRED
 Artifact/install: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
 Blocking defects: OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE_FULL_001
 Acceptance docs synchronized: YES
-Temporary evidence cleaned: PENDING at report authoring; must be YES before closeout
+Temporary evidence cleaned: YES (acceptance root absent; recoverable copy in user Trash)
 ```
 
 ## 7. Sign-off
@@ -134,6 +160,6 @@ Temporary evidence cleaned: PENDING at report authoring; must be YES before clos
 Codex executor: Release Gate execution Luna
 Owner confirmation: NOT_REQUIRED (live/install/owner data forbidden)
 Acceptance date: 2026-09-01
-Report branch: acceptance/owner-memory-detail-drilldown-release-gate-4f0d2a77 (planned; report recorded on candidate worktree)
+Report branch: acceptance/owner-memory-detail-drilldown-release-gate-4f0d2a77
 Report commit: PENDING
 ```
