@@ -853,6 +853,7 @@ try {
   await page.getByRole("dialog").getByRole("button", { name: "修正内容", exact: true }).click();
   await page.locator(".owner-memory-feedback").filter({ hasText: "详情版本已变化，请重新读取" }).waitFor();
   assert.equal(await page.getByRole("dialog").getByRole("textbox", { name: "修正内容" }).inputValue(), "本地未提交修正", "409 must preserve the owner's unsubmitted edit");
+  assert.equal(await page.getByRole("dialog").getByRole("textbox", { name: "修正原因" }).inputValue(), "冲突测试", "409 must preserve the owner's unsubmitted reason");
   await page.getByRole("dialog").getByRole("button", { name: "刷新当前详情", exact: true }).waitFor();
   assert.equal(await page.locator(".owner-memory-card").first().getByText("发布计划", { exact: true }).count(), 1, "stale conflict must not overwrite the card");
   await fetch(`http://127.0.0.1:${apiPort}/__test/card-conflict`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
@@ -861,6 +862,12 @@ try {
   await refreshedActions.locator("summary").click();
   await page.getByRole("dialog").getByRole("textbox", { name: "修正内容" }).waitFor();
   assert.equal(await page.getByRole("dialog").getByRole("textbox", { name: "修正内容" }).inputValue(), "本地未提交修正", "refresh must preserve an unsubmitted correction draft");
+  assert.equal(await page.getByRole("dialog").getByRole("textbox", { name: "修正原因" }).inputValue(), "冲突测试", "refresh must preserve an unsubmitted correction reason");
+  const detailBeforeRetry = state.cardDetailRequests;
+  await page.getByRole("dialog").getByRole("button", { name: "修正内容", exact: true }).click();
+  await page.getByText("已保存，当前状态已刷新。", { exact: true }).waitFor();
+  assert.ok(state.cardDetailRequests > detailBeforeRetry, "a conflict draft must be submit-ready after refresh and successful retry");
+  assert.equal(state.cardMutations.at(-1).body.reason, "冲突测试", "retry after refresh must send the preserved reason");
   await page.keyboard.press("Escape");
 
   const openAdvancedDiagnostics = async () => {

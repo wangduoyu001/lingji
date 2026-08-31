@@ -59,6 +59,7 @@ export type EvidencePage = {
   offset: number;
   total: number | null;
   hasMore: boolean;
+  nextOffset: number | null;
   nextCursor: string | null;
 };
 
@@ -90,7 +91,7 @@ export type OwnerMemoryDetail = {
 };
 
 export type OwnerFacingConclusion = {
-  label: "最新结论" | "当前可确认" | "当前状态" | "当前结论";
+  label: "最新结论" | "当前可确认" | "当前状态" | "当前结论" | "历史结论";
   text: string;
 };
 
@@ -100,21 +101,19 @@ export type OwnerFacingConclusion = {
  * this helper must never infer a new fact from a topic or an internal id.
  */
 export function ownerFacingConclusion(card: OwnerMemoryCard): OwnerFacingConclusion {
-  const conclusion = typeof card.conclusion === "string" ? card.conclusion.trim() : "";
-  if (conclusion) return { label: "最新结论", text: conclusion };
-
   const freshness = String(card.freshness?.state ?? card.state ?? "").trim().toLowerCase();
   const cardState = String(card.state ?? "").trim().toLowerCase();
   const trust = String(card.trust?.state ?? "").trim().toLowerCase();
   const sourceState = String(card.source?.status ?? "").trim().toLowerCase();
+  const conclusion = typeof card.conclusion === "string" ? card.conclusion.trim() : "";
+  if (["superseded", "archived", "invalidated", "rejected", "rolled_back", "repair_required", "not_yet_current"].includes(freshness) || ["superseded", "archived", "invalidated", "rejected", "rolled_back", "repair_required"].includes(cardState)) {
+    if (freshness === "superseded" || cardState === "superseded") return { label: "历史结论", text: "这条内容已被更新版本替代，请以当前版本为准。" };
+    if (freshness === "archived" || cardState === "archived") return { label: "历史结论", text: "这条内容已移出当前记忆，历史记录仍保留。" };
+    return { label: "历史结论", text: "这条内容已不再作为当前记忆，请根据历史记录核对。" };
+  }
+  if (conclusion) return { label: "最新结论", text: conclusion };
   if (trust === "conflict" || card.trust?.conflict === "conflict") {
     return { label: "当前状态", text: "来源之间存在冲突，当前内容需要核对。" };
-  }
-  if (freshness === "superseded" || cardState === "superseded") {
-    return { label: "当前状态", text: "这条内容已被更新版本替代，请以当前版本为准。" };
-  }
-  if (freshness === "archived" || cardState === "archived") {
-    return { label: "当前状态", text: "这条内容已移出当前记忆，历史记录仍保留。" };
   }
   if (["invalidated", "stale", "overdue"].includes(freshness) || ["invalidated", "stale"].includes(cardState)) {
     return { label: "当前状态", text: "这条内容可能已经过时，请根据最近证据核对。" };
