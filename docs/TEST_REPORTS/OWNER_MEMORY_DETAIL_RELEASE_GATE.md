@@ -161,5 +161,5 @@ Codex executor: Release Gate execution Luna
 Owner confirmation: NOT_REQUIRED (live/install/owner data forbidden)
 Acceptance date: 2026-09-01
 Report branch: acceptance/owner-memory-detail-drilldown-release-gate-4f0d2a77
-Report commit: PENDING
+Report commit: 4c696f97cb8296ff6117f559232b01390e007e93
 ```

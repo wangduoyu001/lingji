@@ -27,11 +27,11 @@ public_summary_path: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
 public_hashes_path: NOT_APPLICABLE_RELEASE_VALIDATION_ONLY
 cleanup_before: PASS
 cleanup_after: PASS
-remote_branch_verified: false
-remote_commit_verified: false
-remote_report_verified: false
-remote_result_verified: false
-pr_comment_verified: false
+remote_branch_verified: true
+remote_commit_verified: true
+remote_report_verified: true
+remote_result_verified: true
+pr_comment_verified: true
 local_temp_root_absent: true
 owner_observation: NOT_REQUIRED
 started_at: 2026-08-31T16:48:25Z
