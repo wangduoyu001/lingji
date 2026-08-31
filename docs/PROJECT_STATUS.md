@@ -32,8 +32,8 @@ focused/full/release 后，才允许由根代理基于新的产品 SHA 创建全
 必须使用新隔离根、同 SHA Artifact、全包安装、Computer Use 全页遍历，至少打开五种不同类型记忆
 并展开多个来源原文，且主人确认前不能写完成。
 
-当前实现交付计划为 `docs/superpowers/plans/2026-08-31-owner-memory-detail-drilldown.md`，包含
-9 个可独立测试的 TDD 任务。实现阶段的结论只能是 focused/product implementation 的代码与合成
+当前实现交付计划为 `docs/superpowers/plans/2026-08-31-owner-memory-detail-drilldown.md`，已收束为
+3 个实现任务 + 1 个收口任务（共 4 个可独立测试的 TDD 任务）。实现阶段的结论只能是 focused/product implementation 的代码与合成
 fixture 结果，不表示 Artifact、真实 UI、主人观察、release 或 Phase 1 PASS。
 旧 `6baf4ee6` 候选的 `OWNER_UI_REPAIR_REQUIRED` 报告、backup、fixture、DB、日志与 evidence
 必须继续保留。

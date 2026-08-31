@@ -50,14 +50,20 @@ preserve_old_failed_evidence: true
 ```
 
 本任务只负责 Owner memory detail drilldown 的产品代码、测试与验收文档，具体实施计划为
-`docs/superpowers/plans/2026-08-31-owner-memory-detail-drilldown.md`。允许修改产品代码，但
+`docs/superpowers/plans/2026-08-31-owner-memory-detail-drilldown.md`，已收束为 3 个实现任务 + 1 个
+收口任务，共 4 个任务。允许修改产品代码，但
 仅运行 focused/product implementation 和合成 fixture；不得启动 live 8766/8767、构建或安装
 候选、读取真实聊天/Vault/数据库、操作主人数据或宣布主人体验/release/Phase 1 PASS。
 
-范围固定为：四项普通导航和 current-only 列表不变；单卡详情按需显示 canonical 正文、当前结论、
-稳定时间线、来源原文、raw/structured/vector/permanent 状态与主人处理语义；唯一新增后端能力是
-复用 `MemoryInspectorFacade`/`SourceReadModel` 的认证 bounded paginated linked-evidence route，
-默认 20、最大 50，不能暴露无界 `memory_evidence()`；不新建数据库、projector、状态源或 DELETE。
+范围固定为：四项普通导航和 current-only 列表不变；单卡详情通过现有 `/cards/{id}`、bounded
+`/memories/{id}`、`/vector`、`/source` 与唯一新增的
+`/api/memory/inspector/memories/{memory_id}/evidence` 按需显示 canonical 正文、当前结论、稳定
+时间线、来源原文、raw/structured/vector/permanent 状态与主人处理语义。evidence 默认 20、最大
+50，每 item excerpt<=240/content<=4000、单页 content<=24000 并带 truncated；不能暴露无界
+`memory_evidence()`；不新建数据库、projector、状态源或 DELETE。`/memories/{id}` 仅可增加
+`chunk_limit`/`max_chars`/`cursor` 且保留原 response fields；conversation-only 由前端依据
+card kind/source conversation_id 显示“这是原始会话，尚未形成长期记忆”并使用现有 conversation
+messages 分页，不调用 canonical。
 
 旧 Mac 候选 `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`（product SHA
 `4ce1e00acb17bc5e4e4c183f58d30551ef76b101`）明确记录为 `COMPLETED / FAIL`，不再 ACTIVE；其

@@ -425,20 +425,21 @@ Focused tests: `tests/test_owner_real_history_discovery.py`, `tests/test_owner_c
 当前任务为 `OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION`，基线产品代码为
 `4ce1e00acb17bc5e4e4c183f58d30551ef76b101`，文档同步基线为
 `94461d56c64f31e1af6c7cdece51e959ddc0e8b1`。普通导航和 `state=current` 列表保持不变；点击单条
-记忆后，详情按需组合现有 canonical/source/vector 路由与新增认证、有界分页 evidence route。
+记忆后，详情按需组合现有 `/cards/{id}`、bounded `/memories/{id}`、`/vector`、`/source` 路由与
+唯一新增认证、有界分页 evidence route。计划已收束为 3 个实现任务 + 1 个收口任务，共 4 个任务。
 不得新增数据库、projector、永久事实源、端口、DELETE 或 Desktop 直连数据库。
 
 ```text
 src/gateway/memory_inspector.py::MemoryInspectorFacade.list_memory_evidence
 src/sources/service.py::SourceQueryService.list_memory_evidence_page
 src/control/api.py::GET /api/memory/inspector/memories/{memory_id}/evidence
-= bounded linked-message pages (default 20, max 50), stable UTC order, source/privacy authority
+= bounded linked-message pages (default 20, max 50; excerpt<=240, content<=4000, page content<=24000), stable UTC order, source/privacy authority
 
 desktop/lingji-control/src/pages/ownerMemoryCardsTypes.ts
 desktop/lingji-control/src/pages/ownerMemoryCardsApi.ts
 desktop/lingji-control/src/pages/OwnerMemoryCardsPage.tsx
 desktop/lingji-control/src/pages/LocalMemoryLoop.css
-= selected-only canonical/evidence/vector/source reads, detail sections, truncation and safe actions
+= selected-only `/cards/{id}` + bounded `/memories/{id}` + vector/source/evidence reads, detail sections, truncation and safe actions
 ```
 
 Focused backend coverage: `tests/test_owner_memory_detail_contract.py`,

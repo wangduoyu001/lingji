@@ -7,18 +7,26 @@
   `94461d56c64f31e1af6c7cdece51e959ddc0e8b1`，产品代码基线为
   `4ce1e00acb17bc5e4e4c183f58d30551ef76b101`。本轮允许修改产品代码，但只运行 focused
   实现和合成 fixture；禁止 live 8766/8767、安装/Artifact、真实聊天/Vault/数据库和主人数据。
+- 计划已收束为 3 个实现任务 + 1 个收口任务，共 4 个任务：Task 1 一次完成 read-model/service/
+  facade/API/auth/limits/stable pagination/authority；Task 2 完成 Desktop selected-only 组合与详情；
+  Task 3 完成 rendered E2E/edge/actions；Task 4 完成 focused/gov docs/report。每个任务后由根代理
+  独立复审，不把复审重复写入计划。
 - 变更范围固定：普通导航仍为 `首页 / 记忆内容 / 需要我 / 记忆来源`，普通列表仍
   `state=current`；选中单条记忆后显示 canonical 正文、当前结论、稳定时间线、来源软件/会话/
   时间/角色/原文、raw/structured/vector/permanent 四层状态和主人处理语义。修正、过时、移出、
   拒绝只能在底部折叠“备用操作”，不新增日常按钮或物理删除。
-- 唯一新增后端能力为认证、有界、分页 linked-evidence route，默认 `limit=20`、最大 `50`、
-  稳定排序、bounded excerpt/body；复用现有 `MemoryInspectorFacade`、`SourceReadModel`、
+- 唯一新增后端能力为 `GET /api/memory/inspector/memories/{memory_id}/evidence` 认证、有界、分页
+  linked-evidence route，默认 `limit=20`、最大 `50`，每 item `excerpt<=240`、`content<=4000`、
+  单页 content 总量 `<=24000`，稳定排序并返回 `truncated`；复用现有 `MemoryInspectorFacade`、`SourceReadModel`、
   `SourceQueryService`、`lingji_memory.db`、canonical/vector/source/message/conversation routes，
   不暴露当前无界 `memory_evidence()`，不新建数据库、projector、状态源、队列或端口。
 - canonical body 只在选中单卡后读取；超长正文必须报告截断/继续查看；无 canonical 的
   `conversation_evidence` 显示“这是原始会话，尚未形成长期记忆”并复用 conversation messages
   分页。raw absolute path/token/cookie/JSON 不显示，technical IDs 默认折叠；权限、source authority、
   revoked/expired/hash mismatch 均 fail-closed。
+- `/memories/{id}` 仅增加向后兼容的 `chunk_limit`/`max_chars`/`cursor` 参数并保留原 response fields，
+  不混入 card conclusion/freshness/layers/action；conversation-only 由前端依据 card kind/source
+  conversation_id 处理，不调用 canonical。
 - TDD 必须先 RED 后 GREEN，覆盖后端 auth/limit/pagination/stable order/privacy/source authority、
   前端真实 detail/body/timeline/layers/fallback action/load more/no prefetch、rendered E2E 的
   1024/1280、长文、unknown/error/409、现有动作与 current/history 隔离。局部命令为：

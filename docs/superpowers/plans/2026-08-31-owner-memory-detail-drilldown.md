@@ -2,316 +2,127 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在不改变普通信息架构、永久记忆权威或现有主人操作的前提下，让主人点击任意当前记忆卡后进入真正可核对的记忆大详情，按需看到 canonical 正文、当前结论、时间线、来源原文、四层状态和需要主人处理的备用操作。
+**Goal:** 让主人点击任意记忆卡后进入真正可核对的大详情，默认看见 canonical 正文、当前结论、发展过程、来源原文、四层状态和主人处理语义，同时保持四项普通导航与 current-only 列表不变。
 
-**Architecture:** 保留 `OwnerMemoryCardProjector` 的 current-only、有界摘要投影和四项普通导航。详情由已选中的单条 memory 组装现有 canonical/source/vector 路由与一个新增的认证、有界、分页 linked-evidence route；后端复用 `MemoryInspectorFacade`、`SourceReadModel`、`lingji_memory.db` 和现有 source/privacy authority，不增加数据库、projector、状态源、端口或 DELETE。Desktop 只在点击单卡后读取同一 `memory_id` 的资源，按页显示证据正文，所有历史/过时状态和技术字段都在详情语义中明确表达。
+**Architecture:** Owner UI 组合既有 `/api/memory/inspector/cards/{id}` bounded card、既有 `/memories/{id}` canonical、`/vector`、`/source` 和唯一新增的分页 evidence route；不把 card DTO 扩展成全文，也不让 canonical route 返回 card 状态。后端在现有 `SourceReadModel`/`SourceQueryService`/`MemoryInspectorFacade` 上增加 bounded linked-evidence page，Desktop 仅在选中单卡后并行读取该单条 memory 的资源。
 
-**Tech Stack:** Python/FastAPI-compatible Local Control API on authenticated `127.0.0.1:8766`; existing `MemoryInspectorFacade`, `SourceQueryService`, `SourceReadModel`, `lingji_memory.db`, semantic vector provider; React/TypeScript Desktop; Playwright rendered E2E; pytest focused contracts.
+**Tech Stack:** Python authenticated Local Control API on `127.0.0.1:8766`; existing `MemoryInspectorFacade`, `SourceQueryService`, `SourceReadModel`, `lingji_memory.db`, vector/source/message/conversation routes; React/TypeScript Desktop; pytest; Playwright rendered E2E.
 
 ## Global Constraints
 
-- 普通导航仍固定为 `首页 / 记忆内容 / 需要我 / 记忆来源`；普通列表请求仍为 `state=current`，历史、过时、替代版本、rejected 不得混入。
-- 详情必须展示灵机实际记住的 canonical 正文、当前结论、按时间排序的发展过程、来源软件/会话/时间/角色与原文、raw/structured/vector/permanent 四层状态及是否需要主人处理。
-- 修正、过时、移出、拒绝只位于最底部折叠的“备用操作”；不增加日常按钮，不增加物理删除。
-- 唯一新增后端能力是认证、bounded、paginated linked-evidence route；默认 `limit=20`，硬上限 `50`，稳定排序，excerpt/body 有界；现有单条 message route 负责全文核对，不得直接暴露无界 `memory_evidence()`。
-- canonical body 仅在选中单条 memory 后读取；超长正文明确 `truncated`/继续查看语义，不能把截断文本冒充完整。
-- 没有 canonical 的 `conversation_evidence` 必须显示“这是原始会话，尚未形成长期记忆”，并复用现有 conversation messages 分页。
-- raw absolute path、token、cookie、任意 JSON 不显示；technical IDs 默认折叠；safe `raw:`/`vault:` reference 只能在详情的来源核对区域出现。
-- 所有 source/message/privacy/agent-scope/authority 检查复用现有 `SourceQueryService`；不可见、revoked、expired、hash mismatch、unknown 均 fail-closed，不伪造健康或完整。
-- 不新建库、永久事实源、projector、队列、状态源、端口或删除路由；Desktop 不直连 SQLite/Qdrant。
-- RED/GREEN 必须覆盖后端 auth/limit/pagination/stable order/privacy/source authority、前端真实请求/body/timeline/layers/fallback action/load more/no prefetch、rendered E2E 1024/1280、长文、unknown/error/409 和现有动作。
-- 实现任务只运行 focused/product implementation；不得启动 live 8766/8767、安装候选、读取真实聊天/Vault/数据库或操作主人数据。
-- 新 Mac acceptance 只能在实现产生新的产品 SHA、focused/full/release 门禁通过后另建；必须全包构建/安装并由 Computer Use 全页遍历，至少打开五种不同类型记忆并展开多个来源原文，主人确认前不能写完成。
+- 普通导航严格为 `首页 / 记忆内容 / 需要我 / 记忆来源`；普通记忆列表继续请求 `state=current`，历史、过时、替代版本、rejected 不得混入。
+- Owner 详情默认显示 canonical 正文、当前结论、按时间排序的过程、来源软件/会话/时间/角色/原文、`原始记录 / 结构记录 / 语义向量 / 长期记忆` 四层状态和是否需要主人处理。
+- 修正、过时、移出、拒绝全部位于最底部折叠“备用操作”，不新增日常按钮，不新增物理删除。
+- 唯一新 route 是 `GET /api/memory/inspector/memories/{memory_id}/evidence?limit=20&offset=0`；默认 `20`、最大 `50`，稳定排序；每 item `excerpt <= 240`、`content <= 4000`，单页 content 总量 `<= 24000`，返回 `truncated`。完整单条原文继续使用既有 `/messages/{id}`。
+- Evidence 稳定排序键为 `(occurred_at_utc, sequence, source_id, conversation_id, message_id)`；`total`/`has_more` 对可见集合计算。
+- canonical 只在选中单条 memory 后读取。`/memories/{id}` 只能增加向后兼容的 `chunk_limit`/`max_chars`/`cursor` 参数并保留原 response fields；`truncated` 必须明确为截断，不能暗示完整。
+- `conversation_evidence` 没有 canonical 时由前端根据 card `kind`/`source.conversation_id` 显示“这是原始会话，尚未形成长期记忆”，并使用既有 conversation messages 分页；不得调用 canonical 读取来制造空白或错误。
+- 后端复用既有 source privacy、agent scope、source authority、safe reference；未授权/撤销/过期/不可见来源正文不泄漏。raw absolute path、cookie、auth metadata、任意 JSON 不展示；technical IDs 默认折叠。
+- 不新增数据库、projector、状态源、队列、端口或 DELETE；Desktop 不直连 SQLite/Qdrant。
+- 本任务只允许 focused/product implementation，不启动 live 8766/8767、不安装候选、不读取真实聊天/Vault/数据库、不操作主人数据。
+- 新 Mac acceptance 只能在新的产品 SHA 通过 focused/full/release 后另建；须全包构建/安装、Computer Use 全页遍历，至少点开五种不同记忆并展开多个来源全文，主人确认前不得完成。
 
 ---
 
-### Task 1: Freeze the detail contract and RED coverage
+### Task 1: Bounded evidence backend and selected-resource contracts
 
 **Files:**
-- Modify: `tests/test_owner_memory_card_projector.py`
-- Modify: `tests/test_memory_inspector_api.py`
-- Create: `tests/test_owner_memory_detail_contract.py`
-- Reference: `src/gateway/owner_memory_cards.py`, `src/gateway/memory_inspector.py`, `src/sources/service.py`
-
-**Interfaces:**
-- Produces the test contract for `MemoryInspectorFacade.list_memory_evidence(memory_id: str, *, limit: int = 20, offset: int = 0, include_content: bool = True) -> EvidencePage`.
-- `EvidencePage` contains `as_of`, `memory_id`, `items`, and `pagination`; each item contains `source_id`, `conversation_id`, `message_id`, `role`, `sequence`, `occurred_at`, bounded `excerpt`, optional bounded `content`, `content_hash`, and safe `raw_reference`.
-- Existing `OwnerMemoryCardProjector.list_cards()` remains summary-only; existing `get_card()` remains bounded and does not read all message bodies.
-
-- [ ] **Step 1: Write the failing contract tests.** Add fixtures with 7 linked messages, 2 canonical chunks, a verified conclusion, one restricted source, one revoked source, one conversation-only evidence card, and one superseded card. Assert the following exact behavior:
-
-```python
-def test_detail_contract_keeps_current_list_summary_only(fixture_db, projector):
-    cards = projector.list_cards(state="current", limit=20, offset=0)
-    assert all("content" not in card for card in cards.items)
-    assert all(len(card["evidence"]) <= 3 for card in cards.items if "evidence" in card)
-    detail = projector.get_card(cards.items[0]["memory_id"], expand=True)
-    assert detail["layers"]["raw"]["state"] in {"available", "unknown", "unavailable"}
-    assert detail["layers"]["structured"]["state"] in {"available", "unknown", "unavailable"}
-    assert detail["layers"]["vector"]["state"] in {"available", "partial", "unknown", "unavailable"}
-    assert detail["layers"]["permanent"]["state"] in {"core", "derived", "pending", "not_permanent", "unknown"}
-
-def test_evidence_page_contract_is_bounded_and_stably_ordered(facade, seeded_links):
-    page = facade.list_memory_evidence(seeded_links.memory_id, limit=3, offset=0)
-    assert [item.message_id for item in page.items] == ["m-01", "m-02", "m-03"]
-    assert page.pagination == {"limit": 3, "offset": 0, "total": 7, "has_more": True}
-    assert all(len(item.excerpt) <= 240 for item in page.items)
-    assert all(item.content_hash for item in page.items)
-
-def test_conversation_evidence_without_canonical_has_explicit_copy(projector, conversation_card):
-    detail = projector.get_card(conversation_card.memory_id, expand=True)
-    assert detail["projection"] == "conversation_evidence"
-    assert detail["canonical"] is None
-    assert detail["detail_message"] == "这是原始会话，尚未形成长期记忆"
-
-def test_history_detail_is_explicitly_non_current(projector, superseded_id):
-    detail = projector.get_card(superseded_id, expand=True)
-    assert detail["freshness"]["state"] != "current"
-    assert detail["freshness"]["replacement_id"]
-    assert detail["action"]["delete"] is False
-```
-
-- [ ] **Step 2: Run RED tests against the 94461d56 baseline.**
-
-Run: `python3 -m pytest -q tests/test_owner_memory_detail_contract.py tests/test_owner_memory_card_projector.py tests/test_memory_inspector_api.py --tb=short`
-
-Expected: FAIL because no paginated evidence facade/route or detail canonical/layer contract is wired; preserve the failure output in the implementation report without weakening existing bounded-list assertions.
-
-- [ ] **Step 3: Record the RED boundary.** Confirm the failing assertions identify missing detail behavior rather than fixture/setup errors, and record the exact baseline SHA `94461d56c64f31e1af6c7cdece51e959ddc0e8b1` in the task report.
-
----
-
-### Task 2: Implement bounded linked-evidence authority in the existing facade
-
-**Files:**
-- Modify: `src/gateway/memory_inspector.py`
 - Modify: `src/sources/service.py`
-- Modify: `tests/test_owner_memory_detail_contract.py`
-- Modify: `tests/test_source_service.py`
-
-**Interfaces:**
-- `MemoryInspectorFacade.list_memory_evidence(memory_id, *, limit=20, offset=0, include_content=True) -> EvidencePage` validates `1 <= limit <= 50`, rejects negative offsets, counts links before slicing, and never calls the existing unbounded `memory_evidence()` method.
-- `SourceQueryService.list_memory_evidence_page(memory_id, *, limit, offset, include_content, viewer="owner") -> EvidencePage` applies the existing viewer privacy, agent scope, source authority, and safe-reference logic before returning items.
-- Stable ordering is `(occurred_at_utc, sequence, source_id, conversation_id, message_id)` with missing/invalid times sorted after valid times; `total` and `has_more` are calculated from the visible set.
-
-- [ ] **Step 1: Extend tests for authority and page boundaries.** Add cases for `limit=0`, `limit=51`, negative offset, equal timestamps, mixed timezone offsets, invalid timestamps, restricted source, revoked/expired source, agent-scope mismatch, and content-hash mismatch.
-
-```python
-def test_evidence_page_rechecks_visibility_and_source_authority(facade, fixture_db):
-    page = facade.list_memory_evidence("memory-visible", limit=20, offset=0)
-    assert [item.message_id for item in page.items] == ["visible-1"]
-    assert "restricted-1" not in {item.message_id for item in page.items}
-    assert "revoked-1" not in {item.message_id for item in page.items}
-    assert "expired-1" not in {item.message_id for item in page.items}
-    assert all("/Users/" not in item.raw_reference for item in page.items)
-    assert all("token" not in item.excerpt.lower() for item in page.items)
-
-def test_evidence_page_stable_tie_breakers(facade):
-    page = facade.list_memory_evidence("memory-same-time", limit=50, offset=0)
-    assert [item.message_id for item in page.items] == ["a", "b", "c", "d"]
-```
-
-- [ ] **Step 2: Run the new tests to verify RED.**
-
-Run: `python3 -m pytest -q tests/test_owner_memory_detail_contract.py tests/test_source_service.py -k 'evidence_page or authority or tie_breaker' --tb=short`
-
-Expected: FAIL at the missing page method or missing route-facing DTO, while existing single-message privacy tests remain green.
-
-- [ ] **Step 3: Implement the minimal bounded read.** Query only visible link metadata for the requested page, sort with the exact stable key, then fetch at most that page's message bodies through the existing `get_message(..., include_content=True)` authority path. Apply an explicit per-item excerpt/body character bound and set a truncation flag when content is clipped. Return `total`, `offset`, `limit`, `has_more`, `as_of`, and the selected `memory_id`; keep technical identifiers in the DTO because the UI will fold them, but never include absolute paths, tokens, cookies, or raw JSON.
-
-- [ ] **Step 4: Run GREEN focused tests.**
-
-Run: `python3 -m pytest -q tests/test_owner_memory_detail_contract.py tests/test_source_service.py tests/test_memory_inspector_facade.py --tb=short`
-
-Expected: PASS for page bounds, deterministic order, privacy/source authority, content hash pairing, and no use of unbounded `memory_evidence()`.
-
-- [ ] **Step 5: Commit the bounded facade seam.**
-
-```bash
-git add src/gateway/memory_inspector.py src/sources/service.py tests/test_owner_memory_detail_contract.py tests/test_source_service.py
-git commit -m "feat: add bounded owner memory evidence pages"
-```
-
----
-
-### Task 3: Expose the evidence page through authenticated 8766 API
-
-**Files:**
+- Modify: `src/gateway/memory_inspector.py`
 - Modify: `src/control/api.py`
+- Modify: `tests/test_owner_memory_card_projector.py`
 - Modify: `tests/test_owner_memory_card_api.py`
 - Modify: `tests/test_memory_inspector_api.py`
-- Reference: `src/control/memory_inspector.py`, existing authenticated memory routes
+- Modify: `tests/test_memory_inspector_facade.py`
+- Modify: `tests/test_source_service.py`
+- Create: `tests/test_owner_memory_detail_contract.py`
 
 **Interfaces:**
-- Register `GET /api/memory/inspector/memories/{memory_id}/evidence` in the existing control app.
-- Query parameters are `limit: int = 20`, `offset: int = 0`, `include_content: bool = True`; invalid bounds return 422, missing/wrong token returns 401, and missing/unauthorized memory returns the existing safe 404/403 contract without body leakage.
-- JSON response is `{ "as_of": str, "memory_id": str, "items": [...], "pagination": {"limit": int, "offset": int, "total": int, "has_more": bool} }`.
+- `SourceQueryService.list_memory_evidence_page(memory_id: str, *, limit: int = 20, offset: int = 0, include_content: bool = True, viewer: str = "owner") -> EvidencePage`.
+- `MemoryInspectorFacade.list_memory_evidence(memory_id: str, *, limit: int = 20, offset: int = 0, include_content: bool = True) -> EvidencePage` delegates to the existing source authority path and never calls unbounded `memory_evidence()`.
+- `EvidencePage` serializes `{as_of, memory_id, items, pagination}`. Each item serializes `source_id`, `conversation_id`, `message_id`, `role`, `sequence`, `occurred_at`, `excerpt`, optional bounded `content`, `content_hash`, safe `raw_reference`, and `truncated`.
+- Register only `GET /api/memory/inspector/memories/{memory_id}/evidence`; validate `1 <= limit <= 50`, `offset >= 0`, require the existing auth dependency, and return the established 401/404/422 semantics.
+- Existing `/api/memory/inspector/memories/{id}` may accept `chunk_limit`, `max_chars`, `cursor` while preserving its old document/chunk fields; it must not add card conclusion/freshness/layers/action fields.
 
-- [ ] **Step 1: Add API RED tests.** Extend the existing authenticated API fixture:
+- [ ] **Step 1: Write backend RED tests before implementation.** Use an isolated fixture with 7 linked messages, equal timestamps, mixed timezone offsets, 2 canonical chunks, one restricted source, one revoked source, one expired source, one conversation-only card, and one superseded card.
 
 ```python
-def test_memory_evidence_route_is_authenticated_bounded_and_paginated(client, auth_token):
-    assert client.get("/api/memory/inspector/memories/m-1/evidence").status_code == 401
-    assert client.get(
-        "/api/memory/inspector/memories/m-1/evidence",
-        headers={"X-LingJi-Token": "wrong"},
-    ).status_code == 401
-    response = client.get(
-        "/api/memory/inspector/memories/m-1/evidence?limit=2&offset=0",
-        headers={"X-LingJi-Token": auth_token},
-    )
+def test_list_cards_stays_current_only_and_summary_bounded(projector):
+    payload = projector.list_cards(state="current", limit=20, offset=0)
+    assert all("content" not in card for card in payload["items"])
+    assert all(len(card.get("evidence", [])) <= 3 for card in payload["items"])
+
+def test_evidence_page_has_bounded_stable_order_and_pagination(facade):
+    page = facade.list_memory_evidence("memory-1", limit=3, offset=0)
+    assert [item["message_id"] for item in page["items"]] == ["m-01", "m-02", "m-03"]
+    assert page["pagination"] == {"limit": 3, "offset": 0, "total": 7, "has_more": True}
+    assert all(len(item["excerpt"]) <= 240 for item in page["items"])
+    assert all(len(item["content"]) <= 4000 for item in page["items"])
+    assert sum(len(item["content"]) for item in page["items"]) <= 24000
+
+def test_evidence_page_rechecks_authority_and_safe_references(facade):
+    page = facade.list_memory_evidence("memory-1", limit=50, offset=0)
+    message_ids = {item["message_id"] for item in page["items"]}
+    assert {"restricted", "revoked", "expired"}.isdisjoint(message_ids)
+    assert all("/Users/" not in item["raw_reference"] for item in page["items"])
+    assert all("cookie" not in item for item in page["items"])
+    assert all("auth_metadata" not in item for item in page["items"])
+
+def test_selected_memory_route_only_adds_bounded_canonical_options(client, auth_headers):
+    response = client.get("/api/memory/inspector/memories/memory-1?chunk_limit=1&max_chars=80", headers=auth_headers)
     assert response.status_code == 200
     payload = response.json()
-    assert payload["pagination"] == {"limit": 2, "offset": 0, "total": 7, "has_more": True}
-    assert all(len(item["excerpt"]) <= 240 for item in payload["items"])
-    assert client.get(
-        "/api/memory/inspector/memories/m-1/evidence?limit=51",
-        headers={"X-LingJi-Token": auth_token},
-    ).status_code == 422
+    assert {"document", "chunks"}.issubset(payload)
+    assert "layers" not in payload and "action" not in payload
+    assert payload["chunks"][0]["truncated"] is True
 ```
 
-- [ ] **Step 2: Run RED.**
+- [ ] **Step 2: Run the backend RED suite.**
 
-Run: `python3 -m pytest -q tests/test_owner_memory_card_api.py tests/test_memory_inspector_api.py -k 'evidence' --tb=short`
+Run: `python3 -m pytest -q tests/test_owner_memory_detail_contract.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_source_service.py --tb=short`
 
-Expected: FAIL because the route is not registered.
+Expected: the new page/route and bounded canonical assertions fail; existing card preview, auth, source privacy and single-message tests remain diagnosable and are not weakened.
 
-- [ ] **Step 3: Add the authenticated route.** Reuse the same token dependency and `MemoryInspectorFacade` composition as `/memories/{id}`, pass validated query values to `list_memory_evidence`, and map only known safe exceptions to existing HTTP responses. Do not add a route for the unbounded `memory_evidence()` method.
+- [ ] **Step 3: Implement the minimal backend.** Page visible link metadata first, sort by the exact UTC key, slice the requested page, then read only that page’s message bodies through `SourceQueryService`. Enforce item/page budgets, set `truncated`, return `total`/`has_more`, and use safe references. Wire the route to the existing auth and facade. Add canonical bounds only as optional parameters on the existing route.
 
-- [ ] **Step 4: Run GREEN API tests.**
+- [ ] **Step 4: Run backend GREEN.**
 
-Run: `python3 -m pytest -q tests/test_owner_memory_card_api.py tests/test_memory_inspector_api.py --tb=short`
+Run: `python3 -m pytest -q tests/test_owner_memory_detail_contract.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_source_service.py --tb=short`
 
-Expected: PASS with 401/422 behavior, pagination metadata, bounded response bodies, and no raw secret/path leakage.
+Expected: PASS for authentication, bounds, pagination, stable order, authority/privacy, response budgets, selected canonical bounds, and unchanged current-only summaries.
 
-- [ ] **Step 5: Commit the API contract.**
+- [ ] **Step 5: Commit Task 1.**
 
 ```bash
-git add src/control/api.py tests/test_owner_memory_card_api.py tests/test_memory_inspector_api.py
-git commit -m "feat: expose authenticated paginated memory evidence"
+git add src/sources/service.py src/gateway/memory_inspector.py src/control/api.py tests/test_owner_memory_detail_contract.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_source_service.py
+git commit -m "feat: add bounded owner memory evidence route"
 ```
 
 ---
 
-### Task 4: Make the selected-memory snapshot complete and bounded
-
-**Files:**
-- Modify: `src/gateway/memory_inspector.py`
-- Modify: `src/control/api.py`
-- Modify: `tests/test_owner_memory_detail_contract.py`
-- Modify: `tests/test_memory_inspector_api.py`
-
-**Interfaces:**
-- Extend the existing selected-memory route with bounded optional parameters `chunk_limit: int = 20`, `max_chars: int = 12000`, and `cursor: str | None = None`; do not create a second canonical store or route family.
-- The selected-memory response contains `memory_id`, `as_of`, `content_hash`, `canonical` (or `None`), `canonical.truncated`, `canonical.next_cursor`, `conclusion`, `freshness`, `layers`, `source`, `action`, and `projection`.
-- `projection == "conversation_evidence"` with no canonical returns the exact human-facing copy “这是原始会话，尚未形成长期记忆” and points the UI to existing conversation messages pagination.
-
-- [ ] **Step 1: Add bounded canonical RED tests.**
-
-```python
-def test_selected_memory_returns_canonical_body_only_for_requested_memory(facade, fixture_db):
-    detail = facade.get_memory_detail("memory-long", chunk_limit=1, max_chars=80)
-    assert detail["memory_id"] == "memory-long"
-    assert detail["canonical"]["truncated"] is True
-    assert detail["canonical"]["next_cursor"]
-    assert len(detail["canonical"]["text"]) <= 80
-
-def test_selected_conversation_evidence_uses_existing_message_pagination(facade):
-    detail = facade.get_memory_detail("conversation-only")
-    assert detail["canonical"] is None
-    assert detail["projection"] == "conversation_evidence"
-    assert detail["conversation_messages_route"].endswith("/messages")
-```
-
-- [ ] **Step 2: Run RED.**
-
-Run: `python3 -m pytest -q tests/test_owner_memory_detail_contract.py tests/test_memory_inspector_api.py -k 'canonical or conversation_only' --tb=short`
-
-Expected: FAIL because the current memory inspector response is unbounded/all-chunk and does not carry truncation/cursor or the conversation-only copy.
-
-- [ ] **Step 3: Implement bounded selected reads.** Read canonical chunks only after a memory ID is selected, cap each response, return continuation metadata, and preserve the selected memory's `content_hash`/`as_of` identity. Reuse existing vector/source routes and include their layer state in the composed detail contract; a vector check failure remains unknown/unavailable.
-
-- [ ] **Step 4: Run GREEN.**
-
-Run: `python3 -m pytest -q tests/test_owner_memory_detail_contract.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py --tb=short`
-
-Expected: PASS for canonical body, truncation semantics, conversation-only fallback, vector/source layer states, and current/history identity.
-
-- [ ] **Step 5: Commit the selected snapshot contract.**
-
-```bash
-git add src/gateway/memory_inspector.py src/control/api.py tests/test_owner_memory_detail_contract.py tests/test_memory_inspector_api.py
-git commit -m "feat: bound selected owner memory snapshots"
-```
-
----
-
-### Task 5: Add explicit Desktop detail types and selected-only API calls
+### Task 2: Selected-only Desktop detail composition and rendering
 
 **Files:**
 - Modify: `desktop/lingji-control/src/pages/ownerMemoryCardsTypes.ts`
 - Modify: `desktop/lingji-control/src/pages/ownerMemoryCardsApi.ts`
 - Modify: `desktop/lingji-control/src/pages/OwnerMemoryCardsPage.tsx`
-- Modify: `desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs`
-
-**Interfaces:**
-- Add TypeScript types `OwnerMemoryDetail`, `CanonicalBody`, `EvidenceItem`, `EvidencePage`, `LayerState`, and `DetailLoadState` with explicit `truncated`, `nextCursor`, `hasMore`, `asOf`, and `contentHash` fields.
-- Add API functions `getOwnerMemoryDetail(memoryId, options?)`, `getOwnerMemoryVector(memoryId)`, `getOwnerMemorySource(memoryId)`, and `getOwnerMemoryEvidence(memoryId, { limit = 20, offset = 0 })`, all using the existing `LingJiApi` token path and no direct database access.
-- `open(memoryId)` first selects the card, then requests exactly the selected card's detail/canonical/vector/source/evidence page; list rendering must never call any body endpoint.
-
-- [ ] **Step 1: Add frontend RED smoke assertions.** Instrument the existing fixture server and assert request order/targets and absence of prefetch:
-
-```javascript
-await page.getByRole('button', { name: '发布计划' }).click();
-assert.deepEqual(requests.filter((url) => url.includes('/cards/')).length, 1);
-assert(requests.some((url) => url.endsWith('/memories/memory-1')));
-assert(requests.some((url) => url.includes('/memories/memory-1/evidence?limit=20&offset=0')));
-assert(!requests.some((url) => url.includes('/messages/other-memory')));
-await page.getByRole('button', { name: '加载更多来源' }).click();
-assert(requests.some((url) => url.includes('/evidence?limit=20&offset=20')));
-assert(!requests.some((url) => url.includes('/evidence?limit=20&offset=40')));
-```
-
-- [ ] **Step 2: Run RED.**
-
-Run: `cd desktop/lingji-control && npm run test:owner-ui-menu-fast-track`
-
-Expected: FAIL because opening a card currently requests only bounded card detail and one manually selected message, with no canonical/vector/source/evidence-page orchestration.
-
-- [ ] **Step 3: Implement typed selected-only requests.** Use `Promise.all` only for the selected card's canonical/vector/source/first evidence page, retain independent load/error state for each section, and abort or ignore stale responses when the panel closes or a different card is selected. The list query remains `state=current`, `limit=20`, and has no body prefetch.
-
-- [ ] **Step 4: Run GREEN static/contract checks.**
-
-Run: `cd desktop/lingji-control && npm run test:owner-ui-menu-fast-track && npm run build`
-
-Expected: PASS with request assertions, TypeScript build, existing four-menu/current-only behavior, and no additional list body requests.
-
-- [ ] **Step 5: Commit the typed client seam.**
-
-```bash
-git add desktop/lingji-control/src/pages/ownerMemoryCardsTypes.ts desktop/lingji-control/src/pages/ownerMemoryCardsApi.ts desktop/lingji-control/src/pages/OwnerMemoryCardsPage.tsx desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs
-git commit -m "feat: load owner memory details on selection"
-```
-
----
-
-### Task 6: Render the memory verification page and safe fallback actions
-
-**Files:**
-- Modify: `desktop/lingji-control/src/pages/OwnerMemoryCardsPage.tsx`
 - Modify: `desktop/lingji-control/src/pages/LocalMemoryLoop.css`
-- Modify: `desktop/lingji-control/src/pages/ownerMemoryCardsTypes.ts`
 - Modify: `desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs`
 
 **Interfaces:**
-- Detail sections appear in this order: “灵机当前记住的内容”, “当前结论”, “事情怎么发展”, “来源与核对”, “四层状态”, “需要不需要主人处理”, then a collapsed bottom “备用操作”.
-- Timeline rows display source software, conversation, occurred time, role, sequence, bounded excerpt/body, and a clear “继续查看全文” action using the existing single-message route.
-- Layer labels are exactly “原始记录 / 结构记录 / 语义向量 / 长期记忆”; unknown/unavailable states use “尚未获得/不可用” rather than `0`, `healthy`, or `complete`.
-- Historical detail shows freshness/replacement/reason in non-current language; normal list remains current-only. `action` drives the existing correction/invalidate/archive/reject calls only from the collapsed fallback.
+- Add `OwnerMemoryDetail`, `CanonicalBody`, `EvidenceItem`, `EvidencePage`, `LayerState`, and `DetailLoadState` with explicit `asOf`, `contentHash`, `truncated`, `nextCursor`, `hasMore`, `limit`, and `offset`.
+- Add `getOwnerMemoryDetail(memoryId, options?)`, `getOwnerMemoryVector(memoryId)`, `getOwnerMemorySource(memoryId)`, and `getOwnerMemoryEvidence(memoryId, {limit = 20, offset = 0})` using `LingJiApi` and the existing auth path.
+- `open(memoryId)` first selects one card, then concurrently loads only that ID’s `/cards/{id}`, bounded `/memories/{id}`, `/vector`, `/source`, and evidence page offset `0`; list rendering never loads canonical/message/evidence bodies.
+- Conversation-only cards are handled from the selected card: display the exact copy “这是原始会话，尚未形成长期记忆” and use existing conversation messages pagination instead of calling `/memories/{id}`.
 
-- [ ] **Step 1: Add rendered RED assertions for visible semantics.** Extend the smoke fixture with current verified, no-vector, long canonical, conversation-only, superseded, restricted and action-required cards:
+- [ ] **Step 1: Write Desktop RED request and DOM tests.** Extend the fixture server to record requests and provide current verified, no-vector, long-body, conversation-only, superseded, restricted and action-required cards.
 
 ```javascript
+await page.getByRole('button', { name: '查看记忆详情' }).first().click();
+assert(requests.some((url) => url.endsWith('/cards/memory-1')));
+assert(requests.some((url) => url.endsWith('/memories/memory-1?chunk_limit=20&max_chars=12000')));
+assert(requests.some((url) => url.includes('/memories/memory-1/evidence?limit=20&offset=0')));
+assert(!requests.some((url) => url.includes('/messages/memory-2')));
 assert(await page.getByText('灵机当前记住的内容').isVisible());
 assert(await page.getByText('当前结论').isVisible());
 assert(await page.getByText('事情怎么发展').isVisible());
@@ -320,123 +131,85 @@ assert(await page.getByText('结构记录').isVisible());
 assert(await page.getByText('语义向量').isVisible());
 assert(await page.getByText('长期记忆').isVisible());
 assert(await page.getByText('备用操作').isVisible());
-assert(await page.getByText('这是原始会话，尚未形成长期记忆').isVisible());
-assert((await page.locator('[data-testid="evidence-item"]').count()) <= 20);
 ```
 
-- [ ] **Step 2: Run RED.**
+- [ ] **Step 2: Run Desktop RED.**
 
 Run: `cd desktop/lingji-control && npm run test:owner-ui-menu-fast-track`
 
-Expected: FAIL because the current panel renders only topic, conclusion fallback, three previews, and existing action controls.
+Expected: FAIL because the current panel has only card previews and selected single-message behavior.
 
-- [ ] **Step 3: Implement the detail sections.** Render canonical content with `truncated` badge and continuation affordance; render current conclusion/provenance without inferring a conclusion from message text; render evidence pages with role/time/sequence/source; render folded technical IDs and safe references; keep raw paths/tokens/cookies/JSON out of visible text and attributes. Use CSS max-width/overflow and a scrollable long-body region without horizontal overflow at 1024px.
+- [ ] **Step 3: Implement typed selected-only composition.** Keep ordinary list query `state=current&limit=20`, request detail resources only after selection, track each section’s loading/error/unknown state, and retain selected `asOf`/`contentHash`. Do not prefetch other cards or later evidence pages.
 
-- [ ] **Step 4: Move actions into the bottom disclosure.** Preserve existing correction/invalidate/archive/reject handlers, confirmation, fresh GET, and 409 protection. Label lifecycle actions as retaining history; provide no physical delete control. The detail panel close button and Escape behavior remain functional.
+- [ ] **Step 4: Render the default-visible sections.** Show canonical text with explicit “内容已截断，可继续查看” when `truncated`; current conclusion and provenance; chronological evidence rows with source software/conversation/time/role/sequence and bounded body; four Chinese layer labels and truthful unknown/unavailable copy; owner-handling reason. Technical IDs and safe references stay in a collapsed disclosure. Put existing correction/invalidate/archive/reject controls only in bottom collapsed “备用操作”; do not add delete.
 
-- [ ] **Step 5: Run GREEN UI smoke/build.**
+- [ ] **Step 5: Render conversation-only and long-body semantics.** For card `kind`/`source.conversation_id` with no canonical, show “这是原始会话，尚未形成长期记忆” and the existing paginated conversation messages. For long canonical/evidence content show bounded text plus continuation/single-message route, never claim the excerpt is complete.
+
+- [ ] **Step 6: Run Desktop GREEN.**
 
 Run: `cd desktop/lingji-control && npm run test:owner-ui-menu-fast-track && npm run build`
 
-Expected: PASS for all visible sections, safe copy, fallback action placement, long-body truncation, and 1024/1280 layout.
+Expected: PASS for real selected-resource requests, no list prefetch, all default-visible sections, bottom fallback actions, conversation-only copy, truncation, safe disclosure, and 1024/1280 overflow.
 
-- [ ] **Step 6: Commit the verification page.**
+- [ ] **Step 7: Commit Task 2.**
 
 ```bash
-git add desktop/lingji-control/src/pages/OwnerMemoryCardsPage.tsx desktop/lingji-control/src/pages/LocalMemoryLoop.css desktop/lingji-control/src/pages/ownerMemoryCardsTypes.ts desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs
-git commit -m "feat: render owner memory verification details"
+git add desktop/lingji-control/src/pages/ownerMemoryCardsTypes.ts desktop/lingji-control/src/pages/ownerMemoryCardsApi.ts desktop/lingji-control/src/pages/OwnerMemoryCardsPage.tsx desktop/lingji-control/src/pages/LocalMemoryLoop.css desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs
+git commit -m "feat: render selected owner memory details"
 ```
 
 ---
 
-### Task 7: Cover pagination, privacy failures, revisions, and existing actions
+### Task 3: Rendered E2E edge cases, pagination, and action regression
 
 **Files:**
-- Modify: `desktop/lingji-control/src/pages/OwnerMemoryCardsPage.tsx`
-- Modify: `desktop/lingji-control/src/pages/ownerMemoryCardsApi.ts`
-- Modify: `desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs`
 - Modify: `desktop/lingji-control/tests/e2e_owner_memory_flow.mjs`
-- Modify: `tests/test_owner_memory_card_projector.py`
+- Modify: `desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs`
 - Modify: `tests/test_owner_memory_card_api.py`
+- Modify: `tests/test_owner_memory_corrections.py`
 
 **Interfaces:**
-- “加载更多来源” advances by the current page size and appends only one bounded page; loading, retry, empty, 401/503, and 409 states are explicit and actionable.
-- A changed `content_hash`/`as_of` returns a revision conflict that preserves unsaved owner edits and offers refresh; it must not silently replace the panel.
-- Restricted evidence is collapsed and requires an explicit owner click; unavailable source/vector data remains unknown/unavailable.
+- “加载更多来源” fetches exactly the next evidence page with `offset += currentItems.length`, appends at most 20/50 bounded items, and never fetches a later page before the owner clicks.
+- 401/503 show understandable reconnect/retry copy; 409 keeps an unsaved correction draft and offers refresh; restricted evidence requires explicit expansion; vector unavailable remains unknown/unavailable.
+- Existing correction/invalidate/archive/reject calls, confirmation and fresh GET continue to work from “备用操作”; history detail shows replacement/reason and never receives current label.
 
-- [ ] **Step 1: Add failure-mode RED tests.** Assert page 2 appends exactly 20-or-fewer items, page 3 is not fetched, 503 offers retry, 401 asks for reconnect/authentication, 409 preserves a draft correction, and source mismatch never displays the old conclusion.
+- [ ] **Step 1: Add rendered RED cases.** Use a deterministic fixture of 37 current + 3 history cards, 13 permanent memories, 3 conversations, 36 messages, 8 readable conclusions, one no-vector, one conflict, one long body, one conversation-only card, one superseded card and one owner pending action.
 
 ```javascript
 await page.getByRole('button', { name: '加载更多来源' }).click();
 assert.equal(await page.locator('[data-testid="evidence-item"]').count(), 40);
-assert.equal(requests.filter((url) => url.includes('/evidence?limit=20&offset=40')).length, 0);
+assert(requests.some((url) => url.includes('/evidence?limit=20&offset=20')));
+assert(!requests.some((url) => url.includes('/evidence?limit=20&offset=40')));
 assert(await page.getByText('详情版本已变化，请重新读取').isVisible());
 assert(await page.getByText('请先重新连接灵机').isVisible());
+assert(await page.getByText('这是原始会话，尚未形成长期记忆').isVisible());
+assert((await page.getByRole('button', { name: '删除' }).count()) === 0);
 ```
 
-- [ ] **Step 2: Run RED.**
+- [ ] **Step 2: Run rendered RED.**
 
 Run: `cd desktop/lingji-control && npm run test:e2e:memory && npm run test:owner-ui-menu-fast-track`
 
-Expected: FAIL on the newly asserted drilldown and failure semantics while existing action/current-only assertions remain diagnostic.
+Expected: new drilldown, failure, and load-more assertions fail; pre-existing four-menu/current-only assertions must remain passing or be diagnosed before proceeding.
 
-- [ ] **Step 3: Implement explicit state handling.** Use one request controller per selected detail, page evidence with `offset += items.length`, cap append count, and show retries inline. On 409, hold the draft and show both the current snapshot identity and refresh action. Keep existing owner correction/invalidation/archive/reject request paths and fresh GET behavior unchanged.
+- [ ] **Step 3: Implement edge state and action regression.** Append only the clicked next page, provide retry/reconnect controls, preserve drafts across 409, and keep safe error text. Expand five different memory types and multiple source originals through existing `/messages/{id}` calls in the test; verify each lifecycle action changes state and fresh GET refreshes the detail.
 
-- [ ] **Step 4: Run GREEN failure/action tests.**
-
-Run: `python3 -m pytest -q tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_owner_memory_corrections.py tests/test_project_memory_api.py --tb=short`  
-Run: `cd desktop/lingji-control && npm run test:owner-ui-menu-fast-track && npm run test:e2e:memory`
-
-Expected: PASS for privacy/authority, current/history isolation, bounded loading, error/revision behavior, and all existing lifecycle actions.
-
-- [ ] **Step 5: Commit edge-state behavior.**
-
-```bash
-git add desktop/lingji-control/src/pages/OwnerMemoryCardsPage.tsx desktop/lingji-control/src/pages/ownerMemoryCardsApi.ts desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs desktop/lingji-control/tests/e2e_owner_memory_flow.mjs tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py
-git commit -m "test: cover owner memory detail edge states"
-```
-
----
-
-### Task 8: Add rendered 1024/1280 end-to-end proof and navigation regression
-
-**Files:**
-- Modify: `desktop/lingji-control/tests/e2e_owner_memory_flow.mjs`
-- Modify: `desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs`
-- Modify: `desktop/lingji-control/src/navigation.ts` only if a regression test proves the existing four-item order changed
-- Modify: `docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md`
-
-**Interfaces:**
-- Rendered fixture must include at least 37 current cards plus 3 history cards, 13 permanent memories, 3 conversations, 36 messages, one pending owner action, eight distinct readable conclusions, one vector-unavailable memory, one conflict, one long body, one conversation-only evidence card, and one superseded card.
-- E2E must click at least five different memory types, expand multiple source originals through the existing single-message route, and verify current-only pages, exact pagination, body/timeline/layers/actions, 1024 and 1280 layouts, and no horizontal overflow.
-- Ordinary nav remains exactly four destinations; advanced diagnostics stays collapsed/low emphasis and is not duplicated.
-
-- [ ] **Step 1: Write the rendered RED scenarios.** Add real browser assertions for list leakage zero, selected-only request traces, canonical body/truncation, timeline ordering and load-more, source expansion, layer copy/state, conversation-only copy, historical replacement, action success/fresh GET, 401/503/409, Escape/close/focus, and 1024/1280 overflow.
-
-- [ ] **Step 2: Run the rendered RED suite.**
-
-Run: `cd desktop/lingji-control && npm run test:e2e:memory && npm run test:owner-ui-menu-fast-track`
-
-Expected: FAIL only on the new detail expectations; the pre-existing four-menu/current-only/action assertions must remain passing or be diagnosed before implementation continues.
-
-- [ ] **Step 3: Make the fixture and tests deterministic.** Record request URLs and response identities, assert UTC-stable timeline ordering, bound DOM evidence rows to one page, and use semantic selectors (`role`, labels, `data-testid`) rather than implementation-specific CSS text matching.
-
-- [ ] **Step 4: Run the full rendered GREEN suite.**
+- [ ] **Step 4: Run rendered GREEN.**
 
 Run: `cd desktop/lingji-control && npm run test:e2e:memory && npm run test:owner-ui-menu-fast-track && npm run test:smoke && npm run build`
 
-Expected: PASS at both viewport sizes with all visible controls working and no prefetch/current-history/navigation regressions.
+Expected: PASS for 1024/1280, long-body scrolling, bounded evidence pages, current/history isolation, conversation fallback, unknown/error/409, Escape/close/focus, source expansion, and existing actions.
 
-- [ ] **Step 5: Commit the rendered acceptance coverage.**
+- [ ] **Step 5: Commit Task 3.**
 
 ```bash
-git add desktop/lingji-control/tests/e2e_owner_memory_flow.mjs desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md
-git commit -m "test: verify owner memory detail drilldown"
+git add desktop/lingji-control/tests/e2e_owner_memory_flow.mjs desktop/lingji-control/scripts/owner-ui-menu-fast-track-smoke.mjs tests/test_owner_memory_card_api.py tests/test_owner_memory_corrections.py
+git commit -m "test: verify owner memory detail edge cases"
 ```
 
 ---
 
-### Task 9: Run focused gates, synchronize acceptance docs, and hand off to a new Mac task
+### Task 4: Focused closeout, governance synchronization, and handoff
 
 **Files:**
 - Modify: `docs/PROJECT_STATUS.md`
@@ -445,52 +218,47 @@ git commit -m "test: verify owner memory detail drilldown"
 - Modify: `docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md`
 - Modify: `docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md`
 - Create: `docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION.md`
-- Create: `.superpowers/sdd/2026-08-31-owner-memory-detail-drilldown/task-implementation-report.md`
 
 **Interfaces:**
-- The implementation report records exact product SHA, RED/GREEN commands, focused results, changed files, privacy/current-history evidence, and explicit `NOT_TESTED` for live/installation/owner data.
-- `LOCAL_EXECUTION_TASK.md` remains the only task entry and is `ACTIVE` only for `OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION` with `FOCUSED_PRODUCT_IMPLEMENTATION_ONLY`; its product commit is the exact new implementation SHA and its report path is under `docs/TEST_REPORTS/`.
-- The old `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A` is recorded as `COMPLETED / FAIL`, with `owner_observation: FAIL`, and is never active again.
+- The implementation report records the exact new product SHA, RED/GREEN results, changed files, security/current-history evidence, and explicit `NOT_TESTED` for live/installation/owner data.
+- `LOCAL_EXECUTION_TASK.md` remains the only task entry with `task_id: OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION`, `execution_mode: FOCUSED_PRODUCT_IMPLEMENTATION_ONLY`, and task count `4`.
+- Old `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A` remains historical `COMPLETED / FAIL` and is never reactivated.
 
-- [ ] **Step 1: Update the acceptance log before final product verification.** Add the exact detail scope, RED/GREEN commands, no-live/no-owner-data boundary, later-Mac requirements (new SHA, full/release, fresh root, same-SHA Artifact, full Computer Use, five memory types and multiple originals), and rollback/cleanup rules to `CHANGE_ACCEPTANCE_LOG.md`.
+- [ ] **Step 1: Synchronize docs before closeout tests.** State the 4-task plan, exact route and budgets (`20/50`, `240/4000/24000`), selected-only canonical rule, conversation copy, bottom fallback actions, no-live boundary, and future Mac requirement (five memory types plus multiple expanded originals).
 
-- [ ] **Step 2: Run focused backend and Desktop gates.**
+- [ ] **Step 2: Run final focused backend checks.**
 
-Run: `python3 -m pytest -q tests/test_owner_memory_detail_contract.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_source_service.py tests/test_owner_memory_corrections.py tests/test_project_memory_api.py --tb=short`  
-Run: `cd desktop/lingji-control && npm run test:e2e:memory && npm run test:owner-ui-menu-fast-track && npm run test:smoke && npm run build`  
-Run: `python3 -m compileall -q src tests`  
+Run: `python3 -m pytest -q tests/test_owner_memory_detail_contract.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_source_service.py tests/test_owner_memory_corrections.py tests/test_project_memory_api.py --tb=short`
+
+Expected: PASS with no detail contract skipped.
+
+- [ ] **Step 3: Run final Desktop and governance checks.**
+
+Run: `cd desktop/lingji-control && npm run test:e2e:memory && npm run test:owner-ui-menu-fast-track && npm run test:smoke && npm run build`
+Run: `python3 -m compileall -q src tests`
 Run: `git diff --check`
-
-Expected: PASS with no skipped detail assertions, while preserving any explicitly documented pre-existing unrelated baseline failures.
-
-- [ ] **Step 3: Run governance gates.**
-
 Run: `python3 scripts/check_acceptance_sync.py`  
 Run: `python3 scripts/check_local_execution_handoff.py`
 
-Expected: both commands report PASS; no product change is accepted without the synchronized acceptance log.
+Expected: all commands PASS; no live/installation/owner-data test is run in this task.
 
-- [ ] **Step 4: Write the implementation report.** Include exact branch/commit, plan task count (9), RED/GREEN evidence, tests and results, changed files, known limitations, and the statement `live/安装/主人数据：NOT_TESTED`.
+- [ ] **Step 4: Write the focused implementation report.** Record exact branch/commit, 4 task results, test outputs, no-live boundary, known limitations, and the next Mac acceptance gate without claiming owner PASS.
 
-- [ ] **Step 5: Commit docs-only handoff after the implementation SHA is known.**
+- [ ] **Step 5: Commit Task 4 docs/report.**
 
 ```bash
-git add docs/PROJECT_STATUS.md docs/MODULES/CODE_MAP.md docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION.md .superpowers/sdd/2026-08-31-owner-memory-detail-drilldown/task-implementation-report.md
-git commit -m "docs: activate owner memory detail drilldown"
+git add docs/PROJECT_STATUS.md docs/MODULES/CODE_MAP.md docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md docs/ACCEPTANCE/LOCAL_EXECUTION_TASK.md docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION.md
+git commit -m "docs: close owner memory detail implementation"
 ```
 
-- [ ] **Step 6: Stop at the implementation boundary.** Do not build/install/start live services or create the Mac acceptance task in this implementation worktree. After a later product SHA passes the repository's full/release gates, the parent agent creates a fresh Mac acceptance task and preserves this implementation evidence.
+- [ ] **Step 6: Stop at the focused boundary.** Do not build/install/start live services or create a Mac acceptance task here. The parent agent creates a new Mac task only after a new product SHA passes full/release.
 
-## Self-review checklist
+## Self-review
 
-- Ordinary navigation/current-only list: Task 8 regression coverage.
-- Canonical body/conclusion/timeline/source originals/layers/owner handling: Tasks 4–6.
-- Bottom-only fallback actions and no physical delete: Task 6 and Task 7.
-- Existing API/facade/read-model reuse and bounded paginated evidence: Tasks 2–4.
-- Selected-only canonical read and explicit truncation: Tasks 4–5.
-- Conversation-only copy and message pagination: Tasks 1, 4, and 8.
-- Privacy/source authority/raw secret redaction/technical ID folding: Tasks 2, 3, 6, and 7.
-- RED/GREEN focused and rendered 1024/1280 tests: Tasks 1, 3, 5, 6, 7, and 8.
-- New SHA Mac acceptance, five memory types, multiple originals, owner confirmation gate: Global Constraints and Task 9.
-
-Plan complete and saved to `docs/superpowers/plans/2026-08-31-owner-memory-detail-drilldown.md`. Execution must use the focused implementation task first; Mac acceptance is a separate later task after the new product SHA and release gates exist.
+- Four ordinary destinations/current-only list: Tasks 2–3.
+- Canonical body without card DTO mixing: Tasks 1–2.
+- Unique bounded evidence route and authority/privacy: Task 1.
+- Conversation-only fallback and existing messages pagination: Tasks 2–3.
+- Default-visible detail sections, folded IDs, bottom fallback actions, no delete: Task 2.
+- Pagination, truncation, unknown/error/409, 1024/1280 and five memory types: Task 3.
+- Focused-only implementation and future Mac acceptance boundary: Task 4.
