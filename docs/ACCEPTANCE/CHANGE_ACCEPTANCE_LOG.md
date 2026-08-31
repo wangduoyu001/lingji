@@ -1,5 +1,35 @@
 # 验收要求变更记录
 
+## 2026-08-31 · OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A · Mac owner UI handoff
+
+- 本机任务唯一身份为 `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`，精确产品 SHA
+  `4ce1e00acb17bc5e4e4c183f58d30551ef76b101`，模式
+  `MACOS_OWNER_UI_EXPERIENCE_ONLY`，候选标签 `OWNER_UI_SOURCE_FILTER_REPAIR_CANDIDATE`，
+  `NOT_A_RELEASE_GATE`。质量结论继续为 `MEASURED_FAIL / NOT_RELEASE_READY`；本条不授权
+  release、Phase 1 PASS、merge 或代理代替主人确认。
+- 新 Acceptance 根为 `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`，与旧失败根、
+  Production、真实聊天、真实 Vault 和用户配置物理隔离。旧候选失败证据与整包备份保持只读，
+  本轮未执行 destructive cleanup。
+- 首次 `tauri.macos.conf` app-only 打包尝试记录为 `FAIL_REPAIRED`；修复后以 sidecar-config
+  重建 exact SHA 候选，安装包 deep strict codesign 通过，main/MacOS sidecar/Resources sidecar
+  全部 arm64。DMG SHA256 为
+  `351557a1efd38c66941ba80ed65616a515852fe5e689a220428cd5363dd11991`；已安装成员哈希见
+  `docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_HASHES.txt`。
+- 认证 `127.0.0.1:8766` 为 200，未认证为 401，8767 缺席；Desktop/Core PID 为 37148/37132。
+  合成数据契约为 37 current + 3 history cards、13 permanent、3 conversations、36 messages、
+  1 high-risk owner pending action，failure-generated pending 为 0。
+- 根代理 Computer Use 已通过四项普通菜单、Home 统计/成功文案、当前记忆分页 20+17 且等待
+  21 秒稳定、source/conclusion/layer/source-message 展示、Need Me 单一待办、source filter
+  raw 5 → ordinary visible 4 且 Codex card 1、18 个高级页面和 warm sage 布局；未点击备份、
+  来源授权或主人确认变更控件。状态为 `RUNNING / READY_FOR_OWNER_CONFIRMATION`，
+  `owner_observation: root_agent_pass_owner_pending`。
+- 本条报告与公开脱敏 evidence：
+  `docs/TEST_REPORTS/MACOS_OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A.md`、
+  `docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_SUMMARY.json`、
+  `docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_HASHES.txt` 和
+  `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_PACKAGING.txt`。App/sidecar 必须保持打开，
+  `cleanup_after` 在主人确认前保持未执行。
+
 ## 2026-08-30 · Owner UI / menu fast-track · Task 2 local activation
 
 - 本机任务唯一身份：`OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6`，模式

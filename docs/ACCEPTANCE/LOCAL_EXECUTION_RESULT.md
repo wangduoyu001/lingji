@@ -3,7 +3,7 @@
 > 当前任务正在执行：`OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A`。
 > 当前候选仅为 `OWNER_UI_SOURCE_FILTER_REPAIR_CANDIDATE`，`NOT_A_RELEASE_GATE`；
 > prior candidates `6ea11e4`/`43009a0d`/`6baf4ee6` 的主人体验结论为 `OWNER_UI_REPAIR_REQUIRED`；
-> 新候选 `4ce1e00a` 尚未运行，当前仅等待隔离构建与验收，
+> 新候选 `4ce1e00a` 已完成隔离构建、安装、认证 sidecar 和根代理 UI 遍历，当前仅等待主人确认，
 > `MEASURED_FAIL / NOT_RELEASE_READY`
 > 质量事实保持延期。下方旧任务回执仅作历史记录，
 > 不覆盖当前 ACTIVE 任务。
@@ -16,48 +16,49 @@ duplicate macOS lexical-alias source cards; it is not a PASS result.
 
 ```yaml
 task_id: OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A
-status: PENDING
+status: RUNNING
 verdict: PENDING
+owner_readiness: READY_FOR_OWNER_CONFIRMATION
 execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 product_commit: 4ce1e00acb17bc5e4e4c183f58d30551ef76b101
 task_instruction_commit: 8bc1bce20636135018df302ab931cb37707d6376
 report_branch: acceptance/owner-ui-source-filter-repair-4ce1e00a
-report_commit: PENDING
+report_commit: PENDING_REPORT_BRANCH_COMMIT
 report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A.md
-public_summary_path: PENDING
-public_hashes_path: PENDING
-cleanup_before: PENDING
-cleanup_after: PENDING
+public_summary_path: docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_SUMMARY.json
+public_hashes_path: docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_HASHES.txt
+cleanup_before: PASS
+cleanup_after: NOT_EXECUTED_APP_AND_SIDECAR_MUST_REMAIN_OPEN
 remote_branch_verified: false
 remote_commit_verified: false
 remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
 local_temp_root_absent: false
-owner_observation: PENDING
-started_at: PENDING
-finished_at: PENDING
-installed_app_hash: PENDING
-installed_main_sha256: PENDING
-installed_sidecar_sha256: PENDING
-dmg_sha256: PENDING
-desktop_pid: 0
-sidecar_pid: 0
-control_api_ping: PENDING
+owner_observation: root_agent_pass_owner_pending
+started_at: 2026-08-31 (time not recorded in public evidence)
+finished_at: PENDING_OWNER_CONFIRMATION
+installed_app_hash: see installed_main_sha256/installed_sidecar_sha256 and public hash evidence
+installed_main_sha256: 6fb5e44a27dc65108d4b91ddb5af83cb341a967a9fe9e88b1b1b5a6cec1291a3
+installed_sidecar_sha256: fb83470f1b29c97cb40a342e82f4ee11ea4b7d897907964dd880b184b23f1dbb
+dmg_sha256: 351557a1efd38c66941ba80ed65616a515852fe5e689a220428cd5363dd11991
+desktop_pid: 37148
+sidecar_pid: 37132
+control_api_ping: 200_authenticated_401_unauthenticated
 acceptance_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a
 acceptance_effective_data_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a/data-root/acceptance
-acceptance_memory_cards: 0
-acceptance_completed_scans: 0
-acceptance_pending_actions: 0
+acceptance_memory_cards: 37_current_plus_3_history
+acceptance_completed_scans: 1
+acceptance_pending_actions: 1_high_risk_owner_only
 production_pollution_count: 0
 vault_pollution_count: 0
 owner_observation_page: PENDING
 ```
 
-当前 Acceptance 根目录为 `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`，尚未运行；
-其 DataRoot、Vault、source fixture、evidence 与整包安装备份将在执行时物理分离。旧根
+当前 Acceptance 根目录为 `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`，已完成本轮隔离构建、安装与 UI 交接；
+其 DataRoot、Vault、source fixture、evidence 与整包安装备份保持物理分离。旧根
 `/tmp/LingJiAcceptance/owner-ui-redesign-43009a0`、`/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6`
 和 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b` 及其 backup/evidence/DB/logs
 必须原样只读保留，prior candidate failures 与当前 PENDING receipt 分离。
@@ -74,6 +75,14 @@ owner_observation_page: PENDING
 不得制造自动扫描 failure pending。raw discovery 预期 5 个来源（含 1 个 `not_found` archive），
 普通 visible source facts/found count 预期 4 个（仅 1 张 Codex card），seed 授权完成后
 authorized/current 预期为 1。
+
+本轮技术与根代理观察回执：sidecar-config 重建成功，首次 `tauri.macos.conf` app-only 打包失败已作为
+`FAIL_REPAIRED` 保留；安装包 deep strict codesign 通过，main/MacOS sidecar/Resources sidecar 均为 arm64。
+认证 8766 返回 200，未认证返回 401，8767 缺席。四项普通菜单、Home 统计与成功文案、当前记忆两页
+分页（20+17，等待 21 秒仍稳定）、来源/结论/层状态/来源消息钻取、Need Me 单一高风险待办、来源
+过滤（raw discovery 5、ordinary visible 4、Codex card 1）、18 个高级页面和 warm sage 布局均已由根代理
+观察通过。未点击备份、来源授权或主人确认等变更控件；app/sidecar 必须保持打开，`owner_observation`
+固定为 `root_agent_pass_owner_pending`，`cleanup_after` 不执行，等待主人确认。
 
 > 最近一次任务已完成。权威结论：`COMPLETED / FAIL / DO NOT MERGE`。
 >

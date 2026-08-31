@@ -1,0 +1,8 @@
+OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A packaging evidence
+
+First packaging attempt: FAIL_REPAIRED. The initial tauri.macos.conf app-only packaging invocation
+did not produce the required candidate package. The failure is retained as a repaired packaging
+failure and is not counted as a pass.
+
+Repair/rebuild: PASS. The sidecar-config rebuild produced the macOS arm64 candidate; the installed
+application passed deep strict codesign and main/MacOS-sidecar/Resources-sidecar architecture checks.

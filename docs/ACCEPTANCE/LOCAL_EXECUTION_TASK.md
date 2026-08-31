@@ -23,8 +23,8 @@ artifact_zip_sha256: PENDING
 dmg_sha256: PENDING
 report_branch: acceptance/owner-ui-source-filter-repair-4ce1e00a
 report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A.md
-public_summary_path: PENDING
-public_hashes_path: PENDING
+public_summary_path: docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_SUMMARY.json
+public_hashes_path: docs/TEST_REPORTS/evidence/OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A_HASHES.txt
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
 acceptance_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a
 acceptance_data_root: /tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a/data-root

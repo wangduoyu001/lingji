@@ -1,0 +1,65 @@
+{
+  "task_id": "OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A",
+  "status": "RUNNING",
+  "verdict": "READY_FOR_OWNER_CONFIRMATION",
+  "owner_observation": "root_agent_pass_owner_pending",
+  "quality_gate": "MEASURED_FAIL / NOT_RELEASE_READY",
+  "release_gate": "NOT_A_RELEASE_GATE",
+  "product_commit": "4ce1e00acb17bc5e4e4c183f58d30551ef76b101",
+  "correction_docs_commit": "94461d56c64f31e1af6c7cdece51e959ddc0e8b1",
+  "task_instruction_commit": "8bc1bce20636135018df302ab931cb37707d6376",
+  "packaging": {
+    "first_attempt": "FAIL_REPAIRED",
+    "first_attempt_scope": "tauri.macos.conf app-only packaging invocation",
+    "rebuild": "PASS",
+    "app_codesign_strict": "PASS",
+    "main_arm64": true,
+    "sidecar_arm64": true
+  },
+  "artifact": {
+    "kind": "local macOS arm64 Tauri application",
+    "dmg_sha256": "351557a1efd38c66941ba80ed65616a515852fe5e689a220428cd5363dd11991",
+    "installed_members": {
+      "MacOS/lingji-control-center": "6fb5e44a27dc65108d4b91ddb5af83cb341a967a9fe9e88b1b1b5a6cec1291a3",
+      "MacOS/lingji-core": "fb83470f1b29c97cb40a342e82f4ee11ea4b7d897907964dd880b184b23f1dbb",
+      "Resources/lingji-core.exe": "9b857ed22bc9fcb2e3f99ec515880f17e0232d36424c94ece6dad398147b388c"
+    }
+  },
+  "runtime": {
+    "desktop_pid": 37148,
+    "sidecar_pid": 37132,
+    "authenticated_8766": 200,
+    "unauthenticated_8766": 401,
+    "8767": "absent"
+  },
+  "synthetic_contract": {
+    "current_cards": 37,
+    "history_cards": 3,
+    "permanent": 13,
+    "conversations": 3,
+    "messages": 36,
+    "pending_owner_actions": 1,
+    "failure_pending_created": 0,
+    "raw_discovered_sources": 5,
+    "ordinary_visible_sources": 4,
+    "codex_cards": 1,
+    "authorized_current_sources": 1
+  },
+  "ui_observation": {
+    "ordinary_menus": 4,
+    "advanced_pages_opened": 18,
+    "memory_page_1": 20,
+    "memory_page_2": 17,
+    "memory_page_2_stable_after_seconds": 21,
+    "history_or_stale_leakage": false,
+    "visible_cards_have_conclusion_source_and_layer_status": true,
+    "selected_source_message_exposed": true,
+    "visual_layout": "warm sage inspected",
+    "mutating_controls_clicked": false
+  },
+  "cleanup": {
+    "cleanup_after": "NOT_EXECUTED_APP_AND_SIDECAR_MUST_REMAIN_OPEN",
+    "production_pollution_count": 0,
+    "vault_pollution_count": 0
+  }
+}

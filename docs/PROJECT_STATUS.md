@@ -29,15 +29,16 @@ Phase 1 PASS、merge 或主人观察 PASS。旧候选 `6ea11e4`、`6baf4ee6` 的
 
 新 Acceptance 根固定为 `/tmp/LingJiAcceptance/owner-ui-source-filter-4ce1e00a`，DataRoot、
 Vault、source fixture、evidence 和新安装前 `/Applications/灵机.app` 整包备份分离；Production、
-主人真实聊天、真实 Vault、正式记忆与用户配置保持不触碰。Mac rebuild、full-root Computer
-Use 和主人观察保持待执行；新候选与 sidecar 完成交接后必须保持打开，等待主人确认。
+主人真实聊天、真实 Vault、正式记忆与用户配置保持不触碰。Mac arm64 rebuild、安装、认证
+sidecar 与 full-root Computer Use 已完成；新候选与 sidecar 保持打开，等待主人确认，
+`cleanup_after` 暂不执行。
 
 当前 reviewed candidate 已由本轮独立 review 允许从 `4ce1e00a` 重建；旧候选失败证据必须保留，
 不得冒充本轮结果。新隔离 fixture 要求 37 张记忆卡（3 history）、13 permanent、3 conversations、
 36 messages、1 条 owner high-risk pending action only，至少 8 个不同 synthetic conclusions；
 discovered 同时保留 available sessions 与 `not_found` archive，普通来源页只显示 1 张 Codex card，
-found count 与 visible count 一致。当前状态仍为 `PENDING / NOT_TESTED`，绝不表示主人 PASS、release
-或 Phase 1 PASS。
+found count 与 visible count 一致。当前状态为 `RUNNING / READY_FOR_OWNER_CONFIRMATION`，根代理观察标记
+`root_agent_pass_owner_pending`；绝不表示主人 PASS、release 或 Phase 1 PASS。
 旧 `6baf4ee6` 候选的 `OWNER_UI_REPAIR_REQUIRED` 报告、backup、fixture、DB、日志与 evidence
 必须继续保留。
 
