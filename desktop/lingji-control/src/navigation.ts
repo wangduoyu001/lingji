@@ -15,6 +15,7 @@ export const PRIMARY_NAVIGATION: NavigationItem[] = [
 export const ADVANCED_NAVIGATION: NavigationItem[] = [
   { id: "brain_status", label: "脑状态", hint: "记忆、模型、算力与任务详细状态", group: "advanced", icon: "pulse" },
   { id: "codex_workspace", label: "项目与对话", hint: "项目、会话、当前工作与处理进度", group: "advanced", icon: "project" },
+  { id: "activity", label: "活动记录", hint: "查看灵机最近完成的工作", group: "advanced", icon: "logs" },
   { id: "memory_review", label: "人工记忆审核", hint: "主人批准、编辑或拒绝候选记忆", group: "advanced", icon: "review" },
   { id: "auto_review", label: "自动审查 SHADOW", hint: "查看建议、风险与解释，不执行变更", group: "advanced", icon: "shield" },
   { id: "memory_inspector", label: "记忆检查器", hint: "来源、对话、消息与记忆关系", group: "advanced", icon: "inspect" },
@@ -34,7 +35,6 @@ export const ADVANCED_NAVIGATION: NavigationItem[] = [
 
 // Legacy direct routes remain addressable without becoming ordinary menu entries.
 export const LEGACY_NAVIGATION: NavigationItem[] = [
-  { id: "activity", label: "活动记录", hint: "查看灵机最近完成的工作", group: "observe", icon: "logs" },
   { id: "diagnostics", label: "高级诊断", hint: "遇到问题时查看详细信息", group: "advanced", icon: "settings" },
 ];
 

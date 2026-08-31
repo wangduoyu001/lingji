@@ -39,27 +39,39 @@ export default function OwnerMemoryCardsPage({ api, active, onNavigate }: { api:
   const [editContent, setEditContent] = useState("");
   const [reason, setReason] = useState("");
   const requestId = useRef(0);
+  const offsetRef = useRef(0);
   const detailHeadingRef = useRef<HTMLHeadingElement>(null);
   const detailTriggerRef = useRef<HTMLButtonElement>(null);
   const [feedback, setFeedback] = useState("");
 
-  const load = useCallback(async (nextOffset = offset) => {
+  const load = useCallback(async (nextOffset = 0) => {
     if (!active) return;
+    offsetRef.current = nextOffset;
     const id = ++requestId.current;
     setLoading(true); setError(null);
     try {
       const response = await client.list(nextOffset);
       if (id !== requestId.current) return;
-      setItems(Array.isArray(response.items) ? response.items : []);
+      // The owner stream is intentionally current-only. Historical versions
+      // remain available through an opened detail, never in the daily list.
+      const currentItems = (Array.isArray(response.items) ? response.items : []).filter((item) => String(item.freshness?.state ?? "") === "current");
+      setItems(currentItems);
       const pagination = response.pagination ?? {};
       setOffset(Number(pagination.offset ?? nextOffset));
-      setTotal(typeof pagination.total === "number" ? pagination.total : null);
-      setHasMore(Boolean(pagination.has_more));
+      setTotal(typeof pagination.total === "number" ? pagination.total : currentItems.length);
+      setHasMore(Boolean(pagination.has_more) && currentItems.length > 0);
     } catch (value) {
       if (id === requestId.current && value instanceof ApiError) setError(value);
     } finally { if (id === requestId.current) setLoading(false); }
-  }, [active, client, offset]);
-  useEffect(() => { void load(0); }, [active, client]);
+  }, [active, client]);
+  useEffect(() => {
+    if (active) void load(0);
+  }, [active, load]);
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => void load(offsetRef.current), 20_000);
+    return () => window.clearInterval(timer);
+  }, [active, load]);
 
   const open = async (card: OwnerMemoryCard, trigger?: HTMLButtonElement) => {
     detailTriggerRef.current = trigger ?? null;
@@ -130,7 +142,7 @@ export default function OwnerMemoryCardsPage({ api, active, onNavigate }: { api:
   const selectedConclusion = selected ? ownerFacingConclusion(selected) : null;
   if (!active) return <div className="loop-state">连接本机服务后显示记忆内容。</div>;
   return <div className="loop-page owner-memory-cards-page">
-    <section className="workspace-hero memory-cards-hero"><div><h2>记忆内容</h2><p>每张卡讲清一件事：发生了什么、最新结论、来源和是否需要你决定。</p></div><button className="button secondary" disabled={loading} onClick={() => void load(offset)}>{loading ? "刷新中…" : "刷新内容"}</button></section>
+    <section className="workspace-hero memory-cards-hero"><div><span className="section-kicker">当前有效</span><h2>记忆内容</h2><p>每张卡只保留一件仍然有效的事。灵机会自动更新，历史版本收在详情里。</p></div><span className="auto-refresh-note">自动更新</span></section>
     {error && <Notice kind="error">{error.status === 409 ? "这条内容刚刚发生变化，请刷新后再决定。" : "记忆内容暂时读不出来，原始记录没有被删除。请稍后重试。"}</Notice>}
     <section className="memory-cards-summary" aria-live="polite"><strong>已显示 {items.length} / 共 {total === null ? "尚未获得" : total} 条</strong><span>来源：{distribution}</span></section>
     {loading && items.length === 0 ? <div className="loop-state" aria-busy="true">正在读取你的记忆内容…</div> : items.length === 0 ? <Empty text="还没有可展示的记忆卡片。接管一个来源并完成一次检查后，这里会出现具体内容。" /> : <section className="owner-memory-card-grid" aria-label="记忆卡片">{items.map((card) => {
@@ -139,14 +151,13 @@ export default function OwnerMemoryCardsPage({ api, active, onNavigate }: { api:
       const conclusion = ownerFacingConclusion(card);
       return <article className="owner-memory-card" key={card.memory_id} tabIndex={0} onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); void open(card, event.currentTarget.querySelector<HTMLButtonElement>(".owner-memory-card-title") ?? undefined); } }}>
         <button className="owner-memory-card-title" onClick={(event) => void open(card, event.currentTarget)}>{text(card.topic, "未命名记忆")}</button>
-        <div className="owner-memory-developments">{evidence.slice(0, 3).map((line, index) => <p key={`${card.memory_id}-${index}`}>{line}</p>)}</div>
         <p className="owner-memory-conclusion"><strong>{conclusion.label}：</strong>{conclusion.text}</p>
+        <div className="owner-memory-developments">{evidence.slice(0, 3).map((line, index) => <p key={`${card.memory_id}-${index}`}>{line}</p>)}</div>
         <div className="owner-memory-freshness"><span className="pill neutral">{freshnessLabels[freshness] ?? "尚未判断"}</span><small>{text(card.freshness?.reason, "时效尚未判断")} · {time(card.freshness?.latest_evidence_at, card.source?.latest_evidence_at)}</small></div>
         <p className="owner-memory-source"><strong>来源：</strong>{text(card.source?.label)} · {card.source?.message_count == null ? "消息数尚未获得" : `${card.source.message_count} 条消息`} · 最近证据：{time(card.source?.latest_evidence_at)}</p>
         <div className="owner-memory-layers">{Object.entries(layerLabels).map(([key, label]) => <span className="pill neutral" key={key}>{label}：{stateLabels[String(card.layers?.[key]?.state || "unknown")] ?? "尚未获得"}</span>)}</div>
         <p className="owner-memory-trust">可信提示：{trustLabels[String(card.trust?.state || "unknown")] ?? "可信度尚未判断"}</p>
-        <p className="owner-memory-action">建议：{text(card.action?.label, "查看详情")}</p>
-        <button className="button secondary owner-memory-action-button" onClick={(event) => void open(card, event.currentTarget)} aria-label={`${text(card.action?.label, "查看详情")}：${text(card.topic, "记忆")}`}>{text(card.action?.label, "查看详情")}</button>
+        <button className="button secondary owner-memory-action-button" onClick={(event) => void open(card, event.currentTarget)} aria-label={`查看详情：${text(card.topic, "记忆")}`}>查看详情</button>
       </article>;
     })}</section>}
     <div className="loop-pager owner-memory-pager"><button disabled={offset === 0 || loading} onClick={() => void load(Math.max(0, offset - OWNER_MEMORY_CARD_LIMIT))}>上一页</button><span>{total == null ? `第 ${Math.floor(offset / OWNER_MEMORY_CARD_LIMIT) + 1} 页` : `${Math.floor(offset / OWNER_MEMORY_CARD_LIMIT) + 1} / ${Math.max(1, Math.ceil(total / OWNER_MEMORY_CARD_LIMIT))}`}</span><button disabled={!hasMore || loading} onClick={() => void load(offset + OWNER_MEMORY_CARD_LIMIT)}>下一页</button></div>

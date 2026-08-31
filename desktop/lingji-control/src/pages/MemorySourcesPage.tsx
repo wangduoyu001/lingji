@@ -110,19 +110,20 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
     <div className="stack memory-sources-page">
       <section className="memory-sources-intro">
         <div>
-          <h2>选择灵机要记住的内容</h2>
-          <p>灵机只读取你明确允许的来源。选择后，灵机会检查内容并记住变化。</p>
+          <span className="section-kicker">自动接管</span>
+          <h2>记忆来源</h2>
+          <p>这里显示灵机正在自动接管的记录。授权一次后，扫描、整理和更新都会自动进行。</p>
         </div>
-        <button className="button secondary" disabled={resource.refreshing} onClick={() => void resource.refresh({ force: true })}>{resource.refreshing ? "检查中…" : "现在检查"}</button>
+        <span className="auto-refresh-note">{resource.refreshing ? "正在更新" : "自动更新"}</span>
       </section>
       {resource.stale && <Notice kind="warning">当前显示的是上一次成功读取的结果，正在重试。请不要把过期状态当成当前状态。</Notice>}
-      {resource.error && snapshot && <Notice kind="warning">暂时无法读取记忆来源，已保留上一次成功结果。请点击“现在检查”恢复。</Notice>}
+      {resource.error && snapshot && <Notice kind="warning">暂时无法读取记忆来源，已保留上一次成功结果。灵机会自动重试。</Notice>}
       {error && <Notice kind="error">{error}</Notice>}
       {message && <Notice kind="info">{message}</Notice>}
       {snapshot.runtime?.cleanup_pending && <Notice kind="error">临时文件清理失败：灵机会自动重试，可重试。</Notice>}
       {periodicNotice && <Notice kind="info">{periodicNotice}</Notice>}
       <p className="memory-sources-summary" aria-label="来源总览">{sourceSummary(snapshot)}</p>
-      {snapshot.sources.length === 0 ? <Empty text="暂时没有可连接的记录来源。可以稍后点击“现在检查”；灵机不会自行扩大读取范围。" /> : (
+      {snapshot.sources.length === 0 ? <Empty text="暂时没有可连接的记录来源。灵机会自动重试，不会自行扩大读取范围。" /> : (
         <section className="memory-source-list" aria-label="记忆来源列表">
           {snapshot.sources.map((source) => <SourceCard key={`${source.kind}:${source.root}`} source={source} busy={busy} onAuthorize={() => void authorize(source)} onAction={runAction} sourceApi={sourceApi} onDetail={setDetail} />)}
         </section>
@@ -135,7 +136,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
 function sourceSummary(snapshot: MemorySourcesSnapshot): string {
   const sources = Array.isArray(snapshot.sources) ? snapshot.sources : [];
   const discoveredCount = countLabel(Array.isArray(snapshot.discovered) ? snapshot.discovered.length : undefined);
-  const authorizedCount = countLabel(Array.isArray(snapshot.authorized) ? snapshot.authorized.length : undefined);
+  const authorizedCount = countLabel(Array.isArray(snapshot.authorized) ? snapshot.authorized.filter((item) => ["authorized", "scanning", "current"].includes(String(item.status))).length : undefined);
   const takenOverCount = countLabel(Array.isArray(snapshot.sources) ? sources.filter((item) => item.state === "current").length : undefined);
   const scanCount = countLabel(snapshot.summary?.counts?.completed);
   const current = sources.filter((item) => item.state === "current").map(ownerSourceName);
@@ -199,15 +200,15 @@ function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }
       <span>最近记录：{metadata.latestMtime}</span>
     </div>}
     {source.state !== "unsupported" && !(source.kind === "claude_desktop" && source.nextAction.startsWith("暂不支持")) && <p className="memory-source-next">下一步：{source.nextAction}</p>}
-    <div className="memory-source-actions">
-      {canAuthorize && <button className="button primary" disabled={Boolean(busy)} onClick={onAuthorize}>{busy?.startsWith("authorize:") ? "准备中…" : source.kind === "codex_rollout" ? "允许接管 Codex" : source.kind === "chatgpt_export" ? "选择官方导出目录" : isPickerSource(source) ? "选择文件夹并开始记忆" : "开始记忆"}</button>}
+    {canAuthorize && <button className="button primary memory-source-authorize" disabled={Boolean(busy)} onClick={onAuthorize}>{busy?.startsWith("authorize:") ? "准备中…" : source.kind === "codex_rollout" ? "允许接管 Codex" : source.kind === "chatgpt_export" ? "选择官方导出目录" : isPickerSource(source) ? "选择文件夹并开始记忆" : "开始记忆"}</button>}
+    {(canRevoke || canScan || canPause || canRetry || actions.includes("resume") || actions.includes("detail")) && <details className="memory-source-fallback-actions"><summary>备用操作</summary><div className="memory-source-actions">
       {canRevoke && <button className="button danger" disabled={Boolean(busy)} onClick={() => void invoke("revoke", () => sourceApi.revoke(source.source_id!), (next) => next.sources.some((item) => item.source_id === source.source_id && item.state === "revoked"), "已停止记忆这个来源。")}>停止记忆</button>}
       {canScan && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("scan", () => sourceApi.scan(source.source_id!), (next) => actionEvidence(next, source.source_id!, "scan"))}>现在检查</button>}
       {canPause && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("pause", () => sourceApi.pause(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "pause"))}>暂停检查</button>}
       {actions.includes("resume") && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void invoke("resume", () => sourceApi.resume(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "resume"))}>继续检查</button>}
       {canRetry && <button className="button warning" disabled={Boolean(busy)} onClick={() => void invoke("retry", () => sourceApi.retry(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "retry"))}>再次检查</button>}
       {actions.includes("detail") && <button className="button secondary" disabled={Boolean(busy)} onClick={() => void showDetail()}>查看这次检查</button>}
-    </div>
+    </div></details>}
     {!canAuthorize && source.state === "consent_required" && <small className="memory-source-reason">需要先确认一个受支持的目录；当前没有可安全授权的路径。</small>}
   </article>;
 }

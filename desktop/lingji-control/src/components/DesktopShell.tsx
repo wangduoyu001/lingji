@@ -1,9 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { NAVIGATION_GROUPS, PRIMARY_NAVIGATION } from "../navigation";
+import { PRIMARY_NAVIGATION } from "../navigation";
 import type { ReleaseMetadata } from "../hooks/useReleaseMetadata";
 import type { ConnectionState } from "../hooks/useLingJiConnection";
 import {
-  runtimeStateLabel,
   type RuntimeBootstrapStatus,
   type RuntimeStatus,
 } from "../runtimeTypes";
@@ -56,8 +55,6 @@ export default function DesktopShell({
   const externalRuntime = runtimeHealthy && runtimeStatus?.managed === false;
   const runtimeAvailable = runtimeStatus?.binary_available !== false;
   const runtimeConfigured = bootstrapStatus?.configured === true && !bootstrapStatus.c_drive_write_detected;
-  const advancedPage = current.group === "advanced" && page !== "diagnostics";
-
   const copyDiagnostics = async () => {
     try {
       await onCopyDiagnostics();
@@ -68,11 +65,7 @@ export default function DesktopShell({
     window.setTimeout(() => setCopyState("idle"), 2200);
   };
 
-  const shellStateLabel = runtimeHealthy
-    ? "运行正常"
-    : connectionState === "configuration_required"
-      ? "需要先完成设置"
-      : "需要检查";
+  const shellStateLabel = runtimeHealthy ? "自动记忆运行中" : connectionState === "configuration_required" ? "等待首次设置" : "正在恢复";
 
   return (
     <div className="desktop-frame">
@@ -81,12 +74,11 @@ export default function DesktopShell({
           <div className="desktop-brand-mark">灵</div>
           <div className="desktop-brand-copy">
             <strong>灵机</strong>
-            <span>个人记忆操作系统</span>
+            <span>你的第二大脑</span>
           </div>
         </div>
 
         <nav className="desktop-nav desktop-nav-primary">
-          <div className="desktop-nav-group-title">日常使用</div>
           <div className="desktop-nav-items">
             {PRIMARY_NAVIGATION.map((item) => (
               <button
@@ -94,12 +86,12 @@ export default function DesktopShell({
                 className={page === item.id ? "desktop-nav-item active" : "desktop-nav-item"}
                 onClick={() => onNavigate(item.id)}
                 title={item.hint}
+                aria-label={item.label}
                 aria-current={page === item.id ? "page" : undefined}
               >
                 <span className="desktop-nav-icon"><NavIcon name={item.icon} /></span>
                 <span className="desktop-nav-copy">
                   <strong>{item.label}</strong>
-                  <small>{item.hint}</small>
                 </span>
               </button>
             ))}
@@ -181,12 +173,8 @@ export default function DesktopShell({
       <main className="desktop-main">
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-copy">
-            <div className="desktop-breadcrumb">
-              灵机 / {NAVIGATION_GROUPS.find((group) => group.id === current.group)?.label}
-              {advancedPage && <button className="toolbar-back-button" onClick={() => onNavigate("diagnostics")}>返回高级诊断</button>}
-            </div>
             <h1>{current.label}</h1>
-            <p>{current.hint}</p>
+            <p>{current.group === "observe" ? "灵机自动整理你的记录，这里只展示当前结果。" : current.hint}</p>
           </div>
           <div className={connected ? "desktop-connection-badge connected" : "desktop-connection-badge"}>
             <span className={connected ? "status-dot online" : "status-dot"} />

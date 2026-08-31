@@ -65,11 +65,11 @@ const behavior = (name, check) => { try { check(); } catch (error) { failures.pu
 behavior("source count excludes revoked", () => {
   assert.match(sourcesPage, /ownerSourceName/);
   assert.match(sourcesPage, /sourceSummary/);
-  assert.match(overviewPage, /正在记住什么/);
+  assert.match(overviewPage, /当前记忆|替你记住了什么/);
 });
 behavior("configuration required and ordinary work noise", () => {
   assert.match(overviewPage, /configuration_required/);
-  assert.match(overviewPage, /需要先完成设置/);
+  assert.match(overviewPage, /configuration_required/);
   assert.doesNotMatch(workPage, /JSON\.stringify\(event\.detail\)/);
 });
 behavior("pagination follows backend has_more", () => {

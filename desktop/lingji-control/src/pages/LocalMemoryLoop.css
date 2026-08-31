@@ -183,19 +183,21 @@
 
 .memory-cards-hero { align-items: center; }
 .memory-cards-summary { display: flex; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.owner-memory-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.owner-memory-card { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow, none); }
+.owner-memory-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.owner-memory-card { min-width: 0; padding: 22px; border: 1px solid rgba(133, 151, 177, .16); border-radius: 16px; background: linear-gradient(160deg, rgba(28, 34, 46, .95), rgba(17, 21, 29, .96)); box-shadow: 0 14px 32px rgba(0, 0, 0, .12); }
 .owner-memory-card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.owner-memory-card-title { display: block; width: 100%; min-height: 40px; padding: 0; color: var(--text); background: none; border: 0; text-align: left; font-size: 1.08rem; font-weight: 700; cursor: pointer; }
+.owner-memory-card-title { display: block; width: 100%; min-height: 40px; padding: 0; color: var(--text); background: none; border: 0; text-align: left; font-size: 1.2rem; font-weight: 760; letter-spacing: -.02em; cursor: pointer; }
 .owner-memory-card-title:hover, .owner-memory-card-title:focus-visible { color: var(--accent); text-decoration: underline; }
-.owner-memory-developments p { margin: 8px 0; color: var(--text-soft); }
+.owner-memory-developments { margin: 12px 0 16px; padding-left: 14px; border-left: 2px solid rgba(119, 214, 179, .26); }
+.owner-memory-developments p { margin: 7px 0; color: var(--text-soft); line-height: 1.55; }
+.owner-memory-conclusion { font-size: 1.02rem; color: var(--text); }
 .owner-memory-conclusion, .owner-memory-source, .owner-memory-trust, .owner-memory-action { margin: 10px 0; line-height: 1.5; overflow-wrap: anywhere; }
 .owner-memory-freshness { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
 .owner-memory-freshness small { color: var(--text-soft); }
-.owner-memory-layers { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.owner-memory-layers { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; opacity: .78; }
 .owner-memory-layers .pill { min-height: 32px; }
 .owner-memory-trust { color: var(--text-soft); }
-.owner-memory-action { color: var(--accent); font-weight: 600; }
+.owner-memory-action { color: var(--text-soft); font-weight: 600; }
 .owner-memory-action-button { min-height: 40px; margin-top: 4px; }
 .owner-memory-detail { margin-top: 18px; padding: 18px; }
 .owner-memory-feedback { min-height: 24px; margin-top: 10px; color: var(--accent); }
@@ -246,6 +248,15 @@
   color: var(--muted);
   line-height: 1.6;
 }
+
+/* Keep the owner memory surface calm and outcome-led. */
+.owner-memory-cards-page .workspace-hero { padding: 24px 26px; border-color: var(--line); background: #fff; box-shadow: var(--shadow); }
+.owner-memory-cards-page .workspace-hero h2 { color: var(--text); font-size: 26px; }
+.owner-memory-cards-page .workspace-hero p { color: var(--muted); font-size: 14px; }
+.owner-memory-cards-page .memory-cards-summary { border: 0; background: transparent; padding: 4px 2px; color: var(--muted); }
+.owner-memory-cards-page .memory-cards-summary strong { color: var(--text); font-size: 14px; }
+.owner-memory-cards-page .owner-memory-card-source,
+.owner-memory-cards-page .owner-memory-layers { color: var(--muted); }
 
 /* Memory Review */
 .memory-review-hero {

@@ -58,7 +58,7 @@ assert.match(shell, /PRIMARY_NAVIGATION\.map/);
 assert.equal(shell.includes("NAVIGATION.filter"), false, "Desktop sidebar must not render every advanced page");
 assert.match(shell, /desktop-runtime-tools/);
 assert.match(shell, /<details/);
-assert.match(shell, /返回高级诊断/);
+assert.match(shell, /打开高级诊断/);
 
 assert.match(app, /autoRecoveryActive/);
 assert.match(app, /RuntimeBoundary/);
@@ -77,10 +77,10 @@ assert.match(connection, /ownerStopped/);
 assert.match(connection, /autoRecoveryActive/);
 assert.match(connection, /后台自动恢复已暂停/);
 
-assert.match(overview, /你现在不用做任何事/);
+assert.match(overview, /目前不需要你处理/);
 assert.equal(overview.includes("后台自动运行"), false, "unknown queue activity must not be presented as running");
 assert.match(overview, /尚未获得/);
-assert.match(overview, /去处理|需要你处理/);
+assert.match(overview, /有一件事需要你决定|需要你处理/);
 assert.equal(overview.includes("刷新本机状态"), false, "Overview must not require manual refresh");
 assert.equal(overview.includes("健康检查"), false, "Detailed health checks belong in diagnostics");
 assert.equal(overview.includes("本地 Provider"), false, "Provider internals belong in diagnostics");
@@ -92,7 +92,7 @@ assert.match(activity, /执行事件/);
 assert.match(activity, /刷新记录/);
 
 assert.match(attention, /\/api\/work\/pending-actions/);
-assert.match(attention, /现在没有需要你处理的事项/);
+assert.match(attention, /没有需要你处理的事项|只有高风险/);
 assert.match(attention, /resource\.error/);
 assert.match(attention, /resource\.stale/);
 assert.equal(attention.includes("/api/auto-review/metrics"), false, "Attention must not use cumulative metrics as pending actions");

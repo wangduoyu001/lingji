@@ -73,6 +73,7 @@ const card = {
   current_hash: "hash-memory-card-1",
   evidence: [{ message_id: "message-1", preview: "下周三发布", occurred_at: "2026-08-28T08:03:00Z" }],
 };
+const historicalCard = { ...card, memory_id: "memory-card-old", topic: "旧版发布计划", conclusion: "旧结论", freshness: { state: "superseded", reason: "已被新结论覆盖" }, action: { type: "history", label: "查看历史" } };
 const state = { scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, pauseFailure: false, pendingActions: [] };
 
 const json = (body) => JSON.stringify(body);
@@ -123,7 +124,7 @@ try {
     if (url.pathname === "/api/automatic-memory/scan" && request.method() === "POST") { state.scanRequests += 1; return fulfill(route, { ...scan, status: "running" }); }
     if (url.pathname === "/api/automatic-memory/pause" && request.method() === "POST" && state.pauseFailure) return fulfill(route, { detail: { code: "PAUSE_FAILED", message: "raw backend detail /private/secret" } }, 503);
     if (url.pathname === "/api/memory/inspector/cards-summary") return fulfill(route, { cards: 1, conversations: 1, messages: 2, permanent: 1, vectorized: 1, owner_review: 0 });
-    if (url.pathname === "/api/memory/inspector/cards") { state.cardListRequests += 1; return fulfill(route, { items: [card], pagination: { limit: 20, offset: 0, total: 1, has_more: false } }); }
+    if (url.pathname === "/api/memory/inspector/cards") { state.cardListRequests += 1; return fulfill(route, { items: [card, historicalCard], pagination: { limit: 20, offset: 0, total: 1, has_more: false } }); }
     if (url.pathname === "/api/memory/inspector/cards/memory-card-1") return fulfill(route, { item: card });
     if (url.pathname === "/api/work/pending-actions") { state.pendingReads += 1; return fulfill(route, { pending_actions: state.pendingActions }); }
     if (url.pathname === "/api/work/current") return fulfill(route, { work: null, events: [], outcome: null, next_action: null });
@@ -140,51 +141,62 @@ try {
 
   const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
   assert.deepEqual(primaryLabels, ["首页", "记忆内容", "需要我", "记忆来源"], "ordinary navigation must have exactly four destinations");
+  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "记忆内容", "需要我", "记忆来源"], "ordinary navigation must expose exact accessible labels");
+  assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "活动记录", exact: true }).count(), 0, "activity must stay out of the ordinary sidebar");
   const advanced = page.locator("details.desktop-advanced-disclosure");
   assert.equal(await advanced.count(), 1, "advanced diagnostics must be a single disclosure");
   assert.equal(await advanced.evaluate((node) => node.open), false, "advanced diagnostics must be collapsed by default");
   await advanced.locator("summary").click();
   await advanced.getByRole("button", { name: "打开高级诊断", exact: true }).waitFor();
+  await advanced.getByRole("button", { name: "打开高级诊断", exact: true }).click();
+  await page.locator(".desktop-content").getByRole("heading", { name: "高级诊断", exact: true }).waitFor();
+  const taskGroup = page.locator("details.diagnostics-group").filter({ hasText: "采集与任务" });
+  await taskGroup.locator("summary").click();
+  await taskGroup.getByRole("button", { name: "活动记录", exact: true }).waitFor();
+  await taskGroup.getByRole("button", { name: "活动记录", exact: true }).click();
+  await page.locator(".desktop-content").getByRole("heading", { name: "活动记录", exact: true }).first().waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
+  await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
   await advanced.locator("summary").click();
   assert.equal(await advanced.evaluate((node) => node.open), false, "advanced diagnostics disclosure must close again");
 
-  const nextStep = page.locator(".overview-next-step");
-  await nextStep.getByRole("heading", { name: "下一步", exact: true }).waitFor();
-  await nextStep.getByText("灵机会继续自动检查", { exact: false }).waitFor();
-  await page.getByText("你现在不用做任何事", { exact: true }).waitFor();
+  assert.equal(await page.locator(".overview-next-step").count(), 0, "Home must not present a manual next-step control");
+  await page.getByText("目前不需要你处理", { exact: true }).waitFor();
   const homeText = await page.locator(".overview-page").innerText();
   assert.equal(/memory-card-1|source-codex|\{/.test(homeText), false, "Home ordinary copy must not expose IDs or JSON");
 
   state.pendingActions = [{ action_id: "action-fixture", work_id: "work-fixture", description: "确认发布计划" }];
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
-  const pendingNextStep = page.locator(".overview-next-step");
-  await pendingNextStep.getByText("需要你处理：确认发布计划", { exact: true }).waitFor();
-  await pendingNextStep.getByRole("button", { name: "去处理", exact: true }).click();
-  await page.getByRole("heading", { name: "需要我处理", exact: true }).waitFor();
+  await page.getByText("有一件事需要你决定", { exact: true }).waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
+  await page.getByRole("heading", { name: "需要我", exact: true }).waitFor();
   await page.getByText("确认发布计划", { exact: true }).waitFor();
   assert.ok(state.pendingReads > 0, "attention page must read the shared pending-actions endpoint on activation");
   state.pendingActions = [null];
   await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
   await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
-  await page.getByText("待办状态暂时无法确认，正在重试", { exact: true }).waitFor();
+  await page.getByText("待办正在自动确认，当前不把未读取当作“没有待办”。", { exact: true }).waitFor();
   await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
   await page.getByText("暂时无法确认需要你处理的事项，正在重试。", { exact: true }).waitFor();
   state.pendingActions = [{}];
   await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
   await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
-  await page.getByText("待办状态暂时无法确认，正在重试", { exact: true }).waitFor();
+  await page.getByText("待办正在自动确认，当前不把未读取当作“没有待办”。", { exact: true }).waitFor();
   state.pendingActions = [];
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
-  await page.getByText("你现在不用做任何事", { exact: true }).waitFor();
+  await page.getByText("目前不需要你处理", { exact: true }).waitFor();
 
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆内容" }).click();
   await page.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor();
   const cardsText = await page.locator(".owner-memory-card-grid").innerText();
+  assert.equal(await page.getByText("旧版发布计划", { exact: true }).count(), 0, "ordinary memory stream must never show superseded cards");
+  assert.equal(await page.locator(".owner-memory-card").count(), 1, "ordinary memory stream must keep only current cards");
+  assert.equal(await page.locator(".owner-memory-card-grid").getByRole("button", { name: /确认|扫描|暂停|删除|移出/ }).count(), 0, "routine card actions must stay out of the main card surface");
   assert.ok(cardsText.includes("当前可确认：团队讨论了发布日期"), "a current card without a conclusion must show a sourced, honest current fact");
   assert.ok(cardsText.includes("2026"), "missing freshness time must fall back to the source evidence time");
-  for (const field of ["当前可确认：", "来源：", "原始记录：", "结构记录：", "语义向量：", "长期记忆：", "可信提示：", "建议："]) assert.ok(cardsText.includes(field), `memory card must show ${field}`);
+  for (const field of ["当前可确认：", "来源：", "原始记录：", "结构记录：", "语义向量：", "长期记忆：", "可信提示："]) assert.ok(cardsText.includes(field), `memory card must show ${field}`);
   assert.equal(/memory-card-1|source-codex|\{/.test(cardsText), false, "memory card ordinary copy must not expose IDs or JSON");
   await page.locator(".owner-memory-card-title").click();
   await page.getByRole("dialog").waitFor();
@@ -194,7 +206,7 @@ try {
   await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange")); });
   const hiddenSourceReads = state.sourceReads;
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
-  await page.getByRole("heading", { name: "选择灵机要记住的内容", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "记忆来源", exact: true }).waitFor();
   const sourceCard = page.locator('[data-source-kind="codex_rollout"]');
   await sourceCard.waitFor();
   assert.ok(state.sourceReads > hiddenSourceReads, "activating a hidden source page must still perform its first real read");
@@ -206,6 +218,7 @@ try {
   await sourceCard.getByText("文件数：2", { exact: true }).waitFor();
   await sourceCard.getByText("占用空间：2048 字节", { exact: true }).waitFor();
   assert.equal((await sourceCard.locator(".memory-source-metadata").innerText()).includes("/safe/fixture"), false, "source truth must not expose a filesystem path");
+  await sourceCard.locator("details.memory-source-fallback-actions").locator("summary").click();
   await sourceCard.getByRole("button", { name: "现在检查", exact: true }).click();
   await page.getByRole("heading", { name: "扫描中", exact: true }).waitFor();
   assert.equal(state.scanRequests, 1, "source action must trigger the existing scan API");
@@ -223,7 +236,7 @@ try {
   assert.ok((await technicalDetail.innerText()).includes("fixture failure: /private/secret"), "last_error must remain available in technical details");
 
   await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
-  await page.getByRole("heading", { name: "需要我处理", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "需要我", exact: true }).waitFor();
   await page.getByText("现在没有需要你处理的事项。灵机会继续自动工作。", { exact: true }).waitFor();
   const attentionText = await page.locator(".observation-page").innerText();
   assert.equal(/source-codex|memory-card-1|\{/.test(attentionText), false, "zero-attention ordinary copy must not expose technical fields");

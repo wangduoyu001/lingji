@@ -3,9 +3,10 @@ import type { OwnerMemoryCard, OwnerMemoryCardsResponse } from "./ownerMemoryCar
 
 export class OwnerMemoryCardsApi {
   constructor(private readonly api: LingJiApi) {}
-  list(offset = 0, signal?: AbortSignal, limit = 20) {
+  list(offset = 0, signal?: AbortSignal, limit = 20, state = "current") {
     const boundedLimit = Math.min(Math.max(1, limit), 50);
-    return this.api.get<OwnerMemoryCardsResponse>(`/api/memory/inspector/cards?limit=${boundedLimit}&offset=${Math.max(0, offset)}`, { signal });
+    const stateQuery = state ? `&state=${encodeURIComponent(state)}` : "";
+    return this.api.get<OwnerMemoryCardsResponse>(`/api/memory/inspector/cards?limit=${boundedLimit}&offset=${Math.max(0, offset)}${stateQuery}`, { signal });
   }
   summary(signal?: AbortSignal) {
     return this.api.get<{ cards?: number | null; conversations?: number | null; messages?: number | null; permanent?: number | null; vectorized?: number | null; owner_review?: number | null }>("/api/memory/inspector/cards-summary", { signal });

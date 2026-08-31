@@ -16,7 +16,7 @@ const GROUPS: Array<{ title: string; description: string; pages: PageId[] }> = [
   {
     title: "采集与任务",
     description: "处理手动投喂、媒体分析和任务明细。",
-    pages: ["capture_center", "media", "jobs"],
+    pages: ["activity", "capture_center", "media", "jobs"],
   },
   {
     title: "存储与运维",
@@ -51,7 +51,7 @@ export default function DiagnosticsPage({ onNavigate }: { onNavigate: (page: Pag
                 const item = ADVANCED_NAVIGATION.find((candidate) => candidate.id === pageId);
                 if (!item) return null;
                 return (
-                  <button className="diagnostics-card" key={item.id} onClick={() => onNavigate(item.id)}>
+                  <button aria-label={item.label} className="diagnostics-card" key={item.id} onClick={() => onNavigate(item.id)}>
                     <span className="desktop-nav-icon"><NavIcon name={item.icon} /></span>
                     <span>
                       <strong>{item.label}</strong>

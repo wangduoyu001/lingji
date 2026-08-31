@@ -147,7 +147,8 @@ class OwnerMemoryCardProjector:
     def summary(self, *, viewer: ViewerContext | None = None) -> dict[str, Any]:
         """Return full-card counts for Home without deriving from one page."""
         selected_viewer = viewer or self.source_service.owner_viewer()
-        cards = self._all_cards(selected_viewer)
+        all_cards = self._all_cards(selected_viewer)
+        cards = [card for card in all_cards if str(card.freshness.get("state") or "") == "current"]
         conversations = self._paged_conversations(selected_viewer)
         measured_messages = [item.get("message_count") for item in conversations]
         message_count = (
