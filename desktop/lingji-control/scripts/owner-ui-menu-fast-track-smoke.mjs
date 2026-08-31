@@ -61,7 +61,7 @@ const card = {
   developments: ["团队讨论了发布日期", "确认发布前的检查清单"],
   conclusion: null,
   freshness: { state: "current", reason: "最近证据仍有效", latest_evidence_at: null },
-  source: { label: "Codex聊天记录", status: "active", message_count: 2, latest_evidence_at: "2026-08-28T08:03:00Z", source_id: source.source_id },
+  source: { label: "Codex聊天记录", type: "codex_rollout", conversation_title: "发布计划讨论", conversation_id: "conversation-1", status: "active", message_count: 2, latest_evidence_at: "2026-08-28T08:03:00Z", source_id: source.source_id },
   layers: {
     raw: { state: "available" },
     structured: { state: "available" },
@@ -74,6 +74,11 @@ const card = {
   evidence: [{ message_id: "message-1", preview: "下周三发布", occurred_at: "2026-08-28T08:03:00Z" }],
 };
 const historicalCard = { ...card, memory_id: "memory-card-old", topic: "旧版发布计划", conclusion: "旧结论", freshness: { state: "superseded", reason: "已被新结论覆盖" }, action: { type: "history", label: "查看历史" } };
+const conversationOnlyCard = { ...card, memory_id: "conversation-only", kind: "conversation_evidence", topic: "原始讨论记录", source: { ...card.source, conversation_id: "conversation-only-1", conversation_title: "发布计划原始讨论" }, action: { type: "none", label: "无需处理", reason: "这是原始会话" } };
+const noVectorCard = { ...card, memory_id: "memory-no-vector", topic: "未准备语义检索", layers: { ...card.layers, vector: { state: "unavailable", reason: "语义检索暂时不可用" } } };
+const longBodyCard = { ...card, memory_id: "memory-long-body", topic: "长正文记忆" };
+const restrictedCard = { ...card, memory_id: "memory-restricted", topic: "受限来源记忆", source: { ...card.source, label: "受限来源" } };
+const detailCards = [card, conversationOnlyCard, noVectorCard, longBodyCard, restrictedCard];
 const state = { scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, pauseFailure: false, pendingActions: [], requests: [] };
 
 const json = (body) => JSON.stringify(body);
@@ -125,12 +130,23 @@ try {
     if (url.pathname === "/api/automatic-memory/scan" && request.method() === "POST") { state.scanRequests += 1; return fulfill(route, { ...scan, status: "running" }); }
     if (url.pathname === "/api/automatic-memory/pause" && request.method() === "POST" && state.pauseFailure) return fulfill(route, { detail: { code: "PAUSE_FAILED", message: "raw backend detail /private/secret" } }, 503);
     if (url.pathname === "/api/memory/inspector/cards-summary") return fulfill(route, { cards: 1, conversations: 1, messages: 2, permanent: 1, vectorized: 1, owner_review: 0 });
-    if (url.pathname === "/api/memory/inspector/cards") { state.cardListRequests += 1; return fulfill(route, { items: [card, historicalCard], pagination: { limit: 20, offset: 0, total: 1, has_more: false } }); }
+    if (url.pathname === "/api/memory/inspector/cards") { state.cardListRequests += 1; return fulfill(route, { items: detailCards, pagination: { limit: 20, offset: 0, total: detailCards.length, has_more: false } }); }
     if (url.pathname === "/api/memory/inspector/cards/memory-card-1") return fulfill(route, { item: { ...card, as_of: "2026-08-28T08:05:00Z", content_hash: "hash-memory-card-1" } });
     if (url.pathname === "/api/memory/inspector/memories/memory-card-1") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", item: { memory_id: "memory-card-1", chunks: [{ chunk_id: "chunk-1", text: "下周三发布新版。发布前完成检查清单。", content_hash: "hash-memory-card-1", truncated: false }] } });
     if (url.pathname === "/api/memory/inspector/memories/memory-card-1/vector") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", memory_id: "memory-card-1", vector: { state: "available", chunks: [{ chunk_id: "chunk-1", exists: true, source: "live" }] } });
     if (url.pathname === "/api/memory/inspector/memories/memory-card-1/source") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", memory_id: "memory-card-1", canonical: { relative_path: "01-Inbox/release.md", citations: [{ chunk_id: "chunk-1", start_line: 1, end_line: 2 }] }, links: [{ source_id: "source-codex", conversation_id: "conversation-1" }] });
     if (url.pathname === "/api/memory/inspector/memories/memory-card-1/evidence") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", memory_id: "memory-card-1", items: [{ source_id: "source-codex", conversation_id: "conversation-1", message_id: "message-1", role: "user", sequence: 1, occurred_at: "2026-08-28T08:03:00Z", excerpt: "下周三发布新版。", content: "我们确认下周三发布新版。", content_hash: "message-hash-1", raw_reference: "conversation-1/message-1", truncated: false }], pagination: { limit: 20, offset: 0, total: 1, has_more: false } });
+    if (url.pathname === "/api/memory/inspector/cards/conversation-only") return fulfill(route, { item: conversationOnlyCard });
+    if (url.pathname === "/api/memory/inspector/cards/memory-no-vector") return fulfill(route, { item: noVectorCard });
+    if (url.pathname === "/api/memory/inspector/cards/memory-long-body") return fulfill(route, { item: longBodyCard });
+    if (url.pathname === "/api/memory/inspector/cards/memory-restricted") return fulfill(route, { item: restrictedCard });
+    if (url.pathname === "/api/memory/inspector/memories/conversation-only") return fulfill(route, { item: { memory_id: "conversation-only", chunks: [] } });
+    if (url.pathname === "/api/memory/inspector/messages" && url.searchParams.get("conversation_id") === "conversation-only-1") return fulfill(route, { items: [{ message_id: "conversation-message-1", role: "user", occurred_at: "2026-08-28T08:03:00Z", content: "这是原始会话里的完整消息。" }] });
+    if (url.pathname === "/api/memory/inspector/memories/memory-no-vector") return fulfill(route, { item: { memory_id: "memory-no-vector", chunks: [{ chunk_id: "chunk-no-vector", text: "没有语义向量也应保留正文。", truncated: false }] } });
+    if (url.pathname === "/api/memory/inspector/memories/memory-no-vector/vector") return setTimeout(() => fulfill(route, { vector: { state: "unavailable", chunks: [] } }, 503), 500);
+    if (url.pathname === "/api/memory/inspector/memories/memory-long-body" && url.searchParams.get("cursor") === "chunk-long") return fulfill(route, { as_of: "2026-08-31T08:06:00Z", item: { memory_id: "memory-long-body", chunks: [{ chunk_id: "chunk-long-2", text: "长正文的继续部分。", truncated: false }], next_cursor: null } });
+    if (url.pathname === "/api/memory/inspector/memories/memory-long-body") return fulfill(route, { as_of: "2026-08-31T08:05:00Z", item: { memory_id: "memory-long-body", chunks: [{ chunk_id: "chunk-long", text: "长正文的第一段。", truncated: true }], next_cursor: "chunk-long" } });
+    if (url.pathname === "/api/memory/inspector/messages/message-1") return setTimeout(() => fulfill(route, { item: { message_id: "message-1", content: "这是旧卡片来源正文。" } }), 500);
     if (url.pathname === "/api/work/pending-actions") { state.pendingReads += 1; return fulfill(route, { pending_actions: state.pendingActions }); }
     if (url.pathname === "/api/work/current") return fulfill(route, { work: null, events: [], outcome: null, next_action: null });
     if (url.pathname === "/api/work/history") return fulfill(route, { items: [], total: 0, has_more: false, limit: 3, offset: 0 });
@@ -199,13 +215,13 @@ try {
   assert.equal(state.requests.some((url) => url.includes("/api/memory/inspector/memories/")), false, "ordinary card rendering must not prefetch canonical, vector, source or evidence bodies");
   assert.equal(state.requests.some((url) => url.includes("/api/memory/inspector/messages/")), false, "ordinary card rendering must not prefetch message bodies");
   assert.equal(await page.getByText("旧版发布计划", { exact: true }).count(), 0, "ordinary memory stream must never show superseded cards");
-  assert.equal(await page.locator(".owner-memory-card").count(), 1, "ordinary memory stream must keep only current cards");
+  assert.equal(await page.locator(".owner-memory-card").count(), 5, "ordinary memory stream must keep only current cards");
   assert.equal(await page.locator(".owner-memory-card-grid").getByRole("button", { name: /确认|扫描|暂停|删除|移出/ }).count(), 0, "routine card actions must stay out of the main card surface");
   assert.ok(cardsText.includes("当前可确认：团队讨论了发布日期"), "a current card without a conclusion must show a sourced, honest current fact");
   assert.ok(cardsText.includes("2026"), "missing freshness time must fall back to the source evidence time");
   for (const field of ["当前可确认：", "来源：", "原始记录：", "结构记录：", "语义向量：", "长期记忆：", "可信提示："]) assert.ok(cardsText.includes(field), `memory card must show ${field}`);
   assert.equal(/memory-card-1|source-codex|\{/.test(cardsText), false, "memory card ordinary copy must not expose IDs or JSON");
-  await page.locator(".owner-memory-card-title").click();
+  await page.locator(".owner-memory-card-title").first().click();
   await page.getByRole("dialog").waitFor();
   await page.getByRole("dialog").getByText("当前可确认：团队讨论了发布日期", { exact: true }).waitFor();
   assert(state.requests.some((url) => url.endsWith("/api/memory/inspector/cards/memory-card-1")), "selected detail must re-read the selected card");
@@ -215,7 +231,34 @@ try {
   assert(state.requests.some((url) => url.endsWith("/api/memory/inspector/memories/memory-card-1/evidence?limit=20&offset=0")), "selected detail must request only the first bounded evidence page");
   const detailText = await page.getByRole("dialog").innerText();
   for (const section of ["灵机当前记住的内容", "当前结论", "事情怎么发展", "来源与核对", "原始记录", "结构记录", "语义向量", "长期记忆", "需要不需要主人处理", "备用操作"]) assert.ok(detailText.includes(section), `detail must show ${section}`);
+  assert.ok(detailText.includes("Codex聊天记录") && detailText.includes("发布计划讨论"), "detail must show readable source software and conversation identity");
   assert.equal(await page.getByRole("dialog").getByRole("button", { name: "删除", exact: true }).count(), 0, "detail must not expose physical deletion");
+  await page.setViewportSize({ width: 1024, height: 900 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "1024px detail must not overflow horizontally");
+  await page.setViewportSize({ width: 1280, height: 900 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "1280px detail must not overflow horizontally");
+  await page.getByRole("dialog").getByRole("button", { name: "查看来源", exact: true }).click();
+  await page.getByRole("button", { name: "原始讨论记录", exact: true }).click();
+  await page.getByRole("dialog").getByText("这是原始会话，尚未形成长期记忆", { exact: true }).waitFor();
+  await page.waitForTimeout(700);
+  assert.equal(await page.getByRole("dialog").getByText("这是旧卡片来源正文。", { exact: true }).count(), 0, "a delayed message from the previous selection must not appear in the new card");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "原始讨论记录", exact: true }).click();
+  await page.getByRole("dialog").getByText("这是原始会话，尚未形成长期记忆", { exact: true }).waitFor();
+  assert.equal(state.requests.some((url) => url.includes("/memories/conversation-only?chunk_limit")), false, "conversation-only detail must not request canonical");
+  assert.ok(state.requests.some((url) => url.includes("/api/memory/inspector/messages?conversation_id=conversation-only-1")), "conversation-only detail must use existing messages pagination");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "未准备语义检索", exact: true }).click();
+  await page.getByRole("dialog").getByText("没有语义向量也应保留正文。", { exact: true }).waitFor();
+  assert.ok(state.requests.some((url) => url.includes("/memories/memory-no-vector?chunk_limit=20&max_chars=12000")), "ordinary memory with a conversation relation must still request canonical");
+  await page.getByRole("dialog").getByText("语义向量状态暂时无法确认", { exact: false }).waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "长正文记忆", exact: true }).click();
+  await page.getByRole("dialog").getByText("内容已截断，下面可以继续读取正文。", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "继续读取正文", exact: true }).click();
+  await page.waitForTimeout(100);
+  assert.ok(state.requests.some((url) => url.includes("/memories/memory-long-body?chunk_limit=20&max_chars=12000&cursor=chunk-long")), "continuation must request the returned canonical cursor");
+  await page.getByText("长正文的继续部分。", { exact: false }).waitFor();
   await page.keyboard.press("Escape");
 
   await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange")); });

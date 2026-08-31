@@ -807,6 +807,7 @@ try {
 
   // Core corrections use lifecycle endpoints and re-read the selected card.
   await page.locator(".owner-memory-card").nth(0).getByRole("button", { name: "发布计划", exact: true }).click();
+  await page.getByRole("dialog").locator("details.owner-memory-fallback-actions").locator("summary").click();
   await page.getByRole("dialog").getByRole("textbox", { name: "修正内容" }).fill("修正后的发布计划");
   await page.getByRole("dialog").getByRole("textbox", { name: "修正原因" }).fill("主人确认更新");
   const detailBeforeCorrection = state.cardDetailRequests;
@@ -818,6 +819,7 @@ try {
 
   await page.keyboard.press("Escape");
   await page.locator(".owner-memory-card").nth(1).getByRole("button", { name: "代码审查", exact: true }).click();
+  await page.getByRole("dialog").locator("details.owner-memory-fallback-actions").locator("summary").click();
   await page.getByRole("dialog").getByRole("textbox", { name: "移出原因" }).fill("不再属于当前记忆");
   await page.getByRole("dialog").getByRole("button", { name: "移出当前记忆", exact: true }).click();
   await page.getByText("已保存，当前状态已刷新。", { exact: true }).waitFor();
@@ -830,6 +832,7 @@ try {
 
   await fetch(`http://127.0.0.1:${apiPort}/__test/card-conflict`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
   await page.locator(".owner-memory-card").nth(0).getByRole("button", { name: "发布计划", exact: true }).click();
+  await page.getByRole("dialog").locator("details.owner-memory-fallback-actions").locator("summary").click();
   await page.getByRole("dialog").getByRole("textbox", { name: "修正内容" }).fill("本地未提交修正");
   await page.getByRole("dialog").getByRole("textbox", { name: "修正原因" }).fill("冲突测试");
   await page.getByRole("dialog").getByRole("button", { name: "修正内容", exact: true }).click();

@@ -8,7 +8,7 @@ export type OwnerMemoryCard = {
   evidence_lines?: string[] | null;
   conclusion?: string | null;
   freshness?: { state?: string | null; label?: string | null; reason?: string | null; latest_evidence_at?: string | null; replacement_id?: string | null } | null;
-  source?: { label?: string | null; status?: string | null; message_count?: number | null; latest_evidence_at?: string | null; source_id?: string | null; conversation_id?: string | null; type?: string | null } | null;
+  source?: { label?: string | null; status?: string | null; message_count?: number | null; latest_evidence_at?: string | null; source_id?: string | null; conversation_id?: string | null; conversation_title?: string | null; type?: string | null } | null;
   layers?: Record<string, OwnerMemoryLayer> | null;
   trust?: { state?: string | null; confidence?: number | null; conflict?: string | null; provenance?: string | null } | null;
   action?: { type?: string | null; label?: string | null; reason?: string | null } | null;
