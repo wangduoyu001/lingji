@@ -73,7 +73,6 @@ const card = {
   current_hash: "hash-memory-card-1",
   evidence: [{ message_id: "message-1", preview: "下周三发布", occurred_at: "2026-08-28T08:03:00Z" }],
 };
-const historicalCard = { ...card, memory_id: "memory-card-old", topic: "旧版发布计划", conclusion: "旧结论", freshness: { state: "superseded", reason: "已被新结论覆盖" }, action: { type: "history", label: "查看历史" } };
 const conversationOnlyCard = { ...card, memory_id: "conversation-only", kind: "conversation_evidence", topic: "原始讨论记录", conclusion: "原始会话尚未形成长期结论", developments: ["原始会话保留上下文", "尚未写入长期记忆"], source: { ...card.source, conversation_id: "conversation-only-1", conversation_title: "发布计划原始讨论", message_count: 3 }, action: { type: "none", label: "无需处理", reason: "这是原始会话" } };
 const noVectorCard = { ...card, memory_id: "memory-no-vector", topic: "未准备语义检索", conclusion: "这是已核对的项目事实", developments: ["事实已由主人确认", "等待语义索引恢复"], source: { ...card.source, label: "事实核对记录", conversation_title: "事实核对会话" }, layers: { ...card.layers, vector: { state: "unavailable", reason: "语义检索暂时不可用" } } };
 const longBodyCard = { ...card, memory_id: "memory-long-body", topic: "长正文记忆", conclusion: "项目进展正在按计划推进", developments: ["第一阶段已经完成", "第二阶段等待发布"], source: { ...card.source, label: "项目进展记录", conversation_title: "项目进展同步" } };
@@ -88,10 +87,10 @@ const actionCards = [
   { ...card, memory_id: "memory-action-archive", topic: "生命周期校验卡片F", conclusion: "需要移出当前记忆的旧事实", action: { type: "archive", label: "移出当前记忆", reason: "请说明原因" } },
 ];
 const additionalCurrentCards = Array.from({ length: 25 }, (_, index) => ({ ...card, memory_id: `memory-current-${index + 1}`, topic: `确定性当前记忆${index + 1}`, source: { ...card.source, conversation_id: `conversation-${(index % 3) + 1}` } }));
-const historyCards = Array.from({ length: 3 }, (_, index) => ({ ...card, memory_id: `memory-history-${index + 1}`, topic: `确定性历史记忆${index + 1}`, freshness: { state: "superseded", reason: "已被新版本替代" }, action: { type: "history", label: "查看历史" } }));
+const historyCards = Array.from({ length: 3 }, (_, index) => ({ ...card, memory_id: `memory-history-${index + 1}`, topic: `确定性历史记忆${index + 1}`, conclusion: `历史结论${index + 1}`, freshness: { state: "superseded", reason: "已由当前版本替代", replacement_id: index === 0 ? "memory-card-1" : `memory-current-${index}` }, action: { type: "history", label: "查看历史" } }));
 const detailCards = [card, conversationOnlyCard, noVectorCard, longBodyCard, restrictedCard, ...actionCards, ...additionalCurrentCards, ...historyCards];
 const actionCardsById = new Map(actionCards.map((item) => [item.memory_id, item]));
-const state = { scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, pauseFailure: false, mutationFail: false, detailUnauthorized: false, historyDetail: false, evidenceFailure: true, evidenceDelay: false, mutations: [], pendingActions: [], requests: [] };
+const state = { scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, pauseFailure: false, mutationFail: false, detailUnauthorized: false, evidenceFailure: true, evidenceDelay: false, mutations: [], pendingActions: [], requests: [] };
 
 const json = (body) => JSON.stringify(body);
 const fulfill = (route, body, status = 200) => route.fulfill({
@@ -142,9 +141,10 @@ try {
     if (url.pathname === "/api/automatic-memory/scan" && request.method() === "POST") { state.scanRequests += 1; return fulfill(route, { ...scan, status: "running" }); }
     if (url.pathname === "/api/automatic-memory/pause" && request.method() === "POST" && state.pauseFailure) return fulfill(route, { detail: { code: "PAUSE_FAILED", message: "raw backend detail /private/secret" } }, 503);
     if (url.pathname === "/api/memory/inspector/cards-summary") return fulfill(route, { cards: 37, conversations: 3, messages: 36, permanent: 13, vectorized: 32, owner_review: 1 });
-    if (url.pathname === "/api/memory/inspector/cards") { state.cardListRequests += 1; const requestedState = url.searchParams.get("state"); const cards = requestedState === "current" ? detailCards.filter((item) => item.freshness?.state === "current") : detailCards; const offset = Number(url.searchParams.get("offset") || 0); const limit = Number(url.searchParams.get("limit") || 20); return fulfill(route, { items: cards.slice(offset, offset + limit), pagination: { limit, offset, total: cards.length, has_more: offset + limit < cards.length } }); }
+    if (url.pathname === "/api/memory/inspector/cards") { state.cardListRequests += 1; const requestedState = url.searchParams.get("state"); const cards = requestedState === "current" ? detailCards.filter((item) => item.freshness?.state === "current") : requestedState === "superseded" ? historyCards : detailCards; const offset = Number(url.searchParams.get("offset") || 0); const limit = Number(url.searchParams.get("limit") || 20); return fulfill(route, { items: cards.slice(offset, offset + limit), pagination: { limit, offset, total: cards.length, has_more: offset + limit < cards.length } }); }
     if (url.pathname === "/api/memory/inspector/cards/memory-card-1" && state.detailUnauthorized) return fulfill(route, { detail: { code: "UNAUTHORIZED", message: "token required" } }, 401);
-    if (url.pathname === "/api/memory/inspector/cards/memory-card-1") return fulfill(route, { item: { ...(state.historyDetail ? historicalCard : card), as_of: "2026-08-28T08:05:00Z", content_hash: "hash-memory-card-1" } });
+    if (url.pathname === "/api/memory/inspector/cards/memory-card-1") return fulfill(route, { item: { ...card, as_of: "2026-08-28T08:05:00Z", content_hash: "hash-memory-card-1" } });
+    if (url.pathname.startsWith("/api/memory/inspector/cards/memory-history-")) { const id = url.pathname.split("/").pop(); return fulfill(route, { item: historyCards.find((item) => item.memory_id === id) }); }
     if (url.pathname === "/api/memory/inspector/memories/memory-card-1") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", item: { memory_id: "memory-card-1", chunks: [{ chunk_id: "chunk-1", text: "下周三发布新版。发布前完成检查清单。", content_hash: "hash-memory-card-1", truncated: false }] } });
     if (url.pathname === "/api/memory/inspector/memories/memory-card-1/vector") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", memory_id: "memory-card-1", vector: { state: "available", chunks: [{ chunk_id: "chunk-1", exists: true, source: "live" }] } });
     if (url.pathname === "/api/memory/inspector/memories/memory-card-1/source") return fulfill(route, { as_of: "2026-08-28T08:05:00Z", memory_id: "memory-card-1", canonical: { relative_path: "01-Inbox/release.md", citations: [{ chunk_id: "chunk-1", start_line: 1, end_line: 2 }] }, links: [{ source_id: "source-codex", conversation_id: "conversation-1" }] });
@@ -280,6 +280,18 @@ try {
   assert.equal(state.requests.some((url) => url.includes("/evidence?limit=20&offset=40")), false, "load more must not fetch beyond the clicked page");
   assert.equal(await page.getByRole("dialog").getByRole("button", { name: "加载更多来源", exact: true }).count(), 0, "has_more false must hide load more");
   await page.keyboard.press("Escape");
+  state.evidenceDelay = true;
+  await page.getByRole("button", { name: "发布计划", exact: true }).click();
+  await page.getByRole("dialog").locator('[data-testid="evidence-item"]').first().waitFor();
+  await page.getByRole("dialog").getByRole("button", { name: "加载更多来源", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "原始讨论记录", exact: true }).click();
+  await page.getByRole("dialog").getByText("这是原始会话里的完整消息。", { exact: true }).waitFor();
+  await page.waitForTimeout(700);
+  assert.equal(await page.getByRole("dialog").getByText("第 20 条来源正文。", { exact: true }).count(), 0, "delayed evidence from A must not appear after switching to B");
+  assert.equal((await page.getByRole("dialog").innerText()).includes("memory-card-1"), false, "B detail must not expose A technical identity");
+  state.evidenceDelay = false;
+  await page.keyboard.press("Escape");
   state.detailUnauthorized = true;
   await page.getByRole("button", { name: "发布计划", exact: true }).click();
   await page.getByText("请先重新连接灵机", { exact: true }).waitFor();
@@ -316,14 +328,24 @@ try {
   await page.waitForTimeout(700);
   assert.equal(await page.getByRole("dialog").getByText("这是旧卡片来源正文。", { exact: true }).count(), 0, "a delayed message from the previous selection must not appear in the new card");
   await page.keyboard.press("Escape");
-  state.historyDetail = true;
   await page.getByRole("button", { name: "发布计划", exact: true }).click();
+  const historyRequestCount = state.requests.filter((url) => url.includes("state=superseded")).length;
+  await page.getByRole("dialog").locator("details.owner-memory-technical-details").locator("summary").click();
+  assert.equal(state.requests.filter((url) => url.includes("state=superseded")).length, historyRequestCount, "history metadata must not prefetch before explicit technical click");
+  await page.getByRole("dialog").getByRole("button", { name: "查看被替代的旧版本", exact: true }).click();
+  await page.waitForTimeout(200);
+  await page.getByRole("dialog").getByText("确定性历史记忆1", { exact: false }).waitFor();
+  assert.ok(state.requests.some((url) => url.includes("/api/memory/inspector/cards?limit=20&offset=0&state=superseded")), "history metadata must use the existing superseded cards API on demand");
+  await page.getByRole("dialog").getByRole("button", { name: /打开历史版本：确定性历史记忆1/ }).click();
   await page.getByRole("dialog").getByRole("heading", { name: "历史结论", exact: true }).waitFor();
   const historyDetailText = await page.getByRole("dialog").innerText();
-  assert.ok(historyDetailText.includes("已被新结论覆盖"), "history detail must show freshness reason");
+  assert.ok(historyDetailText.includes("已由当前版本替代"), "history detail must show freshness reason");
+  assert.ok(historyDetailText.includes("已由当前版本替代"), "history detail must show the owner-readable replacement relation");
+  await page.getByRole("dialog").locator("details.owner-memory-technical-details").locator("summary").click();
+  assert.ok((await page.getByRole("dialog").innerText()).includes("memory-card-1"), "replacement id must remain confined to the technical disclosure");
   assert.equal(historyDetailText.includes("最新结论"), false, "history detail must not label a superseded conclusion as latest");
   assert.equal(historyDetailText.includes("当前结论"), false, "history detail must not use current-conclusion semantics");
-  state.historyDetail = false;
+  assert.equal(await page.getByRole("dialog").getByRole("button", { name: /确认加入长期记忆|编辑确认|拒绝|修正内容|标记已经过时|移出当前记忆/ }).count(), 0, "history detail must not expose mutation actions");
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "原始讨论记录", exact: true }).click();
   await page.getByRole("dialog").getByText("最新结论：原始会话尚未形成长期结论", { exact: true }).waitFor();
