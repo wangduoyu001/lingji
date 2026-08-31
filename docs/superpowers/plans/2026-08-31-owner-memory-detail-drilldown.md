@@ -38,7 +38,7 @@
 - Create: `tests/test_owner_memory_detail_contract.py`
 
 **Interfaces:**
-- `SourceQueryService.list_memory_evidence_page(memory_id: str, *, limit: int = 20, offset: int = 0, include_content: bool = True, viewer: str = "owner") -> EvidencePage`.
+- `SourceQueryService.list_memory_evidence_page(memory_id: str, *, limit: int = 20, offset: int = 0, include_content: bool = True, viewer: ViewerContext | None = None) -> EvidencePage`；未传入时继续使用既有 owner viewer。
 - `MemoryInspectorFacade.list_memory_evidence(memory_id: str, *, limit: int = 20, offset: int = 0, include_content: bool = True) -> EvidencePage` delegates to the existing source authority path and never calls unbounded `memory_evidence()`.
 - `EvidencePage` serializes `{as_of, memory_id, items, pagination}`. Each item serializes `source_id`, `conversation_id`, `message_id`, `role`, `sequence`, `occurred_at`, `excerpt`, optional bounded `content`, `content_hash`, safe `raw_reference`, and `truncated`.
 - Register only `GET /api/memory/inspector/memories/{memory_id}/evidence`; validate `1 <= limit <= 50`, `offset >= 0`, require the existing auth dependency, and return the established 401/404/422 semantics.
@@ -72,9 +72,10 @@ def test_selected_memory_route_only_adds_bounded_canonical_options(client, auth_
     response = client.get("/api/memory/inspector/memories/memory-1?chunk_limit=1&max_chars=80", headers=auth_headers)
     assert response.status_code == 200
     payload = response.json()
-    assert {"document", "chunks"}.issubset(payload)
-    assert "layers" not in payload and "action" not in payload
-    assert payload["chunks"][0]["truncated"] is True
+    item = payload["item"]
+    assert {"memory_id", "chunks"}.issubset(item)
+    assert "layers" not in item and "action" not in item
+    assert item["chunks"][0]["truncated"] is True
 ```
 
 - [ ] **Step 2: Run the backend RED suite.**
