@@ -167,3 +167,58 @@ The original implementation and report commits remain
 
 Round 1 remains focused-only: no live services, installation, Artifact,
 Production/Vault, real chats, real databases, or owner data were accessed.
+
+## Fix Round 2/5 — prefixed absolute reference closure
+
+Fix base: `4de66920` (`docs: append evidence review closure`). The sole open
+finding was that the evidence-only sanitizer still accepted values such as
+`raw:C:/Users/owner/private.json`.
+
+### RED
+
+Added a response-level adversarial matrix covering Windows drive paths in both
+cases and slash styles, POSIX/UNC forms (`//server/share` and
+`\\\\server\\share`), `file:` URI forms, and percent-encoded absolute paths.
+The matrix also retains valid `raw:relative/path.json` and
+`vault:folder/note.md` references and checks that normal relative names remain
+allowed. The pre-fix contract run was:
+
+```text
+1 failed, 7 passed, 1 warning in 1.15s
+```
+
+The failure was the old sanitizer returning `raw:C:/Users/owner/private.json`.
+
+### GREEN
+
+The evidence strict sanitizer now percent-decodes the prefixed payload before
+checking POSIX and `PureWindowsPath` absolute/drive/UNC semantics, traversal,
+backslashes, sensitive tokens, and JSON-like values. The broad sanitizer used
+by ordinary source APIs is unchanged.
+
+Exact focused + direct read-model command:
+
+```text
+python3 -m pytest -q tests/test_owner_memory_detail_contract.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_source_service.py tests/test_source_read_model.py --tb=short
+........................................................................ [ 92%]
+......                                                                   [100%]
+78 passed, 1 warning in 2.20s
+```
+
+Also passed:
+
+```text
+python3 -m compileall -q src tests
+git diff --check
+```
+
+### Identity
+
+Fix implementation/test commit:
+`b7b70468316fbf0bf318cabc0f72ac49cc3b2150` —
+`fix: reject prefixed absolute evidence references`.
+
+The report append is committed separately after this entry; previous fix
+commit `b7f4829ff5a342154ec99c62951b4b4349892f86` and report commit
+`4de66920` remain part of the Task 1 history. No live service, installation,
+Artifact, Production/Vault, real chat, real database, or owner data was used.
