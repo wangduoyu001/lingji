@@ -92,3 +92,78 @@ Both exited successfully.
   warning; no new warning was introduced.
 - No live, packaged, Desktop, or owner-observation validation was authorized
   for Task 1; those belong to later tasks/acceptance.
+
+## Fix Round 1/5 — review closure
+
+Fix base: `2d9d4cbe` (`docs: record bounded evidence backend verification`).
+
+### Review RED
+
+After adding focused regression tests for the three Important findings, the
+final valid RED run of `tests/test_owner_memory_detail_contract.py` was:
+
+```text
+3 failed, 5 passed, 1 warning in 1.13s
+```
+
+The failures were the pre-fix `SELECT *` metadata read, adversarial raw
+reference values passing through, and unknown-memory evidence returning 200.
+Invalid fixture-only assertions were corrected before recording this RED.
+
+### Fixes
+
+- `SourceReadModel.get_message(..., include_content=False)` now selects an
+  explicit metadata projection with bounded preview/length expressions and
+  never materializes the full `content` column. The contract fixture traces
+  SQL and records that only selected-page rows request full bodies.
+- Evidence uses a dedicated strict reference sanitizer. It permits only
+  canonical safe `raw:`/`vault:` relative references (and existing sanitized
+  HTTP(S) URLs), rejecting JSON/object-like, credential/auth/cookie-bearing,
+  traversal, and absolute-outside-root values.
+- `MemoryInspectorFacade.list_memory_evidence` performs a lightweight
+  `fetch_memory(..., include_chunks=False)` existence check, preserving 200
+  empty pages for existing memories with no links and translating unknown
+  memory to the established 404 path.
+- Added direct regressions for `include_content=False`, invalid timestamps and
+  sequences, route/facade unknown-memory 404, SQL projection, page-only body
+  reads, and adversarial reference response values.
+
+### Fix GREEN
+
+Exact Task 1 focused command:
+
+```text
+python3 -m pytest -q tests/test_owner_memory_detail_contract.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_memory_inspector_api.py tests/test_memory_inspector_facade.py tests/test_source_service.py --tb=short
+.......................................................................  [100%]
+71 passed, 1 warning in 1.93s
+```
+
+Direct read-model regression command (focused command plus
+`tests/test_source_read_model.py`):
+
+```text
+78 passed, 1 warning in 2.04s
+```
+
+Additional verification remained green:
+
+```text
+python3 -m compileall -q src tests
+git diff --check
+```
+
+### Fix files and identity
+
+Changed in this round:
+
+- `src/sources/read_model.py`
+- `src/sources/service.py`
+- `src/gateway/memory_inspector.py`
+- `tests/test_owner_memory_detail_contract.py`
+
+Fix commit: `b7f4829ff5a342154ec99c62951b4b4349892f86` — `fix: close bounded evidence review gaps`.
+The original implementation and report commits remain
+`b46229eb211e0e91a1f0c1c37e934702cd13fe3c` and `2d9d4cbe`.
+
+Round 1 remains focused-only: no live services, installation, Artifact,
+Production/Vault, real chats, real databases, or owner data were accessed.
