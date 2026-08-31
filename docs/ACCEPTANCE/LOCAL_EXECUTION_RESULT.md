@@ -1,9 +1,9 @@
 # LingJi 本机执行结果回执
 
 > 当前任务正在执行：`OWNER_UI_LIVE_REPAIR_MAC_6EA11E4`。
-> 当前候选仅为 `OWNER_UI_EXPERIENCE_CANDIDATE`，`NOT_A_RELEASE_GATE`；
-> 旧候选 `6baf4ee6` 的主人体验结论为 `OWNER_UI_REPAIR_REQUIRED`；新候选当前验收暂停，
-> 默认记忆页出现 `superseded`/`stale` 历史卡片，已记录为 `OWNER_UI_REPAIR_REQUIRED`，
+> 当前候选仅为 `OWNER_UI_LIVE_REPAIR_CANDIDATE`，`NOT_A_RELEASE_GATE`；
+> prior candidates `43009a0d`/`6baf4ee6` 的主人体验结论为 `OWNER_UI_REPAIR_REQUIRED`；
+> 新候选 `6ea11e4` 尚未运行，当前仅等待隔离构建与验收，
 > `MEASURED_FAIL / NOT_RELEASE_READY`
 > 质量事实保持延期。下方旧任务回执仅作历史记录，
 > 不覆盖当前 ACTIVE 任务。
@@ -22,7 +22,7 @@ execution_mode: MACOS_OWNER_UI_EXPERIENCE_ONLY
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 product_commit: 6ea11e491868e227a0c454e87f73ebd92a99b788
-task_instruction_commit: PENDING
+task_instruction_commit: d3bbf9c82e185f846ac8b3349f7e7ee6f786cd39
 report_branch: acceptance/owner-ui-live-repair-6ea11e4
 report_commit: PENDING
 report_path: docs/TEST_REPORTS/MACOS_OWNER_UI_LIVE_REPAIR_6EA11E4.md
@@ -39,32 +39,32 @@ local_temp_root_absent: false
 owner_observation: PENDING
 started_at: PENDING
 finished_at: PENDING
-installed_app_hash: 48b03e49d5ed8b3eb0bd7c6ec716bcb577f775bffdac83ce0d09bf892c57a721
-installed_main_sha256: 42d451593ed782b6bfce1f3fa421d1b0917face4fff40a5aaad4eb7997dea249
-installed_sidecar_sha256: 8d4a0db1a5b6d6ef0e45711af0d3ff2f69cdd58beb9eb6b149526d0772cdcdf9
-dmg_sha256: NOT_RUN_APP_ONLY
-desktop_pid: 55746
-sidecar_pid: 55764
-control_api_ping: HTTP_200_STATUS_OK
+installed_app_hash: PENDING
+installed_main_sha256: PENDING
+installed_sidecar_sha256: PENDING
+dmg_sha256: PENDING
+desktop_pid: 0
+sidecar_pid: 0
+control_api_ping: PENDING
 acceptance_root: /tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4
-acceptance_effective_data_root: /tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b/data-root/acceptance
-acceptance_memory_cards: 8
-acceptance_completed_scans: 1
-acceptance_pending_actions: 1
+acceptance_effective_data_root: /tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4/data-root/acceptance
+acceptance_memory_cards: 0
+acceptance_completed_scans: 0
+acceptance_pending_actions: 0
 production_pollution_count: 0
 vault_pollution_count: 0
-owner_observation_page: MEMORY_DEFAULT_PAGE_SUPERSEDED_STALE_FAIL
+owner_observation_page: PENDING
 ```
 
-当前 Acceptance 根目录为 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b`，
-其中 DataRoot、Vault、source fixture、evidence 与整包安装备份物理分离；当前保留应用和
-sidecar 供根代理/repair 后观察，未执行清理或回滚。旧根
-`/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6` 及其 backup/evidence/DB
-必须原样保留。
+当前 Acceptance 根目录为 `/tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4`，尚未运行；
+其 DataRoot、Vault、source fixture、evidence 与整包安装备份将在执行时物理分离。旧根
+`/tmp/LingJiAcceptance/owner-ui-redesign-43009a0`、`/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6`
+和 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b` 及其 backup/evidence/DB/logs
+必须原样只读保留，prior candidate failures 与当前 PENDING receipt 分离。
 
-旧候选 `OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6` 的 `OWNER_UI_REPAIR_REQUIRED` 失败记录、
-备份、fixture、DB、日志与 evidence 根必须保留，不得删除或用于新候选验证。新候选的全部结果
-只写入 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b`。
+旧候选 `OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6` 与 `OWNER_UI_REDESIGN_MAC_43009A0D` 的
+`OWNER_UI_REPAIR_REQUIRED` 失败记录、备份、fixture、DB、日志与 evidence 根必须保留，不得删除
+或用于新候选验证。新候选的全部结果只写入 `/tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4`。
 
 > 最近一次任务已完成。权威结论：`COMPLETED / FAIL / DO NOT MERGE`。
 >

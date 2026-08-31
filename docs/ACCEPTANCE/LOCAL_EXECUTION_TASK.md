@@ -58,10 +58,10 @@ Use 全部 UI/菜单/窗口遍历和主人观察；本任务不得替主人宣�
 whole-bundle 安装；其他真实 blocker 立即停止并报告。
 
 旧候选 `OWNER_UI_MENU_FAST_TRACK_TASK_2_6BAF4EE6`（product SHA
-`6baf4ee6d15256e44164bcbe3f7ce227af0b5d07`）的 `OWNER_UI_REPAIR_REQUIRED` 失败观察、整包备份、
-证据与 Acceptance 根 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-6baf4ee6` 必须保留，
-不得删除或复用旧 DB 验证本候选。新候选使用全新根
-`/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b`，与旧根物理隔离。
+`6baf4ee6d15256e44164bcbe3f7ce227af0b5d07`）、旧候选 `43009a0d` 及其旧根与 evidence，
+以及中间候选 `/tmp/LingJiAcceptance/owner-ui-menu-fast-track-task-2-b299e5b` 的 evidence/DB/logs
+均须只读保留，不得删除、复用或冒充当前候选。新候选使用全新根
+`/tmp/LingJiAcceptance/owner-ui-live-repair-6ea11e4`，与全部旧根物理隔离。
 
 ## 1. 最近一次任务
 
