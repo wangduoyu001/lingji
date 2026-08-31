@@ -1,10 +1,37 @@
 # LingJi 本机执行任务单
 
-> **当前状态：IDLE（`OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1` 已完成 focused 收口）。**
+> **当前状态：ACTIVE（`OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME_GROUP`）。**
 >
 > 本文件仍是本机 Codex 的唯一任务入口；下方第 0 节是当前唯一可执行的有界修复任务。
 
 ## 0. 当前 ACTIVE 任务
+
+```yaml
+task_id: OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME_GROUP
+status: ACTIVE
+execution_mode: FOCUSED_RUNTIME_REGRESSION_REPAIR_ONLY
+repository: wangduoyu001/lingji
+product_branch: codex/owner-memory-detail-drilldown
+baseline_commit: eca5b811
+product_commit: PENDING
+product_pr: NONE_NOT_A_RELEASE_GATE
+release_gate: NOT_A_RELEASE_GATE
+artifact_name: NOT_APPLICABLE
+report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME.md
+live_8766_8767_forbidden: true
+install_forbidden: true
+owner_data_forbidden: true
+full_release_forbidden: true
+```
+
+本任务仅调查并修复上轮 full 暴露的三组 runtime 回归：promotion recovery case 06、
+structured evidence lexical 两个顺序相关节点、packaged automatic-memory clean-root 双轮流程。
+必须先逐项复现并定位产品缺陷、测试隔离、时序或资源泄漏的真实根因；不得修改断言以掩盖
+失败，不得删除或 skip 测试。禁止触碰记忆详情 UI、Task4R2 质量语义、Production/Vault、
+真实聊天、live 服务、安装、full/release。修复后只运行指定节点、直接调用方小矩阵、
+compile/diff/acceptance-sync/handoff，并如实记录 RED/GREEN 与未处理边界。
+
+## 0A. 最近 focused 修复任务（已收口）
 
 ```yaml
 task_id: OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1

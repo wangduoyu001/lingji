@@ -1,7 +1,7 @@
 # LingJi 本机执行结果回执
 
-> 当前最近任务 `OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1` 已完成 focused 收口；
-> 下方第 0 节是当前回执。本轮未运行 full/release/live/package/install，未读取真实聊天/
+> 当前任务 `OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME_GROUP` 已激活；
+> 下方第 0 节是当前回执。本轮禁止运行 full/release/live/install，禁止读取真实聊天/
 > Vault/数据库或主人数据。下方旧任务回执仅作历史记录。
 
 Prior candidate `43009a0dfdf3cd7b949d871cc9054286f17d607e` is explicitly
@@ -9,6 +9,26 @@ recorded as `OWNER_UI_REPAIR_REQUIRED` for raw source titles/English error and
 duplicate macOS lexical-alias source cards; it is not a PASS result.
 
 ## 0. 当前任务回执
+
+```yaml
+task_id: OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME_GROUP
+status: RUNNING
+verdict: PENDING
+execution_mode: FOCUSED_RUNTIME_REGRESSION_REPAIR_ONLY
+repository: wangduoyu001/lingji
+product_commit: PENDING
+task_instruction_commit: PENDING
+report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME.md
+focused_result: PENDING
+full_result: NOT_RUN
+release_result: NOT_RUN
+live_8766_8767: NOT_RUN
+install_performed: false
+owner_data_touched: false
+production_pollution_count: 0
+```
+
+## 0A. 最近 focused 修复回执
 
 ```yaml
 task_id: OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1

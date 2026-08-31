@@ -3378,3 +3378,12 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   and a not-found archive; ordinary source UI must show exactly 1 Codex card and found count must
   equal visible count. Mac rebuild and full-root Computer Use remain pending; app/sidecar must stay
   open for owner confirmation after the rebuild.
+## 2026-09-01 · Owner memory detail release full repair · runtime group
+
+- 基线：`eca5b811`；任务：`OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME_GROUP`。
+- 范围严格限于 promotion recovery case 06、structured evidence lexical 两个 full 顺序相关节点、
+  packaged automatic-memory clean-root 双轮流程的真实根因与最小修复。
+- TDD：先逐项复现 RED；新增测试只能捕获已定位的产品/隔离/时序/资源生命周期缺陷，禁止通过
+  改断言、skip、删测试或降低安全边界取得绿灯。
+- 自动验收：指定节点、直接调用方小矩阵、compileall、`git diff --check`、acceptance sync、
+  local handoff。禁止 full/release/live/安装/主人数据、记忆详情 UI 与 Task4R2 质量语义。
