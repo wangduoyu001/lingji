@@ -3,9 +3,10 @@
 ## 当前结论
 
 本报告记录主人界面快速收口候选的 focused 代码与自动化证据，以及 Mac 真机验收交接状态。
-产品提交为 `a0a996636c2a4799952c3381148fbb04978952ab`。当前结论是：
+产品提交为 `1d4cd95bcbe73455507bc32c969f6eab5923bd86`。当前结论是：
 
-> focused 技术证据通过，Mac packaged/安装/真实 UI 尚未执行；Windows 禁止启动。
+> 唯一必要修复轮的 focused 技术证据通过；新 SHA 的 Mac packaged/安装/真实 UI 尚未执行；
+> Windows 禁止启动。
 
 这不是 release、Phase 1、主人体验通过或可合并结论。Mac 技术验收通过后必须保持发布版 App 打开，
 等待主人体验确认；主人确认前只能表述“技术验收通过，等待主人体验”。
@@ -23,10 +24,10 @@
 
 | 项目 | 结果 | 证据 |
 |---|---|---|
-| 产品提交 | PASS | `a0a996636c2a4799952c3381148fbb04978952ab` |
+| 产品提交 | PASS | `1d4cd95bcbe73455507bc32c969f6eab5923bd86` |
 | Task B 实现 | PASS | 11 个 Desktop 文件；139 additions / 105 deletions |
 | Task C 独立阻断审查 | APPROVED | Blocking findings: none |
-| 必要修复轮数 | 0 | 无阻断问题，不启动额外修复轮 |
+| 必要修复轮数 | 1 / 1 | 真实 Mac UI 发现 conversation evidence 请求 synthetic canonical source；TDD 修复后不再产生伪来源失败 |
 
 非阻断 Minor 记录：来源页“已导入”未来可改成“本次处理”以避免把 reused 计入新导入；来源卡存在少量重复状态文案；首页 current 过滤与我的记忆存在防御性差异。
 这些不阻断本轮 Mac 验收。
@@ -46,13 +47,15 @@
 
 自动化后已确认 8765、8766、8767 无监听，且无 LingJi core/control、Playwright 或 Chromium 残留进程。
 
-旧版 `run-smoke-suite.mjs` 在 Node v24 下会因既有 `automatic-memory-sources-smoke.mjs` 使用
-TypeScript 参数属性而触发 `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`。该工具链基线问题未归因本轮 UI，
-也未通过删除、skip 或降低断言隐藏。
+修复后新鲜验证：owner rendered smoke PASS、memory E2E PASS、Desktop build PASS、macOS release
+smoke PASS、完整 Desktop smoke 23 scripts PASS、相关 Python focused `54 passed, 1 warning`、
+compileall/diff-check/acceptance-sync/handoff PASS。TDD RED 精确失败于
+`conversation-only detail must not request canonical memory provenance`，随后以最小前端分支修复转 GREEN。
 
 ## Mac 验收交接
 
-状态：`IN_PROGRESS / NOT_TESTED`。下一步必须使用全新、隔离的 Acceptance root，从精确产品 SHA
+状态：`IN_PROGRESS / NOT_TESTED_AFTER_REPAIR`。旧 SHA 的 packaged、构建、安装和 UI 证据不继承。
+下一步必须使用全新、隔离的 Acceptance root，从精确产品 SHA
 构建 Mac arm64，核验 main/sidecar 架构、strict codesign 和 hash，备份后整包覆盖安装，并使用
 隔离 DataRoot/Vault/source fixture 启动真实发布版。随后遍历首页、我的记忆、来源、高级诊断，
 点击可见 enabled 控件，至少打开五条不同类型记忆核对正文、发展、当前结论、来源原文及

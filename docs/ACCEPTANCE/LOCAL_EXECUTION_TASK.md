@@ -13,12 +13,12 @@ execution_mode: OWNER_UI_PRODUCT_AND_MAC_EXPERIENCE_FAST_CLOSEOUT
 repository: wangduoyu001/lingji
 product_branch: codex/owner-memory-detail-drilldown
 baseline_commit: fde399849eb6b440ef37c977ff76ac280fdd80ab
-product_commit: 38cd484cca541a0fa50ab1f4b2c05fe7a45ca408
+product_commit: 1d4cd95bcbe73455507bc32c969f6eab5923bd86
 product_pr: NONE_NOT_A_RELEASE_GATE
 release_gate: OWNER_EXPERIENCE_CANDIDATE_ONLY
 artifact_name: lingji-macos-arm64-app
 artifact_id: LOCAL_MAC_BUILD_PENDING
-report_branch: acceptance/owner-ui-experience-fast-closeout-38cd484c
+report_branch: acceptance/owner-ui-experience-fast-closeout-1d4cd95b
 report_path: docs/TEST_REPORTS/OWNER_UI_EXPERIENCE_FAST_CLOSEOUT.md
 public_summary_path: PENDING
 public_hashes_path: PENDING
@@ -40,10 +40,13 @@ Desktop 主人界面的菜单收敛、首页成果化、current-only 记忆浏�
 独立阻断审查和最多一轮必要修复。体验候选只阻断安全、真实导入、来源可追溯和 Mac 可用性；
 旧 Task4R2/Task7 质量测量与非核心视觉 Minor 记录为非阻断技术债务，不得冒充通过。
 
-产品审查已通过；精确产品 SHA `38cd484cca541a0fa50ab1f4b2c05fe7a45ca408` 的显式 watcher
-packaged clean-root 双轮已通过（`2 passed, 1 warning`）。现激活隔离 Mac 构建/安装与真实 UI
-验收段：必须 whole-bundle 安装精确 SHA arm64 App、遍历核心页面并打开至少五条记忆核对来源；
-App 必须保持打开等待主人确认。主人确认前 Windows 继续禁止启动。
+精确产品 SHA `38cd484cca541a0fa50ab1f4b2c05fe7a45ca408` 的真实 Mac UI 发现
+conversation evidence 错误请求 synthetic memory 的 canonical source route，导致消息可读但同时显示
+来源失败。任务允许的唯一一轮必要修复已用于产品 SHA
+`1d4cd95bcbe73455507bc32c969f6eab5923bd86`；focused TDD 与直接回归通过。旧 SHA 的 packaged、
+构建、安装和 UI 证据不得继承。现必须从新 SHA 使用全新隔离 Acceptance root 重跑 packaged
+clean-root 双轮、arm64 整包构建/安装及完整真实 UI；App 必须保持打开等待主人确认。主人确认前
+Windows 继续禁止启动。
 
 ## 0A. 上一 focused runtime 任务（停止继续扩张）
 
