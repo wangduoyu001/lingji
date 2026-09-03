@@ -208,9 +208,10 @@ try {
   assert.equal(sidebarStatusText.includes("8766"), false, "ordinary runtime warning must not expose the control port");
 
   const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
-  assert.deepEqual(primaryLabels, ["首页", "记忆内容", "需要我", "记忆来源"], "ordinary navigation must have exactly four destinations");
-  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "记忆内容", "需要我", "记忆来源"], "ordinary navigation must expose exact accessible labels");
+  assert.deepEqual(primaryLabels, ["首页", "我的记忆", "来源"], "ordinary navigation must have exactly three destinations");
+  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "我的记忆", "来源"], "ordinary navigation must expose exact accessible labels");
   assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "活动记录", exact: true }).count(), 0, "activity must stay out of the ordinary sidebar");
+  assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "需要我", exact: true }).count(), 0, "attention must not permanently occupy the ordinary sidebar");
   const advanced = page.locator("details.desktop-advanced-disclosure");
   assert.equal(await advanced.count(), 1, "advanced diagnostics must be a single disclosure");
   assert.equal(await advanced.evaluate((node) => node.open), false, "advanced diagnostics must be collapsed by default");
@@ -218,8 +219,8 @@ try {
   await advanced.getByRole("button", { name: "打开高级诊断", exact: true }).waitFor();
   await advanced.getByRole("button", { name: "打开高级诊断", exact: true }).click();
   await page.locator(".desktop-content").getByRole("heading", { name: "高级诊断", exact: true }).waitFor();
-  const taskGroup = page.locator("details.diagnostics-group").filter({ hasText: "采集与任务" });
-  await taskGroup.locator("summary").click();
+  const taskGroup = page.locator("details.diagnostics-group").filter({ hasText: "运行与错误" });
+  if (!(await taskGroup.evaluate((node) => node.open))) await taskGroup.locator("summary").click();
   await taskGroup.getByRole("button", { name: "活动记录", exact: true }).waitFor();
   await taskGroup.getByRole("button", { name: "活动记录", exact: true }).click();
   await page.locator(".desktop-content").getByRole("heading", { name: "活动记录", exact: true }).first().waitFor();
@@ -237,7 +238,8 @@ try {
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   await page.getByText("有一件事需要你决定", { exact: true }).waitFor();
-  await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
+  await page.locator(".overview-attention-link").waitFor();
+  await page.locator(".overview-attention-link").click();
   await page.getByRole("heading", { name: "需要我", exact: true }).waitFor();
   await page.getByText("确认发布计划", { exact: true }).waitFor();
   assert.ok(state.pendingReads > 0, "attention page must read the shared pending-actions endpoint on activation");
@@ -245,19 +247,20 @@ try {
   await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
   await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
   await page.getByText("待办正在自动确认，当前不把未读取当作“没有待办”。", { exact: true }).waitFor();
-  await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
-  await page.getByText("暂时无法确认需要你处理的事项，正在重试。", { exact: true }).waitFor();
+  assert.equal(await page.locator(".overview-attention-link").count(), 0, "unknown pending must not surface a home attention entry");
   state.pendingActions = [{}];
   await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
   await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
   await page.getByText("待办正在自动确认，当前不把未读取当作“没有待办”。", { exact: true }).waitFor();
+  assert.equal(await page.locator(".overview-attention-link").count(), 0, "malformed pending must not surface a home attention entry");
   state.pendingActions = [];
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
   await page.getByText("目前不需要你处理", { exact: true }).waitFor();
+  assert.equal(await page.locator(".overview-attention-link").count(), 0, "empty pending must not surface a home attention entry");
 
-  await page.locator(".desktop-nav-item").filter({ hasText: "记忆内容" }).click();
-  await page.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "我的记忆" }).click();
+  await page.getByRole("heading", { name: "我的记忆", exact: true }).first().waitFor();
   const cardsText = await page.locator(".owner-memory-card-grid").innerText();
   assert.equal(state.requests.some((url) => url.includes("/api/memory/inspector/memories/")), false, "ordinary card rendering must not prefetch canonical, vector, source or evidence bodies");
   assert.equal(state.requests.some((url) => url.includes("/api/memory/inspector/messages/")), false, "ordinary card rendering must not prefetch message bodies");
@@ -481,8 +484,8 @@ try {
 
   await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange")); });
   const hiddenSourceReads = state.sourceReads;
-  await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
-  await page.getByRole("heading", { name: "记忆来源", exact: true }).first().waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "来源" }).click();
+  await page.getByRole("heading", { name: "来源", exact: true }).first().waitFor();
   const sourceCard = page.locator('[data-source-kind="codex_rollout"]');
   await sourceCard.waitFor();
   assert.ok(state.sourceReads > hiddenSourceReads, "activating a hidden source page must still perform its first real read");
@@ -511,8 +514,14 @@ try {
   await technicalDetail.locator("summary").click();
   assert.ok((await technicalDetail.innerText()).includes("fixture failure: /private/secret"), "last_error must remain available in technical details");
 
-  await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
+  state.pendingActions = [{ action_id: "attention-empty-fixture", work_id: "work-empty", description: "临时进入待办页" }];
+  await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
+  await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
+  await page.locator(".overview-attention-link").waitFor();
+  await page.locator(".overview-attention-link").click();
   await page.getByRole("heading", { name: "需要我", exact: true }).waitFor();
+  state.pendingActions = [];
+  await page.waitForTimeout(8500);
   await page.getByText("现在没有需要你处理的事项。灵机会继续自动工作。", { exact: true }).waitFor();
   const attentionText = await page.locator(".observation-page").innerText();
   assert.equal(/source-codex|memory-card-1|\{/.test(attentionText), false, "zero-attention ordinary copy must not expose technical fields");

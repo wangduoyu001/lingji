@@ -297,18 +297,18 @@ try {
   await installTauri(racePage);
   await racePage.goto(uiBase, { waitUntil: "domcontentloaded" });
   try {
-    await racePage.getByRole("button", { name: "记忆内容", exact: true }).waitFor({ timeout: 10_000 });
+    await racePage.getByRole("button", { name: "我的记忆", exact: true }).waitFor({ timeout: 10_000 });
   } catch (reason) {
     console.error("race body:", await racePage.locator("body").innerText());
     throw reason;
   }
-  await racePage.getByRole("button", { name: "记忆内容", exact: true }).click();
+  await racePage.getByRole("button", { name: "我的记忆", exact: true }).click();
   await new Promise((resolve) => setTimeout(resolve, 1_100));
-  try { await racePage.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor({ timeout: 5_000 }); } catch (reason) { console.error("after navigation:", await racePage.locator("body").innerText()); throw reason; }
-  assert.equal(await racePage.getByRole("heading", { name: "记忆来源", exact: true }).count(), 0, "delayed onboarding reads cannot redirect after navigation");
+  try { await racePage.getByRole("heading", { name: "我的记忆", exact: true }).first().waitFor({ timeout: 5_000 }); } catch (reason) { console.error("after navigation:", await racePage.locator("body").innerText()); throw reason; }
+  assert.equal(await racePage.getByRole("heading", { name: "来源", exact: true }).count(), 0, "delayed onboarding reads cannot redirect after navigation");
   await fetch(`http://127.0.0.1:${apiPort}/__test/release-onboarding`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
   await new Promise((resolve) => setTimeout(resolve, 500));
-  await racePage.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor();
+  await racePage.getByRole("heading", { name: "我的记忆", exact: true }).first().waitFor();
   await racePage.close();
   state.onboardingDelay = false;
   state.onboardingFailures = 0;
@@ -321,9 +321,9 @@ try {
     // Refresh the read model only. The owner-facing page intentionally has
     // no routine scan CTA; opening its backup controls must never be used as
     // a polling helper because that would mutate scan state.
-    const sourceHeading = page.locator(".desktop-content").getByRole("heading", { name: "记忆来源", exact: true });
+    const sourceHeading = page.locator(".desktop-content").getByRole("heading", { name: "来源", exact: true });
     if (await sourceHeading.count() === 0) {
-      await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
+      await page.locator(".desktop-nav-item").filter({ hasText: "来源" }).click();
     }
     await sourceHeading.first().waitFor({ timeout: 10_000 });
   };
@@ -337,9 +337,9 @@ try {
   // therefore not a meaningful readiness signal. Wait for DOM load and the
   // rendered landing heading instead.
   await page.goto(uiBase, { waitUntil: "domcontentloaded" });
-  await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
+  await page.locator(".desktop-nav-item").filter({ hasText: "来源" }).click();
   try {
-    await page.locator(".desktop-content").getByRole("heading", { name: "记忆来源" }).first().waitFor({ timeout: 10_000 });
+    await page.locator(".desktop-content").getByRole("heading", { name: "来源" }).first().waitFor({ timeout: 10_000 });
   } catch (reason) { console.error("rendered body:", await page.locator("body").innerText()); throw reason; }
   await page.getByRole("button", { name: "选择文件夹并开始记忆" }).click();
   await page.getByRole("heading", { name: "已授权", exact: true }).waitFor();
@@ -417,31 +417,26 @@ try {
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
   await page.waitForTimeout(100);
   assert.ok((await page.locator(".memory-detail-grid > div").filter({ hasText: "新增" }).innerText()).includes("新增\n2"), "explicit positive count must remain visible");
+  const homeCardListRequestsBefore = state.cardListRequests;
   await page.getByRole("button", { name: "首页" }).click();
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
-  await page.locator(".proof-grid > div").filter({ hasText: "件当前记忆" }).locator("strong").filter({ hasText: "36" }).waitFor();
-  const homeCardListRequestsBefore = state.cardListRequests;
-  const proofValue = async (label) => page.locator(".proof-grid > div").filter({ hasText: label }).locator("strong").innerText();
-  assert.equal(await proofValue("件当前记忆"), "36", "Home current-memory proof must come from the cards summary");
-  assert.equal(await proofValue("段已接管对话"), "7", "Home conversation proof must come from the cards summary");
-  assert.equal(await proofValue("条原始消息"), "42", "Home raw-message proof must come from the cards summary");
-  assert.equal(await proofValue("件长期记忆"), "8", "Home permanent-memory proof must come from the cards summary");
-  assert.ok((await page.locator(".memory-proof-section").innerText()).includes("当前记忆卡片和长期记忆只统计仍然有效的内容"), "Overview must distinguish current cards/permanent memory from all imported conversations/messages");
-  assert.ok((await page.locator(".proof-note").innerText()).includes("18 件已准备语义检索"), "Home proof note must show vector readiness without a technical metric tile");
-  assert.equal(state.cardListRequests, 0, "Home must use summary proof counts without loading card bodies");
-  assert.equal(state.cardListRequests - homeCardListRequestsBefore, 0, "Home must not load card bodies while rendering summary proof");
+  await page.locator(".recent-memory-list .recent-memory-item").first().waitFor();
+  assert.ok(state.cardListRequests > homeCardListRequestsBefore, "Home must read a bounded current-memory list for concrete recent content");
+  const takeoverValue = async (label) => page.locator(".takeover-stats > div").filter({ hasText: label }).locator("strong").innerText();
+  assert.equal(await takeoverValue("已接管对话"), "7", "Home takeover summary must show conversation count");
+  assert.equal(await takeoverValue("已导入消息"), "42", "Home takeover summary must show imported message count");
+  assert.ok((await page.locator(".takeover-summary-section").innerText()).includes("当前记忆和长期记忆只统计仍然有效的内容"), "Home must distinguish current/permanent memory from imported conversations/messages");
+  assert.ok((await page.locator(".takeover-summary-section .vector-note").innerText()).includes("18 件已准备语义检索"), "Home summary note must show vector readiness without a technical metric tile");
   await fetch(`http://127.0.0.1:${apiPort}/__test/unknown-card-summary`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
-  const unknownProof = page.locator(".proof-grid > div");
-  for (const label of ["件当前记忆", "段已接管对话", "条原始消息", "件长期记忆"]) {
-    assert.equal(await unknownProof.filter({ hasText: label }).locator("strong").innerText(), "—", `${label} must remain unknown rather than fake zero`);
+  const unknownTakeover = page.locator(".takeover-stats > div");
+  for (const label of ["已接管对话", "已导入消息"]) {
+    assert.equal(await unknownTakeover.filter({ hasText: label }).locator("strong").innerText(), "—", `${label} must remain unknown rather than fake zero`);
   }
-  assert.ok((await page.locator(".proof-note").innerText()).includes("后台自动更新"), "unknown vector state must explain that it is updated in the background");
+  assert.ok((await page.locator(".takeover-summary-section .vector-note").innerText()).includes("后台自动更新"), "unknown vector state must explain that it is updated in the background");
   await fetch(`http://127.0.0.1:${apiPort}/__test/unknown-card-summary`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
-  await page.getByText("整理项目会议记录", { exact: true }).waitFor();
-  await page.getByText("已保存 1 条记忆", { exact: true }).waitFor();
-  assert.equal(await page.locator(".outcome-item").count(), 1, "Home must show a real automatic outcome, not a static activity prompt");
+  await page.locator(".recent-memory-list .recent-memory-item").first().waitFor();
   await page.getByText("目前空闲", { exact: true }).waitFor();
   assert.equal(await page.getByText("状态尚未获得", { exact: true }).count(), 0, "null work must render a clear idle state, not an unknown status");
   assert.equal(await page.getByText("内部错误：cleanup_scan_failed", { exact: true }).count(), 1, "raw runtime error may exist only in collapsed details");
@@ -479,8 +474,8 @@ try {
   assert.equal(await page.getByText("结果：成功", { exact: true }).count(), 0, "generic success must not mask measured changed evidence");
   await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "explicit-zero" });
   await fetch(`http://127.0.0.1:${apiPort}/__test/seed-latest-empty-scan`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
-  await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
-  await page.locator(".desktop-content").getByRole("heading", { name: "记忆来源" }).waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "来源" }).click();
+  await page.locator(".desktop-content").getByRole("heading", { name: "来源" }).waitFor();
   await refreshSources();
   await page.getByRole("button", { name: "首页" }).click();
   await page.getByText(/最近一次自动检查完成，暂未发现变化/).waitFor();
@@ -492,8 +487,8 @@ try {
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   await page.getByText(/最近一次自动检查完成/).waitFor();
   assert.equal(await page.getByText("本次新增", { exact: true }).count(), 0, "scan counts must be summarized in a readable sentence, not stacked as developer metrics");
-  await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
-  await page.locator(".desktop-content").getByRole("heading", { name: "记忆来源" }).waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "来源" }).click();
+  await page.locator(".desktop-content").getByRole("heading", { name: "来源" }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/cleanup-pending`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
   await refreshSources();
   await page.getByText("临时文件清理失败：灵机会自动重试，可重试。", { exact: true }).waitFor();
@@ -514,8 +509,8 @@ try {
   const overviewText = await page.locator(".overview-page").innerText();
   assert.ok(overviewText.includes("最近一次自动检查完成"), "completed summary without counts must still say it completed");
   assert.equal(overviewText.includes("检查结果尚未获得"), false, "missing summary counts must not become an unknown result on the primary page");
-  await page.locator(".desktop-nav-item").filter({ hasText: "记忆来源" }).click();
-  await page.locator(".desktop-content").getByRole("heading", { name: "记忆来源" }).waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "来源" }).click();
+  await page.locator(".desktop-content").getByRole("heading", { name: "来源" }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/all-states`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
   await refreshSources();
   for (const heading of ["已发现", "需要确认", "暂不支持", "已授权", "扫描中", "已接管", "需要检查", "已撤销", "扫描失败"]) await page.getByRole("heading", { name: heading }).first().waitFor();
@@ -615,7 +610,7 @@ try {
   const advanced = page.locator("details.desktop-advanced-disclosure");
   if (!(await advanced.evaluate((node) => node.open))) await advanced.locator("summary").click();
   await advanced.getByRole("button", { name: "打开高级诊断", exact: true }).click();
-  const taskGroup = page.locator("details.diagnostics-group").filter({ hasText: "采集与任务" });
+  const taskGroup = page.locator("details.diagnostics-group").filter({ hasText: "运行与错误" });
   if (!(await taskGroup.evaluate((node) => node.open))) await taskGroup.locator("summary").click();
   await taskGroup.getByRole("button", { name: "活动记录", exact: true }).click();
   await page.getByRole("heading", { name: "活动记录", exact: true }).first().waitFor();
@@ -705,11 +700,8 @@ try {
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   assert.equal(await page.locator(".overview-next-step").count(), 0, "Home must not expose a manual next-step panel");
   await page.getByText("有一件事需要你决定", { exact: true }).waitFor();
-  await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
+  await page.locator(".overview-attention-link").click();
   await page.getByRole("heading", { name: "需要我", exact: true }).waitFor();
-  await page.getByText("确认这条会议决定是否进入长期记忆", { exact: true }).waitFor();
-  await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
-  await page.locator("h1").filter({ hasText: "需要我" }).waitFor();
   await page.getByText("确认这条会议决定是否进入长期记忆", { exact: true }).waitFor();
   assert.equal(await page.getByText("work-capture-1", { exact: true }).count(), 0, "attention page must not expose work IDs");
   await page.getByRole("button", { name: "我已确认，继续处理", exact: true }).click();
@@ -720,26 +712,24 @@ try {
   await page.getByText("正在确认待办", { exact: true }).waitFor();
   await page.getByText("灵机仍会继续自动工作", { exact: true }).waitFor();
   await page.getByText("待办正在自动确认，当前不把未读取当作“没有待办”。", { exact: true }).waitFor();
-  await page.locator(".desktop-nav-item").filter({ hasText: "需要我" }).click();
-  await page.getByText("暂时无法确认需要你处理的事项，正在重试。", { exact: true }).waitFor();
-  assert.equal(await page.getByText("现在没有需要你处理的事项。灵机会继续自动工作。", { exact: true }).count(), 0, "attention page must not turn an outage into an empty state");
+  assert.equal(await page.locator(".overview-attention-link").count(), 0, "home must not offer an attention entry during a pending outage");
   await fetch(`http://127.0.0.1:${apiPort}/__test/pending-outage`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
   await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   await page.getByText("目前不需要你处理", { exact: true }).waitFor();
-  await page.getByRole("heading", { name: "灵机刚刚替你做了什么", exact: true }).waitFor();
-  await page.getByText("整理项目会议记录", { exact: true }).waitFor();
-  await page.getByText("已保存 1 条记忆", { exact: false }).waitFor();
+  await page.getByRole("heading", { name: "灵机最近替你记住了什么", exact: true }).waitFor();
+  await page.locator(".recent-memory-list .recent-memory-item").first().waitFor();
+  await page.getByText("目前没有正在处理的事情。", { exact: false }).waitFor();
   assert.equal(await page.getByText("OWNER WORK FACT", { exact: true }).count(), 0, "internal work label must stay out of primary UI");
   assert.equal(await page.getByText("work-capture-1", { exact: true }).count(), 0, "work identity must stay in collapsed technical details");
   assert.equal(await page.getByText("AUTOMATIC RUNTIME", { exact: true }).count(), 0, "ordinary UI must not use decorative English runtime labels");
   assert.equal(await page.getByText("ADVANCED DIAGNOSTICS", { exact: true }).count(), 0, "ordinary UI must not use decorative English diagnostics labels");
 
   const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
-  assert.deepEqual(primaryLabels, ["首页", "记忆内容", "需要我", "记忆来源"], "ordinary navigation must contain exactly four owner entries");
+  assert.deepEqual(primaryLabels, ["首页", "我的记忆", "来源"], "ordinary navigation must contain exactly three owner entries");
   await page.setViewportSize({ width: 760, height: 800 });
-  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "记忆内容", "需要我", "记忆来源"], "compact navigation must expose exactly four accessible labels");
+  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "我的记忆", "来源"], "compact navigation must expose exactly three accessible labels");
   await page.setViewportSize({ width: 1280, height: 800 });
   const advancedDisclosure = page.locator("details.desktop-advanced-disclosure");
   assert.equal(await advancedDisclosure.count(), 1, "advanced diagnostics must have one collapsed disclosure");
@@ -752,8 +742,8 @@ try {
   await page.getByText("目前不需要你处理", { exact: false }).waitFor();
   const cardRequests = [];
   page.on("request", (request) => { if (request.url().includes("/api/memory/inspector/cards?")) cardRequests.push(request.url()); });
-  await page.locator(".desktop-nav-item").filter({ hasText: "记忆内容" }).click();
-  await page.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "我的记忆" }).click();
+  await page.getByRole("heading", { name: "我的记忆", exact: true }).first().waitFor();
   await page.locator(".owner-memory-card").nth(0).waitFor();
   assert.ok(cardRequests.some((url) => new URL(url).searchParams.get("state") === "current"), "ordinary memory stream must request only current cards");
   const ordinaryCardSurface = page.locator(".owner-memory-card-grid");
@@ -876,7 +866,7 @@ try {
     await disclosure.getByRole("button", { name: "打开高级诊断", exact: true }).click();
   };
   await openAdvancedDiagnostics();
-  await page.locator("details").filter({ hasText: "记忆与项目" }).locator("summary").click();
+  await page.locator("details").filter({ hasText: "数据与索引" }).locator("summary").click();
   await fetch(`http://127.0.0.1:${apiPort}/__test/review-delay`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
   await page.getByRole("button", { name: /人工记忆审核/ }).click();
   await page.getByRole("heading", { name: "人工记忆审核", exact: true }).waitFor();
@@ -901,11 +891,11 @@ try {
 
   await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
   await openAdvancedDiagnostics();
-  await page.locator("details").filter({ hasText: "采集与任务" }).locator("summary").click();
+  await page.locator("details").filter({ hasText: "数据与索引" }).locator("summary").click();
   await page.getByRole("button", { name: /手动投喂中心/ }).waitFor();
   assert.equal(await page.locator(".desktop-nav-item").filter({ hasText: "主动投喂" }).count(), 0, "legacy Capture must be hidden from navigation");
-  await page.locator(".desktop-nav-item").filter({ hasText: "记忆内容" }).click();
-  await page.getByRole("heading", { name: "记忆内容", exact: true }).first().waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "我的记忆" }).click();
+  await page.getByRole("heading", { name: "我的记忆", exact: true }).first().waitFor();
   await page.locator(".owner-memory-card-grid").waitFor();
   await page.setViewportSize({ width: 900, height: 800 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "900px viewport must not horizontally clip");
@@ -925,9 +915,8 @@ try {
     }
   };
   await captureOwnerPage("首页", "灵机运行正常", "home");
-  await captureOwnerPage("记忆内容", "记忆内容", "memory-content");
-  await captureOwnerPage("需要我", "需要我", "attention");
-  await captureOwnerPage("记忆来源", "记忆来源", "memory-sources");
+  await captureOwnerPage("我的记忆", "我的记忆", "memory-content");
+  await captureOwnerPage("来源", "来源", "memory-sources");
   await browser.close();
   console.log("e2e_owner_memory_flow: PASS");
 } finally {

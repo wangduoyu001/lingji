@@ -463,6 +463,8 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 .memory-source-card { padding: 21px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
 .memory-source-card-header h3 { color: var(--text); font-size: 18px; }
 .memory-source-detail, .memory-source-next, .memory-source-reason { color: var(--text-soft); font-size: 13px; line-height: 1.55; }
+.memory-source-facts { display: flex; flex-wrap: wrap; gap: 7px 14px; margin-top: 12px; color: var(--muted); font-size: 12px; }
+.memory-source-facts span { padding: 4px 9px; border-radius: 999px; background: var(--surface-2); color: var(--text-soft); }
 .memory-source-fallback-actions { margin-top: 14px; border-top: 1px solid var(--line); }
 .memory-source-fallback-actions summary { padding-top: 12px; color: var(--muted); cursor: pointer; font-size: 12px; }
 .memory-source-actions { padding-top: 10px; }
@@ -486,4 +488,26 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
   .overview-live-summary { min-width: 0; width: 100%; }
   .owner-observe-page .overview-hero { align-items: stretch; flex-direction: column; }
   .proof-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Task B: home becomes a concrete memory-first outcome page, not a four-number dashboard. */
+.recent-memory-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.recent-memory-item { min-width: 0; display: grid; gap: 6px; padding: 15px 16px; border-radius: 13px; background: var(--surface-2); }
+.recent-memory-item strong { color: var(--text); font-size: 14px; }
+.recent-memory-item p { margin: 0; color: var(--text-soft); font-size: 13px; line-height: 1.5; }
+.recent-memory-item small { color: var(--muted); font-size: 12px; }
+.takeover-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.takeover-stats > div { min-width: 0; padding: 14px 15px; border-radius: 12px; background: var(--surface-2); }
+.takeover-stats strong, .takeover-stats span { display: block; }
+.takeover-stats strong { color: var(--text); font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.takeover-stats span { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.overview-attention-link { margin-top: 10px; width: 100%; }
+
+/* Task B: four memory layers become one compact trail instead of four equal badges. */
+.owner-memory-layer-track { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.owner-memory-layer-step { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--text-soft); font-size: 11px; }
+.owner-memory-layer-step:last-child { color: var(--accent-strong); background: var(--accent-soft); }
+
+@media (max-width: 760px) {
+  .recent-memory-list, .takeover-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

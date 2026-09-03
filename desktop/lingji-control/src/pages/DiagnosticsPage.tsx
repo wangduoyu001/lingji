@@ -4,24 +4,24 @@ import type { PageId } from "../types";
 
 const GROUPS: Array<{ title: string; description: string; pages: PageId[] }> = [
   {
-    title: "系统与运行",
-    description: "查看核心、算力、模型和向量状态。",
-    pages: ["brain_status", "system_compute", "models", "vector_center"],
+    title: "运行与错误",
+    description: "查看最近完成的工作、任务明细、自动审查和运行日志。",
+    pages: ["activity", "jobs", "auto_review", "logs"],
   },
   {
-    title: "记忆与项目",
-    description: "检查项目、记忆来源、审核和 Obsidian。",
-    pages: ["codex_workspace", "memory_inspector", "memory_review", "auto_review", "obsidian"],
+    title: "数据与索引",
+    description: "检查项目、记忆、来源、向量、投喂和 Obsidian 数据。",
+    pages: ["codex_workspace", "memory_inspector", "memory_review", "vector_center", "capture_center", "media", "obsidian"],
   },
   {
-    title: "采集与任务",
-    description: "处理手动投喂、媒体分析和任务明细。",
-    pages: ["activity", "capture_center", "media", "jobs"],
+    title: "模型与算力",
+    description: "查看脑状态、系统算力和 AI 模型配置。",
+    pages: ["brain_status", "system_compute", "models"],
   },
   {
-    title: "存储与运维",
-    description: "查看存储、备份、验收、设置和日志。",
-    pages: ["storage", "backups", "acceptance", "settings", "logs"],
+    title: "存储与备份",
+    description: "查看存储、备份、环境验收和设置。",
+    pages: ["storage", "backups", "acceptance", "settings"],
   },
 ];
 

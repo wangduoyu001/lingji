@@ -111,7 +111,7 @@ export default function MemorySourcesPage({ api, active }: { api: LingJiApi; act
       <section className="memory-sources-intro">
         <div>
           <span className="section-kicker">自动接管</span>
-          <h2>记忆来源</h2>
+          <h2>来源</h2>
           <p>这里显示灵机正在自动接管的记录。授权一次后，扫描、整理和更新都会自动进行。</p>
         </div>
         <span className="auto-refresh-note">{resource.refreshing ? "正在更新" : "自动更新"}</span>
@@ -190,8 +190,11 @@ function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }
     if (!scan?.scan_id) return;
     try { onDetail(await sourceApi.detail(scan.scan_id) as Record<string, unknown>); } catch (reason) { onDetail({ status: "failed", last_error: actionError(reason) }); }
   };
+  const queued = scanCountValue(scan, "queued"); const reused = scanCountValue(scan, "reused");
+  const imported = (queued != null || reused != null) ? (queued ?? 0) + (reused ?? 0) : null;
+  const restriction = ["unsupported", "degraded", "failed", "revoked"].includes(source.state) ? source.detail : null;
   return <article className={`memory-source-card memory-source-${stateTone[source.state]}`} data-source-kind={source.kind}>
-    <div className="memory-source-card-header"><div><span className="memory-source-kind">{source.display_name}</span><h3>{sourceStateLabel(source.state)}</h3></div><span className={`pill ${stateTone[source.state]}`}>{sourceStateLabel(source.state)}</span></div>
+    <div className="memory-source-card-header"><div><span className="memory-source-kind">{source.display_name}</span><h3>{sourceStateLabel(source.state)}</h3></div></div>
     <p className="memory-source-detail">{source.detail}</p>
     {source.kind === "codex_rollout" && <div className="memory-source-metadata" aria-label="安全元数据">
       <span>文件数：{metadata.fileCount}</span>
@@ -199,6 +202,12 @@ function SourceCard({ source, busy, onAuthorize, onAction, sourceApi, onDetail }
       <span>最早记录：{metadata.earliestMtime}</span>
       <span>最近记录：{metadata.latestMtime}</span>
     </div>}
+    <div className="memory-source-facts">
+      <span>{source.state === "current" ? "已接管" : sourceStateLabel(source.state)}</span>
+      {imported != null && <span>已导入 {imported} 条</span>}
+      {scan?.updated_at && <span>最近检查：{new Date(String(scan.updated_at)).toLocaleString()}</span>}
+      {restriction && <span>限制原因：{restriction}</span>}
+    </div>
     {source.state !== "unsupported" && !(source.kind === "claude_desktop" && source.nextAction.startsWith("暂不支持")) && <p className="memory-source-next">下一步：{source.nextAction}</p>}
     {canAuthorize && <button className="button primary memory-source-authorize" disabled={Boolean(busy)} onClick={onAuthorize}>{busy?.startsWith("authorize:") ? "准备中…" : source.kind === "codex_rollout" ? "允许接管 Codex" : source.kind === "chatgpt_export" ? "选择官方导出目录" : isPickerSource(source) ? "选择文件夹并开始记忆" : "开始记忆"}</button>}
     {(canRevoke || canScan || canPause || canRetry || actions.includes("resume") || actions.includes("detail")) && <details className="memory-source-fallback-actions"><summary>备用操作</summary><div className="memory-source-actions">

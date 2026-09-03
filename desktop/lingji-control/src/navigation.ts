@@ -7,9 +7,8 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
 
 export const PRIMARY_NAVIGATION: NavigationItem[] = [
   { id: "overview", label: "首页", hint: "查看灵机是否正常，以及你是否需要做事", group: "observe", icon: "home" },
-  { id: "memory_cards", label: "记忆内容", hint: "查看具体记忆、来源和处理状态", group: "observe", icon: "inspect" },
-  { id: "attention", label: "需要我", hint: "只显示现在需要你决定的事项", group: "observe", icon: "review" },
-  { id: "memory_sources", label: "记忆来源", hint: "选择灵机要记住的内容", group: "observe", icon: "vault" },
+  { id: "memory_cards", label: "我的记忆", hint: "查看仍然有效的具体记忆、结论和来源", group: "observe", icon: "inspect" },
+  { id: "memory_sources", label: "来源", hint: "查看已发现和已接管的记录来源", group: "observe", icon: "vault" },
 ];
 
 export const ADVANCED_NAVIGATION: NavigationItem[] = [
@@ -36,6 +35,7 @@ export const ADVANCED_NAVIGATION: NavigationItem[] = [
 // Legacy direct routes remain addressable without becoming ordinary menu entries.
 export const LEGACY_NAVIGATION: NavigationItem[] = [
   { id: "diagnostics", label: "高级诊断", hint: "遇到问题时查看详细信息", group: "advanced", icon: "settings" },
+  { id: "attention", label: "需要我", hint: "只显示现在需要你决定的事项", group: "observe", icon: "review" },
 ];
 
 export const NAVIGATION: NavigationItem[] = [...PRIMARY_NAVIGATION, ...LEGACY_NAVIGATION, ...ADVANCED_NAVIGATION];
