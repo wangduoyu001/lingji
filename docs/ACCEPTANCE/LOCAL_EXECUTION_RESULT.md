@@ -1,8 +1,9 @@
 # LingJi 本机执行结果回执
 
-> 当前任务 `OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME_GROUP` 已激活；
-> 下方第 0 节是当前回执。本轮禁止运行 full/release/live/install，禁止读取真实聊天/
-> Vault/数据库或主人数据。下方旧任务回执仅作历史记录。
+> 当前任务 `OWNER_UI_EXPERIENCE_FAST_CLOSEOUT` 已激活；
+> 下方第 0 节是当前回执。本轮先完成 focused 证据同步，随后才进入隔离 Mac 验收。
+> Windows 必须等 Mac 技术验收及主人确认后才允许启动；禁止触碰 Production/Vault/真实聊天、
+> 真实数据库或主人数据。下方旧任务回执仅作历史记录。
 
 Prior candidate `43009a0dfdf3cd7b949d871cc9054286f17d607e` is explicitly
 recorded as `OWNER_UI_REPAIR_REQUIRED` for raw source titles/English error and
@@ -11,15 +12,35 @@ duplicate macOS lexical-alias source cards; it is not a PASS result.
 ## 0. 当前任务回执
 
 ```yaml
-task_id: OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME_GROUP
+task_id: OWNER_UI_EXPERIENCE_FAST_CLOSEOUT
 status: RUNNING
 verdict: PENDING
-execution_mode: FOCUSED_RUNTIME_REGRESSION_REPAIR_ONLY
+execution_mode: OWNER_UI_PRODUCT_AND_MAC_EXPERIENCE_FAST_CLOSEOUT
 repository: wangduoyu001/lingji
-product_commit: PENDING
-task_instruction_commit: PENDING
-report_path: docs/TEST_REPORTS/OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME.md
-focused_result: PENDING
+product_pr: NONE_NOT_A_RELEASE_GATE
+product_commit: a0a996636c2a4799952c3381148fbb04978952ab
+task_instruction_commit: 9eb4d1fab95abb87dda0eab2a97abc7e6728efaf
+report_branch: acceptance/owner-ui-experience-fast-closeout-a0a99663
+report_commit: PENDING
+report_path: docs/TEST_REPORTS/OWNER_UI_EXPERIENCE_FAST_CLOSEOUT.md
+public_summary_path: PENDING
+public_hashes_path: PENDING
+cleanup_before: PENDING
+cleanup_after: PENDING
+remote_branch_verified: false
+remote_commit_verified: false
+remote_report_verified: false
+remote_result_verified: false
+pr_comment_verified: false
+local_temp_root_absent: PENDING
+owner_observation: PENDING
+started_at: PENDING
+finished_at: PENDING
+focused_result: PASS
+mac_packaged_result: NOT_TESTED
+mac_install_result: NOT_TESTED
+mac_owner_observation: NOT_TESTED
+windows_result: FORBIDDEN_UNTIL_MAC_OWNER_CONFIRMATION
 full_result: NOT_RUN
 release_result: NOT_RUN
 live_8766_8767: NOT_RUN

@@ -1,5 +1,17 @@
 # 验收要求变更记录
 
+## 2026-09-04 · Owner UI experience fast closeout · Mac acceptance handoff
+
+- 当前唯一 ACTIVE 任务为 `OWNER_UI_EXPERIENCE_FAST_CLOSEOUT`，产品提交为
+  `a0a996636c2a4799952c3381148fbb04978952ab`；Task B 实现完成，Task C 独立阻断审查为
+  `APPROVED`，无阻断发现。
+- focused UI/E2E/build 验证均已通过；旧 `run-smoke-suite.mjs` 的 Node v24
+  `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` 基线问题如实保留，不归因本轮 UI。
+- Task D 尚未执行 packaged Mac 验收。必须从精确 SHA 使用全新隔离 Acceptance root，完成
+  clean-root 自动扫描双轮、arm64 构建/strict codesign/整包安装、真实发布版全页遍历和至少五条
+  记忆详情核对。Windows 在 Mac 技术验收及主人确认前禁止启动。
+- 本轮未触碰 Production、真实 Vault、真实聊天、真实数据库或主人数据；当前不 push、不合并。
+
 ## 2026-09-01 · Owner memory detail drilldown · Release full repair Group 1 activation
 
 - 当前唯一 ACTIVE 任务为 `OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_GROUP_1`，基线

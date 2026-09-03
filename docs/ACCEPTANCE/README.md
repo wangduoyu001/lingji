@@ -1,6 +1,6 @@
 # LingJi 验收权威入口
 
-> Updated: 2026-08-22
+> Updated: 2026-09-04
 > 本目录只维护**当前验收治理**。历史实施过程、旧任务和旧失败保留在 Git 历史与 `docs/TEST_REPORTS/`，不得重新冒充当前任务。
 
 ## 1. 唯一权威文件
@@ -57,10 +57,11 @@ macOS Artifact: 9258682849 / DO NOT RETRY
 
 主人明确观察：看不出灵机实际做了什么、接管了什么，与旧版没有明显差异。
 
-当前唯一可执行任务为 `OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION`，执行模式为
-`FOCUSED_PRODUCT_IMPLEMENTATION_ONLY`，基线为文档同步后的 `94461d56c64f31e1af6c7cdece51e959ddc0e8b1`
-（产品代码基线 `4ce1e00acb17bc5e4e4c183f58d30551ef76b101`）。它只允许 focused/product
-implementation，不允许 live 8766/8767、安装、真实聊天/Vault/数据库或主人数据。
+当前唯一可执行任务为 `OWNER_UI_EXPERIENCE_FAST_CLOSEOUT`，执行模式为
+`OWNER_UI_PRODUCT_AND_MAC_EXPERIENCE_FAST_CLOSEOUT`，产品提交为
+`a0a996636c2a4799952c3381148fbb04978952ab`。产品实现与独立阻断审查已经完成；当前只允许按
+`LOCAL_EXECUTION_TASK.md` 继续 focused 证据同步和隔离 Mac 验收。Windows 必须等 Mac 技术验收及
+主人确认后才允许启动；全过程禁止读取或修改 Production、真实 Vault、真实聊天、真实数据库和主人数据。
 
 旧 Mac 候选 `OWNER_UI_SOURCE_FILTER_REPAIR_4CE1E00A` 已明确记录为 `COMPLETED / FAIL`，不再
 `ACTIVE`；其失败 evidence、备份和 Acceptance 根只能保留，不能复用或冒充通过。
@@ -185,7 +186,8 @@ Codex 负责命令、安装、进程、端口、哈希、日志、Git、报告�
 
 产品 PR 只有在当前候选对应的精确自动门禁、同 SHA Artifact、真机、主人观察、Production 隔离、报告闭环和清理全部通过后，才允许进入最终合并判断。
 
-当前 `LOCAL_EXECUTION_TASK.md` 的 `ACTIVE` 任务只能是 Owner memory detail drilldown focused
-实现。实现完成后，必须先产生新的产品 SHA 并通过 focused/full/release，才能创建新的 Mac
-acceptance task；新 Mac 任务必须同 SHA 构建/安装、Computer Use 全页遍历，至少打开五种不同类型
-记忆并展开多个来源原文，主人明确确认前不得写验收完成。旧失败 Artifact 永久 `DO NOT RETRY`。
+当前 `LOCAL_EXECUTION_TASK.md` 的 `ACTIVE` 任务是 Owner UI experience fast closeout。Mac 验收必须从
+精确产品 SHA 构建并整包安装，使用隔离 Acceptance root 完成 packaged clean-root 双轮和 Computer Use
+全页遍历，至少打开五条不同类型记忆并核对来源原文与四层状态。技术验收通过后必须保持真实 App
+打开等待主人确认；主人明确确认前不得写最终验收完成，不得启动 Windows。旧失败 Artifact 永久
+`DO NOT RETRY`。

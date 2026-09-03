@@ -6,7 +6,7 @@
 > Current bounded candidate product/tests head: `4ce1e00acb17bc5e4e4c183f58d30551ef76b101` (previous Mac candidate; FAIL, no longer active)
 > Current reviewed evidence head: `7a23da197d1728253bf1009775872b1217600171`
 > Current implementation branch: `codex/owner-memory-detail-drilldown`
-> Current implementation HEAD: `4f0d2a7738c6cba12d0766cb7ed6b38cbd32e543`
+> Current implementation HEAD: `a0a996636c2a4799952c3381148fbb04978952ab`
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
@@ -30,7 +30,7 @@ current-only“我的记忆”、来源页与主人界面视觉。体验候选�
 
 `OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION` 已完成 focused/product implementation 收口，最终产品/测试
 代码提交为 `81256c4242a6bb8062f1b591832a3313948e9ff9`；当前文档同步后的候选 HEAD 为
-`4f0d2a7738c6cba12d0766cb7ed6b38cbd32e543`。Task 1、Task 2、Task 3 的最终复审均无
+`a0a996636c2a4799952c3381148fbb04978952ab`。Task 1、Task 2、Task 3 的最终复审均无
 Critical/Important/Minor；Task 1 Repair 2 scoped re-review 为 `ADDRESSED — 0 open findings`，Task 2
 Repair 2 与 Task 3 Repair 3 均为 `Spec Compliance: PASS / Approval: APPROVED`。实现结果只覆盖
 合成 fixture 与 focused/rendered 自动化；live 8766/8767、package/install、Mac、Production/Vault、
