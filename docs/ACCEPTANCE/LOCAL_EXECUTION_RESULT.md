@@ -18,9 +18,9 @@ verdict: PENDING
 execution_mode: OWNER_UI_PRODUCT_AND_MAC_EXPERIENCE_FAST_CLOSEOUT
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
-product_commit: a0a996636c2a4799952c3381148fbb04978952ab
+product_commit: 38cd484cca541a0fa50ab1f4b2c05fe7a45ca408
 task_instruction_commit: 9eb4d1fab95abb87dda0eab2a97abc7e6728efaf
-report_branch: acceptance/owner-ui-experience-fast-closeout-a0a99663
+report_branch: acceptance/owner-ui-experience-fast-closeout-38cd484c
 report_commit: PENDING
 report_path: docs/TEST_REPORTS/OWNER_UI_EXPERIENCE_FAST_CLOSEOUT.md
 public_summary_path: PENDING
@@ -37,7 +37,7 @@ owner_observation: PENDING
 started_at: PENDING
 finished_at: PENDING
 focused_result: PASS
-mac_packaged_result: NOT_TESTED
+mac_packaged_result: PASS_2_TESTS_1_WARNING_291_69_SECONDS
 mac_install_result: NOT_TESTED
 mac_owner_observation: NOT_TESTED
 windows_result: FORBIDDEN_UNTIL_MAC_OWNER_CONFIRMATION

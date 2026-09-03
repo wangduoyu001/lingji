@@ -13,12 +13,12 @@ execution_mode: OWNER_UI_PRODUCT_AND_MAC_EXPERIENCE_FAST_CLOSEOUT
 repository: wangduoyu001/lingji
 product_branch: codex/owner-memory-detail-drilldown
 baseline_commit: fde399849eb6b440ef37c977ff76ac280fdd80ab
-product_commit: a0a996636c2a4799952c3381148fbb04978952ab
+product_commit: 38cd484cca541a0fa50ab1f4b2c05fe7a45ca408
 product_pr: NONE_NOT_A_RELEASE_GATE
 release_gate: OWNER_EXPERIENCE_CANDIDATE_ONLY
 artifact_name: lingji-macos-arm64-app
 artifact_id: LOCAL_MAC_BUILD_PENDING
-report_branch: acceptance/owner-ui-experience-fast-closeout-a0a99663
+report_branch: acceptance/owner-ui-experience-fast-closeout-38cd484c
 report_path: docs/TEST_REPORTS/OWNER_UI_EXPERIENCE_FAST_CLOSEOUT.md
 public_summary_path: PENDING
 public_hashes_path: PENDING
@@ -26,8 +26,8 @@ result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
 cleanup_before_required: true
 cleanup_after_required: true
 remote_verification_required: true
-live_8766_8767_forbidden: true_until_mac_acceptance_task
-install_forbidden: true_until_product_review_passes
+live_8766_8767_forbidden: false_for_isolated_mac_acceptance_only
+install_forbidden: false_for_whole_bundle_isolated_mac_acceptance
 owner_data_forbidden: true
 full_release_forbidden: true
 owner_confirmation_required: true
@@ -40,8 +40,10 @@ Desktop 主人界面的菜单收敛、首页成果化、current-only 记忆浏�
 独立阻断审查和最多一轮必要修复。体验候选只阻断安全、真实导入、来源可追溯和 Mac 可用性；
 旧 Task4R2/Task7 质量测量与非核心视觉 Minor 记录为非阻断技术债务，不得冒充通过。
 
-产品审查通过后，根代理才能激活新的隔离 Mac 验收段，运行 packaged clean-root 双轮、构建并安装
-精确 SHA arm64 App、遍历核心页面并打开至少五条记忆核对来源；App 必须保持打开等待主人确认。
+产品审查已通过；精确产品 SHA `38cd484cca541a0fa50ab1f4b2c05fe7a45ca408` 的显式 watcher
+packaged clean-root 双轮已通过（`2 passed, 1 warning`）。现激活隔离 Mac 构建/安装与真实 UI
+验收段：必须 whole-bundle 安装精确 SHA arm64 App、遍历核心页面并打开至少五条记忆核对来源；
+App 必须保持打开等待主人确认。主人确认前 Windows 继续禁止启动。
 
 ## 0A. 上一 focused runtime 任务（停止继续扩张）
 
