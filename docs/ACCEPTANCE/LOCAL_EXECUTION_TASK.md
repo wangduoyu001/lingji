@@ -1,19 +1,50 @@
 # LingJi 本机执行任务单
 
-> **当前状态：ACTIVE（`OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME_GROUP`）。**
+> **当前状态：ACTIVE（`OWNER_UI_EXPERIENCE_FAST_CLOSEOUT`）。**
 >
 > 本文件仍是本机 Codex 的唯一任务入口；下方第 0 节是当前唯一可执行的有界修复任务。
 
 ## 0. 当前 ACTIVE 任务
 
 ```yaml
-task_id: OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME_GROUP
+task_id: OWNER_UI_EXPERIENCE_FAST_CLOSEOUT
 status: ACTIVE
+execution_mode: OWNER_UI_PRODUCT_AND_MAC_EXPERIENCE_FAST_CLOSEOUT
+repository: wangduoyu001/lingji
+product_branch: codex/owner-memory-detail-drilldown
+baseline_commit: fde399849eb6b440ef37c977ff76ac280fdd80ab
+product_commit: PENDING
+product_pr: NONE_NOT_A_RELEASE_GATE
+release_gate: OWNER_EXPERIENCE_CANDIDATE_ONLY
+artifact_name: lingji-macos-arm64-app
+report_path: docs/TEST_REPORTS/OWNER_UI_EXPERIENCE_FAST_CLOSEOUT.md
+live_8766_8767_forbidden: true_until_mac_acceptance_task
+install_forbidden: true_until_product_review_passes
+owner_data_forbidden: true
+full_release_forbidden: true
+owner_confirmation_required: true
+maximum_repair_rounds: 1
+```
+
+本任务按 `docs/superpowers/plans/2026-09-03-owner-ui-experience-fast-closeout.md` 执行。范围只包括现有
+Desktop 主人界面的菜单收敛、首页成果化、current-only 记忆浏览与详情、来源页降噪及统一视觉；
+不新增后端、数据库、API、队列、向量/RAG 或记忆算法。实现由单一 Luna 完成，之后只进行一次
+独立阻断审查和最多一轮必要修复。体验候选只阻断安全、真实导入、来源可追溯和 Mac 可用性；
+旧 Task4R2/Task7 质量测量与非核心视觉 Minor 记录为非阻断技术债务，不得冒充通过。
+
+产品审查通过后，根代理才能激活新的隔离 Mac 验收段，运行 packaged clean-root 双轮、构建并安装
+精确 SHA arm64 App、遍历核心页面并打开至少五条记忆核对来源；App 必须保持打开等待主人确认。
+
+## 0A. 上一 focused runtime 任务（停止继续扩张）
+
+```yaml
+task_id: OWNER_MEMORY_DETAIL_RELEASE_FULL_REPAIR_RUNTIME_GROUP
+status: IDLE
 execution_mode: FOCUSED_RUNTIME_REGRESSION_REPAIR_ONLY
 repository: wangduoyu001/lingji
 product_branch: codex/owner-memory-detail-drilldown
 baseline_commit: eca5b811
-product_commit: PENDING
+product_commit: fde399849eb6b440ef37c977ff76ac280fdd80ab
 product_pr: NONE_NOT_A_RELEASE_GATE
 release_gate: NOT_A_RELEASE_GATE
 artifact_name: NOT_APPLICABLE
@@ -24,7 +55,9 @@ owner_data_forbidden: true
 full_release_forbidden: true
 ```
 
-本任务仅调查并修复上轮 full 暴露的三组 runtime 回归：promotion recovery case 06、
+本任务不再作为当前开发入口。已完成的 promotion recovery 与 structured evidence 隔离修复保留；
+packaged automatic-memory clean-root 双轮尚未形成最终收口证据，已转入当前主人体验任务，作为
+“真实导入可靠性”阻断门禁继续验证。原任务范围为：promotion recovery case 06、
 structured evidence lexical 两个顺序相关节点、packaged automatic-memory clean-root 双轮流程。
 必须先逐项复现并定位产品缺陷、测试隔离、时序或资源泄漏的真实根因；不得修改断言以掩盖
 失败，不得删除或 skip 测试。禁止触碰记忆详情 UI、Task4R2 质量语义、Production/Vault、

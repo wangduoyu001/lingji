@@ -1,6 +1,6 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
-> Updated: 2026-09-01
+> Updated: 2026-09-03
 > Formal/default branch: `master`
 > Phase 1 implementation base: `d12c1fb837257e83835a7cdb899bb29a9c675c3d`
 > Current bounded candidate product/tests head: `4ce1e00acb17bc5e4e4c183f58d30551ef76b101` (previous Mac candidate; FAIL, no longer active)
@@ -10,7 +10,7 @@
 > Last owner acceptance closeout: `e594e3f05e8726cbae7b0a590e6f515fb2cc67c5`
 > Last rejected product candidate: `bd1e7a17304d3f00967e2b3f5db425b0ab18d0e9`
 > Current product phase: `PHASE 1 — SECOND BRAIN COMPLETION`
-> Current engineering gate: `OWNER_MEMORY_DETAIL_DRILLDOWN_RELEASE_GATE — COMPLETED / FAIL`; focused repair Group 1 is complete, full/release has not been rerun
+> Current engineering gate: `OWNER_UI_EXPERIENCE_FAST_CLOSEOUT — ACTIVE`; owner usability candidate, not a final release gate
 > Opportunity Center: `FROZEN UNTIL PHASE 1 FINAL PASS`
 > Architecture: `docs/ARCHITECTURE.md`
 > Code entry points: `docs/MODULES/CODE_MAP.md`
@@ -18,6 +18,15 @@
 > Acceptance authority: `docs/ACCEPTANCE/README.md`
 
 ## 当前本机交接状态（2026-08-31）
+
+### 2026-09-03 主人可用性优先调整
+
+当前开发不再由旧全仓库质量门主导。唯一 ACTIVE 任务已切换为
+`OWNER_UI_EXPERIENCE_FAST_CLOSEOUT`：不增加后端或记忆能力，只集中收敛普通菜单、首页自动成果、
+current-only“我的记忆”、来源页与主人界面视觉。体验候选只阻断数据安全、真实导入与去重、
+来源可追溯和 Mac arm64 App 可用性。旧 Task4R2/Task7 测量保持未通过或未收口的真实记录，
+但不再阻止先生成主人体验候选。完整范围与验收见
+`docs/superpowers/plans/2026-09-03-owner-ui-experience-fast-closeout.md`。
 
 `OWNER_MEMORY_DETAIL_DRILLDOWN_IMPLEMENTATION` 已完成 focused/product implementation 收口，最终产品/测试
 代码提交为 `81256c4242a6bb8062f1b591832a3313948e9ff9`；当前文档同步后的候选 HEAD 为

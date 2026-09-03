@@ -3387,3 +3387,18 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   改断言、skip、删测试或降低安全边界取得绿灯。
 - 自动验收：指定节点、直接调用方小矩阵、compileall、`git diff --check`、acceptance sync、
   local handoff。禁止 full/release/live/安装/主人数据、记忆详情 UI 与 Task4R2 质量语义。
+
+## 2026-09-03 · 主人 UI 体验快速收口
+
+- 激活 `OWNER_UI_EXPERIENCE_FAST_CLOSEOUT`，以
+  `docs/superpowers/plans/2026-09-03-owner-ui-experience-fast-closeout.md` 为冻结范围。
+- 本轮不增加产品功能，不修改后端、数据模型、向量/RAG 或记忆算法；只收敛普通菜单、首页、
+  current-only 我的记忆、来源页和主人界面视觉。
+- 体验候选仅阻断四类结果：数据/隐私安全、真实对话导入与去重、记忆来源可追溯、Mac arm64
+  App 可构建启动并完成核心页面体验。Task4R2/Task7 旧质量测量保持真实未通过/未收口状态，但
+  不阻止本轮主人体验候选。
+- 独立审查只有一次，最多允许一轮必要修复；非安全性视觉 Minor 和高级页问题进入后续清单。
+- 自动验收：主人 UI focused/rendered 行为、Desktop build、packaged automatic-memory clean-root
+  双轮。真机验收：隔离根、精确 SHA arm64 whole-bundle 安装、首页/我的记忆/来源/高级诊断
+  遍历，打开至少五条不同类型记忆核对正文/发展/当前结论/来源/四层状态，并保持 App 打开等待主人。
+- 禁止读取或修改 Production、真实 Vault 和主人真实聊天；不得用合成测试冒充主人体验通过。
