@@ -178,6 +178,95 @@ def test_start_stop_pause_resume_and_restart_use_persisted_cron_jobs(tmp_path: P
     restarted.stop()
 
 
+@pytest.mark.parametrize("resume_before_failure_persists", [False, True])
+def test_resume_retries_claimed_run_on_start_reconciliation_after_pause_race(
+    tmp_path: Path, resume_before_failure_persists: bool
+):
+    """Catches a claimed startup reconciliation being delayed a full interval by pause."""
+    db, registry, source_id = registered(tmp_path)
+    scheduler = AutomaticMemoryScheduler(
+        db,
+        registry,
+        scan_runner=lambda *_args: ReconciliationReport(0, 0, 0, (), True),
+        reconciliation_seconds=60,
+        event_watcher_enabled=False,
+    )
+    source = next(item for item in registry.list_sources() if item.source_id == source_id)
+    scheduler._attach_source(source)
+    job_name = f"automatic_memory:{source_id}:reconciliation"
+    claimed = db.claim_due_scheduler_jobs(
+        scheduler.cron._owner,
+        lease_seconds=scheduler.cron._lease_seconds,
+    )
+    job = next(item for item in claimed if item["name"] == job_name)
+
+    failure_observed = threading.Event()
+    finish_failure = threading.Event()
+
+    def delayed_runner(name: str) -> None:
+        try:
+            scheduler._run_cron_job(name)
+        except RuntimeError as exc:
+            assert str(exc) == "scheduler is paused"
+            failure_observed.set()
+            assert finish_failure.wait(1)
+            raise
+
+    scheduler.cron._runner = delayed_runner
+    scheduler.pause()
+    worker = threading.Thread(target=scheduler.cron._run_job, args=(job,))
+    worker.start()
+    assert failure_observed.wait(1)
+
+    if resume_before_failure_persists:
+        # Resume can win the race with Cron's failure persistence.
+        scheduler.resume()
+        finish_failure.set()
+    else:
+        # Cron's failure persistence can also complete while jobs are disabled.
+        finish_failure.set()
+    worker.join(timeout=2)
+    assert not worker.is_alive()
+    if not resume_before_failure_persists:
+        scheduler.resume()
+
+    # Either ordering must leave the missed run-on-start reconciliation due.
+    persisted = next(item for item in db.list_scheduler_jobs() if item["name"] == job_name)
+    assert persisted["enabled"] == 1
+    assert persisted["status"] == "failed"
+    assert {item["name"] for item in db.due_scheduler_jobs()} == {job_name}
+
+
+def test_non_pause_reconciliation_failure_keeps_normal_retry_interval(tmp_path: Path):
+    """Catches ordinary reconciliation failures being turned into a tight retry loop."""
+    db, registry, source_id = registered(tmp_path)
+    scheduler = AutomaticMemoryScheduler(
+        db,
+        registry,
+        scan_runner=lambda *_args: (_ for _ in ()).throw(RuntimeError("fixture failure")),
+        reconciliation_seconds=60,
+        event_watcher_enabled=False,
+    )
+    source = next(item for item in registry.list_sources() if item.source_id == source_id)
+    scheduler._attach_source(source)
+    job_name = f"automatic_memory:{source_id}:reconciliation"
+    job = next(
+        item
+        for item in db.claim_due_scheduler_jobs(
+            scheduler.cron._owner,
+            lease_seconds=scheduler.cron._lease_seconds,
+        )
+        if item["name"] == job_name
+    )
+
+    scheduler.cron._runner = scheduler._run_cron_job
+    scheduler.cron._run_job(job)
+
+    persisted = next(item for item in db.list_scheduler_jobs() if item["name"] == job_name)
+    assert persisted["status"] == "failed"
+    assert job_name not in {item["name"] for item in db.due_scheduler_jobs()}
+
+
 def test_cleanup_retry_retries_cron_and_preserves_unrelated_error(tmp_path: Path):
     db, registry, source_id = registered(tmp_path)
     release = threading.Event()

@@ -12,6 +12,10 @@ from src.storage.state_db import StateDatabase
 logger = logging.getLogger("pemis.scheduler")
 
 
+class RetryJobSoonError(RuntimeError):
+    """Signal that a claimed run-on-start job should remain immediately due."""
+
+
 class CronScheduler:
     def __init__(
         self,
@@ -148,12 +152,16 @@ class CronScheduler:
         heartbeat_thread.start()
         success = False
         error = None
+        retry_immediately = False
         try:
             if self._runner:
                 self._runner(name)
             success = True
         except Exception as exc:
             error = str(exc)
+            retry_immediately = isinstance(exc, RetryJobSoonError) and bool(
+                job.get("run_on_start")
+            )
             logger.exception("Scheduled job failed: %s", name)
         finally:
             heartbeat_stop.set()
@@ -164,6 +172,7 @@ class CronScheduler:
                 error=error,
                 owner=self._owner,
                 lease_id=lease_id,
+                retry_immediately=retry_immediately,
             )
             with self._lock:
                 self._running_jobs.discard(name)

@@ -461,6 +461,7 @@ class StateDatabase:
         now: datetime | None = None,
         owner: str | None = None,
         lease_id: str | None = None,
+        retry_immediately: bool = False,
     ) -> None:
         now = now or datetime.now()
         with self._lock, self._connection() as connection:
@@ -469,7 +470,11 @@ class StateDatabase:
             ).fetchone()
             if not row:
                 return
-            next_run = now + timedelta(seconds=float(row["interval_seconds"]))
+            next_run = (
+                now
+                if retry_immediately and not success
+                else now + timedelta(seconds=float(row["interval_seconds"]))
+            )
             where = "name = ?"
             values: list[Any] = [
                 "success" if success else "failed",

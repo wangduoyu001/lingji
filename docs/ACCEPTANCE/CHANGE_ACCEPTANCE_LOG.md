@@ -3414,3 +3414,27 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   双轮。真机验收：隔离根、精确 SHA arm64 whole-bundle 安装、首页/我的记忆/来源/高级诊断
   遍历，打开至少五条不同类型记忆核对正文/发展/当前结论/来源/四层状态，并保持 App 打开等待主人。
 - 禁止读取或修改 Production、真实 Vault 和主人真实聊天；不得用合成测试冒充主人体验通过。
+
+## 2026-09-04 · Mac packaged pause/resume admission race repair
+
+- `OWNER_UI_EXPERIENCE_FAST_CLOSEOUT` 的显式 event-watcher packaged 双轮在第二轮
+  crash 70% 场景复现真实竞争：run-on-start reconciliation 已被 Cron 领取后，runtime pause
+  使其以 `scheduler is paused` 失败；紧随其后的 resume 只重新启用任务，失败收尾却把
+  `next_run_at` 推迟完整 60 秒，超过该场景 12 秒的首扫契约。旧失败证据保持只读，不复用。
+- 修复范围严格限于被 pause 延后的 run-on-start reconciliation：先增加确定性 RED，模拟
+  `claim -> pause -> worker finish -> resume`，要求恢复后任务立即重新到期；普通成功周期、
+  integrity、撤销/unsupported 来源和非 pause 失败不得提前执行。禁止延长 packaged 超时、
+  降低断言、skip 或把环境抖动当作通过。
+- GREEN 后只先运行 automatic-memory scheduler、StateDB scheduler、runtime/control lifecycle
+  focused 回归、compileall、acceptance sync、handoff 与 `git diff --check`；随后冻结新产品 SHA，
+  在新的 detached clean root 重跑显式 watcher packaged 双轮。通过前不构建/安装 Mac App；
+  Mac 技术与真实 UI 全面验收、主人确认之前继续禁止 Windows。
+- TDD RED：确定性测试在旧实现精确失败，`due_scheduler_jobs()` 为空；GREEN 覆盖
+  `failure -> resume` 与 `resume -> failure` 两种落库顺序，并以反例确认普通非 pause
+  reconciliation 失败仍按 60 秒周期退避。实现只新增 Cron 内部 `RetryJobSoonError`，仅当
+  `run_on_start` 任务收到该信号时向 StateDB 请求立即重试；未新增表、迁移或第二套调度器。
+- Fresh focused evidence：竞态/反例 `3 passed`；scheduler + StateDB + runtime/control lifecycle
+  `71 passed, 1 warning`；全部 automatic-memory 相关单元/生命周期矩阵
+  `296 passed, 3 warnings`；compileall、`git diff --check`、acceptance sync、local handoff PASS。
+  gpt-5.4-mini 独立只读审查因账户 usage limit 在读取文件前退出，未修改文件，也未冒充审查
+  通过；以双顺序竞态测试和扩大回归补充技术证据，最终 packaged/Mac 验收仍保持阻断。

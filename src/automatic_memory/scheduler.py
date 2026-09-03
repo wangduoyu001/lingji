@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Callable
 from uuid import uuid4
 
-from src.scheduler.cron import CronScheduler
+from src.scheduler.cron import CronScheduler, RetryJobSoonError
 from src.storage.state_db import StateDatabase
 
 from .models import ScanRun
@@ -536,6 +536,8 @@ class AutomaticMemoryScheduler:
         if kind == "reconciliation":
             report = self.reconcile(source_id, reason="reconciliation")
             if not report.complete:
+                if report.errors == ("scheduler is paused",):
+                    raise RetryJobSoonError("scheduler is paused")
                 raise RuntimeError("; ".join(report.errors) or "reconciliation failed")
         elif kind == "integrity":
             report = self.reconcile(source_id, reason="integrity")
