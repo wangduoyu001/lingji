@@ -52,7 +52,7 @@ export default function OwnerMemoryCardsPage({ api, active, onNavigate }: { api:
       };
       const fail = (key: "canonical" | "vector" | "source" | "evidence", value: unknown) => update({}, key, "error", value instanceof Error ? value.message : "本段暂时无法读取");
       if (loaded.card.kind === "conversation_evidence") {
-        void client.getOwnerMemorySource(card.memory_id, controller.signal).then((response) => update({ source: { canonical: response.canonical, links: response.links ?? [] } }, "source", "ready")).catch((value) => fail("source", value));
+        update({}, "source", "ready");
         void client.getOwnerMemoryConversationMessages(card.source?.conversation_id ?? "", controller.signal).then((response) => { if (selectedGeneration === generation.current && !controller.signal.aborted) setDetail((previous) => previous ? { ...previous, conversationMessages: response.items ?? [] } : previous); }).catch(() => undefined);
       } else {
         void client.canonical(card.memory_id, controller.signal).then((response) => { const chunks = response.item?.chunks ?? []; update({ canonical: { asOf: response.as_of ?? null, contentHash: response.item?.content_hash ?? response.item?.current_hash ?? null, chunks, truncated: chunks.some((chunk) => Boolean(chunk.truncated)), nextCursor: response.item?.next_cursor ?? null } }, "canonical", "ready"); }).catch((value) => fail("canonical", value));

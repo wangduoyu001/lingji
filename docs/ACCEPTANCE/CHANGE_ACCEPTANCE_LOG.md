@@ -1,5 +1,19 @@
 # 验收要求变更记录
 
+## 2026-09-04 · Owner UI experience fast closeout · Conversation evidence provenance repair
+
+- 精确候选 `38cd484cca541a0fa50ab1f4b2c05fe7a45ca408` 的真实 Mac UI 发现会话证据卡
+  错误请求 canonical memory source route，三张卡均返回 404；conversation messages 实际为
+  200，UI 同时展示消息和来源失败，判为“来源可追溯”阻断缺陷。本条占用任务允许的唯一一轮修复。
+- TDD 必须先在 rendered owner smoke 证明 conversation card 不请求
+  `/memories/{synthetic-card-id}/source`，且消息成功时不显示来源失败；普通 memory canonical/source、
+  受限来源失败、分页、竞态行为必须回归。
+- 修复仅限 Desktop 展示加载分支，不新增后端、API、数据库、队列或记忆能力。GREEN 后运行
+  owner UI focused、E2E、build、相关 Python focused、compileall、diff-check、acceptance sync 和 handoff。
+- 冻结新产品 SHA 后，必须使用全新隔离 Acceptance 根重跑 packaged 双轮、arm64 整包构建/签名/
+  安装、真实导入、API、安全隔离和完整 Computer Use UI；旧失败根及证据保持不动。回滚为回退
+  本轮测试、前端和验收日志提交，不触碰用户数据。
+
 ## 2026-09-04 · Owner UI experience fast closeout · Mac acceptance handoff
 
 - 当前唯一 ACTIVE 任务为 `OWNER_UI_EXPERIENCE_FAST_CLOSEOUT`，产品提交为

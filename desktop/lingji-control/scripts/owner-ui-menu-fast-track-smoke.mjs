@@ -406,6 +406,16 @@ try {
   await page.getByRole("button", { name: "原始讨论记录", exact: true }).click();
   await page.getByRole("dialog").getByText("最新结论：原始会话尚未形成长期结论", { exact: true }).waitFor();
   assert.equal(state.requests.some((url) => url.includes("/memories/conversation-only?chunk_limit")), false, "conversation-only detail must not request canonical");
+  assert.equal(
+    state.requests.some((url) => url.endsWith("/api/memory/inspector/memories/conversation-only/source")),
+    false,
+    "conversation-only detail must not request canonical memory provenance",
+  );
+  assert.equal(
+    await page.getByRole("dialog").getByText("来源暂时无法读取，正文仍可保留。", { exact: true }).count(),
+    0,
+    "conversation messages and safe card provenance must not be reported as a source failure",
+  );
   assert.ok(state.requests.some((url) => url.includes("/api/memory/inspector/messages?conversation_id=conversation-only-1")), "conversation-only detail must use existing messages pagination");
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "未准备语义检索", exact: true }).click();
