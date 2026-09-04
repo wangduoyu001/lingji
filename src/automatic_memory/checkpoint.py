@@ -36,7 +36,13 @@ class CheckpointStore:
         )
         self.lease_ttl_seconds = max(float(lease_ttl_seconds), 0.1)
 
-    def save(self, token: ResumeToken, *, manifest_status: str | None = None) -> None:
+    def save(self, token: ResumeToken, *, manifest_status: str = "processed") -> None:
+        self._save(token, manifest_status=manifest_status)
+
+    def save_token_only(self, token: ResumeToken) -> None:
+        self._save(token, manifest_status=None)
+
+    def _save(self, token: ResumeToken, *, manifest_status: str | None) -> None:
         payload = json.dumps(
             {
                 "scan_id": token.scan_id,
@@ -334,7 +340,7 @@ class SnapshotJobRunner:
         self._start_heartbeat(scan_id, lease_id)
         try:
             initial = ResumeToken(scan_id, cursor, source_sentinel, lease_id, attempt)
-            self.checkpoints.save(initial)
+            self.checkpoints.save_token_only(initial)
             if self.after_lease is not None:
                 self.after_lease()
             if crash_at == "after-lease":
@@ -439,7 +445,7 @@ class SnapshotJobRunner:
             checkpoint = ResumeToken(scan_id, cursor, source_sentinel, lease_id, attempt)
             try:
                 self._stop_heartbeat()
-                self.checkpoints.save(checkpoint)
+                self.checkpoints.save_token_only(checkpoint)
                 existing_error = (self.state_db.get_automatic_memory_scan(scan_id) or {}).get(
                     "last_error"
                 )

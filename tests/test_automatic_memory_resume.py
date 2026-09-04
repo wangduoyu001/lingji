@@ -772,6 +772,24 @@ def test_incremental_manifest_stays_per_path_and_scales_without_growing_token(tm
     assert len(state.get_automatic_memory_scan(scan.scan_id)["source_sentinel"] or "") < 64
 
 
+def test_token_only_checkpoint_save_preserves_job_association(tmp_path: Path):
+    state, _, _, scan, _, _, _ = _scan_fixture(tmp_path, count=1)
+    state.acquire_automatic_memory_scan_lease(scan.scan_id, "association-lease")
+    state.upsert_automatic_memory_scan_item_owned(
+        scan.scan_id, "association-lease", source_id=scan.source_id,
+        relative_path="item-00.txt", sentinel="8:1:1", status="job:job-1:existing",
+    )
+
+    store = CheckpointStore(state)
+    store.save_token_only(
+        ResumeToken(scan.scan_id, "item-00.txt", "9:2:2", "association-lease", 2)
+    )
+
+    item = state.list_automatic_memory_scan_items(scan.scan_id)[0]
+    assert item["status"] == "job:job-1:existing"
+    assert item["sentinel"] == "8:1:1"
+
+
 def test_runner_rejects_queue_on_different_sqlite_file_before_any_snapshot_side_effect(tmp_path: Path):
     state, _, _, scan, root, snapshot, _ = _scan_fixture(tmp_path, count=1)
     other_queue = SQLiteExtractionQueue(tmp_path / "other.db")
