@@ -14,7 +14,7 @@ from src.storage import StateDatabase
 from src.automatic_memory import AuthorizationScope, AutomaticMemoryRuntime
 from src.automatic_memory.source_registry import SourceRegistry
 from src.extraction.bootstrap import build_extraction_pipeline
-from src.control.automatic_memory_api import project_scan_dto, project_scan_processing
+from src.control.automatic_memory_api import project_scan_dto, project_scan_processing, project_scan_item
 
 try:
     from src.control.api import create_control_app
@@ -512,6 +512,7 @@ def test_scan_detail_merges_safe_manifest_and_queue_items_with_pagination(tmp_pa
     assert all(set(item) == expected_item_keys for item in default_payload["items"])
     assert default_payload["items"][0]["stage"] == "completed"
     assert default_payload["items"][0]["result"] == "imported"
+    assert default_payload["items"][0]["source"] == "ChatGPT导出记录"
     assert default_payload["items"][0]["imported_sources"] == 7
     assert default_payload["items"][0]["imported_conversations"] == 8
     assert default_payload["items"][0]["imported_messages"] == 9
@@ -547,6 +548,157 @@ def test_scan_detail_merges_safe_manifest_and_queue_items_with_pagination(tmp_pa
     assert "items" not in scan_action.json()
     assert bad_limit.status_code == 422
     assert bad_offset.status_code == 422
+
+
+def test_scan_detail_legacy_queue_fallback_enumerates_more_than_200_rows(tmp_path: Path):
+    root = tmp_path / "source"
+    root.mkdir()
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    state = StateDatabase(storage / "lingji_state.db")
+    registry = SourceRegistry(state)
+    source = registry.register(
+        AuthorizationScope("grant-fallback", ("generic_ai_history",), (str(root),), datetime.now(timezone.utc), None, True),
+        "generic_ai_history", str(root),
+    )
+    scan = registry.start_scan(source.source_id)
+    queue = build_extraction_pipeline(SimpleNamespace(
+        storage_path=storage, state_db_path=storage / "lingji_state.db",
+        memory_db_path=storage / "lingji_memory.db", vault_path=tmp_path / "vault",
+        runtime_settings_file="runtime_settings.json",
+        extraction_max_attempts=1, extraction_lease_heartbeat_seconds=2,
+        extraction_stale_after_seconds=30,
+        embedding_enabled=False, semantic_enabled=False,
+    )).queue
+    for index in range(205):
+        queue.enqueue(
+            "automatic_memory_snapshot",
+            payload={"scan_id": scan.scan_id, "source_id": source.source_id, "relative_path": f"item-{index:03d}.json"},
+        )
+
+    class LegacyQueue:
+        def __init__(self, wrapped):
+            self.wrapped = wrapped
+
+        def list_page(self, *, source_type=None, limit=100, offset=0, scan_id=None, **kwargs):
+            if scan_id is not None:
+                raise TypeError("legacy queue has no scan_id filter")
+            return self.wrapped.list_page(source_type=source_type, limit=limit, offset=offset)
+
+    control = LocalControlService.__new__(LocalControlService)
+    control.state_db = state
+    control.automatic_memory_registry = registry
+    control.runtime = SimpleNamespace(queue=LegacyQueue(queue))
+    app = create_control_app(SimpleNamespace(storage_path=storage), service=control, token="secret")
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/automatic-memory/scans/{scan.scan_id}",
+            headers={"X-LingJi-Token": "secret"},
+            params={"limit": 100},
+        )
+    assert response.status_code == 200
+    assert response.json()["items_pagination"]["total"] == 205
+
+
+def test_scan_detail_real_second_scan_projects_reused_content(tmp_path: Path):
+    root = tmp_path / "source"
+    root.mkdir()
+    (root / "history.json").write_text(
+        json.dumps({"schema": "lingji.history.inbox", "schema_version": "1", "conversations": []}),
+        encoding="utf-8",
+    )
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    settings = SimpleNamespace(
+        storage_path=storage, state_db_path=storage / "lingji_state.db",
+        memory_db_path=storage / "lingji_memory.db", vault_path=tmp_path / "vault",
+        runtime_settings_file="runtime_settings.json", extraction_max_attempts=1,
+        extraction_lease_heartbeat_seconds=2, extraction_stale_after_seconds=30,
+        extraction_poll_seconds=0.05, extraction_batch_size=1,
+        embedding_enabled=False, semantic_enabled=False,
+    )
+    state = StateDatabase(settings.state_db_path)
+    registry = SourceRegistry(state)
+    source = registry.register(
+        AuthorizationScope("grant-real-reuse", ("generic_ai_history",), (str(root),), datetime.now(timezone.utc), None, True),
+        "generic_ai_history", str(root),
+    )
+    runtime = AutomaticMemoryRuntime(
+        state_db=state, pipeline=build_extraction_pipeline(settings), settings=settings, registry=registry,
+    )
+    first = runtime.scan_now(source.source_id)
+    first_job = runtime.queue.list_page(source_type="automatic_memory_snapshot", limit=1)[0]
+    claim = runtime.queue.claim("reuse-test", job_id=first_job["job_id"], allowed_source_types={"automatic_memory_snapshot"})
+    runtime.queue.complete(first_job["job_id"], {"structured_read_model": {"sources": 0, "conversations": 0, "messages": 0}}, worker_id="reuse-test", lease_token=claim["lease_token"])
+    second = runtime.scan_now(source.source_id)
+    control = LocalControlService.__new__(LocalControlService)
+    control.settings = settings
+    control.state_db = state
+    control.automatic_memory_registry = registry
+    control.runtime = runtime
+    app = create_control_app(settings, service=control, token="secret")
+    second_scan_id = second["scan_id"]
+    with TestClient(app) as client:
+        response = client.get(
+            f"/api/automatic-memory/scans/{second_scan_id}",
+            headers={"X-LingJi-Token": "secret"},
+        )
+    assert first["scan_id"] != second["scan_id"]
+    assert response.status_code == 200
+    assert response.json()["items"][0]["result"] == "reused"
+
+
+def test_scan_item_projection_uses_owner_source_labels_and_canonical_safe_names():
+    queue_item = {
+        "updated_at": "2026-09-04T00:00:02+00:00",
+        "status": "completed",
+        "payload": {
+            "source_id": "source-a",
+            "source_type": "chatgpt_export",
+            "relative_path": "a//b.json",
+            "sha256": "a" * 64,
+        },
+        "result": {"structured_read_model": {"sources": 1}},
+    }
+    for path in ("a//b.json", "a/./b.json", "line\nb.json", "nul\x00b.json"):
+        item = project_scan_item(
+            "scan-a",
+            path,
+            source_id="source-a",
+            source_kind="chatgpt_export",
+            queue_item={**queue_item, "payload": {**queue_item["payload"], "relative_path": path}},
+        )
+        assert item["name"] == "无法安全显示名称"
+    item = project_scan_item(
+        "scan-a",
+        "history.json",
+        source_id="source-a",
+        source_kind="chatgpt_export",
+        queue_item={**queue_item, "payload": {**queue_item["payload"], "relative_path": "history.json"}},
+    )
+    assert item["source"] == "ChatGPT导出记录"
+    assert "source-a" not in item.values()
+
+
+def test_scan_item_projection_prefers_newest_duplicate_and_reuse_is_completed():
+    old = {
+        "updated_at": "2026-09-04T00:00:01+00:00",
+        "status": "failed",
+        "payload": {"source_id": "source-a", "source_type": "generic_ai_history", "relative_path": "same.json", "sha256": "a" * 64},
+    }
+    new = {
+        "updated_at": "2026-09-04T00:00:02+00:00",
+        "status": "queued",
+        "payload": {"source_id": "source-a", "source_type": "generic_ai_history", "relative_path": "same.json", "sha256": "b" * 64},
+    }
+    assert project_scan_item("scan-a", "same.json", source_id="source-a", source_kind="generic_ai_history", queue_item=new)["result"] == "waiting"
+    reused = project_scan_item(
+        "scan-b", "same.json", source_id="source-a", source_kind="generic_ai_history",
+        queue_item=old, reused=True,
+    )
+    assert reused["stage"] == "completed"
+    assert reused["result"] == "reused"
+    assert reused["reason"] == "命中复用，未重复导入"
 
 
 @pytest.mark.parametrize(
