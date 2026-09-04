@@ -1,5 +1,25 @@
 # 验收要求变更记录
 
+## 2026-09-05 · 本机 AI 软件发现与只读查看 · Desktop 阶段与收口（Task 7–9）
+
+- 来源页新增三个主人分区："本机 AI 软件"（每类软件卡片：支持自动读取/暂不支持自动读取、
+  正在运行/未运行、capability 人话标签、有事实才显示版本；不支持的类别不提供任何授权按钮）、
+  "模型与进程"（灵机自检/系统健康/记忆健康 + 白名单运行进程 + 本地模型已安装/运行/兼容状态；
+  PID 只出现在折叠"高级信息"）、"官方导出接收文件夹"（用途/文件数/最近检查/下一步 +
+  "打开接收文件夹" + "使用此文件夹开始记忆"直达授权）。
+- panels 并入既有 8 秒 snapshot 轮询，不引入第二套刷新体系；reveal/授权按来源独立 busy 并提供
+  aria-live 成功/失败反馈；打开失败显示"暂时无法打开接收文件夹，请稍后重试。"。
+- Tauri 新增官方 tauri-plugin-opener（JS 2.5.5 / cargo 2.5），capability 仅
+  `opener:allow-reveal-item-in-dir`；打包级验证留给新候选 Mac 验收。
+- Inspector：会话列表按日期分组（今天/昨天/中文日期），标题改为中文"对话/消息"；消息模型事实
+  改为有事实才显示，分支缺字段显示"尚未获得"。
+- 修复两处自 `90060c70` 起过期的旧 smoke 断言（`已接管 1 个` 聚合语义、旧 `.memory-scan-detail`
+  技术面板），与新诚实语义对齐，未降低任何安全断言。
+- 验证：`test:e2e:memory`、`test:memory-sources`、`test:memory-sources-repair`、
+  `test:owner-ui-menu-fast-track`、`test:inspector`、`npm run build` 全部 PASS。
+  Desktop 提交 `7e7f0707f67f95fd7c31f3ebee897246447c6815`。仍为合成 fixture focused 结论；
+  packaged Mac 验收、主人观察未执行，Windows/push/PR/merge/结束清理继续冻结。
+
 ## 2026-09-05 · 本机 AI 软件发现与只读查看 · 后端阶段（Task 4–6）
 
 - 主人完整产品目标 A–E 的差距审计与分阶段计划已写入

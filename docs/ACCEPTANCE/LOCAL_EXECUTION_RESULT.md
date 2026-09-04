@@ -20,7 +20,7 @@ execution_mode: OWNER_SOURCE_INTAKE_PRODUCT_AND_MAC_REPAIR
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 baseline_commit: 1d4cd95bcbe73455507bc32c969f6eab5923bd86
-product_commit: 3471db1a41af4533b4ac54cc5cd4ade00d752166
+product_commit: 7e7f0707f67f95fd7c31f3ebee897246447c6815
 task_instruction_commit: 9eb4d1fab95abb87dda0eab2a97abc7e6728efaf
 report_branch: acceptance/owner-source-intake-mac-repair
 report_commit: PENDING
@@ -39,7 +39,7 @@ owner_observation: PENDING
 started_at: PENDING
 finished_at: PENDING
 focused_result: PASS
-focused_summary: Task 1 five-round close at bad17da3; Task 2 90060c70 verified with repaired e2e (memory-sources, memory-sources-repair, e2e_owner_memory_flow, build all PASS); Task 3 RED 11 failed then GREEN discovery+snapshot 43 passed; checkpoint sentinel mode debt closed at 3471db1a (resume RED 2 failed then GREEN 56 passed, focused matrix 226 passed, 1 warning); compileall/diff-check OK
+focused_summary: intake expansion complete at 7e7f0707 (backend 976c1f5b 240 passed; desktop sections/inspector e2e+smoke+repair+fast-track+inspector+build all PASS; deep-compare nine endpoints); sentinel debt closed at 3471db1a; compileall/diff-check OK
 prior_candidate_mac_technical_result: PASS_WAITING_OWNER_EXPERIENCE
 prior_candidate_owner_observation: REPAIR_REQUIRED
 mac_packaged_result: NOT_RUN_FOR_NEW_CANDIDATE

@@ -19,6 +19,16 @@
 
 ## 当前本机交接状态（2026-08-31）
 
+### 2026-09-05 本机 AI 软件发现与只读查看（扩展阶段）
+
+主人完整产品目标 A–E 的差距审计与分阶段实现已完成 focused 收口：后端新增单一本地 AI 软件清单
+（应用安装元数据 + 白名单扩展目录 + 白名单进程，capability 六键矩阵，无适配器类别固定
+"已发现，暂不支持自动读取"）、灵机自有官方导出接收文件夹（幂等创建 + 状态 + 打开/直达授权）、
+安全进程路由；受保护 DTO 深比较扩展到九端点。来源页新增"本机 AI 软件 / 模型与进程 /
+官方导出接收文件夹"三分区，Inspector 会话按日期分组并按事实显示模型。提交链
+`976c1f5b`（后端 240 passed）→ `7e7f0707`（Desktop，E2E/smoke/repair/fast-track/inspector/build
+全 PASS）。仍为合成 fixture focused 结论；packaged Mac 验收与主人观察未执行，Windows 冻结。
+
 ### 2026-09-05 Checkpoint sentinel mode 债务收口
 
 Task 3 报告记录的唯一非阻塞开发债已收口：checkpoint sentinel 扩展为
