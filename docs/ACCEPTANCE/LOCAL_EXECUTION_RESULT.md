@@ -1,7 +1,8 @@
 # LingJi 本机执行结果回执
 
-> 当前任务 `OWNER_UI_EXPERIENCE_FAST_CLOSEOUT` 已激活；
-> 下方第 0 节是当前回执。本轮先完成 focused 证据同步，随后才进入隔离 Mac 验收。
+> 当前任务 `OWNER_SOURCE_INTAKE_MAC_REPAIR` 已激活；
+> 下方第 0 节是当前回执。上一候选技术证据保留，但主人体验已判为需要修复；
+> 本轮先完成 TDD/focused 证据，随后才进入新的隔离 Mac 验收。
 > Windows 必须等 Mac 技术验收及主人确认后才允许启动；禁止触碰 Production/Vault/真实聊天、
 > 真实数据库或主人数据。下方旧任务回执仅作历史记录。
 
@@ -12,20 +13,21 @@ duplicate macOS lexical-alias source cards; it is not a PASS result.
 ## 0. 当前任务回执
 
 ```yaml
-task_id: OWNER_UI_EXPERIENCE_FAST_CLOSEOUT
+task_id: OWNER_SOURCE_INTAKE_MAC_REPAIR
 status: RUNNING
 verdict: PENDING
-execution_mode: OWNER_UI_PRODUCT_AND_MAC_EXPERIENCE_FAST_CLOSEOUT
+execution_mode: OWNER_SOURCE_INTAKE_PRODUCT_AND_MAC_REPAIR
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
-product_commit: 38cd484cca541a0fa50ab1f4b2c05fe7a45ca408
+baseline_commit: 1d4cd95bcbe73455507bc32c969f6eab5923bd86
+product_commit: 7f3222089dc5f3037493d44c22f2c3773ac331c8
 task_instruction_commit: 9eb4d1fab95abb87dda0eab2a97abc7e6728efaf
-report_branch: acceptance/owner-ui-experience-fast-closeout-38cd484c
+report_branch: acceptance/owner-source-intake-mac-repair
 report_commit: PENDING
-report_path: docs/TEST_REPORTS/OWNER_UI_EXPERIENCE_FAST_CLOSEOUT.md
+report_path: docs/TEST_REPORTS/OWNER_SOURCE_INTAKE_MAC_REPAIR.md
 public_summary_path: PENDING
 public_hashes_path: PENDING
-cleanup_before: PENDING
+cleanup_before: PASS
 cleanup_after: PENDING
 remote_branch_verified: false
 remote_commit_verified: false
@@ -37,17 +39,33 @@ owner_observation: PENDING
 started_at: PENDING
 finished_at: PENDING
 focused_result: PASS
-mac_packaged_result: PASS_2_TESTS_1_WARNING_291_69_SECONDS
-mac_install_result: NOT_TESTED
-mac_owner_observation: NOT_TESTED
+focused_summary: Task 1 five-round close at bad17da3; Task 2 90060c70 verified with repaired e2e (memory-sources, memory-sources-repair, e2e_owner_memory_flow, build all PASS); Task 3 RED 11 failed then GREEN discovery+snapshot 43 passed and focused matrix 222 passed, 1 warning; compileall/diff-check OK
+prior_candidate_mac_technical_result: PASS_WAITING_OWNER_EXPERIENCE
+prior_candidate_owner_observation: REPAIR_REQUIRED
+mac_packaged_result: NOT_RUN_FOR_NEW_CANDIDATE
+mac_install_result: NOT_RUN_FOR_NEW_CANDIDATE
+mac_technical_result: NOT_RUN_FOR_NEW_CANDIDATE
+mac_owner_observation: PENDING_NEW_CANDIDATE
 windows_result: FORBIDDEN_UNTIL_MAC_OWNER_CONFIRMATION
 full_result: NOT_RUN
 release_result: NOT_RUN
-live_8766_8767: NOT_RUN
-install_performed: false
+live_8766_8767: 8766_LOOPBACK_RUNNING_8765_8767_CLOSED
+install_performed: true
 owner_data_touched: false
 production_pollution_count: 0
+vault_pollution_count: 0
+secret_export_count: 0
+acceptance_root: /private/tmp/LingJiAcceptance/owner-ui-experience-fast-closeout-1d4cd95b
+desktop_pid: 40636
+sidecar_pid: 40641
 ```
+
+上一候选 `1d4cd95b` 的 packaged clean-root 双轮、arm64 DMG、签名、整包安装、隔离 DataRoot
+导入/复扫、API 和真实 UI 全页遍历技术证据保留；但主人实际使用发现来源接管没有可解释后续、确认动作
+不可用、官方导出目录选择无结果提示，因此不得继续表述为主人体验通过。本轮 focused 实现已完成
+（Task 1 `bad17da3`、Task 2 `90060c70` + e2e 修复、Task 3 只读安全与受保护状态回归），新产品
+SHA 尚未冻结，packaged Mac 验收尚未执行。当前 `/Applications/灵机.app`、sidecar 和
+`127.0.0.1:8766` 必须继续运行；新候选 Mac 技术验收及主人确认前不得启动 Windows。
 
 ## 0A. 最近 focused 修复回执
 

@@ -1,5 +1,54 @@
 # 验收要求变更记录
 
+## 2026-09-04 · Mac 来源接管可解释闭环 · Task 2/3 focused 收口
+
+- Task 1（逐条安全 DTO）按计划五轮收口，最终产品/测试提交 `bad17da3`；Task 2 产品提交
+  `90060c70` 的产品代码满足状态机、逐条分页详情、取消反馈、按来源 busy 与 Memory Inspector
+  精确入口要求，但其 e2e 提交时未跑绿。本轮复跑记录并修复四处测试基建缺陷（歧义状态定位器、
+  fixture 缺 URL 对象、缺 inspector 来源详情路由、缺 `fixture_scanning`/`fixture_current`
+  fixture 行与歧义 paused 定位器）；全部修改仅限 `tests/e2e_owner_memory_flow.mjs`，未弱化断言。
+- GREEN 证据：`npm run test:memory-sources`、`npm run test:memory-sources-repair`、
+  `npm run test:e2e:memory`、`npm run build` 全部通过。
+- Task 3 以真实 RED 收口只读安全：RED `11 failed`（`config.json`/`.env.production` 等被枚举、
+  敏感命名目录被下钻、`server.key`/`certs.pem`/`*.db-wal|shm` 命名根未拒绝、`.env.d` 发现下钻、
+  快照 mode 变化误判 stable）。实现仅改 `path_policy.py`（共享 `is_sensitive_source_name`：新增
+  `config`/`key`/`keys` token、`.pem`/`.key`/WAL/SHM 后缀、`.env*` 前缀规则）、`discovery.py`
+  （复用同一规则）、`snapshot.py`（`FileStat` 增加 `mode`）。
+- 新增受保护状态深比较：完整合成 Local Control fixture 下，真实 authorize → 扫描（真实快照
+  入队）→ 分页 detail 前后，`/api/health`、`/api/models/registry`、`/api/models`、
+  `/api/brain/status`、`/api/overview`、`/api/memory/status` 六个 DTO 除 `as_of`/`checked_at`
+  窄规范化外必须逐值一致；字段集合不得减少，模型运行/兼容状态与灵机自检不得改变。
+- 新增副作用 spy 证明：discovery/enumeration/snapshot 全程无子进程、无网络、无对来源根的
+  chmod/rename/unlink/写打开，且来源树（名称/大小/mtime/mode）前后逐字节一致；解析仅发生在
+  灵机自有 raw 副本之后。
+- GREEN 证据：discovery+snapshot `43 passed`；自动记忆宽域 focused 矩阵 `222 passed, 1 warning`；
+  `compileall`、`git diff --check` 通过。已记录非阻塞边界：checkpoint 路径 sentinel 不含 mode
+  （文件在本次允许范围外）。Windows、push、PR、merge、结束清理继续冻结至 Mac 技术验收与主人确认。
+
+## 2026-09-04 · Mac 来源接管可解释闭环 · 主人体验阻断修复
+
+- 冻结候选 `1d4cd95bcbe73455507bc32c969f6eab5923bd86` 的历史 Mac 技术证据保留，但主人来源页体验为
+  `REPAIR_REQUIRED`：扫描后看不到具体结果、确认动作不可用、选择官方导出目录后没有取消/处理中/
+  成功/空目录/无支持格式/部分失败/失败反馈，且扫描完成、排队或复用被错误写成“已接管/已导入”。
+- 新状态必须由真实事实区分发现、等待授权、已授权、扫描中、扫描完成、处理中、导入完成、空目录、
+  未识别支持格式、部分失败和失败。扫描详情直接可见；目录选择取消显示“未选择目录，本次未开始”；
+  一个来源忙碌不得锁死无关来源。
+- 来源页不得只显示聚合数量。每次扫描必须提供默认 20、最大 100、稳定排序的逐条安全结果，显示授权根内
+  相对名称、来源、阶段、结果、更新时间、可重试性、安全原因及真实结构化导入对话/消息数；成功和失败项
+  可分别辨认。绝对路径、raw/数据库路径、内部 job/lease ID、原始 JSON/异常/堆栈和凭证形态不得进入 DTO/UI。
+- 来源页必须有直接可见的“查看已导入具体内容”入口，复用现有 Memory Inspector 查看对话、消息预览和主人
+  主动点开的正文；无内容、详情读取失败和分页结束均提供人话提示。queued/reused 永远不能称为已导入。
+- 本地 AI 发现只允许低侵入只读探测公开候选路径和非敏感元数据：不得启动/停止目标软件、写配置、
+  注入进程、发模型请求、读取密钥/Token/Cookie 或跟随符号链接逃逸授权根。研究只使用公开仓库/文档，
+  验收只使用合成 fixture，不读取主人真实 AI 数据。
+- 模型清单、模型运行/兼容状态、灵机自检、系统健康、记忆健康字段和 UI/API 链路必须完整保留；来源
+  变更前后要以测试证明这些 DTO 字段和值不变。
+- GPT-5.6 仅负责本轮计划审查、验收设计和最终证据审读，不得修改产品代码或测试；实现必须由明确记录的
+  非 GPT-5.6 低用量子代理完成。5.6 验收发现的问题必须退回非 5.6 开发代理修复。
+- 必须先得到 RED，再做最小实现和 focused 回归。新候选须在全新隔离 Mac 根完成 packaged 双轮、arm64
+  整包构建/签名/覆盖安装和真实 UI 全控件验收，并保持 App 等主人确认。确认前禁止 Windows、push、PR、
+  merge 和结束清理。
+
 ## 2026-09-04 · Owner UI experience fast closeout · Conversation evidence provenance repair
 
 - 精确候选 `38cd484cca541a0fa50ab1f4b2c05fe7a45ca408` 的真实 Mac UI 发现会话证据卡

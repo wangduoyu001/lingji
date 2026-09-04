@@ -19,6 +19,20 @@
 
 ## 当前本机交接状态（2026-08-31）
 
+### 2026-09-04 主人来源接管可解释闭环修复
+
+当前唯一 ACTIVE 本机任务为 `OWNER_SOURCE_INTAKE_MAC_REPAIR`（分支
+`codex/owner-source-intake-mac-repair`），按
+`docs/superpowers/plans/2026-09-04-owner-source-intake-mac-repair.md` 执行。focused 实现进度：
+Task 1 逐条安全 DTO 经五轮修复收口于 `bad17da3`；Task 2 来源页状态/逐条详情/内容入口产品提交
+`90060c70`，其 e2e 修复后 `test:memory-sources`、`test:memory-sources-repair`、
+`test:e2e:memory`、build 全部通过；Task 3 以 RED 11 failed 起步，收口共享敏感名规则
+（`config`/`key`/`keys`、`.pem`/`.key`/WAL/SHM、`.env*`）、discovery 复用同一规则、snapshot
+`FileStat` 增加 `mode`，并新增受保护六端点 DTO 前后深比较与无进程/网络/写副作用 spy 证明，
+discovery+snapshot `43 passed`、自动记忆 focused 矩阵 `222 passed, 1 warning`。以上仅为合成
+fixture focused 结论；新产品 SHA 未冻结，packaged Mac 验收、主人观察未执行。Windows、push、PR、
+merge、结束清理在 Mac 技术验收与主人确认前继续冻结。
+
 ### 2026-09-03 主人可用性优先调整
 
 当前开发不再由旧全仓库质量门主导。唯一 ACTIVE 任务已切换为

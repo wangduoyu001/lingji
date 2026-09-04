@@ -1,25 +1,25 @@
 # LingJi 本机执行任务单
 
-> **当前状态：ACTIVE（`OWNER_UI_EXPERIENCE_FAST_CLOSEOUT`）。**
+> **当前状态：ACTIVE（`OWNER_SOURCE_INTAKE_MAC_REPAIR`）。**
 >
 > 本文件仍是本机 Codex 的唯一任务入口；下方第 0 节是当前唯一可执行的有界修复任务。
 
 ## 0. 当前 ACTIVE 任务
 
 ```yaml
-task_id: OWNER_UI_EXPERIENCE_FAST_CLOSEOUT
+task_id: OWNER_SOURCE_INTAKE_MAC_REPAIR
 status: ACTIVE
-execution_mode: OWNER_UI_PRODUCT_AND_MAC_EXPERIENCE_FAST_CLOSEOUT
+execution_mode: OWNER_SOURCE_INTAKE_PRODUCT_AND_MAC_REPAIR
 repository: wangduoyu001/lingji
-product_branch: codex/owner-memory-detail-drilldown
-baseline_commit: fde399849eb6b440ef37c977ff76ac280fdd80ab
-product_commit: 38cd484cca541a0fa50ab1f4b2c05fe7a45ca408
+product_branch: codex/owner-source-intake-mac-repair
+baseline_commit: 1d4cd95bcbe73455507bc32c969f6eab5923bd86
+product_commit: 7f3222089dc5f3037493d44c22f2c3773ac331c8
 product_pr: NONE_NOT_A_RELEASE_GATE
 release_gate: OWNER_EXPERIENCE_CANDIDATE_ONLY
 artifact_name: lingji-macos-arm64-app
-artifact_id: LOCAL_MAC_BUILD_PENDING
-report_branch: acceptance/owner-ui-experience-fast-closeout-38cd484c
-report_path: docs/TEST_REPORTS/OWNER_UI_EXPERIENCE_FAST_CLOSEOUT.md
+artifact_id: PENDING_NEW_MAC_BUILD
+report_branch: acceptance/owner-source-intake-mac-repair
+report_path: docs/TEST_REPORTS/OWNER_SOURCE_INTAKE_MAC_REPAIR.md
 public_summary_path: PENDING
 public_hashes_path: PENDING
 result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
@@ -31,19 +31,23 @@ install_forbidden: false_for_whole_bundle_isolated_mac_acceptance
 owner_data_forbidden: true
 full_release_forbidden: true
 owner_confirmation_required: true
-maximum_repair_rounds: 1
+maximum_repair_rounds: 3
 ```
 
-本任务按 `docs/superpowers/plans/2026-09-03-owner-ui-experience-fast-closeout.md` 执行。范围只包括现有
-Desktop 主人界面的菜单收敛、首页成果化、current-only 记忆浏览与详情、来源页降噪及统一视觉；
-不新增后端、数据库、API、队列、向量/RAG 或记忆算法。实现由单一 Luna 完成，之后只进行一次
-独立阻断审查和最多一轮必要修复。体验候选只阻断安全、真实导入、来源可追溯和 Mac 可用性；
-旧 Task4R2/Task7 质量测量与非核心视觉 Minor 记录为非阻断技术债务，不得冒充通过。
+本任务按 `docs/superpowers/plans/2026-09-04-owner-source-intake-mac-repair.md` 执行。范围只包括
+automatic-memory 本地 AI 元数据发现、主人目录授权、扫描/处理/导入真实阶段 DTO、来源页反馈、
+动作可用性及其 focused/真实 Mac 验收；不得新增第二套数据库、队列、状态中心或端口，不修改记忆算法。
 
-产品审查已通过；精确产品 SHA `38cd484cca541a0fa50ab1f4b2c05fe7a45ca408` 的显式 watcher
-packaged clean-root 双轮已通过（`2 passed, 1 warning`）。现激活隔离 Mac 构建/安装与真实 UI
-验收段：必须 whole-bundle 安装精确 SHA arm64 App、遍历核心页面并打开至少五条记忆核对来源；
-App 必须保持打开等待主人确认。主人确认前 Windows 继续禁止启动。
+基线候选 `1d4cd95bcbe73455507bc32c969f6eab5923bd86` 的 Mac packaged、安装和全页技术遍历保留为历史
+`PASS_WAITING_OWNER_EXPERIENCE`，但主人最新观察已将该候选判为 `REPAIR_REQUIRED`：扫描后缺少
+可见闭环、确认按钮不可用、官方导出目录选择后无结果提示，并存在把扫描/排队描述为接管/导入完成的
+错误语义。本轮必须先用合成 fixture 复现，再做最小修复；不得读取主人真实 AI 软件数据。
+
+模型清单、模型运行/兼容状态、灵机自检、系统健康和记忆健康字段必须原样保留，来源状态只能扩展，
+不能覆盖或删除。只读扫描不得启动/停止/写入目标 AI 软件，不得修改配置、读取 secrets 或越过授权根。
+完成 focused 后，新产品 SHA 必须从全新隔离根重跑完整 Mac package/install/真实 UI；代理通过后保持
+App/sidecar 打开等待主人确认。Mac 技术验收与主人确认均通过前，Windows、push、PR、merge、结束清理
+继续禁止。上一候选当前运行实例和失败证据必须保持不动，直至新候选准备完成。
 
 ## 0A. 上一 focused runtime 任务（停止继续扩张）
 
