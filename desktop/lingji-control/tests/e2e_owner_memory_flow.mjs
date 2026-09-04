@@ -12,7 +12,7 @@ const memoryCardActionLabels = { correct: "修正内容", invalidate: "标记已
 const allStateDiscovered = [
   ["detected", "available"], ["consent", "consent_required"], ["unsupported", "unsupported"], ["authorized", "available"],
   ["scan_completed", "available"], ["processing", "available"], ["imported", "available"], ["partial_failure", "available"], ["empty", "available"], ["unsupported_scan", "available"],
-  ["current", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
+  ["current", "available"], ["scanning", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
 ].map(([suffix, status]) => ({ kind: `fixture_${suffix}`, display_name: `测试${suffix}`, candidate_root: `/tmp/${suffix}`, status, capability: "metadata_discovery", reason: status === "unsupported" ? "不读取不透明存储" : null }));
 allStateDiscovered.push({ kind: "obsidian", display_name: "Managed Obsidian memory", candidate_root: "/tmp/vault", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "claude_desktop", display_name: "Claude Desktop", candidate_root: "", status: "unsupported", capability: "metadata_discovery", reason: "Claude Desktop has no approved official export schema; opaque storage is not read" });
@@ -39,6 +39,7 @@ const allStateScans = [
   ["unsupported_scan", "completed", "unsupported_format", 0, 3],
   ["failed", "failed", null, 0, 1],
   ["paused", "paused", null, 0, 1],
+  ["current", "completed", "imported", 1, 1],
 ].map(([suffix, status, processingStatus, completed, total]) => ({
   scan_id: `scan-${suffix}`,
   source_id: `src-fixture_${suffix}`,
@@ -287,12 +288,24 @@ const server = http.createServer((req, res) => {
     }
     if (path === "/api/memory/inspector/messages/message-card-1" || path === "/api/memory/inspector/messages/message-card-2") { state.messageDetailRequests += 1; return json(res, 200, { item: { message_id: path.endsWith("2") ? "message-card-2" : "message-card-1", content: path.endsWith("2") ? "这是第二条选定的来源消息正文。" : "这是选定的来源消息正文。" } }); }
     if (path === "/api/memory/inspector/status") return json(res, 200, { as_of: "2026-08-28T08:03:00Z", sources: { sources: 1, conversations: 1, messages: 1 }, memory: { documents: 1, chunks: 1 }, vector: { state: "available", coverage: 1, rebuild_required: false } });
+    if (path.startsWith("/api/memory/inspector/sources/")) {
+      const inspectorSourceItems = [
+        { source_id: "inspector-near", source_type: "codex_session", display_name: "近似来源", status: "active", updated_at: "2026-08-28T08:02:00Z", metadata: { automatic_memory_source_id: "src-fixture_imported-near" } },
+        { source_id: "inspector-exact", source_type: "codex_session", display_name: "精确来源", status: "active", updated_at: "2026-08-28T08:02:00Z", metadata: { automatic_memory_source_id: "src-fixture_imported" } },
+        { source_id: "source-1", source_type: "codex_session", display_name: "Codex 工作会话", status: "active", updated_at: "2026-08-28T08:02:00Z", metadata: { automatic_memory_source_id: "src-fixture_scan_completed" } },
+      ];
+      const id = decodeURIComponent(path.split("/").pop());
+      const item = inspectorSourceItems.find((row) => row.source_id === id);
+      if (!item) return json(res, 404, { detail: { code: "SOURCE_NOT_FOUND", message: "source not found" } });
+      return json(res, 200, { item });
+    }
     if (path === "/api/memory/inspector/sources") {
       const inspectorSourceItems = [
         { source_id: "inspector-near", source_type: "codex_session", display_name: "近似来源", status: "active", updated_at: "2026-08-28T08:02:00Z", metadata: { automatic_memory_source_id: "src-fixture_imported-near" } },
         { source_id: "inspector-exact", source_type: "codex_session", display_name: "精确来源", status: "active", updated_at: "2026-08-28T08:02:00Z", metadata: { automatic_memory_source_id: "src-fixture_imported" } },
         { source_id: "source-1", source_type: "codex_session", display_name: "Codex 工作会话", status: "active", updated_at: "2026-08-28T08:02:00Z", metadata: { automatic_memory_source_id: "src-fixture_scan_completed" } },
       ];
+      const url = new URL(req.url, "http://127.0.0.1");
       const q = url.searchParams.get("q") || "";
       return json(res, 200, { items: q ? inspectorSourceItems.filter((item) => String(item.metadata?.automatic_memory_source_id ?? "").includes(q)) : inspectorSourceItems, pagination: { total: inspectorSourceItems.length, limit: 30, offset: 0, has_more: false } });
     }
@@ -593,14 +606,14 @@ try {
   assert.equal(authorizePayload.root, "/tmp/codex");
   await codexCard.locator("h3").getByText("已授权", { exact: true }).waitFor();
   const scanCompletedCard = page.locator('[data-source-kind="fixture_scan_completed"]');
-  await scanCompletedCard.getByText("扫描完成", { exact: true }).waitFor();
+  await scanCompletedCard.locator("h3").getByText("扫描完成", { exact: true }).waitFor();
   await scanCompletedCard.getByRole("button", { name: "查看这次检查", exact: true }).waitFor();
   assert.equal(await scanCompletedCard.getByRole("button", { name: "查看已导入具体内容", exact: true }).count(), 0, "scan completed but not processed must not open imported content");
   const processingCard = page.locator('[data-source-kind="fixture_processing"]');
-  await processingCard.getByText("处理中", { exact: true }).waitFor();
+  await processingCard.locator("h3").getByText("处理中", { exact: true }).waitFor();
   await processingCard.getByText("正在提取来源内容", { exact: false }).waitFor();
   const importedCard = page.locator('[data-source-kind="fixture_imported"]');
-  await importedCard.getByText("已导入", { exact: true }).waitFor();
+  await importedCard.locator("h3").getByText("已导入", { exact: true }).waitFor();
   await importedCard.getByRole("button", { name: "查看已导入具体内容", exact: true }).waitFor();
   const importedPrimaryActions = importedCard.locator(".memory-source-primary-actions");
   assert.equal(await importedPrimaryActions.getByRole("button", { name: "查看已导入具体内容", exact: true }).count(), 1, "imported content button must be a direct primary action");
@@ -642,8 +655,8 @@ try {
     for (const label of expected.deny) assert.equal(await card.getByRole("button", { name: label, exact: true }).count(), 0, `${kind} cannot offer ${label}`);
   }
   await page.locator('[data-source-kind="fixture_expired"]').getByText("授权已过期，需要重新授权。", { exact: true }).waitFor();
-  await page.locator('[data-source-kind="fixture_paused"]').getByText("已暂停", { exact: false }).waitFor();
-  await page.locator('[data-source-kind="fixture_paused"]').getByText("继续检查", { exact: false }).waitFor();
+  await page.locator('[data-source-kind="fixture_paused"]').getByText("检查状态：已暂停", { exact: true }).waitFor();
+  await page.locator('[data-source-kind="fixture_paused"]').getByRole("button", { name: "继续检查", exact: true }).waitFor();
 
   await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "claude-only" });
   await page.waitForTimeout(300);
