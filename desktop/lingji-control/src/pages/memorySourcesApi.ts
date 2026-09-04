@@ -4,11 +4,13 @@ import type {
   DiscoveredSource,
   MemorySourcesSnapshot,
   RuntimeSummary,
+  ScanDetailResponse,
   ScanRun,
   ScanSummary,
   SourceFact,
   SourceState,
 } from "./memorySourcesTypes";
+import type { PageResponse, SourceItem } from "./memoryInspectorTypes";
 
 const stateLabels: Record<string, string> = {
   detected: "已发现",
@@ -16,9 +18,14 @@ const stateLabels: Record<string, string> = {
   consent_required: "需要确认",
   authorized: "已授权",
   scanning: "扫描中",
+  scan_completed: "扫描完成",
+  processing: "处理中",
+  imported: "已导入",
+  partial_failure: "部分失败",
+  empty: "空目录",
   current: "已接管",
   degraded: "需要检查",
-  unsupported: "暂不支持",
+  unsupported: "未识别支持格式",
   revoked: "已撤销",
   failed: "扫描失败",
 };
@@ -103,6 +110,19 @@ function latestScansBySource(scans: ScanRun[]): Map<string, ScanRun> {
   return latest;
 }
 
+function scanStateFromProcessing(scan?: ScanRun): SourceState | null {
+  if (!scan || scan.status !== "completed") return null;
+  const explicit = String(scan.processing_status ?? "").trim();
+  if (explicit === "scan_completed" || explicit === "processing" || explicit === "imported" || explicit === "partial_failure" || explicit === "empty" || explicit === "unsupported_format") {
+    return explicit === "unsupported_format" ? "unsupported" : explicit as SourceState;
+  }
+  if (typeof scan.processing_failed === "number" && scan.processing_failed > 0 && typeof scan.processing_completed === "number" && scan.processing_completed > 0) return "partial_failure";
+  if (typeof scan.processing_pending === "number" && scan.processing_pending > 0) return "processing";
+  if (typeof scan.processing_completed === "number" && scan.processing_completed === 0 && typeof scan.processing_total === "number" && scan.processing_total === 0) return "empty";
+  if (typeof scan.processing_completed === "number" && scan.processing_completed > 0) return "imported";
+  return "scan_completed";
+}
+
 function describe(discovered: DiscoveredSource, state: SourceState, scan?: ScanRun): { detail: string; nextAction: string } {
   if (state === "detected" && discovered.kind === "codex_rollout") {
     const count = typeof discovered.file_count === "number" ? discovered.file_count : null;
@@ -112,6 +132,11 @@ function describe(discovered: DiscoveredSource, state: SourceState, scan?: ScanR
     };
   }
   if (state === "current") return { detail: `已接管「${rootName(discovered.candidate_root)}」，最近一次扫描已完成。`, nextAction: "可查看本次扫描结果。" };
+  if (state === "scan_completed") return { detail: "这次检查已经完成，但还没有看到导入完成证据。", nextAction: "查看这次检查，确认是否需要继续处理。" };
+  if (state === "processing") return { detail: "处理中：正在提取来源内容，导入证据还在累积。", nextAction: "等待处理完成，或查看这次检查。" };
+  if (state === "imported") return { detail: "来源内容已导入完成，可以查看已导入具体内容。", nextAction: "查看已导入具体内容。" };
+  if (state === "partial_failure") return { detail: "已经导入了一部分内容，但也有项目失败。", nextAction: "查看这次检查，确认失败项是否需要重试。" };
+  if (state === "empty") return { detail: "扫描完成了，但目录里没有可导入内容。", nextAction: "查看这次检查，确认是否选择了正确目录。" };
   if (state === "scanning") {
     const progress = scan?.progress != null && scan?.total != null ? `（${scan.progress}/${scan.total}）` : "";
     if (scan?.status === "paused") return { detail: `扫描已暂停，已保留「${rootName(discovered.candidate_root)}」的授权。`, nextAction: "继续扫描，完成后才会显示为已接管。" };
@@ -163,7 +188,8 @@ export function mergeSourceFacts(
     else if (source?.status === "degraded") state = "degraded";
     else if (scan?.status === "running" || scan?.status === "paused") state = "scanning";
     else if (scan?.status === "failed") state = "failed";
-    else if (source && scan?.status === "completed") state = "current";
+    else if (source?.status === "current") state = "current";
+    else if (source && scan?.status === "completed") state = scanStateFromProcessing(scan) ?? "scan_completed";
     else if (source) state = "authorized";
     else if (candidate.status === "unsupported") state = "unsupported";
     else if (candidate.status === "consent_required") state = "consent_required";
@@ -209,7 +235,19 @@ export class MemorySourcesApi {
   pause(scanId: string): Promise<unknown> { return this.api.post("/api/automatic-memory/pause", { scan_id: scanId }); }
   resume(scanId: string): Promise<unknown> { return this.api.post("/api/automatic-memory/resume", { scan_id: scanId }); }
   retry(scanId: string): Promise<unknown> { return this.api.post("/api/automatic-memory/retry", { scan_id: scanId }); }
-  detail(scanId: string): Promise<unknown> { return this.api.get(`/api/automatic-memory/scans/${encodeURIComponent(scanId)}`); }
+  detail(scanId: string, limit = 20, offset = 0): Promise<ScanDetailResponse> {
+    const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    return this.api.get(`/api/automatic-memory/scans/${encodeURIComponent(scanId)}?${query.toString()}`);
+  }
+}
+
+export async function findInspectorSourceForAutomaticMemorySource(
+  api: Pick<LingJiApi, "get">,
+  automaticMemorySourceId: string,
+): Promise<SourceItem | null> {
+  const query = new URLSearchParams({ q: automaticMemorySourceId, limit: "20", offset: "0" });
+  const response = await api.get<PageResponse<SourceItem>>(`/api/memory/inspector/sources?${query.toString()}`);
+  return response.items?.find((item) => String(item.metadata?.automatic_memory_source_id ?? "") === automaticMemorySourceId) ?? null;
 }
 
 export function countLabel(value: unknown): string {
@@ -292,7 +330,7 @@ export function actionAvailability(state: SourceState, source: { source_id?: str
   const actions: string[] = [];
   if (["detected", "consent_required", "degraded", "revoked"].includes(state) && (Boolean(source.root) || picker)) actions.push("authorize");
   if (source.source_id && !["revoked", "unsupported"].includes(state)) actions.push("revoke");
-  if (source.source_id && ["authorized", "current"].includes(state)) actions.push("scan");
+  if (source.source_id && ["authorized", "current", "scan_completed", "processing", "imported", "partial_failure", "empty"].includes(state)) actions.push("scan");
   if (source.source_id && source.scan_status === "running") actions.push("pause");
   if (source.source_id && source.scan_status === "paused") actions.push("resume");
   if (source.source_id && source.scan_status === "failed") actions.push("retry");

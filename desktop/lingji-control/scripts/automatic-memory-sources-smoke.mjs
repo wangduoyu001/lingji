@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { actionEvidence, MemorySourcesApi, mergeSourceFacts, ownerSourceName, scanStatusLabel, scanTerminalEvidence, sourceMetadataEvidence, sourceStateLabel, countLabel, canonicalSourceKey } from "../src/pages/memorySourcesApi.ts";
+import { actionEvidence, MemorySourcesApi, findInspectorSourceForAutomaticMemorySource, mergeSourceFacts, ownerSourceName, scanStatusLabel, scanTerminalEvidence, sourceMetadataEvidence, sourceStateLabel, countLabel, canonicalSourceKey } from "../src/pages/memorySourcesApi.ts";
 import { LingJiApi } from "../src/api.ts";
 import { readFileSync } from "node:fs";
 
@@ -17,13 +17,47 @@ const responses = {
   "/api/automatic-memory/scans": [
     { scan_id: "scan-codex", source_id: "src-codex", status: "completed", progress: 2, total: 2, queued: 1, reused: 1, updated_at: "2026-08-27T01:02:00Z", last_error: null },
   ],
+  "/api/automatic-memory/scans/scan-codex": {
+    scan_id: "scan-codex",
+    source_id: "src-codex",
+    status: "completed",
+    progress: 2,
+    total: 2,
+    queued: 1,
+    reused: 1,
+    updated_at: "2026-08-27T01:02:00Z",
+    last_error: null,
+    items: [
+      {
+        item_id: "item-codex-1",
+        name: "history.json",
+        source: "Codex聊天记录",
+        stage: "snapshot",
+        result: "recorded",
+        reason: "已记录到扫描清单",
+        updated_at: "2026-08-27T01:02:00Z",
+        retryable: false,
+        imported_sources: null,
+        imported_conversations: null,
+        imported_messages: null,
+      },
+    ],
+    items_pagination: { limit: 20, offset: 40, total: 1, has_more: false },
+  },
+  "/api/memory/inspector/sources": {
+    items: [
+      { source_id: "inspector-near", display_name: "近似来源", metadata: { automatic_memory_source_id: "src-other" } },
+      { source_id: "inspector-exact", display_name: "精确来源", metadata: { automatic_memory_source_id: "src-codex" } },
+    ],
+    pagination: { limit: 20, offset: 0, total: 2, has_more: false },
+  },
   "/api/automatic-memory/summary": { counts: { completed: 1 }, total: 1, latest: { scan_id: "scan-codex", source_id: "src-codex", status: "completed", progress: 2, total: 2, queued: 1, reused: 1 }, progress: { current: 2, total: 2 }, last_error: null, next_action: "wait" },
   "/api/automatic-memory/runtime": { state: "running", running: true, paused: false, scheduler_heartbeat_age: null, scheduler_heartbeat_reason: "unavailable", worker_state: true, authorized_watcher_count: 1, last_global_error: null },
 };
 
 globalThis.fetch = async (url, init = {}) => {
   const path = new URL(url).pathname;
-  calls.push({ path, method: init.method ?? "GET", body: init.body ? JSON.parse(init.body) : null });
+  calls.push({ url: String(url), path, method: init.method ?? "GET", body: init.body ? JSON.parse(init.body) : null });
   if (init.method === "POST") {
     return new Response(JSON.stringify({ scan_id: "scan-next", source_id: "src-codex", status: path.endsWith("/scan") ? "running" : "authorized" }), { status: 200, headers: { "Content-Type": "application/json" } });
   }
@@ -34,15 +68,21 @@ const client = new LingJiApi();
 client.configure("http://127.0.0.1:8766", "test");
 const api = new MemorySourcesApi(client);
 const snapshot = await api.snapshot();
+const scanDetail = await api.detail("scan-codex", 20, 40);
 const pageSource = readFileSync(new URL("../src/pages/MemorySourcesPage.tsx", import.meta.url), "utf8");
 assert.match(pageSource, /临时文件清理失败：灵机会自动重试，可重试/);
 assert.match(pageSource, /cleanup_pending/);
 assert.doesNotMatch(pageSource, /String\(snapshot\.runtime\?\.cleanup_error/);
 assert.equal(snapshot.sources.length, 2);
-assert.equal(snapshot.sources.find((item) => item.kind === "codex_transcript")?.state, "current");
+assert.equal(snapshot.sources.find((item) => item.kind === "codex_transcript")?.state, "scan_completed");
 assert.equal(snapshot.sources.find((item) => item.kind === "claude_desktop")?.state, "unsupported");
 assert.equal(snapshot.sources.find((item) => item.kind === "claude_desktop")?.detail, "Claude 暂不支持自动导入旧记录；灵机不会读取它的内部数据库。");
 assert.match(snapshot.sources.find((item) => item.kind === "claude_desktop")?.nextAction ?? "", /暂不支持|不要读取|官方导出/);
+assert.equal(scanDetail.items_pagination.limit, 20);
+assert.equal(scanDetail.items_pagination.offset, 40);
+assert.equal(scanDetail.items_pagination.total, 1);
+assert.equal(scanDetail.items[0].name, "history.json");
+assert.equal(scanDetail.items[0].source, "Codex聊天记录");
 assert.equal(ownerSourceName({ kind: "obsidian", display_name: "Managed Obsidian memory" }), "Obsidian 长期记忆区");
 assert.equal(canonicalSourceKey("codex_rollout", "/tmp/LingJi/Codex"), canonicalSourceKey("codex_rollout", "/private/tmp/LingJi/Codex"), "macOS /tmp aliases must share a source key");
 assert.equal(canonicalSourceKey("generic", "/var/lib/lingji"), canonicalSourceKey("generic", "/private/var/lib/lingji"), "macOS /var aliases must share a source key");
@@ -53,6 +93,12 @@ assert.equal(mergeSourceFacts(
   [],
 ).length, 1, "macOS lexical aliases must not render duplicate source cards");
 assert.equal(sourceStateLabel("available"), "已发现");
+assert.equal(sourceStateLabel("scan_completed"), "扫描完成");
+assert.equal(sourceStateLabel("processing"), "处理中");
+assert.equal(sourceStateLabel("imported"), "已导入");
+assert.equal(sourceStateLabel("partial_failure"), "部分失败");
+assert.equal(sourceStateLabel("empty"), "空目录");
+assert.equal(sourceStateLabel("unsupported"), "未识别支持格式");
 assert.equal(scanStatusLabel("completed"), "已完成");
 assert.equal(countLabel(null), "尚未获得");
 assert.deepEqual(sourceMetadataEvidence({ file_count: 2, byte_count: 2048, earliest_mtime: 1760000000, latest_mtime: 1760003600 }), {
@@ -85,13 +131,58 @@ assert.equal(actionEvidence({ ...snapshot, sources: running }, "src-codex", "sca
 assert.equal(scanTerminalEvidence({ ...snapshot, sources: running }, "src-codex"), false, "running scan cannot show terminal success");
 const expired = mergeSourceFacts([{ kind: "codex_transcript", display_name: "Codex transcript", candidate_root: "/tmp/codex", status: "available" }], [{ source_id: "src-codex", kind: "codex_transcript", root: "/tmp/codex", status: "expired" }], []);
 assert.match(expired[0].detail, /授权已过期，需要重新授权/);
+const completedWithoutImport = mergeSourceFacts(
+  responses["/api/automatic-memory/discovered"],
+  responses["/api/automatic-memory/sources"],
+  [{ ...responses["/api/automatic-memory/scans"][0], processing_status: "scan_completed" }],
+);
+assert.equal(completedWithoutImport[0].state, "scan_completed", "scan completion is not takeover/import completion");
+assert.doesNotMatch(completedWithoutImport[0].detail, /已接管|已导入/);
+const processing = mergeSourceFacts(
+  responses["/api/automatic-memory/discovered"],
+  responses["/api/automatic-memory/sources"],
+  [{ ...responses["/api/automatic-memory/scans"][0], processing_status: "processing", processing_pending: 2 }],
+);
+assert.equal(processing[0].state, "processing");
+assert.match(processing[0].detail, /处理中/);
+const imported = mergeSourceFacts(
+  responses["/api/automatic-memory/discovered"],
+  responses["/api/automatic-memory/sources"],
+  [{ ...responses["/api/automatic-memory/scans"][0], processing_status: "imported", processing_completed: 2, processing_counts_present: ["processing_completed"] }],
+);
+assert.equal(imported[0].state, "imported");
+assert.match(imported[0].detail, /导入完成/);
+const scanCompleted = mergeSourceFacts(
+  responses["/api/automatic-memory/discovered"],
+  responses["/api/automatic-memory/sources"],
+  [{ ...responses["/api/automatic-memory/scans"][0], queued: 1, reused: 1 }],
+);
+assert.equal(scanCompleted[0].state, "scan_completed");
+assert.doesNotMatch(scanCompleted[0].detail, /已接管|已导入/);
+assert.doesNotMatch(pageSource, /queued \+ reused|queued != null.*reused != null/, "queued/reused must never be displayed as imported");
+assert.match(pageSource, /未选择目录，本次未开始，原授权和数据没有变化。/, "folder-picker cancellation must be visible");
+assert.doesNotMatch(pageSource, /disabled={Boolean\(busy\)}/, "one source action must not disable every source card");
+assert.match(pageSource, /memory-source-primary-actions/, "scan detail must have a direct primary action area");
+assert.match(pageSource, /查看已导入具体内容/, "imported structured content must expose a direct inspector action");
+const resolvedInspector = await findInspectorSourceForAutomaticMemorySource(client, "src-codex");
+assert.equal(resolvedInspector?.source_id, "inspector-exact");
+assert.equal(calls.at(-1).path, "/api/memory/inspector/sources");
+const inspectorQuery = new URL(calls.at(-1).url).searchParams;
+assert.equal(inspectorQuery.get("q"), "src-codex");
+assert.equal(inspectorQuery.get("limit"), "20");
+assert.equal(inspectorQuery.get("offset"), "0");
 const stateFixtures = [
   ["detected", { status: "available" }, [], []],
   ["consent_required", { status: "consent_required", reason: "需要主人确认" }, [], []],
   ["unsupported", { status: "unsupported", reason: "不读取不透明存储" }, [], []],
   ["authorized", { status: "available" }, [{ source_id: "src-state", status: "authorized" }], []],
   ["scanning", { status: "available" }, [{ source_id: "src-state", status: "authorized" }], [{ source_id: "src-state", scan_id: "scan-state", status: "running" }]],
-  ["current", { status: "available" }, [{ source_id: "src-state", status: "authorized" }], [{ source_id: "src-state", scan_id: "scan-state", status: "completed" }]],
+  ["scan_completed", { status: "available" }, [{ source_id: "src-state", status: "authorized" }], [{ source_id: "src-state", scan_id: "scan-state", status: "completed", processing_status: "scan_completed" }]],
+  ["processing", { status: "available" }, [{ source_id: "src-state", status: "authorized" }], [{ source_id: "src-state", scan_id: "scan-state", status: "completed", processing_status: "processing", processing_pending: 2 }]],
+  ["imported", { status: "available" }, [{ source_id: "src-state", status: "authorized" }], [{ source_id: "src-state", scan_id: "scan-state", status: "completed", processing_status: "imported", processing_completed: 2, processing_counts_present: ["processing_completed"] }]],
+  ["partial_failure", { status: "available" }, [{ source_id: "src-state", status: "authorized" }], [{ source_id: "src-state", scan_id: "scan-state", status: "completed", processing_status: "partial_failure", processing_completed: 1, processing_failed: 1 }]],
+  ["empty", { status: "available" }, [{ source_id: "src-state", status: "authorized" }], [{ source_id: "src-state", scan_id: "scan-state", status: "completed", processing_status: "empty", processing_completed: 0, processing_failed: 0 }]],
+  ["unsupported", { status: "available" }, [{ source_id: "src-state", status: "authorized" }], [{ source_id: "src-state", scan_id: "scan-state", status: "completed", processing_status: "unsupported_format", processing_completed: 0, processing_failed: 0 }]],
   ["degraded", { status: "available" }, [{ source_id: "src-state", status: "degraded" }], []],
   ["revoked", { status: "available" }, [{ source_id: "src-state", status: "revoked" }], []],
   ["failed", { status: "available" }, [{ source_id: "src-state", status: "authorized" }], [{ source_id: "src-state", scan_id: "scan-state", status: "failed", last_error: "fixture failure" }]],

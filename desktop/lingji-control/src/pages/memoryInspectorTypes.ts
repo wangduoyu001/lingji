@@ -27,6 +27,10 @@ export type SourceItem = {
   conversation_count?: number | null;
   message_count?: number | null;
   updated_at?: string | null;
+  metadata?: {
+    automatic_memory_source_id?: string | null;
+    [key: string]: unknown;
+  } | null;
 };
 
 export type ConversationItem = {

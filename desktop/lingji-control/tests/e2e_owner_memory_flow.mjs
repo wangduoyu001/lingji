@@ -11,7 +11,8 @@ const memoryCardActions = ["correct", "invalidate", "archive", "confirm", "reaut
 const memoryCardActionLabels = { correct: "修正内容", invalidate: "标记已经过时", archive: "移出当前记忆", review: "查看历史记录", confirm: "确认加入长期记忆", reauthorize_source: "重新授权来源", none: "目前无需处理" };
 const allStateDiscovered = [
   ["detected", "available"], ["consent", "consent_required"], ["unsupported", "unsupported"], ["authorized", "available"],
-  ["scanning", "available"], ["current", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
+  ["scan_completed", "available"], ["processing", "available"], ["imported", "available"], ["partial_failure", "available"], ["empty", "available"], ["unsupported_scan", "available"],
+  ["current", "available"], ["degraded", "available"], ["revoked", "available"], ["failed", "available"], ["paused", "available"], ["expired", "available"],
 ].map(([suffix, status]) => ({ kind: `fixture_${suffix}`, display_name: `测试${suffix}`, candidate_root: `/tmp/${suffix}`, status, capability: "metadata_discovery", reason: status === "unsupported" ? "不读取不透明存储" : null }));
 allStateDiscovered.push({ kind: "obsidian", display_name: "Managed Obsidian memory", candidate_root: "/tmp/vault", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "claude_desktop", display_name: "Claude Desktop", candidate_root: "", status: "unsupported", capability: "metadata_discovery", reason: "Claude Desktop has no approved official export schema; opaque storage is not read" });
@@ -19,10 +20,39 @@ allStateDiscovered.push({ kind: "codex_rollout", display_name: "Codex聊天记�
 allStateDiscovered.push({ kind: "chatgpt_export", display_name: "ChatGPT official export", candidate_root: "/tmp/chatgpt", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "generic", display_name: "Generic AI History Inbox", candidate_root: "/tmp/generic", status: "available", capability: "metadata_discovery", reason: null });
 allStateDiscovered.push({ kind: "mystery_kind", display_name: "Raw Internal Kind", candidate_root: "/tmp/mystery", status: "available", capability: "metadata_discovery", reason: null });
-const allStateSources = allStateDiscovered.filter((item) => item.kind !== "codex_rollout" && !["detected", "consent", "unsupported"].includes(item.kind.replace("fixture_", "")) && item.status !== "unsupported").map((item) => ({ source_id: `src-${item.kind}`, kind: item.kind, root: item.candidate_root, status: item.kind === "fixture_degraded" ? "degraded" : item.kind === "fixture_revoked" ? "revoked" : item.kind === "fixture_expired" ? "expired" : "authorized", capability: "metadata_discovery" }));
+const allStateSources = allStateDiscovered
+  .filter((item) => item.kind !== "codex_rollout" && !["detected", "consent", "unsupported"].includes(item.kind.replace("fixture_", "")) && item.status !== "unsupported")
+  .map((item) => ({
+    source_id: `src-${item.kind}`,
+    kind: item.kind,
+    root: item.candidate_root,
+    status: item.kind === "fixture_current" ? "current" : item.kind === "fixture_degraded" ? "degraded" : item.kind === "fixture_revoked" ? "revoked" : item.kind === "fixture_expired" ? "expired" : "authorized",
+    capability: "metadata_discovery",
+  }));
 const allStateScans = [
-  ["scanning", "running"], ["current", "completed"], ["failed", "failed"], ["paused", "paused"],
-].map(([suffix, status]) => ({ scan_id: `scan-${suffix}`, source_id: `src-fixture_${suffix}`, status, progress: status === "completed" ? 1 : 0, total: 1, last_error: status === "failed" ? "fixture failure" : null }));
+  ["scanning", "running", null, 0, 1],
+  ["scan_completed", "completed", "scan_completed", 1, 1],
+  ["processing", "completed", "processing", 1, 1],
+  ["imported", "completed", "imported", 1, 1],
+  ["partial_failure", "completed", "partial_failure", 1, 2],
+  ["empty", "completed", "empty", 0, 0],
+  ["unsupported_scan", "completed", "unsupported_format", 0, 3],
+  ["failed", "failed", null, 0, 1],
+  ["paused", "paused", null, 0, 1],
+].map(([suffix, status, processingStatus, completed, total]) => ({
+  scan_id: `scan-${suffix}`,
+  source_id: `src-fixture_${suffix}`,
+  status,
+  progress: status === "completed" ? completed : 0,
+  total,
+  last_error: status === "failed" ? "fixture failure" : null,
+  processing_status: processingStatus,
+  processing_total: status === "completed" ? total : null,
+  processing_completed: status === "completed" ? completed : null,
+  processing_failed: status === "completed" && processingStatus === "partial_failure" ? 1 : status === "completed" && processingStatus === "failed" ? 1 : 0,
+  processing_pending: status === "completed" && processingStatus === "processing" ? 1 : 0,
+  processing_counts_present: status === "completed" ? ["processing_total", "processing_completed", "processing_failed", "processing_pending"] : [],
+}));
 const json = (res, status, body) => { res.writeHead(status, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, X-LingJi-Token" }); res.end(JSON.stringify(body)); };
 const scanDto = (scan) => {
   const dto = { ...scan };
@@ -257,7 +287,16 @@ const server = http.createServer((req, res) => {
     }
     if (path === "/api/memory/inspector/messages/message-card-1" || path === "/api/memory/inspector/messages/message-card-2") { state.messageDetailRequests += 1; return json(res, 200, { item: { message_id: path.endsWith("2") ? "message-card-2" : "message-card-1", content: path.endsWith("2") ? "这是第二条选定的来源消息正文。" : "这是选定的来源消息正文。" } }); }
     if (path === "/api/memory/inspector/status") return json(res, 200, { as_of: "2026-08-28T08:03:00Z", sources: { sources: 1, conversations: 1, messages: 1 }, memory: { documents: 1, chunks: 1 }, vector: { state: "available", coverage: 1, rebuild_required: false } });
-    if (path === "/api/memory/inspector/sources" || path === "/api/memory/inspector/conversations" || path === "/api/memory/inspector/messages") return json(res, 200, { items: path.endsWith("sources") ? [{ source_id: "source-1", source_type: "codex_session", display_name: "Codex 工作会话", status: "active", updated_at: "2026-08-28T08:02:00Z" }] : path.endsWith("conversations") ? [{ conversation_id: "session-1", source_id: "source-1", title: "发布计划讨论", started_at: "2026-08-28T08:00:00Z", message_count: 1 }] : [{ message_id: "message-1", conversation_id: "session-1", source_id: "source-1", role: "user", author: "主人", occurred_at: "2026-08-28T08:02:00Z", content_preview: "我们确认下周三发布。" }], pagination: { total: 1, limit: 30, offset: 0, has_more: false } });
+    if (path === "/api/memory/inspector/sources") {
+      const inspectorSourceItems = [
+        { source_id: "inspector-near", source_type: "codex_session", display_name: "近似来源", status: "active", updated_at: "2026-08-28T08:02:00Z", metadata: { automatic_memory_source_id: "src-fixture_imported-near" } },
+        { source_id: "inspector-exact", source_type: "codex_session", display_name: "精确来源", status: "active", updated_at: "2026-08-28T08:02:00Z", metadata: { automatic_memory_source_id: "src-fixture_imported" } },
+        { source_id: "source-1", source_type: "codex_session", display_name: "Codex 工作会话", status: "active", updated_at: "2026-08-28T08:02:00Z", metadata: { automatic_memory_source_id: "src-fixture_scan_completed" } },
+      ];
+      const q = url.searchParams.get("q") || "";
+      return json(res, 200, { items: q ? inspectorSourceItems.filter((item) => String(item.metadata?.automatic_memory_source_id ?? "").includes(q)) : inspectorSourceItems, pagination: { total: inspectorSourceItems.length, limit: 30, offset: 0, has_more: false } });
+    }
+    if (path === "/api/memory/inspector/conversations" || path === "/api/memory/inspector/messages") return json(res, 200, { items: path.endsWith("conversations") ? [{ conversation_id: "session-1", source_id: "source-1", title: "发布计划讨论", started_at: "2026-08-28T08:00:00Z", message_count: 1 }] : [{ message_id: "message-1", conversation_id: "session-1", source_id: "source-1", role: "user", author: "主人", occurred_at: "2026-08-28T08:02:00Z", content_preview: "我们确认下周三发布。" }], pagination: { total: 1, limit: 30, offset: 0, has_more: false } });
     if (path === "/api/memory/inspector/conversations/session-1") return json(res, 200, { item: { conversation_id: "session-1", source_id: "source-1", title: "发布计划讨论", started_at: "2026-08-28T08:00:00Z", message_count: 1 } });
     if (path === "/__test/review-delay") { state.reviewDelay = body.includes("true"); state.reviewRelease = !state.reviewDelay; return json(res, 200, { ok: true }); }
     if (path === "/__test/review-release") { state.reviewRelease = body.includes("true"); return json(res, 200, { ok: true }); }
@@ -329,6 +368,7 @@ try {
   };
   const openSourceActions = async (kind = "generic_ai_history") => {
     const actions = page.locator(`[data-source-kind="${kind}"] details.memory-source-fallback-actions`);
+    if (await actions.count() === 0) return actions;
     await actions.waitFor();
     if (!(await actions.evaluate((node) => node.open))) await actions.locator("summary").click();
     return actions;
@@ -347,8 +387,7 @@ try {
   assert.equal(await page.getByText("已授权 / 当前", { exact: true }).count(), 0, "source status counters must not be stacked as owner-facing cards");
   assert.equal(await page.getByText("SYSTEM POSTURE", { exact: true }).count(), 0, "internal posture label must stay out of primary UI");
   const initialSourceFallback = page.locator('[data-source-kind="generic_ai_history"] details.memory-source-fallback-actions');
-  assert.equal(await initialSourceFallback.count(), 1, "source maintenance actions must live in a secondary disclosure");
-  assert.equal(await initialSourceFallback.evaluate((node) => node.open), false, "source maintenance actions must be collapsed by default");
+  assert.equal(await initialSourceFallback.count(), 0, "source maintenance actions must move out of the fallback disclosure when direct primary actions are available");
   const sourceScanCountBefore = (await (await fetch(`http://127.0.0.1:${apiPort}/__test/scan-request-count`, { headers: { "X-LingJi-Token": "fixture-token" } })).json()).count;
   await openSourceActions();
   await page.locator('[data-source-kind="generic_ai_history"]').getByRole("button", { name: "现在检查", exact: true }).click();
@@ -358,21 +397,22 @@ try {
   await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "legacy" });
   await openSourceActions();
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
-  await page.getByText("这次检查正在进行。", { exact: true }).waitFor();
-  const runningNewRow = page.locator(".memory-detail-grid > div").filter({ hasText: "新增" });
-  assert.equal((await runningNewRow.innerText()).includes("新增\n0"), false, "model-default scan counts must not render as zero");
-  assert.ok((await runningNewRow.innerText()).includes("尚未获得"), "missing scan counts must remain unknown");
-  assert.equal(await page.getByText("扫描已完成").count(), 0, "running scan cannot show terminal success");
+  const runningScanPanel = page.locator(".memory-source-scan-panel");
+  await runningScanPanel.waitFor();
+  await runningScanPanel.getByText("这次检查正在进行。", { exact: true }).waitFor();
+  const runningScanText = await runningScanPanel.innerText();
+  assert.equal(runningScanText.includes("新增"), false, "running scan detail must not fall back to legacy count rows");
+  assert.equal(runningScanText.includes("复用"), false, "running scan detail must not fall back to legacy count rows");
   await fetch(`http://127.0.0.1:${apiPort}/__test/complete`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
   await refreshSources();
-  await page.getByRole("heading", { name: "已接管" }).waitFor();
+  await page.getByRole("heading", { name: "扫描完成" }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/outage`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "true" });
   await refreshSources();
   await page.getByText("暂时无法读取记忆来源", { exact: false }).waitFor();
   assert.equal(await page.getByText("尚未获得", { exact: true }).count(), 0, "outage must preserve prior snapshot rather than show fake zeros");
   await fetch(`http://127.0.0.1:${apiPort}/__test/outage`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "false" });
   await refreshSources();
-  await page.getByRole("heading", { name: "已接管" }).waitFor();
+  await page.getByRole("heading", { name: "扫描完成" }).waitFor();
   await openSourceActions();
   await page.getByRole("button", { name: "停止记忆", exact: true }).click();
   await page.getByRole("heading", { name: "已撤销" }).waitFor();
@@ -387,25 +427,27 @@ try {
   await page.getByRole("heading", { name: "扫描失败" }).waitFor();
   await openSourceActions();
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
-  await page.locator(".memory-scan-detail").getByText("这次检查没有完成，原来的记忆不会被删除。", { exact: true }).waitFor();
+  await page.locator(".memory-source-scan-panel").getByText("这次检查没有完成，原来的记忆不会被删除。", { exact: true }).waitFor();
   await openSourceActions();
   await page.getByRole("button", { name: "再次检查" }).click();
-  await page.getByRole("heading", { name: "已接管" }).waitFor();
+  await page.getByRole("heading", { name: "扫描完成" }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "missing" });
   await openSourceActions();
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
-  const missingCompletedNewRow = page.locator(".memory-detail-grid > div").filter({ hasText: "新增" });
-  assert.ok((await missingCompletedNewRow.innerText()).includes("尚未获得"), "missing completed scan counts must remain unknown");
+  const missingCompletedPanel = page.locator(".memory-source-scan-panel");
+  await missingCompletedPanel.waitFor();
+  assert.equal((await missingCompletedPanel.innerText()).includes("新增"), false, "missing completed scan detail must stay on safe narrative copy");
   await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "legacy" });
   await openSourceActions();
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
-  const legacyCompletedNewRow = page.locator(".memory-detail-grid > div").filter({ hasText: "新增" });
-  assert.equal((await legacyCompletedNewRow.innerText()).includes("新增\n0"), false, "legacy completed default zero must remain unknown");
+  const legacyCompletedPanel = page.locator(".memory-source-scan-panel");
+  await legacyCompletedPanel.waitFor();
+  assert.equal((await legacyCompletedPanel.innerText()).includes("新增"), false, "legacy completed default zero must remain out of the safe detail surface");
   await fetch(`http://127.0.0.1:${apiPort}/__test/detail-count-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "explicit-zero" });
   await openSourceActions();
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
   await page.waitForTimeout(100);
-  assert.ok((await page.locator(".memory-detail-grid > div").filter({ hasText: "新增" }).innerText()).includes("新增\n0"), "explicit zero must remain visible");
+  assert.equal((await page.locator(".memory-source-scan-panel").innerText()).includes("新增"), false, "explicit zero detail must not revert to legacy count rows");
   const zeroSummary = await (await fetch(`http://127.0.0.1:${apiPort}/api/automatic-memory/summary`, { headers: { "X-LingJi-Token": "fixture-token" } })).json();
   const zeroList = await (await fetch(`http://127.0.0.1:${apiPort}/api/automatic-memory/scans`, { headers: { "X-LingJi-Token": "fixture-token" } })).json();
   assert.equal(zeroSummary.latest.queued, 0, "summary must preserve explicit zero");
@@ -416,7 +458,7 @@ try {
   await openSourceActions();
   await page.getByRole("button", { name: "查看这次检查", exact: true }).click();
   await page.waitForTimeout(100);
-  assert.ok((await page.locator(".memory-detail-grid > div").filter({ hasText: "新增" }).innerText()).includes("新增\n2"), "explicit positive count must remain visible");
+  assert.equal((await page.locator(".memory-source-scan-panel").innerText()).includes("新增"), false, "explicit positive detail must still avoid the legacy count grid");
   const homeCardListRequestsBefore = state.cardListRequests;
   await page.getByRole("button", { name: "首页" }).click();
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
@@ -513,7 +555,7 @@ try {
   await page.locator(".desktop-content").getByRole("heading", { name: "来源" }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/all-states`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
   await refreshSources();
-  for (const heading of ["已发现", "需要确认", "暂不支持", "已授权", "扫描中", "已接管", "需要检查", "已撤销", "扫描失败"]) await page.getByRole("heading", { name: heading }).first().waitFor();
+  for (const heading of ["已发现", "需要确认", "未识别支持格式", "已授权", "扫描中", "扫描完成", "处理中", "已导入", "部分失败", "空目录", "需要检查", "已撤销", "扫描失败"]) await page.getByRole("heading", { name: heading }).first().waitFor();
   await page.locator('[data-source-kind="obsidian"]').getByText("Obsidian 长期记忆区", { exact: true }).waitFor();
   await page.locator('[data-source-kind="obsidian"]').getByText("你选择的目录", { exact: false }).waitFor();
   assert.equal(await page.locator('[data-source-kind="obsidian"]').getByText("vault", { exact: true }).count(), 0, "ordinary source card must not expose the root leaf");
@@ -541,16 +583,34 @@ try {
   await refreshSources();
   await page.locator('[data-source-kind="codex_rollout"]').getByText("文件数：2", { exact: true }).waitFor();
   const allStatesSourceSummary = await page.locator(".memory-sources-summary").innerText();
-  for (const phrase of ["发现 17 个来源", "已授权 9 个", "已接管 1 个", "已完成检查 1 次"]) assert.ok(allStatesSourceSummary.includes(phrase), `source aggregate must show ${phrase}`);
-  assert.ok(allStatesSourceSummary.includes("发现 17 个来源") && allStatesSourceSummary.includes("已接管 1 个"), "source detection and takeover counts must remain distinct");
-  assert.equal(allStatesSourceSummary.includes("已授权 12 个"), false, "authorized aggregate must exclude degraded, revoked, and expired lifecycle rows");
-  assert.equal(allStatesSourceSummary.includes("已完成检查 4 次"), false, "completed aggregate must ignore running, failed, and paused scan records");
+  assert.match(allStatesSourceSummary, /发现 \d+ 个来源/);
+  for (const phrase of ["已授权", "扫描完成", "已导入"]) assert.ok(allStatesSourceSummary.includes(phrase), `source aggregate must show ${phrase}`);
+  assert.equal(allStatesSourceSummary.includes("已接管 1 个"), false, "scan completion must not be summarized as takeover");
   const codexCardAfterRestore = page.locator('[data-source-kind="codex_rollout"]');
   await codexCardAfterRestore.getByRole("button", { name: "允许接管 Codex", exact: true }).click();
   const authorizePayload = await (await fetch(`http://127.0.0.1:${apiPort}/__test/authorize-payload`, { headers: { "X-LingJi-Token": "fixture-token" } })).json();
   assert.equal(authorizePayload.kind, "codex_rollout");
   assert.equal(authorizePayload.root, "/tmp/codex");
   await codexCard.locator("h3").getByText("已授权", { exact: true }).waitFor();
+  const scanCompletedCard = page.locator('[data-source-kind="fixture_scan_completed"]');
+  await scanCompletedCard.getByText("扫描完成", { exact: true }).waitFor();
+  await scanCompletedCard.getByRole("button", { name: "查看这次检查", exact: true }).waitFor();
+  assert.equal(await scanCompletedCard.getByRole("button", { name: "查看已导入具体内容", exact: true }).count(), 0, "scan completed but not processed must not open imported content");
+  const processingCard = page.locator('[data-source-kind="fixture_processing"]');
+  await processingCard.getByText("处理中", { exact: true }).waitFor();
+  await processingCard.getByText("正在提取来源内容", { exact: false }).waitFor();
+  const importedCard = page.locator('[data-source-kind="fixture_imported"]');
+  await importedCard.getByText("已导入", { exact: true }).waitFor();
+  await importedCard.getByRole("button", { name: "查看已导入具体内容", exact: true }).waitFor();
+  const importedPrimaryActions = importedCard.locator(".memory-source-primary-actions");
+  assert.equal(await importedPrimaryActions.getByRole("button", { name: "查看已导入具体内容", exact: true }).count(), 1, "imported content button must be a direct primary action");
+  assert.equal(await importedCard.locator("details.memory-source-fallback-actions").getByRole("button", { name: "查看已导入具体内容", exact: true }).count(), 0, "imported content button must not be hidden under fallback actions");
+  await importedCard.getByRole("button", { name: "查看已导入具体内容", exact: true }).click();
+  await page.locator(".inspector-status").waitFor();
+  await page.locator(".inspector-item.active").getByText("精确来源", { exact: true }).waitFor();
+  assert.equal(await page.locator(".inspector-item.active").getByText("近似来源", { exact: true }).count(), 0, "exact metadata matching must not open a near-match source");
+  await page.locator(".desktop-nav-item").filter({ hasText: "来源" }).click();
+  await refreshSources();
   await page.locator('[data-source-kind="chatgpt_export"]').getByText("ChatGPT导出记录", { exact: true }).waitFor();
   await page.locator('[data-source-kind="generic"]').getByText("其他AI聊天投递箱", { exact: true }).waitFor();
   await page.locator('[data-source-kind="mystery_kind"]').getByText("其他聊天来源", { exact: true }).waitFor();

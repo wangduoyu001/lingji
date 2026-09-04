@@ -3,6 +3,11 @@ export const SOURCE_STATES = [
   "consent_required",
   "authorized",
   "scanning",
+  "scan_completed",
+  "processing",
+  "imported",
+  "partial_failure",
+  "empty",
   "current",
   "degraded",
   "unsupported",
@@ -53,6 +58,36 @@ export type ScanRun = {
   counts_present?: string[] | null;
   updated_at?: string | null;
   last_error?: string | null;
+  processing_status?: string | null;
+  processing_total?: number | null;
+  processing_completed?: number | null;
+  processing_failed?: number | null;
+  processing_pending?: number | null;
+  processing_counts_present?: string[] | null;
+};
+
+export type ScanDetailItem = {
+  item_id: string;
+  name?: string | null;
+  source?: string | null;
+  stage?: string | null;
+  result?: string | null;
+  reason?: string | null;
+  updated_at?: string | null;
+  retryable?: boolean | null;
+  imported_sources?: number | null;
+  imported_conversations?: number | null;
+  imported_messages?: number | null;
+};
+
+export type ScanDetailResponse = ScanRun & {
+  items?: ScanDetailItem[] | null;
+  items_pagination?: {
+    limit: number;
+    offset: number;
+    total: number | null;
+    has_more: boolean;
+  } | null;
 };
 
 export type ScanSummary = {
