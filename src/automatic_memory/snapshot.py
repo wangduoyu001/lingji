@@ -22,6 +22,7 @@ class FileStat:
     size: int
     mtime_ns: int
     inode: int | None
+    mode: int
 
 
 @dataclass(frozen=True)
@@ -441,6 +442,7 @@ class ConsistentSnapshot:
             size=int(stat.st_size),
             mtime_ns=int(stat.st_mtime_ns),
             inode=int(getattr(stat, "st_ino", 0)) or None,
+            mode=int(stat.st_mode),
         )
 
     def _temporary_path(

@@ -376,3 +376,26 @@ def test_path_replaced_with_symlink_during_copy_is_rejected_before_reading_targe
         snapshot.capture(source.source_id, source_file)
     assert snapshot.copied_data == b"authorized"
     assert list((tmp_path / "storage" / "raw").iterdir()) == []
+
+
+def test_snapshot_detects_source_mode_change_during_copy(tmp_path: Path):
+    """A chmod of the source between the two stats must not count as stable."""
+    _, registry, source, root = _authorized_source(tmp_path)
+    source_file = root / "changing.txt"
+    source_file.write_bytes(b"authorized")
+    original_mode = source_file.stat().st_mode
+
+    class ChmodDuringCopy(ConsistentSnapshot):
+        def _copy_to_temp(self, source_path: Path, temporary: Path) -> None:
+            super()._copy_to_temp(source_path, temporary)
+            source_path.chmod(0o600)
+
+    snapshot = ChmodDuringCopy(registry, tmp_path / "storage" / "raw")
+
+    result = snapshot.capture(source.source_id, source_file, max_attempts=1)
+
+    assert result.stable is False, "a mode change during copy is a mutating source and must not be accepted"
+    assert result.stat_before != result.stat_after
+    assert result.stat_before.mode & 0o777 == original_mode & 0o777
+    assert result.stat_after.mode & 0o777 == 0o600
+    assert list((tmp_path / "storage" / "raw").iterdir()) == []

@@ -13,8 +13,8 @@ from .models import SourceRecord
 
 MAX_FILES = 10_000
 MAX_DEPTH = 4
-_SENSITIVE_NAMES = {".env", ".envrc", "credentials", "credential", "auth", "token", "cookie", "cookies", "private", "secret", "secrets", "keychain", "login", "logins"}
-_SENSITIVE_SUFFIXES = {".db", ".sqlite", ".sqlite3"}
+_SENSITIVE_NAMES = {".env", ".envrc", "credentials", "credential", "auth", "config", "token", "cookie", "cookies", "private", "secret", "secrets", "keychain", "login", "logins", "key", "keys"}
+_SENSITIVE_SUFFIXES = {".db", ".sqlite", ".sqlite3", ".pem", ".key", ".db-wal", ".db-shm", ".sqlite-wal", ".sqlite-shm", ".sqlite3-wal", ".sqlite3-shm"}
 _EXTENSIONS = {
     "chatgpt_export": {".json", ".zip"}, "codex_transcript": {".jsonl"}, "codex": {".jsonl"}, "codex_history": {".jsonl"},
     "generic_ai_history": {".json", ".jsonl", ".md", ".markdown"}, "history_inbox": {".json", ".jsonl", ".md", ".markdown"},
@@ -46,17 +46,30 @@ def _reject_root(root: Path) -> Path:
     return resolved
 
 
+def is_sensitive_source_name(name: str) -> bool:
+    """Fail closed for credential/config/key/database-shaped component names.
+
+    Matching happens on one path component only: separators are boundaries, so
+    safe names such as ``author.json`` or ``monkey.json`` stay readable while
+    ``.env.production``, ``config.json``, ``server.key`` and ``x.db-wal`` are
+    rejected across case and separator variants.
+    """
+    lowered = name.casefold()
+    if lowered.startswith(".env"):
+        return True
+    if any(lowered.endswith(suffix) for suffix in _SENSITIVE_SUFFIXES):
+        return True
+    stem = lowered.rsplit(".", 1)[0] if "." in lowered else lowered
+    tokens = {token for token in re.split(r"[^a-z0-9]+", stem) if token}
+    return bool(tokens & _SENSITIVE_NAMES)
+
+
 def _sensitive(path: Path) -> bool:
     # Match tokens in the selected component, not operating-system ancestors
     # such as macOS's /private/var temporary tree. Separators are boundaries,
     # so safe names such as ``author.json`` are not overblocked while
     # ``AUTH-token.json`` and ``auth_token.json`` are rejected.
-    name = path.name.casefold()
-    if any(name.endswith(suffix) for suffix in _SENSITIVE_SUFFIXES):
-        return True
-    stem = name.rsplit(".", 1)[0] if "." in name else name
-    tokens = {token for token in re.split(r"[^a-z0-9]+", stem) if token}
-    return bool(tokens & _SENSITIVE_NAMES)
+    return is_sensitive_source_name(path.name)
 
 
 def _within(root: Path, candidate: Path) -> bool:
@@ -106,4 +119,4 @@ def enumerate_authorized_files(
     return tuple(sorted(files, key=lambda item: item.relative_to(root).as_posix()))
 
 
-__all__ = ["MAX_DEPTH", "MAX_FILES", "enumerate_authorized_files", "validate_codex_rollout_root"]
+__all__ = ["MAX_DEPTH", "MAX_FILES", "enumerate_authorized_files", "is_sensitive_source_name", "validate_codex_rollout_root"]

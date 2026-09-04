@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from dataclasses import asdict
+import copy
 import json
 import time
 from pathlib import Path
@@ -1178,3 +1179,164 @@ def test_authenticated_scan_action_reports_paused_and_lease_contention(
         assert contended.json()["next_action"] and "existing" in contended.json()["next_action"]
     finally:
         runtime.stop()
+
+
+def test_source_intake_operations_preserve_protected_health_and_model_dtos(tmp_path: Path):
+    """Authorize + scan + detail must not shrink or change protected DTOs.
+
+    Model registry/runtime/compatibility facts, LingJi self-check, system
+    health and memory health are captured as exact JSON before and after a
+    real automatic-memory intake flow (authorize, scheduled scan with real
+    snapshot admission, paginated detail). Only an explicit narrow time-key
+    normalizer is applied; everything else must be value-identical.
+    """
+    if create_control_app is None or LocalControlService is None:
+        pytest.fail("automatic-memory control API production modules are absent")
+
+    root = tmp_path / "generic-history"
+    root.mkdir()
+    (root / "session-notes.md").write_text("ordinary chat content", encoding="utf-8")
+    (root / "author.json").write_text("{}", encoding="utf-8")
+    (root / ".env.production").write_text("secret", encoding="utf-8")
+    (root / "config.json").write_text("{}", encoding="utf-8")
+
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    settings = SimpleNamespace(
+        storage_path=storage,
+        state_db_path=storage / "lingji_state.db",
+        memory_db_path=storage / "lingji_memory.db",
+        vault_path=tmp_path / "vault",
+        runtime_settings_file="runtime_settings.json",
+        extraction_poll_seconds=0.05,
+        extraction_batch_size=1,
+        extraction_max_attempts=1,
+        extraction_lease_heartbeat_seconds=2,
+        extraction_stale_after_seconds=30,
+        scheduler_poll_seconds=0.05,
+        automatic_memory_debounce_seconds=1,
+        automatic_memory_reconciliation_seconds=60,
+        automatic_memory_integrity_seconds=3600,
+        embedding_enabled=False,
+        semantic_enabled=False,
+    )
+    state = StateDatabase(settings.state_db_path)
+
+    protected_state = {
+        "health": {
+            "status": "healthy",
+            "checks": {"database": {"status": "ok", "latency_ms": 3}, "raw_storage": {"status": "ok", "writable": True}},
+            "checked_at": "2026-09-04T08:00:00+00:00",
+        },
+        "models_registry": {
+            "models": [
+                {"id": "model-primary", "status": "available", "runtime": {"state": "running", "backend": "local"}, "compatibility": {"level": "full", "checked_at": "2026-09-04T07:59:00+00:00"}},
+                {"id": "model-fallback", "status": "idle", "runtime": {"state": "stopped", "backend": "local"}, "compatibility": {"level": "partial", "checked_at": "2026-09-04T07:59:00+00:00"}},
+            ],
+            "default_model": "model-primary",
+            "as_of": "2026-09-04T08:00:00+00:00",
+        },
+        "models": {
+            "available": ["model-primary", "model-fallback"],
+            "running": "model-primary",
+            "compatibility": {"model-primary": "full", "model-fallback": "partial"},
+        },
+        "brain_status": {
+            "state": "healthy",
+            "self_check": {"passed": True, "components": ["lexical", "semantic", "vault"], "as_of": "2026-09-04T08:00:00+00:00"},
+        },
+        "overview": {
+            "health": {"status": "healthy", "checked_at": "2026-09-04T08:00:00+00:00"},
+            "memory_runtime": {"state": "healthy", "memory": {"documents": 37}},
+            "embedding_status": {"state": "available", "model": "fixture-embed"},
+            "vector_status": {"state": "available", "coverage": 1.0},
+        },
+        "memory_status": {
+            "health": "healthy",
+            "documents": 37,
+            "conversations": 3,
+            "messages": 36,
+            "as_of": "2026-09-04T08:00:00+00:00",
+        },
+    }
+
+    def protected(key):
+        def read() -> dict:
+            return copy.deepcopy(protected_state[key])
+        return read
+
+    control = LocalControlService.__new__(LocalControlService)
+    control.health = protected("health")
+    control.model_registry = protected("models_registry")
+    control.models = protected("models")
+    control.brain_status = protected("brain_status")
+    control.overview = protected("overview")
+    control.memory_status = protected("memory_status")
+    control.settings = settings
+    control.state_db = state
+
+    app = create_control_app(settings, service=control, token="local-secret")
+    headers = {"X-LingJi-Token": "local-secret"}
+    protected_routes = ("/api/health", "/api/models/registry", "/api/models", "/api/brain/status", "/api/overview", "/api/memory/status")
+
+    time_keys = {"as_of", "checked_at"}
+
+    def normalize(value):
+        if isinstance(value, dict):
+            return {key: ("<time>" if key in time_keys else normalize(item)) for key, item in value.items()}
+        if isinstance(value, list):
+            return [normalize(item) for item in value]
+        return value
+
+    with TestClient(app) as client:
+        before = {route: client.get(route, headers=headers).json() for route in protected_routes}
+
+        authorized = client.post(
+            "/api/automatic-memory/authorize",
+            headers=headers,
+            json={
+                "grant_id": "grant-protected-dto",
+                "source_kinds": ["generic_ai_history"],
+                "roots": [str(root)],
+                "granted_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+                "expires_at": None,
+                "owner_confirmed": True,
+                "kind": "generic_ai_history",
+                "root": str(root),
+            },
+        )
+        assert authorized.status_code == 200
+        source_id = authorized.json()["source_id"]
+
+        runtime = AutomaticMemoryRuntime(
+            state_db=state,
+            pipeline=build_extraction_pipeline(settings),
+            settings=settings,
+            registry=control.automatic_memory_registry,
+        )
+        control.runtime = runtime
+
+        scanned = client.post("/api/automatic-memory/scan", headers=headers, json={"source_id": source_id})
+        assert scanned.status_code == 200
+        scan_id = scanned.json()["scan_id"]
+
+        first_page = client.get(f"/api/automatic-memory/scans/{scan_id}", headers=headers, params={"limit": 1, "offset": 0})
+        assert first_page.status_code == 200
+        items = first_page.json().get("items") or []
+        assert len(items) == 1, "a real scan of two admissible files must produce per-item detail"
+        assert first_page.json()["items_pagination"]["has_more"] is True
+        second_page = client.get(f"/api/automatic-memory/scans/{scan_id}", headers=headers, params={"limit": 1, "offset": 1})
+        assert second_page.status_code == 200
+        second_items = second_page.json().get("items") or []
+        assert len(second_items) == 1
+
+        item_names = {items[0]["name"], second_items[0]["name"]}
+        assert item_names == {"author.json", "session-notes.md"}, item_names
+        for item in [*items, *second_items]:
+            serialized = json.dumps(item, ensure_ascii=False)
+            assert str(root) not in serialized, "scan items must not expose absolute paths"
+            assert "secret" not in serialized
+
+        after = {route: client.get(route, headers=headers).json() for route in protected_routes}
+
+    assert normalize(after) == normalize(before), "protected model/health DTOs must be value-identical across source intake"

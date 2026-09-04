@@ -10,6 +10,7 @@ from typing import Any, Mapping
 
 from .home import resolve_effective_home
 from .models import DiscoveredSource
+from .path_policy import is_sensitive_source_name
 
 
 def _candidate(value: Any) -> Path | None:
@@ -33,13 +34,6 @@ _CODEX_MAX_FILES = 50_000
 _CODEX_MAX_DIRECTORIES = 50_000
 _CODEX_MAX_DEPTH = 5
 _ROLLOUT_NAME = "rollout-"
-_SENSITIVE_NAMES = frozenset({"auth", "config", "credentials", "cookie", "cookies", "token", "private", "secret", "secrets", "keychain", "login", "logins"})
-
-
-def _sensitive_name(name: str) -> bool:
-    stem = name.casefold().rsplit(".", 1)[0]
-    tokens = {token for token in stem.replace("-", "_").split("_") if token}
-    return bool(tokens & _SENSITIVE_NAMES)
 
 
 def _effective_home(settings: object, env: Mapping[str, str]) -> Path:
@@ -75,7 +69,7 @@ def _rollout_inventory(root: Path) -> tuple[int | None, int | None, float | None
             if depth >= _CODEX_MAX_DEPTH:
                 continue
             for entry in current_path.iterdir():
-                if entry.is_symlink() or _sensitive_name(entry.name):
+                if entry.is_symlink() or is_sensitive_source_name(entry.name):
                     continue
                 if entry.is_dir():
                     directories_seen += 1

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -90,7 +91,180 @@ def test_obsidian_policy_reads_only_managed_paths(tmp_path: Path):
     assert files == (managed,)
 
 
-def test_claude_discovery_is_explicitly_unsupported(tmp_path: Path):
+@pytest.mark.parametrize(
+    "bad_name",
+    [".env", ".env.production", ".env.local", "config.json", "config-export.jsonl", "auth.json", "Cookie Store.jsonl", "secrets.md", "Login Data.json"],
+)
+def test_path_policy_rejects_env_config_and_credential_file_variants(tmp_path: Path, bad_name: str):
+    """`.env.production`/`config.json` must fail closed like credentials do."""
+    assert enumerate_authorized_files is not None, "Task 3 path policy module is absent"
+    root = tmp_path / "generic"
+    root.mkdir()
+    (root / bad_name).write_text("sensitive", encoding="utf-8")
+    safe_author = root / "author.json"
+    safe_author.write_text("{}", encoding="utf-8")
+    safe_session = root / "session-notes.md"
+    safe_session.write_text("ordinary chat content", encoding="utf-8")
+
+    source = SourceRecord("source-1", "generic_ai_history", str(root), "authorized", "metadata_discovery", "v1")
+    files = enumerate_authorized_files(source)
+
+    assert files == (safe_author, safe_session)
+
+
+def test_path_policy_prunes_sensitive_named_directories(tmp_path: Path):
+    assert enumerate_authorized_files is not None, "Task 3 path policy module is absent"
+    root = tmp_path / "generic"
+    for directory in ("config", ".env.d", "server.key", "certs.pem", "history.db-wal"):
+        (root / directory).mkdir(parents=True)
+        (root / directory / "notes.json").write_text("{}", encoding="utf-8")
+    safe = root / "session.jsonl"
+    safe.write_text("safe", encoding="utf-8")
+
+    source = SourceRecord("source-1", "generic_ai_history", str(root), "authorized", "metadata_discovery", "v1")
+    files = enumerate_authorized_files(source)
+
+    assert files == (safe,)
+
+
+@pytest.mark.parametrize("root_name", ["server.key", "certs.pem", "history.db-wal", "history.db-shm", ".env.production", "keys.d"])
+def test_path_policy_rejects_sensitive_named_roots(tmp_path: Path, root_name: str):
+    assert enumerate_authorized_files is not None, "Task 3 path policy module is absent"
+    root = tmp_path / "sources" / root_name
+    root.mkdir(parents=True)
+
+    source = SourceRecord("source-1", "generic_ai_history", str(root), "authorized", "metadata_discovery", "v1")
+    with pytest.raises(PermissionError):
+        enumerate_authorized_files(source)
+
+
+def test_rollout_inventory_prunes_env_variant_directories(tmp_path: Path):
+    """Discovery counting must not descend into credential-shaped folders."""
+    assert discover_source_metadata is not None, "Task 3 discovery module is absent"
+    home = tmp_path / "home"
+    sessions = home / ".codex" / "sessions"
+    sessions.mkdir(parents=True)
+    good = sessions / "rollout-2026-01-01T00-00-00.jsonl"
+    good.write_text("{}", encoding="utf-8")
+    (sessions / ".env.d").mkdir()
+    hidden = sessions / ".env.d" / "rollout-2026-01-02T00-00-00.jsonl"
+    hidden.write_text("{}", encoding="utf-8")
+
+    settings = SimpleNamespace(platform_name="darwin", home_dir=home, environ={"HOME": str(home)})
+    discovered = discover_source_metadata(settings)
+
+    codex = next(item for item in discovered if item.kind == "codex_rollout" and item.candidate_root == str(sessions.resolve()))
+    assert codex.file_count == 1
+    assert codex.byte_count == good.stat().st_size
+
+
+def test_discovery_enumeration_and_snapshot_have_no_source_side_effects(tmp_path: Path, monkeypatch):
+    """Spies prove read-only behavior: no process/network/write under source root."""
+    assert discover_source_metadata is not None and enumerate_authorized_files is not None
+    from src.automatic_memory.snapshot import ConsistentSnapshot
+    from src.automatic_memory.source_registry import SourceRegistry
+    from src.automatic_memory.models import AuthorizationScope
+    from src.storage import StateDatabase
+
+    root = tmp_path / "generic"
+    root.mkdir()
+    safe = root / "session-notes.md"
+    safe.write_text("ordinary chat content", encoding="utf-8")
+    source_tree_before = sorted((str(p.relative_to(root)), p.stat().st_mtime_ns, p.stat().st_size, p.stat().st_mode) for p in root.rglob("*"))
+
+    def deny_source_path_write(target):
+        try:
+            resolved = Path(target).resolve(strict=False)
+        except TypeError:
+            return
+        if str(resolved).startswith(str(root.resolve())):
+            raise AssertionError(f"source tree was touched: {resolved}")
+
+    real_open = open
+
+    def guarded_open(file, mode="r", *args, **kwargs):
+        if any(flag in mode for flag in ("w", "a", "x", "+")):
+            deny_source_path_write(file)
+        return real_open(file, mode, *args, **kwargs)
+
+    import io
+    import os as os_module
+    import socket as socket_module
+    import subprocess as subprocess_module
+
+    def deny(*_args, **_kwargs):
+        raise AssertionError("discovery/enumeration/snapshot must not start processes or touch the network")
+
+    monkeypatch.setattr(subprocess_module, "Popen", deny)
+    monkeypatch.setattr(subprocess_module, "run", deny)
+    monkeypatch.setattr(subprocess_module, "call", deny)
+    monkeypatch.setattr(os_module, "system", deny)
+    monkeypatch.setattr(os_module, "kill", deny)
+    monkeypatch.setattr(socket_module.socket, "connect", deny)
+    monkeypatch.setattr(socket_module, "create_connection", deny)
+    monkeypatch.setattr(os_module, "chmod", deny)
+    monkeypatch.setattr(os_module, "chown", deny)
+    monkeypatch.setattr(io, "open", guarded_open)
+
+    real_chmod = os_module.chmod
+    real_rename = os_module.rename
+    real_replace = os_module.replace
+    real_unlink = os_module.unlink
+
+    def guarded_chmod(path, *args, **kwargs):
+        deny_source_path_write(path)
+        return real_chmod(path, *args, **kwargs)
+
+    def guarded_rename(src, *args, **kwargs):
+        deny_source_path_write(src)
+        return real_rename(src, *args, **kwargs)
+
+    def guarded_replace(src, *args, **kwargs):
+        deny_source_path_write(src)
+        return real_replace(src, *args, **kwargs)
+
+    def guarded_unlink(path, *args, **kwargs):
+        deny_source_path_write(path)
+        return real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(os_module, "chmod", guarded_chmod)
+    monkeypatch.setattr(os_module, "rename", guarded_rename)
+    monkeypatch.setattr(os_module, "replace", guarded_replace)
+    monkeypatch.setattr(os_module, "unlink", guarded_unlink)
+
+    settings = SimpleNamespace(
+        platform_name="darwin",
+        home_dir=tmp_path / "home",
+        environ={"HOME": str(tmp_path / "home")},
+        generic_history_dir=root,
+        claude_owner_confirmed=False,
+    )
+    discovered = discover_source_metadata(settings)
+    generic = next(item for item in discovered if item.kind == "generic_ai_history")
+
+    state = StateDatabase(tmp_path / "lingji_state.db")
+    registry = SourceRegistry(state)
+    registered = registry.register(
+        AuthorizationScope(
+            grant_id="grant-spy",
+            source_kinds=("generic_ai_history",),
+            roots=(str(root),),
+            granted_at=datetime.now(timezone.utc),
+            expires_at=None,
+            owner_confirmed=True,
+        ),
+        "generic_ai_history",
+        str(root),
+    )
+    files = enumerate_authorized_files(registered)
+    assert files == (safe,)
+
+    snapshot = ConsistentSnapshot(registry, tmp_path / "storage" / "raw")
+    result = snapshot.capture(registered.source_id, safe)
+    assert result.stable is True
+
+    source_tree_after = sorted((str(p.relative_to(root)), p.stat().st_mtime_ns, p.stat().st_size, p.stat().st_mode) for p in root.rglob("*"))
+    assert source_tree_after == source_tree_before, "source tree must be byte-identical after read-only intake"
     assert discover_source_metadata is not None, "Task 3 discovery module is absent"
     settings = SimpleNamespace(claude_desktop_dir=tmp_path / "claude")
     discovered = discover_source_metadata(settings)
