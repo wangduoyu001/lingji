@@ -201,6 +201,9 @@ def test_pause_resume_work_fact_uses_truthful_scan_total(
     assert fact["outcome"]["status"] == "completed"
     assert "已检查 0 个" not in fact["outcome"]["summary"]
     assert "已检查 10 个" in fact["outcome"]["summary"]
+    assert fact["outcome"]["evidence"]["queued"] == 10
+    assert fact["outcome"]["evidence"]["reused"] == 0
+    assert fact["outcome"]["evidence"]["completed_jobs"] == 10
     assert runtime._scan_reports == {}
 
 

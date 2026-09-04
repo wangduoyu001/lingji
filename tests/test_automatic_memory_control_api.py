@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from dataclasses import asdict
 import json
 import time
@@ -582,13 +582,155 @@ def test_scan_detail_exact_queue_query_enumerates_more_than_200_rows(tmp_path: P
     control.runtime = SimpleNamespace(queue=queue)
     app = create_control_app(SimpleNamespace(storage_path=storage), service=control, token="secret")
     with TestClient(app) as client:
+        pages = [
+            client.get(
+                f"/api/automatic-memory/scans/{scan.scan_id}",
+                headers={"X-LingJi-Token": "secret"},
+                params={"limit": 100, "offset": offset},
+            )
+            for offset in (0, 100, 200)
+        ]
+    assert all(response.status_code == 200 for response in pages)
+    payloads = [response.json() for response in pages]
+    assert [len(payload["items"]) for payload in payloads] == [100, 100, 5]
+    assert [payload["items_pagination"] for payload in payloads] == [
+        {"limit": 100, "offset": 0, "total": 205, "has_more": True},
+        {"limit": 100, "offset": 100, "total": 205, "has_more": True},
+        {"limit": 100, "offset": 200, "total": 205, "has_more": False},
+    ]
+    items = [item for payload in payloads for item in payload["items"]]
+    assert [item["name"] for item in items] == [
+        f"item-{index:03d}.json" for index in range(205)
+    ]
+    assert len({item["item_id"] for item in items}) == 205
+    assert set(item["item_id"] for item in payloads[0]["items"]).isdisjoint(
+        item["item_id"] for item in payloads[1]["items"]
+    )
+    assert set(item["item_id"] for item in payloads[1]["items"]).isdisjoint(
+        item["item_id"] for item in payloads[2]["items"]
+    )
+
+
+def test_scan_route_uses_one_newest_authoritative_fact_per_source_path(tmp_path: Path):
+    root = tmp_path / "source"
+    root.mkdir()
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    state = StateDatabase(storage / "lingji_state.db")
+    registry = SourceRegistry(state)
+    source = registry.register(
+        AuthorizationScope(
+            "grant-authoritative-path",
+            ("generic_ai_history",),
+            (str(root),),
+            datetime.now(timezone.utc),
+            None,
+            True,
+        ),
+        "generic_ai_history",
+        str(root),
+    )
+    scan = registry.start_scan(source.source_id)
+    queue = build_extraction_pipeline(SimpleNamespace(
+        storage_path=storage,
+        state_db_path=storage / "lingji_state.db",
+        memory_db_path=storage / "lingji_memory.db",
+        vault_path=tmp_path / "vault",
+        runtime_settings_file="runtime_settings.json",
+        extraction_max_attempts=1,
+        extraction_lease_heartbeat_seconds=2,
+        extraction_stale_after_seconds=30,
+        embedding_enabled=False,
+        semantic_enabled=False,
+    )).queue
+    old_at = datetime(2026, 9, 4, tzinfo=timezone.utc)
+    old = queue.enqueue(
+        "automatic_memory_snapshot",
+        payload={
+            "scan_id": scan.scan_id,
+            "source_id": source.source_id,
+            "source_type": "generic_ai_history",
+            "relative_path": "same.json",
+            "sha256": "a" * 64,
+        },
+        idempotency_key="old-failed",
+        max_attempts=1,
+        now=old_at,
+    )
+    old_claim = queue.claim(
+        "route-old",
+        job_id=old["job_id"],
+        allowed_source_types={"automatic_memory_snapshot"},
+        now=old_at,
+    )
+    assert old_claim is not None
+    queue.fail(
+        old["job_id"],
+        "synthetic failure",
+        worker_id="route-old",
+        lease_token=old_claim["lease_token"],
+        terminal=True,
+        now=old_at,
+    )
+    new_at = old_at + timedelta(seconds=1)
+    new = queue.enqueue(
+        "automatic_memory_snapshot",
+        payload={
+            "scan_id": scan.scan_id,
+            "source_id": source.source_id,
+            "source_type": "generic_ai_history",
+            "relative_path": "same.json",
+            "sha256": "b" * 64,
+        },
+        idempotency_key="new-completed",
+        max_attempts=1,
+        now=new_at,
+    )
+    new_claim = queue.claim(
+        "route-new",
+        job_id=new["job_id"],
+        allowed_source_types={"automatic_memory_snapshot"},
+        now=new_at,
+    )
+    assert new_claim is not None
+    queue.complete(
+        new["job_id"],
+        {"structured_read_model": {"sources": 1, "conversations": 2, "messages": 3}},
+        worker_id="route-new",
+        lease_token=new_claim["lease_token"],
+        now=new_at,
+    )
+    registry.complete_scan_if_authorized(
+        scan.scan_id,
+        progress=2,
+        total=2,
+        queued_count=2,
+        reused_count=0,
+    )
+
+    control = LocalControlService.__new__(LocalControlService)
+    control.state_db = state
+    control.automatic_memory_registry = registry
+    control.runtime = SimpleNamespace(queue=queue)
+    app = create_control_app(SimpleNamespace(storage_path=storage), service=control, token="secret")
+    with TestClient(app) as client:
         response = client.get(
             f"/api/automatic-memory/scans/{scan.scan_id}",
             headers={"X-LingJi-Token": "secret"},
-            params={"limit": 100},
         )
+
     assert response.status_code == 200
-    assert response.json()["items_pagination"]["total"] == 205
+    payload = response.json()
+    assert payload["processing_total"] == 1
+    assert payload["processing_completed"] == 1
+    assert payload["processing_failed"] == 0
+    assert payload["processing_pending"] == 0
+    assert payload["processing_status"] == "imported"
+    assert payload["queued"] == 1
+    assert payload["reused"] == 0
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["name"] == "same.json"
+    assert payload["items"][0]["result"] == "imported"
 
 
 def test_scan_detail_real_second_scan_projects_reused_content(tmp_path: Path):
@@ -636,7 +778,134 @@ def test_scan_detail_real_second_scan_projects_reused_content(tmp_path: Path):
         )
     assert first["scan_id"] != second["scan_id"]
     assert response.status_code == 200
-    assert response.json()["items"][0]["result"] == "reused"
+    payload = response.json()
+    assert payload["items"][0]["result"] == "reused"
+    assert payload["reused"] == 1
+    assert payload["queued"] == 0
+    assert payload["processing_total"] == 1
+    assert payload["processing_completed"] == 1
+    assert payload["processing_pending"] == 0
+    assert payload["processing_status"] == "scan_completed"
+
+
+def test_historical_queued_job_completion_reconciles_restarted_work_and_api(tmp_path: Path):
+    root = tmp_path / "source"
+    root.mkdir()
+    root.joinpath("history.json").write_text(
+        json.dumps({
+            "schema": "lingji.history.inbox",
+            "schema_version": "1",
+            "conversations": [{
+                "conversation_id": "restart-conversation",
+                "title": "Synthetic",
+                "messages": [{
+                    "message_id": "restart-message",
+                    "role": "user",
+                    "content": "hello",
+                    "timestamp": "2026-09-04T00:00:00Z",
+                }],
+            }],
+        }),
+        encoding="utf-8",
+    )
+    storage = tmp_path / "storage"
+    settings = SimpleNamespace(
+        storage_path=storage,
+        state_db_path=storage / "lingji_state.db",
+        memory_db_path=storage / "lingji_memory.db",
+        vault_path=tmp_path / "vault",
+        runtime_settings_file="runtime_settings.json",
+        extraction_max_attempts=1,
+        extraction_lease_heartbeat_seconds=2,
+        extraction_stale_after_seconds=30,
+        extraction_poll_seconds=0.05,
+        extraction_batch_size=1,
+        embedding_enabled=False,
+        semantic_enabled=False,
+    )
+    state = StateDatabase(settings.state_db_path)
+    registry = SourceRegistry(state)
+    source = registry.register(
+        AuthorizationScope(
+            "grant-restart-reuse",
+            ("generic_ai_history",),
+            (str(root),),
+            datetime.now(timezone.utc),
+            None,
+            True,
+        ),
+        "generic_ai_history",
+        str(root),
+    )
+    initial = AutomaticMemoryRuntime(
+        state_db=state,
+        pipeline=build_extraction_pipeline(settings),
+        settings=settings,
+        registry=registry,
+    )
+    first = initial.scan_now(source.source_id)
+    second = initial.scan_now(source.source_id)
+    queued_job = initial.queue.list_page(
+        source_type="automatic_memory_snapshot", limit=1
+    )[0]
+    assert queued_job["status"] == "queued"
+    assert state.list_automatic_memory_scan_items(second["scan_id"])[0][
+        "status"
+    ] == f"job:{queued_job['job_id']}:existing"
+
+    reopened_state = StateDatabase(settings.state_db_path)
+    reopened_registry = SourceRegistry(reopened_state)
+    reopened_pipeline = build_extraction_pipeline(settings)
+    reopened_runtime = AutomaticMemoryRuntime(
+        state_db=reopened_state,
+        pipeline=reopened_pipeline,
+        settings=settings,
+        registry=reopened_registry,
+    )
+    outcome = reopened_pipeline.process_job(
+        queued_job["job_id"], worker_id="restart-reuse"
+    )
+    assert outcome["job"]["status"] == "completed"
+    second_fact = reopened_runtime.work_projector.fact(
+        f"automatic-memory:{second['scan_id']}"
+    )
+    assert second_fact["outcome"]["status"] == "completed"
+    assert second_fact["outcome"]["evidence"]["queued"] == 0
+    assert second_fact["outcome"]["evidence"]["reused"] == 1
+    assert "复用 1 个先前已导入内容" in second_fact["outcome"]["summary"]
+    assert "0 个" not in second_fact["outcome"]["summary"]
+
+    control = LocalControlService.__new__(LocalControlService)
+    control.settings = settings
+    control.state_db = reopened_state
+    control.automatic_memory_registry = reopened_registry
+    control.runtime = reopened_runtime
+    app = create_control_app(settings, service=control, token="secret")
+    with TestClient(app) as client:
+        detail = client.get(
+            f"/api/automatic-memory/scans/{second['scan_id']}",
+            headers={"X-LingJi-Token": "secret"},
+        )
+        listed = client.get(
+            "/api/automatic-memory/scans",
+            headers={"X-LingJi-Token": "secret"},
+        )
+    assert detail.status_code == listed.status_code == 200
+    projected = detail.json()
+    assert projected["queued"] == 0
+    assert projected["reused"] == 1
+    assert projected["processing_total"] == 1
+    assert projected["processing_completed"] == 1
+    assert projected["processing_failed"] == 0
+    assert projected["processing_pending"] == 0
+    assert projected["processing_status"] == "scan_completed"
+    assert projected["items"][0]["result"] == "reused"
+    list_projection = next(
+        item for item in listed.json() if item["scan_id"] == second["scan_id"]
+    )
+    assert list_projection["queued"] == projected["queued"]
+    assert list_projection["reused"] == projected["reused"]
+    assert list_projection["processing_status"] == projected["processing_status"]
 
 
 def test_scan_item_projection_uses_owner_source_labels_and_canonical_safe_names():

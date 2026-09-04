@@ -11,7 +11,11 @@ from pydantic import BaseModel, Field
 
 from src.automatic_memory import AuthorizationScope, SourceRegistry, discover_source_metadata
 from src.automatic_memory.home import resolve_effective_home
-from src.automatic_memory.job_facts import association_from_status, resolve_job_facts
+from src.automatic_memory.job_facts import (
+    association_from_status,
+    resolve_job_facts,
+    summarize_job_facts,
+)
 
 
 class AutomaticMemoryAuthorizationRequest(BaseModel):
@@ -74,16 +78,13 @@ def project_scan_processing(scan: Any, jobs: list[dict[str, Any]] | None) -> dic
     if jobs is None:
         return unknown
 
-    statuses = [str(item.get("status") or "unknown").lower() for item in jobs]
-    completed = sum(status == "completed" for status in statuses)
-    imported_completed = sum(
-        status == "completed" and item.get("_automatic_memory_association") != "existing"
-        for status, item in zip(statuses, jobs)
-    )
-    failed = sum(status in {"failed", "cancelled"} for status in statuses)
-    pending = sum(status not in {"completed", "failed", "cancelled"} for status in statuses)
+    facts = summarize_job_facts(jobs)
+    completed = facts["completed"]
+    imported_completed = facts["imported"]
+    failed = facts["failed"]
+    pending = facts["pending"]
     counts = {
-        "processing_total": len(jobs),
+        "processing_total": facts["total"],
         "processing_completed": completed,
         "processing_failed": failed,
         "processing_pending": pending,
@@ -138,6 +139,10 @@ def project_scan_dto(scan: Any, jobs: list[dict[str, Any]] | None = None) -> dic
 
     queued = normalize_count("queued")
     reused = normalize_count("reused")
+    if jobs is not None and jobs and str(payload.get("status") or "").lower() == "completed":
+        facts = summarize_job_facts(jobs)
+        queued = facts["new"]
+        reused = facts["reused"]
     result = {key: payload.get(key) for key in _SCAN_DTO_FIELDS}
     result["queued"] = queued
     result["reused"] = reused
@@ -416,18 +421,10 @@ def register_automatic_memory_routes(
             for item in registry.state_db.list_automatic_memory_scan_items(scan_id)
         }
         queue_items = jobs_for_scan(scan_id)
-        queue_available = queue_items is not None
         merged: dict[str, dict[str, Any]] = {
             relative_path: {"manifest_item": manifest_item, "queue_item": None}
             for relative_path, manifest_item in manifest_items.items()
         }
-        def newest(current: dict[str, Any] | None, candidate: dict[str, Any]) -> dict[str, Any]:
-            if current is None:
-                return candidate
-            current_key = (_scan_item_timestamp(current.get("updated_at")) or datetime.min.replace(tzinfo=timezone.utc), str(current.get("job_id") or ""))
-            candidate_key = (_scan_item_timestamp(candidate.get("updated_at")) or datetime.min.replace(tzinfo=timezone.utc), str(candidate.get("job_id") or ""))
-            return candidate if candidate_key > current_key else current
-
         for item in queue_items or []:
             payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
             relative_path = str(payload.get("relative_path") or "")
@@ -437,33 +434,19 @@ def register_automatic_memory_routes(
                 relative_path,
                 {"manifest_item": None, "queue_item": None},
             )
-            entry["queue_item"] = newest(entry["queue_item"], item)
-        runtime = getattr(control, "runtime", None)
-        queue = getattr(runtime, "queue", None) or getattr(control, "queue", None)
+            entry["queue_item"] = item
         ordered = []
         for relative_path, entry in sorted(
             merged.items(), key=lambda item: (_safe_scan_item_name(item[0]), item[0])
         ):
             associated_job = entry["queue_item"]
-            association = str((entry["manifest_item"] or {}).get("status") or "")
-            if associated_job is None and queue_available and association.startswith("job:") and queue is not None:
-                parts = association.split(":")
-                if len(parts) == 3 and parts[1] and parts[2] in {"existing", "new"}:
-                    getter = getattr(queue, "get", None)
-                    if getter is not None:
-                        try:
-                            candidate = getter(parts[1])
-                        except LookupError:
-                            candidate = None
-                        payload = candidate.get("payload") if isinstance(candidate, dict) else None
-                        if isinstance(payload, dict) and str(payload.get("source_id") or "") == source_id and str(payload.get("relative_path") or "") == relative_path:
-                            associated_job = candidate
             ordered.append(project_scan_item(
                 scan_id, relative_path, source_id=source_id, source_kind=source_kind,
                 manifest_item=entry["manifest_item"],
                 queue_item=associated_job,
                 reused=(
-                    association.endswith(":existing")
+                    isinstance(associated_job, dict)
+                    and associated_job.get("_automatic_memory_association") == "existing"
                     and isinstance(associated_job, dict)
                     and str(associated_job.get("status") or "").lower() == "completed"
                 ),

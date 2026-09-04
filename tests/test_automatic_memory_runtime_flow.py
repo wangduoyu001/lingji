@@ -90,6 +90,74 @@ def test_authorized_snapshot_is_consumed_to_terminal_structured_rows_and_work(tm
         runtime.stop()
 
 
+def test_automatic_snapshot_publishes_work_outcome_before_queue_terminal_visibility(
+    tmp_path: Path, monkeypatch,
+):
+    settings = _settings(tmp_path)
+    source_root = tmp_path / "generic"
+    source_root.mkdir()
+    source_root.joinpath("history.json").write_text(
+        json.dumps({
+            "schema": "lingji.history.inbox",
+            "schema_version": "1",
+            "conversations": [{
+                "conversation_id": "terminal-barrier-conversation",
+                "title": "Synthetic",
+                "messages": [{
+                    "message_id": "terminal-barrier-message",
+                    "role": "user",
+                    "content": "hello",
+                    "timestamp": "2026-09-04T00:00:00Z",
+                }],
+            }],
+        }),
+        encoding="utf-8",
+    )
+    pipeline = build_extraction_pipeline(settings)
+    state = StateDatabase(settings.state_db_path)
+    registry = SourceRegistry(state)
+    source = registry.register(
+        AuthorizationScope(
+            "grant-terminal-barrier",
+            ("generic_ai_history",),
+            (str(source_root),),
+            datetime.now(timezone.utc),
+            None,
+            True,
+        ),
+        "generic_ai_history",
+        str(source_root),
+    )
+    runtime = AutomaticMemoryRuntime(
+        state_db=state,
+        pipeline=pipeline,
+        settings=settings,
+        registry=registry,
+    )
+    report = runtime.scan_now(source.source_id)
+    work_id = f"automatic-memory:{report['scan_id']}"
+    job = pipeline.queue.list_page(
+        source_type="automatic_memory_snapshot",
+        scan_id=report["scan_id"],
+        limit=1,
+    )[0]
+    original_complete = pipeline.queue.complete
+    observed: list[str] = []
+
+    def complete_after_projection(*args, **kwargs):
+        fact = runtime.work_projector.fact(work_id)
+        assert fact["outcome"] is not None
+        assert fact["outcome"]["status"] == "completed"
+        observed.append(fact["outcome"]["status"])
+        return original_complete(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline.queue, "complete", complete_after_projection)
+    outcome = pipeline.process_job(job["job_id"], worker_id="terminal-barrier")
+
+    assert outcome["job"]["status"] == "completed"
+    assert observed == ["completed"]
+
+
 def test_repeated_snapshot_scan_reuses_idempotent_job(tmp_path: Path):
     # The same content-addressed snapshot must not create a duplicate extraction job.
     test_authorized_snapshot_is_consumed_to_terminal_structured_rows_and_work(tmp_path)

@@ -23,7 +23,7 @@ from .source_registry import SourceRegistry
 from .models import SourceRecord
 from .policy import resolve_event_watcher_enabled
 from .path_policy import enumerate_authorized_files
-from .job_facts import association_from_status, resolve_job_facts
+from .job_facts import association_from_status, resolve_job_facts, summarize_job_facts
 from src.work.capture_bridge import CaptureWorkBridge
 from src.work.models import ExecutionEvent, WorkItem
 from src.work.projector import WorkProjector
@@ -241,6 +241,9 @@ class AutomaticMemoryRuntime:
                 # project those states on every restart before serving queries.
                 for source in self.registry.list_sources():
                     self._on_source_lifecycle_projection(source)
+                for scan in self.state_db.list_automatic_memory_scans():
+                    if scan.get("status") in {"completed", "failed", "cancelled"}:
+                        self._maybe_finalize_scan_work(str(scan.get("scan_id") or ""))
                 snapshot_error = self._reconcile_snapshot_cleanup()
                 self._cleanup_errors = [snapshot_error] if snapshot_error else []
                 self._cleanup_pending = bool(snapshot_error)
@@ -510,9 +513,11 @@ class AutomaticMemoryRuntime:
         for scan_id in sorted(scan_ids):
             work_id = f"automatic-memory:{scan_id}"
             self.work_store.append_event(ExecutionEvent(work_id=work_id, event_id=f"extraction:{job_id}:{phase}", event_type=f"extraction.{phase}", detail={"job_id": job_id, "error": error, "source_type": payload.get("source_type")}))
-            self._maybe_finalize_scan_work(scan_id)
+            self._maybe_finalize_scan_work(scan_id, job_override=job)
 
-    def _jobs_for_scan(self, scan_id: str) -> list[dict[str, Any]]:
+    def _jobs_for_scan(
+        self, scan_id: str, *, job_override: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         scan = self.state_db.get_automatic_memory_scan(scan_id) or {}
         source_id = str(scan.get("source_id") or "")
         direct_jobs: list[dict[str, Any]] = []
@@ -527,15 +532,34 @@ class AutomaticMemoryRuntime:
             if len(page) < page_size:
                 break
             offset += page_size
+        override_id = ""
+        override_payload: dict[str, Any] = {}
+        if isinstance(job_override, dict):
+            override_id = str(job_override.get("job_id") or "")
+            raw_override_payload = job_override.get("payload")
+            if isinstance(raw_override_payload, dict):
+                override_payload = raw_override_payload
+            if str(override_payload.get("scan_id") or "") == scan_id:
+                direct_jobs = [
+                    job_override if str(item.get("job_id") or "") == override_id else item
+                    for item in direct_jobs
+                ]
+                if override_id and not any(
+                    str(item.get("job_id") or "") == override_id for item in direct_jobs
+                ):
+                    direct_jobs.append(job_override)
         associated_jobs: list[tuple[dict[str, Any], str]] = []
         for manifest in self.state_db.list_automatic_memory_scan_items(scan_id):
             association = association_from_status(manifest.get("status"))
             if association is None:
                 continue
-            try:
-                item = self.queue.get(association[0])
-            except LookupError:
-                continue
+            if association[0] == override_id and isinstance(job_override, dict):
+                item = job_override
+            else:
+                try:
+                    item = self.queue.get(association[0])
+                except LookupError:
+                    continue
             payload = item.get("payload") if isinstance(item, dict) else None
             if isinstance(payload, dict) and str(payload.get("source_id") or "") == str(manifest.get("source_id") or "") and str(payload.get("relative_path") or "") == str(manifest.get("relative_path") or ""):
                 associated_jobs.append((item, association[1]))
@@ -543,7 +567,13 @@ class AutomaticMemoryRuntime:
             source_id=source_id, direct_jobs=direct_jobs, associated_jobs=associated_jobs
         )
 
-    def _maybe_finalize_scan_work(self, scan_id: str, report: Any | None = None) -> None:
+    def _maybe_finalize_scan_work(
+        self,
+        scan_id: str,
+        report: Any | None = None,
+        *,
+        job_override: dict[str, Any] | None = None,
+    ) -> None:
         work_id = f"automatic-memory:{scan_id}"
         if self.work_store.get_work(work_id) is None:
             return
@@ -567,8 +597,9 @@ class AutomaticMemoryRuntime:
             )
             self._scan_reports.pop(scan_id, None)
             return
-        jobs = self._jobs_for_scan(scan_id)
-        if any(item.get("status") not in {"completed", "failed", "cancelled"} for item in jobs):
+        jobs = self._jobs_for_scan(scan_id, job_override=job_override)
+        facts = summarize_job_facts(jobs)
+        if facts["pending"]:
             return
         failed_jobs = [item for item in jobs if item.get("status") in {"failed", "cancelled"}]
         completed_jobs = [item for item in jobs if item.get("status") == "completed"]
@@ -582,21 +613,15 @@ class AutomaticMemoryRuntime:
             return
         queued_raw = getattr(report, "queued", None) if report is not None else None
         reused_raw = getattr(report, "reused", None) if report is not None else None
-        queued = queued_raw if isinstance(queued_raw, int) and not isinstance(queued_raw, bool) else None
-        persisted_reused = sum(
-            item.get("status") == "completed"
-            and item.get("_automatic_memory_association") == "existing"
-            for item in jobs
-        )
+        reported_queued = queued_raw if isinstance(queued_raw, int) and not isinstance(queued_raw, bool) else None
         reported_reused = reused_raw if isinstance(reused_raw, int) and not isinstance(reused_raw, bool) else None
-        reused = (
-            max(persisted_reused, reported_reused or 0)
-            if persisted_reused or reported_reused is not None
-            else None
-        )
+        queued = facts["new"] if jobs else reported_queued
+        reused = facts["reused"] if jobs else reported_reused
         queued_for_math = queued if queued is not None else 0
         reused_for_math = reused if reused is not None else 0
-        reported_total = getattr(report, "total", None) if report is not None else None
+        reported_total = scan.get("total")
+        if reported_total is None and report is not None:
+            reported_total = getattr(report, "total", None)
         if reported_total is None and report is not None:
             reported_total = getattr(report, "discovered", None)
         if reported_total is None:

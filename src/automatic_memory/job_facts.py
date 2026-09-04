@@ -19,7 +19,14 @@ def _valid_payload(payload: Any, source_id: str) -> bool:
     if not isinstance(payload, dict) or str(payload.get("source_id") or "") != source_id:
         return False
     relative = str(payload.get("relative_path") or "")
-    return bool(relative) and not PurePosixPath(relative).is_absolute() and PurePosixPath(relative).as_posix() == relative and ".." not in PurePosixPath(relative).parts
+    path = PurePosixPath(relative)
+    return (
+        bool(relative)
+        and not any(ord(character) < 32 or ord(character) == 127 for character in relative)
+        and not path.is_absolute()
+        and path.as_posix() == relative
+        and not any(part in {"", ".", ".."} for part in path.parts)
+    )
 
 
 def resolve_job_facts(
@@ -29,7 +36,7 @@ def resolve_job_facts(
     associated_jobs: Iterable[tuple[dict[str, Any], str]] = (),
 ) -> list[dict[str, Any]]:
     """Validate, mark, and deterministically deduplicate snapshot job facts."""
-    by_id: dict[str, dict[str, Any]] = {}
+    by_path: dict[tuple[str, str], dict[str, Any]] = {}
     candidates = [(job, "new") for job in direct_jobs] + list(associated_jobs)
     for job, association in candidates:
         if not isinstance(job, dict) or str(job.get("source_type") or "") != "automatic_memory_snapshot":
@@ -42,10 +49,46 @@ def resolve_job_facts(
             continue
         candidate = dict(job)
         candidate["_automatic_memory_association"] = association
-        current = by_id.get(job_id)
-        if current is None or (_updated_at(candidate.get("updated_at")), job_id) > (_updated_at(current.get("updated_at")), job_id):
-            by_id[job_id] = candidate
-    return list(by_id.values())
+        relative_path = str(payload.get("relative_path") or "")
+        key = (source_id, relative_path)
+        current = by_path.get(key)
+        candidate_order = (_updated_at(candidate.get("updated_at")), job_id)
+        current_order = (
+            _updated_at(current.get("updated_at")),
+            str(current.get("job_id") or ""),
+        ) if current is not None else None
+        if current_order is None or candidate_order > current_order:
+            by_path[key] = candidate
+    return [by_path[key] for key in sorted(by_path)]
+
+
+def summarize_job_facts(jobs: Iterable[dict[str, Any]]) -> dict[str, int]:
+    """Derive scan-wide counts from the same authoritative per-path facts."""
+    facts = list(jobs)
+    statuses = [str(item.get("status") or "unknown").lower() for item in facts]
+    new = sum(
+        item.get("_automatic_memory_association") != "existing"
+        for item in facts
+    )
+    reused = sum(
+        status == "completed"
+        and item.get("_automatic_memory_association") == "existing"
+        for status, item in zip(statuses, facts)
+    )
+    imported = sum(
+        status == "completed"
+        and item.get("_automatic_memory_association") != "existing"
+        for status, item in zip(statuses, facts)
+    )
+    return {
+        "total": len(facts),
+        "new": new,
+        "reused": reused,
+        "imported": imported,
+        "completed": sum(status == "completed" for status in statuses),
+        "failed": sum(status in {"failed", "cancelled"} for status in statuses),
+        "pending": sum(status not in {"completed", "failed", "cancelled"} for status in statuses),
+    }
 
 
 def association_from_status(status: Any) -> tuple[str, str] | None:

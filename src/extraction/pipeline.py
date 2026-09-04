@@ -367,6 +367,7 @@ class ExtractionPipeline:
         error: str | None,
         *,
         trusted_known_materials: tuple[str, ...] = (),
+        require_success: bool = False,
     ) -> None:
         # Keep the claimed worker object private.  Every callback receives a
         # fresh bounded projection.  Explicit lease-key values in payloads are
@@ -402,6 +403,10 @@ class ExtractionPipeline:
                 callback(phase, safe_job, safe_result, safe_error)
             except Exception:
                 logger.error("Extraction lifecycle callback failed")
+                if require_success:
+                    raise RuntimeError(
+                        "Automatic-memory terminal projection failed before publication"
+                    ) from None
 
     def _write_structured(
         self,
@@ -570,15 +575,20 @@ class ExtractionPipeline:
         lease_token = str(job.get("lease_token") or "")
         try:
             result = self._execute_internal_snapshot(job)
-            completed = self.queue.complete(job["job_id"], result, worker_id=worker_id, lease_token=lease_token)
             safe_result = self._scrub_lease_value(result, lease_token)
+            # Publish the associated Work projection before making the queue's
+            # terminal state externally visible.  The callback receives the
+            # terminal projection explicitly, so it does not depend on a
+            # completed row that has already escaped through list/get.
             self._notify_lifecycle(
                 "completed",
                 {**job, "status": "completed"},
                 safe_result,
                 None,
                 trusted_known_materials=_trusted_claim_materials(lease_token),
+                require_success=True,
             )
+            completed = self.queue.complete(job["job_id"], result, worker_id=worker_id, lease_token=lease_token)
             return {"job": completed, "result": safe_result}
         except PermissionError as exc:
             safe_error = self._scrub_lease_value(str(exc), lease_token)
@@ -698,7 +708,6 @@ class ExtractionPipeline:
             lease_token = str(claimed.get("lease_token") or "")
             try:
                 result = self._execute_internal_snapshot(claimed)
-                completed = self.queue.complete(job_id, result, worker_id=worker_id or self._worker_id(), lease_token=lease_token)
                 safe_result = self._scrub_lease_value(result, lease_token)
                 self._notify_lifecycle(
                     "completed",
@@ -706,7 +715,9 @@ class ExtractionPipeline:
                     safe_result,
                     None,
                     trusted_known_materials=_trusted_claim_materials(lease_token),
+                    require_success=True,
                 )
+                completed = self.queue.complete(job_id, result, worker_id=worker_id or self._worker_id(), lease_token=lease_token)
                 return {"job": completed, "result": safe_result}
             except PermissionError as exc:
                 safe_error = self._scrub_lease_value(str(exc), lease_token)
