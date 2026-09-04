@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+import hashlib
 import math
 from dataclasses import asdict, is_dataclass
+from pathlib import PurePosixPath
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -46,11 +48,66 @@ _SCAN_DTO_FIELDS = (
     "scheduler_lease_id", "scheduler_lease_owner",
     "scheduler_lease_heartbeat_at", "scheduler_lease_expires_at", "updated_at",
     "queued", "reused", "counts_present", "complete", "errors", "discovered",
-    "unchanged", "next_action",
+    "unchanged", "next_action", "processing_status", "processing_total",
+    "processing_completed", "processing_failed", "processing_pending",
+    "processing_counts_present",
 )
 
 
-def project_scan_dto(scan: Any) -> dict[str, Any]:
+def project_scan_processing(scan: Any, jobs: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """Project extraction progress without treating scan admission as import."""
+    payload = asdict(scan) if is_dataclass(scan) else dict(scan)
+    scan_status = str(payload.get("status") or "").lower()
+    unknown = {
+        "processing_status": "scanning" if scan_status in {"running", "paused"} else "scan_completed",
+        "processing_total": None,
+        "processing_completed": None,
+        "processing_failed": None,
+        "processing_pending": None,
+        "processing_counts_present": [],
+    }
+    if scan_status in {"failed", "cancelled"}:
+        return {**unknown, "processing_status": "failed"}
+    if scan_status != "completed":
+        return unknown
+    if jobs is None:
+        return unknown
+
+    statuses = [str(item.get("status") or "unknown").lower() for item in jobs]
+    completed = sum(status == "completed" for status in statuses)
+    failed = sum(status in {"failed", "cancelled"} for status in statuses)
+    pending = sum(status not in {"completed", "failed", "cancelled"} for status in statuses)
+    counts = {
+        "processing_total": len(jobs),
+        "processing_completed": completed,
+        "processing_failed": failed,
+        "processing_pending": pending,
+        "processing_counts_present": [
+            "processing_total", "processing_completed", "processing_failed", "processing_pending"
+        ],
+    }
+    if pending:
+        status = "processing"
+    elif completed and failed:
+        status = "partial_failure"
+    elif failed:
+        status = "failed"
+    elif completed:
+        status = "imported"
+    else:
+        total = payload.get("total")
+        queued = payload.get("queued_count", payload.get("queued"))
+        reused = payload.get("reused_count", payload.get("reused"))
+        if total == 0:
+            status = "empty"
+        elif isinstance(total, int) and total > 0 and queued == 0 and reused == 0:
+            status = "unsupported_format"
+        else:
+            status = "scan_completed"
+    return {"processing_status": status, **counts}
+
+
+def project_scan_dto(scan: Any, jobs: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Project every scan response from the same nullable evidence contract."""
     payload = asdict(scan) if is_dataclass(scan) else dict(scan)
     presence_was_declared = "counts_present" in payload
@@ -88,14 +145,151 @@ def project_scan_dto(scan: Any) -> dict[str, Any]:
         result["work_id"] = f"automatic-memory:{result['scan_id']}"
     if "errors" in payload:
         result["errors"] = list(payload.get("errors") or ())
+    result.update(project_scan_processing(payload, jobs))
     return result
+
+
+_SCAN_ITEM_NAME_FALLBACK = "无法安全显示名称"
+_SCAN_ITEM_REASON_MAP = {
+    ("snapshot", "recorded"): "已记录到扫描清单",
+    ("queued", "waiting"): "等待进入提取队列",
+    ("extracting", "processing"): "正在提取来源内容",
+    ("completed", "imported"): "已导入结构化结果",
+    ("completed", "reused"): "命中复用，未重复导入",
+    ("completed", "failed"): "提取失败",
+    ("completed", "cancelled"): "提取已取消",
+}
+
+
+def _scan_item_id(scan_id: str, relative_path: str) -> str:
+    return hashlib.sha256(f"{scan_id}\0{relative_path}".encode("utf-8")).hexdigest()
+
+
+def _scan_item_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _latest_scan_item_timestamp(*values: Any) -> str | None:
+    latest_value = None
+    latest_timestamp: datetime | None = None
+    for value in values:
+        timestamp = _scan_item_timestamp(value)
+        if timestamp is None:
+            continue
+        if latest_timestamp is None or timestamp > latest_timestamp:
+            latest_timestamp = timestamp
+            latest_value = str(value)
+    return latest_value
+
+
+def _normalized_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return int(value)
+
+
+def _safe_scan_item_name(relative_path: Any) -> str:
+    raw = str(relative_path or "").replace("\\", "/")
+    if not raw:
+        return _SCAN_ITEM_NAME_FALLBACK
+    path = PurePosixPath(raw)
+    if path.is_absolute():
+        return _SCAN_ITEM_NAME_FALLBACK
+    if any(part in {"", ".", ".."} for part in path.parts):
+        return _SCAN_ITEM_NAME_FALLBACK
+    first = path.parts[0] if path.parts else ""
+    if ":" in first:
+        return _SCAN_ITEM_NAME_FALLBACK
+    lowered = raw.lower()
+    if any(marker in lowered for marker in ("secret", "token", "password", "passwd", "credential", "cookie", ".env", "apikey", "api_key")):
+        return _SCAN_ITEM_NAME_FALLBACK
+    if any(part.startswith(".") and part not in {".", ".."} for part in path.parts):
+        return _SCAN_ITEM_NAME_FALLBACK
+    return raw
+
+
+def _scan_item_counts(queue_result: dict[str, Any]) -> tuple[int | None, int | None, int | None]:
+    structured = queue_result.get("structured_read_model")
+    if not isinstance(structured, dict):
+        return None, None, None
+    return (
+        _normalized_int(structured.get("sources")),
+        _normalized_int(structured.get("conversations")),
+        _normalized_int(structured.get("messages")),
+    )
+
+
+def _scan_item_result_and_stage(
+    queue_item: dict[str, Any] | None,
+) -> tuple[str, str, bool, int | None, int | None, int | None]:
+    if queue_item is None:
+        return "snapshot", "recorded", False, None, None, None
+
+    status = str(queue_item.get("status") or "").lower()
+    queue_result = queue_item.get("result") if isinstance(queue_item.get("result"), dict) else {}
+    if status in {"queued", "retrying"}:
+        return "queued", "waiting", False, None, None, None
+    if status == "running":
+        return "extracting", "processing", False, None, None, None
+    if status == "cancelled":
+        return "completed", "cancelled", True, None, None, None
+    if status == "failed":
+        return "completed", "failed", True, None, None, None
+    if status == "completed":
+        imported_sources, imported_conversations, imported_messages = _scan_item_counts(queue_result)
+        if any(value is not None for value in (imported_sources, imported_conversations, imported_messages)):
+            return "completed", "imported", False, imported_sources, imported_conversations, imported_messages
+        if _normalized_int(queue_result.get("reused")) is not None or _normalized_int(queue_result.get("reused_count")) is not None:
+            return "completed", "reused", False, None, None, None
+        return "completed", "imported", False, None, None, None
+    return "queued", "waiting", False, None, None, None
+
+
+def project_scan_item(
+    scan_id: str,
+    relative_path: str,
+    *,
+    manifest_item: dict[str, Any] | None = None,
+    queue_item: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = queue_item.get("payload") if isinstance(queue_item, dict) and isinstance(queue_item.get("payload"), dict) else {}
+    source_id = ""
+    if manifest_item is not None:
+        source_id = str(manifest_item.get("source_id") or "")
+    if not source_id:
+        source_id = str(payload.get("source_id") or "")
+    stage, result, retryable, imported_sources, imported_conversations, imported_messages = _scan_item_result_and_stage(queue_item)
+    updated_at = _latest_scan_item_timestamp(
+        manifest_item.get("updated_at") if manifest_item else None,
+        queue_item.get("updated_at") if queue_item else None,
+    )
+    reason = _SCAN_ITEM_REASON_MAP.get((stage, result), "状态已更新")
+    return {
+        "item_id": _scan_item_id(scan_id, relative_path),
+        "name": _safe_scan_item_name(relative_path),
+        "source": source_id,
+        "stage": stage,
+        "result": result,
+        "reason": reason,
+        "updated_at": updated_at,
+        "retryable": retryable,
+        "imported_sources": imported_sources,
+        "imported_conversations": imported_conversations,
+        "imported_messages": imported_messages,
+    }
 
 
 def register_automatic_memory_routes(
     app: Any, control: Any, secured: list[Any]
 ) -> None:
     """Expose source metadata and scan controls through the existing 8766 auth."""
-    from fastapi import HTTPException
+    from fastapi import HTTPException, Query
 
     registry: SourceRegistry | None = getattr(control, "automatic_memory_registry", None)
     if registry is None:
@@ -119,6 +313,84 @@ def register_automatic_memory_routes(
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except (TypeError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    def jobs_for_scan(scan_id: str) -> list[dict[str, Any]] | None:
+        runtime = getattr(control, "runtime", None)
+        queue = getattr(runtime, "queue", None) or getattr(control, "queue", None)
+        if queue is None or not hasattr(queue, "list_page"):
+            return None
+        try:
+            jobs: list[dict[str, Any]] = []
+            offset = 0
+            page_size = 100
+            while True:
+                page = queue.list_page(
+                    source_type="automatic_memory_snapshot",
+                    scan_id=scan_id,
+                    limit=page_size,
+                    offset=offset,
+                )
+                jobs.extend(page)
+                if len(page) < page_size:
+                    break
+                offset += page_size
+            return jobs
+        except TypeError:
+            return [
+                item
+                for item in queue.list_page(
+                    source_type="automatic_memory_snapshot", limit=200
+                )
+                if str((item.get("payload") or {}).get("scan_id") or "") == scan_id
+            ]
+
+    def scan_items_for_scan(scan_id: str, *, limit: int, offset: int) -> dict[str, Any]:
+        manifest_items = {
+            str(item.get("relative_path") or ""): item
+            for item in registry.state_db.list_automatic_memory_scan_items(scan_id)
+        }
+        queue_items = jobs_for_scan(scan_id) or []
+        merged: dict[str, dict[str, Any]] = {
+            relative_path: {"manifest_item": manifest_item, "queue_item": None}
+            for relative_path, manifest_item in manifest_items.items()
+        }
+        for item in queue_items:
+            payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+            relative_path = str(payload.get("relative_path") or "")
+            if not relative_path:
+                continue
+            merged.setdefault(
+                relative_path,
+                {"manifest_item": None, "queue_item": None},
+            )["queue_item"] = item
+        ordered = [
+            project_scan_item(
+                scan_id,
+                relative_path,
+                manifest_item=entry["manifest_item"],
+                queue_item=entry["queue_item"],
+            )
+            for relative_path, entry in sorted(
+                merged.items(),
+                key=lambda item: (_safe_scan_item_name(item[0]), item[0]),
+            )
+        ]
+        total = len(ordered)
+        page_items = ordered[offset : offset + limit]
+        return {
+            "items": page_items,
+            "items_pagination": {
+                "limit": limit,
+                "offset": offset,
+                "total": total,
+                "has_more": offset + limit < total,
+            },
+        }
+
+    def project(scan: Any) -> dict[str, Any]:
+        payload = asdict(scan) if is_dataclass(scan) else dict(scan)
+        scan_id = str(payload.get("scan_id") or "")
+        return project_scan_dto(payload, jobs_for_scan(scan_id) if scan_id else None)
 
     @app.post("/api/automatic-memory/authorize", dependencies=secured)
     def authorize_source(request: AutomaticMemoryAuthorizationRequest) -> dict[str, Any]:
@@ -152,7 +424,7 @@ def register_automatic_memory_routes(
             # scan_now returns a reconciliation report; the durable scan row
             # is the sole count-evidence authority for action responses.
             try:
-                projected = project_scan_dto(registry.get_scan(str(result["scan_id"])))
+                projected = project(registry.get_scan(str(result["scan_id"])))
                 projected["work_id"] = result.get("work_id") or f"automatic-memory:{result['scan_id']}"
                 # A report can be intentionally non-admitting (for example an
                 # expired source) and therefore have no durable scan row.  When
@@ -168,17 +440,17 @@ def register_automatic_memory_routes(
                 # without owning the registry row; preserve that compatibility
                 # while real runtimes always take the durable branch above.
                 return project_scan_dto(result)
-        return project_scan_dto(result)
+        return project(result)
 
     @app.post("/api/automatic-memory/pause", dependencies=secured)
     def pause_scan(request: AutomaticMemoryScanActionRequest) -> dict[str, Any]:
         result = call(lambda: registry.pause_scan(request.scan_id))
-        return project_scan_dto(result)
+        return project(result)
 
     @app.post("/api/automatic-memory/retry", dependencies=secured)
     def retry_scan(request: AutomaticMemoryScanActionRequest) -> dict[str, Any]:
         result = call(lambda: registry.retry_scan(request.scan_id))
-        return project_scan_dto(result)
+        return project(result)
 
     @app.post("/api/automatic-memory/resume", dependencies=secured)
     def resume_scan(request: AutomaticMemoryScanActionRequest) -> dict[str, Any]:
@@ -217,7 +489,7 @@ def register_automatic_memory_routes(
     @app.get("/api/automatic-memory/scans", dependencies=secured)
     def list_scans(limit: int = 50) -> list[dict[str, Any]]:
         return [
-            project_scan_dto(item)
+            project(item)
             for item in registry.state_db.list_automatic_memory_scans()[: min(max(int(limit), 1), 200)]
         ]
 
@@ -228,7 +500,7 @@ def register_automatic_memory_routes(
         for scan in scans:
             status = str(scan.get("status") or "unknown")
             counts[status] = counts.get(status, 0) + 1
-        latest = project_scan_dto(scans[0]) if scans else None
+        latest = project(scans[0]) if scans else None
         runtime = getattr(control, "runtime", None)
         scheduler = getattr(runtime, "scheduler", None)
         periodic = getattr(scheduler, "automation_mode", None) == "periodic_reconciliation"
@@ -304,6 +576,12 @@ def register_automatic_memory_routes(
         return dict(runtime.resume())
 
     @app.get("/api/automatic-memory/scans/{scan_id}", dependencies=secured)
-    def get_scan(scan_id: str) -> dict[str, Any]:
+    def get_scan(
+        scan_id: str,
+        limit: int = Query(default=20, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
         result = call(lambda: registry.get_scan(scan_id))
-        return project_scan_dto(result)
+        payload = project(result)
+        payload.update(scan_items_for_scan(scan_id, limit=limit, offset=offset))
+        return payload

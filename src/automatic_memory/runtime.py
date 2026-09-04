@@ -531,11 +531,26 @@ class AutomaticMemoryRuntime:
             )
             self._scan_reports.pop(scan_id, None)
             return
-        jobs = [item for item in self.queue.list_page(source_type="automatic_memory_snapshot", limit=200) if str((item.get("payload") or {}).get("scan_id") or "") == scan_id]
+        jobs: list[dict[str, Any]] = []
+        offset = 0
+        page_size = 100
+        while True:
+            page = self.queue.list_page(
+                source_type="automatic_memory_snapshot",
+                scan_id=scan_id,
+                limit=page_size,
+                offset=offset,
+            )
+            jobs.extend(page)
+            if len(page) < page_size:
+                break
+            offset += page_size
         if any(item.get("status") not in {"completed", "failed", "cancelled"} for item in jobs):
             return
-        if any(item.get("status") in {"failed", "cancelled"} for item in jobs):
-            self.work_bridge.record_failure(work_id, stage="extraction", reason="一个或多个来源文件提取失败，其他来源仍可继续", retryable=False, evidence={"scan_id": scan_id, "failed_jobs": [item.get("job_id") for item in jobs if item.get("status") in {"failed", "cancelled"}]})
+        failed_jobs = [item for item in jobs if item.get("status") in {"failed", "cancelled"}]
+        completed_jobs = [item for item in jobs if item.get("status") == "completed"]
+        if failed_jobs:
+            self.work_bridge.record_failure(work_id, stage="extraction", reason="一个或多个来源文件提取失败，其他来源仍可继续", retryable=False, evidence={"scan_id": scan_id, "completed_jobs": len(completed_jobs), "failed_jobs": [item.get("job_id") for item in failed_jobs], "processing_status": "partial_failure" if completed_jobs else "failed"})
             self._scan_reports.pop(scan_id, None)
             return
         queued_raw = getattr(report, "queued", None) if report is not None else None
@@ -555,8 +570,8 @@ class AutomaticMemoryRuntime:
             return
         queued_label = str(queued) if queued is not None else "尚未获得"
         reused_label = str(reused) if reused is not None else "尚未获得"
-        summary = f"扫描完成，已检查 {total} 个来源文件（新增 {queued_label}，复用 {reused_label}）"
-        self.work_bridge.complete_extraction(work_id, summary, evidence={"scan_id": scan_id, "jobs": len(jobs), "queued": queued, "reused": reused, "next_actor": "system"})
+        summary = f"处理完成：扫描 {total} 个来源文件，实际导入 {len(completed_jobs)} 个（排队 {queued_label}，复用 {reused_label}）"
+        self.work_bridge.complete_extraction(work_id, summary, evidence={"scan_id": scan_id, "jobs": len(jobs), "completed_jobs": len(completed_jobs), "queued": queued, "reused": reused, "processing_status": "imported" if completed_jobs else "scan_completed", "next_actor": "system"})
         self._scan_reports.pop(scan_id, None)
 
     def pause(self) -> dict[str, object]:

@@ -148,6 +148,43 @@ class SQLiteExtractionQueueTests(unittest.TestCase):
                 plan = cursor.fetchall()
         self.assertTrue(plan)
 
+    def test_list_page_and_count_can_filter_automatic_memory_snapshot_jobs_by_scan(self):
+        for scan_id in ("scan-a", "scan-b"):
+            for index in range(3):
+                self.queue.enqueue(
+                    "automatic_memory_snapshot",
+                    payload={
+                        "scan_id": scan_id,
+                        "source_id": f"source-{scan_id}",
+                        "relative_path": f"{scan_id}-{index}.txt",
+                    },
+                    adapter_name="automatic_memory_snapshot",
+                )
+
+        page = self.queue.list_page(
+            source_type="automatic_memory_snapshot",
+            scan_id="scan-a",
+            limit=2,
+            offset=1,
+        )
+
+        self.assertEqual(len(page), 2)
+        self.assertTrue(all(item["payload"]["scan_id"] == "scan-a" for item in page))
+        self.assertEqual(
+            self.queue.count(
+                source_type="automatic_memory_snapshot",
+                scan_id="scan-a",
+            ),
+            3,
+        )
+        self.assertEqual(
+            self.queue.count(
+                source_type="automatic_memory_snapshot",
+                scan_id="scan-b",
+            ),
+            3,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

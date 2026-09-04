@@ -956,6 +956,7 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
         *,
         status: str | None = None,
         source_type: str | None = None,
+        scan_id: str | None = None,
         q: str | None = None,
     ) -> tuple[str, list[Any]]:
         clauses: list[str] = []
@@ -966,6 +967,9 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
         if source_type:
             clauses.append("source_type = ?")
             values.append(str(source_type))
+        if scan_id:
+            clauses.append("json_extract(payload_json, '$.scan_id') = ?")
+            values.append(str(scan_id))
         if q and str(q).strip():
             needle = f"%{str(q).strip()}%"
             clauses.append(
@@ -990,12 +994,13 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
         *,
         status: str | None = None,
         source_type: str | None = None,
+        scan_id: str | None = None,
         q: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
         normalized_limit, normalized_offset = self._page_values(limit, offset)
-        where, values = self._filters(status=status, source_type=source_type, q=q)
+        where, values = self._filters(status=status, source_type=source_type, scan_id=scan_id, q=q)
         with self._connection() as connection:
             rows = connection.execute(
                 f"SELECT * FROM extraction_jobs{where} "
@@ -1009,9 +1014,10 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
         *,
         status: str | None = None,
         source_type: str | None = None,
+        scan_id: str | None = None,
         q: str | None = None,
     ) -> int:
-        where, values = self._filters(status=status, source_type=source_type, q=q)
+        where, values = self._filters(status=status, source_type=source_type, scan_id=scan_id, q=q)
         with self._connection() as connection:
             row = connection.execute(
                 f"SELECT COUNT(*) AS count FROM extraction_jobs{where}", tuple(values)

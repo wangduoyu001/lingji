@@ -14,7 +14,7 @@ from src.storage import StateDatabase
 from src.automatic_memory import AuthorizationScope, AutomaticMemoryRuntime
 from src.automatic_memory.source_registry import SourceRegistry
 from src.extraction.bootstrap import build_extraction_pipeline
-from src.control.automatic_memory_api import project_scan_dto
+from src.control.automatic_memory_api import project_scan_dto, project_scan_processing
 
 try:
     from src.control.api import create_control_app
@@ -318,6 +318,290 @@ def test_scan_projector_does_not_promote_legacy_zero_without_presence_marker():
     assert projected["queued"] is None
     assert projected["reused"] is None
     assert projected["counts_present"] == []
+
+
+def test_scan_detail_merges_safe_manifest_and_queue_items_with_pagination(tmp_path: Path):
+    root = tmp_path / "source"
+    root.mkdir()
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    settings = SimpleNamespace(
+        storage_path=storage,
+        state_db_path=storage / "lingji_state.db",
+        memory_db_path=storage / "lingji_memory.db",
+        vault_path=tmp_path / "vault",
+        runtime_settings_file="runtime_settings.json",
+        extraction_poll_seconds=0.05,
+        extraction_batch_size=1,
+        extraction_max_attempts=1,
+        extraction_lease_heartbeat_seconds=2,
+        extraction_stale_after_seconds=30,
+        scheduler_poll_seconds=0.05,
+        automatic_memory_debounce_seconds=1,
+        automatic_memory_reconciliation_seconds=60,
+        automatic_memory_integrity_seconds=3600,
+        embedding_enabled=False,
+        semantic_enabled=False,
+    )
+    state = StateDatabase(settings.state_db_path)
+    registry = SourceRegistry(state)
+    source = registry.register(
+        AuthorizationScope(
+            "grant-scan-items",
+            ("chatgpt_export",),
+            (str(root),),
+            datetime.now(timezone.utc),
+            None,
+            True,
+        ),
+        "chatgpt_export",
+        str(root),
+    )
+    scan = registry.start_scan(source.source_id)
+    state.acquire_automatic_memory_scan_lease(scan.scan_id, "lease-scan-items")
+    state.upsert_automatic_memory_scan_item_owned(
+        scan.scan_id,
+        "lease-scan-items",
+        source_id=source.source_id,
+        relative_path="alpha.txt",
+        sentinel="alpha-sentinel",
+    )
+    state.upsert_automatic_memory_scan_item_owned(
+        scan.scan_id,
+        "lease-scan-items",
+        source_id=source.source_id,
+        relative_path="../secret.txt",
+        sentinel="secret-sentinel",
+    )
+    runtime = AutomaticMemoryRuntime(
+        state_db=state,
+        pipeline=build_extraction_pipeline(settings),
+        settings=settings,
+        registry=registry,
+    )
+    control = LocalControlService.__new__(LocalControlService)
+    control.settings = settings
+    control.state_db = state
+    control.automatic_memory_registry = registry
+    control.runtime = runtime
+    app = create_control_app(settings, service=control, token="local-secret")
+    headers = {"X-LingJi-Token": "local-secret"}
+
+    completed_job = runtime.queue.enqueue_authorized_snapshot(
+        scan_id=scan.scan_id,
+        lease_id="lease-scan-items",
+        source_id=source.source_id,
+        relative_path="alpha.txt",
+        raw_id="raw-alpha",
+        sha256="a" * 64,
+        input_path=root / "alpha.txt",
+    )
+    completed_claim = runtime.queue.claim(
+        "worker-1",
+        job_id=completed_job["job_id"],
+        allowed_source_types={"automatic_memory_snapshot"},
+    )
+    runtime.queue.complete(
+        completed_job["job_id"],
+        {
+            "structured_read_model": {
+                "sources": 7,
+                "conversations": 8,
+                "messages": 9,
+            }
+        },
+        worker_id="worker-1",
+        lease_token=completed_claim["lease_token"],
+    )
+
+    queued_job = runtime.queue.enqueue_authorized_snapshot(
+        scan_id=scan.scan_id,
+        lease_id="lease-scan-items",
+        source_id=source.source_id,
+        relative_path="beta.txt",
+        raw_id="raw-beta",
+        sha256="b" * 64,
+        input_path=root / "beta.txt",
+    )
+    failed_job = runtime.queue.enqueue_authorized_snapshot(
+        scan_id=scan.scan_id,
+        lease_id="lease-scan-items",
+        source_id=source.source_id,
+        relative_path="gamma.txt",
+        raw_id="raw-gamma",
+        sha256="c" * 64,
+        input_path=root / "gamma.txt",
+    )
+    failed_claim = runtime.queue.claim(
+        "worker-2",
+        job_id=failed_job["job_id"],
+        allowed_source_types={"automatic_memory_snapshot"},
+    )
+    runtime.queue.fail(
+        failed_job["job_id"],
+        "boom /private/token",
+        worker_id="worker-2",
+        lease_token=failed_claim["lease_token"],
+        retry_delay_seconds=0,
+    )
+
+    with TestClient(app) as client:
+        default_response = client.get(
+            f"/api/automatic-memory/scans/{scan.scan_id}", headers=headers
+        )
+        paged_response = client.get(
+            f"/api/automatic-memory/scans/{scan.scan_id}",
+            headers=headers,
+            params={"limit": 2, "offset": 1},
+        )
+        max_response = client.get(
+            f"/api/automatic-memory/scans/{scan.scan_id}",
+            headers=headers,
+            params={"limit": 100},
+        )
+        scan_action = client.post(
+            "/api/automatic-memory/scan",
+            headers=headers,
+            json={"source_id": source.source_id},
+        )
+        listed = client.get("/api/automatic-memory/scans", headers=headers)
+        summary = client.get("/api/automatic-memory/summary", headers=headers)
+        bad_limit = client.get(
+            f"/api/automatic-memory/scans/{scan.scan_id}",
+            headers=headers,
+            params={"limit": 0},
+        )
+        bad_offset = client.get(
+            f"/api/automatic-memory/scans/{scan.scan_id}",
+            headers=headers,
+            params={"offset": -1},
+        )
+
+    assert default_response.status_code == paged_response.status_code == max_response.status_code == 200
+    default_payload = default_response.json()
+    paged_payload = paged_response.json()
+    max_payload = max_response.json()
+    expected_item_keys = {
+        "item_id",
+        "name",
+        "source",
+        "stage",
+        "result",
+        "reason",
+        "updated_at",
+        "retryable",
+        "imported_sources",
+        "imported_conversations",
+        "imported_messages",
+    }
+
+    assert "items" in default_payload
+    assert "items_pagination" in default_payload
+    assert default_payload["items_pagination"] == {
+        "limit": 20,
+        "offset": 0,
+        "total": 4,
+        "has_more": False,
+    }
+    assert [item["name"] for item in default_payload["items"]] == [
+        "alpha.txt",
+        "beta.txt",
+        "gamma.txt",
+        "无法安全显示名称",
+    ]
+    assert all(set(item) == expected_item_keys for item in default_payload["items"])
+    assert default_payload["items"][0]["stage"] == "completed"
+    assert default_payload["items"][0]["result"] == "imported"
+    assert default_payload["items"][0]["imported_sources"] == 7
+    assert default_payload["items"][0]["imported_conversations"] == 8
+    assert default_payload["items"][0]["imported_messages"] == 9
+    assert default_payload["items"][1]["stage"] == "queued"
+    assert default_payload["items"][1]["result"] == "waiting"
+    assert default_payload["items"][2]["stage"] == "completed"
+    assert default_payload["items"][2]["result"] == "failed"
+    assert default_payload["items"][2]["retryable"] is True
+    assert default_payload["items"][3]["name"] == "无法安全显示名称"
+    assert default_payload["items"][3]["result"] == "recorded"
+    assert default_payload["items"][3]["reason"] == "已记录到扫描清单"
+
+    assert paged_payload["items_pagination"] == {
+        "limit": 2,
+        "offset": 1,
+        "total": 4,
+        "has_more": True,
+    }
+    assert [item["name"] for item in paged_payload["items"]] == [
+        "beta.txt",
+        "gamma.txt",
+    ]
+    assert all(set(item) == expected_item_keys for item in paged_payload["items"])
+    assert max_payload["items_pagination"] == {
+        "limit": 100,
+        "offset": 0,
+        "total": 4,
+        "has_more": False,
+    }
+    assert len(max_payload["items"]) == 4
+    assert "items" not in listed.json()[0]
+    assert "items" not in summary.json()["latest"]
+    assert "items" not in scan_action.json()
+    assert bad_limit.status_code == 422
+    assert bad_offset.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("scan", "jobs", "expected"),
+    [
+        (
+            {"status": "completed", "total": 2, "queued_count": 2, "reused_count": 0},
+            [{"status": "running"}, {"status": "queued"}],
+            {"processing_status": "processing", "processing_completed": 0, "processing_failed": 0, "processing_pending": 2},
+        ),
+        (
+            {"status": "completed", "total": 2, "queued_count": 2, "reused_count": 0},
+            [{"status": "completed"}, {"status": "completed"}],
+            {"processing_status": "imported", "processing_completed": 2, "processing_failed": 0, "processing_pending": 0},
+        ),
+        (
+            {"status": "completed", "total": 2, "queued_count": 2, "reused_count": 0},
+            [{"status": "completed"}, {"status": "failed"}],
+            {"processing_status": "partial_failure", "processing_completed": 1, "processing_failed": 1, "processing_pending": 0},
+        ),
+        (
+            {"status": "completed", "total": 1, "queued_count": 1, "reused_count": 0},
+            [{"status": "cancelled"}],
+            {"processing_status": "failed", "processing_completed": 0, "processing_failed": 1, "processing_pending": 0},
+        ),
+        (
+            {"status": "completed", "total": 0, "queued_count": 0, "reused_count": 0},
+            [],
+            {"processing_status": "empty", "processing_completed": 0, "processing_failed": 0, "processing_pending": 0},
+        ),
+        (
+            {"status": "completed", "total": 3, "queued_count": 0, "reused_count": 0},
+            [],
+            {"processing_status": "unsupported_format", "processing_completed": 0, "processing_failed": 0, "processing_pending": 0},
+        ),
+    ],
+)
+def test_scan_processing_projection_uses_extraction_terminal_facts(scan, jobs, expected):
+    projected = project_scan_processing(scan, jobs)
+    for key, value in expected.items():
+        assert projected[key] == value
+    assert projected["processing_total"] == len(jobs)
+    assert projected["processing_counts_present"] == [
+        "processing_total", "processing_completed", "processing_failed", "processing_pending"
+    ]
+
+
+def test_scan_processing_projection_never_calls_queued_or_reused_imported():
+    projected = project_scan_processing(
+        {"status": "completed", "total": 4, "queued_count": 2, "reused_count": 2},
+        None,
+    )
+    assert projected["processing_status"] == "scan_completed"
+    assert projected["processing_completed"] is None
+    assert projected["processing_counts_present"] == []
 
 
 @pytest.mark.parametrize(
