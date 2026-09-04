@@ -1219,6 +1219,9 @@ def test_source_intake_operations_preserve_protected_health_and_model_dtos(tmp_p
         automatic_memory_integrity_seconds=3600,
         embedding_enabled=False,
         semantic_enabled=False,
+        app_manifest_app_roots=(tmp_path / "no-applications",),
+        app_manifest_extension_base=tmp_path / "no-home",
+        app_manifest_process_provider=lambda: [],
     )
     state = StateDatabase(settings.state_db_path)
 
@@ -1277,9 +1280,12 @@ def test_source_intake_operations_preserve_protected_health_and_model_dtos(tmp_p
 
     app = create_control_app(settings, service=control, token="local-secret")
     headers = {"X-LingJi-Token": "local-secret"}
-    protected_routes = ("/api/health", "/api/models/registry", "/api/models", "/api/brain/status", "/api/overview", "/api/memory/status")
+    protected_routes = (
+        "/api/health", "/api/models/registry", "/api/models", "/api/brain/status", "/api/overview", "/api/memory/status",
+        "/api/automatic-memory/apps", "/api/automatic-memory/processes", "/api/automatic-memory/export-inbox",
+    )
 
-    time_keys = {"as_of", "checked_at"}
+    time_keys = {"as_of", "checked_at", "updated_at", "last_checked_at"}
 
     def normalize(value):
         if isinstance(value, dict):

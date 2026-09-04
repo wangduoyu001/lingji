@@ -10,12 +10,18 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from src.automatic_memory import AuthorizationScope, SourceRegistry, discover_source_metadata
+from src.automatic_memory.app_manifest import discover_app_manifest, discover_running_processes
 from src.automatic_memory.home import resolve_effective_home
 from src.automatic_memory.job_facts import (
     association_from_status,
     resolve_job_facts,
     summarize_job_facts,
 )
+from src.automatic_memory.export_inbox import ensure_all_export_inboxes, ensure_export_inbox
+
+
+class ExportInboxEnsureRequest(BaseModel):
+    kind: str = Field(min_length=1)
 
 
 class AutomaticMemoryAuthorizationRequest(BaseModel):
@@ -561,6 +567,32 @@ def register_automatic_memory_routes(
                 }
             result.append(payload)
         return result
+
+    @app.get("/api/automatic-memory/apps", dependencies=secured)
+    def installed_ai_apps() -> list[dict[str, Any]]:
+        """Owner-facing manifest of locally detected AI software (read-only)."""
+        settings = getattr(control, "settings", control)
+        return discover_app_manifest(settings)
+
+    @app.get("/api/automatic-memory/processes", dependencies=secured)
+    def running_ai_processes() -> list[dict[str, Any]]:
+        """Whitelisted running AI process rows with owner-safe fields only."""
+        settings = getattr(control, "settings", control)
+        return discover_running_processes(settings)
+
+    @app.get("/api/automatic-memory/export-inbox", dependencies=secured)
+    def export_inbox_list() -> list[dict[str, Any]]:
+        """Auto-ensure and report LingJi-owned official-export receiving folders."""
+        settings = getattr(control, "settings", control)
+        return ensure_all_export_inboxes(settings)
+
+    @app.post("/api/automatic-memory/export-inbox/ensure", dependencies=secured)
+    def export_inbox_ensure(request: ExportInboxEnsureRequest) -> dict[str, Any]:
+        settings = getattr(control, "settings", control)
+        try:
+            return ensure_export_inbox(settings, request.kind)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/automatic-memory/scans", dependencies=secured)
     def list_scans(limit: int = 50) -> list[dict[str, Any]]:

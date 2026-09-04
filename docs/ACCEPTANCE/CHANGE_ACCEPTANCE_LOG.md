@@ -1,5 +1,34 @@
 # 验收要求变更记录
 
+## 2026-09-05 · 本机 AI 软件发现与只读查看 · 后端阶段（Task 4–6）
+
+- 主人完整产品目标 A–E 的差距审计与分阶段计划已写入
+  `docs/superpowers/plans/2026-09-04-owner-source-intake-mac-repair.md` 扩展阶段。本条目覆盖
+  后端三任务；前端分区、Inspector 收口与统一门禁在后续条目记录。
+- Task 4 单一本地 AI 软件清单：新增 `src/automatic_memory/app_manifest.py`，只读合并三类
+  白名单探测——应用安装元数据（白名单 `.app` 的 Info.plist 仅 bundle id + 版本，有界
+  500 项、plist ≤1MB、不跟随符号链接）、编辑器扩展目录名（`.vscode/.cursor/.windsurf
+  extensions` 前缀匹配 Cline/Roo/Continue，仅目录名）、运行进程（psutil 只读 provider 可注入）。
+  类别覆盖 Codex、ChatGPT、Claude、Cursor、Windsurf、OpenCode、ZCode、VS Code、Cline、
+  Roo Code、Continue、Ollama、LM Studio；每类输出六键封闭 capability 矩阵；无安全会话
+  适配器的一律"已发现，暂不支持自动读取"。认证路由 `GET /api/automatic-memory/apps`，
+  不支持行不暴露 raw bundle id，全部行不含绝对安装路径。
+- Task 5 官方导出接收文件夹：新增 `src/automatic_memory/export_inbox.py`，灵机自有数据区
+  `<storage>/exports/<kind>/` 幂等创建（0o700，按来源隔离），状态含用途/最近检查/文件数/
+  下一步；`inbox_path` 仅用于桌面"打开文件夹"，禁止进入主人可见文案。路由
+  `GET /api/automatic-memory/export-inbox`（读取即幂等确保）与 `POST .../export-inbox/ensure`；
+  未知 kind 404。不在来源 AI 目录创建任何文件夹，不调用来源 AI 导出/CLI/模型/网络/代理/进程/配置。
+- Task 6 安全进程元数据：`GET /api/automatic-memory/processes` 仅输出白名单进程显示名、
+  运行状态、更新时间与 pid 技术字段（有界 1000 行）；原始命令行/环境/路径/端口/凭证一律不采集。
+- 受保护状态深比较从六端点扩展到九端点：来源 intake 前后 `/api/health`、`/api/models/registry`、
+  `/api/models`、`/api/brain/status`、`/api/overview`、`/api/memory/status`、`/api/automatic-memory/apps`、
+  `/api/automatic-memory/processes`、`/api/automatic-memory/export-inbox` 除时间键
+  （`as_of/checked_at/updated_at/last_checked_at`）窄规范化外逐值一致。
+- TDD：app manifest RED `6 failed`、export inbox RED `6 failed`、processes RED `2 failed`；
+  GREEN 后端 focused 矩阵（app_manifest/export_inbox/resume/snapshot/discovery/runtime/
+  runtime_flow/work_fact/repair_round1+2/control_api/extraction_queue/scheduler/watcher/obsidian）
+  `240 passed, 1 warning`。全程合成 Applications/扩展目录/进程 provider，零真实主人数据。
+
 ## 2026-09-05 · Mac 来源接管可解释闭环 · Checkpoint sentinel mode 债务收口
 
 - 收口 Task 3 报告记录的唯一非阻塞开发债：`CheckpointStore._path_sentinel`/`_sentinel` 不含

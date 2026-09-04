@@ -81,7 +81,64 @@
 2. 覆盖授权根、子目录符号链接、敏感目录/文件、内部数据库、根目录拒绝与只读枚举；spy 证明无进程启动/停止/注入、目标配置写入和模型请求。
 3. 运行 focused Python、Desktop 来源测试、owner E2E、smoke、build、compileall、diff-check、acceptance sync 与 handoff。
 
-## Task 4：全新 Mac 候选验收
+## 扩展阶段（2026-09-05，主人完整产品目标 A–E）
+
+主人在 Task 1–3 收口后把产品目标扩展为完整"本机 AI 软件发现与只读查看"闭环。对 HEAD
+`5bbe7dba`（产品/测试 `3471db1a`）的逐项差距审计结论：
+
+- A：来源页仅有 Codex 自动发现与 4 类配置目录；无应用安装清单（Cursor/Windsurf/Ollama/LM
+  Studio/VS Code 系/OpenCode/ZCode 等）、无运行进程展示、模型只在高级技术页。对话/消息详情
+  入口已可达但缺日期分组与模型事实列。
+- B：启动发现/周期核对/授权后扫描已走既有 scheduler；官方导出接收文件夹自动创建、"打开
+  接收文件夹"与"使用接收文件夹授权"缺失。
+- C：Inspector 已有来源/会话/消息/正文/分页/搜索；缺日期分组、模型事实列与统一"尚未获得"。
+- D：进程安全白名单展示与 PID 折叠高级信息缺失。
+- E：来源卡片体系已成；新分区必须复用同一卡片/状态标签/aria-live 设计并保证窄屏可用。
+
+新增任务（每项先 RED 后实现，GLM 自审；全部合成数据 + 副作用 spy；复用既有
+StateDB/SourceRegistry/extraction queue/Structured Read Model/Memory Inspector，不新增数据库、
+队列、端口或第二套 UI 状态源）：
+
+### Task 4：本地 AI 软件发现清单（backend TDD）
+- 新增 `src/automatic_memory/app_manifest.py`：单一清单 = macOS 应用安装元数据
+  （/Applications、~/Applications 白名单 `.app` 的 Info.plist 最小字段：bundle id + 版本）+
+  白名单扩展目录名（`.vscode/.cursor/.windsurf extensions` 前缀匹配 Cline/Roo/Continue）+
+  白名单运行进程（psutil provider 可注入）。类别至少覆盖 Codex、ChatGPT、Claude、Cursor、
+  Windsurf、OpenCode、ZCode、VS Code 系代理、Ollama、LM Studio 及安全检测到的其他 AI 应用。
+- 每类输出封闭 capability 矩阵：自动发现/需要授权/官方导出接收/会话读取/消息正文/模型进程
+  状态。无安全会话适配器的类别固定"已发现，暂不支持自动读取"。
+- 认证路由 `GET /api/automatic-memory/apps`；只读、有界、不跟随符号链接；副作用 spy 证明
+  零写入/chmod/rename/unlink/进程控制。
+
+### Task 5：官方导出接收文件夹（backend TDD）
+- 新增 `src/automatic_memory/export_inbox.py`：灵机自有数据区 `<storage>/exports/<kind>/`
+  幂等创建；状态（用途、最近检查、文件数、下一步）经 `GET/POST /api/automatic-memory/export-inbox`
+  暴露；`inbox_path` 仅用于"打开文件夹"，UI 不得渲染。授权页提供"使用接收文件夹"直达授权。
+- 不得在来源 AI 目录创建任何文件夹；不调用来源 AI 导出/CLI/模型/网络/代理/进程/配置。
+
+### Task 6：安全进程元数据（backend TDD）
+- `GET /api/automatic-memory/processes`：白名单进程行（显示名、运行状态、更新时间；pid 仅
+  技术字段供折叠高级信息）；provider 可注入，真实实现用 psutil 只读迭代。
+- 受保护 DTO 深比较扩展：apps/processes/export-inbox 读取前后模型/自检/健康六端点逐值不变。
+
+### Task 7：来源页完整分区（frontend TDD）
+- "本机 AI 软件"分区：清单卡片含状态标签（已发现/需要授权/暂不支持自动读取/运行中）、
+  capability 人话、下一步；"模型与进程"分区：模型清单全部行（运行/兼容状态、来源、更新时间）
+  + AI 进程 + 灵机自检/系统/记忆健康摘要；接收文件夹卡片（用途/最近检查/文件数/下一步/
+  打开接收文件夹/使用此文件夹开始记忆）。复用既有卡片、pill、aria-live、busy 体系与样式。
+- Tauri 侧新增官方 `tauri-plugin-opener`（仅 reveal 用途权限），e2e fixture 注入 stub。
+
+### Task 8：对话查看收口（frontend TDD）
+- Inspector 会话列表按日期分组（今天/昨天/具体日期），模型事实有事实才显示，缺字段一律
+  "尚未获得"；来源页"查看已导入具体内容"保持精确匹配直达。rendered E2E fixture 扩展
+  apps/processes/export-inbox 并断言全部新分区、空态、窄屏与 aria-live。
+
+### Task 9：文档收口与统一门禁
+- PROJECT_STATUS/CODE_MAP/Task 报告/SDD 台账/LOCAL_EXECUTION_TASK/RESULT/CHANGE_ACCEPTANCE_LOG
+  同步；每个产品阶段单独提交；最后只执行一次 acceptance-sync + local-handoff + compileall +
+  diff-check 统一门禁。
+
+## Task 10：全新 Mac 候选验收（原 Task 4）
 
 1. 固定新产品 SHA，创建全新隔离 Acceptance root；旧候选和当前运行实例在替换前保持不动。
 2. 重跑 clean-root packaged 双轮，构建 arm64 sidecar/App/DMG，校验签名和 SHA256，whole-bundle 覆盖安装。
