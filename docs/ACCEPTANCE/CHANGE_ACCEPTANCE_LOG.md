@@ -1,5 +1,27 @@
 # 验收要求变更记录
 
+## 2026-09-05 · Mac 来源接管可解释闭环 · Checkpoint sentinel mode 债务收口
+
+- 收口 Task 3 报告记录的唯一非阻塞开发债：`CheckpointStore._path_sentinel`/`_sentinel` 不含
+  文件 mode，来源文件仅权限模式变化时恢复扫描会误判为未变化并跳过重导入。
+- TDD 先行：RED `2 failed`——恢复流程中 chmod-only 变化未刷新 sentinel（格式断言）与缺失
+  `_sentinel_matches` 比较助手；同批覆盖 legacy 3 段 checkpoint 继续匹配未变文件、来源文件
+  消失时扫描 fail 而非静默跳过、分段比较平台无关契约（Windows mode 语义只经合成单元验证，
+  不做真实 Windows 开发/验收）。
+- 最小实现（`src/automatic_memory/checkpoint.py`）：sentinel 扩展为
+  `size:mtime_ns:inode:mode` 四段；新增 `_sentinel_matches`——legacy 3 段 checkpoint 按公共
+  前缀比较（未变文件保持已完成，不产生一次性重导入），空值/畸形一律按已变化处理（朝重导入
+  的安全方向）；`_sentinel` 对缺 `mode` 的内存替身以 `0` 兜底。内容身份（SHA-256/raw）、路径
+  安全（symlink/非普通文件返回空并重新走授权校验）与数据库契约不变；不新增表、列、状态源、
+  端口或配置。
+- GREEN：`tests/test_automatic_memory_resume.py` `56 passed`；受影响 focused 矩阵（resume/
+  snapshot/discovery/runtime/runtime_flow/work_fact/repair_round1+2/control_api/extraction_
+  queue/scheduler/watcher/obsidian）`226 passed, 1 warning`；`compileall`、`git diff --check`
+  通过。产品/测试提交 `3471db1a41af4533b4ac54cc5cd4ade00d752166`。
+- 本轮仍为合成 fixture focused 结论；新产品 SHA 尚未冻结，packaged Mac 验收、主人观察未执行。
+  Windows、push、PR、merge、结束清理继续冻结至 Mac 技术验收与主人确认。Vite `deps_temp_*`
+  残留保持为环境待办，不改产品代码。
+
 ## 2026-09-04 · Mac 来源接管可解释闭环 · Task 2/3 focused 收口
 
 - Task 1（逐条安全 DTO）按计划五轮收口，最终产品/测试提交 `bad17da3`；Task 2 产品提交

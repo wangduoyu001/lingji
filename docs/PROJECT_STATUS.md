@@ -19,6 +19,16 @@
 
 ## 当前本机交接状态（2026-08-31）
 
+### 2026-09-05 Checkpoint sentinel mode 债务收口
+
+Task 3 报告记录的唯一非阻塞开发债已收口：checkpoint sentinel 扩展为
+`size:mtime_ns:inode:mode` 四段，恢复扫描现在能识别来源文件仅权限模式的变化；新增
+`_sentinel_matches` 使 legacy 3 段 checkpoint 继续匹配未变文件（不产生一次性重导入），空值/
+畸形按已变化处理。产品/测试提交 `3471db1a41af4533b4ac54cc5cd4ade00d752166`；RED `2 failed`
+后 resume 套件 `56 passed`，受影响 focused 矩阵 `226 passed, 1 warning`。来源文件消失时扫描
+按既有语义 fail，不再可能被静默跳过。仍为合成 fixture focused 结论；新产品 SHA 未冻结，
+packaged Mac 验收与主人观察未执行，Windows/push/PR/merge/结束清理继续冻结。
+
 ### 2026-09-04 主人来源接管可解释闭环修复
 
 当前唯一 ACTIVE 本机任务为 `OWNER_SOURCE_INTAKE_MAC_REPAIR`（分支

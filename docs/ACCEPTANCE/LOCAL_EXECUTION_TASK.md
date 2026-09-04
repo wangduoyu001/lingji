@@ -13,7 +13,7 @@ execution_mode: OWNER_SOURCE_INTAKE_PRODUCT_AND_MAC_REPAIR
 repository: wangduoyu001/lingji
 product_branch: codex/owner-source-intake-mac-repair
 baseline_commit: 1d4cd95bcbe73455507bc32c969f6eab5923bd86
-product_commit: 7f3222089dc5f3037493d44c22f2c3773ac331c8
+product_commit: 3471db1a41af4533b4ac54cc5cd4ade00d752166
 product_pr: NONE_NOT_A_RELEASE_GATE
 release_gate: OWNER_EXPERIENCE_CANDIDATE_ONLY
 artifact_name: lingji-macos-arm64-app
