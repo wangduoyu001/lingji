@@ -23,6 +23,7 @@ from .source_registry import SourceRegistry
 from .models import SourceRecord
 from .policy import resolve_event_watcher_enabled
 from .path_policy import enumerate_authorized_files
+from .job_facts import association_from_status, resolve_job_facts
 from src.work.capture_bridge import CaptureWorkBridge
 from src.work.models import ExecutionEvent, WorkItem
 from src.work.projector import WorkProjector
@@ -512,7 +513,9 @@ class AutomaticMemoryRuntime:
             self._maybe_finalize_scan_work(scan_id)
 
     def _jobs_for_scan(self, scan_id: str) -> list[dict[str, Any]]:
-        jobs: dict[str, dict[str, Any]] = {}
+        scan = self.state_db.get_automatic_memory_scan(scan_id) or {}
+        source_id = str(scan.get("source_id") or "")
+        direct_jobs: list[dict[str, Any]] = []
         offset = 0
         page_size = 100
         while True:
@@ -520,26 +523,25 @@ class AutomaticMemoryRuntime:
                 source_type="automatic_memory_snapshot", scan_id=scan_id,
                 limit=page_size, offset=offset,
             )
-            for item in page:
-                if item.get("job_id"):
-                    jobs[str(item["job_id"])] = item
+            direct_jobs.extend(page)
             if len(page) < page_size:
                 break
             offset += page_size
+        associated_jobs: list[tuple[dict[str, Any], str]] = []
         for manifest in self.state_db.list_automatic_memory_scan_items(scan_id):
-            status = str(manifest.get("status") or "")
-            parts = status.split(":")
-            if len(parts) != 3 or parts[0] != "job" or not parts[1]:
+            association = association_from_status(manifest.get("status"))
+            if association is None:
                 continue
             try:
-                item = self.queue.get(parts[1])
+                item = self.queue.get(association[0])
             except LookupError:
                 continue
             payload = item.get("payload") if isinstance(item, dict) else None
             if isinstance(payload, dict) and str(payload.get("source_id") or "") == str(manifest.get("source_id") or "") and str(payload.get("relative_path") or "") == str(manifest.get("relative_path") or ""):
-                item["_automatic_memory_association"] = parts[2]
-                jobs[parts[1]] = item
-        return list(jobs.values())
+                associated_jobs.append((item, association[1]))
+        return resolve_job_facts(
+            source_id=source_id, direct_jobs=direct_jobs, associated_jobs=associated_jobs
+        )
 
     def _maybe_finalize_scan_work(self, scan_id: str, report: Any | None = None) -> None:
         work_id = f"automatic-memory:{scan_id}"
@@ -581,7 +583,17 @@ class AutomaticMemoryRuntime:
         queued_raw = getattr(report, "queued", None) if report is not None else None
         reused_raw = getattr(report, "reused", None) if report is not None else None
         queued = queued_raw if isinstance(queued_raw, int) and not isinstance(queued_raw, bool) else None
-        reused = reused_raw if isinstance(reused_raw, int) and not isinstance(reused_raw, bool) else None
+        persisted_reused = sum(
+            item.get("status") == "completed"
+            and item.get("_automatic_memory_association") == "existing"
+            for item in jobs
+        )
+        reported_reused = reused_raw if isinstance(reused_raw, int) and not isinstance(reused_raw, bool) else None
+        reused = (
+            max(persisted_reused, reported_reused or 0)
+            if persisted_reused or reported_reused is not None
+            else None
+        )
         queued_for_math = queued if queued is not None else 0
         reused_for_math = reused if reused is not None else 0
         reported_total = getattr(report, "total", None) if report is not None else None

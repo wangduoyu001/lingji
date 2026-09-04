@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from src.automatic_memory import AuthorizationScope, SourceRegistry, discover_source_metadata
 from src.automatic_memory.home import resolve_effective_home
+from src.automatic_memory.job_facts import association_from_status, resolve_job_facts
 
 
 class AutomaticMemoryAuthorizationRequest(BaseModel):
@@ -385,22 +386,23 @@ def register_automatic_memory_routes(
                 if len(page) < page_size:
                     break
                 offset += page_size
-            by_id = {
-                str(item.get("job_id")): item for item in jobs if item.get("job_id")
-            }
+            associated_jobs = []
             for manifest in registry.state_db.list_automatic_memory_scan_items(scan_id):
-                parts = str(manifest.get("status") or "").split(":")
-                if len(parts) != 3 or parts[0] != "job" or not parts[1]:
+                association = association_from_status(manifest.get("status"))
+                if association is None:
                     continue
                 try:
-                    associated = queue.get(parts[1])
+                    associated = queue.get(association[0])
                 except LookupError:
                     continue
                 payload = associated.get("payload") if isinstance(associated, dict) else None
                 if isinstance(payload, dict) and str(payload.get("source_id") or "") == str(manifest.get("source_id") or "") and str(payload.get("relative_path") or "") == str(manifest.get("relative_path") or ""):
-                    associated["_automatic_memory_association"] = parts[2]
-                    by_id[parts[1]] = associated
-            return list(by_id.values())
+                    associated_jobs.append((associated, association[1]))
+            scan = registry.get_scan(scan_id)
+            return resolve_job_facts(
+                source_id=str(scan.source_id), direct_jobs=jobs,
+                associated_jobs=associated_jobs,
+            )
         except TypeError:
             return None
 
