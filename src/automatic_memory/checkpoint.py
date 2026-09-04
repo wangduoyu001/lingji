@@ -36,7 +36,7 @@ class CheckpointStore:
         )
         self.lease_ttl_seconds = max(float(lease_ttl_seconds), 0.1)
 
-    def save(self, token: ResumeToken) -> None:
+    def save(self, token: ResumeToken, *, manifest_status: str = "processed") -> None:
         payload = json.dumps(
             {
                 "scan_id": token.scan_id,
@@ -66,6 +66,7 @@ class CheckpointStore:
                     source_id=scan["source_id"],
                     relative_path=token.cursor,
                     sentinel=token.source_sentinel,
+                    status=manifest_status,
                 )
 
     def load(self, scan_id: str) -> ResumeToken | None:
@@ -393,9 +394,10 @@ class SnapshotJobRunner:
                         input_path=raw_path,
                         source_type=str(source.get("kind") or ""),
                     )
-                    if admission.get("existing_job"):
+                    admission_status = str(admission.get("status") or "").lower()
+                    if admission.get("existing_job") and admission_status == "completed":
                         reused_count += 1
-                    else:
+                    elif not admission.get("existing_job"):
                         queued_count += 1
                 except Exception as exc:
                     raise RuntimeError(
@@ -411,18 +413,10 @@ class SnapshotJobRunner:
                 checkpoint = ResumeToken(
                     scan_id, result.relative_path, source_sentinel, lease_id, attempt
                 )
-                self.checkpoints.save(checkpoint)
                 job_id = str(admission.get("job_id") or "")
                 association = "existing" if admission.get("existing_job") else "new"
                 manifest_status = f"job:{job_id}:{association}" if job_id else "queued"
-                self.state_db.upsert_automatic_memory_scan_item_owned(
-                    scan_id,
-                    lease_id,
-                    source_id=source_id,
-                    relative_path=result.relative_path,
-                    sentinel=source_sentinel,
-                    status=manifest_status,
-                )
+                self.checkpoints.save(checkpoint, manifest_status=manifest_status)
                 cursor = result.relative_path
                 source_sentinel = sentinel
                 self.state_db.update_automatic_memory_scan_owned(

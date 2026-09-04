@@ -75,6 +75,10 @@ def project_scan_processing(scan: Any, jobs: list[dict[str, Any]] | None) -> dic
 
     statuses = [str(item.get("status") or "unknown").lower() for item in jobs]
     completed = sum(status == "completed" for status in statuses)
+    imported_completed = sum(
+        status == "completed" and item.get("_automatic_memory_association") != "existing"
+        for status, item in zip(statuses, jobs)
+    )
     failed = sum(status in {"failed", "cancelled"} for status in statuses)
     pending = sum(status not in {"completed", "failed", "cancelled"} for status in statuses)
     counts = {
@@ -92,8 +96,10 @@ def project_scan_processing(scan: Any, jobs: list[dict[str, Any]] | None) -> dic
         status = "partial_failure"
     elif failed:
         status = "failed"
-    elif completed:
+    elif imported_completed:
         status = "imported"
+    elif completed:
+        status = "scan_completed"
     else:
         total = payload.get("total")
         queued = payload.get("queued_count", payload.get("queued"))
@@ -379,7 +385,22 @@ def register_automatic_memory_routes(
                 if len(page) < page_size:
                     break
                 offset += page_size
-            return jobs
+            by_id = {
+                str(item.get("job_id")): item for item in jobs if item.get("job_id")
+            }
+            for manifest in registry.state_db.list_automatic_memory_scan_items(scan_id):
+                parts = str(manifest.get("status") or "").split(":")
+                if len(parts) != 3 or parts[0] != "job" or not parts[1]:
+                    continue
+                try:
+                    associated = queue.get(parts[1])
+                except LookupError:
+                    continue
+                payload = associated.get("payload") if isinstance(associated, dict) else None
+                if isinstance(payload, dict) and str(payload.get("source_id") or "") == str(manifest.get("source_id") or "") and str(payload.get("relative_path") or "") == str(manifest.get("relative_path") or ""):
+                    associated["_automatic_memory_association"] = parts[2]
+                    by_id[parts[1]] = associated
+            return list(by_id.values())
         except TypeError:
             return None
 

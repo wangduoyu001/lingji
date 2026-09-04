@@ -178,6 +178,12 @@ def test_real_two_scan_flow_reports_reuse_and_exact_structured_identity_set(tmp_
     runtime.start()
     try:
         first = runtime.scan_now(source.source_id)
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            jobs = pipeline.queue.list_page(source_type="automatic_memory_snapshot", limit=20)
+            if jobs and jobs[0]["status"] == "completed":
+                break
+            time.sleep(0.03)
         second = runtime.scan_now(source.source_id)
         deadline = time.time() + 5
         while time.time() < deadline and pipeline.queue.stats()["pending"]:

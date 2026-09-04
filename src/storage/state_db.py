@@ -1911,6 +1911,18 @@ class StateDatabase:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def list_automatic_memory_scan_ids_for_job(self, job_id: str) -> list[str]:
+        """Find scans whose existing manifest associates the extraction job."""
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT scan_id, status FROM automatic_memory_scan_items
+                WHERE status LIKE 'job:%'
+                """
+            ).fetchall()
+        marker = f"job:{job_id}:"
+        return [str(row["scan_id"]) for row in rows if str(row["status"] or "").startswith(marker)]
+
     def cleanup_automatic_memory_scan_manifest(self, scan_id: str) -> int:
         """Delete per-path recovery rows only for a retired scan.
 

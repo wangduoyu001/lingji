@@ -500,12 +500,46 @@ class AutomaticMemoryRuntime:
         if str(job.get("source_type") or "") != "automatic_memory_snapshot":
             return
         payload = job.get("payload") if isinstance(job, dict) else None
-        if not isinstance(payload, dict) or not payload.get("scan_id"):
+        if not isinstance(payload, dict):
             return
-        scan_id = str(payload["scan_id"])
-        work_id = f"automatic-memory:{scan_id}"
-        self.work_store.append_event(ExecutionEvent(work_id=work_id, event_id=f"extraction:{job.get('job_id')}:{phase}", event_type=f"extraction.{phase}", detail={"job_id": job.get("job_id"), "error": error, "source_type": payload.get("source_type")}))
-        self._maybe_finalize_scan_work(scan_id)
+        job_id = str(job.get("job_id") or "")
+        scan_ids = set(self.state_db.list_automatic_memory_scan_ids_for_job(job_id)) if job_id else set()
+        if payload.get("scan_id"):
+            scan_ids.add(str(payload["scan_id"]))
+        for scan_id in sorted(scan_ids):
+            work_id = f"automatic-memory:{scan_id}"
+            self.work_store.append_event(ExecutionEvent(work_id=work_id, event_id=f"extraction:{job_id}:{phase}", event_type=f"extraction.{phase}", detail={"job_id": job_id, "error": error, "source_type": payload.get("source_type")}))
+            self._maybe_finalize_scan_work(scan_id)
+
+    def _jobs_for_scan(self, scan_id: str) -> list[dict[str, Any]]:
+        jobs: dict[str, dict[str, Any]] = {}
+        offset = 0
+        page_size = 100
+        while True:
+            page = self.queue.list_page(
+                source_type="automatic_memory_snapshot", scan_id=scan_id,
+                limit=page_size, offset=offset,
+            )
+            for item in page:
+                if item.get("job_id"):
+                    jobs[str(item["job_id"])] = item
+            if len(page) < page_size:
+                break
+            offset += page_size
+        for manifest in self.state_db.list_automatic_memory_scan_items(scan_id):
+            status = str(manifest.get("status") or "")
+            parts = status.split(":")
+            if len(parts) != 3 or parts[0] != "job" or not parts[1]:
+                continue
+            try:
+                item = self.queue.get(parts[1])
+            except LookupError:
+                continue
+            payload = item.get("payload") if isinstance(item, dict) else None
+            if isinstance(payload, dict) and str(payload.get("source_id") or "") == str(manifest.get("source_id") or "") and str(payload.get("relative_path") or "") == str(manifest.get("relative_path") or ""):
+                item["_automatic_memory_association"] = parts[2]
+                jobs[parts[1]] = item
+        return list(jobs.values())
 
     def _maybe_finalize_scan_work(self, scan_id: str, report: Any | None = None) -> None:
         work_id = f"automatic-memory:{scan_id}"
@@ -531,24 +565,15 @@ class AutomaticMemoryRuntime:
             )
             self._scan_reports.pop(scan_id, None)
             return
-        jobs: list[dict[str, Any]] = []
-        offset = 0
-        page_size = 100
-        while True:
-            page = self.queue.list_page(
-                source_type="automatic_memory_snapshot",
-                scan_id=scan_id,
-                limit=page_size,
-                offset=offset,
-            )
-            jobs.extend(page)
-            if len(page) < page_size:
-                break
-            offset += page_size
+        jobs = self._jobs_for_scan(scan_id)
         if any(item.get("status") not in {"completed", "failed", "cancelled"} for item in jobs):
             return
         failed_jobs = [item for item in jobs if item.get("status") in {"failed", "cancelled"}]
         completed_jobs = [item for item in jobs if item.get("status") == "completed"]
+        imported_jobs = [
+            item for item in completed_jobs
+            if item.get("_automatic_memory_association") != "existing"
+        ]
         if failed_jobs:
             self.work_bridge.record_failure(work_id, stage="extraction", reason="一个或多个来源文件提取失败，其他来源仍可继续", retryable=False, evidence={"scan_id": scan_id, "completed_jobs": len(completed_jobs), "failed_jobs": [item.get("job_id") for item in failed_jobs], "processing_status": "partial_failure" if completed_jobs else "failed"})
             self._scan_reports.pop(scan_id, None)
@@ -570,11 +595,11 @@ class AutomaticMemoryRuntime:
             return
         queued_label = str(queued) if queued is not None else "尚未获得"
         reused_label = str(reused) if reused is not None else "尚未获得"
-        if reused and not completed_jobs:
+        if reused and not imported_jobs:
             summary = f"处理完成：已检查 {total} 个来源文件，未重复导入；复用 {reused_label} 个先前已导入内容"
         else:
-            summary = f"处理完成：已检查 {total} 个来源文件，实际导入 {len(completed_jobs)} 个（新增 {queued_label}，复用 {reused_label}）"
-        self.work_bridge.complete_extraction(work_id, summary, evidence={"scan_id": scan_id, "jobs": len(jobs), "completed_jobs": len(completed_jobs), "queued": queued, "reused": reused, "processing_status": "imported" if completed_jobs else "scan_completed", "next_actor": "system"})
+            summary = f"处理完成：已检查 {total} 个来源文件，实际导入 {len(imported_jobs)} 个（新增 {queued_label}，复用 {reused_label}）"
+        self.work_bridge.complete_extraction(work_id, summary, evidence={"scan_id": scan_id, "jobs": len(jobs), "completed_jobs": len(imported_jobs), "queued": queued, "reused": reused, "processing_status": "imported" if imported_jobs else "scan_completed", "next_actor": "system"})
         self._scan_reports.pop(scan_id, None)
 
     def pause(self) -> dict[str, object]:
