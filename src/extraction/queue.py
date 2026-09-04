@@ -868,28 +868,6 @@ class SQLiteExtractionQueue(_SQLiteExtractionQueueBase):
             ).fetchone()
         return self._parse_row(row)
 
-    def list_snapshot_identity(
-        self, *, source_id: str, relative_path: str, sha256: str | None = None
-    ) -> list[dict[str, Any]]:
-        """Return snapshot jobs matching an existing content identity."""
-        clauses = [
-            "source_type = 'automatic_memory_snapshot'",
-            "automatic_memory_source_id = ?",
-            "json_extract(payload_json, '$.relative_path') = ?",
-        ]
-        values: list[Any] = [str(source_id), str(relative_path)]
-        if sha256 is not None:
-            clauses.append("json_extract(payload_json, '$.sha256') = ?")
-            values.append(str(sha256))
-        with self._connection() as connection:
-            rows = connection.execute(
-                "SELECT * FROM extraction_jobs WHERE "
-                + " AND ".join(clauses)
-                + " ORDER BY updated_at DESC, job_id DESC",
-                tuple(values),
-            ).fetchall()
-        return [parsed for row in rows if (parsed := self._parse_row(row)) is not None]
-
     def enqueue_authorized_snapshot(
         self,
         *,

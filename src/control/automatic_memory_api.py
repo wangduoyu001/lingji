@@ -152,10 +152,14 @@ def project_scan_dto(scan: Any, jobs: list[dict[str, Any]] | None = None) -> dic
 _SCAN_ITEM_NAME_FALLBACK = "无法安全显示名称"
 _SCAN_ITEM_SOURCE_LABELS = {
     "chatgpt_export": "ChatGPT导出记录",
+    "chatgpt": "ChatGPT导出记录",
     "codex_rollout": "Codex聊天记录",
     "codex_transcript": "Codex聊天记录",
     "codex": "Codex聊天记录",
     "codex_history": "Codex聊天记录",
+    "history_inbox": "通用AI历史记录",
+    "generic_ai_history": "通用AI历史记录",
+    "obsidian": "Obsidian知识库",
 }
 _SCAN_ITEM_REASON_MAP = {
     ("snapshot", "recorded"): "已记录到扫描清单",
@@ -262,6 +266,26 @@ def _scan_item_result_and_stage(
     return "queued", "waiting", False, None, None, None
 
 
+def _manifest_item_result_and_stage(
+    manifest_item: dict[str, Any] | None,
+    associated_job: dict[str, Any] | None = None,
+) -> tuple[str, str, bool, int | None, int | None, int | None]:
+    status = str((manifest_item or {}).get("status") or "processed").lower()
+    if associated_job is not None:
+        return _scan_item_result_and_stage(associated_job)
+    if status == "reused":
+        return "completed", "reused", False, None, None, None
+    if status in {"queued", "retrying"}:
+        return "queued", "waiting", False, None, None, None
+    if status in {"processing", "running"}:
+        return "extracting", "processing", False, None, None, None
+    if status == "failed":
+        return "completed", "failed", True, None, None, None
+    if status == "cancelled":
+        return "completed", "cancelled", True, None, None, None
+    return "snapshot", "recorded", False, None, None, None
+
+
 def project_scan_item(
     scan_id: str,
     relative_path: str,
@@ -282,6 +306,8 @@ def project_scan_item(
     if reused:
         stage, result, retryable = "completed", "reused", False
         imported_sources = imported_conversations = imported_messages = None
+    elif queue_item is None:
+        stage, result, retryable, imported_sources, imported_conversations, imported_messages = _manifest_item_result_and_stage(manifest_item)
     else:
         stage, result, retryable, imported_sources, imported_conversations, imported_messages = _scan_item_result_and_stage(queue_item)
     updated_at = _latest_scan_item_timestamp(
@@ -355,23 +381,7 @@ def register_automatic_memory_routes(
                 offset += page_size
             return jobs
         except TypeError:
-            jobs = []
-            offset = 0
-            page_size = 100
-            while True:
-                page = queue.list_page(
-                    source_type="automatic_memory_snapshot",
-                    limit=page_size,
-                    offset=offset,
-                )
-                jobs.extend(
-                    item for item in page
-                    if str((item.get("payload") or {}).get("scan_id") or "") == scan_id
-                )
-                if len(page) < page_size:
-                    break
-                offset += page_size
-            return jobs
+            return None
 
     def scan_items_for_scan(scan_id: str, *, limit: int, offset: int) -> dict[str, Any]:
         scan = registry.get_scan(scan_id)
@@ -382,7 +392,8 @@ def register_automatic_memory_routes(
             str(item.get("relative_path") or ""): item
             for item in registry.state_db.list_automatic_memory_scan_items(scan_id)
         }
-        queue_items = jobs_for_scan(scan_id) or []
+        queue_items = jobs_for_scan(scan_id)
+        queue_available = queue_items is not None
         merged: dict[str, dict[str, Any]] = {
             relative_path: {"manifest_item": manifest_item, "queue_item": None}
             for relative_path, manifest_item in manifest_items.items()
@@ -394,7 +405,7 @@ def register_automatic_memory_routes(
             candidate_key = (_scan_item_timestamp(candidate.get("updated_at")) or datetime.min.replace(tzinfo=timezone.utc), str(candidate.get("job_id") or ""))
             return candidate if candidate_key > current_key else current
 
-        for item in queue_items:
+        for item in queue_items or []:
             payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
             relative_path = str(payload.get("relative_path") or "")
             if not relative_path:
@@ -410,24 +421,29 @@ def register_automatic_memory_routes(
         for relative_path, entry in sorted(
             merged.items(), key=lambda item: (_safe_scan_item_name(item[0]), item[0])
         ):
-            reuse_item = None
-            if entry["queue_item"] is None and entry["manifest_item"] and queue is not None:
-                lookup = getattr(queue, "list_snapshot_identity", None)
-                if lookup is not None:
-                    manifest = entry["manifest_item"]
-                    candidates = lookup(
-                        source_id=source_id,
-                        relative_path=relative_path,
-                        sha256=manifest.get("sha256"),
-                    )
-                    if not candidates and manifest.get("sha256") is None:
-                        candidates = lookup(source_id=source_id, relative_path=relative_path)
-                    reuse_item = candidates[0] if candidates else None
+            associated_job = entry["queue_item"]
+            association = str((entry["manifest_item"] or {}).get("status") or "")
+            if associated_job is None and queue_available and association.startswith("job:") and queue is not None:
+                parts = association.split(":")
+                if len(parts) == 3 and parts[1] and parts[2] in {"existing", "new"}:
+                    getter = getattr(queue, "get", None)
+                    if getter is not None:
+                        try:
+                            candidate = getter(parts[1])
+                        except LookupError:
+                            candidate = None
+                        payload = candidate.get("payload") if isinstance(candidate, dict) else None
+                        if isinstance(payload, dict) and str(payload.get("source_id") or "") == source_id and str(payload.get("relative_path") or "") == relative_path:
+                            associated_job = candidate
             ordered.append(project_scan_item(
                 scan_id, relative_path, source_id=source_id, source_kind=source_kind,
                 manifest_item=entry["manifest_item"],
-                queue_item=entry["queue_item"] or reuse_item,
-                reused=reuse_item is not None,
+                queue_item=associated_job,
+                reused=(
+                    association.endswith(":existing")
+                    and isinstance(associated_job, dict)
+                    and str(associated_job.get("status") or "").lower() == "completed"
+                ),
             ))
         total = len(ordered)
         page_items = ordered[offset : offset + limit]

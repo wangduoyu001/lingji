@@ -25,35 +25,6 @@ class SQLiteExtractionQueueTests(unittest.TestCase):
         self.assertEqual(first["job_id"], second["job_id"])
         self.assertEqual(self.queue.stats()["queued"], 1)
 
-    def test_snapshot_identity_lookup_is_exhaustive_and_content_specific(self):
-        for index in range(205):
-            self.queue.enqueue(
-                "automatic_memory_snapshot",
-                payload={
-                    "scan_id": "older-scan",
-                    "source_id": "source-a",
-                    "relative_path": f"file-{index:03d}.json",
-                    "sha256": f"{index:064d}"[-64:],
-                },
-            )
-        match = self.queue.enqueue(
-            "automatic_memory_snapshot",
-            payload={
-                "scan_id": "older-scan",
-                "source_id": "source-a",
-                "relative_path": "reused.json",
-                "sha256": "f" * 64,
-            },
-        )
-
-        matches = self.queue.list_snapshot_identity(
-            source_id="source-a",
-            relative_path="reused.json",
-            sha256="f" * 64,
-        )
-
-        self.assertEqual([item["job_id"] for item in matches], [match["job_id"]])
-
     def test_claim_complete(self):
         job = self.queue.enqueue("codex", payload={"summary": "done"})
         claimed = self.queue.claim("worker-1")

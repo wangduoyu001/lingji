@@ -550,7 +550,7 @@ def test_scan_detail_merges_safe_manifest_and_queue_items_with_pagination(tmp_pa
     assert bad_offset.status_code == 422
 
 
-def test_scan_detail_legacy_queue_fallback_enumerates_more_than_200_rows(tmp_path: Path):
+def test_scan_detail_exact_queue_query_enumerates_more_than_200_rows(tmp_path: Path):
     root = tmp_path / "source"
     root.mkdir()
     storage = tmp_path / "storage"
@@ -576,19 +576,10 @@ def test_scan_detail_legacy_queue_fallback_enumerates_more_than_200_rows(tmp_pat
             payload={"scan_id": scan.scan_id, "source_id": source.source_id, "relative_path": f"item-{index:03d}.json"},
         )
 
-    class LegacyQueue:
-        def __init__(self, wrapped):
-            self.wrapped = wrapped
-
-        def list_page(self, *, source_type=None, limit=100, offset=0, scan_id=None, **kwargs):
-            if scan_id is not None:
-                raise TypeError("legacy queue has no scan_id filter")
-            return self.wrapped.list_page(source_type=source_type, limit=limit, offset=offset)
-
     control = LocalControlService.__new__(LocalControlService)
     control.state_db = state
     control.automatic_memory_registry = registry
-    control.runtime = SimpleNamespace(queue=LegacyQueue(queue))
+    control.runtime = SimpleNamespace(queue=queue)
     app = create_control_app(SimpleNamespace(storage_path=storage), service=control, token="secret")
     with TestClient(app) as client:
         response = client.get(
@@ -699,6 +690,16 @@ def test_scan_item_projection_prefers_newest_duplicate_and_reuse_is_completed():
     assert reused["stage"] == "completed"
     assert reused["result"] == "reused"
     assert reused["reason"] == "命中复用，未重复导入"
+
+
+@pytest.mark.parametrize("historical_status", ["failed", "cancelled", "queued", "processing"])
+def test_scan_item_projection_does_not_infer_reuse_from_historical_status(historical_status):
+    item = project_scan_item(
+        "scan-a", "history.json", source_id="source-a", source_kind="generic_ai_history",
+        manifest_item={"source_id": "source-a", "status": historical_status, "updated_at": "2026-09-04T00:00:00+00:00"},
+    )
+    assert item["result"] != "reused"
+    assert item["result"] in {"failed", "cancelled", "waiting", "processing"}
 
 
 @pytest.mark.parametrize(

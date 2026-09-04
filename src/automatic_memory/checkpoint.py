@@ -412,6 +412,17 @@ class SnapshotJobRunner:
                     scan_id, result.relative_path, source_sentinel, lease_id, attempt
                 )
                 self.checkpoints.save(checkpoint)
+                job_id = str(admission.get("job_id") or "")
+                association = "existing" if admission.get("existing_job") else "new"
+                manifest_status = f"job:{job_id}:{association}" if job_id else "queued"
+                self.state_db.upsert_automatic_memory_scan_item_owned(
+                    scan_id,
+                    lease_id,
+                    source_id=source_id,
+                    relative_path=result.relative_path,
+                    sentinel=source_sentinel,
+                    status=manifest_status,
+                )
                 cursor = result.relative_path
                 source_sentinel = sentinel
                 self.state_db.update_automatic_memory_scan_owned(

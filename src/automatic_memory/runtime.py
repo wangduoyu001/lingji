@@ -570,8 +570,10 @@ class AutomaticMemoryRuntime:
             return
         queued_label = str(queued) if queued is not None else "尚未获得"
         reused_label = str(reused) if reused is not None else "尚未获得"
-        reuse_note = "；复用了先前已导入内容" if reused and not completed_jobs else ""
-        summary = f"处理完成：已检查 {total} 个来源文件，实际导入 {len(completed_jobs)} 个（新增 {queued_label}，复用 {reused_label}）{reuse_note}"
+        if reused and not completed_jobs:
+            summary = f"处理完成：已检查 {total} 个来源文件，未重复导入；复用 {reused_label} 个先前已导入内容"
+        else:
+            summary = f"处理完成：已检查 {total} 个来源文件，实际导入 {len(completed_jobs)} 个（新增 {queued_label}，复用 {reused_label}）"
         self.work_bridge.complete_extraction(work_id, summary, evidence={"scan_id": scan_id, "jobs": len(jobs), "completed_jobs": len(completed_jobs), "queued": queued, "reused": reused, "processing_status": "imported" if completed_jobs else "scan_completed", "next_actor": "system"})
         self._scan_reports.pop(scan_id, None)
 
