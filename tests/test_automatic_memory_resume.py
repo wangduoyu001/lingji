@@ -919,7 +919,9 @@ def test_zero_inode_sentinel_is_stable_across_scan_and_resume(tmp_path: Path, mo
     )
 
     assert runner.run(scan.scan_id).status == "completed"
-    assert state.list_automatic_memory_scan_items(scan.scan_id)[0]["sentinel"].endswith(":0")
+    segments = state.list_automatic_memory_scan_items(scan.scan_id)[0]["sentinel"].split(":")
+    assert len(segments) == 4
+    assert segments[2] == "0", "a zero inode must stay stable as the third sentinel segment"
 
 
 def test_revoke_cancels_admitted_snapshot_jobs_but_preserves_other_source_jobs(tmp_path: Path):
@@ -981,3 +983,93 @@ def test_revoke_cancels_admitted_snapshot_jobs_but_preserves_other_source_jobs(t
     assert source_jobs and all(job["status"] == "cancelled" for job in source_jobs)
     assert other_jobs and other_jobs[0]["status"] == "queued"
     assert queue.claim("worker", job_id=source_jobs[0]["job_id"]) is None
+
+
+def test_mode_only_change_is_detected_across_checkpoint_resume(tmp_path: Path):
+    """A chmod-only source change must re-admit the file on resume."""
+    state, _, _, scan, root, snapshot, queue = _scan_fixture(tmp_path, count=1)
+    source_file = root / "item-00.txt"
+    runner = SnapshotJobRunner(
+        snapshot,
+        queue,
+        state,
+        path_provider=lambda current_scan, current_source: [source_file],
+    )
+
+    assert runner.run(scan.scan_id, crash_at="30%").status == "paused"
+    stored = state.list_automatic_memory_scan_items(scan.scan_id)[0]["sentinel"]
+    assert len(stored.split(":")) == 4, "sentinel must carry the file mode segment"
+
+    source_file.chmod(0o600)
+    current = SnapshotJobRunner._path_sentinel(source_file)
+    assert current != stored, "a chmod-only change must change the path sentinel"
+
+    assert runner.run(scan.scan_id).status == "completed"
+
+    refreshed = state.list_automatic_memory_scan_items(scan.scan_id)[0]
+    assert refreshed["sentinel"] == current, "mode-only change must re-admit the file and refresh its sentinel"
+
+
+def test_legacy_three_segment_sentinel_matches_unchanged_file(tmp_path: Path):
+    """Old checkpoints stored size:mtime_ns:inode without mode; they must keep matching."""
+    state, _, _, scan, root, snapshot, queue = _scan_fixture(tmp_path, count=1)
+    source_file = root / "item-00.txt"
+    stat = source_file.lstat()
+    legacy = f"{stat.st_size}:{stat.st_mtime_ns}:{int(getattr(stat, 'st_ino', 0) or 0)}"
+    state.acquire_automatic_memory_scan_lease(scan.scan_id, "legacy-sentinel-lease")
+    state.upsert_automatic_memory_scan_item_owned(
+        scan.scan_id,
+        "legacy-sentinel-lease",
+        source_id=scan.source_id,
+        relative_path="item-00.txt",
+        sentinel=legacy,
+        status="job:legacy:existing",
+    )
+    state.release_automatic_memory_scan_lease(
+        scan.scan_id,
+        "legacy-sentinel-lease",
+        now=datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+    )
+
+    runner = SnapshotJobRunner(
+        snapshot,
+        queue,
+        state,
+        path_provider=lambda current_scan, current_source: [source_file],
+    )
+    outcome = runner.run(scan.scan_id)
+
+    assert outcome.status == "completed"
+    item = state.list_automatic_memory_scan_items(scan.scan_id)[0]
+    assert item["sentinel"] == legacy, "legacy checkpoint without mode must keep matching an unchanged file"
+    assert item["status"] == "job:legacy:existing"
+
+
+def test_disappeared_source_file_fails_scan_instead_of_silent_skip(tmp_path: Path):
+    """A vanished file is a change: the scan fails instead of pretending completion."""
+    state, _, _, scan, root, snapshot, queue = _scan_fixture(tmp_path, count=1)
+    source_file = root / "item-00.txt"
+    runner = SnapshotJobRunner(
+        snapshot,
+        queue,
+        state,
+        path_provider=lambda current_scan, current_source: [source_file],
+    )
+    assert runner.run(scan.scan_id, crash_at="30%").status == "paused"
+
+    source_file.unlink()
+    outcome = runner.run(scan.scan_id)
+
+    assert outcome.status == "failed"
+    assert outcome.last_error
+
+
+def test_sentinel_comparison_is_platform_neutral_and_legacy_compatible():
+    """Comparison is segment-based: legacy 3-segment sentinels match on the common prefix."""
+    compare = SnapshotJobRunner._sentinel_matches
+    assert compare("8:1:1", "8:1:1:33152") is True
+    assert compare("8:1:1:33152", "8:1:1:33152") is True
+    assert compare("8:1:1:33152", "8:1:1:33206") is False
+    assert compare("8:1:2:33152", "8:1:1:33152") is False
+    assert compare("", "8:1:1:33152") is False
+    assert compare("malformed", "8:1:1:33152") is False

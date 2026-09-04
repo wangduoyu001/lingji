@@ -312,7 +312,7 @@ class SnapshotJobRunner:
                 current_sentinel = self._path_sentinel(path)
             except OSError:
                 current_sentinel = ""
-            if current_sentinel and sentinels.get(relative) == current_sentinel:
+            if current_sentinel and self._sentinel_matches(sentinels.get(relative, ""), current_sentinel):
                 completed_before += 1
             else:
                 pending.append(path)
@@ -529,14 +529,34 @@ class SnapshotJobRunner:
     @staticmethod
     def _sentinel(result: Any) -> str:
         stat = result.stat_after
-        return f"{stat.size}:{stat.mtime_ns}:{int(stat.inode or 0)}"
+        return f"{stat.size}:{stat.mtime_ns}:{int(stat.inode or 0)}:{int(getattr(stat, 'mode', 0) or 0)}"
 
     @staticmethod
     def _path_sentinel(path: Path) -> str:
         stat = path.lstat()
         if not path.is_file() or path.is_symlink():
             return ""
-        return f"{stat.st_size}:{stat.st_mtime_ns}:{int(getattr(stat, 'st_ino', 0) or 0)}"
+        return f"{stat.st_size}:{stat.st_mtime_ns}:{int(getattr(stat, 'st_ino', 0) or 0)}:{int(stat.st_mode)}"
+
+    @staticmethod
+    def _sentinel_matches(stored: str, current: str) -> bool:
+        """Compare sentinels across the pre-mode checkpoint format.
+
+        New sentinels carry ``size:mtime_ns:inode:mode``; checkpoints written
+        before the mode segment only have three segments, so they compare on
+        their common prefix and an unchanged file stays completed instead of
+        being re-admitted once after an upgrade. Any other shape (empty,
+        truncated, malformed) is treated as changed, which is the safe
+        direction: it re-admits rather than silently skipping.
+        """
+        if not stored or not current:
+            return False
+        stored_segments = stored.split(":")
+        current_segments = current.split(":")
+        if len(stored_segments) == 3:
+            stored_segments = stored_segments[:3]
+            current_segments = current_segments[:3]
+        return stored_segments == current_segments
 
 
     @staticmethod
