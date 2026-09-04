@@ -11,6 +11,7 @@ import type {
   SourceState,
 } from "./memorySourcesTypes";
 import type { PageResponse, SourceItem } from "./memoryInspectorTypes";
+import type { AppSoftwareRow, ExportInboxRow, ModelHealthPanel, OwnerIntakePanels, ProcessRow } from "./memorySourcesTypes";
 
 const stateLabels: Record<string, string> = {
   detected: "已发现",
@@ -206,14 +207,21 @@ export class MemorySourcesApi {
   constructor(private readonly api: Pick<LingJiApi, "get" | "post">) {}
 
   async snapshot(): Promise<MemorySourcesSnapshot> {
-    const [discovered, authorized, scans, summary, runtime] = await Promise.all([
+    const [discovered, authorized, scans, summary, runtime, panels] = await Promise.all([
       this.api.get<DiscoveredSource[]>("/api/automatic-memory/discovered"),
       this.api.get<AuthorizedSource[]>("/api/automatic-memory/sources"),
       this.api.get<ScanRun[]>("/api/automatic-memory/scans"),
       this.api.get<ScanSummary>("/api/automatic-memory/summary"),
       this.api.get<RuntimeSummary>("/api/automatic-memory/runtime"),
+      loadOwnerIntakePanels(this.api),
     ]);
-    return { discovered, authorized, scans, summary, runtime, sources: mergeSourceFacts(discovered, authorized, scans) };
+    return {
+      discovered, authorized, scans, summary, runtime,
+      sources: mergeSourceFacts(discovered, authorized, scans),
+      apps: panels.apps,
+      processes: panels.processes,
+      inboxes: panels.inboxes,
+    };
   }
 
   authorize(source: SourceFact, selectedRoot = source.root): Promise<unknown> {
@@ -336,4 +344,83 @@ export function actionAvailability(state: SourceState, source: { source_id?: str
   if (source.source_id && source.scan_status === "failed") actions.push("retry");
   if (source.scan_status) actions.push("detail");
   return actions;
+}
+
+const CAPABILITY_LABELS: Record<string, string> = {
+  auto_discovery: "自动发现",
+  requires_authorization: "需要授权",
+  official_export_inbox: "官方导出接收",
+  session_read: "会话读取",
+  message_body_view: "正文查看",
+  model_process_status: "模型与进程状态",
+};
+
+export function appCapabilityLabels(row: AppSoftwareRow): string[] {
+  const capabilities = row.capabilities ?? {};
+  return Object.entries(capabilities)
+    .filter(([, value]) => value === true)
+    .map(([key]) => CAPABILITY_LABELS[key] ?? key);
+}
+
+export function appStatusLabel(row: AppSoftwareRow): string {
+  return row.supported ? "支持自动读取" : "暂不支持自动读取";
+}
+
+export function runningLabel(value: boolean | null | undefined): string {
+  return value === true ? "正在运行" : value === false ? "未运行" : "尚未获得";
+}
+
+export async function revealInbox(inboxPath: string): Promise<void> {
+  const opener = await import("@tauri-apps/plugin-opener");
+  await opener.revealItemInDir(inboxPath);
+}
+
+export async function loadOwnerIntakePanels(api: Pick<LingJiApi, "get">): Promise<OwnerIntakePanels> {
+  const [apps, processes, inboxes] = await Promise.all([
+    api.get<AppSoftwareRow[]>("/api/automatic-memory/apps").catch(() => null),
+    api.get<ProcessRow[]>("/api/automatic-memory/processes").catch(() => null),
+    api.get<ExportInboxRow[]>("/api/automatic-memory/export-inbox").catch(() => null),
+  ]);
+  return {
+    apps: Array.isArray(apps) ? apps : [],
+    processes: Array.isArray(processes) ? processes : [],
+    inboxes: Array.isArray(inboxes) ? inboxes : [],
+  };
+}
+
+function healthText(value: unknown): string {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (["healthy", "ok", "pass", "passed", "true"].includes(normalized)) return "正常";
+  return normalized ? "需要检查" : "尚未获得";
+}
+
+export async function loadModelHealthPanel(api: Pick<LingJiApi, "get">): Promise<ModelHealthPanel> {
+  const [inventory, health, brain, memoryStatus] = await Promise.all([
+    api.get<Record<string, unknown>>("/api/models").catch(() => null),
+    api.get<Record<string, unknown>>("/api/health").catch(() => null),
+    api.get<Record<string, unknown>>("/api/brain/status").catch(() => null),
+    api.get<Record<string, unknown>>("/api/memory/status").catch(() => null),
+  ]);
+  const models = Array.isArray(inventory?.models) ? (inventory?.models as Array<Record<string, unknown>>) : null;
+  return {
+    models: models
+      ? models.map((model) => ({
+          display_name: String(model.display_name ?? "尚未获得"),
+          installed: typeof model.installed === "boolean" ? model.installed : null,
+          running: typeof model.running === "boolean" ? model.running : null,
+          compatibility_status: String((model.compatibility as Record<string, unknown> | undefined)?.status ?? "") || null,
+          parameter_size: (model.parameter_size as string | null) ?? null,
+        }))
+      : null,
+    self_check: healthText((brain?.self_check as Record<string, unknown> | undefined)?.passed),
+    system_health: healthText(health?.status),
+    memory_health: healthText(memoryStatus?.health),
+  };
+}
+
+export function compatibilityLabel(status: string | null | undefined): string {
+  const normalized = String(status ?? "").trim().toLowerCase();
+  if (normalized === "verified") return "已验证";
+  if (normalized === "unverified") return "未验证";
+  return "尚未获得";
 }

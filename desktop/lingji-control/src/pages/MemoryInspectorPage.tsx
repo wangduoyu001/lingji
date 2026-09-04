@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api";
 import type { PageProps } from "../types";
 import type { CaptureInspectorTarget } from "./captureCenterTypes";
@@ -67,6 +67,17 @@ function StateView({ error, empty, filtered }: { error: ApiError | null; empty: 
   return null;
 }
 
+function dateGroupLabel(startedAt: string | null | undefined): string {
+  if (!startedAt) return "日期尚未获得";
+  const date = new Date(startedAt);
+  if (Number.isNaN(date.getTime())) return "日期尚未获得";
+  const startOfDay = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86_400_000);
+  if (diffDays === 0) return "今天";
+  if (diffDays === 1) return "昨天";
+  return date.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+}
+
 export default function MemoryInspectorPage({ api, active, target = null }: PageProps & { target?: CaptureInspectorTarget | null }) {
   const [filters, setFilters] = useState<InspectorFilters>(() => filtersForTarget(target));
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -74,6 +85,16 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
   const [sources, setSources] = useState<SourceItem[]>([]);
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [messages, setMessages] = useState<MessageItem[]>([]);
+  const conversationGroups = useMemo(() => {
+    const groups: Array<{ label: string; rows: ConversationItem[] }> = [];
+    for (const row of conversations) {
+      const label = dateGroupLabel(row.started_at);
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) last.rows.push(row);
+      else groups.push({ label, rows: [row] });
+    }
+    return groups;
+  }, [conversations]);
   const [selectedSource, setSelectedSource] = useState<SourceItem | null>(null);
   const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
   const [selectedMessage, setSelectedMessage] = useState<MessageItem | null>(null);
@@ -287,22 +308,27 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
         </section>
 
         <section>
-          <h2>Conversation 对话 <small>{countLabel(totals.conversation)}</small></h2>
+          <h2>对话 <small>{countLabel(totals.conversation)}</small></h2>
           <StateView error={null} empty={!loading && conversations.length === 0} filtered={Boolean(selectedSource || filters.project || filters.privacy || debouncedQ)} />
-          {conversations.map((row) => (
-            <button key={row.conversation_id} className={`inspector-item${privacyClass(row)} ${selectedConversation?.conversation_id === row.conversation_id ? "active" : ""}`} onClick={() => { setSelectedConversation(row); setSelectedMessage(null); }}>
-              <strong>{text(row.title)}</strong>
-              <span>参与者 {formatList(row.participants)}</span>
-              <span>{dateTime(row.started_at)} → {dateTime(row.ended_at)}</span>
-              <span>项目 {formatList(row.projects)} · 隐私 {text(row.privacy)}</span>
-              <small>消息 {countLabel(row.message_count)}</small>
-            </button>
+          {conversationGroups.map((group) => (
+            <div key={group.label} className="inspector-date-group">
+              <h3 className="inspector-date-label">{group.label}</h3>
+              {group.rows.map((row) => (
+                <button key={row.conversation_id} className={`inspector-item${privacyClass(row)} ${selectedConversation?.conversation_id === row.conversation_id ? "active" : ""}`} onClick={() => { setSelectedConversation(row); setSelectedMessage(null); }}>
+                  <strong>{text(row.title)}</strong>
+                  <span>参与者 {formatList(row.participants)}</span>
+                  <span>{dateTime(row.started_at)} → {dateTime(row.ended_at)}</span>
+                  <span>项目 {formatList(row.projects)} · 隐私 {text(row.privacy)}</span>
+                  <small>消息 {countLabel(row.message_count)}</small>
+                </button>
+              ))}
+            </div>
           ))}
           <Pager offset={offsets.conversation} total={totals.conversation} onChange={(conversation) => setOffsets({ ...offsets, conversation })} />
         </section>
 
         <section>
-          <h2>Message 消息 <small>{countLabel(totals.message)}</small></h2>
+          <h2>消息 <small>{countLabel(totals.message)}</small></h2>
           <StateView error={null} empty={!loading && messages.length === 0} filtered={Boolean(selectedConversation || filters.role || debouncedQ)} />
           {messages.map((row) => {
             const restricted = isRestricted(row);
@@ -310,7 +336,8 @@ export default function MemoryInspectorPage({ api, active, target = null }: Page
               <button key={row.message_id} className={`inspector-item${privacyClass(row)} ${selectedMessage?.message_id === row.message_id ? "active" : ""}`} onClick={() => void openMessage(row)}>
                 <strong>{text(row.role)} · {text(row.author)}</strong>
                 <span>{dateTime(row.occurred_at)}</span>
-                <span>模型 {text(row.metadata?.model)} · 分支 {row.metadata?.is_branch === true ? "是" : row.metadata?.is_branch === false ? "否" : "未知"}</span>
+                {row.metadata?.model ? <span>模型 {String(row.metadata.model)}</span> : null}
+                <span>分支 {row.metadata?.is_branch === true ? "是" : row.metadata?.is_branch === false ? "否" : "尚未获得"}</span>
                 <small>{restricted ? "restricted 受限内容，点击查看" : text(row.content_preview)}</small>
               </button>
             );

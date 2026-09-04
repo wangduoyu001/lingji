@@ -164,6 +164,7 @@ fn main() {
     let _ = runtime_bootstrap::apply_saved_environment();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(RuntimeManager::default())
         .invoke_handler(tauri::generate_handler![
             control_credentials,

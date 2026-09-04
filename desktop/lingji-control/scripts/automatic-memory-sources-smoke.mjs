@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { actionEvidence, MemorySourcesApi, findInspectorSourceForAutomaticMemorySource, mergeSourceFacts, ownerSourceName, scanStatusLabel, scanTerminalEvidence, sourceMetadataEvidence, sourceStateLabel, countLabel, canonicalSourceKey } from "../src/pages/memorySourcesApi.ts";
+import { actionEvidence, MemorySourcesApi, findInspectorSourceForAutomaticMemorySource, mergeSourceFacts, ownerSourceName, scanStatusLabel, scanTerminalEvidence, sourceMetadataEvidence, sourceStateLabel, countLabel, canonicalSourceKey, appCapabilityLabels, appStatusLabel, compatibilityLabel, loadModelHealthPanel, loadOwnerIntakePanels, revealInbox, runningLabel } from "../src/pages/memorySourcesApi.ts";
 import { LingJiApi } from "../src/api.ts";
 import { readFileSync } from "node:fs";
 
@@ -201,4 +201,48 @@ assert.equal(calls.at(-2).body.owner_confirmed, true);
 assert.equal(calls.at(-1).path, "/api/automatic-memory/scan");
 assert.equal(calls.at(-1).body.source_id, "src-codex");
 globalThis.fetch = originalFetch;
+
+// Owner intake panels: app manifest, running processes, export inboxes.
+const appsRows = [
+  { kind: "chatgpt_official", display_name: "ChatGPT", install_status: "installed", running: true, bundle_id: "com.openai.chat", version: "1.2025.12", supported: true, capabilities: { auto_discovery: true, requires_authorization: true, official_export_inbox: true, session_read: true, message_body_view: true, model_process_status: true }, detail: "官方导出导入受支持。" },
+  { kind: "cursor", display_name: "Cursor", install_status: "installed", running: false, bundle_id: null, version: null, supported: false, capabilities: { auto_discovery: true, requires_authorization: false, official_export_inbox: false, session_read: false, message_body_view: false, model_process_status: true }, detail: "已发现，暂不支持自动读取。" },
+];
+const processRows = [{ kind: "chatgpt_official", display_name: "ChatGPT", pid: 421, state: "running", updated_at: "2026-09-05T08:00:00+00:00" }];
+const inboxRows = [{ kind: "chatgpt_export", purpose: "ChatGPT 官方导出接收文件夹", next_step: "把官方导出的 ZIP 原样放进这个文件夹。", exists: true, file_count: 2, last_checked_at: "2026-09-05T08:00:00+00:00", inbox_path: "/tmp/fixture-exports/chatgpt_export" }];
+const panelApi = {
+  async get(path) {
+    if (path === "/api/automatic-memory/apps") return appsRows;
+    if (path === "/api/automatic-memory/processes") return processRows;
+    if (path === "/api/automatic-memory/export-inbox") return inboxRows;
+    throw new Error(`unexpected path ${path}`);
+  },
+};
+const panels = await loadOwnerIntakePanels(panelApi);
+assert.equal(panels.apps.length, 2);
+assert.equal(panels.processes[0].pid, 421);
+assert.equal(panels.inboxes[0].file_count, 2);
+assert.equal(appCapabilityLabels(appsRows[0]).includes("官方导出接收"), true);
+assert.equal(appStatusLabel(appsRows[0]), "支持自动读取");
+assert.equal(appStatusLabel(appsRows[1]), "暂不支持自动读取");
+assert.equal(runningLabel(true), "正在运行");
+assert.equal(runningLabel(false), "未运行");
+assert.equal(runningLabel(null), "尚未获得");
+await assert.rejects(() => revealInbox("/tmp/fixture-exports/chatgpt_export"), undefined, "reveal without Tauri must fail instead of pretending");
+const healthPanel = await loadModelHealthPanel({
+  async get(path) {
+    if (path === "/api/models") return { models: [{ display_name: "llama3:8b", installed: true, running: true, compatibility: { status: "verified" } }] };
+    if (path === "/api/health") return { status: "healthy" };
+    if (path === "/api/brain/status") return { self_check: { passed: true } };
+    if (path === "/api/memory/status") return { health: "healthy" };
+    throw new Error(`unexpected path ${path}`);
+  },
+});
+assert.equal(healthPanel.models[0].display_name, "llama3:8b");
+assert.equal(healthPanel.self_check, "正常");
+assert.equal(healthPanel.system_health, "正常");
+assert.equal(healthPanel.memory_health, "正常");
+assert.equal(compatibilityLabel("verified"), "已验证");
+assert.equal(compatibilityLabel("unverified"), "未验证");
+assert.equal(compatibilityLabel(null), "尚未获得");
+
 console.log("automatic-memory-sources-smoke: PASS");

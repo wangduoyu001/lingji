@@ -528,3 +528,31 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 @media (max-width: 760px) {
   .recent-memory-list, .takeover-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Owner intake panels: local AI apps, model & process status, export inboxes. */
+.ai-apps-section, .model-process-section, .export-inbox-section { display: grid; gap: 12px; margin-top: 8px; }
+.ai-apps-section h3, .model-process-section h3, .export-inbox-section h3 { margin: 8px 0 0; color: var(--text); font-size: 17px; }
+.section-intro { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.ai-app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.ai-app-card { min-width: 0; display: grid; gap: 8px; }
+.memory-source-pills { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.ai-app-capabilities { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-app-version { color: var(--muted); font-size: 12px; }
+.model-health-facts { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 12px 15px; border-radius: 12px; background: var(--surface-2); }
+.model-health-facts span { color: var(--text-soft); font-size: 13px; }
+.model-process-section h4 { margin: 6px 0 0; color: var(--text-soft); font-size: 14px; }
+.ai-process-list, .ai-model-list { display: grid; gap: 8px; }
+.ai-process-row, .ai-model-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 11px 14px; border-radius: 12px; background: var(--surface-2); }
+.ai-process-row > span:first-child, .ai-model-row > span:first-child { min-width: 120px; color: var(--text); font-size: 13px; }
+.ai-process-time { color: var(--muted); font-size: 12px; }
+.ai-process-advanced summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.ai-process-advanced small { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+.export-inbox-card .memory-source-reason { color: var(--text-soft); font-size: 12px; line-height: 1.6; }
+
+@media (max-width: 760px) {
+  .ai-app-grid { grid-template-columns: 1fr; }
+}
+
+/* Inspector conversation date grouping. */
+.inspector-date-group { display: grid; gap: 8px; margin-bottom: 14px; }
+.inspector-date-label { margin: 4px 0 0; color: var(--muted); font-size: 13px; font-weight: 600; }

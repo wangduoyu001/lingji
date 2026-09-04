@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "@playwright/test";
 
-const state = { authorized: false, revoked: false, codexAuthorized: false, lastAuthorize: null, scan: null, scanReads: 0, scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, cardDetailRequests: 0, messageDetailRequests: 0, cardMutations: [], cardConflict: false, cardActionStates: {}, allStates: false, sourceMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", currentWorkMode: "normal", activityMode: "normal", detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, unknownCardSummary: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed", requests: [] };
+const state = { authorized: false, revoked: false, codexAuthorized: false, lastAuthorize: null, scan: null, scanReads: 0, scanRequests: 0, sourceReads: 0, pendingReads: 0, cardListRequests: 0, cardDetailRequests: 0, messageDetailRequests: 0, cardMutations: [], cardConflict: false, cardActionStates: {}, allStates: false, sourceMode: "default", inboxMode: "default", currentWorkNull: true, currentWorkStatus: "accepted", currentWorkMode: "normal", activityMode: "normal", detailCountMode: "missing", onboardingFailures: 7, onboardingDelay: false, onboardingRelease: false, outage: false, omitHomeCounts: false, unknownCardSummary: false, pendingOutage: false, pendingResolved: false, reviewDelay: false, reviewRelease: true, cleanupPending: false, runtimeLastError: "cleanup_scan_failed", requests: [] };
 const memoryCardTopics = ["发布计划", "每周摘要", "代码审查", "家庭安排", "阅读清单", "旅行计划", "饮食偏好", "会议决策", "预算安排", "学习目标", "设备维护", "写作习惯"];
 const memoryCardFreshnessStates = ["current", "overdue", "current", "overdue", "source_revoked", "current", "superseded", "current", "rejected", "rolled_back", "repair_required", "not_yet_current", "unknown"];
 const memoryCardActions = ["correct", "invalidate", "archive", "confirm", "reauthorize_source", "correct", "review", "none", "review", "review", "review", "review", "review"];
@@ -123,6 +123,32 @@ const server = http.createServer((req, res) => {
   req.on("data", (chunk) => { body += chunk; });
   req.on("end", () => {
     if (path === "/api/overview") return json(res, 200, { health: { status: "healthy" }, memory_runtime: { state: "healthy", as_of: new Date().toISOString(), memory: { documents: 1 } }, queue: { stats: {} } });
+    if (path === "/api/automatic-memory/apps") {
+      return json(res, 200, [
+        { kind: "chatgpt_official", display_name: "ChatGPT", install_status: "installed", running: true, bundle_id: "com.openai.chat", version: "1.2025.12", supported: true, capabilities: { auto_discovery: true, requires_authorization: true, official_export_inbox: true, session_read: true, message_body_view: true, model_process_status: true }, detail: "官方导出导入受支持；灵机会自动准备接收文件夹并给出放入步骤。" },
+        { kind: "codex_rollout", display_name: "Codex", install_status: "detected", running: false, bundle_id: null, version: null, supported: true, capabilities: { auto_discovery: true, requires_authorization: true, official_export_inbox: false, session_read: true, message_body_view: true, model_process_status: true }, detail: "可自动发现本机 rollout 记录；主人授权后自动读取。" },
+        { kind: "claude_desktop", display_name: "Claude", install_status: "installed", running: false, bundle_id: null, version: null, supported: false, capabilities: { auto_discovery: true, requires_authorization: false, official_export_inbox: false, session_read: false, message_body_view: false, model_process_status: true }, detail: "已发现，暂不支持自动读取；灵机不会读取它的内部数据库。" },
+        { kind: "cursor", display_name: "Cursor", install_status: "installed", running: false, bundle_id: null, version: null, supported: false, capabilities: { auto_discovery: true, requires_authorization: false, official_export_inbox: false, session_read: false, message_body_view: false, model_process_status: true }, detail: "已发现，暂不支持自动读取。" },
+        { kind: "ollama", display_name: "Ollama", install_status: "installed", running: true, bundle_id: null, version: null, supported: false, capabilities: { auto_discovery: true, requires_authorization: false, official_export_inbox: false, session_read: false, message_body_view: false, model_process_status: true }, detail: "已发现，暂不支持自动读取；本地模型状态见“模型与进程”。" },
+      ]);
+    }
+    if (path === "/api/automatic-memory/processes") {
+      return json(res, 200, [
+        { kind: "chatgpt_official", display_name: "ChatGPT", pid: 421, state: "running", updated_at: "2026-09-05T08:00:00+00:00" },
+        { kind: "ollama", display_name: "Ollama", pid: 512, state: "running", updated_at: "2026-09-05T08:00:00+00:00" },
+      ]);
+    }
+    if (path === "/api/automatic-memory/export-inbox") {
+      const broken = state.inboxMode === "broken";
+      return json(res, 200, [
+        { kind: "chatgpt_export", purpose: "ChatGPT 官方导出接收文件夹", next_step: "把官方导出的 ZIP 原样放进这个文件夹，然后回到来源页选择该文件夹开始记忆。", exists: true, file_count: broken ? 0 : 2, last_checked_at: "2026-09-05T08:00:00+00:00", inbox_path: broken ? "/tmp/lingji-fixture/missing-exports/chatgpt_export" : "/tmp/lingji-fixture/exports/chatgpt_export" },
+      ]);
+    }
+    if (path === "/api/models/registry") return json(res, 200, { capabilities: { chat: { label: "对话", description: "日常对话生成" } } });
+    if (path === "/api/models") return json(res, 200, { collected_at: "2026-09-05T08:00:00+00:00", summary: { installed_models: 2, running_models: 1, unverified_models: 1, missing_assignments: 0 }, models: [ { display_name: "llama3:8b", installed: true, running: true, parameter_size: "8B", quantization: "Q4_0", size_bytes: 4700000000, estimated_ram_bytes: null, estimated_vram_bytes: null, runtime: { device_evidence: null }, compatibility: { status: "verified" }, last_benchmark: null, current_task: null, last_error: null, capabilities: ["chat"] }, { display_name: "qwen2.5:14b", installed: true, running: false, parameter_size: "14B", quantization: null, size_bytes: 9000000000, estimated_ram_bytes: null, estimated_vram_bytes: null, runtime: { device_evidence: null }, compatibility: { status: "unverified" }, last_benchmark: null, current_task: null, last_error: null, capabilities: ["chat"] } ], providers: [], assignments: [], compatibility_process: [] });
+    if (path === "/api/health") return json(res, 200, { status: "healthy", checks: { database: { status: "ok" } }, checked_at: "2026-09-05T08:00:00+00:00" });
+    if (path === "/api/brain/status") return json(res, 200, { state: "healthy", self_check: { passed: true, components: ["lexical", "semantic"] }, as_of: "2026-09-05T08:00:00+00:00" });
+    if (path === "/api/memory/status") return json(res, 200, { health: "healthy", documents: 37, as_of: "2026-09-05T08:00:00+00:00" });
     if (path === "/api/automatic-memory/discovered") {
       state.sourceReads += 1;
       const response = () => json(res, 200, state.sourceMode === "empty" ? [] : ["claude-only", "claude-consent"].includes(state.sourceMode) ? [{ kind: "claude_desktop", display_name: "Claude Desktop", candidate_root: "", status: state.sourceMode === "claude-consent" ? "consent_required" : "unsupported", capability: "metadata_discovery", reason: "Claude Desktop has no approved official export schema; opaque storage is not read" }] : state.sourceMode === "codex-unknown" ? [{ kind: "codex_rollout", display_name: "Codex聊天记录", candidate_root: "/tmp/codex", status: "available", file_count: null, byte_count: null, earliest_mtime: null, latest_mtime: null, capability: "metadata_discovery", reason: null }] : state.allStates ? allStateDiscovered : [{ kind: "generic_ai_history", display_name: "Generic Inbox", candidate_root: "/tmp/lingji-fixture", status: "available", capability: "metadata_discovery", reason: null }]);
@@ -171,7 +197,14 @@ const server = http.createServer((req, res) => {
     if (path === "/__test/release-onboarding") { state.onboardingRelease = true; return json(res, 200, { ok: true }); }
     if (path === "/__test/outage") { state.outage = body.includes("true"); return json(res, 200, { ok: true, outage: state.outage }); }
     if (path === "/__test/cleanup-pending") { state.cleanupPending = body.includes("true"); return json(res, 200, { ok: true, cleanup_pending: state.cleanupPending }); }
-    if (path === "/api/automatic-memory/authorize") { state.lastAuthorize = JSON.parse(body || "{}"); state.authorized = true; state.revoked = false; if (state.lastAuthorize.kind === "codex_rollout") state.codexAuthorized = true; return json(res, 200, { source_id: state.lastAuthorize.kind === "codex_rollout" ? "src-codex" : "src-fixture", kind: state.lastAuthorize.kind, root: state.lastAuthorize.root, status: "authorized" }); }
+    if (path === "/__test/inbox-mode") { state.inboxMode = body.includes("broken") ? "broken" : "default"; return json(res, 200, { ok: true, inbox_mode: state.inboxMode }); }
+    if (path === "/api/automatic-memory/authorize") {
+      state.lastAuthorize = JSON.parse(body || "{}"); state.authorized = true; state.revoked = false;
+      if (state.lastAuthorize.kind === "codex_rollout") state.codexAuthorized = true;
+      const existing = allStateSources.find((item) => item.kind === state.lastAuthorize.kind);
+      if (state.allStates && existing) existing.root = state.lastAuthorize.root;
+      return json(res, 200, { source_id: state.lastAuthorize.kind === "codex_rollout" ? "src-codex" : existing?.source_id ?? "src-fixture", kind: state.lastAuthorize.kind, root: state.lastAuthorize.root, status: "authorized" });
+    }
     if (path === "/api/automatic-memory/scan") { state.scanRequests += 1; state.scanReads = 0; state.scan = state.scanRequests === 2 ? { scan_id: "scan-fixture", source_id: "src-fixture", status: "failed", progress: 0, total: 1, last_error: "fixture failure" } : { scan_id: "scan-fixture", source_id: "src-fixture", status: "running", progress: 0, total: 1 }; return json(res, 200, scanDto(state.scan)); }
     if (path === "/api/automatic-memory/retry") { state.scan = { scan_id: "scan-fixture", source_id: "src-fixture", status: "completed", progress: 1, total: 1, queued: 1, reused: 0, failed: 0, updated: 2, skipped: 3 }; return json(res, 200, scanDto(state.scan)); }
     if (path.startsWith("/api/automatic-memory/scans/")) {
@@ -309,7 +342,7 @@ const server = http.createServer((req, res) => {
       const q = url.searchParams.get("q") || "";
       return json(res, 200, { items: q ? inspectorSourceItems.filter((item) => String(item.metadata?.automatic_memory_source_id ?? "").includes(q)) : inspectorSourceItems, pagination: { total: inspectorSourceItems.length, limit: 30, offset: 0, has_more: false } });
     }
-    if (path === "/api/memory/inspector/conversations" || path === "/api/memory/inspector/messages") return json(res, 200, { items: path.endsWith("conversations") ? [{ conversation_id: "session-1", source_id: "source-1", title: "发布计划讨论", started_at: "2026-08-28T08:00:00Z", message_count: 1 }] : [{ message_id: "message-1", conversation_id: "session-1", source_id: "source-1", role: "user", author: "主人", occurred_at: "2026-08-28T08:02:00Z", content_preview: "我们确认下周三发布。" }], pagination: { total: 1, limit: 30, offset: 0, has_more: false } });
+    if (path === "/api/memory/inspector/conversations" || path === "/api/memory/inspector/messages") return json(res, 200, { items: path.endsWith("conversations") ? [{ conversation_id: "session-1", source_id: "source-1", title: "发布计划讨论", started_at: "2026-08-28T08:00:00Z", message_count: 1 }] : [{ message_id: "message-1", conversation_id: "session-1", source_id: "source-1", role: "user", author: "主人", occurred_at: "2026-08-28T08:02:00Z", content_preview: "我们确认下周三发布。", metadata: { model: "gpt-5.6" } }], pagination: { total: 1, limit: 30, offset: 0, has_more: false } });
     if (path === "/api/memory/inspector/conversations/session-1") return json(res, 200, { item: { conversation_id: "session-1", source_id: "source-1", title: "发布计划讨论", started_at: "2026-08-28T08:00:00Z", message_count: 1 } });
     if (path === "/__test/review-delay") { state.reviewDelay = body.includes("true"); state.reviewRelease = !state.reviewDelay; return json(res, 200, { ok: true }); }
     if (path === "/__test/review-release") { state.reviewRelease = body.includes("true"); return json(res, 200, { ok: true }); }
@@ -334,10 +367,17 @@ try {
   assert.equal((await fetch(`http://127.0.0.1:${apiPort}/api/overview`, { headers: { "X-LingJi-Token": "wrong-token" } })).status, 401, "wrong token must be rejected");
   browser = await chromium.launch({ headless: true, ...(existsSync(installedChrome) ? { executablePath: installedChrome } : {}) });
   const installTauri = async (target) => target.addInitScript(({ port, runtimeLastError }) => {
-    window.__TAURI_INTERNALS__ = { invoke: async (command) => {
+    window.__TAURI_INTERNALS__ = { invoke: async (command, args) => {
       if (command === "control_credentials") return { base_url: `http://127.0.0.1:${port}`, token: "fixture-token" };
       if (command === "runtime_bootstrap_status") return { configured: true, c_drive_write_detected: false, active_workspace: "acceptance", data_root_display: "fixture" };
       if (String(command).includes("dialog") || String(command).includes("plugin:dialog")) return "/tmp/lingji-fixture";
+      if (String(command).includes("opener")) {
+        window.__openerCalls = window.__openerCalls || [];
+        const revealPath = String((args && (Array.isArray(args.paths) ? args.paths[0] : args.path)) || "");
+        window.__openerCalls.push(revealPath);
+        if (revealPath.includes("missing")) throw new Error("fixture reveal failure");
+        return null;
+      }
       return { healthy: true, managed: true, binary_available: true, host: "127.0.0.1", port: port, last_error: runtimeLastError };
     } };
   }, { port: apiPort, runtimeLastError: state.runtimeLastError });
@@ -622,6 +662,11 @@ try {
   await page.locator(".inspector-status").waitFor();
   await page.locator(".inspector-item.active").getByText("精确来源", { exact: true }).waitFor();
   assert.equal(await page.locator(".inspector-item.active").getByText("近似来源", { exact: true }).count(), 0, "exact metadata matching must not open a near-match source");
+  await page.getByText("2026年8月28日", { exact: true }).waitFor();
+  await page.getByRole("button").filter({ hasText: "发布计划讨论" }).first().click();
+  await page.getByText("模型 gpt-5.6", { exact: true }).waitFor();
+  assert.equal(await page.getByText("模型 -", { exact: true }).count(), 0, "missing model facts must not render placeholder dashes");
+  await page.locator(".desktop-nav-item").filter({ hasText: "来源" }).click();
   await page.locator(".desktop-nav-item").filter({ hasText: "来源" }).click();
   await refreshSources();
   await page.locator('[data-source-kind="chatgpt_export"]').getByText("ChatGPT导出记录", { exact: true }).waitFor();
@@ -657,6 +702,61 @@ try {
   await page.locator('[data-source-kind="fixture_expired"]').getByText("授权已过期，需要重新授权。", { exact: true }).waitFor();
   await page.locator('[data-source-kind="fixture_paused"]').getByText("检查状态：已暂停", { exact: true }).waitFor();
   await page.locator('[data-source-kind="fixture_paused"]').getByRole("button", { name: "继续检查", exact: true }).waitFor();
+
+  const appsSection = page.locator(".ai-apps-section");
+  await appsSection.getByRole("heading", { name: "本机 AI 软件", exact: true }).waitFor();
+  const chatgptApp = page.locator('[data-app-kind="chatgpt_official"]');
+  await chatgptApp.getByText("正在运行", { exact: true }).first().waitFor();
+  await chatgptApp.getByText("支持自动读取", { exact: true }).first().waitFor();
+  await chatgptApp.getByText("官方导出接收", { exact: true }).waitFor();
+  await chatgptApp.getByText("版本 1.2025.12", { exact: true }).waitFor();
+  const appsText = await appsSection.innerText();
+  assert.equal(appsText.includes("com.openai"), false, "app cards must not expose bundle ids");
+  assert.equal(appsText.includes("/tmp/lingji-fixture"), false, "app cards must not expose paths");
+  const cursorApp = page.locator('[data-app-kind="cursor"]');
+  try {
+    await cursorApp.getByText("暂不支持自动读取", { exact: true }).first().waitFor({ timeout: 5000 });
+  } catch (e) {
+    console.error("DEBUG APPS:", await appsSection.innerText());
+    throw e;
+  }
+  assert.equal(await cursorApp.getByRole("button").count(), 0, "unsupported apps must not offer actions");
+  await page.locator('[data-app-kind="ollama"]').getByText("正在运行", { exact: true }).first().waitFor();
+
+  const processesSection = page.locator(".model-process-section");
+  await processesSection.getByRole("heading", { name: "模型与进程", exact: true }).waitFor();
+  await processesSection.getByText("ChatGPT", { exact: true }).first().waitFor();
+  assert.equal(await processesSection.getByText("PID 421", { exact: true }).first().isVisible(), false, "pids stay collapsed by default");
+  await processesSection.locator("details.ai-process-advanced").first().locator("summary").click();
+  await processesSection.getByText("PID 421", { exact: true }).waitFor();
+  await processesSection.getByText("llama3:8b", { exact: true }).waitFor();
+  await processesSection.getByText("已验证", { exact: true }).first().waitFor();
+  await processesSection.getByText("未验证", { exact: true }).first().waitFor();
+  await processesSection.getByText("灵机自检：正常", { exact: true }).waitFor();
+  await processesSection.getByText("系统健康：正常", { exact: true }).waitFor();
+  await processesSection.getByText("记忆健康：正常", { exact: true }).waitFor();
+
+  const inboxSection = page.locator(".export-inbox-section");
+  await inboxSection.getByText("ChatGPT 官方导出接收文件夹", { exact: true }).waitFor();
+  await inboxSection.getByText("文件数：2", { exact: true }).waitFor();
+  await inboxSection.getByText("把官方导出的 ZIP 原样放进这个文件夹，然后回到来源页选择该文件夹开始记忆。", { exact: true }).waitFor();
+  assert.equal((await inboxSection.innerText()).includes("/tmp/lingji-fixture"), false, "inbox card must not expose the folder path");
+  await inboxSection.getByRole("button", { name: "打开接收文件夹", exact: true }).click();
+  await page.getByText("已在访达中显示接收文件夹。", { exact: true }).waitFor();
+  const openerCalls = await page.evaluate(() => window.__openerCalls || []);
+  assert.ok(openerCalls.includes("/tmp/lingji-fixture/exports/chatgpt_export"), "reveal must hand the inbox path to the opener plugin");
+  await inboxSection.getByRole("button", { name: "使用此文件夹开始记忆", exact: true }).click();
+  await page.getByText("已记录授权，正在准备首次检查。", { exact: true }).waitFor();
+  const inboxAuthorizePayload = await (await fetch(`http://127.0.0.1:${apiPort}/__test/authorize-payload`, { headers: { "X-LingJi-Token": "fixture-token" } })).json();
+  assert.equal(inboxAuthorizePayload.kind, "chatgpt_export");
+  assert.equal(inboxAuthorizePayload.root, "/tmp/lingji-fixture/exports/chatgpt_export");
+  await fetch(`http://127.0.0.1:${apiPort}/__test/inbox-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "broken" });
+  await refreshSources();
+  await inboxSection.getByText("文件数：0", { exact: true }).waitFor({ timeout: 12_000 });
+  await inboxSection.getByRole("button", { name: "打开接收文件夹", exact: true }).click();
+  await page.getByText("暂时无法打开接收文件夹，请稍后重试。", { exact: true }).waitFor();
+  await fetch(`http://127.0.0.1:${apiPort}/__test/inbox-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "default" });
+  await refreshSources();
 
   await fetch(`http://127.0.0.1:${apiPort}/__test/source-mode`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" }, body: "claude-only" });
   await page.waitForTimeout(300);

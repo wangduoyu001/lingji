@@ -7,16 +7,31 @@ import {
   actionEvidence,
   authorizationEvidence,
   canonicalSourceKey,
+  compatibilityLabel,
   countLabel,
   findInspectorSourceForAutomaticMemorySource,
+  loadModelHealthPanel,
   MemorySourcesApi,
   ownerSourceName,
   periodicReconciliationNotice,
+  revealInbox,
+  runningLabel,
+  appCapabilityLabels,
+  appStatusLabel,
   scanStatusLabel,
   sourceMetadataEvidence,
   sourceStateLabel,
 } from "./memorySourcesApi";
-import type { MemorySourcesSnapshot, ScanDetailResponse, SourceFact, SourceState } from "./memorySourcesTypes";
+import type {
+  AppSoftwareRow,
+  ExportInboxRow,
+  MemorySourcesSnapshot,
+  ModelHealthPanel,
+  ProcessRow,
+  ScanDetailResponse,
+  SourceFact,
+  SourceState,
+} from "./memorySourcesTypes";
 import { usePollingResource } from "../hooks/usePollingResource";
 
 const stateTone: Record<SourceState, string> = {
@@ -81,6 +96,13 @@ export default function MemorySourcesPage({ api, active, onOpenInspector }: { ap
   const [scanDetails, setScanDetails] = useState<Record<string, DetailState>>({});
   const [verifiedSnapshot, setVerifiedSnapshot] = useState<MemorySourcesSnapshot | null>(null);
   const verifiedBaselineRef = useRef<string | null>(null);
+  const [inboxNotices, setInboxNotices] = useState<Record<string, SourceNoticeState>>({});
+  const modelHealth = usePollingResource<ModelHealthPanel>({
+    fetcher: useCallback(() => loadModelHealthPanel(api), [api]),
+    enabled: active,
+    intervalMs: 30_000,
+    staleAfterMs: 120_000,
+  });
 
   useEffect(() => {
     if (verifiedSnapshot && resource.lastSuccessAt !== verifiedBaselineRef.current) {
@@ -199,6 +221,48 @@ export default function MemorySourcesPage({ api, active, onOpenInspector }: { ap
     }
   };
 
+  const setInboxNotice = (kind: string, notice: SourceNoticeState) => {
+    setInboxNotices((prev) => ({ ...prev, [kind]: notice }));
+  };
+
+  const openInboxFolder = async (row: ExportInboxRow) => {
+    if (busyKeys[`reveal:${row.kind}`]) return;
+    setBusy(`reveal:${row.kind}`, true);
+    try {
+      await revealInbox(row.inbox_path);
+      setInboxNotice(row.kind, { kind: "success", text: "已在访达中显示接收文件夹。" });
+    } catch {
+      setInboxNotice(row.kind, { kind: "error", text: "暂时无法打开接收文件夹，请稍后重试。" });
+    } finally {
+      setBusy(`reveal:${row.kind}`, false);
+    }
+  };
+
+  const authorizeInbox = async (row: ExportInboxRow) => {
+    const key = actionKey({ kind: row.kind, root: row.inbox_path } as SourceFact, "authorize");
+    if (busyKeys[key]) return;
+    setBusy(key, true);
+    let returnedSourceId: string | undefined;
+    try {
+      const result = await sourceApi.authorize({ kind: row.kind, root: row.inbox_path } as SourceFact, row.inbox_path);
+      if (result && typeof result === "object" && "source_id" in result) {
+        returnedSourceId = String((result as { source_id: unknown }).source_id);
+      }
+      const next = await sourceApi.snapshot();
+      if (!authorizationEvidence({ kind: row.kind, root: row.inbox_path }, next.authorized, returnedSourceId)) {
+        throw new Error("后端还没有返回可确认的状态，请稍后查看。");
+      }
+      verifiedBaselineRef.current = resource.lastSuccessAt;
+      setVerifiedSnapshot(next);
+      await resource.refresh({ force: true });
+      setInboxNotice(row.kind, { kind: "success", text: "已记录授权，正在准备首次检查。" });
+    } catch {
+      setInboxNotice(row.kind, { kind: "error", text: actionError(new Error("authorize failed")) });
+    } finally {
+      setBusy(key, false);
+    }
+  };
+
   const snapshot = verifiedSnapshot ?? resource.data;
   if (!active) return <Empty text="连接灵机核心后才能查看记忆来源。" />;
   if (resource.loading && !snapshot) return <div className="empty-state" aria-busy="true">正在读取已发现的来源…</div>;
@@ -245,7 +309,162 @@ export default function MemorySourcesPage({ api, active, onOpenInspector }: { ap
           ))}
         </section>
       )}
+
+      <IntakeAppsSection apps={snapshot.apps ?? []} loading={false} />
+      <ModelProcessSection panel={modelHealth.data} processes={snapshot.processes ?? []} loading={modelHealth.loading && !modelHealth.data} />
+      <ExportInboxSection
+        inboxes={snapshot.inboxes ?? []}
+        loading={false}
+        busyKeys={busyKeys}
+        notices={inboxNotices}
+        onReveal={(row) => void openInboxFolder(row)}
+        onAuthorize={(row) => void authorizeInbox(row)}
+      />
     </div>
+  );
+}
+
+function IntakeAppsSection({ apps, loading }: { apps: AppSoftwareRow[]; loading: boolean }) {
+  return (
+    <section className="ai-apps-section" aria-label="本机 AI 软件">
+      <h3>本机 AI 软件</h3>
+      <p className="section-intro">这里显示灵机在这台电脑上安全发现的 AI 软件。只读取安装与运行状态，不读取任何对话内容。</p>
+      {loading ? (
+        <div className="empty-state" aria-busy="true">正在读取本机 AI 软件清单…</div>
+      ) : apps.length === 0 ? (
+        <Empty text="本机 AI 软件清单尚未获得。灵机会自动重试，不会扩大读取范围。" />
+      ) : (
+        <div className="ai-app-grid">
+          {apps.map((row) => (
+            <article key={row.kind} className="memory-source-card ai-app-card" data-app-kind={row.kind}>
+              <div className="memory-source-card-header">
+                <div>
+                  <span className="memory-source-kind">{row.display_name}</span>
+                  <h4>{appStatusLabel(row)}</h4>
+                </div>
+                <div className="memory-source-pills">
+                  <span className={`pill ${row.supported ? "ok" : "neutral"}`}>{appStatusLabel(row)}</span>
+                  <span className={`pill ${row.running === true ? "ok" : "neutral"}`}>{runningLabel(row.running)}</span>
+                </div>
+              </div>
+              <p className="memory-source-detail">{row.detail}</p>
+              <div className="ai-app-capabilities">
+                {appCapabilityLabels(row).map((label) => <span key={label} className="pill neutral">{label}</span>)}
+              </div>
+              {row.version && <small className="ai-app-version">版本 {row.version}</small>}
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ModelProcessSection({ panel, processes, loading }: { panel: ModelHealthPanel | null; processes: ProcessRow[]; loading: boolean }) {
+  return (
+    <section className="model-process-section" aria-label="模型与进程">
+      <h3>模型与进程</h3>
+      <div className="model-health-facts">
+        <span>灵机自检：{panel?.self_check ?? "尚未获得"}</span>
+        <span>系统健康：{panel?.system_health ?? "尚未获得"}</span>
+        <span>记忆健康：{panel?.memory_health ?? "尚未获得"}</span>
+      </div>
+      <h4>正在运行的 AI 进程</h4>
+      {loading ? (
+        <div className="empty-state" aria-busy="true">正在读取进程与模型状态…</div>
+      ) : processes.length === 0 ? (
+        <p className="memory-source-empty-detail">暂时没有发现正在运行的 AI 进程。灵机会自动重试。</p>
+      ) : (
+        <div className="ai-process-list">
+          {processes.map((row) => (
+            <div key={`${row.kind}:${row.pid}`} className="ai-process-row">
+              <span>{row.display_name}</span>
+              <span className="pill ok">{row.state === "running" ? "正在运行" : "尚未获得"}</span>
+              <span className="ai-process-time">更新：{row.updated_at ?? "尚未获得"}</span>
+              <details className="ai-process-advanced">
+                <summary>高级信息</summary>
+                <small>PID {row.pid}</small>
+              </details>
+            </div>
+          ))}
+        </div>
+      )}
+      <h4>本地模型</h4>
+      {!panel?.models ? (
+        <p className="memory-source-empty-detail">模型清单尚未获得。灵机会自动重试。</p>
+      ) : panel.models.length === 0 ? (
+        <p className="memory-source-empty-detail">暂未发现本地模型。</p>
+      ) : (
+        <div className="ai-model-list">
+          {panel.models.map((model) => (
+            <div key={model.display_name} className="ai-model-row">
+              <span>{model.display_name}</span>
+              <span className="pill neutral">{model.installed === true ? "已安装" : model.installed === false ? "未安装" : "尚未获得"}</span>
+              <span className={`pill ${model.running === true ? "ok" : "neutral"}`}>{runningLabel(model.running)}</span>
+              <span className={`pill ${model.compatibility_status === "verified" ? "ok" : "neutral"}`}>{compatibilityLabel(model.compatibility_status)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ExportInboxSection({
+  inboxes,
+  loading,
+  busyKeys,
+  notices,
+  onReveal,
+  onAuthorize,
+}: {
+  inboxes: ExportInboxRow[];
+  loading: boolean;
+  busyKeys: Record<string, boolean>;
+  notices: Record<string, SourceNoticeState>;
+  onReveal: (row: ExportInboxRow) => void;
+  onAuthorize: (row: ExportInboxRow) => void;
+}) {
+  return (
+    <section className="export-inbox-section" aria-label="官方导出接收文件夹">
+      <h3>官方导出接收文件夹</h3>
+      <p className="section-intro">这是灵机自己的接收文件夹。把官方导出文件放进来，灵机才能在主人授权后读取。</p>
+      {loading ? (
+        <div className="empty-state" aria-busy="true">正在准备接收文件夹…</div>
+      ) : inboxes.length === 0 ? (
+        <Empty text="接收文件夹状态尚未获得。灵机会自动重试。" />
+      ) : (
+        <div className="ai-app-grid">
+          {inboxes.map((row) => (
+            <article key={row.kind} className="memory-source-card export-inbox-card" data-inbox-kind={row.kind}>
+              <div className="memory-source-card-header">
+                <div>
+                  <span className="memory-source-kind">灵机自有文件夹</span>
+                  <h4>{row.purpose}</h4>
+                </div>
+                <span className={`pill ${row.exists ? "ok" : "warning"}`}>{row.exists ? "已就绪" : "尚未获得"}</span>
+              </div>
+              <div className="memory-source-facts">
+                <span>文件数：{countLabel(row.file_count)}</span>
+                <span>最近检查：{row.last_checked_at ?? "尚未获得"}</span>
+              </div>
+              <small className="memory-source-reason">{row.next_step}</small>
+              {notices[row.kind] && (
+                <p className={`memory-source-feedback memory-source-feedback-${notices[row.kind].kind}`} aria-live="polite">{notices[row.kind].text}</p>
+              )}
+              <div className="memory-source-primary-actions">
+                <button className="button secondary" disabled={Boolean(busyKeys[`reveal:${row.kind}`])} onClick={() => onReveal(row)}>
+                  {busyKeys[`reveal:${row.kind}`] ? "打开中…" : "打开接收文件夹"}
+                </button>
+                <button className="button primary" disabled={Boolean(busyKeys[actionKey({ kind: row.kind, root: row.inbox_path } as SourceFact, "authorize")])} onClick={() => onAuthorize(row)}>
+                  使用此文件夹开始记忆
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

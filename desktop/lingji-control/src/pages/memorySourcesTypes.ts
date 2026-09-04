@@ -138,4 +138,56 @@ export type MemorySourcesSnapshot = {
   summary: ScanSummary | null;
   runtime: RuntimeSummary | null;
   sources: SourceFact[];
+  apps?: AppSoftwareRow[];
+  processes?: ProcessRow[];
+  inboxes?: ExportInboxRow[];
+};
+
+export type AppSoftwareRow = {
+  kind: string;
+  display_name: string;
+  install_status: string;
+  running: boolean | null;
+  bundle_id?: string | null;
+  version?: string | null;
+  supported: boolean;
+  capabilities?: Record<string, boolean> | null;
+  detail?: string | null;
+};
+
+export type ProcessRow = {
+  kind: string;
+  display_name: string;
+  pid: number;
+  state: string;
+  updated_at?: string | null;
+};
+
+export type ExportInboxRow = {
+  kind: string;
+  purpose: string;
+  next_step: string;
+  exists: boolean;
+  file_count: number;
+  last_checked_at?: string | null;
+  inbox_path: string;
+};
+
+export type OwnerIntakePanels = {
+  apps: AppSoftwareRow[];
+  processes: ProcessRow[];
+  inboxes: ExportInboxRow[];
+};
+
+export type ModelHealthPanel = {
+  models: Array<{
+    display_name: string;
+    installed: boolean | null;
+    running: boolean | null;
+    compatibility_status: string | null;
+    parameter_size?: string | null;
+  }> | null;
+  self_check: string | null;
+  system_health: string | null;
+  memory_health: string | null;
 };
