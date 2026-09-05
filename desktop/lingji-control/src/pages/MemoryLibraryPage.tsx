@@ -47,7 +47,7 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
   const limit = 30;
   const load = useCallback(
     (signal: AbortSignal) =>
-      api.get<unknown>(
+      api.get<{ items?: MemoryRow[]; pagination?: { total?: number | null; has_more?: boolean } }>(
         `/api/memory/inspector/memories?limit=${limit}&offset=${offset}${query.trim() ? `&q=${encodeURIComponent(query.trim())}` : ""}`,
         { signal },
       ),
