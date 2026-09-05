@@ -419,10 +419,12 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         except Exception:
             job_rows = []
         latest_by_rel: dict[str, dict[str, Any]] = {}
+        rounds_by_rel: dict[str, int] = {}
         for row in job_rows:
             rel = str(row["rel"] or "")
             if rel:
                 latest_by_rel[rel] = row
+                rounds_by_rel[rel] = rounds_by_rel.get(rel, 0) + 1
         unique_files = len(latest_by_rel)
         unique_completed = sum(1 for row in latest_by_rel.values() if str(row["status"]) == "completed")
         unique_failed = sum(1 for row in latest_by_rel.values() if str(row["status"]) == "failed")
@@ -519,7 +521,7 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
                 {"key": "fetch", "label": "原始获取（唯一文件）", "plain": "来源里不重复的文件总数；自动检查会反复核对它们", "count": unique_files},
                 {"key": "parse", "label": "解析成功", "plain": "最新一轮成功读出对话内容的文件数", "count": unique_completed},
                 {"key": "pending", "label": "待处理", "plain": "还在排队等待提取的文件", "count": unique_pending or None},
-                {"key": "dedupe", "label": "去重复用", "plain": "内容与已导入记录相同、直接复用的次数（累计）", "count": sum((job_counts.get(str(scan.get("scan_id") or ""), {}).get("completed") or 0) for scan in scans) and sum(_safe_int(scan.get("reused_count")) or 0 for scan in scans)},
+                {"key": "dedupe", "label": "去重复用", "plain": "内容与已导入记录相同、跳过重复导入的文件数", "count": sum(1 for rel in latest_result_by_rel if rounds_by_rel.get(rel, 0) > 1)},
                 {"key": "filter_failed", "label": "筛选拒绝", "plain": "无法安全解析或归属不明的文件", "count": unique_failed},
                 {"key": "extract", "label": "提炼消息", "plain": "从对话里整理出的可检索消息条数（唯一内容）", "count": extracted_total or None},
                 {"key": "memory", "label": "记忆层更新", "plain": "写进可搜索记忆层的条目数（唯一内容）", "count": memory_total or None},
