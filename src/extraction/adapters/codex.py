@@ -577,10 +577,13 @@ class CodexTranscriptAdapter(ExtractionAdapter):
         candidate = Path(path)
         if candidate.is_symlink():
             raise ValueError("Codex transcript refuses a symlink input")
-        for parent in (candidate, *candidate.parents):
+        # Resolve first, then inspect ancestors of the canonical path. Lexical
+        # parents such as macOS's /tmp symlink would otherwise reject data that
+        # physically lives under /private/tmp without any user-visible link.
+        resolved = candidate.resolve(strict=True)
+        for parent in resolved.parents:
             if parent.is_symlink():
                 raise ValueError("Codex transcript refuses a symlink ancestor")
-        resolved = candidate.resolve(strict=True)
         if not stat.S_ISREG(resolved.stat().st_mode):
             raise ValueError("Codex transcript requires a regular file")
         if cls._sensitive_path(resolved):
