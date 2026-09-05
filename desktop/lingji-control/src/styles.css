@@ -556,3 +556,12 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 /* Inspector conversation date grouping. */
 .inspector-date-group { display: grid; gap: 8px; margin-bottom: 14px; }
 .inspector-date-label { margin: 4px 0 0; color: var(--muted); font-size: 13px; font-weight: 600; }
+
+/* Home facts board: everything accurate on open, zero clicks. */
+.home-facts-board .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.home-facts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.home-fact-group { min-width: 0; display: grid; gap: 8px; align-content: start; padding: 14px 15px; border-radius: 12px; background: var(--surface-2); }
+.home-fact-group h4 { margin: 0; color: var(--text-soft); font-size: 13px; }
+.home-fact-line { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.home-fact-line strong { color: var(--text); font-size: 13px; }
+.home-fact-line small { color: var(--muted); font-size: 12px; }

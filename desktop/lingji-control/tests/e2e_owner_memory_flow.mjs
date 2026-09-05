@@ -604,6 +604,15 @@ try {
   const overviewText = await page.locator(".overview-page").innerText();
   assert.ok(overviewText.includes("最近一次自动检查完成"), "completed summary without counts must still say it completed");
   assert.equal(overviewText.includes("检查结果尚未获得"), false, "missing summary counts must not become an unknown result on the primary page");
+  await page.getByText("现在的事实", { exact: true }).waitFor();
+  await page.getByText("灵机自检：正常", { exact: true }).waitFor();
+  await page.getByText("系统健康：正常", { exact: true }).waitFor();
+  await page.getByText("记忆健康：正常", { exact: true }).waitFor();
+  await page.getByText("正在运行：ChatGPT、Ollama", { exact: true }).waitFor();
+  await page.getByText("兼容已验证 1 · 待验证 1", { exact: true }).waitFor();
+  await page.getByText("ChatGPT 官方导出接收文件夹有 2 个文件待处理", { exact: true }).waitFor();
+  assert.equal(overviewText.includes("com.openai"), false, "home facts must not expose bundle ids");
+  assert.equal(overviewText.includes("/tmp/lingji-fixture"), false, "home facts must not expose paths");
   await page.locator(".desktop-nav-item").filter({ hasText: "来源" }).click();
   await page.locator(".desktop-content").getByRole("heading", { name: "来源" }).waitFor();
   await fetch(`http://127.0.0.1:${apiPort}/__test/all-states`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
