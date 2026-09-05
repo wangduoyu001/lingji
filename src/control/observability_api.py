@@ -430,6 +430,7 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         scan_rounds = len(scans)
 
         # 提炼消息/记忆更新：同一文件取最新一次结果，避免重复核对把数字翻倍
+        totals = project_job_result_totals(db)
         extracted_total = 0
         memory_total = 0
         latest_result_by_rel: dict[str, dict[str, Any]] = {}
