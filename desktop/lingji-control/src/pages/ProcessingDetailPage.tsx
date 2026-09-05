@@ -71,8 +71,8 @@ export default function ProcessingDetailPage({ api, active }: { api: LingJiApi; 
                         <div key={`${row.name}-${index}`} className="pipeline-detail-row">
                           <strong>{row.name}</strong>
                           {row.time && <small>{row.time}</small>}
-                          {"what" in row && <small>原因：{row.what}</small>}
-                          {"next" in row && <small>接下来：{row.next}</small>}
+                          {"what" in row && row.what ? <small>原因：{String(row.what)}</small> : null}
+                          {"next" in row && row.next ? <small>接下来：{String(row.next)}</small> : null}
                         </div>
                       ))}
                     </div>
