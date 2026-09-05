@@ -3741,3 +3741,14 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   真机验证通过：DMG `f6f63390272cbe76113a0438ac7dcf879848f1d103420ce5d7543818143c8474`。
 - 验证：e2e PASS、memory-sources PASS、repair PASS、fast-track PASS、inspector PASS、build PASS、
   observability 投影 4 passed、适配器 13 passed、acceptance-sync/handoff PASS。
+
+
+### 精炼展示与永久记忆面板（提交 `63d691ee`）
+
+- 灵机整理卡片改为**精炼展示**：结论与证据行去掉内部标记、压缩空白、按句截取（最多 100/80 字），
+  完整原文保留在详情弹层与原始数据页，杜绝“多轮讨论原文直接当记忆”的观感。
+- 永久记忆面板从空态改为展示**灵机自动固化的精炼记忆**（structured_evidence 记忆条目，每条含
+  自动固化标记、点开看精炼正文），入口在高级诊断“运行与错误”分组；主人确认进 Vault 的流程不变。
+- 临时文件清理：本轮构建产物（build/sidecar-macos、dmg 挂载点、PyInstaller work/dist、vite 缓存）
+  在每次重建时清理；旧验收证据根保持只读不动。
+- 验证：e2e PASS、memory-sources PASS、repair PASS、inspector PASS、build PASS。
