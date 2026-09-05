@@ -3729,3 +3729,15 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   `296 passed, 3 warnings`；compileall、`git diff --check`、acceptance sync、local handoff PASS。
   gpt-5.4-mini 独立只读审查因账户 usage limit 在读取文件前退出，未修改文件，也未冒充审查
   通过；以双顺序竞态测试和扩大回归补充技术证据，最终 packaged/Mac 验收仍保持阻断。
+
+## 2026-09-05 · 处理详情唯一口径收口（自审修复轮）
+
+- 真机自审发现处理详情“原始获取 23402/去重 17700/提炼 399 万”等虚高数字（每轮核对重复累计、
+  整轮合计按文件再累加两处放大）。修复为唯一文件口径：唯一文件 470、解析成功 448、筛选拒绝 22、
+  去重复用 2、提炼消息 10313、记忆层更新 9747、向量化待启用；另显示“检查轮次”说明自动核对频率。
+- 记忆库页主列表改为会话视图（唯一会话、标题干净、点开看完整聊天原文），修复同一会话标题三连
+  重复的观感问题；首页“最近记住的内容”过滤内部注入主题。
+- 过程中引入并修复一次 NameError（totals 未定义/rel_latest 引名错误，提交 `5611c4cc`），最终
+  真机验证通过：DMG `f6f63390272cbe76113a0438ac7dcf879848f1d103420ce5d7543818143c8474`。
+- 验证：e2e PASS、memory-sources PASS、repair PASS、fast-track PASS、inspector PASS、build PASS、
+  observability 投影 4 passed、适配器 13 passed、acceptance-sync/handoff PASS。
