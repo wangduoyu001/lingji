@@ -144,7 +144,7 @@ const processing = mergeSourceFacts(
   [{ ...responses["/api/automatic-memory/scans"][0], processing_status: "processing", processing_pending: 2 }],
 );
 assert.equal(processing[0].state, "processing");
-assert.match(processing[0].detail, /处理中/);
+assert.match(processing[0].detail, /整理成可搜索的记忆/);
 const imported = mergeSourceFacts(
   responses["/api/automatic-memory/discovered"],
   responses["/api/automatic-memory/sources"],

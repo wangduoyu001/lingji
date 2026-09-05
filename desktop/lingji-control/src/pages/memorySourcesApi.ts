@@ -134,7 +134,7 @@ function describe(discovered: DiscoveredSource, state: SourceState, scan?: ScanR
   }
   if (state === "current") return { detail: `已接管「${rootName(discovered.candidate_root)}」，最近一次扫描已完成。`, nextAction: "可查看本次扫描结果。" };
   if (state === "scan_completed") return { detail: "这次检查已经完成，但还没有看到导入完成证据。", nextAction: "查看这次检查，确认是否需要继续处理。" };
-  if (state === "processing") return { detail: "处理中：正在提取来源内容，导入证据还在累积。", nextAction: "等待处理完成，或查看这次检查。" };
+  if (state === "processing") return { detail: "扫描已完成，灵机正在把导入的内容整理成可搜索的记忆（自动进行，无需等待）。", nextAction: "整理完成后会自动显示，无需任何操作。" };
   if (state === "imported") return { detail: "来源内容已导入完成，可以查看已导入具体内容。", nextAction: "查看已导入具体内容。" };
   if (state === "partial_failure") return { detail: "已经导入了一部分内容，但也有项目失败。", nextAction: "查看这次检查，确认失败项是否需要重试。" };
   if (state === "empty") return { detail: "扫描完成了，但目录里没有可导入内容。", nextAction: "查看这次检查，确认是否选择了正确目录。" };

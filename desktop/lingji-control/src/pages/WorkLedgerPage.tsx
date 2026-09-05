@@ -151,11 +151,11 @@ export function WorkLedgerPage({ api, active }: { api: LingJiApi; active: boolea
             ) : (
               <div className="work-item-list">
                 {items.data?.items.map((item) => (
-                  <details key={item.name} className="work-item-row">
-                    <summary>
+                  <div key={item.name} className="work-item-row">
+                    <div className="work-item-head">
                       <span className={`pill ${item.status === "failed" ? "bad" : item.status === "merged" ? "neutral" : item.status === "kept" ? "ok" : "warning"}`}>{item.label}</span>
                       <strong>{item.name}</strong>
-                    </summary>
+                    </div>
                     {item.failure ? (
                       <div className="work-item-detail">
                         <p>原因：{item.failure.what}</p>
@@ -164,7 +164,7 @@ export function WorkLedgerPage({ api, active }: { api: LingJiApi; active: boolea
                     ) : (
                       <div className="work-item-detail"><p>更新时间：{timeText(item.updated_at)}</p></div>
                     )}
-                  </details>
+                  </div>
                 ))}
               </div>
             )}

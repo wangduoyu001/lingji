@@ -59,7 +59,7 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
       </div>
       {isRunning && <RunningStepsFlow api={api} workId={String(work?.work_id)} />}
       {resource.stale && <Notice kind="warning">当前工作状态正在刷新。</Notice>}
-      {hasWork && <div className="current-work-readable-line"><span>结果：{fact ? formatWorkFactResult(fact) : "还没有结果"}</span><span>下一步：{readableNextAction(fact?.next_action)}</span></div>}
+      {hasWork && <div className="current-work-readable-line"><span>{isRunning ? "正在处理：分步进度见下方，完成后这里会显示结果。" : `结果：${fact ? formatWorkFactResult(fact) : "还没有结果"}`}</span><span>下一步：{readableNextAction(fact?.next_action)}</span></div>}
 
       <details className="current-work-timeline">
         <summary>查看技术详情</summary>

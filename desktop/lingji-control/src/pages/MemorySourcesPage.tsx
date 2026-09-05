@@ -637,29 +637,6 @@ function SourceCard({
             {busyKeys[actionKey(source, "authorize")] ? "准备中…" : source.kind === "codex_rollout" ? "允许接管 Codex" : source.kind === "chatgpt_export" ? "选择官方导出目录" : isPickerSource(source) ? "选择文件夹并开始记忆" : "开始记忆"}
           </button>
         )}
-        {canStop && (
-          <button
-            className="button danger"
-            disabled={Boolean(busyKeys[actionKey(source, "revoke")])}
-            onClick={() => void onAction(source, actionKey(source, "revoke"), () => sourceApi.revoke(source.source_id!), (next) => next.sources.some((item) => item.source_id === source.source_id && item.state === "revoked"), "已停止记忆这个来源。")}
-          >
-            {busyKeys[actionKey(source, "revoke")] ? "停止中…" : "停止记忆"}
-          </button>
-        )}
-        {canScan && (
-          <button
-            className="button secondary"
-            disabled={Boolean(busyKeys[actionKey(source, "scan")])}
-            onClick={() => void onAction(source, actionKey(source, "scan"), () => sourceApi.scan(source.source_id!), (next) => actionEvidence(next, source.source_id!, "scan"), "已开始新的检查。")}
-          >
-            {busyKeys[actionKey(source, "scan")] ? "检查中…" : "现在检查"}
-          </button>
-        )}
-        {canDetail && (
-          <button className="button secondary" disabled={Boolean(busyKeys[actionDetailKey])} onClick={openDetail}>
-            {busyKeys[actionDetailKey] ? "读取中…" : "查看这次检查"}
-          </button>
-        )}
         {canOpenImportedContent && (
           <button className="button secondary" disabled={Boolean(importedContentBusy)} onClick={() => void onOpenImportedContent()}>
             {importedContentBusy ? "打开中…" : "查看已导入具体内容"}
@@ -667,10 +644,20 @@ function SourceCard({
         )}
       </div>
 
-      {(canPause || canResume || canRetry) && (
+      {(canStop || canScan || canDetail || canPause || canResume || canRetry) && (
         <details className="memory-source-fallback-actions">
-          <summary>备用操作</summary>
+          <summary>更多操作</summary>
           <div className="memory-source-actions">
+            {canScan && (
+              <button className="button secondary" disabled={Boolean(busyKeys[actionKey(source, "scan")])} onClick={() => void onAction(source, actionKey(source, "scan"), () => sourceApi.scan(source.source_id!), (next) => actionEvidence(next, source.source_id!, "scan"), "已开始新的检查。")}>
+                {busyKeys[actionKey(source, "scan")] ? "检查中…" : "现在检查"}
+              </button>
+            )}
+            {canDetail && (
+              <button className="button secondary" disabled={Boolean(busyKeys[actionDetailKey])} onClick={openDetail}>
+                {busyKeys[actionDetailKey] ? "读取中…" : "查看这次检查"}
+              </button>
+            )}
             {canPause && (
               <button className="button secondary" disabled={Boolean(busyKeys[actionKey(source, "pause")])} onClick={() => void onAction(source, actionKey(source, "pause"), () => sourceApi.pause(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "pause"), "已暂停这次检查。")}>
                 {busyKeys[actionKey(source, "pause")] ? "暂停中…" : "暂停检查"}
@@ -684,6 +671,11 @@ function SourceCard({
             {canRetry && (
               <button className="button warning" disabled={Boolean(busyKeys[actionKey(source, "retry")])} onClick={() => void onAction(source, actionKey(source, "retry"), () => sourceApi.retry(scan!.scan_id), (next) => actionEvidence(next, source.source_id!, "retry"), "已重新检查。")}>
                 {busyKeys[actionKey(source, "retry")] ? "重试中…" : "再次检查"}
+              </button>
+            )}
+            {canStop && (
+              <button className="button danger" disabled={Boolean(busyKeys[actionKey(source, "revoke")])} onClick={() => void onAction(source, actionKey(source, "revoke"), () => sourceApi.revoke(source.source_id!), (next) => next.sources.some((item) => item.source_id === source.source_id && item.state === "revoked"), "已停止记忆这个来源。")}>
+                {busyKeys[actionKey(source, "revoke")] ? "停止中…" : "停止记忆"}
               </button>
             )}
           </div>

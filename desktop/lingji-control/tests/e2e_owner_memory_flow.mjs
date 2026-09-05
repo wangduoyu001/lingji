@@ -497,9 +497,10 @@ try {
   assert.equal(await page.getByText("已授权 / 当前", { exact: true }).count(), 0, "source status counters must not be stacked as owner-facing cards");
   assert.equal(await page.getByText("SYSTEM POSTURE", { exact: true }).count(), 0, "internal posture label must stay out of primary UI");
   const initialSourceFallback = page.locator('[data-source-kind="generic_ai_history"] details.memory-source-fallback-actions');
-  assert.equal(await initialSourceFallback.count(), 0, "source maintenance actions must move out of the fallback disclosure when direct primary actions are available");
+  assert.equal(await initialSourceFallback.count(), 1, "maintenance actions live in the 更多操作 disclosure; primary area keeps only consent actions");
   const sourceScanCountBefore = (await (await fetch(`http://127.0.0.1:${apiPort}/__test/scan-request-count`, { headers: { "X-LingJi-Token": "fixture-token" } })).json()).count;
   await openSourceActions();
+  assert.equal(await initialSourceFallback.getByRole("button", { name: "现在检查", exact: true }).count(), 1, "现在检查 lives under 更多操作");
   await page.locator('[data-source-kind="generic_ai_history"]').getByRole("button", { name: "现在检查", exact: true }).click();
   await page.getByRole("heading", { name: "扫描中" }).waitFor();
   const sourceScanCountAfter = (await (await fetch(`http://127.0.0.1:${apiPort}/__test/scan-request-count`, { headers: { "X-LingJi-Token": "fixture-token" } })).json()).count;
@@ -728,11 +729,12 @@ try {
   await codexCard.locator("h3").getByText("已授权", { exact: true }).waitFor();
   const scanCompletedCard = page.locator('[data-source-kind="fixture_scan_completed"]');
   await scanCompletedCard.locator("h3").getByText("扫描完成", { exact: true }).waitFor();
+  await scanCompletedCard.locator("details.memory-source-fallback-actions summary").click();
   await scanCompletedCard.getByRole("button", { name: "查看这次检查", exact: true }).waitFor();
   assert.equal(await scanCompletedCard.getByRole("button", { name: "查看已导入具体内容", exact: true }).count(), 0, "scan completed but not processed must not open imported content");
   const processingCard = page.locator('[data-source-kind="fixture_processing"]');
   await processingCard.locator("h3").getByText("处理中", { exact: true }).waitFor();
-  await processingCard.getByText("正在提取来源内容", { exact: false }).waitFor();
+  await processingCard.getByText("扫描已完成，灵机正在把导入的内容整理成可搜索的记忆", { exact: false }).waitFor();
   const importedCard = page.locator('[data-source-kind="fixture_imported"]');
   await importedCard.locator("h3").getByText("已导入", { exact: true }).waitFor();
   await importedCard.getByRole("button", { name: "查看已导入具体内容", exact: true }).waitFor();
@@ -1173,8 +1175,7 @@ try {
   await page.getByText("这次检查的流水线", { exact: true }).waitFor();
   await page.getByText("原始获取", { exact: true }).first().waitFor();
   await page.getByText("3 / 3", { exact: true }).first().waitFor();
-  const badRow = page.locator("details.work-item-row").filter({ hasText: "rollout-bad.jsonl" });
-  await badRow.locator("summary").click();
+  const badRow = page.locator(".work-item-row").filter({ hasText: "rollout-bad.jsonl" });
   await badRow.getByText("同一个文件里混着多个不同的会话").waitFor();
   assert.equal((await page.locator(".work-ledger-page").innerText()).includes("session_meta"), false, "failure copy must stay owner-safe");
 

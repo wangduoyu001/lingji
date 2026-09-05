@@ -635,3 +635,12 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 
 .running-steps { display: grid; gap: 8px; margin-top: 10px; }
 .running-steps-caption { color: var(--muted); font-size: 12px; }
+
+/* Bulk confirm bar + card selection. */
+.bulk-confirm-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 14px; border-radius: 12px; background: var(--accent-soft); }
+.bulk-confirm-bar small { color: var(--muted); font-size: 12px; }
+.bulk-select-hint { color: var(--muted); font-size: 12px; }
+.owner-memory-card.selected { outline: 2px solid var(--accent-strong); }
+.owner-memory-card-select { display: inline-flex; align-items: center; gap: 8px; }
+.work-item-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.work-item-head strong { color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
