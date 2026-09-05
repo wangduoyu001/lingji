@@ -301,7 +301,9 @@ const server = http.createServer((req, res) => {
       let rawCards = Array.from({ length: 45 }, (_, index) => ({
         memory_id: `card-${index + 1}`,
         topic: memoryCardTopics[index] ?? `主题${index + 1}`,
-        developments: ["先讨论方案", "根据来源做出决定", "记录后续结果"],
+        developments: index === 0
+          ? ["先讨论方案 /root/monitor_zcode/config.json 已核对", "根据来源做出决定", `LoooooooooooooooongToken_${"x".repeat(120)} 结尾`]
+          : ["先讨论方案", "根据来源做出决定", "记录后续结果"],
         conclusion: [0, 3, 5, 6].includes(index) ? null : "最新结论已从来源核对",
         freshness: { state: memoryCardFreshnessStates[index] ?? "current", reason: index === 3 ? "已有一段时间没有新证据" : memoryCardFreshnessStates[index] === "unknown" ? "时效尚未判断" : "最近证据仍有效", latest_evidence_at: index === 0 ? null : index === 5 ? "not-a-time" : "2026-08-28T08:03:00Z" },
         source: { label: index % 2 ? "Codex 工作会话" : "ChatGPT 导出记录", message_count: 3, latest_evidence_at: "2026-08-28T08:03:00Z" },
@@ -1008,6 +1010,18 @@ try {
   }
   assert.equal(await page.locator(".owner-memory-card").count(), 20, "ordinary memory stream must render the first current page");
   assert.ok((await page.locator(".memory-cards-summary").innerText()).includes("已显示 20 / 共 36 条"), "card total must reflect the current-only stream");
+  const sanitizedCardsText = await page.locator(".owner-memory-card-grid").innerText();
+  assert.equal(sanitizedCardsText.includes("/root/monitor_zcode"), false, "card text must redact absolute paths");
+  assert.equal(sanitizedCardsText.includes("/Users/wuhanwangduoyu/secret.txt"), false, "card conclusions must redact absolute paths");
+  assert.ok(sanitizedCardsText.includes("路径已隐藏"), "redacted paths must be labeled in plain language");
+  const overflow = await page.locator(".owner-memory-card").first().evaluate((node) => {
+    const card = node;
+    for (const el of [card, ...card.querySelectorAll("p, small, strong, div, span")]) {
+      if (el.scrollWidth > el.clientWidth + 2 && getComputedStyle(el).overflowX !== "hidden") return `${el.className}:${el.scrollWidth}>${el.clientWidth}`;
+    }
+    return "";
+  });
+  assert.equal(overflow, "", `card content must wrap instead of overflowing: ${overflow}`);
   const cardsText = await page.locator(".owner-memory-card-grid").innerText();
   for (const topic of ["发布计划", "代码审查", "旅行计划", "会议决策", "主题14", "主题21"]) assert.ok(cardsText.includes(topic), `current card topic ${topic} must be readable`);
   for (const topic of ["每周摘要", "家庭安排", "阅读清单", "饮食偏好", "预算安排", "学习目标", "设备维护", "写作习惯", "主题13"]) assert.equal(cardsText.includes(topic), false, `non-current topic ${topic} must stay out of the ordinary memory stream`);

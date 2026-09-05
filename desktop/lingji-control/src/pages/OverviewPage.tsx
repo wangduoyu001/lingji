@@ -15,6 +15,7 @@ import type { MemorySourcesSnapshot, ModelHealthPanel, ScanRun } from "./memoryS
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { PageId, Row } from "../types";
 import { pendingActionsFrom, type PendingActionsResponse } from "../contracts/workFact";
+import { redactAbsolutePaths } from "./ownerMemoryCardsTypes";
 import { fetchHomePanels, projectServiceRows, projectVectorization, type ServiceRow, type VectorizationPanel } from "./servicesHealth";
 import { OwnerMemoryCardsApi } from "./ownerMemoryCardsApi";
 import { ownerFacingConclusion, type OwnerMemoryCard } from "./ownerMemoryCardsTypes";
@@ -54,7 +55,7 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
     {pendingUnavailable && <Notice kind="warning">待办正在自动确认，当前不把未读取当作“没有待办”。</Notice>}{sourceResource.error && <Notice kind="warning">来源状态正在自动刷新，灵机不会因此停止记忆。</Notice>}{note && <Notice kind="info">{note}</Notice>}
     <HomeFactsBoard snapshot={sourceSnapshot} modelHealth={modelHealth.data} loading={!sourceSnapshot} onNavigate={onNavigate} />
     <ServicesBoard services={services.data} />
-    <section className="outcome-section recent-memory-section"><div className="section-heading"><div><span className="section-kicker">最近记住的内容</span><h3>灵机最近替你记住了什么</h3></div><span className="section-caption">自动更新</span></div>{recentCards.length ? <div className="recent-memory-list">{recentCards.map((card) => { const conclusion = ownerFacingConclusion(card); return <article className="recent-memory-item" key={card.memory_id}><strong>{display(card.topic, "未命名记忆")}</strong><p>{conclusion.text}</p><small>来源：{display(card.source?.label)}</small></article>; })}</div> : <p className="outcome-empty">灵机还没有形成具体记忆，完成一次来源检查后会出现在这里。</p>}</section>
+    <section className="outcome-section recent-memory-section"><div className="section-heading"><div><span className="section-kicker">最近记住的内容</span><h3>灵机最近替你记住了什么</h3></div><span className="section-caption">自动更新</span></div>{recentCards.length ? <div className="recent-memory-list">{recentCards.map((card) => { const conclusion = ownerFacingConclusion(card); return <article className="recent-memory-item" key={card.memory_id}><strong>{display(redactAbsolutePaths(card.topic), "未命名记忆")}</strong><p>{redactAbsolutePaths(conclusion.text)}</p><small>来源：{display(card.source?.label)}</small></article>; })}</div> : <p className="outcome-empty">灵机还没有形成具体记忆，完成一次来源检查后会出现在这里。</p>}</section>
     <section className="outcome-section takeover-summary-section"><div className="section-heading"><div><span className="section-kicker">最近自动接管成果</span><h3>接管了多少记录</h3></div><span className="section-caption">自动统计</span></div><div className="takeover-stats"><div><strong>{currentSources.length ? currentSources.join("、") : "尚未获得"}</strong><span>已接管来源</span></div><div><strong>{number(cards?.conversations)}</strong><span>已接管对话</span></div><div><strong>{number(cards?.messages)}</strong><span>已导入消息</span></div><div><strong>{latestCheckTime}</strong><span>最近检查时间</span></div></div><p className="proof-note latest-check-note">{latestCheckSummary(latest)}</p><p className="proof-note vector-note">当前记忆和长期记忆只统计仍然有效的内容；已接管对话与消息统计全部导入规模。{cards?.vectorized != null ? `其中 ${cards.vectorized} 件已准备语义检索。` : "语义检索状态会在后台自动更新。"}</p></section>
     <CurrentWorkPanel api={api} active={active} />
   </div>;

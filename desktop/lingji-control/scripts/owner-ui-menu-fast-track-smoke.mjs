@@ -515,11 +515,11 @@ try {
   await sourceCard.getByText("文件数：2", { exact: true }).waitFor();
   await sourceCard.getByText("占用空间：2048 字节", { exact: true }).waitFor();
   assert.equal((await sourceCard.locator(".memory-source-metadata").innerText()).includes("/safe/fixture"), false, "source truth must not expose a filesystem path");
+  await sourceCard.locator("details.memory-source-fallback-actions").locator("summary").click();
   await sourceCard.getByRole("button", { name: "现在检查", exact: true }).click();
   await page.getByRole("heading", { name: "扫描中", exact: true }).waitFor();
   assert.equal(state.scanRequests, 1, "source action must trigger the existing scan API");
   state.pauseFailure = true;
-  await sourceCard.locator("details.memory-source-fallback-actions").locator("summary").click();
   await sourceCard.getByRole("button", { name: "暂停检查", exact: true }).click();
   await page.getByText("来源操作没有完成，请稍后重试。", { exact: true }).waitFor();
   const sourcePageText = await page.locator(".memory-sources-page").innerText();

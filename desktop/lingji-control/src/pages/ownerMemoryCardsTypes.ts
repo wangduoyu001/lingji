@@ -141,3 +141,11 @@ export type OwnerMemoryCardsResponse = {
 };
 
 export const OWNER_MEMORY_CARD_LIMIT = 20;
+
+const ABSOLUTE_PATH_PATTERN = /(?:\/(?:Users|root|home|private|var|tmp|etc|opt|Applications)\/[\w.\-\u4e00-\u9fff@][\w.\-\/\u4e00-\u9fff@]*)|(?:[A-Za-z]:\\[^\s"']{2,})/g;
+
+export function redactAbsolutePaths(value: unknown): string {
+  const text = typeof value === "string" ? value : String(value ?? "");
+  if (!text) return "";
+  return text.replace(ABSOLUTE_PATH_PATTERN, "（路径已隐藏）");
+}

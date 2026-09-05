@@ -644,3 +644,13 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 .owner-memory-card-select { display: inline-flex; align-items: center; gap: 8px; }
 .work-item-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .work-item-head strong { color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
+
+
+/* Owner memory cards: never let long content break the grid. */
+.owner-memory-card { min-width: 0; overflow: hidden; display: grid; gap: 8px; align-content: start; }
+.owner-memory-card * { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+.owner-memory-conclusion { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.owner-memory-developments p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.owner-memory-card-title { text-align: left; overflow-wrap: anywhere; }
+.owner-memory-card-select input { accent-color: var(--accent-strong); width: 15px; height: 15px; }
+.owner-memory-grid-fixed { grid-template-columns: repeat(2, minmax(0, 1fr)); }
