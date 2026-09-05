@@ -1,5 +1,30 @@
 # 验收要求变更记录
 
+## 2026-09-05 · Mac 技术验收执行（OWNER_SOURCE_INTAKE_MAC_REPAIR）
+
+- 主人指示直接执行 Mac 验收。packaged 双轮从全新隔离根全绿：round 1 `2 passed`（411.71s）、
+  round 2 `2 passed`（410.14s）。执行中发现两处测试与已发布产品契约的偏差并按归因修复
+  （基线 `3471db1a` 复现同样失败）：场景 3 按 Task8E Darwin 周期核对契约分支（30 秒事件 SLA
+  继续记录为不适用，不冒充通过；根因含配置 60 秒下限钳制）；崩溃矩阵 pause 提前消除周期 tick
+  竞态。提交 `234690b8`。
+- 产物（arm64，ad-hoc strict 签名 OK）：DMG
+  `0e1d75134f4e3087a5fe462e869448068037f352e9200e614c5e47a931103e46`；主程序
+  `f05098871155f979e4c401197147ef581fe318d9583ec9e414aca112fe196dae`；sidecar
+  `e0ea69b19c2cae08fd87b4dd33c5f034e544c0b344708fdf5dc3409964941edb`。构建源树 `460e9011`
+  （含首页事实板 `460e9011 feat: show all facts on home at open`）。
+- 整包替换安装完成；安装前 /Applications 实为今日早间 7e7f0707 代构建，已整包备份至
+  `/tmp/LingJiAcceptance/osimr-7e7f0707/installed-app-backup/`。执行中曾误判旧 sidecar
+  （PID 15127）为测试残留而终止一次，旧 App 受监管自动重启后经 osascript 正常退出；如实记录。
+- 新候选以全新隔离根 `/tmp/LingJiAcceptance/osimr-7e7f0707/app-data` 运行；8766 仅 loopback、
+  8765/8767 关闭；401 认证边界通过；健康真实显示 degraded（ffmpeg/ollama warning）。
+- 真实 UI 遍历通过：首页"现在的事实"板零点击呈现 5 个来源逐项状态、本机 AI 软件发现 6 个
+  （正在运行：ChatGPT、Codex、ZCode——真实进程）、模型状态、健康三值与接收文件夹；来源页
+  Codex 双根真实元数据（451/17 文件）、Claude 无授权按钮（正确拒绝）、模型与进程 PID 折叠、
+  接收文件夹打开/使用按钮在位；缺字段一律"尚未获得"。
+- 主人体验确认**待定**：App/sidecar 保持打开等主人确认。确认前不合并、不 push/PR、
+  不做 Windows、不清理验收证据。技术验收详情见
+  `docs/TEST_REPORTS/OWNER_SOURCE_INTAKE_MAC_REPAIR.md`。
+
 ## 2026-09-05 · 本机 AI 软件发现与只读查看 · Desktop 阶段与收口（Task 7–9）
 
 - 来源页新增三个主人分区："本机 AI 软件"（每类软件卡片：支持自动读取/暂不支持自动读取、

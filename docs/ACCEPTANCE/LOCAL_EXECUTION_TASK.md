@@ -13,11 +13,11 @@ execution_mode: OWNER_SOURCE_INTAKE_PRODUCT_AND_MAC_REPAIR
 repository: wangduoyu001/lingji
 product_branch: codex/owner-source-intake-mac-repair
 baseline_commit: 1d4cd95bcbe73455507bc32c969f6eab5923bd86
-product_commit: 7e7f0707f67f95fd7c31f3ebee897246447c6815
+product_commit: 234690b89f671e328bd610966af73e74684434bd
 product_pr: NONE_NOT_A_RELEASE_GATE
 release_gate: OWNER_EXPERIENCE_CANDIDATE_ONLY
 artifact_name: lingji-macos-arm64-app
-artifact_id: PENDING_NEW_MAC_BUILD
+artifact_id: LOCAL_BUILD_osimr_7e7f0707
 report_branch: acceptance/owner-source-intake-mac-repair
 report_path: docs/TEST_REPORTS/OWNER_SOURCE_INTAKE_MAC_REPAIR.md
 public_summary_path: PENDING

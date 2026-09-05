@@ -20,7 +20,7 @@ execution_mode: OWNER_SOURCE_INTAKE_PRODUCT_AND_MAC_REPAIR
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
 baseline_commit: 1d4cd95bcbe73455507bc32c969f6eab5923bd86
-product_commit: 7e7f0707f67f95fd7c31f3ebee897246447c6815
+product_commit: 234690b89f671e328bd610966af73e74684434bd
 task_instruction_commit: 9eb4d1fab95abb87dda0eab2a97abc7e6728efaf
 report_branch: acceptance/owner-source-intake-mac-repair
 report_commit: PENDING
@@ -39,13 +39,13 @@ owner_observation: PENDING
 started_at: PENDING
 finished_at: PENDING
 focused_result: PASS
-focused_summary: intake expansion complete at 7e7f0707 (backend 976c1f5b 240 passed; desktop sections/inspector e2e+smoke+repair+fast-track+inspector+build all PASS; deep-compare nine endpoints); sentinel debt closed at 3471db1a; compileall/diff-check OK
+focused_summary: intake expansion + mac technical acceptance complete at 234690b8 (packaged double-round 2x 2 passed ~411s after darwin-contract alignment; dmg/main/sidecar sha256 recorded; whole-bundle install on fresh isolated root; real-machine UI traversal PASS: home facts board, per-source states, real app/process discovery incl. ChatGPT/Codex/ZCode running, inbox created); owner observation PENDING (app kept open)
 prior_candidate_mac_technical_result: PASS_WAITING_OWNER_EXPERIENCE
 prior_candidate_owner_observation: REPAIR_REQUIRED
-mac_packaged_result: NOT_RUN_FOR_NEW_CANDIDATE
-mac_install_result: NOT_RUN_FOR_NEW_CANDIDATE
-mac_technical_result: NOT_RUN_FOR_NEW_CANDIDATE
-mac_owner_observation: PENDING_NEW_CANDIDATE
+mac_packaged_result: PASS_DOUBLE_ROUND_GREEN
+mac_install_result: PASS_WHOLE_BUNDLE_REPLACE
+mac_technical_result: PASS
+mac_owner_observation: PENDING_APP_KEEP_OPEN
 windows_result: FORBIDDEN_UNTIL_MAC_OWNER_CONFIRMATION
 full_result: NOT_RUN
 release_result: NOT_RUN
@@ -55,9 +55,9 @@ owner_data_touched: false
 production_pollution_count: 0
 vault_pollution_count: 0
 secret_export_count: 0
-acceptance_root: /private/tmp/LingJiAcceptance/owner-ui-experience-fast-closeout-1d4cd95b
-desktop_pid: 40636
-sidecar_pid: 40641
+acceptance_root: /tmp/LingJiAcceptance/osimr-7e7f0707
+desktop_pid: 23463
+sidecar_pid: 23470
 ```
 
 上一候选 `1d4cd95b` 的 packaged clean-root 双轮、arm64 DMG、签名、整包安装、隔离 DataRoot
