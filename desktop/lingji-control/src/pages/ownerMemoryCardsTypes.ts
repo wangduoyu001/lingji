@@ -149,3 +149,15 @@ export function redactAbsolutePaths(value: unknown): string {
   if (!text) return "";
   return text.replace(ABSOLUTE_PATH_PATTERN, "（路径已隐藏）");
 }
+
+const INTERNAL_MARKUP = /<\/?[A-Za-z][A-Za-z0-9_]*(?:\s[^>]*)?\/?>/g;
+
+export function refineForCard(value: unknown, maxLen = 100): string {
+  let text = typeof value === "string" ? value : String(value ?? "");
+  text = text.replace(INTERNAL_MARKUP, " ");
+  text = text.replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const sentenceEnd = text.search(/[。！？.!?]/);
+  const refined = sentenceEnd > 8 ? text.slice(0, sentenceEnd + 1) : text.slice(0, maxLen);
+  return refined.length > maxLen ? `${refined.slice(0, maxLen)}…` : refined;
+}

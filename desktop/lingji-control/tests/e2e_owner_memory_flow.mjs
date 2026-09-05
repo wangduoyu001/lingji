@@ -372,6 +372,10 @@ const server = http.createServer((req, res) => {
       return json(res, 200, { item: { memory_id: id, topic, kind: action === "confirm" ? "candidate" : "memory", state: cardState, developments: ["先讨论方案", "根据来源做出决定"], conclusion: [0, 3, 5, 6].includes(cardIndex) ? null : "最新结论已从来源核对", freshness: { state: freshnessState, reason: freshnessState === "unknown" ? "时效尚未判断" : freshnessState === "source_revoked" ? "来源已撤销" : freshnessState === "archived" ? "已移出当前记忆" : "最近证据仍有效", latest_evidence_at: cardIndex === 0 ? null : "2026-08-28T08:03:00Z" }, source: { label: sourceRevoked ? "已停止的来源" : "Codex 工作会话", status: sourceRevoked ? "revoked" : "active", message_count: 3 }, layers: { raw: { state: "available" }, structured: { state: "available" }, vector: { state: cardIndex === 4 ? "unavailable" : "complete" }, permanent: { state: permanentState } }, trust: { state: cardIndex === 5 ? "conflict" : "trusted" }, action: { type: projectedAction, label: memoryCardActionLabels[projectedAction], reason: "请核对后决定" }, current_hash: `hash-${id}`, evidence: [{ message_id: "message-card-1", preview: "来源证据摘要一", occurred_at: "2026-08-28T08:03:00Z" }, { message_id: "message-card-2", preview: "来源证据摘要二", occurred_at: "2026-08-28T08:04:00Z" }] } });
     }
     if (path === "/api/memory/inspector/messages/message-card-1" || path === "/api/memory/inspector/messages/message-card-2") { state.messageDetailRequests += 1; return json(res, 200, { item: { message_id: path.endsWith("2") ? "message-card-2" : "message-card-1", content: path.endsWith("2") ? "这是第二条选定的来源消息正文。" : "这是选定的来源消息正文。" } }); }
+    if (path.startsWith("/api/memory/inspector/memories") && new URL(req.url, "http://127.0.0.1").searchParams.get("memory_type") === "structured_evidence") return json(res, 200, { items: [
+        { memory_id: "evi-1", title: "Codex · 发布计划讨论要点", memory_type: "structured_evidence", updated_at: "2026-09-05T08:00:00+00:00" },
+        { memory_id: "evi-2", title: "Codex · 选品参考方案结论", memory_type: "structured_evidence", updated_at: "2026-09-05T08:01:00+00:00" },
+      ], pagination: { total: 2, limit: 20, offset: 0, has_more: false } });
     if (path.startsWith("/api/memory/inspector/memories") && new URL(req.url, "http://127.0.0.1").searchParams.get("memory_type") === "permanent") return json(res, 200, { items: [], pagination: { total: 0, limit: 20, offset: 0, has_more: false } });
     if (path === "/api/memory/inspector/status") return json(res, 200, { as_of: "2026-08-28T08:03:00Z", sources: { sources: 1, conversations: 1, messages: 1 }, memory: { documents: 1, chunks: 1 }, vector: { state: "available", coverage: 1, rebuild_required: false } });
     if (path.startsWith("/api/memory/inspector/sources/")) {
@@ -699,6 +703,15 @@ try {
   await page.locator(".desktop-nav-item").filter({ hasText: "记忆库" }).click();
   await page.locator(".desktop-content").getByRole("heading", { name: "记忆库", exact: true }).waitFor();
   await page.locator(".library-search").waitFor();
+  const pmDisclosure = page.locator("details.desktop-advanced-disclosure");
+  await pmDisclosure.locator("summary").click();
+  await pmDisclosure.getByRole("button", { name: "打开高级诊断", exact: true }).click();
+  const pmEntry = page.locator(".desktop-content").getByRole("button", { name: /永久记忆/ });
+  await pmEntry.first().waitFor();
+  await pmEntry.first().click();
+  await page.locator(".desktop-content").getByRole("heading", { name: "永久记忆", exact: true }).waitFor();
+  await page.getByText("自动固化", { exact: true }).first().waitFor();
+  await page.getByText("Codex · 发布计划讨论要点", { exact: true }).waitFor();
   await page.locator(".desktop-nav-item").filter({ hasText: "提炼候选" }).click();
   await page.getByRole("heading", { name: "灵机整理", exact: true }).first().waitFor();
   await page.locator(".desktop-nav-item").filter({ hasText: "原始数据" }).click();

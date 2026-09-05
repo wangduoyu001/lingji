@@ -6,7 +6,7 @@ const GROUPS: Array<{ title: string; description: string; pages: PageId[] }> = [
   {
     title: "运行与错误",
     description: "查看最近完成的工作、任务明细、自动审查和运行日志。",
-    pages: ["activity", "jobs", "auto_review", "logs"],
+    pages: ["activity", "jobs", "auto_review", "logs", "permanent_memory"],
   },
   {
     title: "数据与索引",
