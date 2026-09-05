@@ -10,6 +10,8 @@ export type PageId =
   | "work_ledger"
   | "changes_ledger"
   | "processing_detail"
+  | "memory_library"
+  | "timeline_page"
   | "activity"
   | "attention"
   | "diagnostics"

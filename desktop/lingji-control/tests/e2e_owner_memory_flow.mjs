@@ -442,12 +442,12 @@ try {
   await installTauri(racePage);
   await racePage.goto(uiBase, { waitUntil: "domcontentloaded" });
   try {
-    await racePage.getByRole("button", { name: "灵机整理", exact: true }).waitFor({ timeout: 10_000 });
+    await racePage.locator(".desktop-nav-item").filter({ hasText: "提炼候选" }).waitFor({ timeout: 10_000 });
   } catch (reason) {
     console.error("race body:", await racePage.locator("body").innerText());
     throw reason;
   }
-  await racePage.getByRole("button", { name: "灵机整理", exact: true }).click();
+  await racePage.locator(".desktop-nav-item").filter({ hasText: "提炼候选" }).click();
   await new Promise((resolve) => setTimeout(resolve, 1_100));
   try { await racePage.getByRole("heading", { name: "灵机整理", exact: true }).first().waitFor({ timeout: 5_000 }); } catch (reason) { console.error("after navigation:", await racePage.locator("body").innerText()); throw reason; }
   assert.equal(await racePage.getByRole("heading", { name: "原始数据", exact: true }).count(), 0, "delayed onboarding reads cannot redirect after navigation");
@@ -466,9 +466,9 @@ try {
     // Refresh the read model only. The owner-facing page intentionally has
     // no routine scan CTA; opening its backup controls must never be used as
     // a polling helper because that would mutate scan state.
-    const backdrop = page.locator(".action-modal-backdrop");
-    if (await backdrop.count()) {
-      const dismiss = backdrop.getByRole("button", { name: "暂不处理", exact: true });
+    const banner = page.locator(".action-notice-bar");
+    if (await banner.count()) {
+      const dismiss = banner.getByRole("button", { name: "知道了", exact: true });
       if (await dismiss.count()) await dismiss.click().catch(() => {});
     }
     const sourceHeading = page.locator(".desktop-content").getByRole("heading", { name: "原始数据", exact: true });
@@ -499,11 +499,11 @@ try {
     if (await dismiss.count()) await dismiss.click().catch(() => {});
     await backdrop.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
   };
-  const alertBackdrop = page.locator(".action-modal-backdrop");
-  await alertBackdrop.waitFor({ state: "visible", timeout: 8000 });
-  await alertBackdrop.getByText("有新的记录来源等待你确认", { exact: true }).waitFor();
-  await alertBackdrop.getByRole("button", { name: "暂不处理", exact: true }).click();
-  await alertBackdrop.waitFor({ state: "hidden", timeout: 5000 });
+  const alertBar = page.locator(".action-notice-bar");
+  await alertBar.waitFor({ state: "visible", timeout: 8000 });
+  await alertBar.getByText("有新的记录来源等待你确认", { exact: true }).waitFor();
+  await alertBar.getByRole("button", { name: "知道了", exact: true }).click();
+  await alertBar.waitFor({ state: "hidden", timeout: 5000 });
   await page.locator(".desktop-nav-item").filter({ hasText: "原始数据" }).click();
   try {
     await page.locator(".desktop-content").getByRole("heading", { name: "原始数据" }).first().waitFor({ timeout: 10_000 });
@@ -694,12 +694,12 @@ try {
   await page.getByText("对话内容不会上传到任何外部服务", { exact: false }).first().waitFor();
 
   await page.waitForTimeout(300);
-  assert.equal(await page.locator(".action-modal-backdrop").count(), 0, "dismissed alert must not re-render immediately");
+  assert.equal(await page.locator(".action-notice-bar").count(), 0, "dismissed alert must not re-render immediately");
 
-  await page.locator(".desktop-nav-item").filter({ hasText: "永久记忆" }).click();
-  await page.locator(".desktop-content").getByRole("heading", { name: "永久记忆", exact: true }).waitFor();
-  await page.getByText("还没有永久记忆。", { exact: false }).waitFor();
-  await page.locator(".desktop-nav-item").filter({ hasText: "灵机整理" }).click();
+  await page.locator(".desktop-nav-item").filter({ hasText: "记忆库" }).click();
+  await page.locator(".desktop-content").getByRole("heading", { name: "记忆库", exact: true }).waitFor();
+  await page.locator(".library-search").waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "提炼候选" }).click();
   await page.getByRole("heading", { name: "灵机整理", exact: true }).first().waitFor();
   await page.locator(".desktop-nav-item").filter({ hasText: "原始数据" }).click();
   await page.locator(".desktop-content").getByRole("heading", { name: "原始数据", exact: true }).waitFor();
@@ -1000,9 +1000,9 @@ try {
   assert.equal(await page.getByText("ADVANCED DIAGNOSTICS", { exact: true }).count(), 0, "ordinary UI must not use decorative English diagnostics labels");
 
   const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
-  assert.deepEqual(primaryLabels, ["首页", "工作记录", "原始数据", "灵机整理", "永久记忆", "变更账本", "处理详情"], "ordinary navigation must contain exactly the owner panels");
+  assert.deepEqual(primaryLabels, ["首页", "记忆库", "原始数据", "时间线", "工作记录", "提炼候选", "变更账本", "处理详情"], "ordinary navigation must contain exactly the owner panels");
   await page.setViewportSize({ width: 760, height: 800 });
-  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "工作记录", "原始数据", "灵机整理", "永久记忆", "变更账本", "处理详情"], "compact navigation must expose the owner panel labels");
+  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "记忆库", "原始数据", "时间线", "工作记录", "提炼候选", "变更账本", "处理详情"], "compact navigation must expose the owner panel labels");
   await page.setViewportSize({ width: 1280, height: 800 });
   const advancedDisclosure = page.locator("details.desktop-advanced-disclosure");
   assert.equal(await advancedDisclosure.count(), 1, "advanced diagnostics must have one collapsed disclosure");
@@ -1015,7 +1015,7 @@ try {
   await page.getByText("目前不需要你处理", { exact: false }).waitFor();
   const cardRequests = [];
   page.on("request", (request) => { if (request.url().includes("/api/memory/inspector/cards?")) cardRequests.push(request.url()); });
-  await page.locator(".desktop-nav-item").filter({ hasText: "灵机整理" }).click();
+  await page.locator(".desktop-nav-item").filter({ hasText: "提炼候选" }).click();
   await page.getByRole("heading", { name: "灵机整理", exact: true }).first().waitFor();
   await page.locator(".owner-memory-card").nth(0).waitFor();
   assert.ok(cardRequests.some((url) => new URL(url).searchParams.get("state") === "current"), "ordinary memory stream must request only current cards");
@@ -1179,7 +1179,7 @@ try {
   await page.locator("details").filter({ hasText: "数据与索引" }).locator("summary").click();
   await page.getByRole("button", { name: /手动投喂中心/ }).waitFor();
   assert.equal(await page.locator(".desktop-nav-item").filter({ hasText: "主动投喂" }).count(), 0, "legacy Capture must be hidden from navigation");
-  await page.locator(".desktop-nav-item").filter({ hasText: "灵机整理" }).click();
+  await page.locator(".desktop-nav-item").filter({ hasText: "提炼候选" }).click();
   await page.getByRole("heading", { name: "灵机整理", exact: true }).first().waitFor();
   await page.locator(".owner-memory-card-grid").waitFor();
   await page.setViewportSize({ width: 900, height: 800 });
@@ -1229,8 +1229,8 @@ try {
   await page.locator(".pipeline-block").filter({ hasText: "筛选拒绝" }).getByRole("button", { name: "查看明细（1）" }).waitFor();
   await captureOwnerPage("首页", "灵机运行正常", "home");
   await captureOwnerPage("原始数据", "原始数据", "memory-sources");
-  await captureOwnerPage("灵机整理", "灵机整理", "memory-content");
-  await captureOwnerPage("永久记忆", "永久记忆", "permanent-memory");
+  await captureOwnerPage("提炼候选", "灵机整理", "memory-content");
+  await captureOwnerPage("处理详情", "处理详情", "processing-detail");
   await browser.close();
   console.log("e2e_owner_memory_flow: PASS");
 } finally {

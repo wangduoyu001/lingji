@@ -175,15 +175,15 @@ export function WorkLedgerPage({ api, active }: { api: LingJiApi; active: boolea
   );
 }
 
-export function ChangesLedgerPage({ api, active }: { api: LingJiApi; active: boolean }) {
+export function ChangesLedgerPage({ api, active, timelineMode }: { api: LingJiApi; active: boolean; timelineMode?: boolean }) {
   const changes = useChanges(api, active);
   return (
     <div className="stack changes-ledger-page">
       <section className="memory-sources-intro">
         <div>
-          <span className="section-kicker">变更账本</span>
-          <h2>变更账本</h2>
-          <p>第二大脑的每一笔变化都记在这里：什么时候、对什么、做了什么。</p>
+          <span className="section-kicker">{timelineMode ? "时间线" : "变更账本"}</span>
+          <h2>{timelineMode ? "时间线" : "变更账本"}</h2>
+          <p>{timelineMode ? "按时间看记忆的变化：自动检查、内容入库、更新。" : "第二大脑的每一笔变化都记在这里：什么时候、对什么、做了什么。"}</p>
         </div>
         <span className="auto-refresh-note">{changes.refreshing ? "正在更新" : "自动更新"}</span>
       </section>

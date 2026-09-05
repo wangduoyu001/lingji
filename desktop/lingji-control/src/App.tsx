@@ -72,14 +72,14 @@ export default function App() {
           onNavigate={setPage}
         />
         {actionRequired.alert && (
-          <div className="action-modal-backdrop" role="alertdialog" aria-label={actionRequired.alert.title}>
-            <div className="action-modal">
-              <h3>{actionRequired.alert.title}</h3>
+          <div className="action-notice-bar" role="status">
+            <div>
+              <strong>{actionRequired.alert.title}</strong>
               <p>{actionRequired.alert.body}</p>
-              <div className="action-modal-actions">
-                <button className="button secondary" onClick={actionRequired.dismiss}>暂不处理</button>
-                <button className="button primary" onClick={actionRequired.go}>{actionRequired.alert.actionLabel}</button>
-              </div>
+            </div>
+            <div className="action-modal-actions">
+              <button className="button secondary" onClick={actionRequired.dismiss}>知道了</button>
+              <button className="button primary" onClick={actionRequired.go}>{actionRequired.alert.actionLabel}</button>
             </div>
           </div>
         )}

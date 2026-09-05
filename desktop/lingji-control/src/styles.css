@@ -669,3 +669,20 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 .pipeline-detail-row strong { font-weight: 400; overflow-wrap: anywhere; }
 .pipeline-scans-list, .pipeline-timeline .changes-list { display: grid; gap: 8px; }
 .pipeline-scans h3, .pipeline-timeline h3 { margin: 4px 0 0; color: var(--text); font-size: 15px; }
+
+
+/* Non-blocking action notice banner + memory library. */
+.action-notice-bar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-radius: 12px; background: var(--warning-soft); border: 1px solid var(--warning); }
+.action-notice-bar strong { color: var(--text); font-size: 13px; }
+.action-notice-bar p { margin: 2px 0 0; color: var(--text-soft); font-size: 12px; line-height: 1.5; }
+.action-notice-bar .action-modal-actions { margin: 0; }
+.library-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.library-search { flex: 1 1 220px; max-width: 320px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font-size: 13px; }
+.library-categories { display: flex; flex-wrap: wrap; gap: 6px; }
+.library-list { display: grid; gap: 8px; }
+.library-item { border-radius: 12px; background: var(--surface-2); }
+.library-item-open { display: grid; gap: 4px; width: 100%; text-align: left; padding: 12px 14px; background: none; border: none; cursor: pointer; }
+.library-item-open:hover strong { color: var(--accent-strong); }
+.library-item-open strong { color: var(--text); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.library-item-open small { color: var(--muted); font-size: 12px; }
+.library-item-plain { color: var(--muted-2); }
