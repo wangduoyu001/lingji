@@ -39,7 +39,7 @@ owner_observation: PENDING
 started_at: PENDING
 finished_at: PENDING
 focused_result: PASS
-focused_summary: intake expansion + mac technical acceptance complete at 234690b8 (packaged double-round 2x 2 passed ~411s after darwin-contract alignment; dmg/main/sidecar sha256 recorded; whole-bundle install on fresh isolated root; real-machine UI traversal PASS: home facts board, per-source states, real app/process discovery incl. ChatGPT/Codex/ZCode running, inbox created); owner observation PENDING (app kept open)
+focused_summary: three-panel owner UI + full-auto real-data intake complete (451/469 real codex rollouts imported, 18 correctly rejected, zero false rejections; services/vectorization plain-language panel; proactive consent modal; permanent-memory panel); e2e+smokes+build PASS; app open for owner observation
 prior_candidate_mac_technical_result: PASS_WAITING_OWNER_EXPERIENCE
 prior_candidate_owner_observation: REPAIR_REQUIRED
 mac_packaged_result: PASS_DOUBLE_ROUND_GREEN

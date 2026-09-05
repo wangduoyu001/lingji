@@ -1,5 +1,55 @@
 # 验收要求变更记录
 
+## 2026-09-05 · 三面板主人界面与真实数据全自动导入收口
+
+- 主人最终产品结构指示：三个一级面板——①原始数据（扫描到的全部记录与元数据，逐条可打开）、
+  ②灵机整理（灵机提炼的对话/要点，主人只验证不操作）、③永久记忆（主人确认过的长期记忆，只能
+  从②提炼进入）；向量/RAG 属于 AI 内部设施，不占主人界面。已按此重组主导航（首页/原始数据/
+  灵机整理/永久记忆），新增 PermanentMemoryPage（列表+分页+正文弹层，空态说明来源）。WeMM 按
+  主人指示不做；抖音/小红书/快手内容接入记入未来需求（Phase 2 外部内容方向）。
+- 服务与向量化分区（首页）：本地服务逐项大白话展示（数据存放/长期记忆库/原始资料区/日志/备份/
+  磁盘/两个数据库/ffmpeg/ffprobe/Ollama——是什么、没它会怎样、怎么做），向量化卡片说明用途、
+  当前未启用原因（Ollama 未运行）与启用步骤，并声明全部在本机完成、无外部上传。
+- 主动弹窗：发现需要授权的来源或待办时应用内弹窗提醒（暂不处理/去确认），同类关闭后不再重复，
+  内容变化才再次提醒；来源名统一中文显示。
+- 主人"全部自动、不点击"授权已登记并执行：真实数据全自动导入在隔离验收根完成——469 个真实
+  Codex rollout 文件中 451 个成功导入（97.9%），18 个失败全部为正确拒绝（16 个单文件多会话身份、
+  2 个无可支持消息），零误拒。会话标题清洗已生效（新提取无 XML 标记残留）。30 秒事件 SLA 在
+  Darwin 周期模式下继续按 Task8E 记录为不适用。
+- 修复提交链：`9cb86d85`（新版 Codex 变体/双 id/超大记录有界跳过）、`c65f7ecd`（symlink 规范化），
+  `460e9011`（首页事实板）、`234690b8`（packaged 门禁平台契约对齐）、`1a7744b2`（标题清洗）、
+  `865488f0`（三面板 UI）。前端验证：e2e、memory-sources、memory-sources-repair、fast-track、
+  inspector smoke、build 全部 PASS。
+- 最终产物：DMG `f355e2e3844a1216cdf5dac0b3d0f3bbcca7e708d91a564d9d1f73cfe5a38dae`，strict 签名 OK，
+  整包安装于 /Applications/灵机.app，数据根为隔离验收根，8766 仅 loopback。App 保持打开，
+  提取队列在后台自动消化剩余文件。主人观察继续进行中。
+
+## 2026-09-05 · 真实 Codex 数据导入阻断修复（验收中）
+
+- 主人明确指示"全自动，不点击"：该指示已作为一次性主人授权登记（两个 effective-home Codex 根），
+  随后扫描/导入/周期核对全部自动执行——授权后 runtime 自动发起新扫描两次且队列零重复，证明自动化
+  链路真实生效。
+- 真实数据立即暴露产品阻断（packaged 门禁只用合成 generic 来源，此前未覆盖）：主人机器 Codex
+  26.825.x 的 rollout 文件在提取阶段 170+ 任务失败。逐文件分析确认三个根因并全部修复
+  （产品提交 `9cb86d85`，合成测试 11 passed、focused 矩阵 183 passed）：
+  1. 新版 event/response 变体（agent_message、token_count、task_started/complete、
+     item_completed、mcp_tool_call_end、thread_settings_applied、patch_apply_end、
+     sub_agent_activity、web_search_end/turn_aborted/context_compacted、
+     thread_goal_updated、custom_tool_call(+output)、web_search_call）与新顶层记录
+     （compacted、inter_agent_communication_metadata、realtime_item）不在已知集合，整文件
+     fail-closed。已按真实样本扩充；`agent_message` 按助手消息提取（不是跳过），其余为
+     已识别非消息记录。真实未知变体仍 fail-closed（有合成测试锁定）。
+  2. session_meta 同时携带 `id`（线程）与 `session_id`（fork/compact 来源会话）且不同，旧规则
+     判为无身份。现以线程 `id` 为会话身份；compact 延续产生的重复相同 id 允许，多个不同 id
+     仍拒绝（no guessing）。
+  3. 单条 >1MB 记录（巨型工具/上下文转储）导致整文件拒绝。改为有界分块跳过该记录（从不整行
+     缓冲或解析），前后聊天记录保持完整；旧"整文件拒绝"契约测试按新契约改写并锁定消息保留。
+- 修复效果（对全部 469 个真实 raw 副本逐文件 schema 检测）：支持 448/469（95.5%）；剩余 20 个为
+  同一文件内多个不同会话身份（真分叉，保持拒绝）、2 个无任何可支持消息。全程只读副本，源文件
+  零改动。
+- 待完成：sidecar/DMG 重建重装后让失败任务自动重试，验证真实导入数字与 UI 自动更新；随后同步
+  回执与报告。
+
 ## 2026-09-05 · Mac 技术验收执行（OWNER_SOURCE_INTAKE_MAC_REPAIR）
 
 - 主人指示直接执行 Mac 验收。packaged 双轮从全新隔离根全绿：round 1 `2 passed`（411.71s）、

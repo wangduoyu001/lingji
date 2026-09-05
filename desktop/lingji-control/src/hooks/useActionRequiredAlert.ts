@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LingJiApi } from "../api";
 import { decideActionRequired, type ActionRequiredAlert } from "../pages/servicesHealth";
+import { ownerSourceName } from "../pages/memorySourcesApi";
 
 const DISMISS_KEY = "lingji.action-required.dismissed";
 
@@ -54,7 +55,7 @@ export function useActionRequiredAlert({
       const projected = sources.map((item) => ({
         state: mapDiscoveredStatus(item.status),
         kind: item.kind,
-        display_name: item.display_name,
+        display_name: ownerSourceName(item),
       }));
       const pendingCount = Array.isArray(pending.items) ? pending.items.length : 0;
       const next = decideActionRequired({ sources: projected, pendingCount, dismissed: dismissedRef.current });
