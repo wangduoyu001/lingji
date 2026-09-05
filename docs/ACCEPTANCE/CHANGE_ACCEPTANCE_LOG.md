@@ -13,6 +13,18 @@
 - 明确排除：WeMM 不做；抖音/小红书/快手抓取推荐记入 FUTURE_DEVELOPMENT_TODO。
 - 每 Task RED→最小实现→focused 绿→功能地图登记→单独提交；P0 全绿后一次统一门禁+重建重装真机。
 
+### P0 批实施结果（提交 `fd624bbb`）
+
+- 后端：新增 `src/control/observability_api.py`（只读投影，白名单字段），挂接 4 个认证路由：
+  `/api/observability/tasks`（任务列表）、`/tasks/{id}/steps`（九步流水，缺失显示"尚未获得"）、
+  `/tasks/{id}/items`（manifest+job 并集，失败分类大白话、queued 永不为已导入）、
+  `/changes`、`/feed`。测试 `tests/test_observability_api.py` 4 passed。
+- 前端：菜单第二位新增"工作记录"页（任务列表→九步步骤表→逐条明细展开，失败原因大白话）；
+  "变更账本"页；原始数据页信息流；首页"正在做什么"在自动检查进行中时显示九步分步进度。
+- 验证：e2e（含新分区/弹窗/工作记录/变更账本断言）PASS；memory-sources、fast-track、
+  inspector smoke、build 全 PASS。功能地图已登记 5 个新功能条目。
+- 真机步骤：重建 DMG→整包安装→打开工作记录页对照真实导入数据；App 保持打开等主人查看。
+
 
 ## 2026-09-05 · 三面板主人界面与真实数据全自动导入收口
 
