@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -19,6 +20,7 @@ from src.media import (
     PySceneDetectProvider,
 )
 from src.model_center import LocalModelInventoryService
+from src.model_center import build_embedding_provider
 from src.obsidian.service import ObsidianService
 from src.storage import BackupManager, StateDatabase, StorageLifecycleManager
 
@@ -76,6 +78,8 @@ class LocalControlService:
                 getattr(memory_gateway, "workspace", None),
             )
         )
+        self._statistics_settings = settings
+        self._live_memory_gateway = memory_gateway
         self._sync_hardware_settings()
 
     def brain_status(self) -> dict:
@@ -250,10 +254,69 @@ class LocalControlService:
             "warnings": warnings,
         }
 
+    def _ensure_memory_status_snapshot(self) -> None:
+        """没有网关时也能给出诚实的 embedding/记忆计数：缺失快照则现算一份。"""
+        try:
+            if self.memory_statistics.gateway is not None:
+                return
+            target = MemoryStatisticsService.snapshot_path_for(self._statistics_settings)
+            if target.exists():
+                return
+            provider = build_embedding_provider(self._statistics_settings)
+            embedding = {"state": "unavailable", "available": False, "active_model": None, "dimension": None}
+            if provider is not None:
+                try:
+                    provider.embed("lingji probe")  # 真实探测一次，主模型缺失时自动落到 fallback
+                except Exception:
+                    pass
+                status = dict(provider.status())
+                available = bool(status.get("available"))
+                embedding = {
+                    "state": "healthy" if available else "unavailable",
+                    "available": available,
+                    "active_model": status.get("active_model") or status.get("model"),
+                    "dimension": status.get("dimension"),
+                }
+            import sqlite3 as _sqlite3
+
+            memory_db_path = Path(
+                str(getattr(self._statistics_settings, "memory_db_path", "")
+                     or (Path(str(self._statistics_settings.storage_path)) / "lingji_memory.db"))
+            ).expanduser()
+            documents = None
+            if memory_db_path.exists():
+                with _sqlite3.connect(str(memory_db_path)) as conn:
+                    documents = conn.execute("SELECT COUNT(*) FROM memory_documents").fetchone()[0]
+            memory_counts = {"documents": documents}
+            payload = {
+                "as_of": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "source": "computed",
+                "stale": False,
+                "workspace": getattr(self._statistics_settings, "workspace_name", "") or "",
+                "memory": {
+                    "documents": memory_counts.get("documents"),
+                    "chunks": memory_counts.get("chunks"),
+                    "state": "available" if memory_counts.get("documents") else "configuration_required",
+                },
+                "embedding": embedding,
+                "vector": {
+                    "state": "unavailable",
+                    "ready": False,
+                    "vectors": None,
+                    "last_error": "向量库（Qdrant）未安装或未运行；关键词搜索不受影响",
+                },
+            }
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+
     def memory_status(self) -> dict[str, Any]:
+        self._ensure_memory_status_snapshot()
         return self.memory_statistics.memory_status()
 
     def vector_status(self) -> dict[str, Any]:
+        self._ensure_memory_status_snapshot()
         return self.memory_statistics.vector_status()
 
     def vector_coverage(self) -> dict[str, Any]:
