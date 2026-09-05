@@ -211,3 +211,25 @@ def test_rollout_adapter_still_fails_closed_on_truly_unknown_variant(tmp_path: P
     ])
     adapter = CodexRolloutAdapter()
     assert not adapter.can_handle("codex_rollout", path, {}), "unknown future variants must keep failing closed"
+
+
+def test_rollout_conversation_title_is_clean_or_falls_back_to_date(tmp_path: Path):
+    """Markup-style first messages must not leak into the owner-facing title."""
+    adapter = CodexRolloutAdapter()
+
+    def build(first_user_message: str, session_id: str):
+        path = tmp_path / f"rollout-{session_id}.jsonl"
+        _record(path, [
+            {"type": "session_meta", "payload": {"id": session_id}, "timestamp": "2026-08-28T10:00:00Z"},
+            {"type": "event_msg", "payload": {"type": "user_message", "message": first_user_message}, "timestamp": "2026-08-28T10:00:02Z"},
+            {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "好的。"}]}, "timestamp": "2026-08-28T10:00:03Z"},
+        ])
+        batch = adapter.extract(ExtractionRequest("job-t", "codex_rollout", input_path=path, options={"authorized_roots": [str(tmp_path)]}))
+        return batch.structured_sources[0].conversations[0].title
+
+    clean = build("帮我整理项目发布计划", "sess-clean")
+    assert clean.startswith("Codex · 帮我整理项目发布计划")
+
+    markup = build("<codex_delegation>\n<source_thread/>", "sess-markup")
+    assert "<codex_delegation>" not in markup and "<source_thread/>" not in markup, markup
+    assert markup == "Codex 会话 2026-08-28", "markup-only first message must fall back to a date title"

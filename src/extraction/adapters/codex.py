@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 from datetime import datetime, timezone
 from pathlib import Path
@@ -794,7 +795,7 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
         )
         conversation = StructuredConversation(
             external_id=f"codex-rollout:conversation:{session_id}",
-            title=f"Codex · {unique[0]['content'][:60]}",
+            title=self._conversation_title(unique[0]["content"], unique[0]["timestamp"]),
             messages=structured_messages,
             started_at=unique[0]["timestamp"],
             ended_at=unique[-1]["timestamp"],
@@ -865,6 +866,21 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
             if isinstance(exc, ValueError) and str(exc).startswith("automatic Codex"):
                 raise
             raise ValueError("automatic Codex source path is outside the authorized root") from exc
+
+    @classmethod
+    def _conversation_title(cls, first_message: str, started_at: str) -> str:
+        """Owner-facing title from the first user message.
+
+        Internal markers such as ``<codex_delegation>`` wrappers are stripped;
+        a message that is only markup falls back to a readable date title so
+        raw tags never reach the UI.
+        """
+        text = re.sub(r"</?[A-Za-z][A-Za-z0-9_]*[^>]*>", " ", first_message or "")
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            return f"Codex · {text[:60]}"
+        day = str(started_at or "")[:10]
+        return f"Codex 会话 {day}" if day else "Codex 会话"
 
     @classmethod
     def _iter_rows(cls, path: Path, include_line_number: bool = False):
