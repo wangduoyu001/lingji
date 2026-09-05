@@ -660,9 +660,9 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
     SCHEMA_VERSION = "1"
     MAX_INPUT_BYTES = 256 * 1024 * 1024
     MAX_RECORD_BYTES = 1024 * 1024
-    _KNOWN_TOP_LEVEL = frozenset({"session_meta", "turn_context", "event_msg", "response_item", "world_state", "reasoning", "tool_call", "tool_output", "base_instructions", "config"})
-    _KNOWN_EVENT_VARIANTS = frozenset({"user_message", "assistant_message", "message", "agent_reasoning", "tool_call", "tool_output", "function_call", "function_call_output"})
-    _KNOWN_RESPONSE_VARIANTS = frozenset({"message", "user_message", "assistant_message", "reasoning", "function_call", "function_call_output", "tool_call", "tool_output"})
+    _KNOWN_TOP_LEVEL = frozenset({"session_meta", "turn_context", "event_msg", "response_item", "world_state", "reasoning", "tool_call", "tool_output", "base_instructions", "config", "compacted", "inter_agent_communication_metadata", "realtime_item"})
+    _KNOWN_EVENT_VARIANTS = frozenset({"user_message", "assistant_message", "message", "agent_reasoning", "tool_call", "tool_output", "function_call", "function_call_output", "agent_message", "item_completed", "token_count", "mcp_tool_call_end", "task_started", "task_complete", "thread_settings_applied", "patch_apply_end", "sub_agent_activity", "web_search_end", "turn_aborted", "context_compacted", "thread_goal_updated"})
+    _KNOWN_RESPONSE_VARIANTS = frozenset({"message", "user_message", "assistant_message", "agent_message", "reasoning", "function_call", "function_call_output", "tool_call", "tool_output", "custom_tool_call", "custom_tool_call_output", "web_search_call"})
 
     def can_handle(self, source_type, input_path, payload):
         del payload
@@ -694,8 +694,10 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
                     return SchemaDetection(None, None, False, "unknown Codex rollout response variant; no guessing")
                 if self._message(row):
                     has_message = True
-            if len(session_ids) != 1:
+            if not session_ids:
                 return SchemaDetection(None, None, False, "Codex rollout session_meta identity is missing")
+            if len(session_ids) > 1:
+                return SchemaDetection(None, None, False, "Codex rollout contains multiple distinct session_meta identities; no guessing")
             if not has_message:
                 return SchemaDetection(self.SCHEMA, self.SCHEMA_VERSION, False, "Codex rollout contains no supported messages")
         except (OSError, UnicodeError, ValueError) as exc:
@@ -742,7 +744,9 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
                 continue
             message["line"] = str(line_number)
             messages.append(message)
-        if len(session_ids) != 1 or not messages:
+        # Compacted Codex threads repeat the same session_meta identity after
+        # a context compaction; only a genuinely different id is ambiguous.
+        if not session_ids or len(session_ids) > 1 or not messages:
             raise ValueError("unsupported Codex rollout: complete session identity and messages are required")
         session_id = next(iter(session_ids))
 
@@ -870,7 +874,15 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
                 if not raw_line:
                     break
                 if len(raw_line) > cls.MAX_RECORD_BYTES:
-                    raise ValueError("Codex rollout record exceeds bounded size")
+                    # A single record beyond the bound is a giant tool/context
+                    # dump, never chat content. Skip the remainder of the
+                    # physical line in bounded chunks: never parse or buffer
+                    # it whole, and keep the surrounding records authoritative.
+                    while True:
+                        rest = handle.readline(1024 * 1024)
+                        if not rest or rest.endswith(b"\n"):
+                            break
+                    continue
                 try:
                     line = raw_line.decode("utf-8-sig" if line_number == 1 else "utf-8")
                 except UnicodeDecodeError as exc:
@@ -890,11 +902,10 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
     @staticmethod
     def _session_id(row: Mapping[str, Any]) -> str:
         payload = row.get("payload") if isinstance(row.get("payload"), Mapping) else {}
-        id_value = payload.get("id")
-        session_value = payload.get("session_id")
-        if id_value and session_value and str(id_value).strip() != str(session_value).strip():
-            return ""
-        value = id_value or session_value
+        # New Codex rollouts carry both `id` (this thread) and `session_id`
+        # (the originating session after a fork or compaction); the thread id
+        # is the stable conversation identity, so it wins when both exist.
+        value = payload.get("id") or payload.get("session_id")
         return str(value).strip() if value is not None else ""
 
     @staticmethod
@@ -909,9 +920,9 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
         payload_kind = str(payload.get("type") or "").casefold()
         candidate = payload.get("item") if isinstance(payload.get("item"), Mapping) else payload
         role = str(candidate.get("role") or "").casefold()
-        if kind == "event_msg" and payload_kind in {"user_message", "assistant_message", "message"}:
-            role = "user" if payload_kind == "user_message" else ("assistant" if payload_kind == "assistant_message" else role)
-        elif kind == "response_item" and payload_kind in {"user_message", "assistant_message"}:
+        if kind == "event_msg" and payload_kind in {"user_message", "assistant_message", "agent_message", "message"}:
+            role = "user" if payload_kind == "user_message" else ("assistant" if payload_kind in {"assistant_message", "agent_message"} else role)
+        elif kind == "response_item" and payload_kind in {"user_message", "assistant_message", "agent_message"}:
             role = "user" if payload_kind == "user_message" else "assistant"
         elif kind == "response_item" and payload_kind != "message" and role not in {"user", "assistant"}:
             return None

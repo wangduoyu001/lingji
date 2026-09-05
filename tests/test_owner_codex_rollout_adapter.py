@@ -58,12 +58,26 @@ def test_rollout_adapter_fails_closed_on_unknown_schema(tmp_path: Path):
         adapter.extract(ExtractionRequest("job-1", "codex_rollout", input_path=path, options={"authorized_roots": [str(tmp_path)]}))
 
 
-def test_rollout_adapter_rejects_oversized_record(tmp_path: Path):
+def test_rollout_adapter_skips_oversized_records_with_bounded_reads(tmp_path: Path):
+    """A >1MB record is a giant tool/context dump, never chat content.
+
+    The record is skipped with bounded chunked reads (never buffered or
+    parsed whole) while the surrounding conversation stays authoritative.
+    """
     path = tmp_path / "oversized.jsonl"
-    path.write_text(json.dumps({"type": "session_meta", "payload": {"id": "s"}}) + "\n" + "x" * (4 * 1024 * 1024) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps({"type": "session_meta", "payload": {"id": "s"}, "timestamp": "2026-09-01T09:00:00Z"}) + "\n"
+        + "x" * (4 * 1024 * 1024) + "\n"
+        + json.dumps({"type": "event_msg", "payload": {"type": "user_message", "message": "跳过大记录后对话仍在"}, "timestamp": "2026-09-01T09:01:00Z"}) + "\n",
+        encoding="utf-8",
+    )
     adapter = CodexRolloutAdapter()
-    with pytest.raises(ValueError, match="size|large|bounded"):
-        adapter.extract(ExtractionRequest("job-1", "codex_rollout", input_path=path, options={"authorized_roots": [str(tmp_path)]}))
+    assert adapter.can_handle("codex_rollout", path, {})
+    batch = adapter.extract(ExtractionRequest("job-1", "codex_rollout", input_path=path, options={"authorized_roots": [str(tmp_path)]}))
+    conversation = batch.structured_sources[0].conversations[0]
+    assert [(item.role, item.content) for item in conversation.messages] == [
+        ("user", "跳过大记录后对话仍在"),
+    ]
 
 
 def test_rollout_requires_payload_session_identity_and_rejects_mixed_sessions(tmp_path: Path):
@@ -147,3 +161,53 @@ def test_rollout_automatic_dispatch_requires_matching_durable_raw_snapshot(tmp_p
                 "raw_path": str(raw_path),
             }, options={"automatic_memory": True},
         ))
+
+
+def test_rollout_adapter_accepts_new_codex_variants_and_extracts_agent_messages(tmp_path: Path):
+    """Codex 26.825.x emits new telemetry/tool variants plus agent_message carriers.
+
+    Recognized non-message variants must be skipped; agent_message must be
+    extracted as the assistant message; truly unknown types still fail closed.
+    """
+    path = tmp_path / "rollout-new.jsonl"
+    _record(path, [
+        {"type": "session_meta", "payload": {"id": "thread-new", "session_id": "origin-old", "timestamp": "2026-09-01T09:00:00Z"}},
+        {"type": "compacted", "payload": {"message": "context compacted summary"}},
+        {"type": "inter_agent_communication_metadata", "payload": {"peer": "sub-agent"}},
+        {"type": "event_msg", "payload": {"type": "user_message", "message": "帮我排期"}, "timestamp": "2026-09-01T09:01:00Z"},
+        {"type": "event_msg", "payload": {"type": "token_count", "info": {"total": 100}}, "timestamp": "2026-09-01T09:01:10Z"},
+        {"type": "event_msg", "payload": {"type": "task_started", "task": "t"}, "timestamp": "2026-09-01T09:01:11Z"},
+        {"type": "event_msg", "payload": {"type": "item_completed", "item": {"id": "i"}}, "timestamp": "2026-09-01T09:01:12Z"},
+        {"type": "event_msg", "payload": {"type": "mcp_tool_call_end", "call": "c"}, "timestamp": "2026-09-01T09:01:13Z"},
+        {"type": "event_msg", "payload": {"type": "thread_settings_applied"}, "timestamp": "2026-09-01T09:01:14Z"},
+        {"type": "event_msg", "payload": {"type": "patch_apply_end"}, "timestamp": "2026-09-01T09:01:15Z"},
+        {"type": "event_msg", "payload": {"type": "sub_agent_activity"}, "timestamp": "2026-09-01T09:01:16Z"},
+        {"type": "event_msg", "payload": {"type": "web_search_end"}, "timestamp": "2026-09-01T09:01:17Z"},
+        {"type": "event_msg", "payload": {"type": "turn_aborted"}, "timestamp": "2026-09-01T09:01:18Z"},
+        {"type": "event_msg", "payload": {"type": "context_compacted"}, "timestamp": "2026-09-01T09:01:19Z"},
+        {"type": "event_msg", "payload": {"type": "agent_message", "message": "已排好下周发布计划。"}, "timestamp": "2026-09-01T09:02:00Z"},
+        {"type": "response_item", "payload": {"type": "custom_tool_call", "name": "tool"}, "timestamp": "2026-09-01T09:02:10Z"},
+        {"type": "response_item", "payload": {"type": "custom_tool_call_output", "output": "ok"}, "timestamp": "2026-09-01T09:02:11Z"},
+        {"type": "response_item", "payload": {"type": "agent_message", "author": "assistant", "content": [{"type": "output_text", "text": "这是新版助手回复。"}]}, "timestamp": "2026-09-01T09:02:20Z"},
+        {"type": "event_msg", "payload": {"type": "task_complete"}, "timestamp": "2026-09-01T09:02:30Z"},
+    ])
+    adapter = CodexRolloutAdapter()
+    assert adapter.can_handle("codex_rollout", path, {}), "new Codex variants must pass schema detection"
+    batch = adapter.extract(ExtractionRequest("job-2", "codex_rollout", input_path=path, options={"authorized_roots": [str(tmp_path)]}))
+    conversation = batch.structured_sources[0].conversations[0]
+    assert conversation.external_id.endswith("thread-new"), "new-format thread id must be the conversation identity"
+    roles = [(item.role, item.content) for item in conversation.messages]
+    assert ("user", "帮我排期") in roles
+    assert ("assistant", "已排好下周发布计划。") in roles, "event agent_message must be extracted as assistant"
+    assert ("assistant", "这是新版助手回复。") in roles, "response_item agent_message must be extracted as assistant"
+    assert all("secret" not in item.content for item in conversation.messages)
+
+
+def test_rollout_adapter_still_fails_closed_on_truly_unknown_variant(tmp_path: Path):
+    path = tmp_path / "rollout-unknown-variant.jsonl"
+    _record(path, [
+        {"type": "session_meta", "payload": {"id": "sess-u", "timestamp": "2026-09-01T09:00:00Z"}},
+        {"type": "event_msg", "payload": {"type": "brand_new_future_variant"}, "timestamp": "2026-09-01T09:01:00Z"},
+    ])
+    adapter = CodexRolloutAdapter()
+    assert not adapter.can_handle("codex_rollout", path, {}), "unknown future variants must keep failing closed"
