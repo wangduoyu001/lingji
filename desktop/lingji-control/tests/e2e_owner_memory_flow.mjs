@@ -146,7 +146,30 @@ const server = http.createServer((req, res) => {
     }
     if (path === "/api/models/registry") return json(res, 200, { capabilities: { chat: { label: "对话", description: "日常对话生成" } } });
     if (path === "/api/models") return json(res, 200, { collected_at: "2026-09-05T08:00:00+00:00", summary: { installed_models: 2, running_models: 1, unverified_models: 1, missing_assignments: 0 }, models: [ { display_name: "llama3:8b", installed: true, running: true, parameter_size: "8B", quantization: "Q4_0", size_bytes: 4700000000, estimated_ram_bytes: null, estimated_vram_bytes: null, runtime: { device_evidence: null }, compatibility: { status: "verified" }, last_benchmark: null, current_task: null, last_error: null, capabilities: ["chat"] }, { display_name: "qwen2.5:14b", installed: true, running: false, parameter_size: "14B", quantization: null, size_bytes: 9000000000, estimated_ram_bytes: null, estimated_vram_bytes: null, runtime: { device_evidence: null }, compatibility: { status: "unverified" }, last_benchmark: null, current_task: null, last_error: null, capabilities: ["chat"] } ], providers: [], assignments: [], compatibility_process: [] });
-    if (path === "/api/health") return json(res, 200, { status: "healthy", checked_at: "2026-09-05T08:00:00+00:00", checks: [
+    if (path === "/api/observability/tasks") return json(res, 200, { items: [ { scan_id: "scan-obs-1", status: "completed", progress: 3, total: 3, queued_count: 2, reused_count: 1, updated_at: "2026-09-05T08:00:00+00:00", job_completed: 2, job_failed: 1, job_queued: 0 } ], pagination: { total: 1, limit: 50, offset: 0, has_more: false } });
+    if (path === "/api/observability/tasks/scan-obs-1/steps") return json(res, 200, { scan_id: "scan-obs-1", steps: [
+      { step: "fetch", label: "原始获取", plain: "把新文件完整复制一份到灵机自己的保存区，原件不动", count: 3, total: 3, percent: 100 },
+      { step: "parse", label: "解析", plain: "读懂文件里的每一条对话", count: 2, total: 3, percent: 67 },
+      { step: "dedupe", label: "去重", plain: "和已经导入过的内容比对", count: 1, total: 3, percent: 33 },
+      { step: "filter", label: "有效性筛选", plain: "跳过空会话、无法归属的内容", count: 1, total: 3, percent: 33 },
+      { step: "extract", label: "信息提取", plain: "把对话整理成可检索的消息", count: null, total: 3, percent: null },
+      { step: "judge", label: "记忆判断", plain: "判断哪些是新内容", count: 2, total: 3, percent: 67 },
+      { step: "memory", label: "记忆更新", plain: "把新内容写进可搜索的记忆层", count: null, total: 3, percent: null },
+      { step: "timeline", label: "时间线", plain: "记录进事件时间线", count: 5, total: 3, percent: 100 },
+      { step: "vectorize", label: "向量化", plain: "按意思搜索用的索引", count: null, total: 3, percent: null },
+    ] });
+    if (path === "/api/observability/tasks/scan-obs-1/items") return json(res, 200, { items: [
+      { name: "rollout-good.jsonl", status: "kept", label: "已保留并提取", updated_at: "2026-09-05T08:00:00+00:00" },
+      { name: "rollout-reused.jsonl", status: "merged", label: "已合并（之前已导入过相同内容）", updated_at: "2026-09-05T08:00:00+00:00" },
+      { name: "rollout-bad.jsonl", status: "failed", label: "失败", updated_at: "2026-09-05T08:00:00+00:00", failure: { what: "同一个文件里混着多个不同的会话", next: "为避免把不同对话记混，这个文件没有导入。等产生它的 AI 软件把会话分开后，会自动重试。" } },
+    ], pagination: { total: 3, limit: 50, offset: 0, has_more: false } });
+    if (path === "/api/observability/changes") return json(res, 200, { items: [
+      { time: "2026-09-05T08:00:00+00:00", action: "内容导入完成", action_key: "structured_ingestion_completed", object: "LJ-SRC-DEMO", reason: "reconciliation", detail_available: true },
+    ] });
+    if (path === "/api/observability/feed") return json(res, 200, { items: [
+      { name: "rollout-good.jsonl", status: "kept", label: "已保留并提取", time: "2026-09-05T08:00:00+00:00" },
+    ], pagination: { limit: 80, offset: 0, has_more: false } });
+        if (path === "/api/health") return json(res, 200, { status: "healthy", checked_at: "2026-09-05T08:00:00+00:00", checks: [
       { name: "data_root_policy", status: "ok", message: "运行数据根已显式配置" },
       { name: "vault", status: "ok", message: "目录可写" },
       { name: "storage", status: "ok", message: "目录可写" },
@@ -958,9 +981,9 @@ try {
   assert.equal(await page.getByText("ADVANCED DIAGNOSTICS", { exact: true }).count(), 0, "ordinary UI must not use decorative English diagnostics labels");
 
   const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
-  assert.deepEqual(primaryLabels, ["首页", "原始数据", "灵机整理", "永久记忆"], "ordinary navigation must contain exactly the owner panels");
+  assert.deepEqual(primaryLabels, ["首页", "工作记录", "原始数据", "灵机整理", "永久记忆", "变更账本"], "ordinary navigation must contain exactly the owner panels");
   await page.setViewportSize({ width: 760, height: 800 });
-  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "原始数据", "灵机整理", "永久记忆"], "compact navigation must expose the owner panel labels");
+  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "工作记录", "原始数据", "灵机整理", "永久记忆", "变更账本"], "compact navigation must expose the owner panel labels");
   await page.setViewportSize({ width: 1280, height: 800 });
   const advancedDisclosure = page.locator("details.desktop-advanced-disclosure");
   assert.equal(await advancedDisclosure.count(), 1, "advanced diagnostics must have one collapsed disclosure");
@@ -1145,6 +1168,20 @@ try {
       await page.screenshot({ path: `${screenshotRoot}/${filename}-${width}.png`, fullPage: true });
     }
   };
+  await page.locator(".desktop-nav-item").filter({ hasText: "工作记录" }).click();
+  await page.locator(".desktop-content").getByRole("heading", { name: "工作记录", exact: true }).waitFor();
+  await page.getByText("这次检查的流水线", { exact: true }).waitFor();
+  await page.getByText("原始获取", { exact: true }).first().waitFor();
+  await page.getByText("3 / 3", { exact: true }).first().waitFor();
+  const badRow = page.locator("details.work-item-row").filter({ hasText: "rollout-bad.jsonl" });
+  await badRow.locator("summary").click();
+  await badRow.getByText("同一个文件里混着多个不同的会话").waitFor();
+  assert.equal((await page.locator(".work-ledger-page").innerText()).includes("session_meta"), false, "failure copy must stay owner-safe");
+
+  await page.locator(".desktop-nav-item").filter({ hasText: "变更账本" }).click();
+  await page.locator(".desktop-content").getByRole("heading", { name: "变更账本", exact: true }).waitFor();
+  await page.getByText("内容导入完成", { exact: true }).first().waitFor();
+
   await captureOwnerPage("首页", "灵机运行正常", "home");
   await captureOwnerPage("原始数据", "原始数据", "memory-sources");
   await captureOwnerPage("灵机整理", "灵机整理", "memory-content");

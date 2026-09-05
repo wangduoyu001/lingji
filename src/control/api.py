@@ -651,6 +651,9 @@ def create_control_app(
         app, control, dependencies=secured, translate_error=translate_error
     )
     register_automatic_memory_routes(app, control, secured)
+    from .observability_api import register_observability_routes
+
+    register_observability_routes(app, control, secured)
     register_capture_routes(app, settings, control, token=token)
     if work_control is not None:
         register_work_routes(app, work_control, secured)

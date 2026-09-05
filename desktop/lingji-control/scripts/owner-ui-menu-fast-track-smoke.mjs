@@ -216,8 +216,8 @@ try {
   assert.equal(sidebarStatusText.includes("8766"), false, "ordinary runtime warning must not expose the control port");
 
   const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
-  assert.deepEqual(primaryLabels, ["首页", "原始数据", "灵机整理", "永久记忆"], "ordinary navigation must have exactly the owner panels");
-  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "原始数据", "灵机整理", "永久记忆"], "ordinary navigation must expose exact accessible labels");
+  assert.deepEqual(primaryLabels, ["首页", "工作记录", "原始数据", "灵机整理", "永久记忆", "变更账本"], "ordinary navigation must have exactly the owner panels");
+  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "工作记录", "原始数据", "灵机整理", "永久记忆", "变更账本"], "ordinary navigation must expose exact accessible labels");
   assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "活动记录", exact: true }).count(), 0, "activity must stay out of the ordinary sidebar");
   assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "需要我", exact: true }).count(), 0, "attention must not permanently occupy the ordinary sidebar");
   const advanced = page.locator("details.desktop-advanced-disclosure");

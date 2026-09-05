@@ -7,6 +7,8 @@ export type PageId =
   | "memory_cards"
   | "memory_sources"
   | "permanent_memory"
+  | "work_ledger"
+  | "changes_ledger"
   | "activity"
   | "attention"
   | "diagnostics"

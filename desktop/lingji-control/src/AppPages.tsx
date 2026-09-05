@@ -16,6 +16,7 @@ import MemoryInspectorLoopPage from "./pages/MemoryInspectorLoopPage";
 import MemoryReviewPage from "./pages/MemoryReviewPage";
 import MemorySourcesPage from "./pages/MemorySourcesPage";
 import PermanentMemoryPage from "./pages/PermanentMemoryPage";
+import { ChangesLedgerPage, WorkLedgerPage } from "./pages/WorkLedgerPage";
 import ModelsPage from "./pages/ModelsPage";
 import ObsidianLoopPage from "./pages/ObsidianLoopPage";
 import OverviewPage from "./pages/OverviewPage";
@@ -45,6 +46,8 @@ export default function AppPages(props: AppPagesProps) {
     {page === "memory_cards" && <OwnerMemoryCardsPage api={api} active={connected} onNavigate={onNavigate} />}
     {page === "memory_sources" && <MemorySourcesPage api={api} active={connected} onOpenInspector={onOpenInspector} />}
     {page === "permanent_memory" && <PermanentMemoryPage api={api} active={connected} />}
+    {page === "work_ledger" && <WorkLedgerPage api={api} active={connected} />}
+    {page === "changes_ledger" && <ChangesLedgerPage api={api} active={connected} />}
     {page === "activity" && <ActivityPage api={api} active={connected} />}
     {page === "attention" && <AttentionPage api={api} active={connected} />}
     {page === "diagnostics" && <DiagnosticsPage onNavigate={onNavigate} />}

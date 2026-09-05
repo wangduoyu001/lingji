@@ -6,10 +6,12 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
 ];
 
 export const PRIMARY_NAVIGATION: NavigationItem[] = [
-  { id: "overview", label: "首页", hint: "查看灵机是否正常，以及你是否需要做事", group: "observe", icon: "home" },
+  { id: "overview", label: "首页", hint: "灵机正在干什么、刚刚做了什么、一切是否正常", group: "observe", icon: "home" },
+  { id: "work_ledger", label: "工作记录", hint: "灵机的每一次检查：每一步处理了多少、结果如何", group: "observe", icon: "logs" },
   { id: "memory_sources", label: "原始数据", hint: "扫描到的全部记录：来源、文件、每条对话原文", group: "observe", icon: "vault" },
-  { id: "memory_cards", label: "灵机整理", hint: "灵机提炼出的对话与要点，确认重要的进入长期记忆", group: "observe", icon: "inspect" },
-  { id: "permanent_memory", label: "永久记忆", hint: "你确认过的长期记忆，永久保存，随时打开原文", group: "observe", icon: "inspect" },
+  { id: "memory_cards", label: "灵机整理", hint: "灵机提炼出的对话与要点，点开看原文", group: "observe", icon: "inspect" },
+  { id: "permanent_memory", label: "永久记忆", hint: "确认过的长期记忆，永久保存，随时打开原文", group: "observe", icon: "inspect" },
+  { id: "changes_ledger", label: "变更账本", hint: "第二大脑的每一笔变化，按时间排列", group: "observe", icon: "logs" },
 ];
 
 export const ADVANCED_NAVIGATION: NavigationItem[] = [

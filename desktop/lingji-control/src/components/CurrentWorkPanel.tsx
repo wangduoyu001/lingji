@@ -4,6 +4,7 @@ import { usePollingResource } from "../hooks/usePollingResource";
 import type { LingJiApi } from "../api";
 import type { WorkFact } from "../contracts/workFact";
 import { formatWorkFactResult, formatWorkFactTitle } from "./workFactPresentation";
+import { StepsFlow } from "../pages/WorkLedgerPage";
 
 export type CurrentWorkFact = WorkFact;
 
@@ -44,6 +45,7 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
   const fact = resource.data;
   const work = fact?.work;
   const hasWork = Boolean(work?.title);
+  const isRunning = String(work?.status ?? "").toLowerCase() === "running" && Boolean(work?.work_id?.startsWith("automatic-memory:"));
   const status = hasWork ? statusLabel(work?.status) : "目前空闲";
 
   return (
@@ -55,6 +57,7 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
         </div>
         <span className="pill">{status}</span>
       </div>
+      {isRunning && <RunningStepsFlow api={api} workId={String(work?.work_id)} />}
       {resource.stale && <Notice kind="warning">当前工作状态正在刷新。</Notice>}
       {hasWork && <div className="current-work-readable-line"><span>结果：{fact ? formatWorkFactResult(fact) : "还没有结果"}</span><span>下一步：{readableNextAction(fact?.next_action)}</span></div>}
 
@@ -70,5 +73,24 @@ export default function CurrentWorkPanel({ api, active }: { api: LingJiApi; acti
         ))}
       </details>
     </section>
+  );
+}
+
+function RunningStepsFlow({ api, workId }: { api: LingJiApi; workId: string }) {
+  const scanId = workId.replace(/^automatic-memory:/, "");
+  const steps = usePollingResource<{ steps: Array<{ step: string; label: string; plain: string; count: number | null; total: number | null; percent: number | null }> }>({
+    fetcher: useCallback((signal: AbortSignal) => api.get(`/api/observability/tasks/${encodeURIComponent(scanId)}/steps`, { signal }), [api, scanId]),
+    enabled: Boolean(scanId),
+    intervalMs: 5000,
+    staleAfterMs: 18000,
+  });
+  const rows = steps.data?.steps ?? [];
+  if (!rows.length) return null;
+  const done = rows.filter((row) => (row.count ?? 0) > 0).length;
+  return (
+    <div className="running-steps" aria-label="本次检查分步进度">
+      <small className="running-steps-caption">这次检查分步进行（{done}/{rows.length} 步已有进展）：每一步在做什么，鼠标放上去可看说明。</small>
+      <StepsFlow steps={rows} />
+    </div>
   );
 }
