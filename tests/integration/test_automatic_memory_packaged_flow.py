@@ -855,12 +855,35 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
         timings["2_authorize_startup"] = time.monotonic() - started
 
         event_started = time.monotonic()
+        automation_mode = str(
+            (sidecar.get("/api/automatic-memory/runtime") or {}).get("automation_mode") or ""
+        )
         event_before_ids = {str(row["scan_id"]) for row in sidecar.get("/api/automatic-memory/scans")}
         _fixture_history(source_dir / "history.json", conversation="event", message="event driven acceptance fact")
-        event_scan = _automatic_scan_until_terminal(sidecar, source_id, event_before_ids, reasons={"event"}, timeout=30.0)
+        if automation_mode == "event_watcher":
+            event_scan = _automatic_scan_until_terminal(sidecar, source_id, event_before_ids, reasons={"event"}, timeout=30.0)
+        else:
+            # The shipped Darwin policy (Task8E safe-polling fallback) does not
+            # start the watchfiles event watcher by default; changes are picked
+            # up by the periodic reconciliation tick. The config clamps the
+            # reconciliation interval to a 60s minimum, so the tick can land up
+            # to ~60s after resume; assert that real contract with the same
+            # ingestion expectations. The 30s watcher-event SLA stays recorded
+            # as not applicable in this mode (documented BLOCKED).
+            sidecar.post("/api/automatic-memory/pause-runtime", {"confirmation": True})
+            sidecar.post("/api/automatic-memory/resume-runtime", {"confirmation": True})
+            event_scan = _automatic_scan_until_terminal(sidecar, source_id, event_before_ids, reasons={"reconciliation"}, timeout=75.0)
         timings["3_file_event"] = time.monotonic() - event_started
-        assert timings["3_file_event"] <= 30.0
-        evidence["scenarios"]["3_file_event"] = {"latency_seconds": timings["3_file_event"], "scan": event_scan}
+        if automation_mode == "event_watcher":
+            assert timings["3_file_event"] <= 30.0
+        else:
+            assert timings["3_file_event"] <= 75.0
+        evidence["scenarios"]["3_file_event"] = {
+            "latency_seconds": timings["3_file_event"],
+            "scan": event_scan,
+            "automation_mode": automation_mode or "unknown",
+            "watcher_event_sla_asserted": automation_mode == "event_watcher",
+        }
 
         sidecar.post("/api/automatic-memory/pause-runtime", {"confirmation": True})
         _fixture_history(source_dir / "history.json", conversation="reconcile", message="suppressed event fact")
@@ -1115,6 +1138,14 @@ def _run_crash_restart_matrix(root: Path) -> dict[str, Any]:
             recovery = {"scan_id": crash_barrier["scan_id"], "trigger": "run_on_start"}
             terminal = _wait_until(lambda: next((row for row in sidecar.get("/api/automatic-memory/scans") if row.get("scan_id") == crash_barrier["scan_id"] and row.get("status") in {"completed", "failed", "cancelled"}), None), timeout=30.0)
             assert terminal is not None, sidecar.get("/api/automatic-memory/scans")
+            # Pause immediately after the recovered scan reaches terminal state.
+            # The config clamps the reconciliation interval to 60s, so the next
+            # periodic tick lands ~60s after restart and otherwise races the
+            # post-drain pause, creating a second no-change scan envelope.
+            paused_after_recovery = sidecar.post(
+                "/api/automatic-memory/pause-runtime", {"confirmation": True}
+            )
+            assert paused_after_recovery.get("paused") is True
             counts = _wait_until(lambda: _sqlite_counts(run_root) if _sqlite_counts(run_root)["queued"] == 0 else None, timeout=30.0) or _sqlite_counts(run_root)
             assert counts["queued"] == 0
             terminal_after = _identity_sets(run_root, source["source_id"])
