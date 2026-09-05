@@ -654,3 +654,18 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 .owner-memory-card-title { text-align: left; overflow-wrap: anywhere; }
 .owner-memory-card-select input { accent-color: var(--accent-strong); width: 15px; height: 15px; }
 .owner-memory-grid-fixed { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* Processing detail page: each pipeline stage shows its full data inline. */
+.processing-detail-page { display: grid; gap: 14px; }
+.pipeline-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.pipeline-block { min-width: 0; display: grid; gap: 6px; padding: 14px 15px; border-radius: 12px; background: var(--surface-2); }
+.pipeline-block header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pipeline-block strong { color: var(--text); font-size: 14px; }
+.pipeline-count { color: var(--accent-strong); font-size: 20px; font-weight: 700; }
+.pipeline-block p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.pipeline-block-detail { display: grid; gap: 8px; }
+.pipeline-detail-list { display: grid; gap: 4px; max-height: 200px; overflow: auto; }
+.pipeline-detail-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--text-soft); }
+.pipeline-detail-row strong { font-weight: 400; overflow-wrap: anywhere; }
+.pipeline-scans-list, .pipeline-timeline .changes-list { display: grid; gap: 8px; }
+.pipeline-scans h3, .pipeline-timeline h3 { margin: 4px 0 0; color: var(--text); font-size: 15px; }

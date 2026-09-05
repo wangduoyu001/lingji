@@ -166,6 +166,21 @@ const server = http.createServer((req, res) => {
     if (path === "/api/observability/changes") return json(res, 200, { items: [
       { time: "2026-09-05T08:00:00+00:00", action: "内容导入完成", action_key: "structured_ingestion_completed", object: "LJ-SRC-DEMO", reason: "reconciliation", detail_available: true },
     ] });
+    if (path === "/api/observability/pipeline") return json(res, 200, {
+      pipeline: [
+        { key: "fetch", label: "原始获取", plain: "复制到灵机保存区", count: 469 },
+        { key: "parse", label: "解析成功", plain: "成功读出对话", count: 451 },
+        { key: "dedupe", label: "去重复用", plain: "相同内容复用", count: 12 },
+        { key: "filter_failed", label: "筛选拒绝", plain: "无法安全解析", count: 18 },
+        { key: "extract", label: "提炼消息", plain: "整理出可检索消息", count: 9018 },
+        { key: "memory", label: "记忆层更新", plain: "写入记忆层", count: 9016 },
+        { key: "vectorize", label: "向量化", plain: "按意思搜索索引", count: null },
+      ],
+      failed_detail: [{ name: "rollout-fork.jsonl", time: "2026-09-05T08:00:00+00:00", what: "同一个文件里混着多个不同的会话", next: "等会话分开后自动重试。" }],
+      reused_detail: [{ name: "rollout-same.jsonl", time: "2026-09-05T08:00:00+00:00" }],
+      latest_scans: [{ scan_id: "scan-p1", status: "completed", total: 451, queued: 451, reused: 0, completed: 451, failed: 18, updated_at: "2026-09-05T08:00:00+00:00" }],
+      timeline: [{ time: "2026-09-05T08:00:00+00:00", action: "自动检查", object: "LJ-SRC-DEMO" }],
+    });
     if (path === "/api/observability/feed") return json(res, 200, { items: [
       { name: "rollout-good.jsonl", status: "kept", label: "已保留并提取", time: "2026-09-05T08:00:00+00:00" },
     ], pagination: { limit: 80, offset: 0, has_more: false } });
@@ -985,9 +1000,9 @@ try {
   assert.equal(await page.getByText("ADVANCED DIAGNOSTICS", { exact: true }).count(), 0, "ordinary UI must not use decorative English diagnostics labels");
 
   const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
-  assert.deepEqual(primaryLabels, ["首页", "工作记录", "原始数据", "灵机整理", "永久记忆", "变更账本"], "ordinary navigation must contain exactly the owner panels");
+  assert.deepEqual(primaryLabels, ["首页", "工作记录", "原始数据", "灵机整理", "永久记忆", "变更账本", "处理详情"], "ordinary navigation must contain exactly the owner panels");
   await page.setViewportSize({ width: 760, height: 800 });
-  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "工作记录", "原始数据", "灵机整理", "永久记忆", "变更账本"], "compact navigation must expose the owner panel labels");
+  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "工作记录", "原始数据", "灵机整理", "永久记忆", "变更账本", "处理详情"], "compact navigation must expose the owner panel labels");
   await page.setViewportSize({ width: 1280, height: 800 });
   const advancedDisclosure = page.locator("details.desktop-advanced-disclosure");
   assert.equal(await advancedDisclosure.count(), 1, "advanced diagnostics must have one collapsed disclosure");
@@ -1197,6 +1212,21 @@ try {
   await page.locator(".desktop-content").getByRole("heading", { name: "变更账本", exact: true }).waitFor();
   await page.getByText("内容导入完成", { exact: true }).first().waitFor();
 
+  await page.locator(".desktop-nav-item").filter({ hasText: "处理详情" }).click();
+  await page.locator(".desktop-content").getByRole("heading", { name: "处理详情", exact: true }).waitFor();
+  const pipelineText = await page.locator(".processing-detail-page").innerText();
+  for (const label of ["原始获取", "解析成功", "去重复用", "筛选拒绝", "提炼消息", "记忆层更新", "向量化", "RAG 检索（AI 内部）"]) {
+    assert.ok(pipelineText.includes(label), `pipeline panel must show ${label}`);
+  }
+  assert.ok(pipelineText.includes("469") && pipelineText.includes("9018"), "pipeline panels must show real counts");
+  assert.ok(pipelineText.includes("给 AI 用"), "RAG block must be marked as AI-internal");
+  const detailToggle = page.locator(".pipeline-block").filter({ hasText: "筛选拒绝" }).getByRole("button", { name: "查看明细（1）" });
+  await detailToggle.waitFor();
+  await detailToggle.click();
+  await page.locator(".pipeline-block").filter({ hasText: "筛选拒绝" }).getByRole("button", { name: "收起明细" }).waitFor();
+  await page.locator(".pipeline-block").filter({ hasText: "筛选拒绝" }).getByText("同一个文件里混着多个不同的会话").waitFor();
+  await page.locator(".pipeline-block").filter({ hasText: "筛选拒绝" }).getByRole("button", { name: "收起明细" }).click();
+  await page.locator(".pipeline-block").filter({ hasText: "筛选拒绝" }).getByRole("button", { name: "查看明细（1）" }).waitFor();
   await captureOwnerPage("首页", "灵机运行正常", "home");
   await captureOwnerPage("原始数据", "原始数据", "memory-sources");
   await captureOwnerPage("灵机整理", "灵机整理", "memory-content");

@@ -395,6 +395,107 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
             items.append(item)
         return {"items": items, "pagination": {"limit": limit, "offset": offset, "has_more": len(items) == limit}}
 
+    @app.get("/api/observability/pipeline", dependencies=secured)
+    def observability_pipeline() -> dict[str, Any]:
+        """九环节各自的全量数据面板：真实计数 + 每环节明细列表。"""
+        db = state_db()
+        scans = list(db.list_automatic_memory_scans())
+        totals = project_job_result_totals(db)
+        job_counts = project_job_counts_by_scan(db)
+        aggregated: dict[str, int] = {"fetch": 0, "completed": 0, "failed": 0, "queued": 0, "reused": 0}
+        for scan in scans:
+            aggregated["fetch"] += _safe_int(scan.get("total")) or 0
+            scan_counts = job_counts.get(str(scan.get("scan_id") or ""), {})
+            for key in ("completed", "failed", "queued"):
+                aggregated[key] += scan_counts.get(key, 0)
+            aggregated["reused"] += _safe_int(scan.get("reused_count")) or 0
+        extracted_total = sum((totals.get(str(scan.get("scan_id") or ""), {}).get("extracted") or 0) for scan in scans)
+        memory_total = sum((totals.get(str(scan.get("scan_id") or ""), {}).get("memory_updated") or 0) for scan in scans)
+
+        # 明细列表（脱敏、白名单字段）
+        failed_detail: list[dict[str, Any]] = []
+        try:
+            rows = _read_rows(
+                db,
+                """
+                SELECT payload_json, last_error, updated_at FROM extraction_jobs
+                WHERE status = 'failed' ORDER BY updated_at DESC LIMIT 50
+                """,
+            )
+            for row in rows:
+                try:
+                    payload = json.loads(row["payload_json"] or "{}")
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    payload = {}
+                rel = str(payload.get("relative_path") or "")
+                failed_detail.append({
+                    "name": rel.rsplit("/", 1)[-1] if rel else "尚未获得",
+                    "time": row.get("updated_at"),
+                    **explain_failure(row["last_error"]),
+                })
+        except Exception:
+            failed_detail = []
+
+        reused_detail: list[dict[str, Any]] = []
+        try:
+            rows = _read_rows(
+                db,
+                """
+                SELECT payload_json, updated_at FROM extraction_jobs
+                WHERE status = 'completed' AND json_extract(payload_json, '$.scan_id') !=
+                      json_extract(options_json, '$.first_scan_id')
+                ORDER BY updated_at DESC LIMIT 50
+                """,
+            )
+            for row in rows:
+                try:
+                    payload = json.loads(row["payload_json"] or "{}")
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+                rel = str(payload.get("relative_path") or "")
+                reused_detail.append({"name": rel.rsplit("/", 1)[-1] if rel else "尚未获得", "time": row.get("updated_at")})
+        except Exception:
+            reused_detail = []
+
+        latest_scans = [
+            {
+                "scan_id": str(scan.get("scan_id") or ""),
+                "status": str(scan.get("status") or ""),
+                "total": _safe_int(scan.get("total")),
+                "queued": _safe_int(scan.get("queued_count")),
+                "reused": _safe_int(scan.get("reused_count")),
+                "completed": job_counts.get(str(scan.get("scan_id") or ""), {}).get("completed"),
+                "failed": job_counts.get(str(scan.get("scan_id") or ""), {}).get("failed"),
+                "updated_at": scan.get("updated_at"),
+            }
+            for scan in scans[:10]
+        ]
+
+        timeline_rows: list[dict[str, Any]] = []
+        try:
+            timeline_rows = _read_rows(
+                db,
+                "SELECT created_at, event_type, entity_id, payload_json FROM events ORDER BY created_at DESC, rowid DESC LIMIT 40",
+            )
+        except Exception:
+            timeline_rows = []
+
+        return {
+            "pipeline": [
+                {"key": "fetch", "label": "原始获取", "plain": "把来源文件完整复制到灵机保存区，原件不动", "count": aggregated["fetch"]},
+                {"key": "parse", "label": "解析成功", "plain": "成功读出对话内容的文件数", "count": aggregated["completed"]},
+                {"key": "dedupe", "label": "去重复用", "plain": "内容与已导入记录相同、直接复用的数量", "count": aggregated["reused"]},
+                {"key": "filter_failed", "label": "筛选拒绝", "plain": "无法安全解析或归属不明的文件", "count": aggregated["failed"]},
+                {"key": "extract", "label": "提炼消息", "plain": "从对话里整理出的可检索消息条数", "count": extracted_total},
+                {"key": "memory", "label": "记忆层更新", "plain": "写进可搜索记忆层的条目数", "count": memory_total},
+                {"key": "vectorize", "label": "向量化", "plain": "按意思搜索用的索引；需要本地 AI 服务运行", "count": None},
+            ],
+            "failed_detail": failed_detail,
+            "reused_detail": reused_detail,
+            "latest_scans": latest_scans,
+            "timeline": [project_event(dict(row)) | {"object": str(row.get("entity_id") or "")[:24]} for row in timeline_rows],
+        }
+
     @app.get("/api/observability/feed", dependencies=secured)
     def observability_feed(
         status: str | None = Query(default=None),

@@ -9,6 +9,7 @@ export type PageId =
   | "permanent_memory"
   | "work_ledger"
   | "changes_ledger"
+  | "processing_detail"
   | "activity"
   | "attention"
   | "diagnostics"

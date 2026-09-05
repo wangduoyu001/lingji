@@ -12,6 +12,7 @@ export const PRIMARY_NAVIGATION: NavigationItem[] = [
   { id: "memory_cards", label: "灵机整理", hint: "灵机提炼出的对话与要点，点开看原文", group: "observe", icon: "inspect" },
   { id: "permanent_memory", label: "永久记忆", hint: "确认过的长期记忆，永久保存，随时打开原文", group: "observe", icon: "inspect" },
   { id: "changes_ledger", label: "变更账本", hint: "第二大脑的每一笔变化，按时间排列", group: "observe", icon: "logs" },
+  { id: "processing_detail", label: "处理详情", hint: "扫描/提炼/候选/记忆/时间线/向量 各环节数据", group: "observe", icon: "pulse" },
 ];
 
 export const ADVANCED_NAVIGATION: NavigationItem[] = [
