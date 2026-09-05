@@ -772,6 +772,7 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
             raw_reference = f"raw:codex_rollout/{canonical.name}"
         automatic_source_id = str(request.payload.get("source_id") or "").strip() if request.options.get("automatic_memory") else ""
         provenance = {"automatic_memory_source_id": automatic_source_id} if automatic_source_id else {}
+        meaningful = [item for item in unique if not self._is_internal_message(item["content"])]
         structured_messages = tuple(
             StructuredMessage(
                 external_id=f"codex-rollout:message:{session_id}:{item['item_id']}",
@@ -791,11 +792,11 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
                     "schema_version": self.SCHEMA_VERSION,
                 },
             )
-            for index, item in enumerate(unique)
+            for index, item in enumerate(meaningful)
         )
         conversation = StructuredConversation(
             external_id=f"codex-rollout:conversation:{session_id}",
-            title=self._conversation_title(unique[0]["content"], unique[0]["timestamp"]),
+            title=self._conversation_title(meaningful, unique[0]["timestamp"]),
             messages=structured_messages,
             started_at=unique[0]["timestamp"],
             ended_at=unique[-1]["timestamp"],
@@ -867,18 +868,31 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
                 raise
             raise ValueError("automatic Codex source path is outside the authorized root") from exc
 
-    @classmethod
-    def _conversation_title(cls, first_message: str, started_at: str) -> str:
-        """Owner-facing title from the first user message.
+    _INTERNAL_TAG_PATTERN = re.compile(
+        r"^\s*<\s*/?\s*(environment_context|heartbeat|recommended_plugins|user_instructions|"
+        r"system_message|permissions|turn_context|app_context|ide_context|tasks|"
+        r"codex_delegation|source_thread_id|session_id)[\s>/]",
+        re.IGNORECASE,
+    )
 
-        Internal markers such as ``<codex_delegation>`` wrappers are stripped;
-        a message that is only markup falls back to a readable date title so
-        raw tags never reach the UI.
-        """
-        text = re.sub(r"</?[A-Za-z][A-Za-z0-9_]*[^>]*>", " ", first_message or "")
-        text = re.sub(r"\s+", " ", text).strip()
-        if text:
-            return f"Codex · {text[:60]}"
+    @classmethod
+    def _is_internal_message(cls, content: str) -> bool:
+        """System injections (environment/heartbeat/plugin/user-instruction
+        wrappers) never belong in the conversation stream."""
+        text = (content or "").strip()
+        if not text:
+            return True
+        return bool(cls._INTERNAL_TAG_PATTERN.match(text))
+
+    @classmethod
+    def _conversation_title(cls, messages: list[dict[str, str]], started_at: str) -> str:
+        """Title from the first meaningful user message; streams that contain
+        only system injections fall back to a readable date title."""
+        for item in messages:
+            if item.get("role") == "user" and not cls._is_internal_message(item.get("content", "")):
+                text = re.sub(r"\s+", " ", item.get("content", "")).strip()
+                if text:
+                    return f"Codex · {text[:60]}"
         day = str(started_at or "")[:10]
         return f"Codex 会话 {day}" if day else "Codex 会话"
 

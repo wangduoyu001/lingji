@@ -129,11 +129,51 @@ def project_job_counts_by_scan(state_db: StateDatabase) -> dict[str, dict[str, i
     return counts
 
 
+def project_job_result_totals(state_db: StateDatabase) -> dict[str, dict[str, int | None]]:
+    """Aggregate real per-scan output totals from completed job results:
+    messages extracted, memory-layer documents updated, lexical index additions."""
+    totals: dict[str, dict[str, int | None]] = {}
+    try:
+        rows = _read_rows(
+            state_db,
+            """
+            SELECT json_extract(payload_json, '$.scan_id') AS scan_id,
+                   result_json
+            FROM extraction_jobs
+            WHERE status = 'completed'
+            ORDER BY updated_at DESC
+            """,
+        )
+    except Exception:
+        return totals
+    for row in rows:
+        scan_id = str(row["scan_id"] or "")
+        if not scan_id:
+            continue
+        try:
+            result = json.loads(row["result_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            result = {}
+        model = result.get("structured_read_model") or {}
+        lexical = model.get("lexical_index") or {}
+        bucket = totals.setdefault(
+            scan_id,
+            {"extracted": 0, "memory_updated": 0, "vectorize": None},
+        )
+        bucket["extracted"] += _safe_int(model.get("messages")) or 0
+        bucket["memory_updated"] += _safe_int(lexical.get("added")) or 0
+    return totals
+
+
 def project_steps(
     scan: dict[str, Any],
     job_counts: dict[str, int],
     timeline_events: int | None,
     vectorized: int | None,
+    *,
+    extracted: int | None = None,
+    memory_updated: int | None = None,
+    failure_detail: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Project the nine pipeline steps with real counts only; gaps stay 尚未获得."""
     total = _safe_int(scan.get("total"))
@@ -142,22 +182,14 @@ def project_steps(
     reused = _safe_int(scan.get("reused_count"))
     queued_new = _safe_int(scan.get("queued_count"))
 
-    extracted = None
-    if completed:
-        try:
-            row = state_extracted_sum(scan)
-            extracted = row
-        except Exception:
-            extracted = None
-
     values: dict[str, int | None] = {
         "fetch": total,
         "parse": completed,
         "dedupe": reused,
         "filter": failed,
         "extract": extracted,
-        "judge": queued_new if queued_new is not None or reused is not None else None,
-        "memory": extracted,
+        "judge": queued_new,
+        "memory": memory_updated,
         "timeline": timeline_events,
         "vectorize": vectorized,
     }
@@ -167,24 +199,18 @@ def project_steps(
         percent = None
         if count is not None and total:
             percent = max(0, min(100, round(count / total * 100)))
-        steps.append(
-            {
-                "step": key,
-                "label": label,
-                "plain": plain,
-                "count": count,
-                "total": total,
-                "percent": percent,
-            }
-        )
+        step: dict[str, Any] = {
+            "step": key,
+            "label": label,
+            "plain": plain,
+            "count": count,
+            "total": total,
+            "percent": percent,
+        }
+        if key == "filter" and failed and failure_detail:
+            step["failure"] = failure_detail
+        steps.append(step)
     return steps
-
-
-def state_extracted_sum(scan: dict[str, Any]) -> int | None:
-    """Sum of messages written by this scan's completed jobs, when recorded."""
-    # structured read model counts live on the job result; the queue table does
-    # not store them, so the honest projection without a result scan is None.
-    return None
 
 
 def project_item_status(item_status: str, job_status: str | None) -> dict[str, Any]:
@@ -270,14 +296,23 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         if scan is None:
             raise HTTPException(status_code=404, detail="scan not found")
         counts = project_job_counts_by_scan(db).get(scan_id, {})
+        totals = project_job_result_totals(db).get(scan_id, {})
         timeline = None
         try:
             rows = _read_rows(db, "SELECT COUNT(*) AS n FROM events WHERE event_type='structured_ingestion_completed'")
             timeline = int(rows[0]["n"] or 0) if rows else None
         except Exception:
             timeline = None
-        steps = project_steps(scan, counts, timeline, None)
-        return {"scan_id": scan_id, "steps": steps}
+        steps = project_steps(
+            scan,
+            counts,
+            timeline,
+            totals.get("vectorize"),
+            extracted=totals.get("extracted"),
+            memory_updated=totals.get("memory_updated"),
+            failure_detail=explain_failure(scan.get("last_error")) if scan.get("last_error") else None,
+        )
+        return {"scan_id": scan_id, "steps": steps, "failure": explain_failure(scan.get("last_error")) if scan.get("last_error") else None}
 
     @app.get("/api/observability/tasks/{scan_id}/items", dependencies=secured)
     def observability_task_items(

@@ -233,3 +233,25 @@ def test_rollout_conversation_title_is_clean_or_falls_back_to_date(tmp_path: Pat
     markup = build("<codex_delegation>\n<source_thread/>", "sess-markup")
     assert "<codex_delegation>" not in markup and "<source_thread/>" not in markup, markup
     assert markup == "Codex 会话 2026-08-28", "markup-only first message must fall back to a date title"
+
+
+def test_rollout_filters_internal_injections_and_titles_from_real_user_message(tmp_path: Path):
+    """系统注入/内部标记不进对话流；标题来自第一条有意义的用户消息。"""
+    path = tmp_path / "rollout-internal.jsonl"
+    _record(path, [
+        {"type": "session_meta", "payload": {"id": "sess-int", "timestamp": "2026-08-28T10:00:00Z"}},
+        {"type": "event_msg", "payload": {"type": "user_message", "message": "<environment_context>\n<current_date>2026-08-28</current_date>\n</environment_context>"}, "timestamp": "2026-08-28T10:00:01Z"},
+        {"type": "event_msg", "payload": {"type": "user_message", "message": "<heartbeat>ok</heartbeat>"}, "timestamp": "2026-08-28T10:00:02Z"},
+        {"type": "event_msg", "payload": {"type": "user_message", "message": "<recommended_plugins> Here is a list of plugins"}, "timestamp": "2026-08-28T10:00:03Z"},
+        {"type": "event_msg", "payload": {"type": "user_message", "message": "帮我看看当前VPN网络稳定吗"}, "timestamp": "2026-08-28T10:00:04Z"},
+        {"type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "稳定的。"}]}, "timestamp": "2026-08-28T10:00:05Z"},
+    ])
+    adapter = CodexRolloutAdapter()
+    batch = adapter.extract(ExtractionRequest("job-i", "codex_rollout", input_path=path, options={"authorized_roots": [str(tmp_path)]}))
+    conversation = batch.structured_sources[0].conversations[0]
+    contents = [m.content for m in conversation.messages]
+    assert all("environment_context" not in c for c in contents)
+    assert all("heartbeat" not in c for c in contents)
+    assert all("recommended_plugins" not in c for c in contents)
+    assert ("user", "帮我看看当前VPN网络稳定吗") in [(m.role, m.content) for m in conversation.messages]
+    assert conversation.title.startswith("Codex · 帮我看看当前VPN网络稳定吗"), conversation.title
