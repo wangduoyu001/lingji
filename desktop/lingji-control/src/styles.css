@@ -686,3 +686,8 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 .library-item-open strong { color: var(--text); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .library-item-open small { color: var(--muted); font-size: 12px; }
 .library-item-plain { color: var(--muted-2); }
+
+.conversation-body { display: grid; gap: 12px; max-height: 60vh; overflow: auto; }
+.conversation-msg { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
+.conversation-msg p { margin: 0; color: var(--text-soft); font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+.conversation-msg small { color: var(--muted); font-size: 11px; }

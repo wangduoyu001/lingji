@@ -46,7 +46,11 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
   const services = usePollingResource({ fetcher: useCallback(() => fetchHomePanels(api), [api]), enabled: active, intervalMs: 60_000, staleAfterMs: 180_000, pauseWhenHidden: true });
   if (!data) return <Empty text="灵机正在连接本机服务…" />;
   const d = data as Record<string, unknown>; const health = (d.health ?? {}) as Record<string, unknown>; const runtime = (d.memory_runtime ?? {}) as Record<string, unknown>;
-  const runtimeState = health.status ?? runtime.state; const sourceSnapshot = sourceResource.data; const pending = pendingActionsFrom(pendingResource.data); const pendingUnavailable = Boolean(pendingResource.error || pendingResource.stale || pending === null); const cards = cardSummaryResource.data; const recentCards = (recentCardsResource.data?.items ?? []).filter((item: OwnerMemoryCard) => String(item.freshness?.state ?? "") === "current").slice(0, 6); const currentSources = sourceSnapshot?.sources.filter((item) => item.state === "current").map(ownerSourceName) ?? []; const latest = sourceSnapshot?.summary?.latest; const note = periodicReconciliationNotice(sourceSnapshot?.runtime); const number = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
+  const runtimeState = health.status ?? runtime.state; const sourceSnapshot = sourceResource.data; const pending = pendingActionsFrom(pendingResource.data); const pendingUnavailable = Boolean(pendingResource.error || pendingResource.stale || pending === null); const cards = cardSummaryResource.data; const internalTopicPattern = /<(environment_context|heartbeat|recommended_plugins|user_instructions|system_message|turn_context|app_context|ide_context|codex_delegation)|^#\s*Files mentioned by the user/i;
+  const recentCards = (recentCardsResource.data?.items ?? [])
+    .filter((item: OwnerMemoryCard) => String(item.freshness?.state ?? "") === "current")
+    .filter((item: OwnerMemoryCard) => !internalTopicPattern.test(String(item.topic ?? "")))
+    .slice(0, 6); const currentSources = sourceSnapshot?.sources.filter((item) => item.state === "current").map(ownerSourceName) ?? []; const latest = sourceSnapshot?.summary?.latest; const note = periodicReconciliationNotice(sourceSnapshot?.runtime); const number = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
   const latestCheckTime = latest?.updated_at ? formatTime(latest.updated_at) : "尚未获得";
   const hasTodos = !pendingUnavailable && Boolean(pending?.length);
 

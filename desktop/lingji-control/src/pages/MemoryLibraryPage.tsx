@@ -3,31 +3,21 @@ import { Empty, Notice } from "../components/ui";
 import type { LingJiApi } from "../api";
 import { usePollingResource } from "../hooks/usePollingResource";
 
-type MemoryRow = {
-  memory_id: string;
+type ConversationRow = {
+  conversation_id: string;
   title?: string | null;
-  memory_type?: string | null;
-  memory_tier?: string | null;
-  status?: string | null;
-  tags?: unknown;
-  valid_from?: string | null;
-  updated_at?: string | null;
-  relative_path?: string | null;
+  started_at?: string | null;
+  message_count?: number | null;
+};
+type MessageRow = {
+  message_id: string;
+  role?: string | null;
+  author?: string | null;
+  content?: string | null;
+  content_preview?: string | null;
+  occurred_at?: string | null;
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  structured_evidence: "自动提炼",
-  note: "笔记",
-  core: "核心记忆",
-  permanent: "永久记忆",
-};
-
-const TYPE_PLAIN: Record<string, string> = {
-  structured_evidence: "灵机从你的记录里自动整理出的内容",
-  note: "普通笔记内容",
-  core: "核心记忆",
-  permanent: "主人确认过的长期记忆",
-};
 
 function time(value: unknown): string {
   if (!value) return "时间尚未获得";
@@ -35,42 +25,40 @@ function time(value: unknown): string {
   return Number.isNaN(date.getTime()) ? "时间尚未获得" : date.toLocaleString();
 }
 
-function categoryOf(row: MemoryRow): string {
-  const t = String(row.memory_type ?? "");
-  return TYPE_LABELS[t] ?? "未分类";
-}
-
 export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; active: boolean }) {
   const [offset, setOffset] = useState(0);
-  const [category, setCategory] = useState<string>("全部");
   const [query, setQuery] = useState("");
+  const [searchApplied, setSearchApplied] = useState("");
   const limit = 30;
   const load = useCallback(
     (signal: AbortSignal) =>
-      api.get<{ items?: MemoryRow[]; pagination?: { total?: number | null; has_more?: boolean } }>(
-        `/api/memory/inspector/memories?limit=${limit}&offset=${offset}${query.trim() ? `&q=${encodeURIComponent(query.trim())}` : ""}`,
+      api.get<{ items?: ConversationRow[]; pagination?: { total?: number | null; has_more?: boolean } }>(
+        `/api/memory/inspector/conversations?limit=${limit}&offset=${offset}${searchApplied.trim() ? `&q=${encodeURIComponent(searchApplied.trim())}` : ""}`,
         { signal },
       ),
-    [api, offset, query],
+    [api, offset, searchApplied],
   );
   const resource = usePollingResource({ fetcher: load, enabled: active, intervalMs: 20_000, staleAfterMs: 60_000 });
-  const [openBody, setOpenBody] = useState<{ id: string; title: string; body: string; loading: boolean } | null>(null);
+  const [openBody, setOpenBody] = useState<{ id: string; title: string; loading: boolean; messages: Array<{ role: string; author: string; content: string; time: string }> } | null>(null);
 
-  const allRows = (resource.data?.items as MemoryRow[] | undefined) ?? [];
-  const rows = category === "全部" ? allRows : allRows.filter((row) => categoryOf(row) === category);
-  const categories = Array.from(new Set(allRows.map(categoryOf)));
+  const rows = (resource.data?.items as ConversationRow[] | undefined) ?? [];
 
-  const openMemory = async (row: MemoryRow) => {
-    setOpenBody({ id: row.memory_id, title: row.title ?? "记忆内容", body: "", loading: true });
+  const openConversation = async (row: ConversationRow) => {
+    const title = row.title ?? "会话";
+    setOpenBody({ id: row.conversation_id, title, loading: true, messages: [] });
     try {
-      const detail = await api.get<{ item?: { body?: string | null; content?: string | null; conclusion?: string | null } }>(
-        `/api/memory/inspector/memories/${encodeURIComponent(row.memory_id)}`,
+      const response = await api.get<{ items?: MessageRow[] }>(
+        `/api/memory/inspector/messages?conversation_id=${encodeURIComponent(row.conversation_id)}&limit=200&offset=0`,
       );
-      const item = detail.item ?? {};
-      const body = String(item.body ?? item.content ?? item.conclusion ?? "这条记忆还没有可显示的正文。");
-      setOpenBody({ id: row.memory_id, title: row.title ?? "记忆内容", body, loading: false });
+      const messages = (response.items ?? []).map((m) => ({
+        role: String(m.role ?? ""),
+        author: String(m.author ?? ""),
+        content: String(m.content ?? m.content_preview ?? ""),
+        time: String(m.occurred_at ?? ""),
+      }));
+      setOpenBody({ id: row.conversation_id, title, loading: false, messages });
     } catch {
-      setOpenBody({ id: row.memory_id, title: row.title ?? "记忆内容", body: "暂时无法读取正文，请稍后重试。", loading: false });
+      setOpenBody({ id: row.conversation_id, title, loading: false, messages: [] });
     }
   };
 
@@ -80,7 +68,7 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
         <div>
           <span className="section-kicker">记忆库</span>
           <h2>记忆库</h2>
-          <p>灵机记住的全部内容都在这里：自动提炼的对话记录、主人确认过的长期记忆。每条都可以打开看原文。</p>
+          <p>灵机记住的每一段对话都在这里，点开就能看完整聊天原文。搜索框支持按内容查找。</p>
         </div>
         <span className="auto-refresh-note">{resource.refreshing ? "正在更新" : "自动更新"}</span>
       </section>
@@ -88,42 +76,33 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
       <div className="library-filters">
         <input
           className="library-search"
-          placeholder="搜索记忆…"
+          placeholder="搜索对话内容…（回车执行）"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter") setOffset(0);
+            if (event.key === "Enter") { setSearchApplied(query); setOffset(0); }
           }}
         />
-        <div className="library-categories">
-          {["全部", ...categories].map((label) => (
-            <button key={label} className={`pill ${category === label ? "ok" : "neutral"}`} onClick={() => { setCategory(label); setOffset(0); }}>
-              {label}
-            </button>
-          ))}
-        </div>
       </div>
       {resource.loading && !resource.data ? (
         <div className="empty-state" aria-busy="true">正在读取记忆库…</div>
       ) : rows.length === 0 ? (
-        <Empty text="没有匹配的记忆。换个搜索词或分类试试。" />
+        <Empty text="没有匹配的对话。换个搜索词试试，或等下一次自动检查。" />
       ) : (
         <>
           <div className="library-list">
             {rows.map((row) => (
-              <article key={row.memory_id} className="library-item">
-                <button className="library-item-open" onClick={() => void openMemory(row)}>
-                  <span className="pill neutral">{categoryOf(row)}</span>
-                  <strong>{row.title ?? "未命名记忆"}</strong>
-                  <small>更新：{time(row.updated_at)}</small>
-                  <small className="library-item-plain">{TYPE_PLAIN[String(row.memory_type)] ?? "记忆内容"}</small>
+              <article key={row.conversation_id} className="library-item">
+                <button className="library-item-open" onClick={() => void openConversation(row)}>
+                  <strong>{row.title ?? "未命名会话"}</strong>
+                  <small>开始：{time(row.started_at)} · {row.message_count == null ? "消息数尚未获得" : `${row.message_count} 条消息`}</small>
                 </button>
               </article>
             ))}
           </div>
           <div className="permanent-memory-pager">
             <button className="button secondary" disabled={offset === 0 || resource.refreshing} onClick={() => setOffset(Math.max(0, offset - limit))}>上一页</button>
-            <span>{offset + 1}–{offset + rows.length}</span>
+            <span>{offset + 1}–{offset + rows.length}{resource.data?.pagination?.total != null ? ` / 共 ${resource.data.pagination.total} 段对话` : ""}</span>
             <button className="button secondary" disabled={!resource.data?.pagination?.has_more || resource.refreshing} onClick={() => setOffset(offset + limit)}>下一页</button>
           </div>
         </>
@@ -133,9 +112,19 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
           <div className="action-modal permanent-memory-body" role="dialog" aria-label={openBody.title} onClick={(event) => event.stopPropagation()}>
             <h3>{openBody.title}</h3>
             {openBody.loading ? (
-              <p aria-busy="true">正在读取正文…</p>
+              <p aria-busy="true">正在读取聊天原文…</p>
+            ) : openBody.messages.length === 0 ? (
+              <p>这段会话还没有可显示的消息。</p>
             ) : (
-              <pre className="permanent-memory-text">{openBody.body}</pre>
+              <div className="conversation-body">
+                {openBody.messages.map((m, index) => (
+                  <div key={`${m.role}-${index}`} className="conversation-msg">
+                    <span className="pill neutral">{m.role === "user" ? "主人" : m.role === "assistant" ? "AI" : m.role || "尚未获得"}</span>
+                    {m.time && <small>{m.time}</small>}
+                    <p>{m.content}</p>
+                  </div>
+                ))}
+              </div>
             )}
             <div className="action-modal-actions">
               <button className="button secondary" onClick={() => setOpenBody(null)}>关闭</button>

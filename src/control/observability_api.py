@@ -400,17 +400,49 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         """九环节各自的全量数据面板：真实计数 + 每环节明细列表。"""
         db = state_db()
         scans = list(db.list_automatic_memory_scans())
-        totals = project_job_result_totals(db)
         job_counts = project_job_counts_by_scan(db)
-        aggregated: dict[str, int] = {"fetch": 0, "completed": 0, "failed": 0, "queued": 0, "reused": 0}
-        for scan in scans:
-            aggregated["fetch"] += _safe_int(scan.get("total")) or 0
-            scan_counts = job_counts.get(str(scan.get("scan_id") or ""), {})
-            for key in ("completed", "failed", "queued"):
-                aggregated[key] += scan_counts.get(key, 0)
-            aggregated["reused"] += _safe_int(scan.get("reused_count")) or 0
-        extracted_total = sum((totals.get(str(scan.get("scan_id") or ""), {}).get("extracted") or 0) for scan in scans)
-        memory_total = sum((totals.get(str(scan.get("scan_id") or ""), {}).get("memory_updated") or 0) for scan in scans)
+
+        # 唯一文件口径：每个 relative_path 只算一次（按最新一次任务状态），
+        # 避免重复核对把“获取/解析”数字越滚越大。
+        try:
+            job_rows = _read_rows(
+                db,
+                """
+                SELECT json_extract(payload_json, '$.relative_path') AS rel,
+                       json_extract(payload_json, '$.scan_id') AS scan_id,
+                       status, updated_at
+                FROM extraction_jobs
+                WHERE json_extract(payload_json, '$.relative_path') != ''
+                ORDER BY updated_at ASC
+                """,
+            )
+        except Exception:
+            job_rows = []
+        latest_by_rel: dict[str, dict[str, Any]] = {}
+        for row in job_rows:
+            rel = str(row["rel"] or "")
+            if rel:
+                latest_by_rel[rel] = row
+        unique_files = len(latest_by_rel)
+        unique_completed = sum(1 for row in latest_by_rel.values() if str(row["status"]) == "completed")
+        unique_failed = sum(1 for row in latest_by_rel.values() if str(row["status"]) == "failed")
+        unique_pending = sum(1 for row in latest_by_rel.values() if str(row["status"]) in {"queued", "running", "retrying"})
+        scan_rounds = len(scans)
+
+        # 提炼消息/记忆更新：同一文件取最新一次结果，避免重复核对把数字翻倍
+        extracted_total = 0
+        memory_total = 0
+        latest_result_by_rel: dict[str, dict[str, Any]] = {}
+        for row in reversed(job_rows):
+            rel = str(row["rel"] or "")
+            status = str(row["status"] or "")
+            if rel and status == "completed" and rel not in latest_result_by_rel:
+                latest_result_by_rel[rel] = row
+        for rel, row in latest_result_by_rel.items():
+            scan_key = str(row["scan_id"] or "")
+            bucket = totals.get(scan_key, {})
+            extracted_total += bucket.get("extracted") or 0
+            memory_total += bucket.get("memory_updated") or 0
 
         # 明细列表（脱敏、白名单字段）
         failed_detail: list[dict[str, Any]] = []
@@ -437,25 +469,18 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
             failed_detail = []
 
         reused_detail: list[dict[str, Any]] = []
-        try:
-            rows = _read_rows(
-                db,
-                """
-                SELECT payload_json, updated_at FROM extraction_jobs
-                WHERE status = 'completed' AND json_extract(payload_json, '$.scan_id') !=
-                      json_extract(options_json, '$.first_scan_id')
-                ORDER BY updated_at DESC LIMIT 50
-                """,
-            )
-            for row in rows:
-                try:
-                    payload = json.loads(row["payload_json"] or "{}")
-                except (TypeError, ValueError, json.JSONDecodeError):
-                    continue
-                rel = str(payload.get("relative_path") or "")
-                reused_detail.append({"name": rel.rsplit("/", 1)[-1] if rel else "尚未获得", "time": row.get("updated_at")})
-        except Exception:
-            reused_detail = []
+        # 复用明细 = 同一相对路径出现过多轮 completed 任务（第二轮起即复用）
+        rounds_by_rel: dict[str, int] = {}
+        for row in job_rows:
+            rel = str(row["rel"] or "")
+            if not rel:
+                continue
+            rounds_by_rel[rel] = rounds_by_rel.get(rel, 0) + 1
+        reused_detail = [
+            {"name": rel.rsplit("/", 1)[-1], "time": latest_result_by_rel[rel].get("updated_at")}
+            for rel in sorted(latest_result_by_rel)
+            if rounds_by_rel.get(rel, 0) > 1
+        ][:50]
 
         latest_scans = [
             {
@@ -481,13 +506,15 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
             timeline_rows = []
 
         return {
+            "scan_rounds": scan_rounds,
             "pipeline": [
-                {"key": "fetch", "label": "原始获取", "plain": "把来源文件完整复制到灵机保存区，原件不动", "count": aggregated["fetch"]},
-                {"key": "parse", "label": "解析成功", "plain": "成功读出对话内容的文件数", "count": aggregated["completed"]},
-                {"key": "dedupe", "label": "去重复用", "plain": "内容与已导入记录相同、直接复用的数量", "count": aggregated["reused"]},
-                {"key": "filter_failed", "label": "筛选拒绝", "plain": "无法安全解析或归属不明的文件", "count": aggregated["failed"]},
-                {"key": "extract", "label": "提炼消息", "plain": "从对话里整理出的可检索消息条数", "count": extracted_total},
-                {"key": "memory", "label": "记忆层更新", "plain": "写进可搜索记忆层的条目数", "count": memory_total},
+                {"key": "fetch", "label": "原始获取（唯一文件）", "plain": "来源里不重复的文件总数；自动检查会反复核对它们", "count": unique_files},
+                {"key": "parse", "label": "解析成功", "plain": "最新一轮成功读出对话内容的文件数", "count": unique_completed},
+                {"key": "pending", "label": "待处理", "plain": "还在排队等待提取的文件", "count": unique_pending or None},
+                {"key": "dedupe", "label": "去重复用", "plain": "内容与已导入记录相同、直接复用的次数（累计）", "count": sum((job_counts.get(str(scan.get("scan_id") or ""), {}).get("completed") or 0) for scan in scans) and sum(_safe_int(scan.get("reused_count")) or 0 for scan in scans)},
+                {"key": "filter_failed", "label": "筛选拒绝", "plain": "无法安全解析或归属不明的文件", "count": unique_failed},
+                {"key": "extract", "label": "提炼消息", "plain": "从对话里整理出的可检索消息条数（唯一内容）", "count": extracted_total or None},
+                {"key": "memory", "label": "记忆层更新", "plain": "写进可搜索记忆层的条目数（唯一内容）", "count": memory_total or None},
                 {"key": "vectorize", "label": "向量化", "plain": "按意思搜索用的索引；需要本地 AI 服务运行", "count": None},
             ],
             "failed_detail": failed_detail,
