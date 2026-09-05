@@ -201,6 +201,14 @@ try {
   });
 
   await page.goto(viteOrigin, { waitUntil: "domcontentloaded" });
+  const actionBackdrop = page.locator(".action-modal-backdrop");
+  try {
+    await actionBackdrop.waitFor({ state: "visible", timeout: 4000 });
+    await actionBackdrop.getByRole("button", { name: "暂不处理", exact: true }).click();
+    await actionBackdrop.waitFor({ state: "hidden", timeout: 4000 });
+  } catch {
+    // 本 fixture 未触发全局提醒时直接继续。
+  }
   await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
   assert.equal(await page.getByRole("heading", { name: "需要先完成设置", exact: true }).count(), 0, "healthy Core must not be presented as setup required by a memory runtime warning");
 
@@ -208,8 +216,8 @@ try {
   assert.equal(sidebarStatusText.includes("8766"), false, "ordinary runtime warning must not expose the control port");
 
   const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
-  assert.deepEqual(primaryLabels, ["首页", "我的记忆", "来源"], "ordinary navigation must have exactly three destinations");
-  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "我的记忆", "来源"], "ordinary navigation must expose exact accessible labels");
+  assert.deepEqual(primaryLabels, ["首页", "原始数据", "灵机整理", "永久记忆"], "ordinary navigation must have exactly the owner panels");
+  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "原始数据", "灵机整理", "永久记忆"], "ordinary navigation must expose exact accessible labels");
   assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "活动记录", exact: true }).count(), 0, "activity must stay out of the ordinary sidebar");
   assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "需要我", exact: true }).count(), 0, "attention must not permanently occupy the ordinary sidebar");
   const advanced = page.locator("details.desktop-advanced-disclosure");
@@ -259,8 +267,8 @@ try {
   await page.getByText("目前不需要你处理", { exact: true }).waitFor();
   assert.equal(await page.locator(".overview-attention-link").count(), 0, "empty pending must not surface a home attention entry");
 
-  await page.locator(".desktop-nav-item").filter({ hasText: "我的记忆" }).click();
-  await page.getByRole("heading", { name: "我的记忆", exact: true }).first().waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "灵机整理" }).click();
+  await page.getByRole("heading", { name: "灵机整理", exact: true }).first().waitFor();
   const cardsText = await page.locator(".owner-memory-card-grid").innerText();
   assert.equal(state.requests.some((url) => url.includes("/api/memory/inspector/memories/")), false, "ordinary card rendering must not prefetch canonical, vector, source or evidence bodies");
   assert.equal(state.requests.some((url) => url.includes("/api/memory/inspector/messages/")), false, "ordinary card rendering must not prefetch message bodies");
@@ -494,8 +502,8 @@ try {
 
   await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange")); });
   const hiddenSourceReads = state.sourceReads;
-  await page.locator(".desktop-nav-item").filter({ hasText: "来源" }).click();
-  await page.getByRole("heading", { name: "来源", exact: true }).first().waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "原始数据" }).click();
+  await page.getByRole("heading", { name: "原始数据", exact: true }).first().waitFor();
   const sourceCard = page.locator('[data-source-kind="codex_rollout"]');
   await sourceCard.waitFor();
   assert.ok(state.sourceReads > hiddenSourceReads, "activating a hidden source page must still perform its first real read");

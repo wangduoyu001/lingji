@@ -276,8 +276,8 @@ export default function MemorySourcesPage({ api, active, onOpenInspector }: { ap
       <section className="memory-sources-intro">
         <div>
           <span className="section-kicker">自动接管</span>
-          <h2>来源</h2>
-          <p>这里显示灵机正在自动接管的记录。授权一次后，扫描、整理和更新都会自动进行。</p>
+          <h2>原始数据</h2>
+          <p>扫描到的全部记录都在这里：来源、文件和每条对话原文。授权一次后，扫描、整理和更新都会自动进行。</p>
         </div>
         <span className="auto-refresh-note">{resource.refreshing ? "正在更新" : "自动更新"}</span>
       </section>

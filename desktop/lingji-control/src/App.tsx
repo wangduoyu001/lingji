@@ -6,6 +6,7 @@ import "./DesktopUX.css";
 import "./ReleaseUX.css";
 import { useLingJiConnection } from "./hooks/useLingJiConnection";
 import { useMemorySourcesOnboarding } from "./hooks/useMemorySourcesOnboarding";
+import { useActionRequiredAlert } from "./hooks/useActionRequiredAlert";
 import { useReleaseMetadata } from "./hooks/useReleaseMetadata";
 import { NAVIGATION } from "./navigation";
 import type { CaptureInspectorTarget } from "./pages/captureCenterTypes";
@@ -19,6 +20,7 @@ export default function App() {
   const current = NAVIGATION.find((item) => item.id === page) ?? NAVIGATION[0];
 
   useMemorySourcesOnboarding({ api: connection.api, connected: connection.connected, page, setPage });
+  const actionRequired = useActionRequiredAlert({ api: connection.api, active: connection.connected, onNavigate: setPage });
 
   const openInspector = (target: CaptureInspectorTarget) => {
     setInspectorTarget(target);
@@ -69,6 +71,18 @@ export default function App() {
           onOpenInspector={openInspector}
           onNavigate={setPage}
         />
+        {actionRequired.alert && (
+          <div className="action-modal-backdrop" role="alertdialog" aria-label={actionRequired.alert.title}>
+            <div className="action-modal">
+              <h3>{actionRequired.alert.title}</h3>
+              <p>{actionRequired.alert.body}</p>
+              <div className="action-modal-actions">
+                <button className="button secondary" onClick={actionRequired.dismiss}>暂不处理</button>
+                <button className="button primary" onClick={actionRequired.go}>{actionRequired.alert.actionLabel}</button>
+              </div>
+            </div>
+          </div>
+        )}
       </RuntimeBoundary>
     </DesktopShell>
   );

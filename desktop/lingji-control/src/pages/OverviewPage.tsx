@@ -15,6 +15,7 @@ import type { MemorySourcesSnapshot, ModelHealthPanel, ScanRun } from "./memoryS
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { PageId, Row } from "../types";
 import { pendingActionsFrom, type PendingActionsResponse } from "../contracts/workFact";
+import { fetchHomePanels, projectServiceRows, projectVectorization, type ServiceRow, type VectorizationPanel } from "./servicesHealth";
 import { OwnerMemoryCardsApi } from "./ownerMemoryCardsApi";
 import { ownerFacingConclusion, type OwnerMemoryCard } from "./ownerMemoryCardsTypes";
 
@@ -41,6 +42,7 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
   const cardSummaryResource = usePollingResource({ fetcher: useCallback((signal: AbortSignal) => cardsApi.summary(signal), [cardsApi]), enabled: active, intervalMs: 20_000, staleAfterMs: 45_000, pauseWhenHidden: true });
   const recentCardsResource = usePollingResource({ fetcher: useCallback((signal: AbortSignal) => cardsApi.list(0, signal, 6, "current"), [cardsApi]), enabled: active, intervalMs: 20_000, staleAfterMs: 45_000, pauseWhenHidden: true });
   const modelHealth = usePollingResource<ModelHealthPanel>({ fetcher: useCallback(() => loadModelHealthPanel(api), [api]), enabled: active, intervalMs: 30_000, staleAfterMs: 120_000, pauseWhenHidden: true });
+  const services = usePollingResource({ fetcher: useCallback(() => fetchHomePanels(api), [api]), enabled: active, intervalMs: 60_000, staleAfterMs: 180_000, pauseWhenHidden: true });
   if (!data) return <Empty text="灵机正在连接本机服务…" />;
   const d = data as Record<string, unknown>; const health = (d.health ?? {}) as Record<string, unknown>; const runtime = (d.memory_runtime ?? {}) as Record<string, unknown>;
   const runtimeState = health.status ?? runtime.state; const sourceSnapshot = sourceResource.data; const pending = pendingActionsFrom(pendingResource.data); const pendingUnavailable = Boolean(pendingResource.error || pendingResource.stale || pending === null); const cards = cardSummaryResource.data; const recentCards = (recentCardsResource.data?.items ?? []).filter((item: OwnerMemoryCard) => String(item.freshness?.state ?? "") === "current").slice(0, 6); const currentSources = sourceSnapshot?.sources.filter((item) => item.state === "current").map(ownerSourceName) ?? []; const latest = sourceSnapshot?.summary?.latest; const note = periodicReconciliationNotice(sourceSnapshot?.runtime); const number = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
@@ -51,6 +53,7 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
     <section className={`overview-hero overview-hero-${stateTone(runtimeState)}`}><div className="overview-hero-main"><div className="overview-title-line"><span className="overview-status-mark" aria-hidden="true" /><h2>{stateLabel(runtimeState)}</h2></div><p>灵机正在自动扫描、整理并更新你的长期记忆，你只需要在这里查看成果。</p></div><div className="overview-live-summary"><strong>{pendingUnavailable ? "正在确认待办" : hasTodos ? "有一件事需要你决定" : "目前不需要你处理"}</strong><small>{pendingUnavailable ? "灵机仍会继续自动工作" : hasTodos ? display(pending?.[0]?.description) : "扫描和整理会自动进行"}</small>{hasTodos && <button className="button primary overview-attention-link" onClick={() => onNavigate("attention")}>处理待办</button>}</div></section>
     {pendingUnavailable && <Notice kind="warning">待办正在自动确认，当前不把未读取当作“没有待办”。</Notice>}{sourceResource.error && <Notice kind="warning">来源状态正在自动刷新，灵机不会因此停止记忆。</Notice>}{note && <Notice kind="info">{note}</Notice>}
     <HomeFactsBoard snapshot={sourceSnapshot} modelHealth={modelHealth.data} loading={!sourceSnapshot} onNavigate={onNavigate} />
+    <ServicesBoard services={services.data} />
     <section className="outcome-section recent-memory-section"><div className="section-heading"><div><span className="section-kicker">最近记住的内容</span><h3>灵机最近替你记住了什么</h3></div><span className="section-caption">自动更新</span></div>{recentCards.length ? <div className="recent-memory-list">{recentCards.map((card) => { const conclusion = ownerFacingConclusion(card); return <article className="recent-memory-item" key={card.memory_id}><strong>{display(card.topic, "未命名记忆")}</strong><p>{conclusion.text}</p><small>来源：{display(card.source?.label)}</small></article>; })}</div> : <p className="outcome-empty">灵机还没有形成具体记忆，完成一次来源检查后会出现在这里。</p>}</section>
     <section className="outcome-section takeover-summary-section"><div className="section-heading"><div><span className="section-kicker">最近自动接管成果</span><h3>接管了多少记录</h3></div><span className="section-caption">自动统计</span></div><div className="takeover-stats"><div><strong>{currentSources.length ? currentSources.join("、") : "尚未获得"}</strong><span>已接管来源</span></div><div><strong>{number(cards?.conversations)}</strong><span>已接管对话</span></div><div><strong>{number(cards?.messages)}</strong><span>已导入消息</span></div><div><strong>{latestCheckTime}</strong><span>最近检查时间</span></div></div><p className="proof-note latest-check-note">{latestCheckSummary(latest)}</p><p className="proof-note vector-note">当前记忆和长期记忆只统计仍然有效的内容；已接管对话与消息统计全部导入规模。{cards?.vectorized != null ? `其中 ${cards.vectorized} 件已准备语义检索。` : "语义检索状态会在后台自动更新。"}</p></section>
     <CurrentWorkPanel api={api} active={active} />
@@ -114,6 +117,45 @@ function HomeFactsBoard({ snapshot, modelHealth, loading, onNavigate }: { snapsh
             <p className="home-fact-line"><small>{inboxLine}</small></p>
           </div>
         </div>
+      )}
+    </section>
+  );
+}
+
+function ServicesBoard({ services }: { services: { health: Record<string, unknown> | null; overview: Record<string, unknown> | null; importedMessages: number | null } | null }) {
+  const rows = projectServiceRows(services?.health ?? null);
+  const vectorization: VectorizationPanel | null = services ? projectVectorization(services.overview, services.health) : null;
+  const problems = rows.filter((row) => row.status !== "ok");
+  return (
+    <section className="outcome-section services-board" aria-label="本地服务与向量化">
+      <div className="section-heading"><div><span className="section-kicker">灵机的助手们</span><h3>本地服务与向量化状态</h3></div><span className="section-caption">{problems.length ? `${problems.length} 项需要留意` : "全部正常"}</span></div>
+      {!services ? (
+        <p className="outcome-empty" aria-busy="true">正在读取服务状态…</p>
+      ) : (
+        <>
+          <div className="services-grid">
+            {rows.map((row) => (
+              <article key={row.key} className={`service-card service-${row.status}`}>
+                <header><strong>{row.label}</strong><span className={`pill ${row.status === "ok" ? "ok" : row.status === "warning" ? "warning" : row.status === "error" ? "bad" : "neutral"}`}>{row.statusText}</span></header>
+                <p>{row.plain}</p>
+                {row.status !== "ok" && row.impact && <small>影响：{row.impact}</small>}
+                {row.status !== "ok" && row.fix && <small>怎么做：{row.fix}</small>}
+              </article>
+            ))}
+          </div>
+          {vectorization && (
+            <div className="vectorization-card">
+              <header><strong>按意思搜索（向量化）</strong><span className={`pill ${vectorization.embeddingAvailable ? "ok" : "warning"}`}>{vectorization.embeddingAvailable ? "已启用" : "尚未启用"}</span></header>
+              <p>向量化就是“把文字变成机器能理解的意思”，这样你可以用“发布计划”搜到聊过排期的对话，哪怕原文里没有这几个字。</p>
+              {!vectorization.embeddingAvailable && vectorization.ollamaService && (
+                <small>现在没启用，原因：{vectorization.ollamaService.statusText === "需要留意" || vectorization.ollamaService.statusText === "不可用" ? "本地 AI 服务 Ollama 没有运行。" : "向量化服务尚未配置。"} {vectorization.ollamaService.fix}</small>
+              )}
+              {vectorization.vectorizedMessages != null && <small>已向量化 {vectorization.vectorizedMessages} 条。</small>}
+              <small>放心：向量化在本机完成，对话内容不会上传到任何外部服务。</small>
+            </div>
+          )}
+          <p className="services-note">灵机目前不依赖任何外部云服务：记忆、搜索、向量化全部在本机完成。</p>
+        </>
       )}
     </section>
   );

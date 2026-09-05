@@ -7,8 +7,9 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
 
 export const PRIMARY_NAVIGATION: NavigationItem[] = [
   { id: "overview", label: "首页", hint: "查看灵机是否正常，以及你是否需要做事", group: "observe", icon: "home" },
-  { id: "memory_cards", label: "我的记忆", hint: "查看仍然有效的具体记忆、结论和来源", group: "observe", icon: "inspect" },
-  { id: "memory_sources", label: "来源", hint: "查看已发现和已接管的记录来源", group: "observe", icon: "vault" },
+  { id: "memory_sources", label: "原始数据", hint: "扫描到的全部记录：来源、文件、每条对话原文", group: "observe", icon: "vault" },
+  { id: "memory_cards", label: "灵机整理", hint: "灵机提炼出的对话与要点，确认重要的进入长期记忆", group: "observe", icon: "inspect" },
+  { id: "permanent_memory", label: "永久记忆", hint: "你确认过的长期记忆，永久保存，随时打开原文", group: "observe", icon: "inspect" },
 ];
 
 export const ADVANCED_NAVIGATION: NavigationItem[] = [
