@@ -410,7 +410,7 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
                 """
                 SELECT json_extract(payload_json, '$.relative_path') AS rel,
                        json_extract(payload_json, '$.scan_id') AS scan_id,
-                       status, updated_at
+                       status, updated_at, result_json
                 FROM extraction_jobs
                 WHERE json_extract(payload_json, '$.relative_path') != ''
                 ORDER BY updated_at ASC
@@ -429,8 +429,9 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         unique_pending = sum(1 for row in latest_by_rel.values() if str(row["status"]) in {"queued", "running", "retrying"})
         scan_rounds = len(scans)
 
-        # 提炼消息/记忆更新：同一文件取最新一次结果，避免重复核对把数字翻倍
-        totals = project_job_result_totals(db)
+        # 提炼消息/记忆更新：同一文件取最新一次 completed 结果，
+        # 直接读取该任务自己的 structured_read_model.messages / lexical_index.added，
+        # 绝不把整轮 scan 的合计再按文件累加（那会把数字放大几百倍）。
         extracted_total = 0
         memory_total = 0
         latest_result_by_rel: dict[str, dict[str, Any]] = {}
@@ -439,11 +440,17 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
             status = str(row["status"] or "")
             if rel and status == "completed" and rel not in latest_result_by_rel:
                 latest_result_by_rel[rel] = row
+        extracted_total = 0
+        memory_total = 0
         for rel, row in latest_result_by_rel.items():
-            scan_key = str(row["scan_id"] or "")
-            bucket = totals.get(scan_key, {})
-            extracted_total += bucket.get("extracted") or 0
-            memory_total += bucket.get("memory_updated") or 0
+            try:
+                result = json.loads(row.get("result_json") or "{}")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            model = result.get("structured_read_model") or {}
+            extracted_total += _safe_int(model.get("messages")) or 0
+            lexical = model.get("lexical_index") or {}
+            memory_total += _safe_int(lexical.get("added")) or 0
 
         # 明细列表（脱敏、白名单字段）
         failed_detail: list[dict[str, Any]] = []
