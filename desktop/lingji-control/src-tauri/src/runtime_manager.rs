@@ -19,7 +19,7 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const CONTROL_PORT: u16 = 8766;
 const STARTUP_ATTEMPTS: u32 = 3;
-const STARTUP_POLLS: usize = 80;
+const STARTUP_POLLS: usize = 480;
 const STARTUP_POLL_DELAY: Duration = Duration::from_millis(250);
 const ADOPTION_GRACE_MS: u128 = 30_000;
 const STOP_POLLS: usize = 50;
@@ -411,7 +411,7 @@ impl RuntimeManager {
         self.stop_managed_process(root);
         let mut inner = self.inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         inner.state = "failed".to_string();
-        inner.last_error = Some("LingJi runtime did not become healthy within 20 seconds".to_string());
+        inner.last_error = Some("LingJi runtime did not become healthy within 120 seconds".to_string());
         drop(inner);
         Ok(self.snapshot(app, root, false))
     }

@@ -3761,3 +3761,10 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   每轮核对的 22 个真分叉文件保持自动拒绝+自动重试，堆几十条主人待办的问题根除。真机遗留的
   132 条历史待办已批量关闭，待办数归零。Task8 work 契约测试同步新契约（失败仍写 Work Fact 与
   审计事件，但 pending_actions 不产生主人行），25+111 passed。
+
+- 启动崩溃循环根因修复（Tauri `runtime_manager.rs`）：sidecar 引入向量回填后冷启动需 ~40 秒，
+  而 Tauri 健康等待窗口只有 20 秒——判死→停止→重启→无限循环，8766 永远无监听。启动窗口提高到
+  120 秒（480×250ms）后一次启动成功。含 NameError（pipeline settings 引用）修复 `6da6ecf8`。
+- 真机终验：待办 0（失败全自动闭环生效）、向量化 800 条（local qdrant，幂等回填中）、
+  Ollama ok + embedding healthy 768 维、九环节唯一口径数字完整。最终 DMG
+  `faad98eb9b19f7d4b2b895c4ba7c1907102f85b450475dc9b1e3fb445d15f318`。
