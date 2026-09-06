@@ -541,7 +541,7 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
                 {"key": "filter_failed", "label": "筛选拒绝", "plain": "无法安全解析或归属不明的文件", "count": unique_failed},
                 {"key": "extract", "label": "提炼消息", "plain": "从对话里整理出的可检索消息条数（唯一内容）", "count": extracted_total or None},
                 {"key": "memory", "label": "记忆层更新", "plain": "写进可搜索记忆层的条目数（唯一内容）", "count": memory_total or None},
-                {"key": "vectorize", "label": "向量化", "plain": "按意思搜索用的索引；自动后台补算，无需操作", "count": VectorBackfill.vector_count(settings)},
+                {"key": "vectorize", "label": "向量化", "plain": "按意思搜索用的索引；自动后台补算，无需操作", "count": VectorBackfill.vector_count(getattr(control, "settings", control))},
             ],
             "failed_detail": failed_detail,
             "reused_detail": reused_detail,
