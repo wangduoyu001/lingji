@@ -14,6 +14,7 @@ from typing import Any
 
 from fastapi import HTTPException, Query
 
+from src.retrieval.vector_backfill import VectorBackfill
 from src.storage import StateDatabase
 
 # 主人可读的失败原因分类：内部错误串永不直接暴露。
@@ -373,6 +374,21 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
             projected.append(entry)
         return {"items": projected, "pagination": {"total": total, "limit": limit, "offset": offset, "has_more": offset + limit < total}}
 
+    @app.post("/api/observability/vectorize", dependencies=secured)
+    def observability_vectorize() -> dict[str, Any]:
+        """自动向量化一轮（有界）；由前端自动触发，也可手动兜底。"""
+        settings = getattr(control, "settings", control)
+        provider_builder = getattr(control, "build_embedding_provider", None)
+        if provider_builder is None:
+            from src.model_center import build_embedding_provider
+
+            provider_builder = build_embedding_provider
+        provider = provider_builder(settings)
+        if provider is None:
+            raise HTTPException(status_code=503, detail="embedding provider is not configured")
+        backfill = VectorBackfill(settings, provider=provider)
+        return backfill.run_once(limit=200)
+
     @app.get("/api/observability/changes", dependencies=secured)
     def observability_changes(
         limit: int = Query(default=50, ge=1, le=200),
@@ -525,7 +541,7 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
                 {"key": "filter_failed", "label": "筛选拒绝", "plain": "无法安全解析或归属不明的文件", "count": unique_failed},
                 {"key": "extract", "label": "提炼消息", "plain": "从对话里整理出的可检索消息条数（唯一内容）", "count": extracted_total or None},
                 {"key": "memory", "label": "记忆层更新", "plain": "写进可搜索记忆层的条目数（唯一内容）", "count": memory_total or None},
-                {"key": "vectorize", "label": "向量化", "plain": "按意思搜索用的索引；需要本地 AI 服务运行", "count": None},
+                {"key": "vectorize", "label": "向量化", "plain": "按意思搜索用的索引；自动后台补算，无需操作", "count": VectorBackfill.vector_count(settings)},
             ],
             "failed_detail": failed_detail,
             "reused_detail": reused_detail,

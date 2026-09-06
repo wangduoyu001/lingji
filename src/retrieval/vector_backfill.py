@@ -1,0 +1,146 @@
+"""Full-auto vector backfill: embed memory-layer messages into the local
+Qdrant collection (embedded mode, storage/qdrant).
+
+全自动向量化：无需任何人工点击。每次 run_once 以 message_id 为幂等键，
+已存在的向量跳过；单轮有界，多轮调用直到追平。数据全部留在本机。
+"""
+
+from __future__ import annotations
+
+import hashlib
+import sqlite3
+import threading
+from pathlib import Path
+from typing import Any, Protocol
+
+COLLECTION = "lingji_automatic_memory"
+
+
+class EmbeddingProviderLike(Protocol):
+    def embed_many(self, texts: list[str]) -> list[list[float]]: ...
+
+    def status(self) -> dict[str, Any]: ...
+
+
+def _point_id(message_id: str) -> int:
+    digest = hashlib.md5(message_id.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") % (2**63)
+
+
+class VectorBackfill:
+    """把记忆层消息向量化进本地 Qdrant（幂等、有界、全自动）。"""
+
+    def __init__(self, settings: Any, *, provider: EmbeddingProviderLike, collection: str = COLLECTION):
+        self.settings = settings
+        self.provider = provider
+        self.collection = collection
+        self._lock = threading.Lock()
+
+    def _qdrant_path(self) -> Path:
+        return Path(str(self.settings.storage_path)).expanduser() / "qdrant"
+
+    def _client(self):
+        from qdrant_client import QdrantClient
+
+        path = self._qdrant_path()
+        path.mkdir(parents=True, exist_ok=True)
+        return QdrantClient(path=str(path))
+
+    def _message_rows(self, limit: int) -> list[dict[str, Any]]:
+        memory_db = Path(str(getattr(self.settings, "memory_db_path", "")))
+        if not memory_db.exists():
+            return []
+        with sqlite3.connect(str(memory_db)) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT message_id, conversation_id, role, content, occurred_at, content_hash
+                FROM message_records
+                ORDER BY occurred_at ASC, message_id ASC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def run_once(self, limit: int = 500) -> dict[str, Any]:
+        with self._lock:
+            return self._run_once_locked(limit)
+
+    def _run_once_locked(self, limit: int) -> dict[str, Any]:
+        from qdrant_client.models import PointStruct, VectorParams
+
+        client = self._client()
+        try:
+            rows = self._message_rows(limit * 4)
+            if not rows:
+                return {"embedded": 0, "skipped": 0, "total_vectors": self._count(client), "status": "empty"}
+
+            existing_ids: set[str] = set()
+            try:
+                points, _ = client.scroll(collection_name=self.collection, limit=10000, with_payload=["message_id"])
+                for point in points:
+                    mid = (point.payload or {}).get("message_id")
+                    if mid:
+                        existing_ids.add(str(mid))
+            except Exception:
+                existing_ids = set()
+
+            pending = [row for row in rows if str(row["message_id"]) not in existing_ids][:limit]
+            embedded = 0
+            for row in pending:
+                try:
+                    vectors = self.provider.embed_many([str(row["content"] or "")])
+                    dim = len(vectors[0]) if vectors else 0
+                    if not dim:
+                        continue
+                    try:
+                        client.create_collection(
+                            collection_name=self.collection,
+                            vectors_config=VectorParams(size=dim, distance="Cosine"),
+                        )
+                    except Exception:
+                        pass  # 集合已存在
+                    client.upsert(
+                        collection_name=self.collection,
+                        points=[PointStruct(id=_point_id(row["message_id"]), vector=vectors[0], payload={"message_id": row["message_id"], "role": row["role"]})],
+                    )
+                    embedded += 1
+                except Exception:
+                    continue
+            return {
+                "embedded": embedded,
+                "skipped": len(rows) - len(pending),
+                "total_vectors": self._count(client),
+                "status": "ok",
+            }
+        finally:
+            client.close()
+
+    def _count(self, client) -> int:
+        try:
+            result = client.count(collection_name=self.collection, exact=True)
+            return int(result.count)
+        except Exception:
+            return 0
+
+    @classmethod
+    def vector_count(cls, settings: Any) -> int | None:
+        try:
+            path = Path(str(settings.storage_path)).expanduser() / "qdrant"
+            if not path.exists():
+                return None
+            from qdrant_client import QdrantClient
+
+            client = QdrantClient(path=str(path))
+            try:
+                return int(client.count(collection_name=COLLECTION, exact=True).count)
+            except Exception:
+                return 0
+            finally:
+                client.close()
+        except Exception:
+            return None
+
+
+__all__ = ["COLLECTION", "VectorBackfill"]
