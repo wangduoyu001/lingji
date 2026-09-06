@@ -356,27 +356,12 @@ class WorkStore:
                     description = "重试处理"
                     actor = "system"
                 else:
+                    # 不可重试的失败是最终事实，不是主人的待办：自动关闭旧待办，
+                    # 系统接管下一步（失败明细已在处理详情/工作记录可查）。
                     connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
-                    owner_action_id = f"owner-failure:{work_id}"
-                    updated = connection.execute(
-                        """
-                        UPDATE pending_actions
-                        SET work_id = ?, description = ?, resolved = 0, actor = 'owner', created_at = ?
-                        WHERE action_id = ?
-                        """,
-                        (work_id, "查看提取失败原因并决定下一步", timestamp, owner_action_id),
-                    )
-                    if updated.rowcount == 0:
-                        connection.execute(
-                            """
-                            INSERT INTO pending_actions(work_id, description, resolved, action_id, actor, created_at)
-                            VALUES (?, ?, 0, ?, 'owner', ?)
-                            """,
-                            (work_id, "查看提取失败原因并决定下一步", owner_action_id, timestamp),
-                        )
-                    action_id = f"next:{work_id}:failed"
-                    description = "等待主人查看失败原因"
-                    actor = "owner"
+                    action_id = f"next:{work_id}:failed-auto"
+                    description = "自动记录失败原因，已保留原始文件，不影响已导入内容"
+                    actor = "system"
                 connection.execute(
                     """
                     INSERT INTO work_next_actions(work_id, action_id, description, actor, created_at)

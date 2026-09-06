@@ -100,10 +100,10 @@ def test_real_extraction_terminal_failure_writes_failure_and_owner_pending_witho
     failure = store.get_failure(work_id)
     assert failure is not None
     assert store.get_outcome(work_id).status == "failed"
-    assert len(store.list_pending(work_id=work_id)) == 1
+    assert len(store.list_pending(work_id=work_id)) == 0, "failures must not create owner pending actions"
 
     pipeline.process_job(submitted["job_id"], worker_id="task8")
-    assert len(store.list_pending(work_id=work_id)) == 1
+    assert len(store.list_pending(work_id=work_id)) == 0, "failures must not create owner pending actions"
     assert len([event for event in store.list_events(work_id) if event.event_type == "work.failed"]) == 1
 
 
@@ -166,14 +166,14 @@ def test_terminal_failed_job_replays_failure_and_owner_pending_after_callback_cr
     restarted = WorkStore(StateDatabase(tmp_path / "lingji_state.db"))
     assert restarted.get_outcome(submitted["work_id"]).status == "failed"
     assert restarted.get_failure(submitted["work_id"]) is not None
-    assert len(restarted.list_pending(work_id=submitted["work_id"])) == 1
+    assert len(restarted.list_pending(work_id=submitted["work_id"])) == 0, "failures must not create owner pending actions"
     action_ids = {restarted.get_next_action(submitted["work_id"]).action_id}
     restarted.reconcile_extraction_jobs()
     action_ids.add(restarted.get_next_action(submitted["work_id"]).action_id)
     restarted.reconcile_extraction_jobs()
     action_ids.add(restarted.get_next_action(submitted["work_id"]).action_id)
     assert len(action_ids) == 1
-    assert len(restarted.list_pending(work_id=submitted["work_id"])) == 1
+    assert len(restarted.list_pending(work_id=submitted["work_id"])) == 0, "failures must not create owner pending actions"
     assert len([event for event in restarted.list_events(submitted["work_id"]) if event.event_type == "work.failed"]) == 1
 
 
@@ -185,7 +185,7 @@ def test_replayed_failure_pending_is_resolved_after_retry_success(tmp_path: Path
         connection.execute("UPDATE extraction_jobs SET max_attempts = 1 WHERE job_id = ?", (submitted["job_id"],))
     assert pipeline.process_job(submitted["job_id"], worker_id="task8")["job"]["status"] == "failed"
     failed_store = WorkStore(state)
-    assert len(failed_store.list_pending(work_id=submitted["work_id"])) == 1
+    assert len(failed_store.list_pending(work_id=submitted["work_id"])) == 0, "failures must not create owner pending actions"
 
     pipeline.registry._adapters["always-fail"] = SuccessAdapter()
     queue.retry(submitted["job_id"])
@@ -211,7 +211,7 @@ def test_callback_failure_then_success_resolves_owner_pending_before_any_replay(
     with queue._connection() as connection:
         connection.execute("UPDATE extraction_jobs SET max_attempts = 1 WHERE job_id = ?", (submitted["job_id"],))
     assert pipeline.process_job(submitted["job_id"], worker_id="task8")["job"]["status"] == "failed"
-    assert len(service.work_bridge.store.list_pending(work_id=submitted["work_id"])) == 1
+    assert len(service.work_bridge.store.list_pending(work_id=submitted["work_id"])) == 0, "failures must not create owner pending actions"
 
     pipeline.registry._adapters["always-fail"] = SuccessAdapter()
     queue.retry(submitted["job_id"])

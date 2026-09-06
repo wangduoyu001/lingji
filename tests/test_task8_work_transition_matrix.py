@@ -57,9 +57,9 @@ def _read_state(store: WorkStore, work_id: str) -> dict[str, object]:
             {
                 "outcome": "failed",
                 "failure_visible": True,
-                "next_actor": "owner",
-                "next_action_id": "next:{work_id}:failed",
-                "pending_owner": 1,
+                "next_actor": "system",
+                "next_action_id": "next:{work_id}:failed-auto",
+                "pending_owner": 0,
                 "terminal_events": 1,
             },
         ),
@@ -105,9 +105,9 @@ def _read_state(store: WorkStore, work_id: str) -> dict[str, object]:
             {
                 "outcome": "failed",
                 "failure_visible": True,
-                "next_actor": "owner",
-                "next_action_id": "next:{work_id}:failed",
-                "pending_owner": 1,
+                "next_actor": "system",
+                "next_action_id": "next:{work_id}:failed-auto",
+                "pending_owner": 0,
                 "terminal_events": 1,
             },
         ),
@@ -161,9 +161,9 @@ def test_callback_and_replay_converge_without_new_ids(tmp_path: Path, order: tup
     pending = {action.action_id for action in store.list_pending(work_id=work.work_id)}
     next_action = store.get_next_action(work.work_id)
     assert events == {f"work:{work.work_id}:failed:extraction"}
-    assert pending == {f"owner-failure:{work.work_id}"}
+    assert pending == set(), "failures must not create owner pending actions (full-auto contract)"
     assert next_action is not None
-    assert next_action.action_id == f"next:{work.work_id}:failed"
+    assert next_action.action_id == f"next:{work.work_id}:failed-auto"
     assert _read_state(store, work.work_id)["terminal_events"] == 1
 
 
@@ -299,9 +299,14 @@ def test_current_event_selection_uses_utc_instant_and_ignores_malformed_candidat
     assert store.get_next_action(work.work_id) is None
 
 
-def test_pending_owner_failure_uses_one_sql_row_and_reopens_resolved_row(tmp_path: Path) -> None:
+def test_failure_auto_resolves_legacy_owner_row_and_stays_audited(tmp_path: Path) -> None:
     store, work = _store_and_work(tmp_path)
     action_id = f"owner-failure:{work.work_id}"
+    with store.state._connection() as connection:
+        connection.execute(
+            "INSERT INTO pending_actions(work_id, description, resolved, action_id, actor, created_at) VALUES (?, 'legacy owner row', 0, ?, 'owner', '2026-08-26T09:00:00Z')",
+            (work.work_id, action_id),
+        )
     store.apply_extraction_transition(
         work.work_id,
         "failed",
@@ -318,9 +323,9 @@ def test_pending_owner_failure_uses_one_sql_row_and_reopens_resolved_row(tmp_pat
     )
     with store.state._connection() as connection:
         assert connection.execute(
-            "SELECT COUNT(*) FROM pending_actions WHERE action_id = ?", (action_id,)
-        ).fetchone()[0] == 1
-    assert len(store.list_pending(work_id=work.work_id)) == 1
+            "SELECT COUNT(*) FROM pending_actions WHERE action_id = ? AND resolved = 0", (action_id,)
+        ).fetchone()[0] == 0, "legacy owner row must be auto-resolved by the system-handled failure"
+    assert store.list_pending(work_id=work.work_id) == []
 
     store.apply_extraction_transition(
         work.work_id,
@@ -338,12 +343,13 @@ def test_pending_owner_failure_uses_one_sql_row_and_reopens_resolved_row(tmp_pat
         occurred_at="2026-08-26T10:03:00Z",
     )
     with store.state._connection() as connection:
-        assert connection.execute(
-            "SELECT COUNT(*) FROM pending_actions WHERE action_id = ?", (action_id,)
-        ).fetchone()[0] == 1
+        resolved_legacy = connection.execute(
+            "SELECT COUNT(*) FROM pending_actions WHERE action_id = ? AND resolved = 1", (action_id,)
+        ).fetchone()[0]
+        assert resolved_legacy >= 1, "legacy owner row stays audited as resolved"
         assert connection.execute(
             "SELECT COUNT(*) FROM pending_actions WHERE action_id = ? AND resolved = 0", (action_id,)
-        ).fetchone()[0] == 1
+        ).fetchone()[0] == 0, "failures never reopen owner pending rows (full-auto contract)"
 
 
 def test_pending_action_legacy_duplicates_are_compacted_before_unique_index(tmp_path: Path) -> None:
