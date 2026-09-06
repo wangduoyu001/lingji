@@ -284,10 +284,16 @@ class LocalControlService:
                      or (Path(str(self._statistics_settings.storage_path)) / "lingji_memory.db"))
             ).expanduser()
             documents = None
+            chunks = None
             if memory_db_path.exists():
                 with _sqlite3.connect(str(memory_db_path)) as conn:
                     documents = conn.execute("SELECT COUNT(*) FROM memory_documents").fetchone()[0]
-            memory_counts = {"documents": documents}
+                    chunks = conn.execute("SELECT COUNT(*) FROM memory_chunks").fetchone()[0]
+            memory_counts = {"documents": documents, "chunks": chunks}
+            from src.retrieval.vector_backfill import VectorBackfill
+
+            vector_count = VectorBackfill.vector_count(self._statistics_settings)
+            vector_state = "healthy" if (vector_count or 0) > 0 else "configuration_required"
             payload = {
                 "as_of": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "source": "computed",
@@ -300,10 +306,9 @@ class LocalControlService:
                 },
                 "embedding": embedding,
                 "vector": {
-                    "state": "unavailable",
-                    "ready": False,
-                    "vectors": None,
-                    "last_error": "向量库（Qdrant）未安装或未运行；关键词搜索不受影响",
+                    "state": vector_state,
+                    "ready": (vector_count or 0) > 0,
+                    "vectors": vector_count,
                 },
             }
             target.parent.mkdir(parents=True, exist_ok=True)
