@@ -3752,3 +3752,6 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 临时文件清理：本轮构建产物（build/sidecar-macos、dmg 挂载点、PyInstaller work/dist、vite 缓存）
   在每次重建时清理；旧验收证据根保持只读不动。
 - 验证：e2e PASS、memory-sources PASS、repair PASS、inspector PASS、build PASS。
+
+- 修复提交 `3e7e2049`：service 惰性快照（无网关时从 memory_db 直接计数 + 真实探测 Ollama embedding），
+  使向量化卡和向量状态在有真实数据时不再显示"尚未获得"。
