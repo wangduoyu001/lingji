@@ -3768,3 +3768,7 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 真机终验：待办 0（失败全自动闭环生效）、向量化 800 条（local qdrant，幂等回填中）、
   Ollama ok + embedding healthy 768 维、九环节唯一口径数字完整。最终 DMG
   `faad98eb9b19f7d4b2b895c4ba7c1907102f85b450475dc9b1e3fb445d15f318`。
+
+- 向量化全自动收口（提交 `843027fe`）：`AutomaticMemoryScheduler` 每轮核对成功后自动执行一轮有界
+  向量回填（200 条/轮，幂等），embedding 不可用或回填失败完全隔离、下一轮自动重试，不再依赖
+  任何手动触发。回归 58+24 passed。
