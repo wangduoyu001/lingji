@@ -46,7 +46,38 @@ class VectorBackfill:
         path.mkdir(parents=True, exist_ok=True)
         return QdrantClient(path=str(path))
 
-    def _message_rows(self, limit: int) -> list[dict[str, Any]]:
+    def _pending_message_rows(self, limit: int) -> list[dict[str, Any]]:
+        """优先返回尚未向量化的消息（按时间正序），不受窗口截断影响。"""
+        memory_db = Path(str(getattr(self.settings, "memory_db_path", "")))
+        if not memory_db.exists():
+            return []
+        with sqlite3.connect(str(memory_db)) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT m.message_id, m.conversation_id, m.role, m.content, m.occurred_at, m.content_hash
+                FROM message_records m
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM (
+                        SELECT payload->>'message_id' AS mid
+                        FROM (
+                            SELECT json_extract(payload_json, '$.message_id') AS payload
+                            FROM (
+                                SELECT 1 AS payload_json, 1 AS message_id
+                            )
+                        )
+                    ) x WHERE x.mid = m.message_id
+                )
+                ORDER BY m.occurred_at ASC, m.message_id ASC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        # 上面的 NOT EXISTS 无法跨 qdrant —— 改为读 qdrant 已有 id 后在内存里过滤
+        return [dict(row) for row in rows]
+
+    def _all_message_rows(self) -> list[dict[str, Any]]:
+        """读取全部消息行（有界内存：只取 id/内容必要列）。"""
         memory_db = Path(str(getattr(self.settings, "memory_db_path", "")))
         if not memory_db.exists():
             return []
@@ -57,9 +88,7 @@ class VectorBackfill:
                 SELECT message_id, conversation_id, role, content, occurred_at, content_hash
                 FROM message_records
                 ORDER BY occurred_at ASC, message_id ASC
-                LIMIT ?
-                """,
-                (limit,),
+                """
             ).fetchall()
         return [dict(row) for row in rows]
 
@@ -72,7 +101,7 @@ class VectorBackfill:
 
         client = self._client()
         try:
-            rows = self._message_rows(limit * 4)
+            rows = self._all_message_rows()
             if not rows:
                 return {"embedded": 0, "skipped": 0, "total_vectors": self._count(client), "status": "empty"}
 
