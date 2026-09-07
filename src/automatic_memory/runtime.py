@@ -129,6 +129,7 @@ class AutomaticMemoryRuntime:
                 heartbeat_seconds=float(
                     getattr(settings, "automatic_memory_heartbeat_seconds", 5.0)
                 ),
+                vector_backfill_callback=self._build_vector_backfill_callback(settings),
             )
         self.scheduler = scheduler
         if worker is None:
@@ -446,6 +447,24 @@ class AutomaticMemoryRuntime:
                     failures.append(f"{scan.get('source_id') or scan.get('scan_id')}: {exc}")
         if failures:
             raise RuntimeError("; ".join(failures)[:2000])
+
+    def _build_vector_backfill_callback(self, settings: Any) -> Callable[[], object] | None:
+        """每轮核对后自动补算向量；embedding 不可用时静默跳过。"""
+        try:
+            from src.model_center import build_embedding_provider
+            from src.retrieval.vector_backfill import VectorBackfill
+
+            provider = build_embedding_provider(settings)
+            if provider is None:
+                return None
+            backfill = VectorBackfill(settings, provider=provider)
+
+            def _run() -> object:
+                return backfill.run_once(limit=200)
+
+            return _run
+        except Exception:
+            return None
 
     def scan_now(self, source_id: str) -> dict[str, object]:
         result = self.scheduler.reconcile(source_id, reason="manual")

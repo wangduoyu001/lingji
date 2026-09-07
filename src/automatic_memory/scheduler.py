@@ -65,7 +65,9 @@ class AutomaticMemoryScheduler:
         heartbeat_seconds: float = 5.0,
         heartbeat_work_callback: Callable[[], Any] | None = None,
         event_watcher_enabled: bool = True,
+        vector_backfill_callback: Callable[[], Any] | None = None,
     ) -> None:
+        self.vector_backfill_callback = vector_backfill_callback
         self.state_db = state_db
         self.registry = source_registry
         self.scan_runner = scan_runner
@@ -363,6 +365,17 @@ class AutomaticMemoryScheduler:
             with self._lock:
                 self._inflight.pop(source_id, None)
 
+    def _run_vector_backfill(self) -> None:
+        """每轮核对成功后自动补算一批向量；失败隔离，绝不影响扫描。"""
+        callback = getattr(self, "vector_backfill_callback", None)
+        if callback is None:
+            return
+        try:
+            callback()
+        except Exception:
+            # 向量化是可重建派生层：任何失败只跳过本轮，下一轮核对自动重试。
+            return
+
     def _reconcile_once(self, source_id: str, *, reason: str) -> ReconciliationReport:
         if self._paused:
             return ReconciliationReport(
@@ -427,6 +440,7 @@ class AutomaticMemoryScheduler:
                 ),
             )
             if report.complete:
+                self._run_vector_backfill()
                 current = self.registry.get_scan(scan.scan_id)
                 if current.status == "completed":
                     finalized = current
