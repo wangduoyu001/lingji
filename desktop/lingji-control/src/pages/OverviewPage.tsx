@@ -15,6 +15,8 @@ import type { MemorySourcesSnapshot, ModelHealthPanel, ScanRun } from "./memoryS
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { PageId, Row } from "../types";
 import { pendingActionsFrom, type PendingActionsResponse } from "../contracts/workFact";
+import { useObservabilityTasks, useTaskSteps } from "./WorkLedgerPage";
+import { StepsFlow } from "./WorkLedgerPage";
 import { redactAbsolutePaths } from "./ownerMemoryCardsTypes";
 import { fetchHomePanels, projectServiceRows, projectVectorization, type ServiceRow, type VectorizationPanel } from "./servicesHealth";
 import { OwnerMemoryCardsApi } from "./ownerMemoryCardsApi";
@@ -44,6 +46,9 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
   const recentCardsResource = usePollingResource({ fetcher: useCallback((signal: AbortSignal) => cardsApi.list(0, signal, 6, "current"), [cardsApi]), enabled: active, intervalMs: 20_000, staleAfterMs: 45_000, pauseWhenHidden: true });
   const modelHealth = usePollingResource<ModelHealthPanel>({ fetcher: useCallback(() => loadModelHealthPanel(api), [api]), enabled: active, intervalMs: 30_000, staleAfterMs: 120_000, pauseWhenHidden: true });
   const services = usePollingResource({ fetcher: useCallback(() => fetchHomePanels(api), [api]), enabled: active, intervalMs: 60_000, staleAfterMs: 180_000, pauseWhenHidden: true });
+  const obsTasks = useObservabilityTasks(api, active);
+  const latestScanId = obsTasks.data?.items?.[0]?.scan_id ?? null;
+  const obsSteps = useTaskSteps(api, latestScanId, active);
   if (!data) return <Empty text="灵机正在连接本机服务…" />;
   const d = data as Record<string, unknown>; const health = (d.health ?? {}) as Record<string, unknown>; const runtime = (d.memory_runtime ?? {}) as Record<string, unknown>;
   const runtimeState = health.status ?? runtime.state; const sourceSnapshot = sourceResource.data; const pending = pendingActionsFrom(pendingResource.data); const pendingUnavailable = Boolean(pendingResource.error || pendingResource.stale || pending === null); const cards = cardSummaryResource.data; const internalTopicPattern = /<(environment_context|heartbeat|recommended_plugins|user_instructions|system_message|turn_context|app_context|ide_context|codex_delegation)|^#\s*Files mentioned by the user/i;
@@ -58,6 +63,7 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
     <section className={`overview-hero overview-hero-${stateTone(runtimeState)}`}><div className="overview-hero-main"><div className="overview-title-line"><span className="overview-status-mark" aria-hidden="true" /><h2>{stateLabel(runtimeState)}</h2></div><p>灵机正在自动扫描、整理并更新你的长期记忆，你只需要在这里查看成果。</p></div><div className="overview-live-summary"><strong>{pendingUnavailable ? "正在确认待办" : hasTodos ? "有一件事需要你决定" : "目前不需要你处理"}</strong><small>{pendingUnavailable ? "灵机仍会继续自动工作" : hasTodos ? display(pending?.[0]?.description) : "扫描和整理会自动进行"}</small>{hasTodos && <button className="button primary overview-attention-link" onClick={() => onNavigate("attention")}>处理待办</button>}</div></section>
     {pendingUnavailable && <Notice kind="warning">待办正在自动确认，当前不把未读取当作“没有待办”。</Notice>}{sourceResource.error && <Notice kind="warning">来源状态正在自动刷新，灵机不会因此停止记忆。</Notice>}{note && <Notice kind="info">{note}</Notice>}
     <HomeFactsBoard snapshot={sourceSnapshot} modelHealth={modelHealth.data} loading={!sourceSnapshot} onNavigate={onNavigate} />
+    <MonitorBoard tasks={obsTasks.data} steps={obsSteps.data?.steps ?? null} />
     <ServicesBoard services={services.data} />
     <section className="outcome-section recent-memory-section"><div className="section-heading"><div><span className="section-kicker">最近记住的内容</span><h3>灵机最近替你记住了什么</h3></div><span className="section-caption">自动更新</span></div>{recentCards.length ? <div className="recent-memory-list">{recentCards.map((card) => { const conclusion = ownerFacingConclusion(card); return <article className="recent-memory-item" key={card.memory_id}><strong>{display(redactAbsolutePaths(card.topic), "未命名记忆")}</strong><p>{redactAbsolutePaths(conclusion.text)}</p><small>来源：{display(card.source?.label)}</small></article>; })}</div> : <p className="outcome-empty">灵机还没有形成具体记忆，完成一次来源检查后会出现在这里。</p>}</section>
     <section className="outcome-section takeover-summary-section"><div className="section-heading"><div><span className="section-kicker">最近自动接管成果</span><h3>接管了多少记录</h3></div><span className="section-caption">自动统计</span></div><div className="takeover-stats"><div><strong>{currentSources.length ? currentSources.join("、") : "尚未获得"}</strong><span>已接管来源</span></div><div><strong>{number(cards?.conversations)}</strong><span>已接管对话</span></div><div><strong>{number(cards?.messages)}</strong><span>已导入消息</span></div><div><strong>{latestCheckTime}</strong><span>最近检查时间</span></div></div><p className="proof-note latest-check-note">{latestCheckSummary(latest)}</p><p className="proof-note vector-note">当前记忆和长期记忆只统计仍然有效的内容；已接管对话与消息统计全部导入规模。{cards?.vectorized != null ? `其中 ${cards.vectorized} 件已准备语义检索。` : "语义检索状态会在后台自动更新。"}</p></section>
@@ -161,6 +167,24 @@ function ServicesBoard({ services }: { services: { health: Record<string, unknow
           )}
           <p className="services-note">灵机目前不依赖任何外部云服务：记忆、搜索、向量化全部在本机完成。</p>
         </>
+      )}
+    </section>
+  );
+}
+
+function MonitorBoard({ tasks, steps }: { tasks: { items?: Array<{ scan_id: string; status: string; total?: number | null; queued_count?: number | null; reused_count?: number | null; updated_at?: string | null; job_failed?: number | null }> } | null; steps: Parameters<typeof StepsFlow>[0]["steps"] }) {
+  const latest = tasks?.items?.[0] ?? null;
+  return (
+    <section className="outcome-section monitor-board" aria-label="实时监控">
+      <div className="section-heading"><div><span className="section-kicker">实时监控</span><h3>流水线与最近任务</h3></div><span className="section-caption">{latest ? `最近任务：${latest.status === "completed" ? "已完成" : latest.status === "running" ? "进行中" : latest.status}` : "暂无任务"}</span></div>
+      <StepsFlow steps={steps} />
+      {latest && (
+        <div className="monitor-latest">
+          <div className="monitor-stat"><strong>{latest.total == null ? "尚未获得" : latest.total}</strong><span>检查文件</span></div>
+          <div className="monitor-stat"><strong>{latest.queued_count == null ? "尚未获得" : latest.queued_count}</strong><span>新入库</span></div>
+          <div className="monitor-stat"><strong>{latest.reused_count == null ? "尚未获得" : latest.reused_count}</strong><span>去重复用</span></div>
+          <div className="monitor-stat"><strong>{latest.job_failed == null ? "尚未获得" : latest.job_failed}</strong><span>筛选拒绝</span></div>
+        </div>
       )}
     </section>
   );

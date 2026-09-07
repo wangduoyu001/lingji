@@ -691,3 +691,10 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 .conversation-msg { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
 .conversation-msg p { margin: 0; color: var(--text-soft); font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
 .conversation-msg small { color: var(--muted); font-size: 11px; }
+
+/* Monitor board: dashboard-style pipeline + latest task stats. */
+.monitor-board { display: grid; gap: 12px; }
+.monitor-latest { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.monitor-stat { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); }
+.monitor-stat strong { color: var(--accent-strong); font-size: 20px; font-weight: 700; }
+.monitor-stat span { color: var(--muted); font-size: 12px; }

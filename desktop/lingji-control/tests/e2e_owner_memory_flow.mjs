@@ -697,6 +697,10 @@ try {
   await page.getByText("向量化就是", { exact: false }).first().waitFor();
   await page.getByText("对话内容不会上传到任何外部服务", { exact: false }).first().waitFor();
 
+  await page.getByRole("heading", { name: "流水线与最近任务", exact: true }).waitFor();
+  await page.getByText("原始获取", { exact: true }).first().waitFor();
+  await page.getByText("检查文件", { exact: true }).waitFor();
+
   await page.waitForTimeout(300);
   assert.equal(await page.locator(".action-notice-bar").count(), 0, "dismissed alert must not re-render immediately");
 
