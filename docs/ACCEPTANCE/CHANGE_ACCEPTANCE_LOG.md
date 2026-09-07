@@ -3776,3 +3776,9 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 回填窗口截断修复（提交同上）：`_message_rows` 的 LIMIT 窗口导致永远只看到最旧的行、向量化
   停在 800 无法推进；改为全表候选 + qdrant 已有 id 集合过滤，真机实测一轮 50 条新增、总数推进
   到 850。
+
+### 首页监控大屏板块（提交 `d1de8817`）
+
+- 首页新增"实时监控"板块：九步流水（StepsFlow 复用工作记录组件）+ 最近任务四格统计
+  （检查文件/新入库/去重复用/筛选拒绝），数据来自 observability 投影，10 秒自动刷新。
+- e2e：流水线标题/步骤标签/统计格断言 PASS；其余 smoke/build PASS。
