@@ -3772,3 +3772,7 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 向量化全自动收口（提交 `843027fe`）：`AutomaticMemoryScheduler` 每轮核对成功后自动执行一轮有界
   向量回填（200 条/轮，幂等），embedding 不可用或回填失败完全隔离、下一轮自动重试，不再依赖
   任何手动触发。回归 58+24 passed。
+
+- 回填窗口截断修复（提交同上）：`_message_rows` 的 LIMIT 窗口导致永远只看到最旧的行、向量化
+  停在 800 无法推进；改为全表候选 + qdrant 已有 id 集合过滤，真机实测一轮 50 条新增、总数推进
+  到 850。
