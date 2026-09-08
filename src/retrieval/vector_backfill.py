@@ -15,6 +15,42 @@ from typing import Any, Protocol
 
 COLLECTION = "lingji_automatic_memory"
 
+# 本地（embedded）模式同一存储目录只允许一个 QdrantClient。进程内共享单例，
+# 避免调度器回填线程与 API 线程各自开关客户端时撞 "already accessed" 文件锁。
+_CLIENT_LOCK = threading.Lock()
+_SHARED_CLIENT: Any = None
+_SHARED_PATH: str = ""
+
+
+def _shared_client(path: Path) -> Any:
+    global _SHARED_CLIENT, _SHARED_PATH
+    from qdrant_client import QdrantClient
+
+    with _CLIENT_LOCK:
+        if _SHARED_CLIENT is None or _SHARED_PATH != str(path):
+            if _SHARED_CLIENT is not None:
+                try:
+                    _SHARED_CLIENT.close()
+                except Exception:
+                    pass
+                _SHARED_CLIENT = None
+            _SHARED_CLIENT = QdrantClient(path=str(path))
+            _SHARED_PATH = str(path)
+        return _SHARED_CLIENT
+
+
+def close_shared_client() -> None:
+    """测试或进程退出时释放共享客户端。"""
+    global _SHARED_CLIENT, _SHARED_PATH
+    with _CLIENT_LOCK:
+        if _SHARED_CLIENT is not None:
+            try:
+                _SHARED_CLIENT.close()
+            except Exception:
+                pass
+        _SHARED_CLIENT = None
+        _SHARED_PATH = ""
+
 
 class EmbeddingProviderLike(Protocol):
     def embed_many(self, texts: list[str]) -> list[list[float]]: ...
@@ -40,11 +76,9 @@ class VectorBackfill:
         return Path(str(self.settings.storage_path)).expanduser() / "qdrant"
 
     def _client(self):
-        from qdrant_client import QdrantClient
-
         path = self._qdrant_path()
         path.mkdir(parents=True, exist_ok=True)
-        return QdrantClient(path=str(path))
+        return _shared_client(path)
 
     def _pending_message_rows(self, limit: int) -> list[dict[str, Any]]:
         """优先返回尚未向量化的消息（按时间正序），不受窗口截断影响。"""
@@ -170,7 +204,7 @@ class VectorBackfill:
                 "status": "ok",
             }
         finally:
-            client.close()
+            pass  # 共享客户端保持打开，供调度器/API 复用
 
     def _count(self, client) -> int:
         try:
@@ -185,27 +219,21 @@ class VectorBackfill:
             path = Path(str(settings.storage_path)).expanduser() / "qdrant"
             if not path.exists():
                 return None
-            from qdrant_client import QdrantClient
-
-            client = QdrantClient(path=str(path))
+            client = _shared_client(path)
             try:
                 return int(client.count(collection_name=COLLECTION, exact=True).count)
             except Exception:
                 return 0
-            finally:
-                client.close()
         except Exception:
             return None
 
 
     def search(self, query_embedding: list[float], limit: int = 10) -> list[dict[str, Any]]:
         """按意思搜索：返回最相近的对话/消息。"""
-        from qdrant_client import QdrantClient
-
         path = self._qdrant_path()
         if not path.exists():
             return []
-        client = QdrantClient(path=str(path))
+        client = _shared_client(path)
         try:
             # qdrant-client >= 1.10 移除了 search()；统一走 query_points。
             result = client.query_points(collection_name=self.collection, query=query_embedding, limit=limit)
@@ -222,8 +250,6 @@ class VectorBackfill:
             ]
         except Exception:
             return []
-        finally:
-            client.close()
 
 
 __all__ = ["COLLECTION", "VectorBackfill"]

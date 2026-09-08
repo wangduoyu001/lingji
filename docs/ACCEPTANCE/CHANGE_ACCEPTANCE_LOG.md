@@ -3839,3 +3839,13 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   点击跳转完整对话），与关键词搜索并行展示。
 - 测试：vector_backfill 新增 3 例（payload 完整性、旧格式自愈、search 返回可展示结果），
   focused 111 passed。
+
+### Qdrant 本地锁竞争修复（进程内共享客户端）
+
+- 数据对账中发现 `/api/observability/pipeline` 间歇 500 + 处理详情页"向量化"格显示"尚未获得"：
+  embedded 模式同一存储目录只允许一个 QdrantClient，而调度器回填线程、API 线程、外部脚本各自
+  反复 open/close 撞文件锁（RuntimeError: already accessed / BlockingIOError）。
+- 修复：`vector_backfill.py` 增加进程级共享单例客户端（`_shared_client`，按路径复用，
+  `close_shared_client()` 供测试/退出释放），`_client()`/`vector_count()`/`search()` 全部走共享
+  实例，不再每次开关。测试相应释放共享客户端后直接开独立客户端核对。
+- 回归：vector_backfill 4 例 + observability/distillation/runtime/scheduler/retrieval 79 例通过。

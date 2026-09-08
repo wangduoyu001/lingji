@@ -10,7 +10,7 @@ import pytest
 from src.storage import StateDatabase
 
 try:
-    from src.retrieval.vector_backfill import VectorBackfill
+    from src.retrieval.vector_backfill import VectorBackfill, close_shared_client
 except ModuleNotFoundError:
     VectorBackfill = None  # type: ignore[assignment]
 
@@ -63,6 +63,7 @@ def _fixture(tmp_path: Path, n: int = 3):
 
 
 def test_backfill_embeds_all_messages_once_and_is_idempotent(tmp_path: Path):
+    close_shared_client()
     if VectorBackfill is None:
         pytest.fail("vector backfill production module is absent")
     import sqlite3
@@ -103,6 +104,7 @@ def test_backfill_payload_carries_content_for_recall(tmp_path: Path):
         embed_model="fake-primary", fallback_embed_model="fake-fallback", embedding_batch_size=8)
     backfill = VectorBackfill(settings, provider=FakeProvider())
     backfill.run_once(limit=10)
+    close_shared_client()
     client = QdrantClient(path=str(tmp_path / "qdrant"))
     points, _ = client.scroll(collection_name="lingji_automatic_memory", limit=10, with_payload=True)
     client.close()
@@ -129,6 +131,7 @@ def test_legacy_points_without_content_are_self_healed(tmp_path: Path):
         embedding_provider="ollama", ollama_base_url="http://127.0.0.1:11434",
         embed_model="fake-primary", fallback_embed_model="fake-fallback", embedding_batch_size=8)
     # 预置一个旧格式点（payload 只有 message_id/role）
+    close_shared_client()
     client = QdrantClient(path=str(tmp_path / "qdrant"))
     client.create_collection(collection_name="lingji_automatic_memory", vectors_config=VectorParams(size=4, distance="Cosine"))
     from src.retrieval.vector_backfill import _point_id
@@ -137,10 +140,12 @@ def test_legacy_points_without_content_are_self_healed(tmp_path: Path):
     backfill = VectorBackfill(settings, provider=FakeProvider())
     result = backfill.run_once(limit=10)
     assert result["embedded"] == 1, "legacy point without content must be re-upserted"
+    close_shared_client()
     client = QdrantClient(path=str(tmp_path / "qdrant"))
     points, _ = client.scroll(collection_name="lingji_automatic_memory", limit=10, with_payload=True)
     client.close()
     assert (points[0].payload or {}).get("content") == "内容 0"
+    close_shared_client()
 
 
 def test_search_returns_displayable_recall_results(tmp_path: Path):
@@ -165,3 +170,4 @@ def test_search_returns_displayable_recall_results(tmp_path: Path):
     assert hits[0]["content"] == "晨间简报内容"
     assert hits[0]["conversation_id"] == "conv-1"
     assert hits[0]["score"] > 0
+    close_shared_client()
