@@ -414,7 +414,7 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         hits = backfill.search(vectors[0], limit=limit)
         return {"items": hits, "query": q}
 
-    def _distiller(self) -> Any:
+    def _distiller() -> Any:
         settings = getattr(control, "settings", control)
         from src.automatic_memory.distillation import KnowledgeDistiller
 
@@ -445,15 +445,18 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
     def observability_knowledge_detail(conversation_id: str) -> dict[str, Any]:
         """单条知识要点详情：提炼结果 + 来源对话原文（追溯）。"""
         distiller = _distiller()
-        listing = distiller.list_entries(limit=1, offset=0)
+        listing = distiller.list_entries(limit=200, offset=0)
         entry = next((item for item in listing["items"] if item["conversation_id"] == conversation_id), None)
         settings = getattr(control, "settings", control)
-        memory_db = Path(str(getattr(settings, "memory_db_path", "")))
+        memory_db_raw = str(getattr(settings, "memory_db_path", "") or "").strip()
+        if not memory_db_raw:
+            storage = str(getattr(settings, "storage_path", "") or "")
+            memory_db_raw = str(Path(storage) / "lingji_memory.db") if storage else ""
         messages: list[dict[str, Any]] = []
-        if memory_db.exists():
+        if memory_db_raw and Path(memory_db_raw).exists():
             import sqlite3
 
-            with sqlite3.connect(str(memory_db)) as conn:
+            with sqlite3.connect(memory_db_raw) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
                     """

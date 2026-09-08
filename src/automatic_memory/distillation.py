@@ -66,11 +66,19 @@ class KnowledgeDistiller:
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ db
-    def _memory_db(self) -> Path:
-        return Path(str(getattr(self.settings, "memory_db_path", "")))
+    def _memory_db(self) -> Path | None:
+        # 注意：Path("") 会规范化为 "."，必须先判断原始字符串。
+        raw = str(getattr(self.settings, "memory_db_path", "") or "").strip()
+        return Path(raw) if raw else None
+
+    def _db_available(self) -> bool:
+        path = self._memory_db()
+        return path is not None and path.exists()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._memory_db()))
+        path = self._memory_db()
+        assert path is not None, "memory db path must be available before connect"
+        conn = sqlite3.connect(str(path))
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -196,8 +204,7 @@ class KnowledgeDistiller:
 
     # ------------------------------------------------------------- public
     def stats(self) -> dict[str, Any]:
-        db = self._memory_db()
-        if not db.exists():
+        if not self._db_available():
             return {"total": 0, "ready": 0, "pending": 0, "by_category": {}, "model": None, "available": False}
         with self._connect() as conn:
             self._ensure_schema(conn)
@@ -226,8 +233,7 @@ class KnowledgeDistiller:
         query: str | None = None,
         order: str = "occurred",
     ) -> dict[str, Any]:
-        db = self._memory_db()
-        if not db.exists():
+        if not self._db_available():
             return {"items": [], "pagination": {"total": 0, "has_more": False}}
         clauses: list[str] = ["status = 'ready'"]
         params: list[Any] = []
@@ -286,8 +292,7 @@ class KnowledgeDistiller:
             return self._run_once_locked(limit)
 
     def _run_once_locked(self, limit: int) -> dict[str, Any]:
-        db = self._memory_db()
-        if not db.exists():
+        if not self._db_available():
             return {"status": "empty", "distilled": 0, "failed": 0, **self.stats()}
         model = self._resolve_model()
         if model is None:

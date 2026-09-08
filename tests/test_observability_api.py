@@ -145,3 +145,87 @@ def test_failed_job_projects_owner_safe_reason(tmp_path: Path):
         feed = client.get("/api/observability/feed", headers=headers).json()
         assert feed["items"][0]["status"] == "failed"
         assert "/private" not in json.dumps(feed, ensure_ascii=False)
+
+
+def test_knowledge_routes_project_distilled_entries(tmp_path: Path):
+    """路由级：知识要点列表/详情/空库守卫（回归 distillation 接线）。"""
+    import sqlite3
+
+    state, app, headers, registry, source = _fixture(tmp_path)
+    memory_db = tmp_path / "storage" / "lingji_memory.db"
+    control_settings = getattr(app.state, "lingji_control", None)
+
+    with TestClient(app) as client:
+        # 空库/缺库：200 + 空列表（不 500）
+        missing = client.get("/api/observability/knowledge", headers=headers)
+        assert missing.status_code == 200
+        assert missing.json()["items"] == []
+        assert missing.json()["stats"]["total"] == 0
+
+    # 播种最小记忆库：一段对话 + 已提炼条目 + 一条消息
+    with sqlite3.connect(str(memory_db)) as conn:
+        conn.execute(
+            "CREATE TABLE conversation_records (conversation_id TEXT PRIMARY KEY, source_id TEXT NOT NULL, title TEXT NOT NULL, started_at TEXT, message_count INTEGER NOT NULL DEFAULT 0)"
+        )
+        conn.execute(
+            "CREATE TABLE message_records (message_id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, role TEXT NOT NULL, author TEXT, content TEXT NOT NULL, content_hash TEXT NOT NULL, occurred_at TEXT, sequence INTEGER NOT NULL DEFAULT 0)"
+        )
+        conn.execute("INSERT INTO conversation_records VALUES ('LJ-CONV-K1', 'src', '对话 K1', '2026-09-01T00:00:00+00:00', 1)")
+        conn.execute(
+            "INSERT INTO message_records VALUES ('LJ-MSG-K1', 'LJ-CONV-K1', 'user', '主人', '讨论了本地模型方案', 'h1', '2026-09-01T00:00:00+00:00', 0)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE distilled_knowledge (
+                conversation_id TEXT PRIMARY KEY, source_id TEXT NOT NULL, title TEXT NOT NULL,
+                summary TEXT NOT NULL, key_points_json TEXT NOT NULL, category TEXT NOT NULL,
+                model TEXT NOT NULL, messages_digest TEXT NOT NULL, message_count INTEGER NOT NULL DEFAULT 0,
+                revision INTEGER NOT NULL DEFAULT 1, occurred_at TEXT, status TEXT NOT NULL DEFAULT 'ready',
+                last_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO distilled_knowledge (conversation_id, source_id, title, summary, key_points_json, category, model, messages_digest, message_count, revision, occurred_at, status, created_at, updated_at) VALUES ('LJ-CONV-K1', 'src', '对话 K1', '确定了本地模型方案', '[\"使用本地模型\"]', '决策', 'test-chat', 'dig', 1, 1, '2026-09-01T00:00:00+00:00', 'ready', '2026-09-01T00:00:00+00:00', '2026-09-01T00:00:00+00:00')"
+        )
+        conn.commit()
+
+    # 告诉 distiller 记忆库在哪（与真实 settings 契约一致）
+    from src.automatic_memory.distillation import KnowledgeDistiller
+
+    original_init = KnowledgeDistiller.__init__
+
+    def _patched_init(self, settings, **kwargs):
+        settings = SimpleNamespace(
+            storage_path=getattr(settings, "storage_path", ""),
+            ollama_base_url=getattr(settings, "ollama_base_url", "http://127.0.0.1:11434"),
+            distill_model=getattr(settings, "distill_model", ""),
+            memory_db_path=str(memory_db),
+        )
+        original_init(self, settings, **kwargs)
+
+    KnowledgeDistiller.__init__ = _patched_init
+    try:
+        with TestClient(app) as client:
+            listing = client.get("/api/observability/knowledge?limit=10", headers=headers)
+            assert listing.status_code == 200, listing.text
+            body = listing.json()
+            assert body["stats"]["ready"] == 1
+            assert body["items"][0]["summary"] == "确定了本地模型方案"
+            assert body["items"][0]["key_points"] == ["使用本地模型"]
+
+            searched = client.get("/api/observability/knowledge?q=本地模型", headers=headers).json()
+            assert len(searched["items"]) == 1
+            empty_search = client.get("/api/observability/knowledge?q=不存在xyz", headers=headers).json()
+            assert empty_search["items"] == []
+
+            detail = client.get("/api/observability/knowledge/LJ-CONV-K1", headers=headers)
+            assert detail.status_code == 200, detail.text
+            detail_body = detail.json()
+            assert detail_body["entry"]["category"] == "决策"
+            assert detail_body["messages"][0]["content"] == "讨论了本地模型方案"
+
+            updated_order = client.get("/api/observability/knowledge?order=updated", headers=headers).json()
+            assert updated_order["items"][0]["conversation_id"] == "LJ-CONV-K1"
+    finally:
+        KnowledgeDistiller.__init__ = original_init

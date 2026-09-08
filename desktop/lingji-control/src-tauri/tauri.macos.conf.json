@@ -2,7 +2,9 @@
   "bundle": {
     "targets": ["dmg"],
     "resources": {
-      "binaries/lingji-core-aarch64-apple-darwin": "lingji-core.exe"
+      "binaries/lingji-core-aarch64-apple-darwin": "lingji-core.exe",
+      "binaries/lingji_core_lib": "lingji_core_lib",
+      "binaries/lingji-core-manifest.json": "lingji-core-manifest.json"
     },
     "macOS": {
       "signingIdentity": "-"
