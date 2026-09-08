@@ -84,7 +84,15 @@ class _OllamaHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/api/tags":
-            body = json.dumps({"models": [{"name": "test-chat:latest"}, {"name": "nomic-embed-text:latest"}]}).encode()
+            body = json.dumps(
+                {
+                    "models": [
+                        {"name": "test-chat-huge:latest", "size": 16_000_000_000},
+                        {"name": "test-chat:latest", "size": 4_700_000_000},
+                        {"name": "nomic-embed-text:latest", "size": 274_000_000},
+                    ]
+                }
+            ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -215,6 +223,27 @@ def test_configured_model_falls_back_to_available(tmp_path: Path, ollama_server:
     result = distiller.run_once(limit=10)
     assert result["status"] == "ok"
     assert distiller.list_entries(limit=1)["items"][0]["model"] == "test-chat:latest"
+
+
+def test_prefers_smallest_installed_chat_model(tmp_path: Path, ollama_server: str) -> None:
+    """提炼是摘要任务：无显式配置时应选最小的 chat 模型，而不是列表里第一个大模型。"""
+    memory_db = tmp_path / "lingji_memory.db"
+    _seed_memory_db(memory_db)
+    distiller = KnowledgeDistiller(_Settings(memory_db, ollama_server))
+    distiller.run_once(limit=10)
+    assert distiller.list_entries(limit=1)["items"][0]["model"] == "test-chat:latest"
+
+
+def test_designed_llm_default_beats_smaller_models(tmp_path: Path, ollama_server: str) -> None:
+    """配置了设计默认 llm_model 且已安装时，优先于更小的模型。"""
+    memory_db = tmp_path / "lingji_memory.db"
+    _seed_memory_db(memory_db)
+    settings = _Settings(memory_db, ollama_server)
+    settings.distill_model = ""
+    settings.llm_model = "test-chat-huge:latest"  # 已安装：作为设计默认应被采用
+    distiller = KnowledgeDistiller(settings)
+    distiller.run_once(limit=10)
+    assert distiller.list_entries(limit=1)["items"][0]["model"] == "test-chat-huge:latest"
 
 
 def test_unparsable_answer_is_recorded_and_retried(tmp_path: Path, ollama_server: str, monkeypatch: pytest.MonkeyPatch) -> None:

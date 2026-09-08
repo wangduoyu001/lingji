@@ -107,38 +107,67 @@ class KnowledgeDistiller:
         conn.commit()
 
     # ------------------------------------------------------------ model io
-    def _transport(self):
-        import urllib.request
-
-        return urllib.request
-
-    def _available_models(self) -> list[str]:
+    def _available_models(self) -> list[tuple[str, int]]:
+        """返回 [(模型名, 体积字节)]；体积用于优先选小模型（提炼无需大模型）。"""
         try:
             import urllib.request
 
             with urllib.request.urlopen(f"{self.base_url}/api/tags", timeout=_TAGS_TIMEOUT_SECONDS) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-            return [str(item.get("name") or "") for item in payload.get("models", []) if item.get("name")]
+            models = []
+            for item in payload.get("models", []):
+                name = str(item.get("name") or "")
+                if name:
+                    try:
+                        size = int(item.get("size") or 0)
+                    except (TypeError, ValueError):
+                        size = 0
+                    models.append((name, size))
+            return models
         except Exception:
             return []
+
+    def _designed_defaults(self) -> list[str]:
+        """原设计的默认提炼模型（小模型）：llm_model → fallback_llm。"""
+        defaults = []
+        for attr in ("llm_model", "fallback_llm"):
+            value = str(getattr(self.settings, attr, "") or "").strip()
+            if value:
+                defaults.append(value)
+        return defaults
 
     def _resolve_model(self) -> str | None:
         if self._model:
             return self._model
-        names = self._available_models()
-        if not names:
+        installed = self._available_models()
+        if not installed:
             return None
+        names = [name for name, _size in installed]
+
+        def match(name: str) -> str | None:
+            if name in names:
+                return name
+            base = name.split(":")[0]
+            return next((candidate for candidate in names if candidate.split(":")[0] == base), None)
+
+        # 1) 显式配置的提炼模型
         if self.configured_model:
-            if self.configured_model in names:
-                self._model = self.configured_model
+            found = match(self.configured_model)
+            if found:
+                self._model = found
                 return self._model
-            base = self.configured_model.split(":")[0]
-            match = next((name for name in names if name.split(":")[0] == base), None)
-            if match:
-                self._model = match
+        # 2) 原设计默认（小模型优先于大模型）
+        for default in self._designed_defaults():
+            found = match(default)
+            if found:
+                self._model = found
                 return self._model
-        chat = [name for name in names if not any(hint in name.lower() for hint in _EMBEDDING_MODEL_HINTS)]
-        self._model = chat[0] if chat else None
+        # 3) 兜底：已安装的 chat 模型里选体积最小的（摘要任务不需要大模型）
+        chat = [(name, size) for name, size in installed if not any(hint in name.lower() for hint in _EMBEDDING_MODEL_HINTS)]
+        if not chat:
+            return None
+        chat.sort(key=lambda entry: (entry[1], entry[0]))
+        self._model = chat[0][0]
         return self._model
 
     def _build_prompt(self, title: str, transcript: str) -> list[dict[str, str]]:
