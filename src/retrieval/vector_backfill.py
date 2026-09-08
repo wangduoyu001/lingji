@@ -172,4 +172,34 @@ class VectorBackfill:
             return None
 
 
+    def search(self, query_embedding: list[float], limit: int = 10) -> list[dict[str, Any]]:
+        """按意思搜索：返回最相近的对话/消息。"""
+        from qdrant_client import QdrantClient
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+        path = self._qdrant_path()
+        if not path.exists():
+            return []
+        client = QdrantClient(path=str(path))
+        try:
+            hits = client.search(
+                collection_name=self.collection,
+                query_vector=query_embedding,
+                limit=limit,
+            )
+            return [
+                {
+                    "score": round(hit.score, 3),
+                    "content": (hit.payload or {}).get("content", ""),
+                    "role": (hit.payload or {}).get("role", ""),
+                    "message_id": (hit.payload or {}).get("message_id", ""),
+                }
+                for hit in hits
+            ]
+        except Exception:
+            return []
+        finally:
+            client.close()
+
+
 __all__ = ["COLLECTION", "VectorBackfill"]

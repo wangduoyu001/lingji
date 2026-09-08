@@ -76,7 +76,7 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
       <div className="library-filters">
         <input
           className="library-search"
-          placeholder="搜索对话内容…（回车执行）"
+          placeholder="搜你的记忆：输入关键词或一句话…"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {

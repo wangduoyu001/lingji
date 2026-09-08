@@ -389,6 +389,30 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         backfill = VectorBackfill(settings, provider=provider)
         return backfill.run_once(limit=200)
 
+    @app.get("/api/observability/recall", dependencies=secured)
+    def observability_recall(
+        q: str = Query(min_length=1),
+        limit: int = Query(default=10, ge=1, le=50),
+    ) -> dict[str, Any]:
+        """按意思搜索你的全部对话记忆（语义召回）。"""
+        settings = getattr(control, "settings", control)
+        provider_builder = getattr(control, "build_embedding_provider", None)
+        if provider_builder is None:
+            from src.model_center import build_embedding_provider
+
+            provider_builder = build_embedding_provider
+        provider = provider_builder(settings)
+        if provider is None:
+            raise HTTPException(status_code=503, detail="embedding provider is not configured")
+        vectors = provider.embed_many([q])
+        if not vectors:
+            return {"items": [], "query": q}
+        from src.retrieval.vector_backfill import VectorBackfill
+
+        backfill = VectorBackfill(settings, provider=provider)
+        hits = backfill.search(vectors[0], limit=limit)
+        return {"items": hits, "query": q}
+
     @app.get("/api/observability/changes", dependencies=secured)
     def observability_changes(
         limit: int = Query(default=50, ge=1, le=200),
