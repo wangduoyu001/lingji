@@ -3782,3 +3782,10 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 首页新增"实时监控"板块：九步流水（StepsFlow 复用工作记录组件）+ 最近任务四格统计
   （检查文件/新入库/去重复用/筛选拒绝），数据来自 observability 投影，10 秒自动刷新。
 - e2e：流水线标题/步骤标签/统计格断言 PASS；其余 smoke/build PASS。
+
+### 语义搜索（按意思搜你的记忆）交付（提交 `2cb5bc9a`）
+
+- 记忆库搜索框升级为语义搜索：输入"部署"能命中聊过"上线"的对话（nomic-embed-text 768 维
+  向量召回，qdrant 本地存储）。后端新增 `/api/observability/recall` 路由，用户输入 → embed →
+  qdrant search → 按相似度排序返回。搜索提示改为"搜你的记忆：输入关键词或一句话"。
+- 后端 75 passed（含 observability/vector_backfill/adapter 全套）。
