@@ -490,10 +490,21 @@ class AutomaticMemoryRuntime:
             return None
         try:
             from src.automatic_memory.distillation import KnowledgeDistiller
+            from src.control.runtime_settings import RuntimeSettingsStore
 
-            return KnowledgeDistiller(settings)
+            store = RuntimeSettingsStore(settings)
+
+            def _model_override() -> str:
+                return str(store.snapshot()["values"].get("distill_model", "") or "")
+
+            return KnowledgeDistiller(settings, model_override=_model_override)
         except Exception:
-            return None
+            try:
+                from src.automatic_memory.distillation import KnowledgeDistiller
+
+                return KnowledgeDistiller(settings)
+            except Exception:
+                return None
 
     def _distill_loop(self) -> None:
         """daemon：每轮有界提炼若干段对话；失败退避，绝不影响扫描。"""

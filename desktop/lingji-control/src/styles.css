@@ -690,10 +690,24 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 .library-tabs { display: flex; gap: 8px; }
 .library-tabs .button { padding: 7px 16px; }
 .knowledge-section { display: grid; gap: 12px; }
-.knowledge-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-.knowledge-stats > div { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); }
-.knowledge-stats strong { font-size: 18px; color: var(--text); }
-.knowledge-stats span { color: var(--muted); font-size: 12px; }
+.knowledge-progress-board { display: grid; grid-template-columns: 1.6fr 1fr; gap: 12px; padding: 14px; border-radius: 12px; background: var(--surface-2); }
+.knowledge-progress-main { display: grid; gap: 8px; align-content: start; }
+.knowledge-progress-status { display: grid; gap: 3px; }
+.knowledge-progress-status strong { color: var(--text); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.knowledge-progress-status small { color: var(--muted); font-size: 12px; }
+.knowledge-progress-bar { height: 8px; border-radius: 999px; background: rgba(127,127,127,.25); overflow: hidden; }
+.knowledge-progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent-strong), var(--accent, #7aa2f7)); transition: width .6s ease; }
+.knowledge-progress-caption { color: var(--muted); font-size: 12px; }
+.knowledge-progress-side { display: grid; gap: 10px; align-content: start; }
+.knowledge-model-row { display: grid; gap: 5px; }
+.knowledge-model-row label { color: var(--muted); font-size: 12px; }
+.knowledge-model-select { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font-size: 13px; }
+.knowledge-model-row small { color: var(--muted); font-size: 11px; }
+.knowledge-recent { display: grid; gap: 5px; }
+.knowledge-recent > small { color: var(--muted); font-size: 12px; }
+.knowledge-recent-row { display: flex; align-items: center; gap: 6px; }
+.knowledge-recent-row small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.knowledge-recent-row small:last-child { margin-left: auto; flex-shrink: 0; }
 .knowledge-filters { display: grid; gap: 8px; }
 .knowledge-category-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .knowledge-category-row .pill { border: 1px solid transparent; cursor: pointer; font-size: 12px; }

@@ -22,6 +22,14 @@ class RuntimeSettingsStore:
 
     def definitions(self) -> dict[str, dict[str, Any]]:
         return {
+            # Knowledge distillation (fully automatic; local models only).
+            "distill_model": self._string(
+                "knowledge_distill",
+                "提炼模型",
+                "自动提炼对话要点使用的本机模型；留空表示自动选择已安装里最小的 chat 模型。",
+                "",
+                128,
+            ),
             # Media extraction limits.
             "media_keyframe_interval_seconds": self._number(
                 "media_processing", "关键帧间隔（秒）", "每隔多少秒提取一张关键帧。", 30.0, 1.0, 86400.0

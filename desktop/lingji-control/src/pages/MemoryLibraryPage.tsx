@@ -37,6 +37,31 @@ export type KnowledgeStats = {
   model?: string | null;
   available: boolean;
 };
+export type KnowledgeProgress = {
+  active: boolean;
+  current?: { conversation_id: string; title: string; started_at: string } | null;
+  model?: string | null;
+  finished?: Array<{ title: string; seconds: number; ok: boolean; at: string }>;
+  cumulative_distilled?: number;
+  cumulative_failed?: number;
+};
+export type KnowledgeModel = { name: string; size_bytes: number; active: boolean };
+
+function bytesLabel(value: number | undefined): string {
+  if (!value || value <= 0) return "体积未知";
+  const gb = value / 1024 ** 3;
+  if (gb >= 1) return `${gb.toFixed(1)} GB`;
+  return `${Math.round(value / 1024 ** 2)} MB`;
+}
+
+function elapsedLabel(startedAt: string | undefined): string {
+  if (!startedAt) return "";
+  const started = new Date(startedAt).getTime();
+  if (Number.isNaN(started)) return "";
+  const seconds = Math.max(0, Math.round((Date.now() - started) / 1000));
+  if (seconds < 60) return `${seconds} 秒`;
+  return `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
+}
 
 function time(value: unknown): string {
   if (!value) return "时间尚未获得";
@@ -58,7 +83,14 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
   const [query, setQuery] = useState("");
   const [searchApplied, setSearchApplied] = useState("");
   const limit = 20;
-  const resource = usePollingResource<{ items: KnowledgeEntry[]; pagination: { total: number; has_more: boolean }; stats: KnowledgeStats }>({
+  const resource = usePollingResource<{
+    items: KnowledgeEntry[];
+    pagination: { total: number; has_more: boolean };
+    stats: KnowledgeStats;
+    progress?: KnowledgeProgress;
+    models?: KnowledgeModel[];
+    distill_model?: string;
+  }>({
     fetcher: useCallback(
       (signal: AbortSignal) =>
         api.get(
@@ -70,13 +102,28 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
       [api, offset, category, searchApplied],
     ),
     enabled: active,
-    intervalMs: 15_000,
-    staleAfterMs: 45_000,
+    intervalMs: 8_000,
+    staleAfterMs: 25_000,
   });
-  const [detail, setDetail] = useState<{ entry: KnowledgeEntry | null; loading: boolean; messages: Array<{ role: string; content: string; time: string }> } | null>(null);
-
+  const [switchingModel, setSwitchingModel] = useState(false);
   const stats = resource.data?.stats;
+  const progress = resource.data?.progress;
+  const models = resource.data?.models ?? [];
   const rows = resource.data?.items ?? [];
+
+  const switchModel = async (name: string) => {
+    setSwitchingModel(true);
+    try {
+      await api.post("/api/observability/knowledge/model", { model: name });
+      await resource.refresh();
+    } catch {
+      // 切换失败保持原状，下一次刷新会显示当前生效模型。
+    } finally {
+      setSwitchingModel(false);
+    }
+  };
+
+  const [detail, setDetail] = useState<{ entry: KnowledgeEntry | null; loading: boolean; messages: Array<{ role: string; content: string; time: string }> } | null>(null);
 
   const openDetail = async (entry: KnowledgeEntry) => {
     setDetail({ entry, loading: true, messages: [] });
@@ -100,11 +147,63 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
 
   return (
     <section className="stack knowledge-section">
-      <div className="knowledge-stats">
-        <div><strong>{stats ? `${stats.ready} / ${stats.total}` : "—"}</strong><span>已提炼 / 全部对话</span></div>
-        <div><strong>{stats?.pending ?? "—"}</strong><span>待提炼（自动推进）</span></div>
-        <div><strong>{stats?.model ? String(stats.model).split(":")[0] : "等待模型"}</strong><span>本机提炼模型</span></div>
-        <div><strong>{stats && stats.pending > 0 ? "自动提炼中" : stats?.ready ? "已完成一轮" : "等待数据"}</strong><span>当前状态</span></div>
+      <div className="knowledge-progress-board">
+        <div className="knowledge-progress-main">
+          <div className="knowledge-progress-status">
+            {progress?.active ? (
+              <>
+                <span className="pill warning">模型正在提炼</span>
+                <strong>{progress.current?.title || "未命名对话"}</strong>
+                <small>已进行 {elapsedLabel(progress.current?.started_at) || "刚刚开始"}</small>
+              </>
+            ) : (
+              <>
+                <span className="pill ok">{progress?.finished?.length ? "模型空闲" : "等待任务"}</span>
+                <strong>{progress?.finished?.length ? "刚完成一轮提炼，有新对话会自动继续" : "有新对话时会自动开始提炼"}</strong>
+                <small>全程自动，无需操作</small>
+              </>
+            )}
+          </div>
+          <div className="knowledge-progress-bar">
+            <div className="knowledge-progress-fill" style={{ width: stats && stats.total ? `${Math.round((stats.ready / stats.total) * 100)}%` : "0%" }} />
+          </div>
+          <small className="knowledge-progress-caption">
+            {stats ? `进度 ${stats.ready} / ${stats.total} 段（${stats.total ? Math.round((stats.ready / stats.total) * 100) : 0}%）` : "进度尚未获得"}
+            {progress?.cumulative_failed ? ` · 失败 ${progress.cumulative_failed} 段会自动重试` : ""}
+          </small>
+        </div>
+        <div className="knowledge-progress-side">
+          <div className="knowledge-model-row">
+            <label htmlFor="knowledge-model-select">提炼模型</label>
+            <select
+              id="knowledge-model-select"
+              className="knowledge-model-select"
+              disabled={switchingModel || models.length === 0}
+              value={resource.data?.distill_model || ""}
+              onChange={(event) => void switchModel(event.target.value)}
+            >
+              <option value="">自动（优先最小模型）</option>
+              {models.map((model) => (
+                <option key={model.name} value={model.name}>
+                  {model.name} · {bytesLabel(model.size_bytes)}
+                </option>
+              ))}
+            </select>
+            <small>{switchingModel ? "正在切换…" : models.length === 0 ? "未发现本机模型" : "下一轮提炼立即生效"}</small>
+          </div>
+          {(progress?.finished?.length ?? 0) > 0 && (
+            <div className="knowledge-recent">
+              <small>最近提炼</small>
+              {progress!.finished!.slice().reverse().slice(0, 3).map((item, index) => (
+                <div key={index} className="knowledge-recent-row">
+                  <span className={`pill ${item.ok ? "ok" : "bad"}`}>{item.ok ? "完成" : "重试"}</span>
+                  <small>{item.title}</small>
+                  <small>{item.seconds < 60 ? `${Math.round(item.seconds)} 秒` : `${Math.floor(item.seconds / 60)} 分`}</small>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <div className="knowledge-filters">
         <input

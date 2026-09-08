@@ -58,7 +58,7 @@ def _fixture(tmp_path: Path):
     )
     control = LocalControlService.__new__(LocalControlService)
     control.state_db = state
-    control.settings = SimpleNamespace(storage_path=storage)
+    control.settings = SimpleNamespace(storage_path=storage, runtime_settings_file="runtime_settings.json")
     app = create_control_app(SimpleNamespace(storage_path=storage), service=control, token="local-secret")
     headers = {"X-LingJi-Token": "local-secret"}
     return state, app, headers, registry, source
@@ -229,3 +229,20 @@ def test_knowledge_routes_project_distilled_entries(tmp_path: Path):
             assert updated_order["items"][0]["conversation_id"] == "LJ-CONV-K1"
     finally:
         KnowledgeDistiller.__init__ = original_init
+
+
+def test_knowledge_progress_fields_and_model_switch(tmp_path: Path):
+    """进度/模型列表字段 + 主人切换提炼模型的端点。"""
+    state, app, headers, registry, source = _fixture(tmp_path)
+    with TestClient(app) as client:
+        listing = client.get("/api/observability/knowledge", headers=headers).json()
+        assert "progress" in listing and listing["progress"]["active"] is False
+        assert isinstance(listing["models"], list)
+        assert "distill_model" in listing
+
+        rejected = client.post("/api/observability/knowledge/model", headers=headers, json={"model": "not-installed:x"})
+        assert rejected.status_code == 400
+
+        reset = client.post("/api/observability/knowledge/model", headers=headers, json={"model": ""})
+        assert reset.status_code == 200
+        assert reset.json()["distill_model"] == ""

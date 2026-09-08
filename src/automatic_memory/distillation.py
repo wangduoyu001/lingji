@@ -17,8 +17,9 @@ import json
 import re
 import sqlite3
 import threading
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 TRANSCRIPT_CHAR_BUDGET = 6000
 TRANSCRIPT_MESSAGE_CAP = 80
@@ -57,11 +58,13 @@ def _parse_model_json(raw: str) -> dict[str, Any] | None:
 class KnowledgeDistiller:
     """把记忆层对话提炼成结构化知识要点（本机模型、幂等、有界、全自动）。"""
 
-    def __init__(self, settings: Any, *, base_url: str | None = None, model: str | None = None):
+    def __init__(self, settings: Any, *, base_url: str | None = None, model: str | None = None,
+                 model_override: Callable[[], str] | None = None):
         self.settings = settings
         self.base_url = str(base_url or getattr(settings, "ollama_base_url", "http://127.0.0.1:11434")).rstrip("/")
         configured = str(model if model is not None else getattr(settings, "distill_model", "") or "").strip()
-        self.configured_model = configured
+        self._configured_static = configured
+        self._model_override = model_override
         self._model: str | None = None
         self._lock = threading.Lock()
 
@@ -104,6 +107,21 @@ class KnowledgeDistiller:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS distill_progress (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                current_conversation_id TEXT,
+                current_title TEXT,
+                current_started_at TEXT,
+                active_model TEXT,
+                finished_json TEXT NOT NULL DEFAULT '[]',
+                cumulative_distilled INTEGER NOT NULL DEFAULT 0,
+                cumulative_failed INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
         conn.commit()
 
     # ------------------------------------------------------------ model io
@@ -127,6 +145,18 @@ class KnowledgeDistiller:
         except Exception:
             return []
 
+    @property
+    def configured_model(self) -> str:
+        """每轮实时读取覆盖值：主人在 UI 切换模型后下一轮立即生效。"""
+        if self._model_override is not None:
+            try:
+                override = str(self._model_override() or "").strip()
+            except Exception:
+                override = ""
+            if override:
+                return override
+        return self._configured_static
+
     def _designed_defaults(self) -> list[str]:
         """原设计的默认提炼模型（小模型）：llm_model → fallback_llm。"""
         defaults = []
@@ -136,9 +166,20 @@ class KnowledgeDistiller:
                 defaults.append(value)
         return defaults
 
+    def installed_models(self) -> list[dict[str, Any]]:
+        """已安装的 chat 模型（供主人在 UI 选择）；标注当前生效的一个。"""
+        active = self._resolve_model()
+        chat = [
+            {"name": name, "size_bytes": size}
+            for name, size in self._available_models()
+            if not any(hint in name.lower() for hint in _EMBEDDING_MODEL_HINTS)
+        ]
+        chat.sort(key=lambda entry: (entry["size_bytes"], entry["name"]))
+        for entry in chat:
+            entry["active"] = entry["name"] == active
+        return chat
+
     def _resolve_model(self) -> str | None:
-        if self._model:
-            return self._model
         installed = self._available_models()
         if not installed:
             return None
@@ -150,19 +191,24 @@ class KnowledgeDistiller:
             base = name.split(":")[0]
             return next((candidate for candidate in names if candidate.split(":")[0] == base), None)
 
-        # 1) 显式配置的提炼模型
-        if self.configured_model:
-            found = match(self.configured_model)
+        # 1) 主人显式选择的提炼模型（UI 切换后立即生效，不用旧缓存）
+        configured = self.configured_model
+        if configured:
+            found = match(configured)
             if found:
                 self._model = found
                 return self._model
-        # 2) 原设计默认（小模型优先于大模型）
+        # 2) 无覆盖时可用已解析缓存；该模型被卸载则重新解析
+        cached = self._model
+        if cached and cached in names:
+            return cached
+        # 3) 原设计默认（小模型优先于大模型）
         for default in self._designed_defaults():
             found = match(default)
             if found:
                 self._model = found
                 return self._model
-        # 3) 兜底：已安装的 chat 模型里选体积最小的（摘要任务不需要大模型）
+        # 4) 兜底：已安装的 chat 模型里选体积最小的（摘要任务不需要大模型）
         chat = [(name, size) for name, size in installed if not any(hint in name.lower() for hint in _EMBEDDING_MODEL_HINTS)]
         if not chat:
             return None
@@ -333,17 +379,103 @@ class KnowledgeDistiller:
             pending = self._pending_conversations(conn, max(1, int(limit)))
             for conversation in pending:
                 conversation_id = str(conversation["conversation_id"])
+                self._publish_current(conn, model, conversation)
+                started = time.monotonic()
                 try:
                     outcome = self._distill_one(conn, model, conversation)
                 except Exception as exc:  # 单段失败不阻塞本轮其余对话
                     self._record_failure(conn, conversation_id, str(exc))
+                    self._publish_finished(conn, model, str(conversation["title"] or "未命名对话"), time.monotonic() - started, False)
                     failed += 1
                     continue
+                self._publish_finished(conn, model, str(conversation["title"] or "未命名对话"), time.monotonic() - started, bool(outcome))
                 if outcome:
                     distilled += 1
                 else:
                     failed += 1
         return {"status": "ok", "distilled": distilled, "failed": failed, **self.stats()}
+
+    # ------------------------------------------------------------- progress
+    def _publish_current(self, conn: sqlite3.Connection, model: str, conversation: dict[str, Any]) -> None:
+        conn.execute(
+            """
+            INSERT INTO distill_progress (id, current_conversation_id, current_title, current_started_at, active_model, finished_json, cumulative_distilled, cumulative_failed, updated_at)
+            VALUES (1, ?, ?, ?, ?, COALESCE((SELECT finished_json FROM distill_progress WHERE id = 1), '[]'),
+                    COALESCE((SELECT cumulative_distilled FROM distill_progress WHERE id = 1), 0),
+                    COALESCE((SELECT cumulative_failed FROM distill_progress WHERE id = 1), 0), ?)
+            ON CONFLICT(id) DO UPDATE SET
+                current_conversation_id = excluded.current_conversation_id,
+                current_title = excluded.current_title,
+                current_started_at = excluded.current_started_at,
+                active_model = excluded.active_model,
+                updated_at = excluded.updated_at
+            """,
+            (
+                str(conversation["conversation_id"]),
+                str(conversation["title"] or "未命名对话"),
+                _now(),
+                model,
+                _now(),
+            ),
+        )
+        conn.commit()
+
+    def _publish_finished(self, conn: sqlite3.Connection, model: str, title: str, seconds: float, ok: bool) -> None:
+        row = conn.execute("SELECT finished_json, cumulative_distilled, cumulative_failed FROM distill_progress WHERE id = 1").fetchone()
+        try:
+            finished = json.loads(str(row["finished_json"] or "[]")) if row is not None else []
+        except json.JSONDecodeError:
+            finished = []
+        if not isinstance(finished, list):
+            finished = []
+        finished.append({"title": title[:60], "seconds": round(float(seconds), 1), "ok": bool(ok), "at": _now()})
+        finished = finished[-6:]
+        distilled = int(row["cumulative_distilled"] if row is not None else 0) + (1 if ok else 0)
+        failed = int(row["cumulative_failed"] if row is not None else 0) + (0 if ok else 1)
+        conn.execute(
+            """
+            INSERT INTO distill_progress (id, current_conversation_id, current_title, current_started_at, active_model, finished_json, cumulative_distilled, cumulative_failed, updated_at)
+            VALUES (1, NULL, NULL, NULL, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                current_conversation_id = NULL,
+                current_title = NULL,
+                current_started_at = NULL,
+                active_model = excluded.active_model,
+                finished_json = excluded.finished_json,
+                cumulative_distilled = excluded.cumulative_distilled,
+                cumulative_failed = excluded.cumulative_failed,
+                updated_at = excluded.updated_at
+            """,
+            (model, json.dumps(finished, ensure_ascii=False), distilled, failed, _now()),
+        )
+        conn.commit()
+
+    def progress(self) -> dict[str, Any]:
+        """主人面板用的实时进度：正在提炼哪段、最近几段耗时、累计成败。"""
+        if not self._db_available():
+            return {"active": False}
+        with self._connect() as conn:
+            self._ensure_schema(conn)
+            row = conn.execute("SELECT * FROM distill_progress WHERE id = 1").fetchone()
+        if row is None:
+            return {"active": False}
+        try:
+            finished = json.loads(str(row["finished_json"] or "[]"))
+        except json.JSONDecodeError:
+            finished = []
+        return {
+            "active": bool(row["current_conversation_id"]),
+            "current": {
+                "conversation_id": row["current_conversation_id"],
+                "title": row["current_title"],
+                "started_at": row["current_started_at"],
+            } if row["current_conversation_id"] else None,
+            "model": row["active_model"],
+            "finished": [item for item in finished if isinstance(item, dict)][-6:],
+            "cumulative_distilled": int(row["cumulative_distilled"]),
+            "cumulative_failed": int(row["cumulative_failed"]),
+            "updated_at": row["updated_at"],
+        }
 
     def _distill_one(self, conn: sqlite3.Connection, model: str, conversation: dict[str, Any]) -> bool:
         conversation_id = str(conversation["conversation_id"])

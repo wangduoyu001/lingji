@@ -439,7 +439,34 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
             order=order if order in {"occurred", "updated"} else "occurred",
         )
         listing["stats"] = stats
+        try:
+            listing["distill_model"] = distiller.configured_model
+        except Exception:
+            listing["distill_model"] = ""
+        try:
+            listing["progress"] = distiller.progress()
+        except Exception:
+            listing["progress"] = {"active": False}
+        try:
+            listing["models"] = distiller.installed_models()
+        except Exception:
+            listing["models"] = []
         return listing
+
+    @app.post("/api/observability/knowledge/model", dependencies=secured)
+    def observability_knowledge_set_model(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """主人切换提炼模型：只在已安装的本机模型里选，下一轮提炼立即生效。"""
+        body = payload or {}
+        requested = str(body.get("model") or "").strip()
+        distiller = _distiller()
+        installed = {str(entry["name"]) for entry in distiller.installed_models()}
+        if requested and requested not in installed:
+            raise HTTPException(status_code=400, detail="model is not installed locally")
+        settings = getattr(control, "settings", control)
+        from src.control.runtime_settings import RuntimeSettingsStore
+
+        snapshot = RuntimeSettingsStore(settings).update({"distill_model": requested})
+        return {"distill_model": snapshot["values"].get("distill_model", ""), "installed": sorted(installed)}
 
     @app.get("/api/observability/knowledge/{conversation_id}", dependencies=secured)
     def observability_knowledge_detail(conversation_id: str) -> dict[str, Any]:

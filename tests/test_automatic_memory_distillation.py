@@ -254,3 +254,41 @@ def test_unparsable_answer_is_recorded_and_retried(tmp_path: Path, ollama_server
     monkeypatch.undo()
     recovered = distiller.run_once(limit=10)
     assert recovered["distilled"] == 2
+
+
+def test_progress_reports_activity_and_results(tmp_path: Path, ollama_server: str) -> None:
+    distiller = _distiller(tmp_path, ollama_server)
+    before = distiller.progress()
+    assert before["active"] is False
+    distiller.run_once(limit=10)
+    progress = distiller.progress()
+    assert progress["active"] is False  # 本轮结束后不再有进行中的对话
+    assert progress["cumulative_distilled"] == 2
+    assert len(progress["finished"]) == 2
+    assert all(item["ok"] for item in progress["finished"])
+    assert progress["model"] == "test-chat:latest"
+
+
+def test_model_override_switches_live(tmp_path: Path, ollama_server: str) -> None:
+    memory_db = tmp_path / "lingji_memory.db"
+    _seed_memory_db(memory_db)
+    current = {"value": ""}
+    distiller = KnowledgeDistiller(_Settings(memory_db, ollama_server), model_override=lambda: current["value"])
+    current["value"] = "test-chat-huge:latest"
+    distiller.run_once(limit=10)
+    assert distiller.list_entries(limit=1)["items"][0]["model"] == "test-chat-huge:latest"
+    # 覆盖清空后回到自动（最小 chat 模型）
+    current["value"] = ""
+    distiller._model = None
+    assert distiller._resolve_model() == "test-chat:latest"
+
+
+def test_installed_models_marks_active_and_sorts_by_size(tmp_path: Path, ollama_server: str) -> None:
+    memory_db = tmp_path / "lingji_memory.db"
+    _seed_memory_db(memory_db)
+    distiller = KnowledgeDistiller(_Settings(memory_db, ollama_server))
+    models = distiller.installed_models()
+    names = [entry["name"] for entry in models]
+    assert names == ["test-chat:latest", "test-chat-huge:latest"]  # embedding 模型被排除，小模型在前
+    assert models[0]["active"] is True
+    assert models[1]["active"] is False

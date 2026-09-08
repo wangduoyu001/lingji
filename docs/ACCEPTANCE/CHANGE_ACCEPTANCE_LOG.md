@@ -3809,3 +3809,19 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 测试：新增 `tests/test_automatic_memory_distillation.py` 8 个用例（提炼/幂等/变更重提炼/
   搜索分类过滤/模型不可用/失败重试/模型回退/解析失败重试），fake Ollama 全覆盖；
   observability+scheduler+vector+retrieval+control 回归 29+72 passed。
+
+### 提炼进度实时看板 + 主人可切换提炼模型
+
+- 进度事实落地：`lingji_memory.db` 新增 `distill_progress` 单行表（正在提炼哪段对话/开始时间/
+  生效模型/最近 6 段结果与耗时/累计成败）。daemon 每处理一段对话即更新，API 与 UI 无状态可读。
+- `KnowledgeDistiller.progress()` 供面板读取；`GET /api/observability/knowledge` 新增
+  `progress`（当前任务+最近记录）、`models`（已安装 chat 模型按体积排序+生效标注）、
+  `distill_model`（当前覆盖值）字段。
+- 主人可切换模型：`POST /api/observability/knowledge/model` 只接受已安装的本机模型（否则 400），
+  写入 `runtime_settings.json` 的 `distill_model` 覆盖（RuntimeSettingsStore 既有机制）；
+  daemon 每轮实时读取覆盖值，下一轮提炼立即生效，清空即回到"自动（最小模型优先）"。
+- UI（记忆库 → 知识要点）：静态四格升级为实时进度看板——正在提炼的对话标题+已进行时长、
+  进度条（已提炼/全部+百分比）、最近提炼记录（完成/重试+耗时）、模型下拉选择器（标注体积，
+  切换即时生效）。轮询加密到 8 秒。
+- 测试：distillation 新增 3 例（progress 断言、覆盖切换即时生效、installed_models 排序与生效
+  标注），observability 新增 1 例（进度字段+模型切换 400/200）；合计 110 focused passed。
