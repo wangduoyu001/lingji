@@ -187,6 +187,7 @@ export function ChangesLedgerPage({ api, active, timelineMode }: { api: LingJiAp
         </div>
         <span className="auto-refresh-note">{changes.refreshing ? "正在更新" : "自动更新"}</span>
       </section>
+      {timelineMode && <KnowledgeTimelinePanel api={api} active={active} />}
       {changes.loading && !changes.data ? (
         <div className="empty-state" aria-busy="true">正在读取变更账本…</div>
       ) : (changes.data?.items?.length ?? 0) === 0 ? (
@@ -203,5 +204,56 @@ export function ChangesLedgerPage({ api, active, timelineMode }: { api: LingJiAp
         </div>
       )}
     </div>
+  );
+}
+
+type KnowledgeTimelineEntry = {
+  conversation_id: string;
+  title: string;
+  summary: string;
+  key_points: string[];
+  category: string;
+  revision: number;
+  occurred_at?: string | null;
+  updated_at?: string | null;
+  created_at?: string | null;
+};
+
+function KnowledgeTimelinePanel({ api, active }: { api: LingJiApi; active: boolean }) {
+  const knowledge = usePollingResource<{ items: KnowledgeTimelineEntry[]; stats: { ready: number; total: number; pending: number } }>({
+    fetcher: useCallback((signal: AbortSignal) => api.get("/api/observability/knowledge?limit=15&order=updated", { signal }), [api]),
+    enabled: active,
+    intervalMs: 15_000,
+    staleAfterMs: 45_000,
+  });
+  const entries = knowledge.data?.items ?? [];
+  return (
+    <section className="outcome-section">
+      <div className="section-heading">
+        <div><span className="section-kicker">记忆提炼动态</span><h3>灵机最近提炼（或更新）了哪些知识要点</h3></div>
+        <span className="section-caption">
+          {knowledge.data?.stats
+            ? `已提炼 ${knowledge.data.stats.ready} / ${knowledge.data.stats.total}${knowledge.data.stats.pending > 0 ? ` · 待提炼 ${knowledge.data.stats.pending}` : ""}`
+            : "自动更新"}
+        </span>
+      </div>
+      {entries.length === 0 ? (
+        <p className="outcome-empty">还没有提炼记录。本机模型正在自动推进，完成后会出现在这里。</p>
+      ) : (
+        <div className="knowledge-list">
+          {entries.map((entry) => (
+            <article key={entry.conversation_id} className="knowledge-item">
+              <div className="knowledge-item-head">
+                <span className="pill neutral">{entry.category}</span>
+                <span className={`pill ${entry.revision > 1 ? "warning" : "ok"}`}>{entry.revision > 1 ? `更新 · 第 ${entry.revision} 版` : "新提炼"}</span>
+                <small>{timeText(entry.updated_at ?? entry.created_at)}</small>
+              </div>
+              <strong>{entry.title}</strong>
+              <p>{entry.summary}</p>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

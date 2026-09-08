@@ -11,7 +11,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 import math
 from pathlib import Path
-from threading import RLock
+from threading import Event, RLock, Thread
 from typing import Any, Callable
 
 from src.storage import StateDatabase
@@ -67,6 +67,7 @@ class AutomaticMemoryRuntime:
         platform_provider: Callable[[], str] | None = None,
     ) -> None:
         self.state_db = state_db
+        self.settings = settings
         if pipeline is None and settings is not None:
             # Import lazily: extraction adapters import automatic_memory models
             # during bootstrap, so a module-level import would create a cycle.
@@ -151,6 +152,9 @@ class AutomaticMemoryRuntime:
         self.work_store = WorkStore(state_db)
         self.work_projector = WorkProjector(self.work_store)
         self.work_bridge = CaptureWorkBridge(self.work_store)
+        self._distiller = self._build_distiller(settings)
+        self._distill_stop = Event()
+        self._distill_thread: Thread | None = None
         if hasattr(self.scheduler, "heartbeat_work_callback"):
             self.scheduler.heartbeat_work_callback = self._touch_active_scan_work
         if hasattr(self.registry, "add_lifecycle_listener"):
@@ -269,6 +273,19 @@ class AutomaticMemoryRuntime:
             self._started = True
             self._cleanup_pending = False
             self._cleanup_errors = []
+            self._start_distill_thread()
+
+    def _start_distill_thread(self) -> None:
+        """提炼是可重建派生层：daemon 线程推进，不参与启停成败判定。"""
+        if self._distiller is None or self._distill_thread is not None:
+            return
+        self._distill_stop.clear()
+        self._distill_thread = Thread(
+            target=self._distill_loop,
+            name="lingji-knowledge-distiller",
+            daemon=True,
+        )
+        self._distill_thread.start()
 
     def stop(self) -> None:
         with self._lock:
@@ -295,6 +312,7 @@ class AutomaticMemoryRuntime:
         snapshot_error = self._reconcile_snapshot_cleanup()
         if snapshot_error:
             errors.append(snapshot_error)
+        self._distill_stop.set()
         with self._lock:
             self._cleanup_errors = errors
             self._cleanup_pending = bool(errors)
@@ -465,6 +483,48 @@ class AutomaticMemoryRuntime:
             return _run
         except Exception:
             return None
+
+    def _build_distiller(self, settings: Any) -> Any | None:
+        """全自动知识提炼器；Ollama 不可用时返回 None，提炼自动停用。"""
+        if not bool(getattr(settings, "distill_enabled", True)):
+            return None
+        try:
+            from src.automatic_memory.distillation import KnowledgeDistiller
+
+            return KnowledgeDistiller(settings)
+        except Exception:
+            return None
+
+    def _distill_loop(self) -> None:
+        """daemon：每轮有界提炼若干段对话；失败退避，绝不影响扫描。"""
+        poll = float(getattr(self.settings, "distill_poll_seconds", 20.0) or 20.0)
+        batch = int(getattr(self.settings, "distill_batch_size", 2) or 2)
+        backoff = Event()
+        while not self._distill_stop.is_set():
+            distiller = self._distiller
+            if distiller is None or self._paused:
+                if self._distill_stop.wait(timeout=5.0):
+                    return
+                continue
+            try:
+                result = distiller.run_once(limit=batch)
+                status = str((result or {}).get("status") or "")
+                remaining = (result or {}).get("pending") or 0
+                # 全部提炼完成后放慢节奏（新对话仍会被下一轮拾起）。
+                idle = poll if (status == "ok" and remaining == 0 and not (result or {}).get("failed")) else poll
+                backoff.wait(timeout=idle)
+            except Exception:
+                backoff.wait(timeout=max(poll * 3.0, 60.0))
+
+    @property
+    def distill_stats(self) -> dict[str, Any]:
+        distiller = self._distiller
+        if distiller is None:
+            return {"available": False}
+        try:
+            return dict(distiller.stats())
+        except Exception:
+            return {"available": False}
 
     def scan_now(self, source_id: str) -> dict[str, object]:
         result = self.scheduler.reconcile(source_id, reason="manual")

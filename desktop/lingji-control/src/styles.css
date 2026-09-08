@@ -687,6 +687,30 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 .library-item-open small { color: var(--muted); font-size: 12px; }
 .library-item-plain { color: var(--muted-2); }
 
+.library-tabs { display: flex; gap: 8px; }
+.library-tabs .button { padding: 7px 16px; }
+.knowledge-section { display: grid; gap: 12px; }
+.knowledge-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.knowledge-stats > div { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); }
+.knowledge-stats strong { font-size: 18px; color: var(--text); }
+.knowledge-stats span { color: var(--muted); font-size: 12px; }
+.knowledge-filters { display: grid; gap: 8px; }
+.knowledge-category-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.knowledge-category-row .pill { border: 1px solid transparent; cursor: pointer; font-size: 12px; }
+.knowledge-category-row .pill.active { border-color: var(--accent-strong); color: var(--accent-strong); }
+.knowledge-list { display: grid; gap: 8px; }
+.knowledge-item { border-radius: 12px; background: var(--surface-2); }
+.knowledge-item-open { display: grid; gap: 6px; width: 100%; text-align: left; padding: 12px 14px; background: none; border: none; cursor: pointer; }
+.knowledge-item-open:hover strong { color: var(--accent-strong); }
+.knowledge-item-open strong { color: var(--text); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.knowledge-item-open p { margin: 0; color: var(--text-soft); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.knowledge-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.knowledge-item-head small { color: var(--muted); font-size: 12px; }
+.knowledge-points { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
+.knowledge-points li { color: var(--muted); font-size: 12px; line-height: 1.55; }
+.knowledge-source-hint { color: var(--accent-strong); }
+.knowledge-summary-full { color: var(--text-soft); font-size: 14px; line-height: 1.7; }
+
 .conversation-body { display: grid; gap: 12px; max-height: 60vh; overflow: auto; }
 .conversation-msg { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
 .conversation-msg p { margin: 0; color: var(--text-soft); font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }

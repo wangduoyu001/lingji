@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     embed_model: str = "bge-m3"
     fallback_embed_model: str = "nomic-embed-text"
     ollama_base_url: str = "http://127.0.0.1:11434"
+    distill_model: str = ""
+    distill_enabled: bool = True
+    distill_batch_size: int = Field(default=2, ge=1, le=32)
+    distill_poll_seconds: float = Field(default=20.0, ge=5.0, le=3600.0)
     embedding_provider: str = "ollama"
     embedding_enabled: bool = True
     embedding_timeout_seconds: float = Field(default=60.0, ge=0.1, le=3600.0)

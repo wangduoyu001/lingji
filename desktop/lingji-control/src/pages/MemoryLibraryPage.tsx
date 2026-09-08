@@ -17,7 +17,26 @@ type MessageRow = {
   content_preview?: string | null;
   occurred_at?: string | null;
 };
-
+export type KnowledgeEntry = {
+  conversation_id: string;
+  title: string;
+  summary: string;
+  key_points: string[];
+  category: string;
+  model: string;
+  revision: number;
+  occurred_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+export type KnowledgeStats = {
+  total: number;
+  ready: number;
+  pending: number;
+  by_category: Record<string, number>;
+  model?: string | null;
+  available: boolean;
+};
 
 function time(value: unknown): string {
   if (!value) return "时间尚未获得";
@@ -25,7 +44,163 @@ function time(value: unknown): string {
   return Number.isNaN(date.getTime()) ? "时间尚未获得" : date.toLocaleString();
 }
 
+const CATEGORY_TONE: Record<string, string> = {
+  项目: "ok",
+  技术: "neutral",
+  决策: "warning",
+  问题: "bad",
+  其他: "neutral",
+};
+
+export function KnowledgeSection({ api, active }: { api: LingJiApi; active: boolean }) {
+  const [offset, setOffset] = useState(0);
+  const [category, setCategory] = useState("");
+  const [query, setQuery] = useState("");
+  const [searchApplied, setSearchApplied] = useState("");
+  const limit = 20;
+  const resource = usePollingResource<{ items: KnowledgeEntry[]; pagination: { total: number; has_more: boolean }; stats: KnowledgeStats }>({
+    fetcher: useCallback(
+      (signal: AbortSignal) =>
+        api.get(
+          `/api/observability/knowledge?limit=${limit}&offset=${offset}` +
+            `${category ? `&category=${encodeURIComponent(category)}` : ""}` +
+            `${searchApplied.trim() ? `&q=${encodeURIComponent(searchApplied.trim())}` : ""}`,
+          { signal },
+        ),
+      [api, offset, category, searchApplied],
+    ),
+    enabled: active,
+    intervalMs: 15_000,
+    staleAfterMs: 45_000,
+  });
+  const [detail, setDetail] = useState<{ entry: KnowledgeEntry | null; loading: boolean; messages: Array<{ role: string; content: string; time: string }> } | null>(null);
+
+  const stats = resource.data?.stats;
+  const rows = resource.data?.items ?? [];
+
+  const openDetail = async (entry: KnowledgeEntry) => {
+    setDetail({ entry, loading: true, messages: [] });
+    try {
+      const response = await api.get<{ entry: KnowledgeEntry | null; messages?: MessageRow[] }>(
+        `/api/observability/knowledge/${encodeURIComponent(entry.conversation_id)}`,
+      );
+      setDetail({
+        entry: response.entry ?? entry,
+        loading: false,
+        messages: (response.messages ?? []).map((m) => ({
+          role: String(m.role ?? ""),
+          content: String(m.content ?? m.content_preview ?? ""),
+          time: String(m.occurred_at ?? ""),
+        })),
+      });
+    } catch {
+      setDetail({ entry, loading: false, messages: [] });
+    }
+  };
+
+  return (
+    <section className="stack knowledge-section">
+      <div className="knowledge-stats">
+        <div><strong>{stats ? `${stats.ready} / ${stats.total}` : "—"}</strong><span>已提炼 / 全部对话</span></div>
+        <div><strong>{stats?.pending ?? "—"}</strong><span>待提炼（自动推进）</span></div>
+        <div><strong>{stats?.model ? String(stats.model).split(":")[0] : "等待模型"}</strong><span>本机提炼模型</span></div>
+        <div><strong>{stats && stats.pending > 0 ? "自动提炼中" : stats?.ready ? "已完成一轮" : "等待数据"}</strong><span>当前状态</span></div>
+      </div>
+      <div className="knowledge-filters">
+        <input
+          className="library-search"
+          placeholder="搜提炼要点：输入关键词…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") { setSearchApplied(query); setOffset(0); }
+          }}
+        />
+        <div className="knowledge-category-row">
+          <button className={`pill neutral${category === "" ? " active" : ""}`} onClick={() => { setCategory(""); setOffset(0); }}>全部</button>
+          {Object.entries(stats?.by_category ?? {}).map(([name, count]) => (
+            <button key={name} className={`pill neutral${category === name ? " active" : ""}`} onClick={() => { setCategory(category === name ? "" : name); setOffset(0); }}>
+              {name} · {count}
+            </button>
+          ))}
+        </div>
+      </div>
+      {resource.error && !resource.data && <Notice kind="warning">提炼要点正在自动准备，灵机会持续重试。</Notice>}
+      {resource.loading && !resource.data ? (
+        <div className="empty-state" aria-busy="true">正在读取提炼要点…</div>
+      ) : rows.length === 0 ? (
+        <Empty text={stats && stats.pending > 0 ? `还有 ${stats.pending} 段对话在排队提炼，本机模型正在自动推进。` : "还没有提炼要点。等第一段对话提炼完成后会出现在这里。"} />
+      ) : (
+        <>
+          <div className="knowledge-list">
+            {rows.map((entry) => (
+              <article key={entry.conversation_id} className="knowledge-item">
+                <button className="knowledge-item-open" onClick={() => void openDetail(entry)}>
+                  <div className="knowledge-item-head">
+                    <span className={`pill ${CATEGORY_TONE[entry.category] ?? "neutral"}`}>{entry.category}</span>
+                    {entry.revision > 1 && <span className="pill warning">已更新 {entry.revision - 1} 次</span>}
+                    <small>{time(entry.occurred_at ?? entry.created_at)}</small>
+                  </div>
+                  <strong>{entry.title}</strong>
+                  <p>{entry.summary}</p>
+                  {entry.key_points.length > 0 && (
+                    <ul className="knowledge-points">
+                      {entry.key_points.slice(0, 3).map((point, index) => <li key={index}>{point}</li>)}
+                    </ul>
+                  )}
+                  <small className="knowledge-source-hint">点击查看要点详情与对话原文 →</small>
+                </button>
+              </article>
+            ))}
+          </div>
+          <div className="permanent-memory-pager">
+            <button className="button secondary" disabled={offset === 0 || resource.refreshing} onClick={() => setOffset(Math.max(0, offset - limit))}>上一页</button>
+            <span>{offset + 1}–{offset + rows.length}{resource.data?.pagination?.total != null ? ` / 共 ${resource.data.pagination.total} 条要点` : ""}</span>
+            <button className="button secondary" disabled={!resource.data?.pagination?.has_more || resource.refreshing} onClick={() => setOffset(offset + limit)}>下一页</button>
+          </div>
+        </>
+      )}
+      {detail && (
+        <div className="action-modal-backdrop" onClick={() => setDetail(null)}>
+          <div className="action-modal permanent-memory-body" role="dialog" aria-label="要点详情" onClick={(event) => event.stopPropagation()}>
+            <div className="knowledge-item-head">
+              {detail.entry && <span className={`pill ${CATEGORY_TONE[detail.entry.category] ?? "neutral"}`}>{detail.entry.category}</span>}
+              {detail.entry && detail.entry.revision > 1 && <span className="pill warning">已更新 {detail.entry.revision - 1} 次</span>}
+              <small>提炼模型：{detail.entry?.model || "尚未获得"}</small>
+            </div>
+            <h3>{detail.entry?.title ?? "要点详情"}</h3>
+            <p className="knowledge-summary-full">{detail.entry?.summary}</p>
+            {detail.entry && detail.entry.key_points.length > 0 && (
+              <ul className="knowledge-points">{detail.entry.key_points.map((point, index) => <li key={index}>{point}</li>)}</ul>
+            )}
+            <h4>来源对话原文</h4>
+            {detail.loading ? (
+              <p aria-busy="true">正在读取对话原文…</p>
+            ) : detail.messages.length === 0 ? (
+              <p>这段会话还没有可显示的消息。</p>
+            ) : (
+              <div className="conversation-body">
+                {detail.messages.map((m, index) => (
+                  <div key={`${m.role}-${index}`} className="conversation-msg">
+                    <span className="pill neutral">{m.role === "user" ? "主人" : m.role === "assistant" ? "AI" : m.role || "尚未获得"}</span>
+                    {m.time && <small>{m.time}</small>}
+                    <p>{m.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="action-modal-actions">
+              <button className="button secondary" onClick={() => setDetail(null)}>关闭</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; active: boolean }) {
+  const [tab, setTab] = useState<"knowledge" | "raw">("knowledge");
   const [offset, setOffset] = useState(0);
   const [query, setQuery] = useState("");
   const [searchApplied, setSearchApplied] = useState("");
@@ -38,7 +213,7 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
       ),
     [api, offset, searchApplied],
   );
-  const resource = usePollingResource({ fetcher: load, enabled: active, intervalMs: 20_000, staleAfterMs: 60_000 });
+  const resource = usePollingResource({ fetcher: load, enabled: active && tab === "raw", intervalMs: 20_000, staleAfterMs: 60_000 });
   const [openBody, setOpenBody] = useState<{ id: string; title: string; loading: boolean; messages: Array<{ role: string; author: string; content: string; time: string }> } | null>(null);
 
   const rows = (resource.data?.items as ConversationRow[] | undefined) ?? [];
@@ -68,69 +243,79 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
         <div>
           <span className="section-kicker">记忆库</span>
           <h2>记忆库</h2>
-          <p>灵机记住的每一段对话都在这里，点开就能看完整聊天原文。搜索框支持按内容查找。</p>
+          <p>灵机自动把每段对话提炼成知识要点，也保留全部聊天原文，随时可以追溯。</p>
         </div>
-        <span className="auto-refresh-note">{resource.refreshing ? "正在更新" : "自动更新"}</span>
+        <span className="auto-refresh-note">自动更新</span>
       </section>
-      {resource.error && !resource.data && <Notice kind="warning">暂时无法读取记忆库，灵机会自动重试。</Notice>}
-      <div className="library-filters">
-        <input
-          className="library-search"
-          placeholder="搜你的记忆：输入关键词或一句话…"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") { setSearchApplied(query); setOffset(0); }
-          }}
-        />
+      <div className="library-tabs">
+        <button className={`button ${tab === "knowledge" ? "primary" : "secondary"}`} onClick={() => setTab("knowledge")}>知识要点</button>
+        <button className={`button ${tab === "raw" ? "primary" : "secondary"}`} onClick={() => setTab("raw")}>对话原文</button>
       </div>
-      {resource.loading && !resource.data ? (
-        <div className="empty-state" aria-busy="true">正在读取记忆库…</div>
-      ) : rows.length === 0 ? (
-        <Empty text="没有匹配的对话。换个搜索词试试，或等下一次自动检查。" />
+      {tab === "knowledge" ? (
+        <KnowledgeSection api={api} active={active} />
       ) : (
         <>
-          <div className="library-list">
-            {rows.map((row) => (
-              <article key={row.conversation_id} className="library-item">
-                <button className="library-item-open" onClick={() => void openConversation(row)}>
-                  <strong>{row.title ?? "未命名会话"}</strong>
-                  <small>开始：{time(row.started_at)} · {row.message_count == null ? "消息数尚未获得" : `${row.message_count} 条消息`}</small>
-                </button>
-              </article>
-            ))}
+          <div className="library-filters">
+            <input
+              className="library-search"
+              placeholder="搜你的记忆：输入关键词或一句话…"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") { setSearchApplied(query); setOffset(0); }
+              }}
+            />
           </div>
-          <div className="permanent-memory-pager">
-            <button className="button secondary" disabled={offset === 0 || resource.refreshing} onClick={() => setOffset(Math.max(0, offset - limit))}>上一页</button>
-            <span>{offset + 1}–{offset + rows.length}{resource.data?.pagination?.total != null ? ` / 共 ${resource.data.pagination.total} 段对话` : ""}</span>
-            <button className="button secondary" disabled={!resource.data?.pagination?.has_more || resource.refreshing} onClick={() => setOffset(offset + limit)}>下一页</button>
-          </div>
-        </>
-      )}
-      {openBody && (
-        <div className="action-modal-backdrop" onClick={() => setOpenBody(null)}>
-          <div className="action-modal permanent-memory-body" role="dialog" aria-label={openBody.title} onClick={(event) => event.stopPropagation()}>
-            <h3>{openBody.title}</h3>
-            {openBody.loading ? (
-              <p aria-busy="true">正在读取聊天原文…</p>
-            ) : openBody.messages.length === 0 ? (
-              <p>这段会话还没有可显示的消息。</p>
-            ) : (
-              <div className="conversation-body">
-                {openBody.messages.map((m, index) => (
-                  <div key={`${m.role}-${index}`} className="conversation-msg">
-                    <span className="pill neutral">{m.role === "user" ? "主人" : m.role === "assistant" ? "AI" : m.role || "尚未获得"}</span>
-                    {m.time && <small>{m.time}</small>}
-                    <p>{m.content}</p>
-                  </div>
+          {resource.error && !resource.data && <Notice kind="warning">暂时无法读取记忆库，灵机会自动重试。</Notice>}
+          {resource.loading && !resource.data ? (
+            <div className="empty-state" aria-busy="true">正在读取记忆库…</div>
+          ) : rows.length === 0 ? (
+            <Empty text="没有匹配的对话。换个搜索词试试，或等下一次自动检查。" />
+          ) : (
+            <>
+              <div className="library-list">
+                {rows.map((row) => (
+                  <article key={row.conversation_id} className="library-item">
+                    <button className="library-item-open" onClick={() => void openConversation(row)}>
+                      <strong>{row.title ?? "未命名会话"}</strong>
+                      <small>开始：{time(row.started_at)} · {row.message_count == null ? "消息数尚未获得" : `${row.message_count} 条消息`}</small>
+                    </button>
+                  </article>
                 ))}
               </div>
-            )}
-            <div className="action-modal-actions">
-              <button className="button secondary" onClick={() => setOpenBody(null)}>关闭</button>
+              <div className="permanent-memory-pager">
+                <button className="button secondary" disabled={offset === 0 || resource.refreshing} onClick={() => setOffset(Math.max(0, offset - limit))}>上一页</button>
+                <span>{offset + 1}–{offset + rows.length}{resource.data?.pagination?.total != null ? ` / 共 ${resource.data.pagination.total} 段对话` : ""}</span>
+                <button className="button secondary" disabled={!resource.data?.pagination?.has_more || resource.refreshing} onClick={() => setOffset(offset + limit)}>下一页</button>
+              </div>
+            </>
+          )}
+          {openBody && (
+            <div className="action-modal-backdrop" onClick={() => setOpenBody(null)}>
+              <div className="action-modal permanent-memory-body" role="dialog" aria-label={openBody.title} onClick={(event) => event.stopPropagation()}>
+                <h3>{openBody.title}</h3>
+                {openBody.loading ? (
+                  <p aria-busy="true">正在读取聊天原文…</p>
+                ) : openBody.messages.length === 0 ? (
+                  <p>这段会话还没有可显示的消息。</p>
+                ) : (
+                  <div className="conversation-body">
+                    {openBody.messages.map((m, index) => (
+                      <div key={`${m.role}-${index}`} className="conversation-msg">
+                        <span className="pill neutral">{m.role === "user" ? "主人" : m.role === "assistant" ? "AI" : m.role || "尚未获得"}</span>
+                        {m.time && <small>{m.time}</small>}
+                        <p>{m.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="action-modal-actions">
+                  <button className="button secondary" onClick={() => setOpenBody(null)}>关闭</button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -3789,3 +3789,23 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   向量召回，qdrant 本地存储）。后端新增 `/api/observability/recall` 路由，用户输入 → embed →
   qdrant search → 按相似度排序返回。搜索提示改为"搜你的记忆：输入关键词或一句话"。
 - 后端 75 passed（含 observability/vector_backfill/adapter 全套）。
+
+### 全自动知识提炼（本机 LLM 自动总结每段对话）交付
+
+- 新增 `src/automatic_memory/distillation.py`：`KnowledgeDistiller` 把每段对话交给本机
+  Ollama 模型（自动发现已安装的 chat 模型，可用 `distill_model` 覆盖），强制 JSON 输出，
+  提炼为一句话总结 + 要点 + 分类，存入 `lingji_memory.db` 新表 `distilled_knowledge`
+  （可重建派生层，原始消息仍是唯一权威）。
+- 全自动：runtime `start()` 拉起 daemon 线程（`lingji-knowledge-distiller`），每轮有界提炼
+  `distill_batch_size`（默认 2）段对话；失败退避 60s；`stop()` 优雅停止；`_paused` 时暂停。
+  不阻塞扫描/向量化线程，提炼失败绝不影响扫描。
+- 幂等 + 迭代：以消息数变化检测对话更新（导入 append-only），变更自动重提炼并递增
+  `revision`，时间线可见"新提炼 / 更新·第 N 版"。
+- API：`GET /api/observability/knowledge`（列表 + 分类筛选 + 搜索 + stats）、
+  `GET /api/observability/knowledge/{conversation_id}`（要点详情 + 来源对话原文追溯）。
+- UI：记忆库新增页签——"知识要点"（默认，四格统计：已提炼/待提炼/模型/状态 + 分类筛选 +
+  要点卡片 + 详情弹窗含原文）与"对话原文"（原有列表）；时间线页顶部新增"记忆提炼动态"
+  面板（最近提炼/更新记录 + 进度）。
+- 测试：新增 `tests/test_automatic_memory_distillation.py` 8 个用例（提炼/幂等/变更重提炼/
+  搜索分类过滤/模型不可用/失败重试/模型回退/解析失败重试），fake Ollama 全覆盖；
+  observability+scheduler+vector+retrieval+control 回归 29+72 passed。

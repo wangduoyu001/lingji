@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, Query
@@ -412,6 +413,60 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         backfill = VectorBackfill(settings, provider=provider)
         hits = backfill.search(vectors[0], limit=limit)
         return {"items": hits, "query": q}
+
+    def _distiller(self) -> Any:
+        settings = getattr(control, "settings", control)
+        from src.automatic_memory.distillation import KnowledgeDistiller
+
+        return KnowledgeDistiller(settings)
+
+    @app.get("/api/observability/knowledge", dependencies=secured)
+    def observability_knowledge(
+        limit: int = Query(default=30, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+        category: str = Query(default=""),
+        q: str = Query(default=""),
+        order: str = Query(default="occurred"),
+    ) -> dict[str, Any]:
+        """灵机自动提炼的知识要点：一句话总结 + 要点 + 分类，可搜索。"""
+        distiller = _distiller()
+        stats = distiller.stats()
+        listing = distiller.list_entries(
+            limit=limit,
+            offset=offset,
+            category=category or None,
+            query=q or None,
+            order=order if order in {"occurred", "updated"} else "occurred",
+        )
+        listing["stats"] = stats
+        return listing
+
+    @app.get("/api/observability/knowledge/{conversation_id}", dependencies=secured)
+    def observability_knowledge_detail(conversation_id: str) -> dict[str, Any]:
+        """单条知识要点详情：提炼结果 + 来源对话原文（追溯）。"""
+        distiller = _distiller()
+        listing = distiller.list_entries(limit=1, offset=0)
+        entry = next((item for item in listing["items"] if item["conversation_id"] == conversation_id), None)
+        settings = getattr(control, "settings", control)
+        memory_db = Path(str(getattr(settings, "memory_db_path", "")))
+        messages: list[dict[str, Any]] = []
+        if memory_db.exists():
+            import sqlite3
+
+            with sqlite3.connect(str(memory_db)) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    """
+                    SELECT role, author, content, occurred_at
+                    FROM message_records
+                    WHERE conversation_id = ?
+                    ORDER BY occurred_at ASC, sequence ASC
+                    LIMIT 200
+                    """,
+                    (conversation_id,),
+                ).fetchall()
+                messages = [dict(row) for row in rows]
+        return {"entry": entry, "messages": messages}
 
     @app.get("/api/observability/changes", dependencies=secured)
     def observability_changes(
