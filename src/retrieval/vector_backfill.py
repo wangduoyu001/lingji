@@ -107,20 +107,36 @@ class VectorBackfill:
 
             existing_ids: set[str] = set()
             try:
-                points, _ = client.scroll(collection_name=self.collection, limit=10000, with_payload=["message_id"])
+                points, _ = client.scroll(collection_name=self.collection, limit=10000, with_payload=True)
                 for point in points:
                     mid = (point.payload or {}).get("message_id")
-                    if mid:
+                    if not mid:
+                        continue
+                    # 旧版本向量 payload 缺 content：视为待修复，重写后才能参与语义召回。
+                    if str((point.payload or {}).get("content", "") or ""):
                         existing_ids.add(str(mid))
             except Exception:
                 existing_ids = set()
 
             pending = [row for row in rows if str(row["message_id"]) not in existing_ids][:limit]
             embedded = 0
+            # 整批嵌入一次调用，避免逐条 HTTP 往返；单条失败仍逐个兜底。
+            vectors_by_id: dict[str, list[float]] = {}
+            if pending:
+                try:
+                    batch_vectors = self.provider.embed_many([str(row["content"] or "") for row in pending])
+                    for row, vector in zip(pending, batch_vectors):
+                        if vector:
+                            vectors_by_id[str(row["message_id"])] = vector
+                except Exception:
+                    vectors_by_id = {}
             for row in pending:
                 try:
-                    vectors = self.provider.embed_many([str(row["content"] or "")])
-                    dim = len(vectors[0]) if vectors else 0
+                    vector = vectors_by_id.get(str(row["message_id"]))
+                    if not vector:
+                        vectors = self.provider.embed_many([str(row["content"] or "")])
+                        vector = vectors[0] if vectors else None
+                    dim = len(vector) if vector else 0
                     if not dim:
                         continue
                     try:
@@ -132,7 +148,17 @@ class VectorBackfill:
                         pass  # 集合已存在
                     client.upsert(
                         collection_name=self.collection,
-                        points=[PointStruct(id=_point_id(row["message_id"]), vector=vectors[0], payload={"message_id": row["message_id"], "role": row["role"]})],
+                        points=[PointStruct(
+                            id=_point_id(row["message_id"]),
+                            vector=vector,
+                            payload={
+                                "message_id": row["message_id"],
+                                "role": row["role"],
+                                "conversation_id": row["conversation_id"],
+                                "occurred_at": row["occurred_at"],
+                                "content": str(row["content"] or "")[:800],
+                            },
+                        )],
                     )
                     embedded += 1
                 except Exception:
@@ -175,26 +201,24 @@ class VectorBackfill:
     def search(self, query_embedding: list[float], limit: int = 10) -> list[dict[str, Any]]:
         """按意思搜索：返回最相近的对话/消息。"""
         from qdrant_client import QdrantClient
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
 
         path = self._qdrant_path()
         if not path.exists():
             return []
         client = QdrantClient(path=str(path))
         try:
-            hits = client.search(
-                collection_name=self.collection,
-                query_vector=query_embedding,
-                limit=limit,
-            )
+            # qdrant-client >= 1.10 移除了 search()；统一走 query_points。
+            result = client.query_points(collection_name=self.collection, query=query_embedding, limit=limit)
             return [
                 {
                     "score": round(hit.score, 3),
                     "content": (hit.payload or {}).get("content", ""),
                     "role": (hit.payload or {}).get("role", ""),
                     "message_id": (hit.payload or {}).get("message_id", ""),
+                    "conversation_id": (hit.payload or {}).get("conversation_id", ""),
+                    "occurred_at": (hit.payload or {}).get("occurred_at", ""),
                 }
-                for hit in hits
+                for hit in result.points
             ]
         except Exception:
             return []

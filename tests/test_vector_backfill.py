@@ -84,3 +84,84 @@ def test_backfill_embeds_all_messages_once_and_is_idempotent(tmp_path: Path):
     assert result["embedded"] == 3
     again = backfill.run_once(limit=100)
     assert again["embedded"] == 0, "second pass must skip already-vectorized messages"
+
+
+def test_backfill_payload_carries_content_for_recall(tmp_path: Path):
+    """向量 payload 必须带 content/conversation_id，否则语义召回搜到也显示不出。"""
+    from types import SimpleNamespace
+
+    from qdrant_client import QdrantClient
+
+    state = StateDatabase(tmp_path / "lingji_state.db")
+    mem = tmp_path / "lingji_memory.db"
+    conn = sqlite3.connect(mem)
+    conn.execute("CREATE TABLE message_records (message_id TEXT PRIMARY KEY, conversation_id TEXT, role TEXT, content TEXT, occurred_at TEXT, content_hash TEXT)")
+    conn.execute("INSERT INTO message_records VALUES ('m-0', 'conv-1', 'user', 'Gmail 晨间简报内容', '2026-09-01T00:00:00Z', 'h0')")
+    conn.commit(); conn.close()
+    settings = SimpleNamespace(storage_path=tmp_path, memory_db_path=mem,
+        embedding_provider="ollama", ollama_base_url="http://127.0.0.1:11434",
+        embed_model="fake-primary", fallback_embed_model="fake-fallback", embedding_batch_size=8)
+    backfill = VectorBackfill(settings, provider=FakeProvider())
+    backfill.run_once(limit=10)
+    client = QdrantClient(path=str(tmp_path / "qdrant"))
+    points, _ = client.scroll(collection_name="lingji_automatic_memory", limit=10, with_payload=True)
+    client.close()
+    payload = points[0].payload or {}
+    assert payload.get("content") == "Gmail 晨间简报内容"
+    assert payload.get("conversation_id") == "conv-1"
+    assert payload.get("occurred_at") == "2026-09-01T00:00:00Z"
+
+
+def test_legacy_points_without_content_are_self_healed(tmp_path: Path):
+    """旧格式向量（payload 缺 content）视为待修复：自动重写而不是跳过。"""
+    from types import SimpleNamespace
+
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import PointStruct, VectorParams
+
+    state = StateDatabase(tmp_path / "lingji_state.db")
+    mem = tmp_path / "lingji_memory.db"
+    conn = sqlite3.connect(mem)
+    conn.execute("CREATE TABLE message_records (message_id TEXT PRIMARY KEY, conversation_id TEXT, role TEXT, content TEXT, occurred_at TEXT, content_hash TEXT)")
+    conn.execute("INSERT INTO message_records VALUES ('m-0', 'conv-1', 'user', '内容 0', '2026-09-01T00:00:00Z', 'h0')")
+    conn.commit(); conn.close()
+    settings = SimpleNamespace(storage_path=tmp_path, memory_db_path=mem,
+        embedding_provider="ollama", ollama_base_url="http://127.0.0.1:11434",
+        embed_model="fake-primary", fallback_embed_model="fake-fallback", embedding_batch_size=8)
+    # 预置一个旧格式点（payload 只有 message_id/role）
+    client = QdrantClient(path=str(tmp_path / "qdrant"))
+    client.create_collection(collection_name="lingji_automatic_memory", vectors_config=VectorParams(size=4, distance="Cosine"))
+    from src.retrieval.vector_backfill import _point_id
+    client.upsert(collection_name="lingji_automatic_memory", points=[PointStruct(id=_point_id("m-0"), vector=[0.25, 0.25, 0.75, 0.25], payload={"message_id": "m-0", "role": "user"})])
+    client.close()
+    backfill = VectorBackfill(settings, provider=FakeProvider())
+    result = backfill.run_once(limit=10)
+    assert result["embedded"] == 1, "legacy point without content must be re-upserted"
+    client = QdrantClient(path=str(tmp_path / "qdrant"))
+    points, _ = client.scroll(collection_name="lingji_automatic_memory", limit=10, with_payload=True)
+    client.close()
+    assert (points[0].payload or {}).get("content") == "内容 0"
+
+
+def test_search_returns_displayable_recall_results(tmp_path: Path):
+    """search() 走 query_points 并返回 content/conversation_id（回归旧 search() 移除故障）。"""
+    from types import SimpleNamespace
+
+    state = StateDatabase(tmp_path / "lingji_state.db")
+    mem = tmp_path / "lingji_memory.db"
+    conn = sqlite3.connect(mem)
+    conn.execute("CREATE TABLE message_records (message_id TEXT PRIMARY KEY, conversation_id TEXT, role TEXT, content TEXT, occurred_at TEXT, content_hash TEXT)")
+    conn.execute("INSERT INTO message_records VALUES ('m-0', 'conv-1', 'user', '晨间简报内容', '2026-09-01T00:00:00Z', 'h0')")
+    conn.commit(); conn.close()
+    settings = SimpleNamespace(storage_path=tmp_path, memory_db_path=mem,
+        embedding_provider="ollama", ollama_base_url="http://127.0.0.1:11434",
+        embed_model="fake-primary", fallback_embed_model="fake-fallback", embedding_batch_size=8)
+    provider = FakeProvider()
+    backfill = VectorBackfill(settings, provider=provider)
+    backfill.run_once(limit=10)
+    embedding = provider.embed_many(["晨间简报"])[0]
+    hits = backfill.search(embedding, limit=5)
+    assert hits, "search must return hits"
+    assert hits[0]["content"] == "晨间简报内容"
+    assert hits[0]["conversation_id"] == "conv-1"
+    assert hits[0]["score"] > 0

@@ -313,16 +313,28 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
     [api, offset, searchApplied],
   );
   const resource = usePollingResource({ fetcher: load, enabled: active && tab === "raw", intervalMs: 20_000, staleAfterMs: 60_000 });
+  // 语义召回：按意思搜索（与关键词搜索并行展示，命中带相似度分数）。
+  const recallResource = usePollingResource<{ items: Array<{ score: number; content: string; role: string; message_id: string; conversation_id: string; occurred_at: string }> }>({
+    fetcher: useCallback(
+      (signal: AbortSignal) =>
+        searchApplied.trim() && tab === "raw"
+          ? api.get(`/api/observability/recall?q=${encodeURIComponent(searchApplied.trim())}&limit=8`, { signal })
+          : Promise.resolve({ items: [] }),
+      [api, searchApplied, tab],
+    ),
+    enabled: active && tab === "raw" && Boolean(searchApplied.trim()),
+    intervalMs: 30_000,
+    staleAfterMs: 90_000,
+  });
   const [openBody, setOpenBody] = useState<{ id: string; title: string; loading: boolean; messages: Array<{ role: string; author: string; content: string; time: string }> } | null>(null);
 
   const rows = (resource.data?.items as ConversationRow[] | undefined) ?? [];
 
-  const openConversation = async (row: ConversationRow) => {
-    const title = row.title ?? "会话";
-    setOpenBody({ id: row.conversation_id, title, loading: true, messages: [] });
+  const openConversationById = async (conversationId: string, title: string) => {
+    setOpenBody({ id: conversationId, title, loading: true, messages: [] });
     try {
       const response = await api.get<{ items?: MessageRow[] }>(
-        `/api/memory/inspector/messages?conversation_id=${encodeURIComponent(row.conversation_id)}&limit=200&offset=0`,
+        `/api/memory/inspector/messages?conversation_id=${encodeURIComponent(conversationId)}&limit=200&offset=0`,
       );
       const messages = (response.items ?? []).map((m) => ({
         role: String(m.role ?? ""),
@@ -330,11 +342,13 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
         content: String(m.content ?? m.content_preview ?? ""),
         time: String(m.occurred_at ?? ""),
       }));
-      setOpenBody({ id: row.conversation_id, title, loading: false, messages });
+      setOpenBody({ id: conversationId, title, loading: false, messages });
     } catch {
-      setOpenBody({ id: row.conversation_id, title, loading: false, messages: [] });
+      setOpenBody({ id: conversationId, title, loading: false, messages: [] });
     }
   };
+
+  const openConversation = async (row: ConversationRow) => openConversationById(row.conversation_id, row.title ?? "会话");
 
   return (
     <div className="stack memory-library-page">
@@ -372,8 +386,31 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
             <Empty text="没有匹配的对话。换个搜索词试试，或等下一次自动检查。" />
           ) : (
             <>
+          {searchApplied.trim() && (recallResource.data?.items?.length ?? 0) > 0 && (
+            <section className="stack knowledge-section">
+              <div className="section-heading">
+                <div><span className="section-kicker">按意思找到</span><h3>语义召回（和"{searchApplied.trim()}"意思最相近的消息）</h3></div>
+                <span className="section-caption">相似度越高越相关</span>
+              </div>
               <div className="library-list">
-                {rows.map((row) => (
+                {recallResource.data!.items.map((hit) => (
+                  <article key={hit.message_id} className="library-item">
+                    <button className="library-item-open" onClick={() => void openConversationById(hit.conversation_id, "语义命中的对话")}>
+                      <div className="knowledge-item-head">
+                        <span className="pill ok">{Math.round(hit.score * 100)}% 相似</span>
+                        <span className="pill neutral">{hit.role === "user" ? "主人" : hit.role === "assistant" ? "AI" : hit.role || "尚未获得"}</span>
+                        {hit.occurred_at && <small>{time(hit.occurred_at)}</small>}
+                      </div>
+                      <p className="knowledge-summary-full">{hit.content || "（该向量还是旧格式，等自动回填补全后显示原文）"}</p>
+                      <small className="knowledge-source-hint">点击查看这段对话的完整原文 →</small>
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+          <div className="library-list">
+            {rows.map((row) => (
                   <article key={row.conversation_id} className="library-item">
                     <button className="library-item-open" onClick={() => void openConversation(row)}>
                       <strong>{row.title ?? "未命名会话"}</strong>

@@ -3825,3 +3825,17 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   切换即时生效）。轮询加密到 8 秒。
 - 测试：distillation 新增 3 例（progress 断言、覆盖切换即时生效、installed_models 排序与生效
   标注），observability 新增 1 例（进度字段+模型切换 400/200）；合计 110 focused passed。
+
+### 语义召回修复（数据对账发现的设计流程断点）
+
+- 全链路数据对账发现语义召回从未真正生效：qdrant-client 新版移除了 `QdrantClient.search()`，
+  `VectorBackfill.search()` 的异常被静默吞掉后恒返空；且向量 payload 只存了 message_id/role，
+  没有 content/conversation_id，即使命中也无法展示原文或跳转。
+- 修复：`search()` 改用 `query_points()`；payload 补齐 content（截断 800 字）/conversation_id/
+  occurred_at；幂等检查改为"payload 缺 content 视为待修复"，存量 1 万条旧格式向量由回填自动重写
+  自愈，无需人工迁移；回填嵌入改为整批调用（每轮 200 条一次 embed_many），自愈与首轮重建提速
+  一个量级。
+- UI：记忆库"对话原文"搜索新增"按意思找到"语义召回面板（相似度百分比 + 角色 + 原文片段 +
+  点击跳转完整对话），与关键词搜索并行展示。
+- 测试：vector_backfill 新增 3 例（payload 完整性、旧格式自愈、search 返回可展示结果），
+  focused 111 passed。
