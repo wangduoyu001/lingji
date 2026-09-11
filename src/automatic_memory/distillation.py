@@ -291,8 +291,13 @@ class KnowledgeDistiller:
             try:
                 return self._chat_cloud_with_deadline(messages), self._ZHIPU_MODEL
             except Exception as exc:
-                # 回退是兜底不是静默：记录原因供进度面板展示。
+                # 回退是兜底不是静默：记录原因供进度面板与日志排查。
                 self._last_cloud_error = f"{type(exc).__name__}: {exc}"[:200]
+                import logging
+
+                logging.getLogger("lingji.distillation").warning(
+                    "cloud distillation failed, falling back to local: %s", self._last_cloud_error
+                )
         return self._chat(local_model, messages), local_model
 
     def _chat_cloud_with_deadline(self, messages: list[dict[str, str]], deadline: float = 130.0) -> str:

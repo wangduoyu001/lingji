@@ -418,6 +418,12 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         settings = getattr(control, "settings", control)
         from src.automatic_memory.distillation import KnowledgeDistiller
 
+        # 优先复用 runtime 持有的 daemon 实例：进度/最近云端错误才是真实值。
+        runtime = getattr(control, "runtime", None)
+        daemon_distiller = getattr(runtime, "_distiller", None)
+        if daemon_distiller is not None:
+            return daemon_distiller
+
         try:
             from src.control.runtime_settings import RuntimeSettingsStore
 
