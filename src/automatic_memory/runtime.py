@@ -537,7 +537,9 @@ class AutomaticMemoryRuntime:
                 result = distiller.run_once(limit=batch)
                 status = str((result or {}).get("status") or "")
                 pending = int((result or {}).get("pending") or 0)
-                idle = bulk_poll if pending > batch * 4 else poll
+                # 本地模型批量回填才需要拉长间隔控制发热；云端调用不占本机算力。
+                bulk = pending > batch * 4 and getattr(distiller, "provider", "local") == "local"
+                idle = bulk_poll if bulk else poll
                 if status != "ok":
                     idle = max(poll * 3.0, 60.0)
                 backoff.wait(timeout=idle)
