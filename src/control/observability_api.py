@@ -444,6 +444,14 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         except Exception:
             listing["distill_model"] = ""
         try:
+            listing["provider"] = distiller.provider
+        except Exception:
+            listing["provider"] = "local"
+        try:
+            listing["zhipu_key_set"] = bool(distiller.api_key)
+        except Exception:
+            listing["zhipu_key_set"] = False
+        try:
             listing["progress"] = distiller.progress()
         except Exception:
             listing["progress"] = {"active": False}
@@ -452,6 +460,28 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         except Exception:
             listing["models"] = []
         return listing
+
+    @app.post("/api/observability/knowledge/provider", dependencies=secured)
+    def observability_knowledge_set_provider(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """切换提炼服务：local（本机）或 zhipu（云端 GLM-4-Flash，需 Key）。"""
+        body = payload or {}
+        provider = str(body.get("provider") or "local").strip().lower()
+        if provider not in {"local", "zhipu"}:
+            raise HTTPException(status_code=400, detail="provider must be local or zhipu")
+        api_key = str(body.get("api_key") or "").strip()
+        settings = getattr(control, "settings", control)
+        from src.control.runtime_settings import RuntimeSettingsStore
+
+        values: dict[str, Any] = {"distill_provider": provider}
+        if api_key:
+            values["zhipu_api_key"] = api_key
+        if provider == "zhipu":
+            snapshot = RuntimeSettingsStore(settings)
+            existing_key = str(snapshot.snapshot()["values"].get("zhipu_api_key", "") or "").strip()
+            if not api_key and not existing_key:
+                raise HTTPException(status_code=400, detail="zhipu provider requires an api key")
+        RuntimeSettingsStore(settings).update(values)
+        return {"provider": provider, "zhipu_key_set": bool(api_key) or provider == "zhipu" and bool(values.get("zhipu_api_key"))}
 
     @app.post("/api/observability/knowledge/model", dependencies=secured)
     def observability_knowledge_set_model(payload: dict[str, Any] | None = None) -> dict[str, Any]:

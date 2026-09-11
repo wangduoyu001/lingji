@@ -30,6 +30,20 @@ class RuntimeSettingsStore:
                 "",
                 128,
             ),
+            "distill_provider": self._choice(
+                "knowledge_distill",
+                "提炼服务",
+                "local 使用本机 Ollama 模型（默认，数据不出机）；zhipu 使用智谱 GLM-4-Flash 云端提炼（更快，但对话原文会上传到智谱）。",
+                "local",
+                ["local", "zhipu"],
+            ),
+            "zhipu_api_key": self._string(
+                "knowledge_distill",
+                "智谱 API Key",
+                "提炼服务选择 zhipu 时必填；只保存在本机设置文件里。",
+                "",
+                256,
+            ),
             # Media extraction limits.
             "media_keyframe_interval_seconds": self._number(
                 "media_processing", "关键帧间隔（秒）", "每隔多少秒提取一张关键帧。", 30.0, 1.0, 86400.0

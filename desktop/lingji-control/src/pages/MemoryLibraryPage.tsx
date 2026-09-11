@@ -90,6 +90,8 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
     progress?: KnowledgeProgress;
     models?: KnowledgeModel[];
     distill_model?: string;
+    provider?: "local" | "zhipu";
+    zhipu_key_set?: boolean;
   }>({
     fetcher: useCallback(
       (signal: AbortSignal) =>
@@ -106,6 +108,8 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
     staleAfterMs: 25_000,
   });
   const [switchingModel, setSwitchingModel] = useState(false);
+  const [switchingProvider, setSwitchingProvider] = useState(false);
+  const [keyDraft, setKeyDraft] = useState("");
   const stats = resource.data?.stats;
   const progress = resource.data?.progress;
   const models = resource.data?.models ?? [];
@@ -124,6 +128,22 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
   };
 
   const [detail, setDetail] = useState<{ entry: KnowledgeEntry | null; loading: boolean; messages: Array<{ role: string; content: string; time: string }> } | null>(null);
+
+  const provider = resource.data?.provider || "local";
+  const zhipuKeySet = resource.data?.zhipu_key_set === true;
+
+  const switchProvider = async (next: string, key?: string) => {
+    setSwitchingProvider(true);
+    try {
+      await api.post("/api/observability/knowledge/provider", { provider: next, api_key: key ?? "" });
+      setKeyDraft("");
+      await resource.refresh();
+    } catch {
+      // 失败保持原状；界面下一次刷新会显示当前生效服务。
+    } finally {
+      setSwitchingProvider(false);
+    }
+  };
 
   const openDetail = async (entry: KnowledgeEntry) => {
     setDetail({ entry, loading: true, messages: [] });
@@ -174,6 +194,32 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
         </div>
         <div className="knowledge-progress-side">
           <div className="knowledge-model-row">
+            <label htmlFor="knowledge-provider-select">提炼服务</label>
+            <select
+              id="knowledge-provider-select"
+              className="knowledge-model-select"
+              disabled={switchingProvider}
+              value={provider}
+              onChange={(event) => void switchProvider(event.target.value)}
+            >
+              <option value="local">本机模型（数据不出机）</option>
+              <option value="zhipu">智谱 GLM-4-Flash（云端·快）</option>
+            </select>
+            {provider === "zhipu" && !zhipuKeySet && (
+              <div className="knowledge-key-row">
+                <input
+                  className="knowledge-key-input"
+                  placeholder="粘贴智谱 API Key"
+                  value={keyDraft}
+                  onChange={(event) => setKeyDraft(event.target.value)}
+                />
+                <button className="button primary" disabled={!keyDraft.trim() || switchingProvider} onClick={() => void switchProvider("zhipu", keyDraft.trim())}>保存</button>
+              </div>
+            )}
+            {provider === "zhipu" && zhipuKeySet && <small>Key 已保存在本机 ✓</small>}
+          </div>
+          {provider === "local" && (
+          <div className="knowledge-model-row">
             <label htmlFor="knowledge-model-select">提炼模型</label>
             <select
               id="knowledge-model-select"
@@ -191,6 +237,7 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
             </select>
             <small>{switchingModel ? "正在切换…" : models.length === 0 ? "未发现本机模型" : "下一轮提炼立即生效"}</small>
           </div>
+          )}
           {(progress?.finished?.length ?? 0) > 0 && (
             <div className="knowledge-recent">
               <small>最近提炼</small>
@@ -378,6 +425,7 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
                 if (event.key === "Enter") { setSearchApplied(query); setOffset(0); }
               }}
             />
+            <button className="button secondary" onClick={() => { setSearchApplied(query); setOffset(0); }}>搜索</button>
           </div>
           {resource.error && !resource.data && <Notice kind="warning">暂时无法读取记忆库，灵机会自动重试。</Notice>}
           {searchApplied.trim() && (recallResource.data?.items?.length ?? 0) > 0 && (

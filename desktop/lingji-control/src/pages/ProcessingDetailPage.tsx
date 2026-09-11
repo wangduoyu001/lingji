@@ -93,7 +93,7 @@ export default function ProcessingDetailPage({ api, active }: { api: LingJiApi; 
         <div className="pipeline-scans-list">
           {data.latest_scans.map((scan) => (
             <div key={scan.scan_id} className="change-row">
-              <small>{scan.updated_at ?? "时间尚未获得"}</small>
+              <small>{scan.updated_at ? new Date(scan.updated_at).toLocaleString() : "时间尚未获得"}</small>
               <span className={`pill ${scan.status === "completed" ? "ok" : scan.status === "failed" ? "bad" : "warning"}`}>{scan.status === "completed" ? "已完成" : scan.status === "running" ? "进行中" : scan.status === "failed" ? "未完成" : scan.status}</span>
               <span>检查 {scan.total == null ? "尚未获得" : scan.total} 个</span>
               <span>新 {scan.queued == null ? "尚未获得" : scan.queued} · 复用 {scan.reused == null ? "尚未获得" : scan.reused}</span>

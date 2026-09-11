@@ -32,6 +32,7 @@ export default function App() {
       page={page}
       current={current}
       connected={connection.connected}
+      api={connection.api}
       connectionState={connection.state}
       releaseMetadata={release.metadata}
       runtimeStatus={connection.runtimeStatus}

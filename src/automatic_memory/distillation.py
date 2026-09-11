@@ -59,12 +59,16 @@ class KnowledgeDistiller:
     """把记忆层对话提炼成结构化知识要点（本机模型、幂等、有界、全自动）。"""
 
     def __init__(self, settings: Any, *, base_url: str | None = None, model: str | None = None,
-                 model_override: Callable[[], str] | None = None):
+                 model_override: Callable[[], str] | None = None,
+                 provider_override: Callable[[], str] | None = None,
+                 api_key_override: Callable[[], str] | None = None):
         self.settings = settings
         self.base_url = str(base_url or getattr(settings, "ollama_base_url", "http://127.0.0.1:11434")).rstrip("/")
         configured = str(model if model is not None else getattr(settings, "distill_model", "") or "").strip()
         self._configured_static = configured
         self._model_override = model_override
+        self._provider_override = provider_override
+        self._api_key_override = api_key_override
         self._model: str | None = None
         self._lock = threading.Lock()
 
@@ -219,12 +223,65 @@ class KnowledgeDistiller:
     def _build_prompt(self, title: str, transcript: str) -> list[dict[str, str]]:
         system = (
             "你是记忆提炼器。阅读一段用户与AI的对话，提炼成知识要点。"
-            '只返回 JSON 对象：{"summary": "一句话总结这段对话产出了什么结论/决定/事实", '
+            '只返回 JSON 对象：{"short_title": "给这段对话起一个不超过16字的具体标题", '
+            '"summary": "一句话总结这段对话产出了什么结论/决定/事实", '
             '"key_points": ["要点1", "要点2", "要点3"], "category": "项目|技术|决策|问题|其他"}。'
             "key_points 用短句，每条不超过40字，只保留有信息量的事实，不要寒暄。"
+            "category 必须五选一：改代码/修Bug/搭环境=技术；定了方案或拍板=决策；"
+            "遇到故障或报错=问题；启动或推进某个项目=项目；闲聊或无结论=其他。"
         )
         user = f"对话标题：{title}\n\n对话内容：\n{transcript}"
         return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+    @property
+    def provider(self) -> str:
+        """提炼服务：local（本机 Ollama）或 zhipu（GLM-4-Flash 云端）。"""
+        if self._provider_override is not None:
+            try:
+                value = str(self._provider_override() or "").strip().lower()
+            except Exception:
+                value = ""
+            if value:
+                return value
+        return "local"
+
+    @property
+    def api_key(self) -> str:
+        if self._api_key_override is not None:
+            try:
+                return str(self._api_key_override() or "").strip()
+            except Exception:
+                return ""
+        return ""
+
+    _ZHIPU_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    _ZHIPU_MODEL = "glm-4-flash"
+
+    def _chat_zhipu(self, api_key: str, messages: list[dict[str, str]]) -> str:
+        import urllib.request
+
+        payload = json.dumps(
+            {"model": self._ZHIPU_MODEL, "messages": messages, "temperature": 0.2, "stream": False}
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            self._ZHIPU_URL,
+            data=payload,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=120) as response:
+            body = json.loads(response.read().decode("utf-8"))
+        choices = body.get("choices") or [{}]
+        return str(((choices[0] or {}).get("message") or {}).get("content") or "")
+
+    def _chat_dispatch(self, local_model: str, messages: list[dict[str, str]]) -> tuple[str, str]:
+        """按主人选择分发；云端失败自动回退本机，绝不丢提炼。"""
+        if self.provider == "zhipu" and self.api_key:
+            try:
+                return self._chat_zhipu(self.api_key, messages), self._ZHIPU_MODEL
+            except Exception:
+                pass
+        return self._chat(local_model, messages), local_model
 
     def _chat(self, model: str, messages: list[dict[str, str]]) -> str:
         import urllib.request
@@ -490,7 +547,7 @@ class KnowledgeDistiller:
         if existing is not None and str(existing["messages_digest"]) == digest and str(existing["status"] if "status" in existing.keys() else "ready") == "ready":
             return True  # 已是最新，视为成功
         messages, _digest_used, message_count = self._transcript_payload(conn, conversation_id)
-        answer = self._chat(model, self._build_prompt(title, self._render_transcript(messages)))
+        answer, used_model = self._chat_dispatch(model, self._build_prompt(title, self._render_transcript(messages)))
         parsed = _parse_model_json(answer)
         if parsed is None or not str(parsed.get("summary") or "").strip():
             self._record_failure(conn, conversation_id, "模型输出无法解析为知识要点")
@@ -504,6 +561,9 @@ class KnowledgeDistiller:
         else:
             key_points = []
         category = str(parsed.get("category") or "其他").strip() or "其他"
+        short_title = str(parsed.get("short_title") or "").strip()
+        if 2 <= len(short_title) <= 24 and "会话" not in short_title:
+            title = short_title
         now = _now()
         revision = 1 if existing is None else int(existing["revision"]) + 1
         conn.execute(
@@ -534,7 +594,7 @@ class KnowledgeDistiller:
                 summary,
                 json.dumps(key_points, ensure_ascii=False),
                 category,
-                model,
+                used_model,
                 digest,
                 message_count,
                 revision,

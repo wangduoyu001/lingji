@@ -292,3 +292,83 @@ def test_installed_models_marks_active_and_sorts_by_size(tmp_path: Path, ollama_
     assert names == ["test-chat:latest", "test-chat-huge:latest"]  # embedding 模型被排除，小模型在前
     assert models[0]["active"] is True
     assert models[1]["active"] is False
+
+
+class _ZhipuHandler(BaseHTTPRequestHandler):
+    """假的智谱 chat/completions 服务。"""
+    fail = False
+    lock = threading.Lock()
+
+    def do_POST(self) -> None:  # noqa: N802
+        length = int(self.headers.get("Content-Length") or 0)
+        self.rfile.read(length)
+        if _ZhipuHandler.fail:
+            self.send_response(502)
+            self.end_headers()
+            return
+        body = json.dumps({
+            "choices": [{"message": {"content": json.dumps({
+                "short_title": "测试云端标题",
+                "summary": "云端提炼的总结",
+                "key_points": ["云端要点"],
+                "category": "技术",
+            }, ensure_ascii=False)}}]
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_args: Any) -> None:
+        return
+
+
+@pytest.fixture()
+def zhipu_server():
+    _ZhipuHandler.fail = False
+    server = HTTPServer(("127.0.0.1", 0), _ZhipuHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+
+
+def test_zhipu_provider_distills_via_cloud_and_falls_back(tmp_path: Path, ollama_server: str, zhipu_server: str) -> None:
+    """云端服务可用时走 GLM-4-Flash；云端故障自动回退本机模型。"""
+    import urllib.request
+
+    class _Rewriter(_OllamaHandler):
+        """把 distiller 的 zhipu URL 指向本地假服务的最小 monkeypatch 载体。"""
+
+    memory_db = tmp_path / "lingji_memory.db"
+    _seed_memory_db(memory_db)
+    current = {"provider": "local", "key": ""}
+
+    from src.automatic_memory import distillation as distillation_module
+
+    distiller = KnowledgeDistiller(_Settings(memory_db, ollama_server),
+                                   provider_override=lambda: current["provider"],
+                                   api_key_override=lambda: current["key"])
+    # 把云端 URL 重写到假服务
+    original_url = distiller._ZHIPU_URL
+    distiller._ZHIPU_URL = zhipu_server + "/chat/completions"
+
+    current["provider"] = "zhipu"
+    current["key"] = "test-key"
+    result = distiller.run_once(limit=10)
+    assert result["status"] == "ok"
+    assert distiller.list_entries(limit=1)["items"][0]["model"] == "glm-4-flash"
+
+    # 云端故障 → 自动回退本机
+    _ZhipuHandler.fail = True
+    memory_db2 = tmp_path / "lingji_memory2.db"
+    _seed_memory_db(memory_db2)
+    distiller2 = KnowledgeDistiller(_Settings(memory_db2, ollama_server),
+                                    provider_override=lambda: "zhipu",
+                                    api_key_override=lambda: "test-key")
+    distiller2._ZHIPU_URL = zhipu_server + "/chat/completions"
+    result2 = distiller2.run_once(limit=10)
+    assert result2["status"] == "ok"
+    assert result2["distilled"] == 2, "云端失败必须回退本机完成提炼"
+    assert distiller2.list_entries(limit=1)["items"][0]["model"] == "test-chat:latest"
+    _ = original_url, _Rewriter

@@ -736,3 +736,24 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 .monitor-stat { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); }
 .monitor-stat strong { color: var(--accent-strong); font-size: 20px; font-weight: 700; }
 .monitor-stat span { color: var(--muted); font-size: 12px; }
+
+/* —— 2026-09 视觉与点击便利性打磨 —— */
+.desktop-nav-item { transition: background .15s ease, transform .1s ease; }
+.desktop-nav-item:hover { background: rgba(127, 176, 129, .14); transform: translateX(2px); }
+.desktop-nav-item.active { box-shadow: inset 3px 0 0 var(--accent-strong); }
+.button { transition: filter .12s ease, transform .08s ease; }
+.button:hover:not(:disabled) { filter: brightness(1.12); }
+.button:active:not(:disabled) { transform: scale(.98); }
+.outcome-section, .pipeline-block, .knowledge-item, .library-item, .home-fact-group { transition: box-shadow .15s ease, transform .12s ease, border-color .15s ease; }
+.knowledge-item:hover, .library-item:hover, .pipeline-block:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0, 0, 0, .22); }
+.knowledge-progress-board { border: 1px solid rgba(127, 176, 129, .18); }
+.sidebar-model-switch { display: grid; gap: 4px; padding: 8px 10px; margin: 6px 10px; border-radius: 12px; background: rgba(127, 176, 129, .1); }
+.sidebar-model-button { display: grid; gap: 2px; width: 100%; text-align: left; padding: 8px 10px; border-radius: 10px; background: none; border: 1px solid transparent; cursor: pointer; }
+.sidebar-model-button:hover { background: rgba(127, 176, 129, .16); }
+.sidebar-model-button.active { border-color: rgba(127, 176, 129, .45); }
+.sidebar-model-button strong { color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-model-button small { color: var(--muted); font-size: 11px; }
+.sidebar-model-detail { display: grid; gap: 6px; }
+.sidebar-model-detail select { width: 100%; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font-size: 12px; }
+.knowledge-key-row { display: flex; gap: 6px; }
+.knowledge-key-input { flex: 1 1 auto; min-width: 0; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font-size: 12px; }
