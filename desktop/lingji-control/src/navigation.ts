@@ -7,17 +7,17 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
 
 export const PRIMARY_NAVIGATION: NavigationItem[] = [
   { id: "overview", label: "首页", hint: "灵机正在干什么、刚刚做了什么、一切是否正常", group: "observe", icon: "home" },
-  { id: "memory_library", label: "记忆库", hint: "灵机记住的全部内容：自动提炼+永久记忆，每条可打开", group: "observe", icon: "inspect" },
+  { id: "memory_library", label: "记忆库", hint: "灵机记住的全部内容：知识要点 + 对话原文，每条可打开", group: "observe", icon: "inspect" },
   { id: "memory_sources", label: "原始数据", hint: "扫描到的全部记录：来源、文件、每条对话原文", group: "observe", icon: "vault" },
-  { id: "timeline_page", label: "时间线", hint: "按天看记忆的变化：新发现/入库/更新", group: "observe", icon: "logs" },
-  { id: "work_ledger", label: "工作记录", hint: "灵机的每一次检查：每一步处理了多少、结果如何", group: "observe", icon: "logs" },
-  { id: "memory_cards", label: "提炼候选", hint: "灵机提炼出的要点卡，支持批量转入永久记忆", group: "observe", icon: "inspect" },
-  { id: "changes_ledger", label: "变更账本", hint: "第二大脑的每一笔变化，按时间排列", group: "observe", icon: "logs" },
-  { id: "processing_detail", label: "处理详情", hint: "扫描/提炼/候选/记忆/时间线/向量 各环节数据", group: "observe", icon: "pulse" },
+  { id: "timeline_page", label: "时间线", hint: "按时间看两件事：灵机新提炼了什么、数据发生了什么变化", group: "observe", icon: "logs" },
+  { id: "work_ledger", label: "检查记录", hint: "每一次自动检查：按批次看每一步处理了多少、结果如何", group: "observe", icon: "logs" },
+  { id: "processing_detail", label: "处理流水", hint: "按环节看全部数据：获取/解析/提炼/记忆/向量化", group: "observe", icon: "pulse" },
 ];
 
 export const ADVANCED_NAVIGATION: NavigationItem[] = [
+  { id: "memory_cards", label: "要点转永久记忆", hint: "手动挑选提炼要点并确认进永久记忆（日常无需使用）", group: "advanced", icon: "inspect" },
   { id: "permanent_memory", label: "永久记忆(确认)", hint: "主人逐条确认过的长期记忆", group: "advanced", icon: "inspect" },
+  { id: "changes_ledger", label: "变更账本", hint: "系统级事件流水（时间线页已覆盖日常视图）", group: "advanced", icon: "logs" },
   { id: "brain_status", label: "脑状态", hint: "记忆、模型、算力与任务详细状态", group: "advanced", icon: "pulse" },
   { id: "codex_workspace", label: "项目与对话", hint: "项目、会话、当前工作与处理进度", group: "advanced", icon: "project" },
   { id: "activity", label: "活动记录", hint: "查看灵机最近完成的工作", group: "advanced", icon: "logs" },

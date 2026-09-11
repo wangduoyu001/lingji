@@ -446,18 +446,18 @@ try {
   await installTauri(racePage);
   await racePage.goto(uiBase, { waitUntil: "domcontentloaded" });
   try {
-    await racePage.locator(".desktop-nav-item").filter({ hasText: "提炼候选" }).waitFor({ timeout: 10_000 });
+    await racePage.locator(".desktop-nav-item").filter({ hasText: "记忆库" }).waitFor({ timeout: 10_000 });
   } catch (reason) {
     console.error("race body:", await racePage.locator("body").innerText());
     throw reason;
   }
-  await racePage.locator(".desktop-nav-item").filter({ hasText: "提炼候选" }).click();
+  await racePage.locator(".desktop-nav-item").filter({ hasText: "记忆库" }).click();
   await new Promise((resolve) => setTimeout(resolve, 1_100));
-  try { await racePage.getByRole("heading", { name: "灵机整理", exact: true }).first().waitFor({ timeout: 5_000 }); } catch (reason) { console.error("after navigation:", await racePage.locator("body").innerText()); throw reason; }
+  try { await racePage.getByRole("heading", { name: "记忆库", exact: true }).first().waitFor({ timeout: 5_000 }); } catch (reason) { console.error("after navigation:", await racePage.locator("body").innerText()); throw reason; }
   assert.equal(await racePage.getByRole("heading", { name: "原始数据", exact: true }).count(), 0, "delayed onboarding reads cannot redirect after navigation");
   await fetch(`http://127.0.0.1:${apiPort}/__test/release-onboarding`, { method: "POST", headers: { "X-LingJi-Token": "fixture-token" } });
   await new Promise((resolve) => setTimeout(resolve, 500));
-  await racePage.getByRole("heading", { name: "灵机整理", exact: true }).first().waitFor();
+  await racePage.getByRole("heading", { name: "记忆库", exact: true }).first().waitFor();
   await racePage.close();
   state.onboardingDelay = false;
   state.onboardingFailures = 0;
@@ -716,8 +716,8 @@ try {
   await page.locator(".desktop-content").getByRole("heading", { name: "永久记忆", exact: true }).waitFor();
   await page.getByText("自动固化", { exact: true }).first().waitFor();
   await page.getByText("Codex · 发布计划讨论要点", { exact: true }).waitFor();
-  await page.locator(".desktop-nav-item").filter({ hasText: "提炼候选" }).click();
-  await page.getByRole("heading", { name: "灵机整理", exact: true }).first().waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "记忆库" }).click();
+  await page.getByRole("heading", { name: "记忆库", exact: true }).first().waitFor();
   await page.locator(".desktop-nav-item").filter({ hasText: "原始数据" }).click();
   await page.locator(".desktop-content").getByRole("heading", { name: "原始数据", exact: true }).waitFor();
   await page.locator(".desktop-nav-item").filter({ hasText: "原始数据" }).click();
@@ -1032,8 +1032,8 @@ try {
   await page.getByText("目前不需要你处理", { exact: false }).waitFor();
   const cardRequests = [];
   page.on("request", (request) => { if (request.url().includes("/api/memory/inspector/cards?")) cardRequests.push(request.url()); });
-  await page.locator(".desktop-nav-item").filter({ hasText: "提炼候选" }).click();
-  await page.getByRole("heading", { name: "灵机整理", exact: true }).first().waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "记忆库" }).click();
+  await page.getByRole("heading", { name: "记忆库", exact: true }).first().waitFor();
   await page.locator(".owner-memory-card").nth(0).waitFor();
   assert.ok(cardRequests.some((url) => new URL(url).searchParams.get("state") === "current"), "ordinary memory stream must request only current cards");
   const ordinaryCardSurface = page.locator(".owner-memory-card-grid");
@@ -1196,8 +1196,8 @@ try {
   await page.locator("details").filter({ hasText: "数据与索引" }).locator("summary").click();
   await page.getByRole("button", { name: /手动投喂中心/ }).waitFor();
   assert.equal(await page.locator(".desktop-nav-item").filter({ hasText: "主动投喂" }).count(), 0, "legacy Capture must be hidden from navigation");
-  await page.locator(".desktop-nav-item").filter({ hasText: "提炼候选" }).click();
-  await page.getByRole("heading", { name: "灵机整理", exact: true }).first().waitFor();
+  await page.locator(".desktop-nav-item").filter({ hasText: "记忆库" }).click();
+  await page.getByRole("heading", { name: "记忆库", exact: true }).first().waitFor();
   await page.locator(".owner-memory-card-grid").waitFor();
   await page.setViewportSize({ width: 900, height: 800 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "900px viewport must not horizontally clip");

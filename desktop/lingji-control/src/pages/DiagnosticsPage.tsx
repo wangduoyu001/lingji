@@ -5,13 +5,13 @@ import type { PageId } from "../types";
 const GROUPS: Array<{ title: string; description: string; pages: PageId[] }> = [
   {
     title: "运行与错误",
-    description: "查看最近完成的工作、任务明细、自动审查和运行日志。",
-    pages: ["activity", "jobs", "auto_review", "logs", "permanent_memory"],
+    description: "查看最近完成的工作、任务明细、系统事件流水和运行日志。",
+    pages: ["activity", "jobs", "auto_review", "logs", "permanent_memory", "changes_ledger"],
   },
   {
     title: "数据与索引",
     description: "检查项目、记忆、来源、向量、投喂和 Obsidian 数据。",
-    pages: ["codex_workspace", "memory_inspector", "memory_review", "vector_center", "capture_center", "media", "obsidian"],
+    pages: ["codex_workspace", "memory_inspector", "memory_review", "memory_cards", "vector_center", "capture_center", "media", "obsidian"],
   },
   {
     title: "模型与算力",

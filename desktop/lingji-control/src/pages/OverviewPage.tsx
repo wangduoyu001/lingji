@@ -94,13 +94,17 @@ function HomeFactsBoard({ snapshot, modelHealth, loading, onNavigate }: { snapsh
         <div className="home-facts-grid">
           <div className="home-fact-group">
             <h4>记忆来源（{sources.length ? `${sources.length} 个` : "尚未获得"}）</h4>
-            {sources.length === 0 ? <p className="home-fact-line">暂时没有可连接的记录来源。灵机会自动重试。</p> : sources.map((item) => (
-              <p className="home-fact-line" key={`${item.kind}:${item.root}`}>
-                <span className="pill neutral">{sourceStateLabel(item.state)}</span>
-                <strong>{ownerSourceName(item)}</strong>
-                <small>最近检查：{item.latestScan?.updated_at ? new Date(String(item.latestScan.updated_at)).toLocaleString() : "尚未获得"}</small>
-              </p>
-            ))}
+            {sources.length === 0 ? <p className="home-fact-line">暂时没有可连接的记录来源。灵机会自动重试。</p> : sources.map((item) => {
+              const rootTail = String(item.root ?? "").replace(/\/+$/, "").split("/").filter(Boolean).slice(-1)[0];
+              return (
+                <p className="home-fact-line" key={`${item.kind}:${item.root}`}>
+                  <span className="pill neutral">{sourceStateLabel(item.state)}</span>
+                  <strong>{ownerSourceName(item)}</strong>
+                  {rootTail && <small>· {rootTail}</small>}
+                  <small>最近检查：{item.latestScan?.updated_at ? new Date(String(item.latestScan.updated_at)).toLocaleString() : "尚未获得"}</small>
+                </p>
+              );
+            })}
           </div>
           <div className="home-fact-group">
             <h4>本机 AI 软件（{apps.length ? `发现 ${apps.length} 个` : "尚未获得"}）</h4>
@@ -111,17 +115,9 @@ function HomeFactsBoard({ snapshot, modelHealth, loading, onNavigate }: { snapsh
             {!models ? <p className="home-fact-line">模型清单尚未获得。灵机会自动重试。</p> : (
               <p className="home-fact-line">
                 <span className={`pill ${runningModels.length ? "ok" : "neutral"}`}>{runningModels.length ? `正在运行：${runningModels.join("、")}` : "暂无运行中的模型"}</span>
-                <small>兼容已验证 {verified} · 待验证 {unverified}</small>
+                <small>兼容已验证 {verified} · 待验证 {unverified}（待验证只影响速度评估，不影响使用）</small>
               </p>
             )}
-          </div>
-          <div className="home-fact-group">
-            <h4>健康</h4>
-            <p className="home-fact-line">
-              <small>灵机自检：{modelHealth?.self_check ?? "尚未获得"}</small>
-              <small>系统健康：{modelHealth?.system_health ?? "尚未获得"}</small>
-              <small>记忆健康：{modelHealth?.memory_health ?? "尚未获得"}</small>
-            </p>
           </div>
           <div className="home-fact-group">
             <h4>官方导出接收文件夹</h4>
