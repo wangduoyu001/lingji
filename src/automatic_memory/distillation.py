@@ -277,7 +277,10 @@ class KnowledgeDistiller:
             context = ssl.create_default_context(cafile=certifi.where())
         except Exception:
             context = ssl.create_default_context()
-        with urllib.request.urlopen(request, timeout=120, context=context) as response:
+        # 显式绕过系统代理（urllib 在 macOS 会自动读取系统代理，
+        # Clash 等代理的 CONNECT 隧道可能挂起导致云端调用无限等待）。
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(request, timeout=120) as response:
             body = json.loads(response.read().decode("utf-8"))
         choices = body.get("choices") or [{}]
         return str(((choices[0] or {}).get("message") or {}).get("content") or "")
