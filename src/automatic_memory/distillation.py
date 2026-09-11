@@ -270,13 +270,14 @@ class KnowledgeDistiller:
             headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
             method="POST",
         )
-        # PyInstaller 冻结后系统 CA 路径不可靠，优先用 certifi 证书包。
+        # 系统根证书 + certifi 叠加：冻结环境里两边都可能缺某一环。
+        context = ssl.create_default_context()
         try:
             import certifi
 
-            context = ssl.create_default_context(cafile=certifi.where())
+            context.load_verify_locations(cafile=certifi.where())
         except Exception:
-            context = ssl.create_default_context()
+            pass
         # 显式绕过系统代理（urllib 在 macOS 会自动读取系统代理，
         # Clash 等代理的 CONNECT 隧道可能挂起导致云端调用无限等待）。
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
