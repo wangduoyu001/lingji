@@ -1034,6 +1034,66 @@ class StateDatabase:
             rows = connection.execute(query, values).fetchall()
         return [dict(row) for row in rows]
 
+    def prune_automatic_memory_history(
+        self, *, keep_scans_per_source: int = 20, keep_events: int = 2000
+    ) -> dict[str, int]:
+        """滚动保留检查历史，防止检查留痕无限膨胀。
+
+        每个来源只保留最近 ``keep_scans_per_source`` 次终态（completed /
+        failed / cancelled）扫描及其条目；运行中的扫描永不清理。事件表只
+        保留最近 ``keep_events`` 条。返回实际删除的数量，供调用方记录。
+        """
+        with self._lock, self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            pruned_scans = 0
+            pruned_items = 0
+            pruned_events = 0
+            sources = [
+                row["source_id"]
+                for row in connection.execute(
+                    "SELECT DISTINCT source_id FROM automatic_memory_scans"
+                ).fetchall()
+            ]
+            for source_id in sources:
+                stale = connection.execute(
+                    """
+                    SELECT scan_id FROM automatic_memory_scans
+                    WHERE source_id = ? AND status IN ('completed', 'failed', 'cancelled')
+                    ORDER BY updated_at DESC, rowid DESC
+                    LIMIT -1 OFFSET ?
+                    """,
+                    (source_id, int(keep_scans_per_source)),
+                ).fetchall()
+                scan_ids = [str(row["scan_id"]) for row in stale]
+                if not scan_ids:
+                    continue
+                placeholders = ",".join("?" for _ in scan_ids)
+                cursor = connection.execute(
+                    f"DELETE FROM automatic_memory_scan_items WHERE scan_id IN ({placeholders})",
+                    scan_ids,
+                )
+                pruned_items += cursor.rowcount if cursor.rowcount and cursor.rowcount > 0 else 0
+                cursor = connection.execute(
+                    f"DELETE FROM automatic_memory_scans WHERE scan_id IN ({placeholders})",
+                    scan_ids,
+                )
+                pruned_scans += cursor.rowcount if cursor.rowcount and cursor.rowcount > 0 else 0
+            connection.execute(
+                """
+                DELETE FROM events WHERE rowid <= (
+                    SELECT MAX(rowid) FROM events
+                ) - ?
+                """,
+                (int(keep_events),),
+            )
+            pruned_events = connection.execute("SELECT changes()").fetchone()[0]
+            connection.execute("COMMIT")
+        return {
+            "scans": pruned_scans,
+            "scan_items": pruned_items,
+            "events": pruned_events,
+        }
+
     def register_automatic_memory_source_atomic(
         self, grant: dict[str, Any], source: dict[str, Any]
     ) -> dict[str, Any]:

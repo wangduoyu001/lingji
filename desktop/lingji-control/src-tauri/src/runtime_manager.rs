@@ -240,11 +240,32 @@ fn identity_is_recent(identity: &PackagedRuntimeIdentity) -> bool {
 fn open_runtime_log(root: &Path) -> Result<File, String> {
     let log_dir = root.join("logs");
     fs::create_dir_all(&log_dir).map_err(|error| format!("Unable to create runtime log directory: {error}"))?;
+    let log_path = log_dir.join("runtime-sidecar.log");
+    rotate_runtime_log(&log_path);
     OpenOptions::new()
         .create(true)
         .append(true)
-        .open(log_dir.join("runtime-sidecar.log"))
+        .open(&log_path)
         .map_err(|error| format!("Unable to open runtime log: {error}"))
+}
+
+/// 启动时轮换运行日志，最多保留 3 份历史，防止日志无限增长。
+fn rotate_runtime_log(log_path: &Path) {
+    const KEEP: usize = 3;
+    let oldest = log_path.with_extension(format!("log.{KEEP}"));
+    if oldest.exists() {
+        let _ = fs::remove_file(&oldest);
+    }
+    for index in (1..KEEP).rev() {
+        let from = log_path.with_extension(format!("log.{index}"));
+        if from.exists() {
+            let to = log_path.with_extension(format!("log.{}", index + 1));
+            let _ = fs::rename(&from, &to);
+        }
+    }
+    if log_path.exists() {
+        let _ = fs::rename(log_path, log_path.with_extension("log.1"));
+    }
 }
 
 fn authenticated_health(root: &Path) -> bool {

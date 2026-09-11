@@ -376,6 +376,17 @@ class AutomaticMemoryScheduler:
             # 向量化是可重建派生层：任何失败只跳过本轮，下一轮核对自动重试。
             return
 
+    def _prune_history(self) -> None:
+        """滚动保留检查留痕，防止 15 分钟一次的核对把记录表撑爆。"""
+        prune = getattr(self.state_db, "prune_automatic_memory_history", None)
+        if prune is None:
+            return
+        try:
+            prune()
+        except Exception:
+            # 历史清理失败不影响主流程；下一轮核对自动重试。
+            return
+
     def _reconcile_once(self, source_id: str, *, reason: str) -> ReconciliationReport:
         if self._paused:
             return ReconciliationReport(
@@ -441,6 +452,7 @@ class AutomaticMemoryScheduler:
             )
             if report.complete:
                 self._run_vector_backfill()
+                self._prune_history()
                 current = self.registry.get_scan(scan.scan_id)
                 if current.status == "completed":
                     finalized = current
