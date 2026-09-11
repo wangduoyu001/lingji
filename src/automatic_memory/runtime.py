@@ -507,9 +507,14 @@ class AutomaticMemoryRuntime:
                 return None
 
     def _distill_loop(self) -> None:
-        """daemon：每轮有界提炼若干段对话；失败退避，绝不影响扫描。"""
+        """daemon：每轮有界提炼若干段对话；失败退避，绝不影响扫描。
+
+        节流策略控制发热：批量回填期（待提炼多）拉长轮间隔，让 GPU/CPU 有
+        充分冷却窗口；接近完成（稳态增量）才用短间隔保证新对话及时入库。
+        """
         poll = float(getattr(self.settings, "distill_poll_seconds", 20.0) or 20.0)
         batch = int(getattr(self.settings, "distill_batch_size", 2) or 2)
+        bulk_poll = max(poll * 4.0, 60.0)
         backoff = Event()
         while not self._distill_stop.is_set():
             distiller = self._distiller
@@ -520,9 +525,10 @@ class AutomaticMemoryRuntime:
             try:
                 result = distiller.run_once(limit=batch)
                 status = str((result or {}).get("status") or "")
-                remaining = (result or {}).get("pending") or 0
-                # 全部提炼完成后放慢节奏（新对话仍会被下一轮拾起）。
-                idle = poll if (status == "ok" and remaining == 0 and not (result or {}).get("failed")) else poll
+                pending = int((result or {}).get("pending") or 0)
+                idle = bulk_poll if pending > batch * 4 else poll
+                if status != "ok":
+                    idle = max(poll * 3.0, 60.0)
                 backoff.wait(timeout=idle)
             except Exception:
                 backoff.wait(timeout=max(poll * 3.0, 60.0))

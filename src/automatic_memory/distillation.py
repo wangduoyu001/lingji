@@ -21,8 +21,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-TRANSCRIPT_CHAR_BUDGET = 6000
-TRANSCRIPT_MESSAGE_CAP = 80
+TRANSCRIPT_CHAR_BUDGET = 3500
+TRANSCRIPT_MESSAGE_CAP = 60
 _CHAT_TIMEOUT_SECONDS = 300.0
 _TAGS_TIMEOUT_SECONDS = 5.0
 _EMBEDDING_MODEL_HINTS = ("embed", "bge", "minilm", "e5")
@@ -235,7 +235,7 @@ class KnowledgeDistiller:
                 "messages": messages,
                 "stream": False,
                 "format": "json",
-                "options": {"temperature": 0.2, "num_ctx": 8192},
+                "options": {"temperature": 0.2, "num_ctx": 4096},
             }
         ).encode("utf-8")
         request = urllib.request.Request(

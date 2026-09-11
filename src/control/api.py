@@ -236,7 +236,15 @@ def create_control_app(
     @app.get("/api/memory/inspector/cards-summary", dependencies=secured)
     def inspector_cards_summary() -> dict[str, Any]:
         try:
-            return memory_inspector().card_summary()
+            payload = dict(memory_inspector().card_summary())
+            # 补充真实向量总数（本地 qdrant 口径），让"向量化"有可信数字。
+            try:
+                from src.retrieval.vector_backfill import VectorBackfill
+
+                payload["vectors"] = VectorBackfill.vector_count(settings)
+            except Exception:
+                payload["vectors"] = None
+            return payload
         except Exception as exc:
             raise translate_error(exc) from exc
 

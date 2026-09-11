@@ -255,13 +255,36 @@ class LocalControlService:
         }
 
     def _ensure_memory_status_snapshot(self) -> None:
-        """没有网关时也能给出诚实的 embedding/记忆计数：缺失快照则现算一份。"""
+        """没有网关时也能给出诚实的 embedding/记忆计数。
+
+        快照缺失、标记 stale、或超过 TTL 时现算一份；否则沿用最近一次
+        计算结果，避免每次面板轮询都去做向量/嵌入探测。
+        """
         try:
             if self.memory_statistics.gateway is not None:
                 return
             target = MemoryStatisticsService.snapshot_path_for(self._statistics_settings)
             if target.exists():
-                return
+                try:
+                    existing = json.loads(target.read_text(encoding="utf-8"))
+                except Exception:
+                    existing = None
+                as_of = str((existing or {}).get("as_of") or "")
+                age_seconds = None
+                if as_of:
+                    try:
+                        stamp = datetime.fromisoformat(as_of)
+                        age_seconds = (datetime.now(timezone.utc) - stamp).total_seconds()
+                    except ValueError:
+                        age_seconds = None
+                is_stale = bool((existing or {}).get("stale"))
+                is_fresh_computed = (
+                    str((existing or {}).get("source") or "") == "computed"
+                    and age_seconds is not None
+                    and age_seconds < 600
+                )
+                if not is_stale and is_fresh_computed:
+                    return
             provider = build_embedding_provider(self._statistics_settings)
             embedding = {"state": "unavailable", "available": False, "active_model": None, "dimension": None}
             if provider is not None:

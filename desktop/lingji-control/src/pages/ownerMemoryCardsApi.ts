@@ -21,7 +21,7 @@ export class OwnerMemoryCardsApi {
     return this.api.get<OwnerMemoryCardsResponse>(`/api/memory/inspector/cards?limit=${boundedLimit}&offset=${Math.max(0, offset)}${stateQuery}`, { signal });
   }
   summary(signal?: AbortSignal) {
-    return this.api.get<{ cards?: number | null; conversations?: number | null; messages?: number | null; permanent?: number | null; vectorized?: number | null; owner_review?: number | null }>("/api/memory/inspector/cards-summary", { signal });
+    return this.api.get<{ cards?: number | null; conversations?: number | null; messages?: number | null; permanent?: number | null; vectorized?: number | null; owner_review?: number | null; vectors?: number | null }>("/api/memory/inspector/cards-summary", { signal });
   }
   detail(id: string, signal?: AbortSignal) {
     return this.api.get<{ as_of?: string | null; item: OwnerMemoryCard }>(`/api/memory/inspector/cards/${encodeURIComponent(id)}`, { signal });

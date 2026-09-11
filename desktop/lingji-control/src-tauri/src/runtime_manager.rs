@@ -446,6 +446,15 @@ impl RuntimeManager {
             .try_clone()
             .map_err(|error| format!("Unable to clone runtime log handle: {error}"))?;
         let port = CONTROL_PORT.to_string();
+        // 后台记忆整理不应把整机烤热：macOS 上以低 CPU 优先级（nice 10）运行
+        // sidecar，前台交互永远优先于导入/提炼/向量化这些可重建的后台工作。
+        #[cfg(target_os = "macos")]
+        let mut command = {
+            let mut wrapped = Command::new("/usr/bin/nice");
+            wrapped.arg("-n").arg("10").arg(&binary);
+            wrapped
+        };
+        #[cfg(not(target_os = "macos"))]
         let mut command = Command::new(&binary);
         command
             .arg("--data-root")
