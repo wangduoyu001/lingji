@@ -3897,3 +3897,18 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 运行日志轮转：sidecar 启动时 `runtime-sidecar.log` → `.log.1/.2/.3` 滚动，最多 3 份历史。
 - 实测：日志轮转与 nice 10 优先级在真机生效；导入尾声 CPU 高峰为多线程短暂叠加，导入完成后回落。
 - 遗留决策点：GLM-4-Flash 云端提炼开关（主人拍板）；raw 镜像去重 vs 保留底稿（主人拍板）。
+
+### GLM-4-Flash 云端提炼 + 侧栏模型快切（9 月 12 日，主人批准接入）
+
+- 提炼服务可切换：`distill_provider`（local/zhipu）+ `zhipu_api_key`（只存本机
+  runtime_settings.json）。zhipu 走智谱 open.bigmodel.cn 的 chat/completions
+  （glm-4-flash），云端失败自动回退本机模型，绝不丢提炼。
+- 提炼提示词升级：要求产出 short_title（≤16字具体标题，替换"会话+日期"噪声）+
+  分类五选一约束（含判定规则），改善分类"其他"偏多与标题噪音。
+- UI：侧栏新增"提炼模型快切"按钮（本机/云端徽章 + 待提炼数 + 待配 Key 提示，
+  点开记忆库展开服务/模型选择）；知识要点看板增加"提炼服务"选择器与 Key 保存输入；
+  两处搜索框补"搜索"按钮；处理流水时间戳本地化；卡片/按钮悬停与过渡打磨。
+- Ollama 自启：按主人决定暂不启用（LaunchAgent 已安装后又卸载，配方保留在验收
+  日志历史中），开发稳定后再启用；当前 ollama 手动运行，仅供 nomic 嵌入（语义搜索）。
+- 全量测试：1715 passed / 22 skipped / 0 failed（1 个 task4 遗留评估测试按主人
+  知情排除，待迁移治理）。
