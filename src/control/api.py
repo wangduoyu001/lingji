@@ -241,9 +241,11 @@ def create_control_app(
             try:
                 from src.retrieval.vector_backfill import VectorBackfill
 
-                payload["vectors"] = VectorBackfill.vector_count(settings)
+                vectors = VectorBackfill.vector_count(settings)
+                if vectors is not None:
+                    payload["vectors"] = vectors
             except Exception:
-                payload["vectors"] = None
+                pass
             return payload
         except Exception as exc:
             raise translate_error(exc) from exc

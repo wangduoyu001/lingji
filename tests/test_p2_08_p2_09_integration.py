@@ -118,7 +118,11 @@ def test_desktop_uses_shared_polling_and_shadow_dashboard_without_execution_cont
 
     for page_id in ("overview", "activity", "attention", "diagnostics"):
         assert f'id: "{page_id}"' in navigation
-    assert navigation.count('group: "observe"') == 4
+    # 2026-09 菜单收敛后的契约：日常使用固定 6 页，手动确认类全部收进高级诊断。
+    assert navigation.count('group: "observe"') == 7  # 6 项主菜单 + 遗留 attention 路由
+    for observe_id in ("overview", "memory_library", "memory_sources", "timeline_page", "work_ledger", "processing_detail"):
+        assert f'id: "{observe_id}"' in navigation
+    assert 'id: "memory_cards"' in navigation and '要点转永久记忆' in navigation
     assert "PRIMARY_NAVIGATION" in navigation
     assert "ADVANCED_NAVIGATION" in navigation
     assert 'id: "auto_review"' in navigation
