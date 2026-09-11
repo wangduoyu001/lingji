@@ -77,6 +77,19 @@ APP_CATALOG: Mapping[str, AppCatalogEntry] = {
             detail="可自动发现本机 rollout 记录；主人授权后自动读取。",
         ),
         AppCatalogEntry(
+            "workbuddy", "WorkBuddy",
+            app_names=("WorkBuddy.app",),
+            process_names=("WorkBuddy", "workbuddy"),
+            extension_dirs=("$HOME/.workbuddy",),
+            capabilities={
+                "auto_discovery": True, "requires_authorization": False,
+                "official_export_inbox": False, "session_read": False,
+                "message_body_view": False, "model_process_status": True,
+            },
+            supported=False,
+            detail="已发现，暂不支持自动读取；适配器开发中，接入前不会读取它的任何数据。",
+        ),
+        AppCatalogEntry(
             "claude_desktop", "Claude",
             app_names=("Claude.app",),
             process_names=("Claude",),

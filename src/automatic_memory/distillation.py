@@ -699,11 +699,19 @@ class KnowledgeDistiller:
         ], digest, len(rows)
 
     def _render_transcript(self, messages: list[dict[str, str]]) -> str:
+        # 纵深防御：上云文本在记忆层脱敏之外再做一次敏感信息擦除。
+        try:
+            from src.extraction.privacy import PrivacyClassifier
+
+            redactor = PrivacyClassifier()
+        except Exception:
+            redactor = None
         parts: list[str] = []
         budget = TRANSCRIPT_CHAR_BUDGET
         for message in messages:
             role = "用户" if message["role"] == "user" else "AI"
-            piece = f"{role}: {message['content'].strip()}"
+            content = redactor.redact(message["content"]) if redactor else message["content"]
+            piece = f"{role}: {content.strip()}"
             if len(piece) > budget:
                 piece = piece[:budget] + "…"
             if not piece.strip():

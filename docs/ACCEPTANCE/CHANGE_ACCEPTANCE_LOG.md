@@ -3912,3 +3912,16 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   日志历史中），开发稳定后再启用；当前 ollama 手动运行，仅供 nomic 嵌入（语义搜索）。
 - 全量测试：1715 passed / 22 skipped / 0 failed（1 个 task4 遗留评估测试按主人
   知情排除，待迁移治理）。
+
+### 敏感信息红线：入层脱敏 + WorkBuddy 发现（9 月 12 日）
+
+- 主人红线：灵机拿全量，但 API Key/凭据/证件号等敏感内容不记录、不出本机。
+- PrivacyClassifier 模式补强：新增 credential_pair（智谱等"hex32.alnum"键格式）、bearer_token、
+  cloud_api_token（ghp_/github_pat_/xox/AKIA），全部列入 HIGH_RISK。
+- 管线统一脱敏接缝：`ExtractionPipeline._write_structured` 在结构化批次写入记忆层前，对全部
+  来源的标题与消息内容做 `PrivacyClassifier.redact`（幂等），summary 记录 redacted_messages
+  计数。记忆层是检索/提炼/向量化的唯一源头——源头干净则全链路干净。
+- 云端纵深防御：提炼上云的 transcript 渲染时二次脱敏（防历史未脱敏数据外流）。
+- WorkBuddy 进入应用发现清单（installed，暂不支持自动读取；适配器为下一任务）。
+- 测试：新增 tests/test_privacy_redaction.py 4 例（凭据识别/保留上下文/管线接缝/幂等），
+  提炼+抽取回归 45+20 passed。

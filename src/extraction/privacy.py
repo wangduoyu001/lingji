@@ -70,9 +70,25 @@ class PrivacyClassifier:
             "medium",
             re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
         ),
+        (
+            "bearer_token",
+            "high",
+            re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{16,}"),
+        ),
+        (
+            "credential_pair",
+            "high",
+            # 智谱/各类平台凭据形态：32位十六进制.字母数字串（如 xxx.yyy API Key）
+            re.compile(r"\b[0-9a-f]{32}\.[A-Za-z0-9_-]{8,32}\b"),
+        ),
+        (
+            "cloud_api_token",
+            "high",
+            re.compile(r"\b(?:ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abp]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})\b"),
+        ),
     )
 
-    HIGH_RISK_KINDS = {"api_key", "private_key", "password", "cn_identity_number", "bank_card"}
+    HIGH_RISK_KINDS = {"api_key", "private_key", "password", "cn_identity_number", "bank_card", "bearer_token", "credential_pair", "cloud_api_token"}
 
     def assess(self, text: str, extra_sensitive_terms: Iterable[str] = ()) -> PrivacyAssessment:
         findings: list[PrivacyFinding] = []

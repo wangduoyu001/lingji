@@ -408,6 +408,37 @@ class ExtractionPipeline:
                         "Automatic-memory terminal projection failed before publication"
                     ) from None
 
+    def _redact_structured_batch(self, batch: Any) -> Any:
+        """对结构化批次的标题与消息内容做敏感信息脱敏（幂等，纯派生）。"""
+        from dataclasses import replace
+
+        from .privacy import PrivacyClassifier
+
+        redactor = PrivacyClassifier()
+        sources = []
+        redacted_messages = 0
+        for source in batch.structured_sources:
+            conversations = []
+            for conversation in source.conversations:
+                messages = []
+                for message in conversation.messages:
+                    clean = redactor.redact(message.content)
+                    if clean != message.content:
+                        redacted_messages += 1
+                    messages.append(replace(message, content=clean))
+                conversations.append(
+                    replace(conversation, title=redactor.redact(conversation.title), messages=tuple(messages))
+                )
+            sources.append(replace(source, conversations=tuple(conversations)))
+        redacted_batch = replace(batch, structured_sources=tuple(sources))
+        try:
+            summary = dict(redacted_batch.summary or {})
+            summary["redacted_messages"] = redacted_messages
+            redacted_batch = replace(redacted_batch, summary=summary)
+        except Exception:
+            pass
+        return redacted_batch
+
     def _write_structured(
         self,
         *,
@@ -428,6 +459,9 @@ class ExtractionPipeline:
                 "links": 0,
                 "warnings": [],
             }
+        # 敏感信息在入记忆层前统一脱敏（API Key/私钥/身份证号/凭据对等）：
+        # 记忆层是所有下游（检索/提炼/向量化）的源头，源头干净则全链路干净。
+        batch = self._redact_structured_batch(batch)
         return self.structured_sink.write_batch(
             batch,
             raw_snapshot=raw_snapshot,
