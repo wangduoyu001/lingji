@@ -41,8 +41,8 @@ export default function ProcessingDetailPage({ api, active }: { api: LingJiApi; 
     <div className="stack processing-detail-page">
       <section className="memory-sources-intro">
         <div>
-          <span className="section-kicker">处理详情</span>
-          <h2>处理详情</h2>
+          <span className="section-kicker">处理流水</span>
+          <h2>处理流水</h2>
           <p>扫描 → 提炼 → 候选 → 记忆 → 时间线 → 向量 → RAG：每个环节的全部数据，直接平铺展示。</p>
         </div>
         <span className="auto-refresh-note">{resource.refreshing ? "正在更新" : "自动更新"}</span>

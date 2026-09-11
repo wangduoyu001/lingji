@@ -115,8 +115,8 @@ export function WorkLedgerPage({ api, active }: { api: LingJiApi; active: boolea
     <div className="stack work-ledger-page">
       <section className="memory-sources-intro">
         <div>
-          <span className="section-kicker">工作记录</span>
-          <h2>工作记录</h2>
+          <span className="section-kicker">检查记录</span>
+          <h2>检查记录</h2>
           <p>灵机做过的每一次检查都在这里：做了什么、每一步处理了多少、结果如何。</p>
         </div>
         <span className="auto-refresh-note">{tasks.refreshing ? "正在更新" : "自动更新"}</span>
