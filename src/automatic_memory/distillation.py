@@ -496,8 +496,12 @@ class KnowledgeDistiller:
         if not self._db_available():
             return {"status": "empty", "distilled": 0, "failed": 0, **self.stats()}
         model = self._resolve_model()
-        if model is None:
+        # 进度面板展示"实际生效"的模型：云端启用时优先显示云端模型名。
+        used_model_label = self._ZHIPU_MODEL if (self.provider == "zhipu" and self.api_key) else model
+        if model is None and used_model_label is None:
             return {"status": "model_unavailable", "distilled": 0, "failed": 0, **self.stats()}
+        if model is None:
+            model = used_model_label
         distilled = 0
         failed = 0
         with self._connect() as conn:
@@ -505,16 +509,16 @@ class KnowledgeDistiller:
             pending = self._pending_conversations(conn, max(1, int(limit)))
             for conversation in pending:
                 conversation_id = str(conversation["conversation_id"])
-                self._publish_current(conn, model, conversation)
+                self._publish_current(conn, used_model_label, conversation)
                 started = time.monotonic()
                 try:
                     outcome = self._distill_one(conn, model, conversation)
                 except Exception as exc:  # 单段失败不阻塞本轮其余对话
                     self._record_failure(conn, conversation_id, str(exc))
-                    self._publish_finished(conn, model, str(conversation["title"] or "未命名对话"), time.monotonic() - started, False)
+                    self._publish_finished(conn, used_model_label, str(conversation["title"] or "未命名对话"), time.monotonic() - started, False)
                     failed += 1
                     continue
-                self._publish_finished(conn, model, str(conversation["title"] or "未命名对话"), time.monotonic() - started, bool(outcome))
+                self._publish_finished(conn, used_model_label, str(conversation["title"] or "未命名对话"), time.monotonic() - started, bool(outcome))
                 if outcome:
                     distilled += 1
                 else:
