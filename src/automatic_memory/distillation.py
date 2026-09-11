@@ -291,15 +291,46 @@ class KnowledgeDistiller:
         if self.provider == "zhipu" and self.api_key:
             try:
                 return self._chat_cloud_with_deadline(messages), self._ZHIPU_MODEL
-            except Exception as exc:
-                # 回退是兜底不是静默：记录原因供进度面板与日志排查。
-                self._last_cloud_error = f"{type(exc).__name__}: {exc}"[:200]
-                import logging
+            except Exception as ssl_exc:
+                # OpenSSL 证书链不完整时（bigmodel 缺中间证书），用系统 curl 重试。
+                try:
+                    return self._chat_zhipu_curl(self.api_key, messages), self._ZHIPU_MODEL
+                except Exception as curl_exc:
+                    self._last_cloud_error = (
+                        f"ssl={type(ssl_exc).__name__}; curl={type(curl_exc).__name__}: {curl_exc}"[:200]
+                    )
+                    import logging
 
-                logging.getLogger("lingji.distillation").warning(
-                    "cloud distillation failed, falling back to local: %s", self._last_cloud_error
-                )
+                    logging.getLogger("lingji.distillation").warning(
+                        "cloud distillation failed, falling back to local: %s", self._last_cloud_error
+                    )
         return self._chat(local_model, messages), local_model
+
+    def _chat_zhipu_curl(self, api_key: str, messages: list[dict[str, str]]) -> str:
+        """系统 curl 兜底：bigmodel 证书链缺中间证书时，macOS 的 curl
+        （系统 TLS 栈，自动补中间证书）可以完成校验而 OpenSSL 不行。"""
+        import subprocess
+
+        payload = json.dumps(
+            {"model": self._ZHIPU_MODEL, "messages": messages, "temperature": 0.2, "stream": False}
+        ).encode("utf-8")
+        completed = subprocess.run(
+            [
+                "/usr/bin/curl", "--noproxy", "*", "-sS", "-m", "115", "-X", "POST",
+                self._ZHIPU_URL,
+                "-H", "Content-Type: application/json",
+                "-H", f"Authorization: Bearer {api_key}",
+                "-d", "@-",
+            ],
+            input=payload,
+            capture_output=True,
+            timeout=115,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(f"curl exit {completed.returncode}: {completed.stderr[:120]!r}")
+        body = json.loads(completed.stdout.decode("utf-8"))
+        choices = body.get("choices") or [{}]
+        return str(((choices[0] or {}).get("message") or {}).get("content") or "")
 
     def _chat_cloud_with_deadline(self, messages: list[dict[str, str]], deadline: float = 130.0) -> str:
         """带硬截止的云端调用：DNS/TLS 挂起无法靠 socket timeout 兜底，
