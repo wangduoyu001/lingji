@@ -3849,3 +3849,16 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   `close_shared_client()` 供测试/退出释放），`_client()`/`vector_count()`/`search()` 全部走共享
   实例，不再每次开关。测试相应释放共享客户端后直接开独立客户端核对。
 - 回归：vector_backfill 4 例 + observability/distillation/runtime/scheduler/retrieval 79 例通过。
+
+### 夜间断活恢复：验收数据根持久化 + 全自动重建验证（9 月 12 日）
+
+- 根因：机器于 9 月 11 日 18:02 重启，macOS 清空 /tmp，验收数据根（/tmp/LingJiAcceptance/...）
+  连同已导入的记忆层/向量/提炼全部丢失，应用进程同时被杀。这暴露了验收环境把数据根放在 /tmp
+  的脆弱性。
+- 恢复动作：数据根迁移到持久路径 `~/LingJiAcceptance/osimr-7e7f0707/app-data`，
+  desktop-bootstrap.json 同步更新；重新拉起 Ollama（重启后不自启，需后续产品化为 launchd 自启）；
+  重新授权 ~/.codex/sessions 与 ~/.codex/archived_sessions 两个只读来源并触发首轮扫描。
+- 全自动重建得到真机验证：授权后无需任何人工干预，扫描→解析→导入→记忆层→提炼 daemon 依次
+  自行推进（90 分钟内导入 116+ 段对话/3974+ 条消息，提炼同步跟进，模型 qwen2.5:7b）。
+- 结论：数据权威架构（来源 AI 目录 = 权威，记忆层/向量/提炼 = 可重建派生层）在真实灾难场景下
+  成立；恢复成本 = 纯机器时间，无数据损失。
