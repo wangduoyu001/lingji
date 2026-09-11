@@ -3888,3 +3888,12 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   正常显示）；提炼候选卡片"语义向量：尚未获得"徽标对未回填会话可见，随向量化自动消失。
 - 优化提交：0daece79（菜单重组+首页清理）、fix: unify renamed page titles（标题统一）、
   1b6f9c81（语义召回面板）、896dc169（Qdrant 共享客户端）、0f284887（语义召回修复）。
+
+### 防膨胀 P0 落地：检查留痕滚动保留 + 日志轮转（9 月 12 日）
+
+- `StateDatabase.prune_automatic_memory_history`：每来源滚动保留最近 20 次终态扫描
+  （completed/failed/cancelled）及其条目，运行中的扫描永不清理；事件表保留最近 2000 条。
+  调度器每轮核对成功后自动执行，失败隔离不影响主流程。TDD：3 个新测试（保留/事件上限/幂等）。
+- 运行日志轮转：sidecar 启动时 `runtime-sidecar.log` → `.log.1/.2/.3` 滚动，最多 3 份历史。
+- 实测：日志轮转与 nice 10 优先级在真机生效；导入尾声 CPU 高峰为多线程短暂叠加，导入完成后回落。
+- 遗留决策点：GLM-4-Flash 云端提炼开关（主人拍板）；raw 镜像去重 vs 保留底稿（主人拍板）。
