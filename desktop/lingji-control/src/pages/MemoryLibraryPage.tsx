@@ -380,12 +380,6 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
             />
           </div>
           {resource.error && !resource.data && <Notice kind="warning">暂时无法读取记忆库，灵机会自动重试。</Notice>}
-          {resource.loading && !resource.data ? (
-            <div className="empty-state" aria-busy="true">正在读取记忆库…</div>
-          ) : rows.length === 0 ? (
-            <Empty text="没有匹配的对话。换个搜索词试试，或等下一次自动检查。" />
-          ) : (
-            <>
           {searchApplied.trim() && (recallResource.data?.items?.length ?? 0) > 0 && (
             <section className="stack knowledge-section">
               <div className="section-heading">
@@ -409,6 +403,13 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
               </div>
             </section>
           )}
+          {searchApplied.trim() && recallResource.loading && <div className="empty-state" aria-busy="true">正在按意思搜索…</div>}
+          {resource.loading && !resource.data ? (
+            <div className="empty-state" aria-busy="true">正在读取记忆库…</div>
+          ) : rows.length === 0 ? (
+            <Empty text="没有匹配的对话。换个搜索词试试，或等下一次自动检查。" />
+          ) : (
+            <>
           <div className="library-list">
             {rows.map((row) => (
                   <article key={row.conversation_id} className="library-item">
