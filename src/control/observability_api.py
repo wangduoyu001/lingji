@@ -418,7 +418,28 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         settings = getattr(control, "settings", control)
         from src.automatic_memory.distillation import KnowledgeDistiller
 
-        return KnowledgeDistiller(settings)
+        try:
+            from src.control.runtime_settings import RuntimeSettingsStore
+
+            store = RuntimeSettingsStore(settings)
+
+            def _model_override() -> str:
+                return str(store.snapshot()["values"].get("distill_model", "") or "")
+
+            def _provider_override() -> str:
+                return str(store.snapshot()["values"].get("distill_provider", "local") or "local")
+
+            def _key_override() -> str:
+                return str(store.snapshot()["values"].get("zhipu_api_key", "") or "")
+
+            return KnowledgeDistiller(
+                settings,
+                model_override=_model_override,
+                provider_override=_provider_override,
+                api_key_override=_key_override,
+            )
+        except Exception:
+            return KnowledgeDistiller(settings)
 
     @app.get("/api/observability/knowledge", dependencies=secured)
     def observability_knowledge(

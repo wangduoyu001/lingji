@@ -258,6 +258,7 @@ class KnowledgeDistiller:
     _ZHIPU_MODEL = "glm-4-flash"
 
     def _chat_zhipu(self, api_key: str, messages: list[dict[str, str]]) -> str:
+        import ssl
         import urllib.request
 
         payload = json.dumps(
@@ -269,7 +270,14 @@ class KnowledgeDistiller:
             headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=120) as response:
+        # PyInstaller 冻结后系统 CA 路径不可靠，优先用 certifi 证书包。
+        try:
+            import certifi
+
+            context = ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            context = ssl.create_default_context()
+        with urllib.request.urlopen(request, timeout=120, context=context) as response:
             body = json.loads(response.read().decode("utf-8"))
         choices = body.get("choices") or [{}]
         return str(((choices[0] or {}).get("message") or {}).get("content") or "")
@@ -279,8 +287,9 @@ class KnowledgeDistiller:
         if self.provider == "zhipu" and self.api_key:
             try:
                 return self._chat_zhipu(self.api_key, messages), self._ZHIPU_MODEL
-            except Exception:
-                pass
+            except Exception as exc:
+                # 回退是兜底不是静默：记录原因供进度面板展示。
+                self._last_cloud_error = f"{type(exc).__name__}: {exc}"[:200]
         return self._chat(local_model, messages), local_model
 
     def _chat(self, model: str, messages: list[dict[str, str]]) -> str:
@@ -520,7 +529,7 @@ class KnowledgeDistiller:
             finished = json.loads(str(row["finished_json"] or "[]"))
         except json.JSONDecodeError:
             finished = []
-        return {
+        payload = {
             "active": bool(row["current_conversation_id"]),
             "current": {
                 "conversation_id": row["current_conversation_id"],
@@ -532,7 +541,9 @@ class KnowledgeDistiller:
             "cumulative_distilled": int(row["cumulative_distilled"]),
             "cumulative_failed": int(row["cumulative_failed"]),
             "updated_at": row["updated_at"],
+            "cloud_error": getattr(self, "_last_cloud_error", None),
         }
+        return payload
 
     def _distill_one(self, conn: sqlite3.Connection, model: str, conversation: dict[str, Any]) -> bool:
         conversation_id = str(conversation["conversation_id"])
