@@ -286,11 +286,31 @@ class KnowledgeDistiller:
         """按主人选择分发；云端失败自动回退本机，绝不丢提炼。"""
         if self.provider == "zhipu" and self.api_key:
             try:
-                return self._chat_zhipu(self.api_key, messages), self._ZHIPU_MODEL
+                return self._chat_cloud_with_deadline(messages), self._ZHIPU_MODEL
             except Exception as exc:
                 # 回退是兜底不是静默：记录原因供进度面板展示。
                 self._last_cloud_error = f"{type(exc).__name__}: {exc}"[:200]
         return self._chat(local_model, messages), local_model
+
+    def _chat_cloud_with_deadline(self, messages: list[dict[str, str]], deadline: float = 130.0) -> str:
+        """带硬截止的云端调用：DNS/TLS 挂起无法靠 socket timeout 兜底，
+        用独立线程 + join(deadline) 强制超时，避免 daemon 卡死在单段对话上。"""
+        result: dict[str, str] = {}
+
+        def _run() -> None:
+            try:
+                result["answer"] = self._chat_zhipu(self.api_key, messages)
+            except Exception as exc:  # noqa: BLE001 - 回退路径需要知道原因
+                result["error"] = f"{type(exc).__name__}: {exc}"[:200]
+
+        worker = threading.Thread(target=_run, name="lingji-cloud-distill", daemon=True)
+        worker.start()
+        worker.join(deadline)
+        if worker.is_alive():
+            raise TimeoutError(f"cloud request exceeded {deadline:.0f}s deadline")
+        if "error" in result:
+            raise RuntimeError(result["error"])
+        return result["answer"]
 
     def _chat(self, model: str, messages: list[dict[str, str]]) -> str:
         import urllib.request
