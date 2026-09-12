@@ -113,6 +113,20 @@ class KnowledgeDistiller:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS distilled_knowledge_history (
+                conversation_id TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                key_points_json TEXT NOT NULL,
+                category TEXT NOT NULL,
+                model TEXT NOT NULL,
+                superseded_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS distill_progress (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 current_conversation_id TEXT,
@@ -641,6 +655,26 @@ class KnowledgeDistiller:
             title = short_title
         now = _now()
         revision = 1 if existing is None else int(existing["revision"]) + 1
+        if existing is not None:
+            # 迭代可追溯（P3）：旧结论归档，新结论取代旧结论，时间线只记一条更新。
+            old_row = conn.execute(
+                "SELECT * FROM distilled_knowledge WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()
+            if old_row is not None:
+                conn.execute(
+                    """
+                    INSERT INTO distilled_knowledge_history (
+                        conversation_id, revision, title, summary, key_points_json,
+                        category, model, superseded_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        conversation_id, int(old_row["revision"]), old_row["title"],
+                        old_row["summary"], old_row["key_points_json"], old_row["category"],
+                        old_row["model"], now,
+                    ),
+                )
         conn.execute(
             """
             INSERT INTO distilled_knowledge (

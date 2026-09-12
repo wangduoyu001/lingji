@@ -83,6 +83,20 @@ export function useInfoFeed(api: LingJiApi, active: boolean) {
   });
 }
 
+function stepUnit(step: string): string {
+  const messageSteps: Record<string, string> = {
+    extract: " 条消息", memory: " 条", timeline: " 条事件", vectorize: " 条",
+  };
+  return messageSteps[step] ?? " 个文件";
+}
+
+function friendlyFileName(name: string): string {
+  const match = /rollout-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})/.exec(name);
+  if (!match) return name;
+  const [, y, m, d, hh, mm] = match;
+  return `${Number(m)}月${Number(d)}日 ${hh}:${mm} 会话`;
+}
+
 export function StepsFlow({ steps }: { steps: ObsStep[] | null }) {
   if (!steps || steps.length === 0) return <p className="outcome-empty">这一步的工作明细尚未获得，灵机会自动重试。</p>;
   return (
@@ -95,7 +109,7 @@ export function StepsFlow({ steps }: { steps: ObsStep[] | null }) {
             <small>{step.plain}</small>
           </div>
           <div className="step-count">
-            <strong>{step.count == null ? "尚未获得" : `${step.count}${step.total ? ` / ${step.total}` : ""}`}</strong>
+            <strong>{step.count == null ? "尚未获得" : `${step.count}${stepUnit(step.step)}`}</strong>
             {step.percent != null && <div className="step-bar"><div className="step-bar-fill" style={{ width: `${step.percent}%` }} /></div>}
           </div>
         </div>
@@ -154,7 +168,7 @@ export function WorkLedgerPage({ api, active }: { api: LingJiApi; active: boolea
                   <div key={item.name} className="work-item-row">
                     <div className="work-item-head">
                       <span className={`pill ${item.status === "failed" ? "bad" : item.status === "merged" ? "neutral" : item.status === "kept" ? "ok" : "warning"}`}>{item.label}</span>
-                      <strong>{item.name}</strong>
+                      <strong title={item.name}>{friendlyFileName(item.name)}</strong>
                     </div>
                     {item.failure ? (
                       <div className="work-item-detail">
@@ -198,7 +212,7 @@ export function ChangesLedgerPage({ api, active, timelineMode }: { api: LingJiAp
             <div key={`${change.time}-${index}`} className="change-row">
               <small className="change-time">{timeText(change.time)}</small>
               <span className="pill neutral">{change.action}</span>
-              <small>对象：{change.object}</small>
+              <small>对象：{change.object.startsWith("src-") ? "记忆来源" : change.object}</small>
             </div>
           ))}
         </div>

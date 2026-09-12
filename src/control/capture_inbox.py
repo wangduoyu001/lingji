@@ -33,6 +33,23 @@ def ensure_capture_inbox() -> Path:
     return inbox
 
 
+
+_PLATFORM_CN = {"douyin": "抖音", "tiktok": "抖音", "xiaohongshu": "小红书", "rednote": "小红书",
+               "channels": "视频号", "weixin": "微信", "wechat": "微信", "bilibili": "B站",
+               "kuaishou": "快手", "web": "网页", "browser": "浏览器"}
+
+
+def _chinese_platform(value: str) -> str:
+    key = value.strip().lower()
+    if not key:
+        return "手机分享"
+    if key in _PLATFORM_CN:
+        return _PLATFORM_CN[key]
+    for needle, cn in _PLATFORM_CN.items():
+        if needle in key:
+            return cn
+    return value
+
 class CaptureInboxWatcher:
     """轮询 LingJiInbox，把手机分享的条目送进捕获管线。"""
 
@@ -88,7 +105,20 @@ class CaptureInboxWatcher:
                     self._move(path, "failed")
                     failed += 1
                     continue
-                self._submit(payload)
+                try:
+                    self._submit(payload)
+                except Exception:
+                    # 降级存档（C2）：网页抓取失败时保留链接+笔记本体，绝不丢条目。
+                    degraded = dict(payload)
+                    degraded["text"] = "\n".join(
+                        part for part in (
+                            f"链接：{payload.get('url', '')}".strip(),
+                            f"笔记：{payload.get('text', '')}".strip(),
+                        ) if part
+                    )
+                    degraded["title"] = f"{payload.get('title', '手机捕获')}（链接存档）"
+                    degraded.pop("url", None)
+                    self._submit(degraded)
                 self._move(path, "processed")
                 processed += 1
             except Exception:
@@ -114,7 +144,7 @@ class CaptureInboxWatcher:
                     "text": str(data.get("text") or data.get("note") or ""),
                     "url": str(data.get("url") or data.get("source_url") or ""),
                     "title": str(data.get("title") or "手机捕获"),
-                    "platform": str(data.get("source_app") or data.get("platform") or "mobile_share"),
+                    "platform": _chinese_platform(str(data.get("source_app") or data.get("platform") or "手机分享")),
                     "capture_method": "mobile_inbox",
                     "captured_at": str(data.get("captured_at") or ""),
                 }
@@ -122,7 +152,7 @@ class CaptureInboxWatcher:
                     return None
                 return payload
             return None
-        return {"text": raw, "title": "手机捕获", "platform": "mobile_share", "capture_method": "mobile_inbox"}
+        return {"text": raw, "title": "手机捕获", "platform": "手机分享", "capture_method": "mobile_inbox"}
 
     def _move(self, path: Path, sub: str) -> None:
         target_dir = self.inbox_dir / sub

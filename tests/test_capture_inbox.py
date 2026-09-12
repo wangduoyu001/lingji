@@ -27,7 +27,7 @@ def test_json_entry_is_parsed_submitted_and_archived(tmp_path: Path):
     payload = submitted[0]
     assert "曝光三角" in payload["text"]
     assert payload["url"] == "https://v.douyin.com/x"
-    assert payload["platform"] == "douyin"
+    assert payload["platform"] == "抖音"
     assert not entry.exists()
     assert list((tmp_path / "LingJiInbox" / "processed").glob("*a.json"))
 
@@ -38,7 +38,7 @@ def test_plain_text_entry_defaults_to_mobile_share(tmp_path: Path):
     (tmp_path / "LingJiInbox" / "note.txt").write_text("一段纯文本笔记", encoding="utf-8")
     watcher.scan_once()
     assert submitted[0]["text"] == "一段纯文本笔记"
-    assert submitted[0]["platform"] == "mobile_share"
+    assert submitted[0]["platform"] == "手机分享"
 
 
 def test_broken_json_goes_to_failed_not_silent(tmp_path: Path):
