@@ -3925,3 +3925,16 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - WorkBuddy 进入应用发现清单（installed，暂不支持自动读取；适配器为下一任务）。
 - 测试：新增 tests/test_privacy_redaction.py 4 例（凭据识别/保留上下文/管线接缝/幂等），
   提炼+抽取回归 45+20 passed。
+
+### 任务③手机捕获通道实施（iCloud 收件箱桥）+ 三任务设计定稿（9 月 12 日）
+
+- 三任务实施设计落盘：docs/plans/2026-09-12_task3_mobile_capture_design.md、
+  task2_history_scrub_design.md、task1_workbuddy_adapter_design.md。
+- 任务③ P0 实现：`src/control/capture_inbox.py`——CaptureInboxWatcher 轮询
+  iCloud Drive/LingJiInbox（iCloud 不可用自动回退 ~/LingJiInbox），支持 .json
+  （text/url/note/source_app）与 .txt，调 capture_share 进既有捕获管线；成功归档
+  processed/，解析或提交失败归档 failed/（不静默丢）。run_control_api 启动 watcher
+  并在停机时优雅停止。端口零暴露（不开 LAN）。
+- 测试：4 例（json 摄取+归档/纯文本/坏文件入 failed/目录解析回退）全过。
+- iOS 快捷指令配方（主人手机 2 分钟）：分享面板 → 文本组装 JSON → 存文件到
+  iCloud Drive/LingJiInbox/时间戳.json（完整步骤见任务③设计文档）。

@@ -61,6 +61,17 @@ def main() -> None:
     register_p2_07_routes(app, settings, service, token=token)
     register_auto_review_routes(app, settings, service, token=token)
     register_settings_governance_routes(app, service, token=token)
+
+    # 手机捕获收件箱：iOS 快捷指令写 iCloud Drive/LingJiInbox，这里轮询摄取。
+    from src.control.capture_inbox import CaptureInboxWatcher, ensure_capture_inbox
+
+    capture_inbox_dir = ensure_capture_inbox()
+    capture_inbox = CaptureInboxWatcher(
+        submit=lambda payload: service.capture_share(payload),
+        inbox_dir=capture_inbox_dir,
+    )
+    capture_inbox.start()
+
     shutdown_done = False
 
     def shutdown_runtime() -> None:
@@ -68,6 +79,7 @@ def main() -> None:
         if shutdown_done:
             return
         shutdown_done = True
+        capture_inbox.stop()
         # Runtime owns the background worker/scheduler.  Close the service
         # only after those components have released their resources.
         try:
