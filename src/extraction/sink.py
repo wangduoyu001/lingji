@@ -176,9 +176,26 @@ class VaultExtractionSink:
         target = target_dir / self.layout.sanitize_filename(source.name)
         target_dir.mkdir(parents=True, exist_ok=True)
         if not target.exists():
-            temporary = target.with_suffix(target.suffix + ".tmp")
-            shutil.copy2(source, temporary)
-            temporary.replace(target)
+            # 同盘优先硬链接：底稿零额外空间，且来源被删后证据仍在
+            #（inode 由本库持有）。同内容不同文件名链接到同一物理底稿
+            #（内容级去重）。跨盘/链接失败回退复制。
+            try:
+                existing = next(
+                    (
+                        candidate
+                        for candidate in sorted(target_dir.iterdir())
+                        if candidate.is_file() and not candidate.name.endswith(".tmp")
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    os.link(existing, target)
+                else:
+                    os.link(source, target)
+            except OSError:
+                temporary = target.with_suffix(target.suffix + ".tmp")
+                shutil.copy2(source, temporary)
+                temporary.replace(target)
         return {
             "kind": "file",
             "source_path": str(source),
