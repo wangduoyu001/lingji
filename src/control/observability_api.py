@@ -573,7 +573,10 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         items = []
         for row in rows:
             item = project_event(dict(row))
-            item["object"] = str(row.get("entity_id") or "")[:24] or "尚未获得"
+            entity = str(row.get("entity_id") or "")
+            if entity.startswith("LJ-JOB-"):
+                entity = "导入批次"
+            item["object"] = entity[:24] or "尚未获得"
             items.append(item)
         return {"items": items, "pagination": {"limit": limit, "offset": offset, "has_more": len(items) == limit}}
 

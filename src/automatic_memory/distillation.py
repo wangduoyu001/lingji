@@ -111,6 +111,10 @@ class KnowledgeDistiller:
             )
             """
         )
+        try:
+            conn.execute("ALTER TABLE distilled_knowledge ADD COLUMN superseded_by TEXT")
+        except Exception:
+            pass
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS distilled_knowledge_history (
@@ -243,6 +247,8 @@ class KnowledgeDistiller:
             "key_points 用短句，每条不超过40字，只保留有信息量的事实，不要寒暄。"
             "category 必须五选一：改代码/修Bug/搭环境=技术；定了方案或拍板=决策；"
             "遇到故障或报错=问题；启动或推进某个项目=项目；闲聊或无结论=其他。"
+            "如果这段对话推翻或升级了近期某个旧结论（旧标题见下），"
+            "额外返回 \"supersedes\": \"<被取代的旧标题>\"；否则不要返回该字段。"
         )
         user = f"对话标题：{title}\n\n对话内容：\n{transcript}"
         return [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -430,13 +436,16 @@ class KnowledgeDistiller:
                 "SELECT category, COUNT(*) AS n FROM distilled_knowledge WHERE status = 'ready' GROUP BY category"
             ):
                 by_category[str(row["category"])] = int(row["n"])
+        model = self._model or self._resolve_model()
+        if self.provider == "zhipu" and self.api_key:
+            model = self._ZHIPU_MODEL
         return {
             "total": total_convs,
             "ready": ready,
             "pending": max(0, total_convs - ready),
             "by_category": by_category,
-            "model": self._model or self._resolve_model(),
-            "available": self._model is not None or self._resolve_model() is not None,
+            "model": model,
+            "available": model is not None,
         }
 
     def list_entries(
@@ -500,6 +509,35 @@ class KnowledgeDistiller:
                 }
             )
         return {"items": items, "pagination": {"total": total, "has_more": offset + len(items) < total}}
+
+    def reset_distillations(self) -> int:
+        """把存量要点归档（进 history），让 daemon 用新提示词全量重提炼。"""
+        db = self._memory_db()
+        if not self._db_available():
+            return 0
+        with self._connect() as conn:
+            self._ensure_schema(conn)
+            rows = conn.execute(
+                "SELECT * FROM distilled_knowledge WHERE status = 'ready'"
+            ).fetchall()
+            now = _now()
+            for row in rows:
+                conn.execute(
+                    """
+                    INSERT INTO distilled_knowledge_history (
+                        conversation_id, revision, title, summary, key_points_json,
+                        category, model, superseded_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(row["conversation_id"]), int(row["revision"]), str(row["title"]),
+                        str(row["summary"]), str(row["key_points_json"]), str(row["category"]),
+                        str(row["model"]), now,
+                    ),
+                )
+            cursor = conn.execute("DELETE FROM distilled_knowledge WHERE status = 'ready'")
+            conn.commit()
+            return cursor.rowcount if cursor.rowcount and cursor.rowcount > 0 else 0
 
     def run_once(self, limit: int = 2) -> dict[str, Any]:
         """提炼至多 limit 段对话；返回进度统计。全自动、可重复调用。"""
@@ -636,7 +674,19 @@ class KnowledgeDistiller:
         if existing is not None and str(existing["messages_digest"]) == digest and str(existing["status"] if "status" in existing.keys() else "ready") == "ready":
             return True  # 已是最新，视为成功
         messages, _digest_used, message_count = self._transcript_payload(conn, conversation_id)
-        answer, used_model = self._chat_dispatch(model, self._build_prompt(title, self._render_transcript(messages)))
+        recent = conn.execute(
+            """
+            SELECT title FROM distilled_knowledge
+            WHERE status = 'ready' AND conversation_id != ?
+            ORDER BY COALESCE(occurred_at, created_at) DESC LIMIT 10
+            """,
+            (conversation_id,),
+        ).fetchall()
+        prompt = self._build_prompt(title, self._render_transcript(messages))
+        if recent:
+            listing = "\n".join(f"- {r['title']}" for r in recent)
+            prompt[-1]["content"] += f"\n\n近期已有结论的标题（若本次对话推翻其中某个，返回 supersedes 字段）：\n{listing}"
+        answer, used_model = self._chat_dispatch(model, prompt)
         parsed = _parse_model_json(answer)
         if parsed is None or not str(parsed.get("summary") or "").strip():
             self._record_failure(conn, conversation_id, "模型输出无法解析为知识要点")
@@ -653,6 +703,17 @@ class KnowledgeDistiller:
         short_title = str(parsed.get("short_title") or "").strip()
         if 2 <= len(short_title) <= 24 and "会话" not in short_title:
             title = short_title
+        supersedes = str(parsed.get("supersedes") or "").strip()
+        if supersedes:
+            row = conn.execute(
+                "SELECT conversation_id FROM distilled_knowledge WHERE title LIKE ? AND conversation_id != ? AND status = 'ready' LIMIT 1",
+                (f"%{supersedes[:40]}%", conversation_id),
+            ).fetchone()
+            if row is not None:
+                conn.execute(
+                    "UPDATE distilled_knowledge SET status = 'superseded', superseded_by = ? WHERE conversation_id = ?",
+                    (conversation_id, str(row["conversation_id"])),
+                )
         now = _now()
         revision = 1 if existing is None else int(existing["revision"]) + 1
         if existing is not None:
