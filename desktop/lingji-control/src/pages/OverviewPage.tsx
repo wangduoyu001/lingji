@@ -62,6 +62,7 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
   return <div className="stack overview-page owner-observe-page">
     <section className={`overview-hero overview-hero-${stateTone(runtimeState)}`}><div className="overview-hero-main"><div className="overview-title-line"><span className="overview-status-mark" aria-hidden="true" /><h2>{stateLabel(runtimeState)}</h2></div><p>灵机正在自动扫描、整理并更新你的长期记忆，你只需要在这里查看成果。</p></div><div className="overview-live-summary"><strong>{pendingUnavailable ? "正在确认待办" : hasTodos ? "有一件事需要你决定" : "目前不需要你处理"}</strong><small>{pendingUnavailable ? "灵机仍会继续自动工作" : hasTodos ? display(pending?.[0]?.description) : "扫描和整理会自动进行"}</small>{hasTodos && <button className="button primary overview-attention-link" onClick={() => onNavigate("attention")}>处理待办</button>}</div></section>
     {pendingUnavailable && <Notice kind="warning">待办正在自动确认，当前不把未读取当作“没有待办”。</Notice>}{sourceResource.error && <Notice kind="warning">来源状态正在自动刷新，灵机不会因此停止记忆。</Notice>}{note && <Notice kind="info">{note}</Notice>}
+    <DashboardBoard snapshot={sourceSnapshot} cards={cards} latest={latest} onNavigate={onNavigate} />
     <HomeFactsBoard snapshot={sourceSnapshot} modelHealth={modelHealth.data} loading={!sourceSnapshot} onNavigate={onNavigate} />
     <MonitorBoard tasks={obsTasks.data} steps={obsSteps.data?.steps ?? null} />
     <ServicesBoard services={services.data} />
@@ -69,6 +70,57 @@ export default function OverviewPage({ data, api, active, onNavigate }: { data: 
     <section className="outcome-section takeover-summary-section"><div className="section-heading"><div><span className="section-kicker">最近自动接管成果</span><h3>接管了多少记录</h3></div><span className="section-caption">自动统计</span></div><div className="takeover-stats"><div><strong>{number(cards?.conversations)}</strong><span>已接管对话</span></div><div><strong>{number(cards?.messages)}</strong><span>已导入消息</span></div><div><strong>{number(cards?.permanent ?? 0)}</strong><span>已入永久记忆</span></div><div><strong>{latestCheckTime}</strong><span>最近检查时间</span></div></div><p className="proof-note latest-check-note">{latestCheckSummary(latest)}</p><p className="proof-note vector-note">当前记忆和长期记忆只统计仍然有效的内容；已接管对话与消息统计全部导入规模。{cards?.vectors != null ? `其中 ${cards.vectors} 条消息已建立语义检索索引，可按意思搜索。` : "语义检索状态会在后台自动更新。"}</p></section>
     <CurrentWorkPanel api={api} active={active} />
   </div>;
+}
+
+function DashboardBoard({ snapshot, cards, latest, onNavigate }: {
+  snapshot: MemorySourcesSnapshot | null | undefined;
+  cards: { conversations?: number | null; messages?: number | null; permanent?: number | null; vectors?: number | null } | null;
+  latest: ScanRun | null | undefined;
+  onNavigate: (page: PageId) => void;
+}) {
+  const sources = snapshot?.sources ?? [];
+  const activeSources = sources.filter((item) => item.state === "current" || item.state === "processing").length;
+  const pending = snapshot?.pending_count;
+  const formatNumber = (value: number | null | undefined): string =>
+    value == null ? "—" : value >= 10000 ? `${(value / 10000).toFixed(1)}万` : String(value);
+  const tiles = [
+    { key: "conversations", label: "对话", value: formatNumber(cards?.conversations), hint: "已接管", page: "memory_library" as PageId },
+    { key: "messages", label: "消息", value: formatNumber(cards?.messages), hint: "全部入库", page: "processing_detail" as PageId },
+    { key: "vectors", label: "语义索引", value: formatNumber(cards?.vectors), hint: "可按意思搜索", page: "memory_library" as PageId },
+    { key: "permanent", label: "永久记忆", value: formatNumber(cards?.permanent ?? 0), hint: "已确认固化", page: "memory_cards" as PageId },
+  ];
+  const scan = latest ? {
+    done: String(latest.status ?? "").toLowerCase() !== "running",
+    added: latest.queued_count ?? 0,
+    reused: latest.reused_count ?? 0,
+    time: latest.updated_at ? new Date(latest.updated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+  } : null;
+  return (
+    <section className="dashboard-board" aria-label="数据大屏">
+      <div className="dashboard-tiles">
+        {tiles.map((tile) => (
+          <button key={tile.key} className="dashboard-tile" onClick={() => onNavigate(tile.page)}>
+            <strong>{tile.value}</strong>
+            <span>{tile.label}</span>
+            <small>{tile.hint}</small>
+          </button>
+        ))}
+      </div>
+      <div className="dashboard-side">
+        <div className="dashboard-chip">
+          <span className={`pill ${activeSources ? "ok" : "neutral"}`}>{activeSources} 来源在线</span>
+          {pending != null && pending > 0 && <span className="pill warning">{pending} 个文件待处理</span>}
+        </div>
+        <div className="dashboard-chip">
+          {scan ? (
+            scan.done
+              ? <small>最近检查 {scan.time} · 新 {scan.added} · 复用 {scan.reused}</small>
+              : <small>正在检查新记录…</small>
+          ) : <small>检查状态尚未获得</small>}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function HomeFactsBoard({ snapshot, modelHealth, loading, onNavigate }: { snapshot: MemorySourcesSnapshot | null | undefined; modelHealth: ModelHealthPanel | null; loading: boolean; onNavigate: (page: PageId) => void }) {

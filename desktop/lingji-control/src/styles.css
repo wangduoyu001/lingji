@@ -757,3 +757,16 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 .sidebar-model-detail select { width: 100%; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font-size: 12px; }
 .knowledge-key-row { display: flex; gap: 6px; }
 .knowledge-key-input { flex: 1 1 auto; min-width: 0; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font-size: 12px; }
+
+/* —— 首页数据大屏（一屏认知区）—— */
+.dashboard-board { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: stretch; padding: 16px; border-radius: 16px; background: linear-gradient(135deg, rgba(73,185,143,.10), rgba(73,185,143,.03) 55%, transparent), var(--surface); border: 1px solid rgba(73,185,143,.16); }
+.dashboard-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.dashboard-tile { display: grid; gap: 3px; justify-items: start; padding: 16px 16px 13px; border-radius: 14px; background: var(--surface-2); border: 1px solid transparent; cursor: pointer; text-align: left; transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease; }
+.dashboard-tile:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,.26); border-color: rgba(73,185,143,.35); }
+.dashboard-tile strong { font-size: 30px; line-height: 1.1; color: var(--text); font-variant-numeric: tabular-nums; }
+.dashboard-tile span { color: var(--text-soft); font-size: 13px; }
+.dashboard-tile small { color: var(--muted); font-size: 11px; }
+.dashboard-side { display: grid; gap: 10px; align-content: center; padding: 0 6px; min-width: 190px; }
+.dashboard-chip { display: grid; gap: 5px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.dashboard-chip small { color: var(--muted); font-size: 12px; }
+.dashboard-chip .pill { justify-self: start; }
