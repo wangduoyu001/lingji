@@ -9,12 +9,10 @@ from src.extraction.sink import VaultExtractionSink
 
 
 def _sink(tmp_path: Path) -> VaultExtractionSink:
-    from src.config import Settings
     from src.memory import VaultLayout
 
-    settings = Settings(storage_path=str(tmp_path / "storage"))
-    layout = VaultLayout(settings.vault_path)
-    return VaultExtractionSink(layout, settings.storage_path)
+    layout = VaultLayout(tmp_path / "vault")
+    return VaultExtractionSink(layout, tmp_path / "storage")
 
 
 def test_same_volume_preserve_uses_hardlink(tmp_path: Path):
