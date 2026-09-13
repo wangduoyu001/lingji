@@ -3986,3 +3986,18 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   才真正退出）。
 - 真机实测：点× → 进程存活、可见窗口 0；菜单栏托盘图标存在（menu bar extras=1）；
   点托盘菜单"打开灵机"→ 窗口恢复；进程持续存活。PASS。
+
+### 项目清理（9 月 13 日）
+
+- 已删（可再生）：cargo target/（2.6GB）、build/（123MB）。
+- 已删（已合并进当前分支）：codex/owner-real-history-memory-cards、codex/phase1-automatic-memory。
+- 已删（零脏 stale）：3 个 worktree 及其分支（project-progress-update、docs-project-truth-audit、
+  task8e-mac-experience-repair）。
+- 保留（有未推送内容，安全第一）：LingJiRepair-PR88-171091fe（ahead 1）、LingJiRepair-PR88-Closeout
+  （workflow 有未提交修改）、owner-memory-detail-drilldown（dirty 6）、task8e-safe-polling-fallback
+  （dirty 1）、主仓库灵机（dirty 9，正在使用的验收分支）。
+- 保留：12 个 PR88/M5 时代 acceptance/docs/fix 分支（多数 ahead 远端 1300+，疑为本地计数口径，
+  网络恢复后需 git fetch --all 核实再清）。
+- 数据根核实：raw 名义 2.0G 但 483/487 与来源共享 inode，真实独占仅 114MB；记忆库 112M、
+  qdrant 96M 均为有效数据。
+- 仓库误提交的 storage/ 验收残留已从 git 移除（7b66fb8c）。
