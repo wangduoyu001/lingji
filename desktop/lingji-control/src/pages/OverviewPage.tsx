@@ -91,8 +91,8 @@ function DashboardBoard({ snapshot, cards, latest, onNavigate }: {
   ];
   const scan = latest ? {
     done: String(latest.status ?? "").toLowerCase() !== "running",
-    added: latest.queued_count ?? 0,
-    reused: latest.reused_count ?? 0,
+    added: latest.queued ?? 0,
+    reused: latest.reused ?? 0,
     time: latest.updated_at ? new Date(latest.updated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
   } : null;
   return (
