@@ -80,7 +80,7 @@ function DashboardBoard({ snapshot, cards, latest, onNavigate }: {
 }) {
   const sources = snapshot?.sources ?? [];
   const activeSources = sources.filter((item) => item.state === "current" || item.state === "processing").length;
-  const pending = snapshot?.processing_pending;
+  const pending = sources.reduce((sum, item) => sum + (item.latestScan?.processing_pending ?? 0), 0);
   const formatNumber = (value: number | null | undefined): string =>
     value == null ? "—" : value >= 10000 ? `${(value / 10000).toFixed(1)}万` : String(value);
   const tiles = [
