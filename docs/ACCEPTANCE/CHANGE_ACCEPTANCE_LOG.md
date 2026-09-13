@@ -4001,3 +4001,13 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 数据根核实：raw 名义 2.0G 但 483/487 与来源共享 inode，真实独占仅 114MB；记忆库 112M、
   qdrant 96M 均为有效数据。
 - 仓库误提交的 storage/ 验收残留已从 git 移除（7b66fb8c）。
+
+### 首页数据大屏（一屏认知区）交付（9 月 13 日）
+
+- 新增 DashboardBoard：状态行下方即"数据大屏"——四大数据瓷片（对话/消息/语义索引/永久记忆，
+  大数字 30px，自动万位缩写，点击直达对应页面）+ 右侧芯片（来源在线数/待处理文件数/最近检查
+  时间与新内容·复用计数）。渐变底色突出一屏认知。
+- 数据接缝修复三连：ScanRun 字段名对齐（queued/reused）、MemorySourcesSnapshot 无顶层
+  pending → 按各来源 latestScan.processing_pending 汇总。
+- 已知观察：webview 首绘在冷启动+权限变动时可能延迟（AX 树确认前端逻辑与轮询正常，
+  托盘菜单完整）；属系统环境观察项，非本次改动引入。
