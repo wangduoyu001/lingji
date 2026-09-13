@@ -176,78 +176,77 @@ fn main() -> tauri::Result<()> {
             guarded_runtime_stop,
             guarded_runtime_restart
         ])
-        .build(tauri::generate_context!())
-        .expect("error while building LingJi control center");
+        .setup(|handle| {
+            // 关窗 = 隐藏到菜单栏（灵机继续后台整理记忆），真正退出走托盘菜单。
+            use tauri::{
+                menu::{Menu, MenuItem},
+                tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+                Manager,
+            };
 
-    // 关窗 = 隐藏到菜单栏（灵机继续后台整理记忆），真正退出走托盘菜单。
-    {
-        use tauri::{
-            menu::{Menu, MenuItem},
-            tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-            Manager,
-        };
+            if let Some(main_window) = handle.get_webview_window("main") {
+                let window_for_close = main_window.clone();
+                main_window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        // 拦截关闭：只隐藏窗口，进程与后台整理继续
+                        api.prevent_close();
+                        let _ = window_for_close.hide();
+                    }
+                });
+            }
 
-        let handle = app.handle().clone();
-        if let Some(main_window) = handle.get_webview_window("main") {
-            let window_for_close = main_window.clone();
-            main_window.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    // 拦截关闭：隐藏窗口，进程保持运行
-                    api.prevent_close();
-                    let _ = window_for_close.hide();
-                }
-            });
-        }
-
-        let show = MenuItem::with_id(&handle, "open", "打开灵机", true, None::<&str>)?;
-        let pause = MenuItem::with_id(&handle, "pause", "暂停自动整理", true, None::<&str>)?;
-        let resume = MenuItem::with_id(&handle, "resume", "恢复自动整理", true, None::<&str>)?;
-        let quit = MenuItem::with_id(&handle, "quit", "退出灵机（停止后台整理）", true, None::<&str>)?;
-        let menu = Menu::with_items(&handle, &[&show, &pause, &resume, &quit])?;
-        let _tray = TrayIconBuilder::with_id("lingji-tray")
-            .icon(handle.default_window_icon().cloned().unwrap_or_else(|| {
-                tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
-                    .expect("bundled icon")
-            }))
-            .tooltip("灵机 · 后台自动整理记忆中")
-            .menu(&menu)
-            .show_menu_on_left_click(false)
-            .on_menu_event(move |handle, event| {
-                match event.id().as_ref() {
-                    "open" => {
+            let show = MenuItem::with_id(handle, "open", "打开灵机", true, None::<&str>)?;
+            let pause = MenuItem::with_id(handle, "pause", "暂停自动整理", true, None::<&str>)?;
+            let resume = MenuItem::with_id(handle, "resume", "恢复自动整理", true, None::<&str>)?;
+            let quit = MenuItem::with_id(handle, "quit", "退出灵机（停止后台整理）", true, None::<&str>)?;
+            let menu = Menu::with_items(handle, &[&show, &pause, &resume, &quit])?;
+            let _tray = TrayIconBuilder::with_id("lingji-tray")
+                .icon(handle.default_window_icon().cloned().unwrap_or_else(|| {
+                    tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
+                        .expect("bundled icon")
+                }))
+                .tooltip("灵机 · 后台自动整理记忆中")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|handle, event| {
+                    match event.id().as_ref() {
+                        "open" | "pause" | "resume" => {
+                            if let Some(window) = handle.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            handle.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    // 左键单击托盘图标 = 显示主窗口
+                    if matches!(event, TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. }) {
+                        let handle = tray.app_handle();
                         if let Some(window) = handle.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
                     }
-                    "pause" | "resume" => {
-                        // 托盘显示主窗口并定位到处理流水（主人可直观确认暂停/恢复状态）
-                        let _ = handle.get_webview_window("main").map(|window| {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        });
-                    }
-                    "quit" => {
-                        handle.exit(0);
-                    }
-                    _ => {}
-                }
-            })
-            .on_tray_icon_event(|tray, event| {
-                // 左键单击托盘图标 = 显示主窗口
-                if matches!(event, TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. }) {
-                    let handle = tray.app_handle();
-                    if let Some(window) = handle.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
-                }
-            })
-            .build(&handle)?;
-    }
+                })
+                .build(handle)?;
+            Ok(())
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building LingJi control center");
 
     app.run(|app_handle, event| match event {
-        tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+        // 主窗口隐藏期间 macOS 可能仍发出退出请求：一律拒绝，
+        // 只允许托盘菜单 quit 触发的 Exit 走真正退出。
+        tauri::RunEvent::ExitRequested { api, code, .. } => {
+            if code.is_none() {
+                api.prevent_exit();
+            }
+        }
+        tauri::RunEvent::Exit => {
             app_handle.state::<RuntimeManager>().shutdown();
         }
         _ => {}

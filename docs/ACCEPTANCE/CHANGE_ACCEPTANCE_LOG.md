@@ -3976,3 +3976,13 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   菜单含"打开灵机/暂停自动整理/恢复自动整理/退出灵机（停止后台整理）"。真机实测关窗后
   进程存活 PASS。托盘"暂停/恢复"当前行为=打开主窗口（主人可在 UI 操作）；真正的托盘级
   暂停待后续接入 runtime 指令。
+
+### 关窗后台运行修复（v2，真机实测 PASS）
+
+- 首版问题：拦截注册在 Builder 建窗口之后（get_webview_window 时机不稳），且未拒绝
+  macOS 在窗口全关后的 ExitRequested——主人实测点×仍退出。
+- 修复：托盘注册与关窗拦截移入 `Builder::setup`（窗口构造期注册）；run 循环增加
+  `ExitRequested { code: None } → prevent_exit()`（只有托盘菜单"退出灵机"携带 exit code
+  才真正退出）。
+- 真机实测：点× → 进程存活、可见窗口 0；菜单栏托盘图标存在（menu bar extras=1）；
+  点托盘菜单"打开灵机"→ 窗口恢复；进程持续存活。PASS。
