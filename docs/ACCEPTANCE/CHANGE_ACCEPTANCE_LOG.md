@@ -4011,3 +4011,30 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   pending → 按各来源 latestScan.processing_pending 汇总。
 - 已知观察：webview 首绘在冷启动+权限变动时可能延迟（AX 树确认前端逻辑与轮询正常，
   托盘菜单完整）；属系统环境观察项，非本次改动引入。
+
+### 主人视角全面复检与修复（9 月 15-16 日）
+
+- 触发：主人要求"再次全面检查灵机并修复已知问题，重点是普通人视角的 UI 清晰美观；其他检测项
+  按之前项目核验"。装机版本先与 HEAD 构建（23:51 打包）哈希核对一致后再开始。
+- 环境核验（沿用上轮口径）：8766 仅 loopback、8765/8767 关闭、数据根为隔离验收根、大屏四瓷片
+  与 cards-summary/brain-status 真实数字一致、时间线/检查记录/处理流水计数与 API 一致。
+- 本轮发现并要求修复（RED→GREEN，e2e 先加断言）：
+  1) 托盘"打开灵机"后 webview document.hidden 不翻转：所有 pauseWhenHidden 轮询暂停、首页数据
+     冻结、永远显示"正在确认待办"；只有真正 activate 才恢复。修复=托盘 open/左键点击路径追加
+     App 级 show+set_focus 激活。
+  2) 托盘"暂停/恢复自动整理"是假按钮（只开窗）。后端 pause-runtime/resume-runtime 已存在，
+     修复=Rust 侧携带控制 token 调用真实端点并回写托盘 tooltip。
+  3) 首页芯片"0 来源在线"与"458 对话已接管"矛盾：只统计 current/processing。修复=按"已接入"
+     口径（已授权且未撤销/未过期）计数并改标签。
+  4) 来源页总览"扫描完成 0 个 · 已导入 0 个"同样误导：只认 scan_completed/imported 精确态。
+     修复=扫描完成含全部完成态、已导入含 imported/partial_failure/current，且已导入>0 时提示
+     "正在自动记住"而不是"完成选择和检查后才会开始记住"。
+  5) 安全元数据"1659110953 字节 / 2026-08-07 16:21:24.575 UTC"：原始字节+毫秒级 UTC 违反
+     "时间全本地化"与普通人可读要求。修复=MB/GB 人读格式+本地化时间。
+  6) 来源总览长句被 CSS 截断。修复=允许换行。
+  7) 记忆库要点卡标题泄漏绝对路径（redactAbsolutePaths 未套用）。修复=列表与详情统一脱敏。
+- 明确不修：`/api/brain/status` 无 self_check 键 →"灵机自检：尚未获得"维持诚实回退（ACTIVE 任务
+  约束自检链路原样保留）；smoke Node v24 基线问题沿用历史记录。
+- 验证：e2e_owner_memory_flow 新断言 RED→实现 GREEN；test:memory-sources、test:memory-sources-repair、
+  test:e2e:memory、build、cargo check 全绿；重打包安装后真机复验托盘三流程（打开/暂停/恢复）与
+  首页鲜活度。

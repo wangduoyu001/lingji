@@ -39,7 +39,7 @@ owner_observation: PENDING
 started_at: PENDING
 finished_at: PENDING
 focused_result: PASS
-focused_summary: three-panel owner UI + full-auto real-data intake complete (451/469 real codex rollouts imported, 18 correctly rejected, zero false rejections; services/vectorization plain-language panel; proactive consent modal; permanent-memory panel); e2e+smokes+build PASS; app open for owner observation
+focused_summary: 2026-09-16 owner-view recheck repaired tray fake-pause, tray-open polling freeze, misleading 0-source counters, raw byte/UTC formats, memory-library path leak, folded layer CSS; e2e+smokes+build+cargo all green; repackaged and reinstalled (main binary 3a6c5547, sidecar unchanged fe98100e); tray pause/resume/open live-verified. Prior summary: three-panel owner UI + full-auto real-data intake complete (451/469 real codex rollouts imported, 18 correctly rejected, zero false rejections; services/vectorization plain-language panel; proactive consent modal; permanent-memory panel); e2e+smokes+build PASS; app open for owner observation
 prior_candidate_mac_technical_result: PASS_WAITING_OWNER_EXPERIENCE
 prior_candidate_owner_observation: REPAIR_REQUIRED
 mac_packaged_result: PASS_DOUBLE_ROUND_GREEN

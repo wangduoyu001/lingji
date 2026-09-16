@@ -83,3 +83,57 @@ Report path: docs/TEST_REPORTS/OWNER_SOURCE_INTAKE_MAC_REPAIR.md
 
 App 与 sidecar 保持打开，等待主人肉眼确认：首页数据是否一眼可读、来源明细是否可信、
 本机 AI 软件与进程是否与实际一致。主人确认前：不合并、不 push/PR、不做 Windows、不清理验收证据。
+
+## 9. 2026-09-16 主人视角全面复检与修复（本轮追加）
+
+主人要求"再次全面检查灵机并修复已知问题，重点是普通人视角的 UI 清晰美观；其他检测项按之前
+项目核验"。执行者：ZCode（GLM）。
+
+### 9.1 复检环境结论（沿用第 4/6 节口径，全部 PASS）
+
+- 装机 App 主程序/sidecar 哈希与本分支 9-13 打包产物逐字节一致后才开检；本轮修复后整包替换安装，
+  新主程序 SHA-256 `3a6c5547…`、sidecar 不变 `fe98100e…`（Python 零改动，复用同哈希产物）。
+- 8766 仅 loopback、8765/8767 关闭；数据根为隔离验收根；无 Token 访问 401。
+- 大屏四瓷片与 `/api/memory/inspector/cards-summary` 真实值一致（458/10624/10202/0）；
+  时间线、检查记录、处理流水计数与 API 一致；缺字段一律"尚未获得"。
+
+### 9.2 发现并修复（RED→GREEN）
+
+| # | 问题（普通人视角） | 修复 |
+|---|---|---|
+| 1 | 托盘"打开灵机"后前端轮询保持暂停：首页数据冻结、永远显示"正在确认待办" | Rust 托盘 open/左键路径追加 App 级 `show()`（main.rs `show_main_window`），真机复验轮询恢复 |
+| 2 | 托盘"暂停/恢复自动整理"是假按钮（只开窗） | 复用后端 `pause-runtime/resume-runtime`，托盘菜单直调并回写 tooltip；真机实测 state running→paused→running |
+| 3 | 首页芯片"0 来源在线"与"458 对话已接管"矛盾 | 改为"按授权事实"计数，文案"N 个来源已接入"；真机显示"3 个来源已接入" |
+| 4 | 来源页总览"扫描完成 0 个 · 已导入 0 个"误导 | 扫描完成含全部完成态、已导入含 imported/partial_failure/current；新文案"灵机正在自动记住：…" |
+| 5 | "1659110953 字节 / 2026-08-07 16:21:24.575 UTC" 不可读 | `1.5 GB/372 MB` 人读格式 + `toLocaleString()` 本地化时间 |
+| 6 | 记忆库要点卡标题/要点泄漏绝对路径 | 列表与详情统一套 `redactAbsolutePaths`（smoke 锁定契约） |
+| 7 | 记忆卡"技术详情"折叠层因 `display:flex` 误用于 `<details>` 导致折叠失效 | CSS 拆分选择器：details 保持 block，flex 仅作用于内层芯片行 |
+
+### 9.3 连带发现并修复的测试债（隐藏回归）
+
+`tests/e2e_owner_memory_flow.mjs` 与 `scripts/owner-ui-menu-fast-track-smoke.mjs` 自 9-12 菜单/文案
+重构（0daece79、132b0aaa）起即未对齐、实际处于 RED 状态，但近期交付记录声称"e2e PASS"。本轮已
+全部对齐当前产品契约：主导航六项、健康三值位于来源页、卡片机器字段折叠、向量注释文案、
+cards-summary `vectors` 字段、检查记录九步流水行。同时为首页大屏芯片与语义索引瓷片补上首条
+渲染断言（stash 取证 RED → 恢复实现 GREEN）。
+
+### 9.4 Focused 验证结果（本轮全绿）
+
+- `test:e2e:memory` PASS（含 1024/1280 无横向溢出断言）
+- `test:memory-sources` PASS、`test:memory-sources-repair` PASS
+- `test:owner-ui-menu-fast-track` PASS
+- `test:work-fact` PASS、`test:inspector` PASS
+- `npm run build` PASS；`cargo check` PASS（仅历史 dead_code 警告）
+
+### 9.5 真机复验（重打包安装后）
+
+- 托盘"暂停自动整理"：runtime `running→paused`；"恢复自动整理"：`paused→running`（API 实证）。
+- 关窗隐藏 35 秒：轮询保持鲜活；托盘"打开灵机"：窗口恢复、8 秒级轮询节奏持续、
+  首页"目前不需要你处理"而非"正在确认待办"。
+- 首页芯片"3 个来源已接入"；原始数据页"1.5 GB / 372 MB / 2026/8/8 00:21:24"本地化格式。
+
+### 9.6 保持不修（诚实回退/边界）
+
+- `/api/brain/status` 无 `self_check` 键 →"灵机自检：尚未获得"维持（ACTIVE 任务约束自检链路原样保留）。
+- smoke 套件 Node v24 基线问题沿用历史记录。
+- `AutoClaw.app` 通配监听 `*:8766` 为主人另一应用，未触碰（特定绑定优先）。
