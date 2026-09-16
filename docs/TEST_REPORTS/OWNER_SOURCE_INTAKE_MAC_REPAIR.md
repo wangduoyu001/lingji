@@ -183,3 +183,19 @@ WorkBuddy 只读自检报告指控经 API 逐条复核属实后修复。
 - settings 明文 Key：复核 `/api/settings` 不回显敏感值，无修复项。
 - ffprobe 缺失、Obsidian CLI 未发现：环境事项；备份/验收报告为 0：沙箱预期。
 - cards-summary 在提取队列满载时偶发超时（SQLite 写锁竞争）：队列排干后恢复，记为观察项。
+
+## 11. bge-m3 主嵌入模型安装与向量层重建（2026-09-16 深夜追加）
+
+主人查出中文召回失效的真正根因：设计主嵌入模型 `bge-m3` 从未安装（config.py 主/备结构与
+P2_09A 文档无误），系统静默降级英文备胎 nomic。本轮完成：
+
+- **模型安装**：Ollama registry 网络干扰无法 pull；改从 ModelScope 镜像下载
+  gpustack/bge-m3-GGUF F16（1104MB/128 秒），`ollama create bge-m3` 导入。
+- **集合重建**：旧 768 维集合备份移出（`storage/qdrant.bak-768`），新集合按 1024 维重建，
+  11703 点全部重嵌（56 轮收敛，embedded=0）。
+- **护栏校准**：召回分数下限 0.70→0.55（bge-m3 实测：无关噪声 ≤0.44、语义相关 ≥0.55；
+  nomic 时代 0.70 会误杀中文相关命中）。测试夹具同步。
+- **终验**：中文语义命中（Gmail 简报 0.716、电商选品 0.677）；语料外查询正确空集；
+  vectors=messages=11703 全覆盖；cards=468 持续增长。sidecar `7aae839d…` 已装机。
+- **遗留**：装机器清单需补 bge-m3；qdrant.bak-768 待主人确认后清理；registry 大模型
+  拉取需国内镜像路径；cards-summary 满载超时为暂态观察项。
