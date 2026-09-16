@@ -137,3 +137,49 @@ cards-summary `vectors` 字段、检查记录九步流水行。同时为首页�
 - `/api/brain/status` 无 `self_check` 键 →"灵机自检：尚未获得"维持（ACTIVE 任务约束自检链路原样保留）。
 - smoke 套件 Node v24 基线问题沿用历史记录。
 - `AutoClaw.app` 通配监听 `*:8766` 为主人另一应用，未触碰（特定绑定优先）。
+
+## 10. 2026-09-16 WorkBuddy 复检 P0 修复（追加轮）
+
+任务：`OWNER_WORKBUDDY_RECHECK_PIPELINE_RECALL_REPAIR`（任务单 0B 节，主人指令）。
+WorkBuddy 只读自检报告指控经 API 逐条复核属实后修复。
+
+### 10.1 根因（实测定位）
+
+- **提取回归 P0-1**：Codex 桌面版 0.154.0-alpha（9-13 起）新会话写入新信封
+  `token_usage_record`，`CodexRolloutAdapter` 严格白名单按设计整文件拒绝 → 9-13 起
+  全部 automatic_memory_snapshot 提取 failed（brain/status recent_tasks 9 failed/1 completed
+  实证），记忆库冻结在 458 会话/10624 消息。
+- **召回失效 P0-2**：`/api/observability/recall` 的 kNN 对无关查询也返回"最近的 N 个"，
+  且存量退化点（零范数/跨点重复向量）恒回满分——"桃园结义"→1.000 命中"什么情况"
+  （WorkBuddy 与我方双重复现）。
+- **连带发现**：向量化 scroll 单页 10000 截断，集合超 1 万点后尾部点永远进不了
+  existing_ids，其消息每轮被当作未向量化重嵌（embedded=200/轮空转、计数不增）。
+
+### 10.2 修复内容（TDD RED→GREEN）
+
+1. `CodexRolloutAdapter._KNOWN_TOP_LEVEL` 增加 `token_usage_record`（仅识别+跳过，遥测
+   不入对话流；fail-closed 语义不变——扫描 487 个源文件确认无其他未知类型）。
+2. 召回护栏 `observability_api._plausible_recall_hits`：分数 <0.70 丢弃（实测相关命中
+   ≥0.717、无关噪声 ≤0.683）；满分 ≥0.999 仅当查询词与命中内容互为子串才保留。
+3. `VectorBackfill.run_once` 三项：scroll 失败（并发锁竞争）时中止本轮而非盲目重嵌；
+   集合翻页扫描消除 1 万点截断；零范数/跨点重复（不同内容同向量）的点直接出索引并记入
+   进程级放弃名单（重嵌无法修复提供方级坍缩）；空内容消息不再进入向量化。
+4. 测试：新增 3 个 RED→GREEN（token_usage_record 接受、召回护栏契约、退化点移除），
+   修正 FakeProvider 为跨进程稳定种子；`test_vector_backfill`+`test_observability_api`+
+   `test_owner_codex_rollout_adapter`+`test_automatic_memory_control_api` 共 54 passed。
+
+### 10.3 真机复验（sidecar `4bb36edf…` 整包重装后）
+
+- **导入恢复**：cards 458→462+、messages 10624→10881+ 且持续增长；requeue 的回归受害者
+  job 全部成功，仅剩 19-20 个"混多会话"文件按既有安全规则拒绝（UI 有大白话解释，属设计）。
+- **向量化恢复**：总量 10202→11612 并追平（embedded=0 收敛），422 积压与新导入全部补齐。
+- **召回正确**：无关查询（桃园结义/直播话术）返回空集，相关查询（comfyui）正常命中 0.839/0.811。
+- 附带证明：requeue 通过 `SQLiteExtractionQueue.retry` 完成——该能力未暴露 HTTP 路由，
+  孤儿失败任务（所属扫描已被滚动保留删除）当前无主人可用的重试入口，记为已知缺口。
+
+### 10.4 明确不修（记录）
+
+- chat_model=qwen3:8b 空挂配置（主人裁定不纠结；仅状态展示字段，无链路消费）。
+- settings 明文 Key：复核 `/api/settings` 不回显敏感值，无修复项。
+- ffprobe 缺失、Obsidian CLI 未发现：环境事项；备份/验收报告为 0：沙箱预期。
+- cards-summary 在提取队列满载时偶发超时（SQLite 写锁竞争）：队列排干后恢复，记为观察项。

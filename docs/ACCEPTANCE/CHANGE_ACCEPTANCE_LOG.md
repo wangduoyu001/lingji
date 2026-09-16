@@ -4038,3 +4038,26 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 验证：e2e_owner_memory_flow 新断言 RED→实现 GREEN；test:memory-sources、test:memory-sources-repair、
   test:e2e:memory、build、cargo check 全绿；重打包安装后真机复验托盘三流程（打开/暂停/恢复）与
   首页鲜活度。
+
+### WorkBuddy 复检 P0 修复（9 月 16 日，主人指令）
+
+- 触发：WorkBuddy 只读自检报告（走灵机 35 个只读接口）指出提取链路断裂与召回失效；经 API 逐条
+  复核属实后主人指令修复。任务单新增 0B 节 `OWNER_WORKBUDDY_RECHECK_PIPELINE_RECALL_REPAIR`。
+- 根因（实测定位）：
+  1) Codex 桌面版 0.154.0-alpha（9-13 起）新会话写入新信封 `token_usage_record`，rollout 适配器
+     严格白名单按设计整文件拒绝 → 9-13 起全部 automatic_memory_snapshot 提取 failed，
+     记忆库冻结在 458 会话/10624 消息；
+  2) 召回 kNN 对无关查询也返回"最近的 N 个"，且存量退化向量（零范数/跨点重复）对部分中文查询
+     恒等于满分 →"桃园结义"→1.0 分给"什么情况"（WorkBuddy 实测与我方复现一致）。
+- 修复范围（三件套，均 TDD RED→GREEN）：
+  1) `CodexRolloutAdapter._KNOWN_TOP_LEVEL` 增加 `token_usage_record`（仅识别+跳过，遥测
+     不入对话流，fail-closed 语义不变）；
+  2) recall 护栏 `_plausible_recall_hits`：低于 0.70 丢弃（实测相关 ≥0.717、无关 ≤0.683）；
+     满分 ≥0.999 仅当查询词与内容互为子串（真重复）才保留；
+  3) `VectorBackfill.run_once` 自愈：零范数或跨点重复向量不记为已向量化，重嵌入修复；
+     重嵌入仍退化则拒绝落库。
+- 明确不修（记录在案）：chat_model=qwen3:8b 空挂配置（主人裁定不纠结）；settings Key 回显
+  （复核通过：/api/settings 不回显敏感值）；ffprobe/Obsidian/备份为环境事项或沙箱预期。
+- 验证要求：三个新测试 RED→GREEN；`test_owner_codex_rollout_adapter`、`test_vector_backfill`、
+  `test_observability_api` focused 全绿；重建 sidecar 整包重装后真机复验：新扫描导入恢复
+  （cards>458）、召回探测（桃园结义不再 1.0 相关、无命中返回空/低分）、记忆状态 as_of 刷新。

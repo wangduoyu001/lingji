@@ -49,6 +49,32 @@ automatic-memory 本地 AI 元数据发现、主人目录授权、扫描/处理/
 App/sidecar 打开等待主人确认。Mac 技术验收与主人确认均通过前，Windows、push、PR、merge、结束清理
 继续禁止。上一候选当前运行实例和失败证据必须保持不动，直至新候选准备完成。
 
+## 0B. 追加 bounded 修复：WorkBuddy 复检 P0（2026-09-16，主人指令）
+
+```yaml
+task_id: OWNER_WORKBUDDY_RECHECK_PIPELINE_RECALL_REPAIR
+status: ACTIVE
+execution_mode: FOCUSED_PRODUCT_REPAIR_ONLY
+parent_task: OWNER_SOURCE_INTAKE_MAC_REPAIR
+trigger: 主人 2026-09-16 指令"按 WorkBuddy 复检报告做一轮修复，然后做一轮卫生清理"
+scope:
+  - FIX1 codex_rollout 适配器白名单扩充：识别 Codex 0.154.x 新遥测信封 token_usage_record
+    （9-13 起全部快照提取 failed 的根因；严格 fail-closed 语义不变，遥测内容不入对话流）
+  - FIX2 /api/observability/recall 召回护栏：低于分数下限的命中丢弃；满分(>=0.999)仅允许
+    查询词与命中内容互为子串的真重复（退化向量不得冒充实命中、不得回填 1.0）
+  - FIX3 VectorBackfill 向量自愈：零范数/跨点重复的退化向量在 run_once 中识别并以 DB 内容
+    重嵌入修复；重嵌入仍退化的不落库
+out_of_scope:
+  - chat_model=qwen3:8b 空挂配置（主人已裁定不纠结；仅文档记录）
+  - settings 明文 Key 复核（已复核：/api/settings 不回显，无修复项）
+  - ffprobe/Obsidian 环境补装、备份/验收报告为 0（沙箱预期）
+forbidden: 不改记忆算法与蒸馏提示词；不动 Vault/Production；不改扫描只读边界；
+  不删除既有测试或断言；live 仅限隔离验收实例 8766
+verification: RED 先行（三个新测试在旧代码上失败）→ GREEN → 上述三文件 focused 全绿 →
+  cargo/npm 不涉及（纯 Python）→ 重建 sidecar → 整包重装 → 真机复验
+  （新扫描导入恢复、召回探测、记忆状态刷新）→ 验收文档同步
+
+
 ## 0A. 上一 focused runtime 任务（停止继续扩张）
 
 ```yaml
