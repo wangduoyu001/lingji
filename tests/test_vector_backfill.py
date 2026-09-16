@@ -30,7 +30,8 @@ class FakeProvider:
         self.calls += len(texts)
         out = []
         for t in texts:
-            seed = abs(hash(t)) % 997
+            # 稳定字节和种子：跨进程确定（hash() 有进程盐），且不同内容几乎不碰撞。
+            seed = sum(t.encode("utf-8")) % 997
             out.append([((seed >> i) & 1) * 0.5 + 0.25 for i in range(4)])
         return out
 
@@ -170,4 +171,51 @@ def test_search_returns_displayable_recall_results(tmp_path: Path):
     assert hits[0]["content"] == "晨间简报内容"
     assert hits[0]["conversation_id"] == "conv-1"
     assert hits[0]["score"] > 0
+    close_shared_client()
+
+
+def test_backfill_removes_degenerate_and_duplicate_vectors(tmp_path: Path):
+    """WorkBuddy 2026-09-16 复检 P0-2 根因之一：退化向量冒充实命中。
+
+    零范数向量与跨点重复向量（不同内容嵌出同一向量）在余弦检索里会无条件
+    回填高分（实测无关查询得 1.0），提供方级坍缩也无法靠重嵌修复：契约是
+    直接出索引（词法层仍在），且同轮不再重嵌入同批点。
+    """
+    from types import SimpleNamespace
+
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import PointStruct, VectorParams
+
+    from src.retrieval.vector_backfill import _point_id
+
+    state = StateDatabase(tmp_path / "lingji_state.db")
+    mem = tmp_path / "lingji_memory.db"
+    conn = sqlite3.connect(mem)
+    conn.execute("CREATE TABLE message_records (message_id TEXT PRIMARY KEY, conversation_id TEXT, role TEXT, content TEXT, occurred_at TEXT, content_hash TEXT)")
+    conn.execute("INSERT INTO message_records VALUES ('d-0', 'conv-1', 'user', '桃花源记内容', '2026-09-01T00:00:00Z', 'hd0')")
+    conn.execute("INSERT INTO message_records VALUES ('d-1', 'conv-1', 'user', '什么情况', '2026-09-01T00:01:00Z', 'hd1')")
+    conn.execute("INSERT INTO message_records VALUES ('d-2', 'conv-1', 'user', '登陆了啊', '2026-09-01T00:02:00Z', 'hd2')")
+    conn.commit(); conn.close()
+    settings = SimpleNamespace(storage_path=tmp_path, memory_db_path=mem,
+        embedding_provider="ollama", ollama_base_url="http://127.0.0.1:11434",
+        embed_model="fake-primary", fallback_embed_model="fake-fallback", embedding_batch_size=8)
+    close_shared_client()
+    client = QdrantClient(path=str(tmp_path / "qdrant"))
+    client.create_collection(collection_name="lingji_automatic_memory", vectors_config=VectorParams(size=4, distance="Cosine"))
+    client.upsert(collection_name="lingji_automatic_memory", points=[
+        PointStruct(id=_point_id("d-0"), vector=[0.0, 0.0, 0.0, 0.0], payload={"message_id": "d-0", "role": "user", "content": "桃花源记内容"}),
+        PointStruct(id=_point_id("d-1"), vector=[0.5, 0.5, 0.5, 0.5], payload={"message_id": "d-1", "role": "user", "content": "什么情况"}),
+        PointStruct(id=_point_id("d-2"), vector=[0.5, 0.5, 0.5, 0.5], payload={"message_id": "d-2", "role": "user", "content": "登陆了啊"}),
+    ])
+    client.close()
+    backfill = VectorBackfill(settings, provider=FakeProvider())
+    backfill.run_once(limit=10)
+    close_shared_client()
+    client = QdrantClient(path=str(tmp_path / "qdrant"))
+    points, _ = client.scroll(collection_name="lingji_automatic_memory", limit=10, with_vectors=True, with_payload=True)
+    client.close()
+    remaining = {(p.payload or {}).get("message_id") for p in points}
+    assert remaining == set(), "degenerate points must be removed from the recall index"
+    again = backfill.run_once(limit=10)
+    assert again["embedded"] == 0, "give-up list must stop re-embedding removed degenerate points"
     close_shared_client()

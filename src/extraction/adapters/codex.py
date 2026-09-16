@@ -664,7 +664,8 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
     SCHEMA_VERSION = "1"
     MAX_INPUT_BYTES = 256 * 1024 * 1024
     MAX_RECORD_BYTES = 1024 * 1024
-    _KNOWN_TOP_LEVEL = frozenset({"session_meta", "turn_context", "event_msg", "response_item", "world_state", "reasoning", "tool_call", "tool_output", "base_instructions", "config", "compacted", "inter_agent_communication_metadata", "realtime_item"})
+    # token_usage_record：Codex 0.154.x（2026-09-13 起）的用量遥测信封，仅识别+跳过，不入对话流。
+    _KNOWN_TOP_LEVEL = frozenset({"session_meta", "turn_context", "event_msg", "response_item", "world_state", "reasoning", "tool_call", "tool_output", "base_instructions", "config", "compacted", "inter_agent_communication_metadata", "realtime_item", "token_usage_record"})
     _KNOWN_EVENT_VARIANTS = frozenset({"user_message", "assistant_message", "message", "agent_reasoning", "tool_call", "tool_output", "function_call", "function_call_output", "agent_message", "item_completed", "token_count", "mcp_tool_call_end", "task_started", "task_complete", "thread_settings_applied", "patch_apply_end", "sub_agent_activity", "web_search_end", "turn_aborted", "context_compacted", "thread_goal_updated"})
     _KNOWN_RESPONSE_VARIANTS = frozenset({"message", "user_message", "assistant_message", "agent_message", "reasoning", "function_call", "function_call_output", "tool_call", "tool_output", "custom_tool_call", "custom_tool_call_output", "web_search_call"})
 

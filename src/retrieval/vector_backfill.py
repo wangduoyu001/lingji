@@ -18,8 +18,20 @@ COLLECTION = "lingji_automatic_memory"
 # 本地（embedded）模式同一存储目录只允许一个 QdrantClient。进程内共享单例，
 # 避免调度器回填线程与 API 线程各自开关客户端时撞 "already accessed" 文件锁。
 _CLIENT_LOCK = threading.Lock()
+# 进程级：已确认嵌入坍缩、不可修复的消息点，跳过后续向量化尝试。
+_RECALL_POINT_GIVE_UP: set[str] = set()
 _SHARED_CLIENT: Any = None
 _SHARED_PATH: str = ""
+
+
+def _vector_is_degenerate(vector: Any) -> bool:
+    """零范数（全零/失败占位）向量在余弦检索里会冒充满分命中，视为退化。"""
+    if not vector:
+        return True
+    try:
+        return sum(float(x) * float(x) for x in vector) < 1e-12
+    except (TypeError, ValueError):
+        return True
 
 
 def _shared_client(path: Path) -> Any:
@@ -131,7 +143,7 @@ class VectorBackfill:
             return self._run_once_locked(limit)
 
     def _run_once_locked(self, limit: int) -> dict[str, Any]:
-        from qdrant_client.models import PointStruct, VectorParams
+        from qdrant_client.models import PointIdsList, PointStruct, VectorParams
 
         client = self._client()
         try:
@@ -140,19 +152,68 @@ class VectorBackfill:
                 return {"embedded": 0, "skipped": 0, "total_vectors": self._count(client), "status": "empty"}
 
             existing_ids: set[str] = set()
+            # 退化向量治理（WorkBuddy 2026-09-16 复检 P0-2）：零范数向量、以及不同内容
+            # 嵌出同一向量的重复簇，会在召回里冒充实命中（无关查询回填 1.0 分）。
+            # 重嵌无法修复提供方级坍缩：这些点直接出索引（词法层仍在），并记入
+            # 进程级放弃名单，避免每轮“嵌入→删除”空转。
+            remove_ids: list[str] = []
+            repair_ids: set[str] = set()
             try:
-                points, _ = client.scroll(collection_name=self.collection, limit=10000, with_payload=True)
+                try:
+                    collection_missing = not client.collection_exists(collection_name=self.collection)
+                except ValueError:
+                    collection_missing = True  # qdrant local 对缺失集合直接抛错
+                if collection_missing:
+                    points: list = []
+                else:
+                    # 翻页扫全量：单页 10000 截断会让尾部点永远进不了 existing_ids，
+                    # 它们的消息每轮被当“未向量化”反复重嵌（2026-09-16 实测 200/轮空转）。
+                    points = []
+                    scroll_offset = None
+                    while True:
+                        page, next_offset = client.scroll(
+                            collection_name=self.collection, limit=10000,
+                            offset=scroll_offset, with_payload=True, with_vectors=True,
+                        )
+                        points.extend(page)
+                        if not page or next_offset is None:
+                            break
+                        scroll_offset = next_offset
+                signatures: dict[tuple[float, ...], list[str]] = {}
                 for point in points:
                     mid = (point.payload or {}).get("message_id")
                     if not mid:
                         continue
-                    # 旧版本向量 payload 缺 content：视为待修复，重写后才能参与语义召回。
-                    if str((point.payload or {}).get("content", "") or ""):
-                        existing_ids.add(str(mid))
+                    # 旧版本向量 payload 缺 content 但向量健康：重嵌入补写 payload。
+                    if not str((point.payload or {}).get("content", "") or ""):
+                        repair_ids.add(str(mid))
+                        continue
+                    vector = list(getattr(point, "vector", None) or [])
+                    if _vector_is_degenerate(vector):
+                        remove_ids.append(str(mid))
+                        continue
+                    existing_ids.add(str(mid))
+                    signatures.setdefault(tuple(round(float(x), 6) for x in vector), []).append(str(mid))
+                for members in signatures.values():
+                    # 不同内容嵌出同一向量 = 嵌入坍缩；内容相同的合法重复行不折腾。
+                    distinct_contents = {str((point.payload or {}).get("content", "") or "") for point in points if str((point.payload or {}).get("message_id") or "") in set(members)}
+                    if len(members) > 1 and len(distinct_contents) > 1:
+                        remove_ids.extend(members)
             except Exception:
-                existing_ids = set()
+                # 扫描存量点失败（并发/锁竞争）时绝不能当作“全都没有向量化”
+                # 盲目重嵌——那会把最老的一批每轮反复重写。中止本轮，稍后重试。
+                return {"embedded": 0, "skipped": 0, "total_vectors": self._count(client), "status": "scan_unavailable"}
+            if remove_ids:
+                for mid in remove_ids:
+                    existing_ids.discard(mid)
+                    _RECALL_POINT_GIVE_UP.add(str(mid))
+                try:
+                    client.delete(collection_name=self.collection, points_selector=PointIdsList(points=list({_point_id(mid) for mid in remove_ids[:10000]})))
+                except Exception:
+                    pass
 
-            pending = [row for row in rows if str(row["message_id"]) not in existing_ids][:limit]
+            # 空内容不参与向量化：既无语义可嵌，也会因 payload 恒为空而每轮重嵌。
+            pending = [row for row in rows if str(row["message_id"]) not in existing_ids and str(row["message_id"]) not in _RECALL_POINT_GIVE_UP and str(row["content"] or '').strip()][:limit]
             embedded = 0
             # 整批嵌入一次调用，避免逐条 HTTP 往返；单条失败仍逐个兜底。
             vectors_by_id: dict[str, list[float]] = {}
@@ -171,8 +232,8 @@ class VectorBackfill:
                         vectors = self.provider.embed_many([str(row["content"] or "")])
                         vector = vectors[0] if vectors else None
                     dim = len(vector) if vector else 0
-                    if not dim:
-                        continue
+                    if not dim or _vector_is_degenerate(vector):
+                        continue  # 退化向量拒绝落库：宁缺毋滥，不留 1.0 分假命中源
                     try:
                         client.create_collection(
                             collection_name=self.collection,

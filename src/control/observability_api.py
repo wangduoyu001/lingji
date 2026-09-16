@@ -18,6 +18,29 @@ from fastapi import HTTPException, Query
 from src.retrieval.vector_backfill import VectorBackfill
 from src.storage import StateDatabase
 
+# 语义召回护栏（WorkBuddy 2026-09-16 复检 P0-2）：kNN 永远返回"最近的 N 个"，
+# 不相关时必须宁缺毋滥。实测相关命中 >=0.717、无关噪声 <=0.683，下限取 0.70。
+# 满分(>=0.999)只允许查询词与命中内容互为子串的真重复——退化向量不得冒充实命中。
+MIN_RECALL_SCORE = 0.70
+
+
+def _plausible_recall_hits(query: str, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    kept: list[dict[str, Any]] = []
+    normalized_query = query.strip()
+    for hit in hits:
+        try:
+            score = float(hit.get("score") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if score < MIN_RECALL_SCORE:
+            continue
+        content = str(hit.get("content") or "").strip()
+        if score >= 0.999 and not (normalized_query and content and (normalized_query in content or content in normalized_query)):
+            continue
+        kept.append(hit)
+    return kept
+
+
 # 主人可读的失败原因分类：内部错误串永不直接暴露。
 _FAILURE_EXPLANATIONS: tuple[tuple[str, str, str], ...] = (
     (
@@ -411,7 +434,7 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         from src.retrieval.vector_backfill import VectorBackfill
 
         backfill = VectorBackfill(settings, provider=provider)
-        hits = backfill.search(vectors[0], limit=limit)
+        hits = _plausible_recall_hits(q, backfill.search(vectors[0], limit=limit))
         return {"items": hits, "query": q}
 
     def _distiller() -> Any:

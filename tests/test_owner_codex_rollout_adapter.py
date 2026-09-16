@@ -255,3 +255,27 @@ def test_rollout_filters_internal_injections_and_titles_from_real_user_message(t
     assert all("recommended_plugins" not in c for c in contents)
     assert ("user", "帮我看看当前VPN网络稳定吗") in [(m.role, m.content) for m in conversation.messages]
     assert conversation.title.startswith("Codex · 帮我看看当前VPN网络稳定吗"), conversation.title
+
+
+def test_rollout_accepts_token_usage_record_telemetry(tmp_path: Path):
+    """Codex 0.154.x（2026-09-13 起）writes token_usage_record telemetry envelopes.
+
+    Recognizing the envelope must keep the file importable while the telemetry
+    stays out of the conversation stream. Regression guard: since 9-13 every
+    automatic_memory_snapshot extraction failed closed on this new type.
+    """
+    path = tmp_path / "rollout-token-usage.jsonl"
+    _record(path, [
+        {"type": "session_meta", "payload": {"id": "thread-tu", "timestamp": "2026-09-15T23:31:28Z"}},
+        {"type": "event_msg", "payload": {"type": "user_message", "message": "帮我看看这段排期"}, "timestamp": "2026-09-15T23:32:00Z"},
+        {"type": "token_usage_record", "payload": {"input_tokens": 1200, "output_tokens": 300, "model": "gpt-5"}},
+        {"type": "token_usage_record", "payload": {"input_tokens": 80, "output_tokens": 40, "model": "gpt-5"}},
+        {"type": "event_msg", "payload": {"type": "task_complete"}, "timestamp": "2026-09-15T23:33:00Z"},
+    ])
+    adapter = CodexRolloutAdapter()
+    assert adapter.can_handle("codex_rollout", path, {}), "token_usage_record telemetry must not fail schema detection"
+    batch = adapter.extract(ExtractionRequest("job-tu", "codex_rollout", input_path=path, options={"authorized_roots": [str(tmp_path)]}))
+    conversation = batch.structured_sources[0].conversations[0]
+    roles = [(item.role, item.content) for item in conversation.messages]
+    assert ("user", "帮我看看这段排期") in roles, "real user message must still be extracted"
+    assert all("1200" not in content and "input_tokens" not in content for _role, content in roles), "token telemetry must stay out of the conversation stream"
