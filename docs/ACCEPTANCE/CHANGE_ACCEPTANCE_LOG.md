@@ -4061,3 +4061,21 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 验证要求：三个新测试 RED→GREEN；`test_owner_codex_rollout_adapter`、`test_vector_backfill`、
   `test_observability_api` focused 全绿；重建 sidecar 整包重装后真机复验：新扫描导入恢复
   （cards>458）、召回探测（桃园结义不再 1.0 相关、无命中返回空/低分）、记忆状态 as_of 刷新。
+
+### bge-m3 主嵌入模型安装与向量层重建（9 月 16 日晚，主人指令）
+
+- 根因修正：主人查出中文召回失效的真正根因是**设计的主嵌入模型 bge-m3 从未安装**
+  （config.py 主=bge-m3/备=nomic；P2_09A 明确不自动下载），系统静默降级英文备胎，
+  而非召回算法设计错误。
+- 本轮完成（主人指令"先下载模型"）：
+  1) Ollama registry 被网络干扰无法 pull，改从 ModelScope 镜像下载 gpustack/bge-m3-GGUF
+     F16（1104MB，128 秒），`ollama create bge-m3` 导入，ollama list 确认；
+  2) 旧 768 维集合备份移出（storage/qdrant.bak-768），新集合按 bge-m3 1024 维重建，
+     11703 点全部重嵌（56 轮收敛）；
+  3) 召回护栏分数下限按 bge-m3 实测分布校准：0.70→0.55（无关噪声 ≤0.44、
+     语义相关 ≥0.55，Gap 干净），测试夹具同步更新；
+  4) 过程中修复向量化 scroll 单页 10000 截断（尾部点每轮重嵌空转）。
+- 终验：Gmail 简报 0.716/0.706、电商选品 0.677/0.646 中文语义命中；桃园结义（语料无
+  相关内容）正确空集；vectors=messages=11703 全覆盖；cards 468/messages 11703 持续增长。
+- 遗留：Ollama 拉取大模型仍需国内镜像路径（registry 直连/代理均不稳），装机清单需补
+  bge-m3；qdrant.bak-768 待主人确认后清理；cards-summary 满载超时为暂态观察项。

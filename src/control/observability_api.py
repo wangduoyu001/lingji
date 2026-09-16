@@ -19,9 +19,10 @@ from src.retrieval.vector_backfill import VectorBackfill
 from src.storage import StateDatabase
 
 # 语义召回护栏（WorkBuddy 2026-09-16 复检 P0-2）：kNN 永远返回"最近的 N 个"，
-# 不相关时必须宁缺毋滥。实测相关命中 >=0.717、无关噪声 <=0.683，下限取 0.70。
+# 不相关时必须宁缺毋滥。分数下限按当前嵌入模型实测分布校准：bge-m3 无关查询
+# 噪声 <=0.44、语义相关 >=0.55，取 0.55；nomic 时代的 0.70 会误杀中文相关命中。
 # 满分(>=0.999)只允许查询词与命中内容互为子串的真重复——退化向量不得冒充实命中。
-MIN_RECALL_SCORE = 0.70
+MIN_RECALL_SCORE = 0.55
 
 
 def _plausible_recall_hits(query: str, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:

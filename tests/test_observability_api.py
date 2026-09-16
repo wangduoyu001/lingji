@@ -252,7 +252,7 @@ def test_recall_guard_drops_degenerate_perfect_scores_and_below_floor():
     """WorkBuddy 2026-09-16 复检：无关中文查询回填 1.0 分给不相关内容。
 
     护栏契约：满分(>=0.999)只有查询词与命中内容互为子串（真重复）才保留；
-    低于分数下限的弱相关一律丢弃（实测相关命中 >=0.717，无关噪声 <=0.683）。
+    低于分数下限的弱相关一律丢弃（bge-m3：相关 >=0.55，无关噪声 <=0.44）。
     """
     from src.control.observability_api import _plausible_recall_hits
 
@@ -269,5 +269,5 @@ def test_recall_guard_drops_degenerate_perfect_scores_and_below_floor():
     dup = _plausible_recall_hits("什么情况", [{"score": 1.0, "content": "什么情况"}])
     assert len(dup) == 1, "a true duplicate (query equals content) must stay"
 
-    empty = _plausible_recall_hits("桃园结义", [{"score": 0.609, "content": "无关内容"}])
+    empty = _plausible_recall_hits("桃园结义", [{"score": 0.44, "content": "无关内容"}])
     assert empty == [], "below-floor noise must return an empty result set"
