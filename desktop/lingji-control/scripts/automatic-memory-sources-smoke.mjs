@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { actionEvidence, MemorySourcesApi, findInspectorSourceForAutomaticMemorySource, mergeSourceFacts, ownerSourceName, scanStatusLabel, scanTerminalEvidence, sourceMetadataEvidence, sourceStateLabel, countLabel, canonicalSourceKey, appCapabilityLabels, appStatusLabel, compatibilityLabel, loadModelHealthPanel, loadOwnerIntakePanels, revealInbox, runningLabel } from "../src/pages/memorySourcesApi.ts";
 import { LingJiApi } from "../src/api.ts";
+import { redactAbsolutePaths } from "../src/pages/ownerMemoryCardsTypes.ts";
 import { readFileSync } from "node:fs";
 
 const calls = [];
@@ -103,9 +104,9 @@ assert.equal(scanStatusLabel("completed"), "已完成");
 assert.equal(countLabel(null), "尚未获得");
 assert.deepEqual(sourceMetadataEvidence({ file_count: 2, byte_count: 2048, earliest_mtime: 1760000000, latest_mtime: 1760003600 }), {
   fileCount: "2",
-  byteCount: "2048 字节",
-  earliestMtime: "2025-10-09 08:53:20 UTC",
-  latestMtime: "2025-10-09 09:53:20 UTC",
+  byteCount: "2.0 KB",
+  earliestMtime: new Date(1760000000 * 1000).toLocaleString(),
+  latestMtime: new Date(1760003600 * 1000).toLocaleString(),
 });
 assert.deepEqual(sourceMetadataEvidence({ file_count: null, byte_count: undefined, earliest_mtime: null, latest_mtime: Number.NaN }), {
   fileCount: "尚未获得",
@@ -113,6 +114,8 @@ assert.deepEqual(sourceMetadataEvidence({ file_count: null, byte_count: undefine
   earliestMtime: "尚未获得",
   latestMtime: "尚未获得",
 });
+assert.equal(redactAbsolutePaths("标题 /Users/wuhanwangduoyu/Documents/ChatGPT/灵机 交付"), "标题 （路径已隐藏） 交付", "knowledge titles must hide absolute paths before render");
+assert.equal(redactAbsolutePaths("C:\\Users\\owner\\notes 泄漏"), "（路径已隐藏） 泄漏", "windows paths must be redacted too");
 assert.equal(mergeSourceFacts([{ kind: "generic_ai_history", candidate_root: "/tmp/inbox", status: "available" }], [], []).length, 1);
 const notFoundCandidate = { kind: "codex_rollout", display_name: "Codex", candidate_root: "/tmp/missing-codex", status: "not_found", capability: "metadata_discovery", reason: "目录不存在" };
 assert.equal(mergeSourceFacts([notFoundCandidate], [], []).length, 0, "unauthorized not_found candidates must stay out of ordinary source cards");

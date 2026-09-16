@@ -472,9 +472,14 @@ function sourceSummary(snapshot: MemorySourcesSnapshot): string {
   const sources = Array.isArray(snapshot.sources) ? snapshot.sources : [];
   const discoveredCount = countLabel(sources.length);
   const authorizedCount = countLabel(sources.filter((item) => ["authorized", "scanning", "scan_completed", "processing", "imported", "partial_failure", "empty", "current"].includes(item.state)).length);
-  const scanCompletedCount = countLabel(sources.filter((item) => item.state === "scan_completed").length);
-  const importedCount = countLabel(sources.filter((item) => item.state === "imported").length);
+  // 扫描完成按“最近一次检查跑完”口径（含部分失败、空目录）；已导入按“真实导入过内容”
+  // 口径（部分失败也确实导入了一部分），避免活跃来源被显示成 0。
+  const scanCompletedCount = countLabel(sources.filter((item) => ["scan_completed", "processing", "imported", "partial_failure", "empty"].includes(item.state)).length);
+  const importedSources = sources.filter((item) => ["imported", "partial_failure", "current"].includes(item.state));
+  const importedCount = countLabel(importedSources.length);
   const counts = `发现 ${discoveredCount} 个来源 · 已授权 ${authorizedCount} 个 · 扫描完成 ${scanCompletedCount} 个 · 已导入 ${importedCount} 个。`;
+  const importedNames = [...new Set(importedSources.map(ownerSourceName))];
+  if (importedNames.length) return `${counts}灵机正在自动记住：${importedNames.join("、")}的新内容。`;
   const current = sources.filter((item) => item.state === "current").map(ownerSourceName);
   if (current.length) return `${counts}当前正在记住：${current.join("、")}。`;
   const connectable = sources.some((item) => {

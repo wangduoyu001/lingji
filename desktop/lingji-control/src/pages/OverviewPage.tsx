@@ -79,7 +79,9 @@ function DashboardBoard({ snapshot, cards, latest, onNavigate }: {
   onNavigate: (page: PageId) => void;
 }) {
   const sources = snapshot?.sources ?? [];
-  const activeSources = sources.filter((item) => item.state === "current" || item.state === "processing").length;
+  // “已接入”按授权事实计数：已授权且未撤销、未过期的来源都在持续供数据；
+  // 仅统计 current/processing 会把“部分失败但确实导入了内容”的活跃来源错误显示为 0。
+  const connectedSources = sources.filter((item) => Boolean(item.source_id) && !["revoked", "degraded"].includes(item.state)).length;
   const pending = sources.reduce((sum, item) => sum + (item.latestScan?.processing_pending ?? 0), 0);
   const formatNumber = (value: number | null | undefined): string =>
     value == null ? "—" : value >= 10000 ? `${(value / 10000).toFixed(1)}万` : String(value);
@@ -108,7 +110,7 @@ function DashboardBoard({ snapshot, cards, latest, onNavigate }: {
       </div>
       <div className="dashboard-side">
         <div className="dashboard-chip">
-          <span className={`pill ${activeSources ? "ok" : "neutral"}`}>{activeSources} 来源在线</span>
+          <span className={`pill ${connectedSources ? "ok" : "neutral"}`}>{connectedSources} 个来源已接入</span>
           {pending != null && pending > 0 && <span className="pill warning">{pending} 个文件待处理</span>}
         </div>
         <div className="dashboard-chip">

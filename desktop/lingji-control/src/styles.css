@@ -520,8 +520,11 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 .takeover-stats span { margin-top: 4px; color: var(--muted); font-size: 12px; }
 .overview-attention-link { margin-top: 10px; width: 100%; }
 
-/* Task B: four memory layers become one compact trail instead of four equal badges. */
-.owner-memory-layer-track { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+/* Task B: four memory layers become one compact trail instead of four equal badges.
+   flex 只作用于内层芯片行；details 自身保持 block，否则折叠态内容仍占布局。 */
+.owner-memory-layer-track { margin: 12px 0; }
+details.owner-memory-layer-track { display: block; }
+div.owner-memory-layer-track { display: flex; flex-wrap: wrap; gap: 6px; }
 .owner-memory-layer-step { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--text-soft); font-size: 11px; }
 .owner-memory-layer-step:last-child { color: var(--accent-strong); background: var(--accent-soft); }
 

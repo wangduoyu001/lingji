@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { Empty, Notice } from "../components/ui";
 import type { LingJiApi } from "../api";
 import { usePollingResource } from "../hooks/usePollingResource";
+import { redactAbsolutePaths } from "./ownerMemoryCardsTypes";
 
 type ConversationRow = {
   conversation_id: string;
@@ -173,7 +174,7 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
             {progress?.active ? (
               <>
                 <span className="pill warning">模型正在提炼</span>
-                <strong>{progress.current?.title || "未命名对话"}</strong>
+                <strong>{progress.current ? redactAbsolutePaths(progress.current.title) || "未命名对话" : "未命名对话"}</strong>
                 <small>已进行 {elapsedLabel(progress.current?.started_at) || "刚刚开始"}</small>
               </>
             ) : (
@@ -244,7 +245,7 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
               {progress!.finished!.slice().reverse().slice(0, 3).map((item, index) => (
                 <div key={index} className="knowledge-recent-row">
                   <span className={`pill ${item.ok ? "ok" : "bad"}`}>{item.ok ? "完成" : "重试"}</span>
-                  <small>{item.title}</small>
+                  <small>{redactAbsolutePaths(item.title)}</small>
                   <small>{item.seconds < 60 ? `${Math.round(item.seconds)} 秒` : `${Math.floor(item.seconds / 60)} 分`}</small>
                 </div>
               ))}
@@ -287,11 +288,11 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
                     {entry.revision > 1 && <span className="pill warning">已更新 {entry.revision - 1} 次</span>}
                     <small>{time(entry.occurred_at ?? entry.created_at)}</small>
                   </div>
-                  <strong>{entry.title}</strong>
-                  <p>{entry.summary}</p>
+                  <strong>{redactAbsolutePaths(entry.title)}</strong>
+                  <p>{redactAbsolutePaths(entry.summary)}</p>
                   {entry.key_points.length > 0 && (
                     <ul className="knowledge-points">
-                      {entry.key_points.slice(0, 3).map((point, index) => <li key={index}>{point}</li>)}
+                      {entry.key_points.slice(0, 3).map((point, index) => <li key={index}>{redactAbsolutePaths(point)}</li>)}
                     </ul>
                   )}
                   <small className="knowledge-source-hint">点击查看要点详情与对话原文 →</small>
@@ -314,10 +315,10 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
               {detail.entry && detail.entry.revision > 1 && <span className="pill warning">已更新 {detail.entry.revision - 1} 次</span>}
               <small>提炼模型：{detail.entry?.model || "尚未获得"}</small>
             </div>
-            <h3>{detail.entry?.title ?? "要点详情"}</h3>
-            <p className="knowledge-summary-full">{detail.entry?.summary}</p>
+            <h3>{detail.entry ? redactAbsolutePaths(detail.entry.title) : "要点详情"}</h3>
+            <p className="knowledge-summary-full">{redactAbsolutePaths(detail.entry?.summary ?? "")}</p>
             {detail.entry && detail.entry.key_points.length > 0 && (
-              <ul className="knowledge-points">{detail.entry.key_points.map((point, index) => <li key={index}>{point}</li>)}</ul>
+              <ul className="knowledge-points">{detail.entry.key_points.map((point, index) => <li key={index}>{redactAbsolutePaths(point)}</li>)}</ul>
             )}
             <h4>来源对话原文</h4>
             {detail.loading ? (
@@ -462,7 +463,7 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
             {rows.map((row) => (
                   <article key={row.conversation_id} className="library-item">
                     <button className="library-item-open" onClick={() => void openConversation(row)}>
-                      <strong>{row.title ?? "未命名会话"}</strong>
+                      <strong>{redactAbsolutePaths(row.title ?? "") || "未命名会话"}</strong>
                       <small>开始：{time(row.started_at)} · {row.message_count == null ? "消息数尚未获得" : `${row.message_count} 条消息`}</small>
                     </button>
                   </article>
@@ -477,8 +478,8 @@ export default function MemoryLibraryPage({ api, active }: { api: LingJiApi; act
           )}
           {openBody && (
             <div className="action-modal-backdrop" onClick={() => setOpenBody(null)}>
-              <div className="action-modal permanent-memory-body" role="dialog" aria-label={openBody.title} onClick={(event) => event.stopPropagation()}>
-                <h3>{openBody.title}</h3>
+              <div className="action-modal permanent-memory-body" role="dialog" aria-label={redactAbsolutePaths(openBody.title)} onClick={(event) => event.stopPropagation()}>
+                <h3>{redactAbsolutePaths(openBody.title)}</h3>
                 {openBody.loading ? (
                   <p aria-busy="true">正在读取聊天原文…</p>
                 ) : openBody.messages.length === 0 ? (

@@ -59,11 +59,21 @@ function metadataNumber(value: unknown, integer = false): string {
   return String(value);
 }
 
+function metadataBytes(value: unknown): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "尚未获得";
+  if (value < 1024) return `${Math.round(value)} 字节`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let size = value;
+  let unit = -1;
+  do { size /= 1024; unit += 1; } while (size >= 1024 && unit < units.length - 1);
+  return `${size >= 100 ? Math.round(size) : size.toFixed(1)} ${units[unit]}`;
+}
+
 function metadataTime(value: unknown): string {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "尚未获得";
   const date = new Date(value * 1000);
   if (!Number.isFinite(date.getTime())) return "尚未获得";
-  return date.toISOString().replace("T", " ").replace(".000Z", " UTC").replace("Z", " UTC");
+  return date.toLocaleString();
 }
 
 /**
@@ -77,10 +87,9 @@ export function sourceMetadataEvidence(source: Pick<DiscoveredSource, "file_coun
   latestMtime: string;
 } {
   const fileCount = metadataNumber(source.file_count, true);
-  const byteCount = metadataNumber(source.byte_count);
   return {
     fileCount,
-    byteCount: byteCount === "尚未获得" ? byteCount : `${byteCount} 字节`,
+    byteCount: metadataBytes(source.byte_count),
     earliestMtime: metadataTime(source.earliest_mtime),
     latestMtime: metadataTime(source.latest_mtime),
   };

@@ -216,8 +216,8 @@ try {
   assert.equal(sidebarStatusText.includes("8766"), false, "ordinary runtime warning must not expose the control port");
 
   const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
-  assert.deepEqual(primaryLabels, ["首页", "工作记录", "原始数据", "灵机整理", "永久记忆", "变更账本"], "ordinary navigation must have exactly the owner panels");
-  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ["首页", "工作记录", "原始数据", "灵机整理", "永久记忆", "变更账本"], "ordinary navigation must expose exact accessible labels");
+  assert.deepEqual(primaryLabels, ['首页', '记忆库', '原始数据', '时间线', '检查记录', '处理流水'], "ordinary navigation must have exactly the owner panels");
+  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ['首页', '记忆库', '原始数据', '时间线', '检查记录', '处理流水'], "ordinary navigation must expose exact accessible labels");
   assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "活动记录", exact: true }).count(), 0, "activity must stay out of the ordinary sidebar");
   assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "需要我", exact: true }).count(), 0, "attention must not permanently occupy the ordinary sidebar");
   const advanced = page.locator("details.desktop-advanced-disclosure");
@@ -267,8 +267,14 @@ try {
   await page.getByText("目前不需要你处理", { exact: true }).waitFor();
   assert.equal(await page.locator(".overview-attention-link").count(), 0, "empty pending must not surface a home attention entry");
 
-  await page.locator(".desktop-nav-item").filter({ hasText: "灵机整理" }).click();
-  await page.getByRole("heading", { name: "灵机整理", exact: true }).first().waitFor();
+  const ftAdvanced = page.locator("details.desktop-advanced-disclosure");
+  await ftAdvanced.locator("summary").click();
+  await ftAdvanced.getByRole("button", { name: "打开高级诊断", exact: true }).click();
+  await page.locator(".desktop-content").getByRole("heading", { name: "高级诊断", exact: true }).waitFor();
+  const ftCardsGroup = page.locator("details.diagnostics-group").filter({ hasText: "数据与索引" });
+  if (!(await ftCardsGroup.evaluate((node) => node.open))) await ftCardsGroup.locator("summary").click();
+  await ftCardsGroup.getByRole("button", { name: "要点转永久记忆" }).click();
+  await page.getByRole("heading", { name: "要点转永久记忆", exact: true }).first().waitFor();
   const cardsText = await page.locator(".owner-memory-card-grid").innerText();
   assert.equal(state.requests.some((url) => url.includes("/api/memory/inspector/memories/")), false, "ordinary card rendering must not prefetch canonical, vector, source or evidence bodies");
   assert.equal(state.requests.some((url) => url.includes("/api/memory/inspector/messages/")), false, "ordinary card rendering must not prefetch message bodies");
@@ -278,7 +284,12 @@ try {
   assert.equal(await page.locator(".owner-memory-card-grid").getByRole("button", { name: /确认加入长期记忆|扫描|暂停|删除|移出/ }).count(), 0, "routine card actions must stay out of the main card surface");
   assert.ok(cardsText.includes("当前可确认：团队讨论了发布日期"), "a current card without a conclusion must show a sourced, honest current fact");
   assert.ok(cardsText.includes("2026"), "missing freshness time must fall back to the source evidence time");
-  for (const field of ["当前可确认：", "来源：", "原始记录：", "结构记录：", "语义向量：", "长期记忆：", "可信提示："]) assert.ok(cardsText.includes(field), `memory card must show ${field}`);
+  for (const field of ["当前可确认：", "来源："]) assert.ok(cardsText.includes(field), `memory card face must show ${field}`);
+  const ftLayerTrack = page.locator(".owner-memory-card").first().locator("details.owner-memory-layer-track");
+  await ftLayerTrack.locator("summary").click();
+  const ftLayerText = await ftLayerTrack.innerText();
+  for (const field of ["原始记录：", "结构记录：", "语义向量：", "长期记忆：", "可信提示："]) assert.ok(ftLayerText.includes(field), `folded technical details must show ${field}`);
+  await ftLayerTrack.locator("summary").click();
   assert.equal(/memory-card-1|source-codex|\{/.test(cardsText), false, "memory card ordinary copy must not expose IDs or JSON");
   await page.locator(".owner-memory-card-title").first().click();
   await page.getByRole("dialog").waitFor();
@@ -513,7 +524,7 @@ try {
   assert.equal(sourceSummary.includes("已接管 1 个"), false, "a current source must be described as being remembered, never as a takeover count");
   assert.equal(sourceSummary.includes("已导入 1 个"), false, "scan completion must never be aggregated as imported content");
   await sourceCard.getByText("文件数：2", { exact: true }).waitFor();
-  await sourceCard.getByText("占用空间：2048 字节", { exact: true }).waitFor();
+  await sourceCard.getByText("占用空间：2.0 KB", { exact: true }).waitFor();
   assert.equal((await sourceCard.locator(".memory-source-metadata").innerText()).includes("/safe/fixture"), false, "source truth must not expose a filesystem path");
   await sourceCard.locator("details.memory-source-fallback-actions").locator("summary").click();
   await sourceCard.getByRole("button", { name: "现在检查", exact: true }).click();
