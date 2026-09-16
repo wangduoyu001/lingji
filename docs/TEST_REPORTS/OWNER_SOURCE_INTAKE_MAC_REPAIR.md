@@ -199,3 +199,28 @@ P2_09A 文档无误），系统静默降级英文备胎 nomic。本轮完成：
   vectors=messages=11703 全覆盖；cards=468 持续增长。sidecar `7aae839d…` 已装机。
 - **遗留**：装机器清单需补 bge-m3；qdrant.bak-768 待主人确认后清理；registry 大模型
   拉取需国内镜像路径；cards-summary 满载超时为暂态观察项。
+
+## 12. MCP 检索链路修复（2026-09-17 凌晨追加，任务 0C）
+
+WorkBuddy v3 复检报告 R1/R5 经逐条源码+实测复核属实后修复（提交 031bba96）：
+
+- **词法通道**：trigram 分词器对 2 字中文词恒 0 命中——把既有 history 模式的子串兜底
+  推广到全部读取模式，并补 current/why 的 status 过滤。
+- **语义通道**：正式集合从未被灌入 chunk 向量。新增 `ChunkVectorBackfill`
+  （src/retrieval/chunk_backfill.py），按 chunk_id 幂等补齐正式集合（bge-m3 1024 维），
+  重嵌 15,645/15,645（coverage 1.0）；vectorize 端点同时驱动消息层与 chunk 层回填，
+  控制进程自建 provider 复用共享 Qdrant 客户端避免同路径双锁。
+- **诊断诚实化**：hybrid diagnostics 增加每通道命中数（lexical_hits/semantic_hits），
+  双 0 时 reason_code=no_matches。
+- **状态真实化**：/api/vector/status 与 /api/vector/coverage 改为控制进程实时计算
+  （source=live、stale=false），快照不可用时回退。
+- **端到端实证**：离线驱动完整 HybridRetriever（副本+真 bge-m3）——agent=codex 时
+  comfyui 返回 3 条结果；agent 无身份时 0 条为设计内代理隔离（agent_scope）。
+- **R3 更正**：20 个失败任务实为"混多会话"按设计拒绝（伞形报错易误读），非缺适配器。
+
+### 已知遗留（下轮候选）
+
+1. R2 升格链输入端从未产出 candidate（自动激活被检疫隔离是设计；执行链未接线）——命门，需独立排查轮。
+2. R4 数据全部在 acceptance 沙箱、production 从未创建——主人数据主权决策（搬 or 认账）。
+3. MCP 客户端接线（Claude Desktop/Codex 配置段）+ search_memory 需带 agent_id 的使用说明。
+4. reranker 精排、coverage 分母口径细化、UI 降级警示条、qwen3:8b 空挂配置清理。
