@@ -4079,3 +4079,28 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   相关内容）正确空集；vectors=messages=11703 全覆盖；cards 468/messages 11703 持续增长。
 - 遗留：Ollama 拉取大模型仍需国内镜像路径（registry 直连/代理均不稳），装机清单需补
   bge-m3；qdrant.bak-768 待主人确认后清理；cards-summary 满载超时为暂态观察项。
+
+### WorkBuddy v3 复检修复：MCP 检索链路与状态真实性（9 月 17 日凌晨）
+
+- 触发：WorkBuddy v3 报告（R1 MCP 双通道失效/R2 升格链/R5 状态失真）+ 主人指令
+  "综合建议与我的判断执行，尽快落地、不制造垃圾、不膨胀、数据准确"。
+- R1 修复（三件）：
+  1) 词法通道：trigram 分词器对 2 字中文词恒 0——现有 history 模式子串兜底推广到全部
+     读取模式（current/why 补 status 过滤），"薏仁"类核心词恢复可搜；
+  2) 语义通道：正式集合（lingji_memory_acceptance）从未被灌入 chunk 向量。不改变集合名/
+     不复制数据，改为新增 ChunkVectorBackfill 按 chunk_id 幂等补齐（bge-m3 1024 维），
+     已重嵌 15,645/15,645（coverage 1.0，67 轮收敛）；
+  3) 诊断诚实化：hybrid diagnostics 增加每通道命中数，双 0 时 reason_code=no_matches
+     （不再顶着 available 冒充检索成功）。
+- R5 修复：/api/vector/status 与 /api/vector/coverage 改为控制进程实时计算
+  （source=live/stale=false），不再依赖网关进程发布的陈旧快照；快照不可用时回退。
+- R3 更正（WorkBuddy 定性有误）：20 个失败任务是"混多会话"文件按设计拒绝
+  （伞形报错文案易误读为缺适配器），非白名单缺失；内容待来源会话分开后自动重试。
+- R2/R4 明确本轮不做：R2 升格链输入是"命门"但需独立排查轮；R4 acceptance/production
+  归属是主人数据主权决策；reranker/客户端接线列入后续。
+- 验证：新增 3 测试 RED→GREEN；focused 60 passed；重包装机（sidecar 16725fec）后实测
+  coverage 15645/15645=1.0（live）、混合检索离线驱动 agent=codex 时 3 条结果返回、
+  无关词空集；qdrant.bak-768（96MB）已按"不制造垃圾"原则清理。
+- 落地用法（给主人）：MCP search_memory 需带 agent_id（如 "codex"）才能读到对应代理
+  范围的记忆——这是设计内的代理隔离；Claude Desktop/Codex 的 MCP 客户端接线待主人
+  确认后配置。

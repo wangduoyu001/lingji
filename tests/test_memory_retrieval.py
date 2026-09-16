@@ -153,5 +153,81 @@ class MemoryRetrievalTests(unittest.TestCase):
         self.assertTrue(self.database.integrity_check()["healthy"])
 
 
+
+
+class MemorySearchFallbackTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.storage = Path(self.temp_dir.name) / "storage"
+        self.vault = Path(self.temp_dir.name) / "vault"
+        self.storage.mkdir(parents=True, exist_ok=True)
+        self.vault.mkdir(parents=True, exist_ok=True)
+        self.database = MemoryDatabase(self.storage / "lingji_memory.db")
+        self.chunker = MarkdownChunker(max_chars=240, overlap_chars=40)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def _note(self, relative, memory_id, title, body, **metadata):
+        values = {
+            "schema_version": 1,
+            "id": memory_id,
+            "title": title,
+            "memory_type": "knowledge",
+            "memory_tier": "archival",
+            "status": "active",
+            "privacy": "private",
+            "importance": "medium",
+            "review_status": "approved",
+        }
+        values.update(metadata)
+        path = self.vault / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frontmatter = "---\n" + "".join(f"{k}: {v}\n" for k, v in values.items()) + "---\n"
+        path.write_text(frontmatter + body, encoding="utf-8")
+        return path
+
+    def _rebuild(self):
+        indexer = PEMISIndex(self.vault, self.storage)
+        indexer.build_index()
+        return self.database.rebuild_from_index(indexer.get_all(), self.vault, self.chunker)
+
+    def test_two_char_chinese_query_falls_back_to_substring_match(self):
+        """trigram 分词器对 2 字中文词恒空（WorkBuddy 2026-09-17 R1-A）。
+
+        current 模式必须与 history 模式一样走有界子串兜底，否则中文短词
+        在词法通道恒 0 命中，MCP search_memory 对中文失效。
+        """
+        self._note(
+            "03-Knowledge/Cooking/yiren.md",
+            "LJ-MEM-YIREN",
+            "薏仁采购记录",
+            "# 买薏仁\n\n我们开了 200 公里，专门来买柴火炒薏仁的，给我装上 50 斤。\n",
+        )
+        self._rebuild()
+        hits = self.database.search_fts("薏仁", limit=5)
+        self.assertTrue(hits, "two-char CJK query must fall back to substring matching")
+        self.assertEqual(hits[0]["memory_id"], "LJ-MEM-YIREN")
+
+    def test_search_diagnostics_report_per_channel_hits(self):
+        """诊断必须报告每条通道的实际命中数（WorkBuddy 2026-09-17 R1）。
+
+        旧行为只报"通道对象存在"，两通道同时 0 命中时仍自称一切可用。
+        """
+        retriever = HybridRetriever(self.database, semantic_provider=None)
+        outcome = retriever.search_with_diagnostics("薏仁", limit=5)
+        self.assertEqual(outcome["diagnostics"].get("lexical_hits"), 0, "empty corpus must report 0 lexical hits")
+        self.assertEqual(outcome["diagnostics"].get("reason_code"), "no_matches")
+        self._note(
+            "03-Knowledge/Cooking/yiren.md",
+            "LJ-MEM-YIREN",
+            "薏仁采购记录",
+            "# 买薏仁\n\n柴火炒薏仁，装上 50 斤。\n",
+        )
+        self._rebuild()
+        outcome = retriever.search_with_diagnostics("薏仁", limit=5)
+        self.assertGreater(outcome["diagnostics"].get("lexical_hits"), 0, "real hits must be counted")
+
 if __name__ == "__main__":
     unittest.main()

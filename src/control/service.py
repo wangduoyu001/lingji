@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from src.acceptance import AcceptanceChecker
 from src.acceptance_reports import AcceptanceReportStore
 from src.automatic_memory import SourceRegistry
+from src.retrieval.qdrant_provider import QdrantSemanticProvider
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.extraction.queue import SQLiteExtractionQueue, _without_lease_material
 from src.gateway.memory_statistics import MemoryStatisticsService
@@ -337,10 +338,128 @@ class LocalControlService:
 
     def vector_status(self) -> dict[str, Any]:
         self._ensure_memory_status_snapshot()
-        return self.memory_statistics.vector_status()
+        snapshot = self.memory_statistics.vector_status()
+        # 控制进程没有网关时快照可能长期陈旧（WorkBuddy 2026-09-17 R5）：
+        # 尽力用工作区 Qdrant 实时修正向量计数，失败则保留快照并维持 stale 标记。
+        live = self._live_semantic_counts()
+        if live is None:
+            return snapshot
+        merged = dict(snapshot)
+        merged.update({
+            "source": "live",
+            "stale": False,
+            "as_of": live["as_of"],
+            "vectors": live["vectors"],
+        })
+        embedding = dict(merged.get("embedding") or {})
+        embedding.update(live["embedding"])
+        merged["embedding"] = embedding
+        merged["state"] = live["state"]
+        merged["ready"] = live["ready"]
+        return merged
 
     def vector_coverage(self) -> dict[str, Any]:
+        live = self._live_chunk_coverage()
+        if live is not None:
+            return {
+                "as_of": live["as_of"],
+                "source": "live",
+                "stale": False,
+                "workspace": getattr(self.settings, "workspace_name", "production"),
+                **live["coverage"],
+            }
         return self.memory_statistics.vector_coverage()
+
+    def _live_semantic_provider(self) -> tuple[Any, Any] | None:
+        """按工作区解析语义集合，并复用向量回填的共享 Qdrant 客户端。"""
+        try:
+            from src.gateway.bootstrap import _resolve_semantic_workspace
+            from src.retrieval.memory_db import MemoryDatabase
+            from src.retrieval.vector_backfill import _shared_client
+
+            workspace = _resolve_semantic_workspace(self.settings, None)
+            if workspace is None:
+                return None
+            client = (
+                _shared_client(workspace.qdrant_path)
+                if workspace.qdrant_mode == "embedded" and workspace.qdrant_path
+                else None
+            )
+            database = MemoryDatabase(self.settings.memory_db_path)
+
+            class _CoverageEmbeddings:
+                """coverage 只需检索，不需要真实嵌入。"""
+
+                def embed_many(self, texts):
+                    raise NotImplementedError("coverage path does not embed")
+
+                def embed(self, text):
+                    raise NotImplementedError("coverage path does not embed")
+
+                def status(self):
+                    return {"available": False, "active_model": None, "dimension": None}
+
+            provider = QdrantSemanticProvider(workspace, _CoverageEmbeddings(), client=client)
+            return database, provider
+        except Exception:
+            return None
+
+    def _live_semantic_counts(self) -> dict[str, Any] | None:
+        try:
+            composed = self._live_semantic_provider()
+            if composed is None:
+                return None
+            database, provider = composed
+            from datetime import datetime, timezone
+
+            as_of = datetime.now(timezone.utc).isoformat()
+            vectors = int(provider.count() or 0)
+            expected = len(database.semantic_chunk_rows())
+            coverage_ratio = (vectors / expected) if expected else None
+            state = "healthy" if expected and vectors >= expected else "degraded"
+            embedding_status: dict[str, Any] = {}
+            builder = getattr(self, "build_embedding_provider", None)
+            if builder is None:
+                from src.model_center import build_embedding_provider
+
+                builder = build_embedding_provider
+            embedding = builder(self.settings)
+            if embedding is not None:
+                embedding_status = dict(embedding.status() or {})
+                embedding.close()
+            return {
+                "as_of": as_of,
+                "vectors": vectors,
+                "state": state,
+                "ready": bool(expected and vectors >= expected),
+                "embedding": {
+                    "active_model": embedding_status.get("active_model"),
+                    "dimension": embedding_status.get("dimension"),
+                    "available": embedding_status.get("available"),
+                },
+                "coverage_ratio": coverage_ratio,
+            }
+        except Exception:
+            return None
+
+    def _live_chunk_coverage(self) -> dict[str, Any] | None:
+        try:
+            composed = self._live_semantic_provider()
+            if composed is None:
+                return None
+            database, provider = composed
+            from datetime import datetime, timezone
+
+            chunk_ids = [row["chunk_id"] for row in database.semantic_chunk_rows()]
+            if not chunk_ids:
+                return None
+            coverage = provider.coverage(chunk_ids)
+            return {
+                "as_of": datetime.now(timezone.utc).isoformat(),
+                "coverage": coverage,
+            }
+        except Exception:
+            return None
 
     def get_settings(self) -> dict[str, Any]:
         return self.runtime_settings.snapshot()

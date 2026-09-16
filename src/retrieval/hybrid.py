@@ -163,6 +163,14 @@ class HybridRetriever:
             clean_query, candidate_limit, evaluation_filters
         )
         channel_state.update(semantic_state)
+        # 诊断必须报实际命中数：两通道都可用却双 0 时，答案应该是“语料无相关”，
+        # 而不是顶着 available 的字样冒充检索成功（WorkBuddy 2026-09-17 R1）。
+        channel_state["lexical_hits"] = len(lexical)
+        channel_state["semantic_hits"] = len(semantic)
+        if not lexical and not semantic:
+            # 结果层面的解释优先于通道可用性：双 0 就是“语料无相关”，
+            # 通道缺失已在 semantic 字段里如实标注。
+            channel_state["reason_code"] = "no_matches"
         fused = self._fuse(clean_query, lexical, semantic, evaluation_filters)
         if apply_source_authority and normalized.mode in {"current", "why"}:
             fused, authority_state = self.source_authority.filter_current(fused)

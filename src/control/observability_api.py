@@ -412,7 +412,43 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         if provider is None:
             raise HTTPException(status_code=503, detail="embedding provider is not configured")
         backfill = VectorBackfill(settings, provider=provider)
-        return backfill.run_once(limit=200)
+        messages = backfill.run_once(limit=200)
+
+        # chunk 级正式语义集合补齐（WorkBuddy 2026-09-17 R1-B）：MCP 语义通道
+        # 与 /api/vector/coverage 读的是这个集合，缺失即恒空。
+        chunks: dict[str, Any] = {"embedded": 0, "remaining": 0, "status": "unavailable"}
+        gateway = getattr(control, "memory_gateway", None)
+        retriever = getattr(gateway, "retriever", None)
+        semantic_provider = getattr(retriever, "semantic_provider", None)
+        database = getattr(gateway, "database", None)
+        if semantic_provider is None or database is None:
+            # 控制进程未组装网关（网关随 MCP 进程组装）时自建 provider：
+            # 复用向量回填的共享 Qdrant 客户端，避免同路径二次加锁。
+            try:
+                from src.gateway.bootstrap import _resolve_semantic_workspace
+                from src.retrieval.memory_db import MemoryDatabase
+                from src.retrieval.qdrant_provider import QdrantSemanticProvider
+                from src.retrieval.vector_backfill import _shared_client
+
+                workspace = _resolve_semantic_workspace(settings, None)
+                if workspace is not None:
+                    database = MemoryDatabase(settings.memory_db_path)
+                    client = (
+                        _shared_client(workspace.qdrant_path)
+                        if workspace.qdrant_mode == "embedded" and workspace.qdrant_path
+                        else None
+                    )
+                    semantic_provider = QdrantSemanticProvider(
+                        workspace, provider, client=client
+                    )
+            except Exception:
+                semantic_provider = None
+        if semantic_provider is not None and database is not None:
+            from src.retrieval.chunk_backfill import ChunkVectorBackfill
+
+            chunk_backfill = ChunkVectorBackfill(database, semantic_provider)
+            chunks = chunk_backfill.run_once(limit=200)
+        return {"messages": messages, "chunks": chunks}
 
     @app.get("/api/observability/recall", dependencies=secured)
     def observability_recall(

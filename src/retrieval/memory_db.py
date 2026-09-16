@@ -1082,6 +1082,24 @@ class MemoryDatabase:
             output.append(item)
         return output
 
+    def semantic_chunk_rows(self) -> list[dict[str, Any]]:
+        """Return every canonical chunk row for semantic indexing (bounded fields)."""
+
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT c.chunk_id, c.memory_id, c.heading, c.text,
+                       c.start_line, c.end_line,
+                       d.title, d.memory_type, d.memory_tier, d.status,
+                       d.privacy, d.importance,
+                       d.project_json, d.tags_json, d.agent_scope_json
+                FROM memory_chunks AS c
+                JOIN memory_documents AS d ON d.memory_id = c.memory_id
+                ORDER BY c.chunk_id ASC
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def search_fts(
         self,
         query: str,
@@ -1172,10 +1190,11 @@ class MemoryDatabase:
             for term in re.findall(r"[A-Za-z0-9_.+-]+|[\u4e00-\u9fff]+", str(query or ""))
             if term
         )
-        if temporal.mode == "history" and (not output or short_cjk_query):
+        if not output or short_cjk_query:
             # FTS trigram/unicode tokenizers may return no row for short CJK
-            # terms.  History/why must still inspect the same evidence set, so
-            # use a bounded metadata/chunk substring fallback here.
+            # terms (any 2-char CJK word is always 0 under trigram).  All read
+            # modes must fall back to the bounded metadata/chunk substring scan
+            # so Chinese short words stay searchable (WorkBuddy 2026-09-17 R1-A).
             terms = [term.casefold() for term in re.findall(r"[A-Za-z0-9_.+-]+|[\u4e00-\u9fff]+", str(query or "")) if term]
             if terms:
                 with self._connection() as connection:
@@ -1192,6 +1211,9 @@ class MemoryDatabase:
                     if memory_types:
                         fallback_sql += " AND d.memory_type IN (" + ",".join("?" for _ in memory_types) + ")"
                         fallback_params.extend(memory_types)
+                    if statuses and temporal.mode in {"current", "why"}:
+                        fallback_sql += " AND d.status IN (" + ",".join("?" for _ in statuses) + ")"
+                        fallback_params.extend(statuses)
                     with self._connection() as connection:
                         fallback_rows = connection.execute(fallback_sql, fallback_params).fetchall()
                 seen_ids = {str(item.get("memory_id") or "") for item in output}
