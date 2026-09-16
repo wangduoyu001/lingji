@@ -82,9 +82,65 @@ fn control_credentials() -> Result<ControlCredentials, String> {
     })
 }
 
+/// 托盘菜单直接调用本机控制 API（如暂停/恢复自动整理）。
+/// 复用 control_credentials 的凭据解析；curl 是系统自带工具，避免为一次
+/// POST 引入 HTTP 依赖。失败只写 stderr，不弹窗打扰主人。
+fn post_control_action(handle: &tauri::AppHandle, path: &str) {
+    let _ = handle;
+    let credentials = (|| {
+        runtime_bootstrap::require_configured().ok()?;
+        let base_url = env::var("LINGJI_CONTROL_BASE_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:8766".to_string());
+        let mut candidates = Vec::new();
+        if let Ok(value) = env::var("LINGJI_CONTROL_TOKEN_FILE") {
+            let path = PathBuf::from(value);
+            if path.is_absolute() {
+                candidates.push(path);
+            }
+        }
+        candidates.push(owner_data_root().ok()?.join("storage").join("control_api_token"));
+        for path in candidates {
+            if let Ok(value) = fs::read_to_string(&path) {
+                let token = value.trim().to_string();
+                if !token.is_empty() {
+                    return Some((base_url, token));
+                }
+            }
+        }
+        None
+    })();
+    let Some((base_url, token)) = credentials else {
+        eprintln!("lingji tray action {path}: control credentials unavailable");
+        return;
+    };
+    let url = format!("{base_url}{path}");
+    let status = std::process::Command::new("curl")
+        .args(["-s", "-o", "/dev/null", "-w", "%{http_code}", "-m", "10", "-X", "POST", "-H", &format!("X-LingJi-Token: {token}"), "-H", "Content-Type: application/json", "-d", "{}", &url])
+        .output();
+    match status {
+        Ok(output) if String::from_utf8_lossy(&output.stdout).trim() == "200" => {}
+        Ok(output) => eprintln!(
+            "lingji tray action {path}: unexpected response {:?}",
+            String::from_utf8_lossy(&output.stdout).trim()
+        ),
+        Err(error) => eprintln!("lingji tray action {path}: {error}"),
+    }
+}
+
+/// 后台托盘路径只调 window.show/set_focus 时，macOS 可能拒绝后台应用激活，
+/// WKWebView 的 document.hidden 不翻转会让前端所有轮询保持暂停（首页数据冻结）。
+/// 必须先做 App 级 show，再显示并聚焦窗口。
+fn show_main_window(handle: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    let _ = handle.show();
+    if let Some(window) = handle.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 #[tauri::command]
-fn release_metadata() -> ReleaseMetadata {
-    ReleaseMetadata {
+fn release_metadata() -> ReleaseMetadata {    ReleaseMetadata {
         product_name: "灵机",
         version: env!("CARGO_PKG_VERSION"),
         commit: env!("LINGJI_BUILD_COMMIT"),
@@ -210,10 +266,17 @@ fn main() -> tauri::Result<()> {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|handle, event| {
                     match event.id().as_ref() {
-                        "open" | "pause" | "resume" => {
-                            if let Some(window) = handle.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
+                        "open" => show_main_window(handle),
+                        "pause" => {
+                            post_control_action(handle, "/api/automatic-memory/pause-runtime");
+                            if let Some(tray) = handle.tray_by_id("lingji-tray") {
+                                let _ = tray.set_tooltip(Some("灵机 · 已暂停自动整理（托盘菜单可恢复）"));
+                            }
+                        }
+                        "resume" => {
+                            post_control_action(handle, "/api/automatic-memory/resume-runtime");
+                            if let Some(tray) = handle.tray_by_id("lingji-tray") {
+                                let _ = tray.set_tooltip(Some("灵机 · 后台自动整理记忆中"));
                             }
                         }
                         "quit" => {
@@ -225,11 +288,7 @@ fn main() -> tauri::Result<()> {
                 .on_tray_icon_event(|tray, event| {
                     // 左键单击托盘图标 = 显示主窗口
                     if matches!(event, TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. }) {
-                        let handle = tray.app_handle();
-                        if let Some(window) = handle.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        show_main_window(tray.app_handle());
                     }
                 })
                 .build(handle)?;
