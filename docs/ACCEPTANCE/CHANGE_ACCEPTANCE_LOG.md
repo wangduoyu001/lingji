@@ -4104,3 +4104,16 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
 - 落地用法（给主人）：MCP search_memory 需带 agent_id（如 "codex"）才能读到对应代理
   范围的记忆——这是设计内的代理隔离；Claude Desktop/Codex 的 MCP 客户端接线待主人
   确认后配置。
+
+### MCP 客户端接线修正（9 月 17 日，主人指令"要自动化"）
+
+- 现状确认：WorkBuddy 已把 lingji_memory MCP 服务器写入 ~/.codex/config.toml，但 env 变量名
+  （LINGJI_ACCEPTANCE_MEMORY_DB 等）在代码中不存在、workspace 解析落到 production 空目录——
+  接线形同虚设，这就是"做了 MCP 却恒返空"的最后一层。
+- 修正：run_mcp_server.py 新增 --data-root/--workspace（复用打包运行时的
+  configure_packaged_environment，导入 src 前完成环境注入）；Codex 配置块重写为
+  --data-root + --workspace acceptance + --agent codex，删除无效 env 段（已备份原配置）。
+- 端到端实测：以干净环境（无任何 LINGJI_*/WORKSPACE_* 变量）模拟 Codex 启动——
+  MCP 网关 1.29.1 初始化成功，search_memory("薏仁") 返回 2 条（词法 16+语义 30 双通道）。
+- 主人使用说明：Codex 新会话自动加载 lingji_memory 工具；search_memory 需带
+  agent_id="codex"（代理隔离设计）。Claude Desktop 待范围策略明确后按同一模式接线。
