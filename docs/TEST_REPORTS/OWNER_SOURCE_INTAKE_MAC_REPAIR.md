@@ -224,3 +224,18 @@ WorkBuddy v3 复检报告 R1/R5 经逐条源码+实测复核属实后修复（�
 2. R4 数据全部在 acceptance 沙箱、production 从未创建——主人数据主权决策（搬 or 认账）。
 3. MCP 客户端接线（Claude Desktop/Codex 配置段）+ search_memory 需带 agent_id 的使用说明。
 4. reranker 精排、coverage 分母口径细化、UI 降级警示条、qwen3:8b 空挂配置清理。
+
+## 13. 升格链接通 + production 迁移（2026-09-17 追加，提交 64a89b48）
+
+- **升格链**：确认/编辑/拒绝动作对无 vault 候选文件的 DB 记忆，现在按记忆库权威内容
+  物化候选文件（01-Inbox/AI-Memory/）再走 promote/reject 生命周期；全 vault 身份扫描
+  防重复升格；会话卡（LJ-CONV）从会话记录组装候选内容。真机升格一张真实会话卡 →
+  vault/03-Knowledge/Core-Memory/General/ 产出 memory_tier=core 文件（项目首份永久记忆）。
+- **迁移**：acceptance→production 整体 mv（同卷、硬链接 inode 抽检一致）；chunk 集合以
+  正确名称（lingji_memory_production）经 ChunkVectorBackfill 全量重嵌 15,648 点收敛；
+  desktop-bootstrap active_workspace=production；Codex MCP --data-root 同步。
+- **双工作区终验**：production 全功能（coverage 1.0 live、中文召回命中、永久记忆在位、
+  workspace=production）；acceptance 重置为空沙箱（按需自动建目录）。
+- sidecar `129df847` 已装机。已知限制：卡片流投影未读 vault 状态（升格成功的会话卡仍在
+  流中显示，重复确认诚实报 ALREADY_REVIEWED）；qdrant 本地模式单进程锁——MCP 子进程与
+  sidecar 回填互斥（幂等重试可收敛，长期方案=MCP 语义检索走 sidecar HTTP）。
