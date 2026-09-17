@@ -36,8 +36,21 @@ class ChunkVectorBackfill:
         if not rows:
             return {"embedded": 0, "remaining": 0, "expected": 0, "status": "empty"}
 
-        coverage = self.provider.coverage([row["chunk_id"] for row in rows])
+        expected_ids = {row["chunk_id"] for row in rows}
+        coverage = self.provider.coverage(list(expected_ids))
         missing = set(coverage.get("missing_chunk_ids") or [])
+        # 集合里 chunk_id 不在当前权威集合中的孤儿点：重分块后旧 id 失效，
+        # 留着会在语义召回里返回已被替换的内容（数据准确性）。
+        orphans = sorted(self._collection_chunk_ids() - expected_ids)
+        removed = 0
+        if orphans:
+            for orphan_id in orphans[:limit]:
+                try:
+                    self.provider.delete(orphan_id)
+                    removed += 1
+                except Exception:
+                    break
+        missing -= set(orphans)
         targets = [row for row in rows if row["chunk_id"] in missing][:limit]
         if not targets:
             return {
@@ -86,9 +99,37 @@ class ChunkVectorBackfill:
             "embedded": embedded,
             "remaining": remaining,
             "failed": failed,
+            "removed_orphans": removed,
             "expected": len(rows),
             "status": "ok" if not failed else "degraded",
         }
+
+    def _collection_chunk_ids(self) -> set[str]:
+        try:
+            return self._collection_chunk_ids_inner()
+        except Exception:
+            return set()
+
+    def _collection_chunk_ids_inner(self) -> set[str]:
+        ids: set[str] = set()
+        scroll_offset = None
+        client = getattr(self.provider, "client", None)
+        if client is None:
+            return ids
+        collection = getattr(self.provider, "collection", "")
+        while True:
+            page, next_offset = client.scroll(
+                collection_name=collection, limit=1000,
+                offset=scroll_offset, with_payload=True, with_vectors=False,
+            )
+            for point in page:
+                chunk_id = str((point.payload or {}).get("chunk_id") or "")
+                if chunk_id:
+                    ids.add(chunk_id)
+            if not page or next_offset is None:
+                break
+            scroll_offset = next_offset
+        return ids
 
     @staticmethod
     def _chunk_text(row: dict[str, Any]) -> str:

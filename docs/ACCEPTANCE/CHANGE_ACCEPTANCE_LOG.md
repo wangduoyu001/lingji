@@ -4117,3 +4117,28 @@ diff/sync/handoff 均通过；不执行 live/Artifact/release/
   MCP 网关 1.29.1 初始化成功，search_memory("薏仁") 返回 2 条（词法 16+语义 30 双通道）。
 - 主人使用说明：Codex 新会话自动加载 lingji_memory 工具；search_memory 需带
   agent_id="codex"（代理隔离设计）。Claude Desktop 待范围策略明确后按同一模式接线。
+
+### 升格链接通 + acceptance→production 迁移（9 月 17 日，主人指令）
+
+**Task A 升格链**：排查确认缺失写入点=主人确认动作对"无 vault 候选文件的 DB 记忆"直接
+NOT_FOUND。修复=MemoryReviewService 新增 _resolve_or_materialize_candidate：确认/编辑/拒绝
+时按记忆库权威内容物化候选文件（01-Inbox/AI-Memory/，含完整溯源 frontmatter），再走既有
+promote/reject 生命周期；全 vault 身份扫描防"复活"重复升格；会话卡（LJ-CONV）从
+conversation_records+message_records 组装候选内容。测试 RED→GREEN（approve 物化升格 +
+会话卡物化 + 防复活 + 拒绝路径）。
+- 真机验证：真实升格一张会话卡 → vault/03-Knowledge/Core-Memory/General/ 产出
+  memory_tier=core 文件（本项目第一份永久记忆，内容=本次修复工作会话）。
+- 已知限制（记录）：卡片流的 permanent 计数与卡片投影暂未读取 vault 状态
+  （升格成功的会话卡仍显示在流中，重复确认诚实报 ALREADY_REVIEWED）——投影集成列下轮。
+
+**Task B 迁移**：acceptance → production 整体 mv（同卷保 inode，raw 硬链接抽检一致），
+chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qdrant 本地模式
+"目录改名≠集合改名"问题（内部元数据绑定）→ 删除后经 ChunkVectorBackfill 以正确名称
+全量重嵌 15,648 点收敛。desktop-bootstrap active_workspace→production；Codex MCP 配置
+--data-root 同步指向 production。
+- 双工作区终验：production workspace=production、cards=469、messages=11706、vectors=11706、
+  coverage=1.0（live）、中文召回命中、永久记忆文件在位；acceptance 重置为空沙箱
+  （按需自动建目录）。
+- 过程记录：qdrant 本地模式单进程锁——Codex 拉起的 MCP 子进程与 sidecar 回填互斥，
+  表现为回填轮间歇 degraded/unavailable（幂等重试可收敛）；长期方案=MCP 语义检索改走
+  sidecar HTTP（列下轮）。sidecar 129df847 已装机。

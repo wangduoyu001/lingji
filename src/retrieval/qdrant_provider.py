@@ -17,6 +17,8 @@ except ImportError:  # pragma: no cover - exercised through status() without dep
     QdrantClient = None  # type: ignore[assignment]
     models = None  # type: ignore[assignment]
 
+from .qdrant_client_pool import shared_embedded_client
+
 
 _POINT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "lingji:qdrant-point")
 _DISTANCE_NAMES = {"cosine", "dot", "euclid", "manhattan"}
@@ -93,8 +95,14 @@ class QdrantSemanticProvider:
                         raise QdrantUnavailableError(
                             f"Embedded Qdrant path is missing for workspace {self.workspace.name.value}"
                         )
-                    Path(path).mkdir(parents=True, exist_ok=True)
-                    self._client = QdrantClient(path=str(path))
+                    # 必须走进程级客户端池：嵌入式 Qdrant 对同一存储路径只允许一个
+                    # client（flock 绑定 open file description，同进程第二次加锁同样
+                    # 被拒），这里若自建就会把网关/回填已持有的客户端顶掉，
+                    # 表现为 "Storage folder ... is already accessed by another
+                    # instance of Qdrant client"，语义通道整段消失。
+                    self._client = shared_embedded_client(path)
+                    # 池里的客户端不是本对象独占，close() 不得连带关闭它。
+                    self._owns_client = False
             except Exception as exc:
                 self._last_error = self._safe_error(exc)
                 raise QdrantUnavailableError(self._last_error) from exc

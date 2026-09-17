@@ -51,8 +51,9 @@ class MemoryReviewService:
     def approve(self, memory_id: str, *, owner_confirmed: bool, expected_content_hash: str, target_category: str = "General", agent_scope: list[str] | None = None) -> dict[str, Any]:
         if not owner_confirmed:
             raise MemoryReviewError("MEMORY_APPROVAL_REQUIRED")
-        source = self._find_candidate(memory_id)
-        self._require_hash(source, expected_content_hash)
+        source, materialized = self._resolve_or_materialize_candidate(memory_id, expected_content_hash)
+        if not materialized:
+            self._require_hash(source, expected_content_hash)
         result = self.lifecycle.promote_candidate(source, True, agent_scope=agent_scope, target_category=target_category)
         target = self.layout.root / result["relative_path"]
         metadata, body = split_frontmatter(target.read_text(encoding="utf-8-sig"))
@@ -68,8 +69,9 @@ class MemoryReviewService:
     def edit_and_approve(self, memory_id: str, *, content: str, expected_content_hash: str, owner_confirmed: bool, title: str | None = None, target_category: str = "General") -> dict[str, Any]:
         if not owner_confirmed:
             raise MemoryReviewError("MEMORY_APPROVAL_REQUIRED")
-        source = self._find_candidate(memory_id)
-        self._require_hash(source, expected_content_hash)
+        source, materialized = self._resolve_or_materialize_candidate(memory_id, expected_content_hash)
+        if not materialized:
+            self._require_hash(source, expected_content_hash)
         metadata, body = split_frontmatter(source.read_text(encoding="utf-8-sig"))
         if title is not None:
             metadata["title"] = title.strip() or metadata.get("title")
@@ -83,8 +85,9 @@ class MemoryReviewService:
             raise MemoryReviewError("MEMORY_APPROVAL_REQUIRED")
         if not reason.strip():
             raise ValueError("rejection reason is required")
-        source = self._find_candidate(memory_id)
-        self._require_hash(source, expected_content_hash)
+        source, materialized = self._resolve_or_materialize_candidate(memory_id, expected_content_hash)
+        if not materialized:
+            self._require_hash(source, expected_content_hash)
         result = self.lifecycle.reject_candidate(source, True, reason=reason.strip())
         self._event("memory_owner_rejected", memory_id, {**result, "reason": reason.strip()})
         return result
@@ -193,6 +196,153 @@ class MemoryReviewService:
     def inspect_core_integrity(self, memory_id: str) -> dict[str, Any]:
         from .integrity import CoreMemoryIntegrityService
         return CoreMemoryIntegrityService(self.layout).inspect(memory_id)
+
+    def _vault_file_with_id(self, memory_id: str):
+        """全 vault 范围查找携带该 memory_id 的 Markdown 文件（任意生命周期）。"""
+        target = f'id: {memory_id}'
+        for path in self.layout.root.rglob("*.md"):
+            try:
+                head = path.read_text(encoding="utf-8-sig")[:600]
+            except OSError:
+                continue
+            if target in head:
+                return path
+        return None
+
+    def _conversation_snapshot(self, conversation_id: str) -> dict[str, Any] | None:
+        """会话卡的权威内容：会话标题 + 有界消息文本（只读）。"""
+        import sqlite3
+
+        path = getattr(self.database, "path", None)
+        if not path:
+            return None
+        with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as connection:
+            connection.row_factory = sqlite3.Row
+            conv = connection.execute(
+                "SELECT * FROM conversation_records WHERE conversation_id = ?",
+                (conversation_id,),
+            ).fetchone()
+            if not conv:
+                return None
+            messages = connection.execute(
+                """
+                SELECT role, author, content, occurred_at FROM message_records
+                WHERE conversation_id = ? ORDER BY sequence ASC LIMIT 12
+                """,
+                (conversation_id,),
+            ).fetchall()
+        return {"conversation": dict(conv), "messages": [dict(row) for row in messages]}
+
+    def _materialize_conversation_candidate(self, memory_id: str, snapshot: dict[str, Any]):
+        conv = snapshot["conversation"]
+        messages = snapshot["messages"]
+        title = str(conv.get("title") or conv.get("topic") or memory_id)
+        parts: list[str] = []
+        used = 0
+        for message in messages:
+            text = str(message.get("content") or "").strip()
+            if not text:
+                continue
+            clipped = text[:300]
+            parts.append(f"{message.get('role') or '消息'}：{clipped}")
+            used += len(clipped)
+            if used >= 4000:
+                break
+        body = title + "\n\n" + "\n\n".join(parts) if parts else title
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        metadata = {
+            "id": memory_id,
+            "title": title,
+            "memory_type": "conversation_evidence",
+            "memory_tier": "candidate",
+            "status": "active",
+            "review_status": "needs_review",
+            "privacy": str(conv.get("privacy") or "private"),
+            "importance": "medium",
+            "proposed_by": "automatic-memory",
+            "created_at": now,
+            "updated_at": now,
+            "started_at": str(conv.get("started_at") or ""),
+            "message_count": conv.get("message_count"),
+        }
+        metadata = {key: value for key, value in metadata.items() if value not in (None, "")}
+        inbox = self.layout.root / "01-Inbox" / "AI-Memory"
+        inbox.mkdir(parents=True, exist_ok=True)
+        target = inbox / f"{self.layout.sanitize_filename(memory_id)}.md"
+        atomic_write(target, render_frontmatter(metadata, body))
+        return target, True
+
+    def _resolve_or_materialize_candidate(self, memory_id: str, expected_content_hash: str) -> tuple[Path, bool]:
+        """找到 vault 候选文件；DB 记忆没有候选文件时从权威内容物化一份。
+
+        WorkBuddy 2026-09-17 R2：提炼/导入产物从未写入 vault 候选文件，导致
+        "要点转永久记忆"页的确认动作永远 MEMORY_CANDIDATE_NOT_FOUND。物化完整性：
+        文件体=记忆库权威内容（按 chunk 顺序拼接），前端 expected 与库内哈希不一致
+        时以库内为准——构造即权威，无需再对文件整体哈希二次校验。
+        返回 (候选路径, 是否本次物化)。
+        """
+        # 卡片流的会话卡带 "conversation:" 前缀：归一为纯 ID 再解析。
+        compact_id = str(memory_id or "")
+        if compact_id.startswith("conversation:"):
+            compact_id = compact_id.split(":", 1)[1]
+        try:
+            source = self._find_candidate(memory_id)
+            return source, False
+        except MemoryReviewError as exc:
+            if "MEMORY_CANDIDATE_NOT_FOUND" not in str(exc):
+                raise
+        # 全 vault 身份扫描：该记忆若已有任何生命周期的 vault 文件
+        # （core/rejected/archived），绝不物化第二份（防“复活”重复升格）。
+        for candidate_id in {str(memory_id), compact_id}:
+            existing = self._vault_file_with_id(candidate_id)
+            if existing is not None:
+                raise MemoryReviewError("MEMORY_ALREADY_REVIEWED")
+        memory = self.database.fetch_memory(memory_id, include_chunks=True) if self.database is not None else None
+        conversation = (
+            self._conversation_snapshot(compact_id)
+            if compact_id.startswith("LJ-CONV")
+            else None
+        )
+        if memory is None and conversation is not None:
+            return self._materialize_conversation_candidate(compact_id, conversation)
+        if not memory:
+            raise MemoryReviewError("MEMORY_CANDIDATE_NOT_FOUND")
+        chunks = memory.get("chunks") or []
+        body = "\n\n".join(
+            str(chunk.get("text") or "").strip()
+            for chunk in sorted(chunks, key=lambda c: int(c.get("ordinal") or 0))
+            if str(chunk.get("text") or "").strip()
+        )
+        if not body:
+            body = str(memory.get("summary") or "").strip()
+        if not body:
+            raise MemoryReviewError("MEMORY_CANDIDATE_NOT_FOUND")
+        relationships = memory.get("relationships") if isinstance(memory.get("relationships"), dict) else {}
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        metadata = {
+            "id": memory_id,
+            "title": str(memory.get("title") or memory_id),
+            "memory_type": str(memory.get("memory_type") or "knowledge"),
+            "memory_tier": "candidate",
+            "status": str(memory.get("status") or "active"),
+            "review_status": "needs_review",
+            "privacy": str(memory.get("privacy") or "private"),
+            "importance": str(memory.get("importance") or "medium"),
+            "project_ids": self._list(memory.get("project") or memory.get("project_ids")),
+            "tags": self._list(memory.get("tags") or memory.get("tags_json")),
+            "agent_scope": self._list(memory.get("agent_scope") or memory.get("agent_scope_json")) or ["codex"],
+            "proposed_by": "automatic-memory",
+            "created_at": now,
+            "updated_at": now,
+            "conversation_id": str(relationships.get("conversation_id") or memory.get("conversation_id") or ""),
+            "occurred_at": str(memory.get("occurred_at") or relationships.get("occurred_at") or ""),
+        }
+        metadata = {key: value for key, value in metadata.items() if value not in (None, "")}
+        inbox = self.layout.root / "01-Inbox" / "AI-Memory"
+        inbox.mkdir(parents=True, exist_ok=True)
+        target = inbox / f"{self.layout.sanitize_filename(memory_id)}.md"
+        atomic_write(target, render_frontmatter(metadata, body))
+        return target, True
 
     def _candidate_paths(self):
         root = self.layout.root / "01-Inbox" / "AI-Memory"

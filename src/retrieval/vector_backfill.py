@@ -13,15 +13,15 @@ import threading
 from pathlib import Path
 from typing import Any, Protocol
 
+from .qdrant_client_pool import close_all as _close_pooled_clients
+from .qdrant_client_pool import shared_embedded_client
+
 COLLECTION = "lingji_automatic_memory"
 
-# 本地（embedded）模式同一存储目录只允许一个 QdrantClient。进程内共享单例，
-# 避免调度器回填线程与 API 线程各自开关客户端时撞 "already accessed" 文件锁。
-_CLIENT_LOCK = threading.Lock()
+# 本地（embedded）模式同一存储目录只允许一个 QdrantClient —— 见 qdrant_client_pool：
+# 同进程的第二个客户端也会被 flock 拒绝。所有创建入口统一委派给那个池。
 # 进程级：已确认嵌入坍缩、不可修复的消息点，跳过后续向量化尝试。
 _RECALL_POINT_GIVE_UP: set[str] = set()
-_SHARED_CLIENT: Any = None
-_SHARED_PATH: str = ""
 
 
 def _vector_is_degenerate(vector: Any) -> bool:
@@ -35,33 +35,19 @@ def _vector_is_degenerate(vector: Any) -> bool:
 
 
 def _shared_client(path: Path) -> Any:
-    global _SHARED_CLIENT, _SHARED_PATH
-    from qdrant_client import QdrantClient
+    """进程内共享的嵌入式 Qdrant 客户端（委派给统一客户端池）。
 
-    with _CLIENT_LOCK:
-        if _SHARED_CLIENT is None or _SHARED_PATH != str(path):
-            if _SHARED_CLIENT is not None:
-                try:
-                    _SHARED_CLIENT.close()
-                except Exception:
-                    pass
-                _SHARED_CLIENT = None
-            _SHARED_CLIENT = QdrantClient(path=str(path))
-            _SHARED_PATH = str(path)
-        return _SHARED_CLIENT
+    保留本函数名是为了兼容既有调用点（control/service.py、
+     control/observability_api.py）。实现必须留在池里：网关侧
+     QdrantSemanticProvider 与回填共用同一个池，才不会再出现
+    "already accessed by another instance of Qdrant client"。
+    """
+    return shared_embedded_client(path)
 
 
 def close_shared_client() -> None:
     """测试或进程退出时释放共享客户端。"""
-    global _SHARED_CLIENT, _SHARED_PATH
-    with _CLIENT_LOCK:
-        if _SHARED_CLIENT is not None:
-            try:
-                _SHARED_CLIENT.close()
-            except Exception:
-                pass
-        _SHARED_CLIENT = None
-        _SHARED_PATH = ""
+    _close_pooled_clients()
 
 
 class EmbeddingProviderLike(Protocol):
