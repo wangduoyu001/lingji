@@ -235,6 +235,13 @@ One fact has one detailed authority:
 - `docs/DEVELOPMENT_RULES.md`: durable development and governance rules
 
 Update the existing authority instead of creating a parallel document. Historical module plans and implementation reports may remain as evidence but must not override the current architecture, project status or acceptance authority.
+### 文档保留与清理
+
+- 当前默认分支只保留仍承担权威、操作、用户说明或有效验收证据职责的文档。
+- 已被 `ARCHITECTURE.md`、`PROJECT_STATUS.md`、`CODE_MAP.md`、`DEVELOPMENT_RULES.md` 或当前 Acceptance 合同取代的阶段计划、Draft PR 实施报告和一次性研究说明，应从默认分支删除，不迁移成平行“archive”权威；历史内容由 Git 历史保留。
+- `docs/TEST_REPORTS/` 继续承担测试与验收证据库职责。只有确认未被当前状态、Acceptance、发布回执或回归边界引用的重复报告，才允许单独清理。
+- 每次大规模文档清理必须先做引用检查，并留下清理报告、删除清单和回滚提交。
+
 
 Final task output must distinguish:
 
