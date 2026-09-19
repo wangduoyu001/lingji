@@ -227,6 +227,8 @@ The next CI pass also exposed a stale TypeScript call-site contract: `AppPages` 
 
 A further Desktop smoke rerun exposed more presentation-coupled assertions in the same historical smoke: it required the source literal `5_000` and the obsolete copy “系统当前空闲 / 处理进度”. `CurrentWorkPanel` now uses `5000`, the empty state “当前没有进行中的工作”, and the canonical Work Fact projection fields “任务 / 事件 / 结果 / 下一步”. The smoke now validates those current contracts and the exact 5000 ms interval instead of obsolete presentation strings.
 
+The next sequential smoke failure was also stale ownership: `codex-workspace-smoke.mjs` still expected project/session copy inside `CurrentWorkPanel`. The test now validates project/session ownership in `CodexWorkspacePage` and validates canonical Work Fact ownership in `CurrentWorkPanel`.
+
 No Runtime, Vault, database, Qdrant, Memory authority, or owner-data code is changed.
 
 Final validation must be read from CI on the updated cleanup head; no unexecuted result may be reported as PASS.
