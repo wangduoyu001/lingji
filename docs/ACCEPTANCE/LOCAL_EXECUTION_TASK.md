@@ -1,3 +1,31 @@
+# 当前本机任务：个人记忆实用优化
+
+## 本轮：个人记忆实用优化（2026-09-19）
+
+```yaml
+task_id: PERSONAL_MEMORY_PRACTICAL_OPTIMIZATION
+status: COMPLETED
+baseline_commit: 264b14d3a3a3690b2ba768f2844660abd87f16f9
+product_branch: codex/owner-source-intake-mac-repair
+execution_mode: BOUNDED_BACKEND_REPAIR_AND_HYGIENE
+```
+
+主人本轮明确授权剩余优化与卫生清理，覆盖下方旧任务范围限制；旧任务只作历史背景。本轮不新增平台、模型、队列或数据库，不重写 UI，不合并远程主线。
+
+### 落地计划及完成标准
+
+- [x] 召回：将原始语义分数门槛接入当前 HybridRetriever；保留权限/时态/全文通道。低分语义剔除、低分但精确全文仍命中、MCP 正负例一致。
+- [x] 启动与访问：已有 MemoryDatabase 初始化不请求写锁；MCP 通过认证的现有后端共享索引，避免跨进程打开 Qdrant。用真实锁与跨入口样本测试。
+- [x] Core：复用现有索引读写，启动时只对账已批准 Core 文件；已有聊天索引非空仍补入 Core，不重复，不丢聊天证据，不修改 Vault。
+- [x] 扫描与增长：复用既有 scan manifest 跨轮跳过未变且可复用快照；变化、原始快照丢失时重新采集；原始快照容量限制给出可解释停止，不删除真实资料。
+- [x] 验证与清理：先记录失败测试，再做最小实现；对应模块测试与隔离后端/MCP 验证，后端安装验证（含一次直接相关的 Core 显示收尾）；保留现有 UI，不要求无关组件变绿。
+
+测试入口为新增实际行为测试及相关既有模块测试，结果写现有 OWNER_SOURCE_INTAKE_MAC_REPAIR.md。本机数据只用于既有已批准内容的索引对账与只读回验，不批准新记忆、不删除 raw/Vault、不修改其他软件。安装前保留一个完整旧应用回滚副本，测试通过后清理临时数据库、构建中间产物与本轮缓存。失败证据保留到原因已记录，不进入无限修复。
+
+---
+
+## 以下为已被本轮替代的历史任务
+
 # LingJi 本机执行任务单
 
 > **当前状态：ACTIVE（`OWNER_SOURCE_INTAKE_MAC_REPAIR`）。**
@@ -8,7 +36,7 @@
 
 ```yaml
 task_id: OWNER_SOURCE_INTAKE_MAC_REPAIR
-status: ACTIVE
+status: SUPERSEDED
 execution_mode: OWNER_SOURCE_INTAKE_PRODUCT_AND_MAC_REPAIR
 repository: wangduoyu001/lingji
 product_branch: codex/owner-source-intake-mac-repair
@@ -53,7 +81,7 @@ App/sidecar 打开等待主人确认。Mac 技术验收与主人确认均通过�
 
 ```yaml
 task_id: OWNER_WORKBUDDY_RECHECK_PIPELINE_RECALL_REPAIR
-status: ACTIVE
+status: SUPERSEDED
 execution_mode: FOCUSED_PRODUCT_REPAIR_ONLY
 parent_task: OWNER_SOURCE_INTAKE_MAC_REPAIR
 trigger: 主人 2026-09-16 指令"按 WorkBuddy 复检报告做一轮修复，然后做一轮卫生清理"

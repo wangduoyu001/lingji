@@ -116,6 +116,7 @@ def create_mcp_server(
     codex_service: CodexSessionService | None = None,
     project_context_service: Any | None = None,
     extraction_pipeline: Any | None = None,
+    app_settings: Any | None = None,
 ):
     """Create the local LingJi MCP server with one shared pipeline and Codex runtime."""
     try:
@@ -125,6 +126,7 @@ def create_mcp_server(
             "MCP support is optional. Install it with: pip install -r requirements-mcp.txt"
         ) from exc
 
+    settings = app_settings or globals()["settings"]
     memory_gateway = gateway or build_memory_gateway(settings)
     indexer = PEMISIndex(
         settings.vault_path,
@@ -157,6 +159,7 @@ def create_mcp_server(
     session_service = codex_service or build_codex_session_service(
         pipeline,
         state_db=memory_gateway.state_db,
+        app_settings=settings,
     )
     context_service = project_context_service or build_project_context_service(
         memory_gateway,

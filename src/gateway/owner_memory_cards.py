@@ -683,6 +683,11 @@ class OwnerMemoryCardProjector:
         if document.get("valid_from") not in (None, "") and start is None or document.get("valid_to") not in (None, "") and end is None:
             return {"state": "unknown", "reason": "有效时间格式无法确认", "replacement_id": replacement or None}
         if start is None and end is None:
+            if (status == "active" and document.get("memory_tier") == "core"
+                    and document.get("review_status") == "approved"):
+                # Owner-confirmed permanent preferences may be timeless;
+                # retrieval also treats absent validity bounds as open-ended.
+                return {"state": "current", "reason": None, "replacement_id": replacement or None}
             return {"state": "unknown", "reason": "缺少证据时间", "replacement_id": replacement or None}
         now = datetime.now(timezone.utc)
         if end is not None and now >= end:

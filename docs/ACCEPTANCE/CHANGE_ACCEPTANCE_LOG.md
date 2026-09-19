@@ -4153,3 +4153,10 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
   WorkBuddy 适配器路线推荐（文件适配器直读白名单根，隐私=只本地提炼）/运维要点。
 - 主人使用说明：Codex 新会话即自动加载 lingji_memory MCP 工具（search_memory 带
   agent_id="codex"）。
+
+
+## 2026-09-19 PERSONAL_MEMORY_PRACTICAL_OPTIMIZATION
+
+最终范围增加一处直接相关的展示修复：已批准、无起止日期的 active Core 按长期有效计入首页；普通缺证据候选仍为 unknown。最终相关测试 229 passed，2 个既有依赖弃用警告；未运行全仓库/Windows/全部 UI 门禁。原始 RED 均已复现后修复。成功扫描工作记录滚动保留只处理已退出扫描保留窗口、已完成且无待主人决策的记录；失败及活跃记录保留。
+
+开发前约定：原始语义门槛、无写锁初始化、认证后端 MCP 共享、Core 对账、跨轮快照复用及容量上限。先跑失败回归；用合成数据库与临时 Vault 验证隔离、幂等、权限和来源保留，再回验已安装后端。纯后端修改不扩展为全 UI 改版、Windows 发包或全部模型安装。真实 Core/Vault/raw 只保护不删除；旧应用保留一个回滚副本；本轮构建缓存与临时样本最后删除。具体结果同步既有测试报告，未执行项如实记录。

@@ -1,5 +1,19 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
+## 2026-09-19 个人记忆实用优化（当前）
+
+主人授权本轮优化与卫生清理，当前产品源码为 `codex/owner-source-intake-mac-repair`，基线 `264b14d3`。下文旧候选和门禁状态只作历史背景。
+
+已落地：已有索引只读初始化、已批准 Core 启动对账、Core 首页统计口径修复、Hybrid 原始语义门槛、Desktop MCP 复用认证后端、跨轮快照复用、10 GiB raw 采集限额和成功扫描工作记录滚动保留。没有新增数据库、队列、模型或 UI 页面。
+
+最终相关测试 229 passed；Mac 后端已打包并做隔离/真实入口验证。实测详情、产物哈希、清理和限制统一见 `docs/TEST_REPORTS/OWNER_SOURCE_INTAKE_MAC_REPAIR.md` 最新章节。保留 15 分钟稳定轮询与每日完整校验；未实现 JSONL 字节游标、raw 引用回收、真实问题集召回率标定。既有失败任务不通过删除伪装成功。
+
+本轮为个人使用优化交付，不冒充完整 Windows/全页面发布验收，不推送、合并远程分支。
+
+---
+
+以下为历史阶段记录。
+
 > Updated: 2026-09-03
 > Formal/default branch: `master`
 > Phase 1 implementation base: `d12c1fb837257e83835a7cdb899bb29a9c675c3d`

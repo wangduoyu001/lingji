@@ -26,6 +26,12 @@ def main() -> None:
     parser.add_argument("--workspace", default=None, choices=(None, "production", "acceptance"))
     args = parser.parse_args()
 
+    if args.data_root and args.transport in (None, "stdio"):
+        from src.mcp.control_bridge import run_control_bridge
+
+        run_control_bridge(args.data_root, default_agent=args.agent or "codex")
+        return
+
     if args.data_root:
         from run_packaged_control_api import configure_packaged_environment
 

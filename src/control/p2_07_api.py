@@ -38,6 +38,7 @@ def register_p2_07_routes(app: Any, settings: Any, control: Any, *, token: str) 
 
     lock = threading.RLock()
     cached: P207ControlRuntime | None = None
+    shared_mcp = None
 
     def runtime() -> P207ControlRuntime:
         nonlocal cached
@@ -92,6 +93,25 @@ def register_p2_07_routes(app: Any, settings: Any, control: Any, *, token: str) 
         _LazyProxy(runtime, "notes"),
         token_validator=token_valid,
     )
+
+    def mcp_server():
+        nonlocal shared_mcp
+        with lock:
+            if shared_mcp is None:
+                from src.mcp_server import create_mcp_server
+
+                loop = runtime().loop
+                shared_mcp = create_mcp_server(
+                    gateway=control.memory_gateway,
+                    extraction_pipeline=control.pipeline,
+                    codex_service=loop.codex_sessions,
+                    project_context_service=loop.project_context,
+                    app_settings=settings,
+                )
+            return shared_mcp
+
+    from src.mcp.control_bridge import register_control_bridge
+    register_control_bridge(app, mcp_server, token=token)
 
 
 def _header_authorizer(token: str):

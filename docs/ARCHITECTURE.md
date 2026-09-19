@@ -155,8 +155,11 @@ stdio = default local MCP transport
 Rules:
 
 - Tauri must use `8766`.
+- Desktop-bound stdio MCP (`run_mcp_server.py --data-root ...`) forwards tools, resources and prompts through authenticated `8766 /api/mcp/rpc`. It does not open SQLite/Qdrant or start another worker. The backend owns the shared gateway. Without `--data-root`, standalone development MCP remains available; optional MCP HTTP still uses 8767.
 - New product APIs must be added to the Local Control API, not the compatibility API.
 - `8765` must not receive new primary product responsibilities.
+
+Normal automatic-memory scans reuse the latest completed manifest when the authorized path, file signature, queue job and immutable raw object still match. Daily integrity scans recapture content. A default 10 GiB raw admission budget stops additional snapshot capture with an explicit error; it never deletes source material. Existing scan/event retention also retires old successful background scan work, retaining 200 orphaned successful summaries plus work attached to retained scans. Failed, active and unresolved owner work is preserved.
 
 ## 7. UI Architecture
 

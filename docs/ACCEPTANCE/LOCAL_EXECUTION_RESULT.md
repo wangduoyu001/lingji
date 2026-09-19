@@ -1,5 +1,24 @@
 # LingJi 本机执行结果回执
 
+## 2026-09-19 当前回执
+
+```yaml
+task_id: PERSONAL_MEMORY_PRACTICAL_OPTIMIZATION
+status: COMPLETED
+scope: BOUNDED_PERSONAL_BACKEND_OPTIMIZATION_AND_HYGIENE
+branch: codex/owner-source-intake-mac-repair
+baseline_commit: 264b14d3a3a3690b2ba768f2844660abd87f16f9
+tests: 229_passed
+installed_sidecar_sha256: a5d9eb4b4d463d75f4989968f8ec2e0aca35bd277ba0955ec507ac84b4b99127
+owner_experience: NOT_SIGNED_ON_BEHALF_OF_OWNER
+app: LEFT_OPEN
+remote_publication: NOT_REQUESTED_NOT_PERFORMED
+```
+
+本轮主人授权优化与清理；只完成相关行为测试、隔离后端、真实 MCP/API 与首页/记忆库复验，不冒充全产品验收。详细改动、实测、清理、回滚和剩余限制统一见 `docs/TEST_REPORTS/OWNER_SOURCE_INTAKE_MAC_REPAIR.md` 2026-09-19 最新章节。以下旧任务状态仅作历史记录，不覆盖本轮授权。
+
+---
+
 > 当前任务 `OWNER_SOURCE_INTAKE_MAC_REPAIR` 已激活；
 > 下方第 0 节是当前回执。上一候选技术证据保留，但主人体验已判为需要修复；
 > 本轮先完成 TDD/focused 证据，随后才进入新的隔离 Mac 验收。

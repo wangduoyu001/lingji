@@ -14,6 +14,49 @@ class IncrementalMemorySynchronizer:
     def __init__(self, database: MemoryDatabase):
         self.database = database
 
+    def sync_core(self, vault_root: Path | str, storage_root: Path | str,
+                  chunker: MarkdownChunker | None = None) -> dict[str, int]:
+        """Reconcile the small owner-approved Core directory, never other sources.
+
+        A nonempty chat index must not suppress recovery of a saved Core file.
+        This only changes rebuildable SQLite projections; the Vault is read-only.
+        Semantic chunks are picked up by the existing background backfill.
+        """
+        from src.indexer.index import PEMISIndex
+
+        root = Path(vault_root)
+        core = root / "03-Knowledge" / "Core-Memory"
+        counts = {"added": 0, "updated": 0, "removed": 0}
+        if not core.is_dir() or core.is_symlink() or (root / "03-Knowledge").is_symlink():
+            return counts
+        indexer = PEMISIndex(root, storage_root)
+        with self.database._connection() as connection:
+            current = {row["relative_path"]: dict(row) for row in connection.execute(
+                "SELECT memory_id,relative_path,content_hash FROM memory_documents "
+                "WHERE memory_tier='core' AND relative_path LIKE '03-Knowledge/Core-Memory/%'"
+            )}
+        seen = set()
+        for path in sorted(core.rglob("*.md")):
+            if path.is_symlink() or any((core / p).is_symlink() for p in path.relative_to(core).parents if p != Path('.')):
+                continue
+            entry = indexer._parse_md_file(path)
+            props = (entry or {}).get("properties") or {}
+            if not entry or props.get("memory_tier") != "core" or props.get("review_status") != "approved":
+                continue
+            relative = str(entry["relative_path"])
+            seen.add(relative)
+            old = current.get(relative)
+            if old and old["memory_id"] == entry["id"] and old["content_hash"] == entry["content_hash"]:
+                continue
+            if old and old["memory_id"] != entry["id"]:
+                self.database.remove_by_path(relative)
+            self.database.upsert_from_entry(entry, path, chunker)
+            counts["updated" if old else "added"] += 1
+        for relative in current.keys() - seen:
+            if self.database.remove_by_path(relative):
+                counts["removed"] += 1
+        return counts
+
     def sync(
         self,
         entries: Iterable[dict[str, Any]],

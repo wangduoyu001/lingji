@@ -91,3 +91,23 @@ def test_prune_is_idempotent(tmp_path: Path):
     assert first["scans"] == 0
     assert second["scans"] == 0
     assert second["events"] == 0
+
+
+def test_prune_retires_only_old_successful_scan_work(tmp_path):
+    from src.work.store import WorkStore
+    from src.work.models import WorkItem, ExecutionEvent, PendingAction
+    state = StateDatabase(tmp_path / 'state.db')
+    work = WorkStore(state)
+    for index in range(205):
+        ident = f'automatic-memory:retired-{index:03}'
+        work.create_work(WorkItem(work_id=ident, title='旧扫描', status='completed'))
+        work.append_event(ExecutionEvent(work_id=ident, event_type='scan.completed'))
+    for ident, status in [('automatic-memory:failed', 'failed'), ('automatic-memory:running', 'running'), ('owner-task', 'completed')]:
+        work.create_work(WorkItem(work_id=ident, title='保留', status=status))
+    work.add_pending_action(PendingAction(work_id='automatic-memory:retired-000', description='待主人处理'))
+    state.prune_automatic_memory_history()
+    with state._connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM work_items WHERE work_id LIKE 'automatic-memory:retired-%'").fetchone()[0] == 201
+        assert connection.execute('SELECT COUNT(*) FROM execution_events').fetchone()[0] == 201
+    for ident in ['automatic-memory:failed', 'automatic-memory:running', 'owner-task', 'automatic-memory:retired-000']:
+        assert work.get_work(ident) is not None

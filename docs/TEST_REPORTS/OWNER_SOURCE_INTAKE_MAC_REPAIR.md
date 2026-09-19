@@ -1,5 +1,54 @@
 # OWNER_SOURCE_INTAKE_MAC_REPAIR — Mac 技术验收报告
 
+## 2026-09-19 个人记忆实用优化（最新交付）
+
+**结论：本轮后端优化已实现、相关测试通过并安装到本机；应用保持打开。** 这是主人授权的个人使用优化，不是全产品/Windows/全部 UI 发布验收，主人最终体验未代签。下面较早版本的状态、哈希和限制仅为历史记录。
+
+### 版本与范围
+
+- 产品分支：`codex/owner-source-intake-mac-repair`；变更基线 `264b14d3a3a3690b2ba768f2844660abd87f16f9`。根目录旧验收分支及其用户改动未覆盖，`交接.md` 保留。
+- 安装位置：`/Applications/灵机.app`。最终 sidecar SHA-256：`a5d9eb4b4d463d75f4989968f8ec2e0aca35bd277ba0955ec507ac84b4b99127`。沿用已有 Desktop 主程序；完整应用重新签名，`codesign --verify --deep --strict` 通过。
+- 生产仍为 `~/LingJiAcceptance/osimr-7e7f0707/app-data/production`，没有因为目录名含 Acceptance 而删除或迁移。
+
+### 已实现并验证
+
+1. **索引读取**：健康 MemoryDatabase 初始化只读检查，不再无条件更新元数据、索取写锁。独立进程持有写事务时，另一个进程仍能打开索引。
+2. **共享 MCP**：带 `--data-root` 的 stdio 入口通过现有认证 Local Control API 调用共享后端，避免另开 Qdrant、数据库和 worker。21 个工具、3 个资源、1 个提示词保留；AI scope、输入校验、结构化输出和错误结果经过回归。无 `--data-root` 的开发入口和独立 HTTP 模式保留原行为。
+3. **Core**：启动时在 worker 开始前对账已批准 Core；已有聊天索引不再阻止恢复。更新、换 ID、撤回批准与重复启动均有测试，既有其他记录保留。Vault 正文未由本轮修复改写。无起止日期的已批准 active Core 按长期有效显示，与检索一致；普通缺证据候选仍为 unknown。
+4. **召回**：共享 Hybrid 检索在融合前采用原始语义分数下限 `0.55`，保留精确全文命中；NaN/无效响应仍如实标为降级。不是对最终 RRF 分数误设阈值，也没有宣称普适准确率。
+5. **扫描**：普通新一轮扫描复用上一完成扫描的 manifest，核对授权、文件签名、队列任务及 raw 是否存在；变化或 raw 丢失重新采集。每日 integrity 强制完整校验。复用仍经过现有租约和授权入队，不跳过撤权检查。
+6. **增长**：自动快照采集默认 `AUTOMATIC_MEMORY_RAW_MAX_BYTES=10737418240`（10 GiB）；达到预算停止新增复制并说明原因，已有原件/证据保留。该限制针对自动扫描快照，不是整个磁盘配额。每源 20 轮扫描、约 2,000 普通事件的既有保留规则继续使用；旧成功扫描工作记录保留 200 条加仍有扫描关联的记录，失败、活跃和未决工作保留。生产成功扫描工作记录实测由 1,043 降至 250（随后可能随扫描变化）。
+
+### 验证证据
+
+- RED：写锁阻塞、语义门槛缺失、非空索引漏 Core、重复扫描重复制、容量限制缺失均先复现。另补 Core 换 ID/撤回、无效语义诊断、无日期 Core 展示、历史清理范围回归。
+- 最终相关测试：**229 passed，2 个既有依赖弃用警告，14.99 秒**。没有删除/跳过失败断言；未跑无关全仓库、Windows 或前端构建门禁。
+- 隔离真实 sidecar + stdio MCP：独立 acceptance 根、端口 8876、虚构数据，初始化 0.222 秒，Core 1，正例命中、负例为空，工具/资源/提示词可列出；实例已结束。
+- 最终实际安装版：MCP 初始化 **0.282 秒**；Core 读取 **0.011 秒 / 1 条**；“灵机”搜索 **0.583 秒 / 5 条**；未知随机负例 **0.743 秒 / 0 条**。语义和全文通道都显示 available。均为单次样本，不是 P95 或召回率基准。
+- 最终实际 HTTP：health 0.430 秒，memory/status 0.568 秒，vector/status 0.845 秒，coverage 0.232 秒，cards-summary 3.676 秒；均 HTTP 200。修复前 vector/status 两次分别 15 秒、8 秒超时。
+- 本次状态快照：12,475 文档 / 16,954 chunks，Core 1；向量 16,197 / 16,954（95.535%），缺 757，仍为 degraded；采集继续运行，数量会变化。
+- 实际 UI 已打开首页与记忆库；最终首页显示“1 永久记忆”“向量化已启用”。没有遍历与本轮无关的所有按钮，没有虚构全页面验收。
+
+复现最终 focused：
+
+```text
+python3 -m pytest -q tests/test_personal_memory_runtime.py tests/test_mcp_control_bridge.py tests/test_mcp_server.py tests/test_p2_07_integration_wiring.py tests/test_codex_mcp_tools.py tests/test_mcp_extraction_submission.py tests/test_memory_retrieval.py tests/test_incremental_index_sync.py tests/test_semantic_runtime_wiring.py tests/test_automatic_memory_resume.py tests/test_automatic_memory_runtime.py tests/test_automatic_memory_runtime_flow.py tests/test_automatic_memory_scheduler.py tests/test_permanent_memory_gateway.py tests/test_status_snapshot_wiring.py tests/test_state_db_history_pruning.py tests/test_owner_memory_card_projector.py tests/test_owner_memory_card_api.py tests/test_owner_memory_corrections.py tests/test_owner_memory_detail_contract.py --tb=short -p no:cacheprovider
+```
+
+### 卫生清理、回滚与边界
+
+前序审计已清理约 5.82 GB、7 个过期本地分支、2 个旧 worktree，先保留恢复 bundle/必要补丁。本轮再清理自身构建中间产物、依赖缓存、重复候选应用和隔离测试数据，共 87 个路径、按文件分配块统计约 642 MB；两轮合计约 6.46 GB（不是磁盘可用空间差值）；明细与实测字节数保存在仓库 `.git/local-cleanup-recovery/20260919/optimization-cleanup.json`。仍有独有提交或用户未提交修改的工作树保留，不强删。
+
+旧安装应用和安装前两个 SQLite 备份留在 `~/LingJiBackups/personal-memory-20260919/`：应用为 `previous-app.zip`，数据库为 `.db.gz`，包含校验回执。SQLite backup 后 quick_check 均 ok；压缩后逐一验证内容哈希和应用 ZIP 完整性。该目录权限 0700，未提交到 Git。应用回退时先退出灵机、恢复 ZIP 中旧 app 到原安装位置，再打开；如需数据库回滚，必须先停对应实例并另存后续新增数据，本轮没有执行回滚。
+
+保留真实 Vault、raw、设置、20 个既有失败队列任务和失败工作证据；未为让界面全绿删除它们。未新增远程发布、PR、云端配置或模型，没有 push/merge。
+
+已知限制：仍用稳定的 15 分钟轮询，每日完整校验；未实现 JSONL 字节游标、raw 引用回收和真实高频问题集标定。失败历史不自动删除，因此尚未为全部数据类型设置绝对容量上限。个人使用先观察真实体验，再按实际瓶颈追加小改动，不扩展新平台或无关门禁。
+
+---
+
+以下为历史报告。
+
 > 报告日期：2026-09-05。执行者：ZCode（GLM）。主人确认：**待定**（App 保持打开中）。
 
 ## 1. Executive Verdict

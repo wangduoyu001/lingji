@@ -12,6 +12,8 @@ from src.control.settings_api import register_settings_governance_routes
 from src.automatic_memory.runtime import AutomaticMemoryRuntime
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.storage import StateDatabase
+from src.gateway.bootstrap import build_memory_gateway
+from src.control.settings_catalog import CompleteOwnerSettingsRegistry
 
 
 def load_or_create_token(path: Path) -> str:
@@ -42,12 +44,17 @@ def main() -> None:
     token_path = settings.storage_path / settings.control_api_token_file
     token = load_or_create_token(token_path)
     state_db = StateDatabase(settings.state_db_path)
+    # Recover approved Core before the importer starts writing. The UI and
+    # desktop MCP share this gateway and the same local Qdrant client.
+    runtime_values = CompleteOwnerSettingsRegistry(settings, state_db=state_db).snapshot().get("values", {})
+    gateway = build_memory_gateway(settings, runtime_values=runtime_values)
     pipeline = build_extraction_pipeline(settings)
     service = GovernedLocalControlService(
         settings,
         state_db=state_db,
         pipeline=pipeline,
         queue=pipeline.queue,
+        memory_gateway=gateway,
     )
     runtime = AutomaticMemoryRuntime(
         state_db=state_db,

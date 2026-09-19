@@ -1087,11 +1087,33 @@ class StateDatabase:
                 (int(keep_events),),
             )
             pruned_events = connection.execute("SELECT changes()").fetchone()[0]
+            pruned_work = 0
+            tables = {r[0] for r in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            work_tables = {'work_items', 'execution_events', 'work_outcomes',
+                           'work_next_actions', 'pending_actions', 'work_failures'}
+            if work_tables <= tables:
+                # Successful background checks are operational history, not
+                # owner work or permanent memory. Retain failures and decisions.
+                retired = connection.execute("""
+                    SELECT work_id FROM work_items w
+                    WHERE w.work_id LIKE 'automatic-memory:%' AND w.status='completed'
+                      AND NOT EXISTS (SELECT 1 FROM automatic_memory_scans s
+                                      WHERE w.work_id='automatic-memory:' || s.scan_id)
+                      AND NOT EXISTS (SELECT 1 FROM pending_actions p
+                                      WHERE p.work_id=w.work_id AND p.resolved=0)
+                    ORDER BY w.updated_at DESC, w.rowid DESC LIMIT -1 OFFSET 200
+                """).fetchall()
+                ids = [(r[0],) for r in retired]
+                for table in sorted(work_tables - {'work_items'}):
+                    connection.executemany(f'DELETE FROM {table} WHERE work_id=?', ids)
+                connection.executemany('DELETE FROM work_items WHERE work_id=?', ids)
+                pruned_work = len(ids)
             connection.execute("COMMIT")
         return {
             "scans": pruned_scans,
             "scan_items": pruned_items,
             "events": pruned_events,
+            "successful_scan_work": pruned_work,
         }
 
     def register_automatic_memory_source_atomic(

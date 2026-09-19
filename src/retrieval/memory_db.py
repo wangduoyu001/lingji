@@ -47,6 +47,22 @@ class MemoryDatabase:
             connection.close()
 
     def _initialize(self) -> None:
+        # Opening a healthy index is a read operation. In particular, MCP and
+        # status readers must not contend with an importer's write transaction.
+        with self._connection() as connection:
+            try:
+                version = self._get_meta(connection, "schema_version")
+                fts = connection.execute(
+                    "SELECT sql FROM sqlite_master WHERE name='memory_fts' AND type='table'"
+                ).fetchone()
+                connection.execute("SELECT memory_id, memory_tier, pin_to_context FROM memory_documents LIMIT 0")
+                connection.execute("SELECT chunk_id, content_hash FROM memory_chunks LIMIT 0")
+                if version == SCHEMA_VERSION and fts is not None:
+                    self._fts_tokenizer = "trigram" if "trigram" in str(fts["sql"]).lower() else "unicode61"
+                    return
+            except sqlite3.OperationalError:
+                # A new/old store still uses the normal additive initializer.
+                pass
         with self._lock, self._connection() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
             connection.execute("PRAGMA synchronous = NORMAL")

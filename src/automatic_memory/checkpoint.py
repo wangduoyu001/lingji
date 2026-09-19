@@ -15,7 +15,7 @@ from src.storage import StateDatabase
 from src.storage.state_db import LeaseLostError
 
 from .models import ScanRun
-from .snapshot import ConsistentSnapshot
+from .snapshot import ConsistentSnapshot, SnapshotResult
 
 
 @dataclass(frozen=True)
@@ -123,12 +123,14 @@ class SnapshotJobRunner:
         before_queue: Callable[[], None] | None = None,
         after_lease: Callable[[], None] | None = None,
         lease_ttl_seconds: float = 30.0,
+        raw_max_bytes: int = 10 * 1024 ** 3,
     ):
         if snapshot is None:
             snapshot = snapshotter
         if snapshot is None or queue is None or state_db is None:
             raise TypeError("snapshot, queue and state_db are required")
         self.snapshot = snapshot
+        self.raw_max_bytes = max(int(raw_max_bytes), 1)
         self.queue = queue
         self.state_db = state_db if isinstance(state_db, StateDatabase) else StateDatabase(state_db)
         self.path_provider = path_provider
@@ -264,6 +266,8 @@ class SnapshotJobRunner:
         self,
         scan_id: str,
         crash_at: Literal["none", "30%", "70%", "after-lease"] = "none",
+        *,
+        force_capture: bool = False,
     ) -> ScanRun:
         if crash_at not in {"none", "30%", "70%", "after-lease"}:
             raise ValueError(f"unsupported crash_at: {crash_at}")
@@ -297,6 +301,9 @@ class SnapshotJobRunner:
             return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
 
         paths = self._paths(row, source)
+        previous = {} if force_capture else self._previous_manifest(source_id, scan_id)
+        raw_used = sum(p.stat().st_size for p in self.snapshot.raw_root.iterdir()
+                       if p.is_file() and not p.is_symlink())
         total = len(paths)
         token = self.checkpoints.load(scan_id)
         cursor = token.cursor if token else ""
@@ -375,13 +382,21 @@ class SnapshotJobRunner:
         try:
             for path in paths:
                 self._assert_heartbeat()
-                result = self.snapshot.capture(
-                    source_id,
-                    path,
-                    scan_id=scan_id,
-                    lease_id=lease_id,
-                    lease_guard=self._assert_heartbeat,
-                )
+                relative = self._relative(source, path)
+                result = self._reuse_snapshot(source_id, path, previous.get(relative))
+                if result is None:
+                    size = path.stat().st_size
+                    if raw_used + size > self.raw_max_bytes:
+                        raise RuntimeError(
+                            f"raw storage limit reached ({raw_used}/{self.raw_max_bytes} bytes); "
+                            "existing evidence preserved; free space or raise automatic_memory_raw_max_bytes"
+                        )
+                    result = self.snapshot.capture(
+                        source_id, path, scan_id=scan_id, lease_id=lease_id,
+                        lease_guard=self._assert_heartbeat,
+                    )
+                    # Conservative within-scan accounting also bounds staging space.
+                    raw_used += result.stat_after.size
                 if not result.stable:
                     raise RuntimeError(
                         f"source changed during snapshot: {result.relative_path}"
@@ -488,6 +503,42 @@ class SnapshotJobRunner:
             return self._scan(self.state_db.get_automatic_memory_scan(scan_id))
         final_row = self.state_db.get_automatic_memory_scan(scan_id) or finalized
         return self._scan(final_row)
+
+    def _previous_manifest(self, source_id: str, scan_id: str) -> dict[str, Any]:
+        scans = self.state_db.list_automatic_memory_scans(source_id)
+        completed = [s for s in scans if s['scan_id'] != scan_id and s['status'] == 'completed']
+        if not completed:
+            return {}
+        latest = completed[0]  # StateDatabase orders by timestamp, then insertion order.
+        return {i['relative_path']: i for i in self.state_db.list_automatic_memory_scan_items(latest['scan_id'])}
+
+    def _reuse_snapshot(self, source_id: str, path: Path, item: dict | None) -> SnapshotResult | None:
+        if not item or not str(item.get('status', '')).startswith('job:'):
+            return None
+        # Reuse never bypasses authorization, path checks, or queue admission.
+        _, relative = self.snapshot._authorized_path(source_id, path)
+        before = self.snapshot._file_stat(path)
+        if not self._sentinel_matches(item['sentinel'], self._path_sentinel(path)):
+            return None
+        try:
+            job = self.queue.get(item['status'].split(':')[1])
+        except (KeyError, LookupError):
+            return None
+        payload = job.get('payload') or {}
+        digest = str(payload.get('sha256') or '')
+        if (job.get('status') not in {'queued', 'running', 'completed'}
+                or payload.get('source_id') != source_id
+                or payload.get('relative_path') != relative
+                or len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest)
+                or payload.get('raw_id') != digest):
+            return None
+        raw = self.snapshot.raw_root / digest
+        if raw.is_symlink() or not raw.is_file() or raw.stat().st_size != before.size:
+            return None
+        after = self.snapshot._file_stat(path)
+        if before != after:
+            return None
+        return SnapshotResult(source_id, relative, digest, digest, before, after, True, 0)
 
     def _pause(self, scan_id: str, token: ResumeToken) -> ScanRun:
         self._stop_heartbeat()

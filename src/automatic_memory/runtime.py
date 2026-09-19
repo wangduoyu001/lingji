@@ -99,6 +99,7 @@ class AutomaticMemoryRuntime:
                 # File enumeration is intentionally not part of Task 2.
                 # Task 3 supplies the authorized path policy.
                 path_provider=path_provider or self._authorized_paths,
+                raw_max_bytes=int(getattr(settings, "automatic_memory_raw_max_bytes", 10 * 1024 ** 3)),
             )
             configured_event_watcher = getattr(
                 settings, "automatic_memory_event_watcher_enabled", None
@@ -592,7 +593,10 @@ class AutomaticMemoryRuntime:
             work = self.work_store.create_work(WorkItem(work_id=work_id, title=title, source_id=source_id, status="accepted", owner_approved=True))
             self.work_store.append_event(ExecutionEvent(work_id=work_id, event_id=f"scan:{scan_id}:started", event_type="scan.started", detail={"scan_id": scan_id, "source_id": source_id, "reason": reason}))
         try:
-            result = self.runner.run(scan_id)
+            if reason == "integrity" and isinstance(self.runner, SnapshotJobRunner):
+                result = self.runner.run(scan_id, force_capture=True)
+            else:
+                result = self.runner.run(scan_id)
             self._scan_reports[scan_id] = result
             status = getattr(result, "status", None) or (result.get("status") if isinstance(result, dict) else None)
             self.work_store.append_event(ExecutionEvent(work_id=work_id, event_id=f"scan:{scan_id}:{status or 'progress'}", event_type="scan.completed" if status == "completed" else "scan.progress", detail={"scan_id": scan_id, "status": status, "progress": getattr(result, "progress", None)}))

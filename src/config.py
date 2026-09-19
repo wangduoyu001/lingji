@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     automatic_memory_event_watcher_enabled: bool | None = None
     automatic_memory_reconciliation_seconds: int = Field(default=900, ge=60)
     automatic_memory_integrity_seconds: int = Field(default=86400, ge=3600)
+    automatic_memory_raw_max_bytes: int = Field(default=10 * 1024 ** 3, ge=1)
     manual_command_interval_minutes: int = 2
     extraction_request_interval_minutes: int = 1
 
@@ -126,6 +127,8 @@ class Settings(BaseSettings):
     memory_chunk_overlap_chars: int = 180
     memory_search_cache_size: int = 256
     memory_search_cache_ttl_seconds: float = 120.0
+    # Raw semantic score before RRF; lexical matches are never gated by this.
+    memory_semantic_min_score: float = Field(default=0.55, ge=0.0, le=1.0)
     memory_default_context_chars: int = 12000
     memory_index_check_hours: float = 6.0
 

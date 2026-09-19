@@ -59,6 +59,42 @@ def _scan_fixture(tmp_path: Path, count: int = 10):
     return state, registry, source, scan, root, snapshot, queue
 
 
+def test_new_scan_reuses_unchanged_raw_and_recaptures_changes(tmp_path, monkeypatch):
+    state, registry, source, scan, root, snapshot, queue = _scan_fixture(tmp_path, count=1)
+    runner = SnapshotJobRunner(snapshot, queue, state, path_provider=lambda *_: root.glob('*.txt'))
+    assert runner.run(scan.scan_id).status == 'completed'
+    captured = []
+    capture = snapshot.capture
+    def counted(*args, **kwargs):
+        captured.append(args[1])
+        return capture(*args, **kwargs)
+    monkeypatch.setattr(snapshot, 'capture', counted)
+    assert runner.run(registry.start_scan(source.source_id).scan_id).status == 'completed'
+    assert captured == [], 'unchanged files should not be recopied and hashed each scan'
+    (root / 'item-00.txt').write_text('updated item', encoding='utf-8')
+    assert runner.run(registry.start_scan(source.source_id).scan_id).status == 'completed'
+    assert len(captured) == 1
+    for raw in snapshot.raw_root.iterdir():
+        if raw.is_file():
+            raw.unlink()
+    assert runner.run(registry.start_scan(source.source_id).scan_id).status == 'completed'
+    assert len(captured) == 2, 'a missing raw object must be recovered'
+    assert runner.run(registry.start_scan(source.source_id).scan_id, force_capture=True).status == 'completed'
+    assert len(captured) == 3, 'integrity scans must verify content even when metadata is unchanged'
+
+
+def test_raw_budget_stops_new_capture_without_deleting_evidence(tmp_path):
+    state, _, _, scan, root, snapshot, queue = _scan_fixture(tmp_path, count=1)
+    evidence = snapshot.raw_root / ('a' * 64)
+    evidence.write_bytes(b'preserved')
+    runner = SnapshotJobRunner(snapshot, queue, state, path_provider=lambda *_: root.glob('*.txt'), raw_max_bytes=10)
+    result = runner.run(scan.scan_id)
+    assert result.status == 'failed'
+    assert 'raw storage limit' in result.last_error
+    assert evidence.read_bytes() == b'preserved'
+    assert len(list(snapshot.raw_root.iterdir())) == 1
+
+
 def test_active_owned_snapshot_temp_survives_second_snapshot_constructor(tmp_path: Path):
     state, _, _, scan, _, snapshot, _ = _scan_fixture(tmp_path, count=1)
     lease_id = "active-copy-lease"

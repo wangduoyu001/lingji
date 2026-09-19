@@ -126,6 +126,7 @@ def build_memory_gateway(
         source_authority=SourceAuthorityResolver(state_db),
         cache_size=settings.memory_search_cache_size,
         cache_ttl_seconds=settings.memory_search_cache_ttl_seconds,
+        semantic_min_score=float(values.get("memory_semantic_min_score", getattr(settings, "memory_semantic_min_score", 0.55))),
     )
     coordinator = MemoryIndexCoordinator(
         memory_db,
@@ -177,6 +178,10 @@ def build_memory_gateway(
         indexer.build_index()
         gateway.rebuild(indexer.get_all(), vault_path, chunker)
     else:
+        if rebuild_if_empty:
+            from src.retrieval.incremental_sync import IncrementalMemorySynchronizer
+
+            IncrementalMemorySynchronizer(memory_db).sync_core(vault_path, storage_path, chunker)
         gateway.publish_statistics()
     return gateway
 

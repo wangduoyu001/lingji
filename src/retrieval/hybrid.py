@@ -74,12 +74,14 @@ class HybridRetriever:
         cache_ttl_seconds: float = 120.0,
         rrf_k: int = 60,
         source_authority: SourceAuthorityResolver | None = None,
+        semantic_min_score: float = 0.0,
     ):
         self.database = database
         self.semantic_provider = semantic_provider
         self.cache_size = max(int(cache_size), 0)
         self.cache_ttl_seconds = max(float(cache_ttl_seconds), 0.0)
         self.rrf_k = max(int(rrf_k), 1)
+        self.semantic_min_score = min(max(float(semantic_min_score), 0.0), 1.0)
         # Direct retrievers have no authority context and therefore fail closed
         # for automatic structured evidence. Formal composition injects the
         # StateDB-backed resolver.
@@ -325,6 +327,7 @@ class HybridRetriever:
         except Exception:
             return [], {"semantic": "degraded", "reason_code": "semantic_query_failed"}
         normalized = []
+        valid_scores = 0
         for item in results or []:
             if not isinstance(item, dict):
                 continue
@@ -332,15 +335,25 @@ class HybridRetriever:
             memory_id = str(item.get("memory_id") or "")
             if not chunk_id and not memory_id:
                 continue
+            raw_score = item.get("score", item.get("semantic_score", 0.0))
+            try:
+                raw_score = float(raw_score)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(raw_score):
+                continue
+            valid_scores += 1
+            if raw_score < self.semantic_min_score:
+                continue
             normalized.append(
                 {
                     **item,
                     "chunk_id": chunk_id,
                     "memory_id": memory_id,
-                    "semantic_score": self._clamp_score(item.get("score", item.get("semantic_score", 0.0))),
+                    "semantic_score": self._clamp_score(raw_score),
                 }
             )
-        if not normalized and results:
+        if not normalized and results and not valid_scores:
             return [], {"semantic": "degraded", "reason_code": "semantic_results_invalid"}
         return normalized, {"semantic": "available", "reason_code": "none"}
 
