@@ -125,9 +125,12 @@ def test_desktop_uses_shared_polling_and_shadow_dashboard_without_execution_cont
     assert 'page === "auto_review"' in app_pages
     assert 'page === "attention"' in app_pages
     assert "ADVANCED_NAVIGATION" in diagnostics
-    assert "pending_review_count" in attention
+    assert "/api/work/pending-actions" in attention
+    assert "pending_actions" in attention
+    assert "PendingAction" in attention
+    assert "当前没有需要主人决定的事项。" in attention
+    assert "pending_review_count" not in attention
     assert "/api/auto-review/metrics" not in attention
-    assert "SHADOW 决策目前是审计历史" in attention
     assert "usePollingResource" in dashboard
     assert "AbortController" in polling
     assert "inFlightRef" in polling

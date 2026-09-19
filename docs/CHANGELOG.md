@@ -2,6 +2,18 @@
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
 
+## 2026-09-19
+
+### Repository deep cleanup
+
+- 审计默认分支文档、156 个远程分支和 5 个开放 PR。
+- 从默认分支清理 54 份已被当前权威替代的阶段计划、旧 Draft PR 报告、旧机器环境审计和平行架构说明；历史内容仍可从 Git 历史追溯。
+- 保留 `docs/TEST_REPORTS/` 作为测试与验收证据库，避免把审计证据与当前权威混在一起。
+- 文档当前权威继续收口到 `AGENTS.md`、`docs/ARCHITECTURE.md`、`docs/PROJECT_STATUS.md`、`docs/MODULES/CODE_MAP.md`、`docs/DEVELOPMENT_RULES.md` 与 `docs/ACCEPTANCE/`。
+- 关闭已被当前 Phase 1 主线取代或已明确失败/完成使命的旧 Draft PR；当前 Phase 1 Draft PR #106 保留。
+- 修复两条已过期的 UI 测试合同：Attention 改为验证正式 `/api/work/pending-actions` / `PendingAction`，Activity smoke 改为验证当前 Work Fact API 与真实 5000ms 轮询配置；未删除测试或降低断言。
+- 远程分支物理删除需要 Git ref 删除权限；本次报告给出可删除分类，禁止误删 master、#106 head 和仍被权威验收引用的报告分支。
+
 ## 2026-07-26
 
 ### P2-11B Packaged Python runtime Sidecar manager
@@ -160,8 +172,8 @@
 - 正式生产 `bge-m3` Collection 构建和生产模型切换仍未执行。
 - 最新本机测试汇总记录为 `223 passed, 0 failed, 8 skipped`。
 - 记录测试质量债务：旧 PySide6 桌面测试按依赖跳过；启动文件测试仍需改成 Semantic Startup Contract Test；测试数量差异尚未核对。
-- 新增 `docs/FINAL_P2_MERGE_REPORT.md`。
-- 新增 `docs/DOCUMENTATION_MAINTENANCE.md`，建立 Documentation Contract、明确更新时间点、状态词、术语解释和低积分执行规则。
+- P2 合并报告的历史细节保留在 Git 历史；当前状态统一以 `docs/PROJECT_STATUS.md` 为准。
+- 当时建立 Documentation Contract；其长期规则现已收口到 `AGENTS.md` 与 `docs/DEVELOPMENT_RULES.md`，旧单独维护文档已清理。
 - 刷新 `docs/PROJECT_STATUS.md` 和 P2-01/P2-02 测试报告，使文档与正式分支状态一致。
 
 ### P1 统一语义记忆

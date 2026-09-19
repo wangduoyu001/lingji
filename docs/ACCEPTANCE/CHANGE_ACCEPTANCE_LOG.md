@@ -51,6 +51,60 @@
 
 ---
 
+## 2026-09-19 · PR #107 · Repository deep cleanup and stale Desktop contract repair
+
+- 产品分支：`chore/repository-deep-cleanup-20260919`
+- 产品 Commit：`pending`
+- 影响模块：仓库文档治理、Desktop Work Fact 测试合同、AppPages → AttentionPage TypeScript props 合同
+- 风险等级：P2
+- 用户可感知变化：无新功能；清理默认分支中过期文档，关闭过期 Draft PR，并修复会阻断现有 Desktop 构建的废弃 Attention props。
+- 数据或安全边界变化：无；不修改 Vault、数据库、Qdrant、Runtime、Memory authority、认证或 Production/Acceptance 数据。
+
+### 新增或修改的自动验收
+
+- [ ] `tests/test_p2_08_p2_09_integration.py`：Attention 必须读取 canonical `/api/work/pending-actions` 并使用 `PendingAction`，不得回退到聚合 `pending_review_count`。
+- [ ] `desktop/lingji-control/scripts/observation-first-ui-smoke.mjs`：Activity/Attention 必须验证当前 Work Fact API、真实 polling interval、empty/error state。
+- [ ] Desktop TypeScript/Vite build：`AppPages` 不得向 `AttentionPage` 传已删除的 `overview/onNavigate` props。
+- [ ] `python scripts/check_acceptance_sync.py` / GitHub `acceptance-doc-sync`。
+- [ ] GitHub `tests`、`P0 Windows Gate`、`macOS Desktop Gate`、`Windows Desktop Release Baseline` 按当前 PR 触发条件执行。
+
+### 新增或修改的真机验收
+
+- [x] 不要求新的主人真机验收；本变更不改变主人操作流程或产品数据，只恢复当前代码合同与测试/构建的一致性。
+
+### 主人肉眼确认
+
+- [x] 不需要新增肉眼确认；无视觉或交互设计变化。
+
+### 回归项
+
+- [ ] Attention 只显示真实 unresolved `PendingAction`，不得由 Auto Review 累计指标或其他聚合状态伪造主人待办。
+- [ ] Activity 继续读取 `/api/work/current` 并使用共享 polling hook。
+- [ ] 不删除测试、不降低断言、不把失败改成 skip。
+- [ ] 文档清理不得删除当前架构、项目状态、代码地图、Acceptance 权威或 `docs/TEST_REPORTS/` 证据库。
+
+### 清理与回滚
+
+- 临时数据前缀：无。
+- 覆盖安装或迁移方式：不涉及安装或迁移。
+- 临时备份删除条件：无。
+- 测试数据清理方式：无测试数据写入。
+- 回滚：revert PR #107 的清理/合同修复提交；被删除文档均可从 `master@ced1128e50d3b3758585573042ea6bcc6f315384` 及更早 Git 历史恢复。
+
+### 不在范围
+
+- 不推进 Phase 1 产品节点。
+- 不修改 Work Fact/Memory/Capture Runtime 行为。
+- 不物理删除当前连接器不支持删除的远程 Git refs。
+- 不改造 UI 信息架构。
+
+### 最终报告
+
+- 报告路径：`docs/TEST_REPORTS/REPOSITORY_DEEP_CLEANUP.md`
+- 清理 PR：`#107`
+
+---
+
 ## 2026-08-01 · PR #60 后续 · 代码发布验证临时目录安全清理修复
 
 - 产品分支：`fix/cleanup-code-validation-workspace`

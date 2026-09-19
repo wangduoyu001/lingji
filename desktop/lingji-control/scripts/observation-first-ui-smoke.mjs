@@ -84,18 +84,21 @@ assert.equal(overview.includes("健康检查"), false, "Detailed health checks b
 assert.equal(overview.includes("本地 Provider"), false, "Provider internals belong in diagnostics");
 assert.equal(overview.includes("定时任务"), false, "Scheduler internals belong in diagnostics");
 
-assert.match(activity, /每 4 秒自动更新/);
-assert.match(activity, /当前任务/);
-assert.match(activity, /最近结果/);
+assert.match(activity, /\/api\/work\/current/);
+assert.match(activity, /intervalMs:\s*5000/);
+assert.match(activity, /当前工作事实/);
+assert.match(activity, /执行事件/);
 assert.equal(activity.includes("刷新看板"), false, "Activity page must not expose manual refresh");
 
-assert.match(attention, /系统不能自行决定/);
-assert.match(attention, /暂时不需要你处理/);
-assert.match(attention, /部分待办状态暂时未知/);
-assert.match(attention, /不会把未知状态显示成一切正常/);
-assert.match(attention, /vector-rebuild/);
-assert.match(attention, /pending_review_count/);
-assert.match(attention, /SHADOW 决策目前是审计历史/);
+assert.match(attention, /\/api\/work\/pending-actions/);
+assert.match(attention, /PendingAction/);
+assert.match(attention, /pending_actions/);
+assert.match(attention, /intervalMs:\s*8000/);
+assert.match(attention, /需要主人处理/);
+assert.match(attention, /当前没有需要主人决定的事项/);
+assert.match(attention, /待处理事项暂时不可用/);
+assert.equal(attention.includes("pending_review_count"), false, "Attention must not derive owner tasks from aggregate review counts");
+assert.equal(attention.includes("vector-rebuild"), false, "Attention must only render canonical PendingAction objects");
 assert.equal(attention.includes("/api/auto-review/metrics"), false, "Cumulative SHADOW metrics must not masquerade as unresolved owner tasks");
 assert.equal(attention.includes("catch {\n      return { current: null }"), false, "Attention polling must not swallow unknown-state failures");
 
@@ -103,9 +106,13 @@ assert.match(diagnostics, /日常不需要进入这里/);
 assert.match(diagnostics, /<details/);
 assert.match(diagnostics, /ADVANCED_NAVIGATION/);
 
-assert.match(currentWork, /intervalMs: 5_000/);
-assert.match(currentWork, /系统当前空闲/);
-assert.match(currentWork, /处理进度/);
+assert.match(currentWork, /\/api\/work\/current/);
+assert.match(currentWork, /intervalMs:\s*(?:5_000|5000)/);
+assert.match(currentWork, /OWNER WORK FACT/);
+assert.match(currentWork, /当前没有进行中的工作/);
+for (const field of ["任务", "事件", "结果", "下一步"]) {
+  assert.ok(currentWork.includes(field), `Current work projection is missing ${field}`);
+}
 
 for (const cssToken of [
   ".observation-hero",
