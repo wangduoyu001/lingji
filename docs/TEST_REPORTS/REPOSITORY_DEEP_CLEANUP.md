@@ -225,6 +225,8 @@ The cleanup therefore updates those tests without weakening coverage: assertions
 
 The next CI pass also exposed a stale TypeScript call-site contract: `AppPages` still passed removed `overview/onNavigate` props to `AttentionPage`, whose current contract is only `{ api, active }`. PR #107 removes only those obsolete props. This is a compile-contract repair; it does not change Attention runtime behavior or data authority.
 
+A further Desktop smoke rerun exposed one formatting-only stale assertion: it required the source literal `5_000` while `CurrentWorkPanel` uses the behaviorally identical `5000`. The smoke now accepts either numeric-literal formatting while still requiring an exact 5000 ms polling interval.
+
 No Runtime, Vault, database, Qdrant, Memory authority, or owner-data code is changed.
 
 Final validation must be read from CI on the updated cleanup head; no unexecuted result may be reported as PASS.

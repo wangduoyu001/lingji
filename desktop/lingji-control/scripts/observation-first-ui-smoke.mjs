@@ -106,7 +106,7 @@ assert.match(diagnostics, /日常不需要进入这里/);
 assert.match(diagnostics, /<details/);
 assert.match(diagnostics, /ADVANCED_NAVIGATION/);
 
-assert.match(currentWork, /intervalMs: 5_000/);
+assert.match(currentWork, /intervalMs:\s*(?:5_000|5000)/);
 assert.match(currentWork, /系统当前空闲/);
 assert.match(currentWork, /处理进度/);
 
