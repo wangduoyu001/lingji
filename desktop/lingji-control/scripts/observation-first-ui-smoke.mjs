@@ -106,9 +106,13 @@ assert.match(diagnostics, /日常不需要进入这里/);
 assert.match(diagnostics, /<details/);
 assert.match(diagnostics, /ADVANCED_NAVIGATION/);
 
+assert.match(currentWork, /\/api\/work\/current/);
 assert.match(currentWork, /intervalMs:\s*(?:5_000|5000)/);
-assert.match(currentWork, /系统当前空闲/);
-assert.match(currentWork, /处理进度/);
+assert.match(currentWork, /OWNER WORK FACT/);
+assert.match(currentWork, /当前没有进行中的工作/);
+for (const field of ["任务", "事件", "结果", "下一步"]) {
+  assert.ok(currentWork.includes(field), `Current work projection is missing ${field}`);
+}
 
 for (const cssToken of [
   ".observation-hero",

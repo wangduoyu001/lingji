@@ -225,7 +225,7 @@ The cleanup therefore updates those tests without weakening coverage: assertions
 
 The next CI pass also exposed a stale TypeScript call-site contract: `AppPages` still passed removed `overview/onNavigate` props to `AttentionPage`, whose current contract is only `{ api, active }`. PR #107 removes only those obsolete props. This is a compile-contract repair; it does not change Attention runtime behavior or data authority.
 
-A further Desktop smoke rerun exposed one formatting-only stale assertion: it required the source literal `5_000` while `CurrentWorkPanel` uses the behaviorally identical `5000`. The smoke now accepts either numeric-literal formatting while still requiring an exact 5000 ms polling interval.
+A further Desktop smoke rerun exposed more presentation-coupled assertions in the same historical smoke: it required the source literal `5_000` and the obsolete copy “系统当前空闲 / 处理进度”. `CurrentWorkPanel` now uses `5000`, the empty state “当前没有进行中的工作”, and the canonical Work Fact projection fields “任务 / 事件 / 结果 / 下一步”. The smoke now validates those current contracts and the exact 5000 ms interval instead of obsolete presentation strings.
 
 No Runtime, Vault, database, Qdrant, Memory authority, or owner-data code is changed.
 
