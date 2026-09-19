@@ -11,6 +11,7 @@
 - 保留 `docs/TEST_REPORTS/` 作为测试与验收证据库，避免把审计证据与当前权威混在一起。
 - 文档当前权威继续收口到 `AGENTS.md`、`docs/ARCHITECTURE.md`、`docs/PROJECT_STATUS.md`、`docs/MODULES/CODE_MAP.md`、`docs/DEVELOPMENT_RULES.md` 与 `docs/ACCEPTANCE/`。
 - 关闭已被当前 Phase 1 主线取代或已明确失败/完成使命的旧 Draft PR；当前 Phase 1 Draft PR #106 保留。
+- 修复两条已过期的 UI 测试合同：Attention 改为验证正式 `/api/work/pending-actions` / `PendingAction`，Activity smoke 改为验证当前 Work Fact API 与真实 5000ms 轮询配置；未删除测试或降低断言。
 - 远程分支物理删除需要 Git ref 删除权限；本次报告给出可删除分类，禁止误删 master、#106 head 和仍被权威验收引用的报告分支。
 
 ## 2026-07-26

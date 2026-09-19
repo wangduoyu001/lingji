@@ -208,13 +208,22 @@ PR #106 is based on an older master and may still contain documents removed by t
 
 ## 7. Validation
 
-This commit changes documentation only. Required checks:
+Initial documentation commit `77740d8ee725fb2ff7e51cfd9cb9f8587d7f095f` changed only `docs/**` (57 files total: 54 deletions + 3 documentation updates).
 
-- verify all deleted paths are absent on cleanup branch;
-- verify authority files remain present;
-- verify `docs/CHANGELOG.md` and `docs/DEVELOPMENT_RULES.md` render correctly;
-- run `python scripts/check_acceptance_sync.py` through CI/available validation;
-- no product/runtime tests are claimed as executed merely because documentation changed.
+CI results on that exact commit:
+
+- `local-execution-handoff`: PASS
+- `acceptance-doc-sync`: PASS
+- MCP smoke: PASS
+- browser capture smoke: PASS
+- Obsidian plugin smoke: PASS
+- Python 3.11 / 3.12 and Desktop smoke exposed two pre-existing stale UI-test contracts in unchanged files:
+  - integration test still required `pending_review_count` / SHADOW copy in Attention even though the canonical page now reads `/api/work/pending-actions`;
+  - observation-first smoke still required the old literal “每 4 秒自动更新” while Activity now uses the shared polling hook at 5000 ms.
+
+The cleanup therefore updates those tests without weakening coverage: assertions now bind to the canonical Work Fact API, `PendingAction` DTO, explicit empty/error states, and actual polling intervals. Product/runtime source files remain unchanged.
+
+Final validation must be read from CI on the updated cleanup head; no unexecuted result may be reported as PASS.
 
 ## 8. Rollback
 
