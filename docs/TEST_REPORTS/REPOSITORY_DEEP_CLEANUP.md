@@ -221,7 +221,11 @@ CI results on that exact commit:
   - integration test still required `pending_review_count` / SHADOW copy in Attention even though the canonical page now reads `/api/work/pending-actions`;
   - observation-first smoke still required the old literal “每 4 秒自动更新” while Activity now uses the shared polling hook at 5000 ms.
 
-The cleanup therefore updates those tests without weakening coverage: assertions now bind to the canonical Work Fact API, `PendingAction` DTO, explicit empty/error states, and actual polling intervals. Product/runtime source files remain unchanged.
+The cleanup therefore updates those tests without weakening coverage: assertions now bind to the canonical Work Fact API, `PendingAction` DTO, explicit empty/error states, and actual polling intervals.
+
+The next CI pass also exposed a stale TypeScript call-site contract: `AppPages` still passed removed `overview/onNavigate` props to `AttentionPage`, whose current contract is only `{ api, active }`. PR #107 removes only those obsolete props. This is a compile-contract repair; it does not change Attention runtime behavior or data authority.
+
+No Runtime, Vault, database, Qdrant, Memory authority, or owner-data code is changed.
 
 Final validation must be read from CI on the updated cleanup head; no unexecuted result may be reported as PASS.
 
