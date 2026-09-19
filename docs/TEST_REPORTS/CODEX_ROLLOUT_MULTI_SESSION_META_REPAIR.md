@@ -35,6 +35,10 @@ python3 -m pytest tests/ -k "rollout or extraction or automatic_memory" -q   # 4
 1. **首次完整备份**：`POST /api/backups` profile=full include_raw=true → LJ-BACKUP-20260919-200242-30c483d6.zip，559 文件 / 2.39GB，SHA256 校验 559/559 通过。消除"零备份"。
 2. **向量补齐**：`POST /api/observability/vectorize` 循环 17 轮（每轮 200 条，约 27 秒/轮，共约 8 分钟）→ coverage 83.8% → **100%**（19329/19329，missing=0）。
 3. **Obsidian 通道恢复**：根因=CLI 在 `/Applications/Obsidian.app/Contents/MacOS/obsidian-cli`（官方自带，不在 PATH）且 Obsidian 应用未运行。已 `PATCH /api/settings` 显式配置 `obsidian_cli_path` 并启动 Obsidian 应用 → `/api/obsidian/status` state=healthy、issues=[]。
+4. **sidecar 重打包装机（22:05–22:10）**：`scripts/build_macos_sidecar.sh`（本机 python3 + PyInstaller 6.21.0，onedir 182 文件）构建含本修复的新二进制（SHA-256 `6e55bf1c…`，contract check 通过），替换 `/Applications/灵机.app/Contents/Resources/` 三件套（lingji-core.exe + lingji_core_lib + manifest），旧版备份至 `app-data/rollback-sidecar-20260919/`。
+   - **装机坑（未来每次 mac 装机必做）**：PyInstaller 产物直接装入 App 后，完整服务模式启动即崩（DiagnosticReports 报 `CODESIGNING / Invalid Page / SIGKILL`；`--check-config` 最小模式不触发）。修复=对 `lingji_core_lib` 全部 80 个 `.so`/`.dylib` 及主 exe 逐个 `codesign --force --sign -` 重签 ad-hoc。重签后手动完整启动与 App 拉起均正常。
+   - 装机后验收：health degraded（仅剩 ffprobe 一条已知 warning）、`search_memory("薏仁")` 正常返回、memory healthy（core 1）、vector healthy（19329/19329）、新 sidecar PID 41360 监听 8766。构建中间产物（build/ 与 tauri binaries，共约 202MB）已清理。
+   - 19 个终态失败 job 未重置（等 Codex 侧清理后由下一轮扫描验证修复效果）。
 
 ## 未执行 / 待主人决策
 
