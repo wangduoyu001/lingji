@@ -4160,3 +4160,8 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 最终范围增加一处直接相关的展示修复：已批准、无起止日期的 active Core 按长期有效计入首页；普通缺证据候选仍为 unknown。最终相关测试 229 passed，2 个既有依赖弃用警告；未运行全仓库/Windows/全部 UI 门禁。原始 RED 均已复现后修复。成功扫描工作记录滚动保留只处理已退出扫描保留窗口、已完成且无待主人决策的记录；失败及活跃记录保留。
 
 开发前约定：原始语义门槛、无写锁初始化、认证后端 MCP 共享、Core 对账、跨轮快照复用及容量上限。先跑失败回归；用合成数据库与临时 Vault 验证隔离、幂等、权限和来源保留，再回验已安装后端。纯后端修改不扩展为全 UI 改版、Windows 发包或全部模型安装。真实 Core/Vault/raw 只保护不删除；旧应用保留一个回滚副本；本轮构建缓存与临时样本最后删除。具体结果同步既有测试报告，未执行项如实记录。
+
+
+## 2026-09-19 CODEX_ROLLOUT_MULTI_SESSION_META_REPAIR
+
+开发前约定：修复 codex_rollout 适配器对 Codex compact/fork 产生的"同一 rollout 文件含多条不同线程 session_meta"形态的错误拒绝（生产 17 个终态失败 job、连续三日每轮 partial_failure 19 的根因之一）。语义：以首条 session_meta 线程 id 作为会话身份（与文件名一致），后续不同 id 记 warning 不再拒绝；registry._detection_reason 对所有带 detect_schema 的适配器透出真实拒绝原因，取代误导性兜底文案。仅改 worktree 代码与测试；不部署生产、不重置生产终态 job（待主人确认后另行执行）。验收：新增/改造单测覆盖多 session_meta 接受、首条身份、warning 与无身份拒绝保留；局部 pytest 通过；不降低既有断言。"无可提取消息仍判失败"语义本轮不变，如实记录。

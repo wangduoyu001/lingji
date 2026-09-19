@@ -217,7 +217,7 @@ class AdapterRegistry:
     def _detection_reason(adapter: ExtractionAdapter, input_path: Path | None) -> str:
         if not input_path:
             return "input schema is unsupported, unauthorized, or malformed"
-        if adapter.name == "codex_transcript" and hasattr(adapter, "detect_schema"):
+        if hasattr(adapter, "detect_schema"):
             return str(adapter.detect_schema(input_path).reason)
         if hasattr(adapter, "detect"):
             return str(adapter.detect(input_path).reason)

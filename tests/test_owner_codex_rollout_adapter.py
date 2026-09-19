@@ -80,16 +80,35 @@ def test_rollout_adapter_skips_oversized_records_with_bounded_reads(tmp_path: Pa
     ]
 
 
-def test_rollout_requires_payload_session_identity_and_rejects_mixed_sessions(tmp_path: Path):
+def test_rollout_requires_payload_session_identity(tmp_path: Path):
     path = tmp_path / "rollout.jsonl"
     _record(path, [
-        {"type": "session_meta", "id": "top-level-must-not-count", "payload": {"id": "session-one"}},
-        {"type": "session_meta", "payload": {"session_id": "session-two"}},
+        {"type": "session_meta", "id": "top-level-must-not-count", "payload": {}},
         {"type": "event_msg", "id": "u", "payload": {"type": "user_message", "message": "x"}, "timestamp": "2026-08-29T00:00:00Z"},
     ])
     adapter = CodexRolloutAdapter()
     with pytest.raises(ValueError, match="unsupported|session"):
         adapter.extract(ExtractionRequest("job-1", "codex_rollout", input_path=path, options={"authorized_roots": [str(tmp_path)]}))
+
+
+def test_rollout_accepts_compaction_appended_session_meta_using_first_identity(tmp_path: Path):
+    path = tmp_path / "rollout.jsonl"
+    _record(path, [
+        {"type": "session_meta", "payload": {"id": "thread-first"}},
+        {"type": "event_msg", "id": "u1", "payload": {"type": "user_message", "message": "第一段"}, "timestamp": "2026-08-29T00:00:00Z"},
+        # Codex compaction/fork appends a follow-up session_meta for the new
+        # thread into the same rollout file; the first identity must win.
+        {"type": "session_meta", "payload": {"id": "thread-second", "session_id": "thread-first"}},
+        {"type": "event_msg", "id": "u2", "payload": {"type": "user_message", "message": "压缩后继续"}, "timestamp": "2026-08-29T00:30:00Z"},
+    ])
+    adapter = CodexRolloutAdapter()
+    request = ExtractionRequest("job-1", "codex_rollout", input_path=path, options={"authorized_roots": [str(tmp_path)]})
+    assert adapter.detect_schema(path).supported is True
+    batch = adapter.extract(request)
+    assert batch.warnings and "thread-first" in batch.warnings[0] and "thread-second" not in batch.warnings[0]
+    source = batch.structured_sources[0]
+    assert source.conversations[0].external_id == "codex-rollout:conversation:thread-first"
+    assert source.conversations[0].metadata["session_id"] == "thread-first"
 
 
 def test_rollout_rejects_unknown_top_level_and_malformed_message_variant(tmp_path: Path):

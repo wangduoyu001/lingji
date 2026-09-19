@@ -701,8 +701,10 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
                     has_message = True
             if not session_ids:
                 return SchemaDetection(None, None, False, "Codex rollout session_meta identity is missing")
-            if len(session_ids) > 1:
-                return SchemaDetection(None, None, False, "Codex rollout contains multiple distinct session_meta identities; no guessing")
+            # Codex compaction/fork appends follow-up session_meta records for a
+            # new thread into the same rollout file; the first record is the
+            # file's own identity (it matches the file name), so extra
+            # identities are accepted as continuation and flagged in extract().
             if not has_message:
                 return SchemaDetection(self.SCHEMA, self.SCHEMA_VERSION, False, "Codex rollout contains no supported messages")
         except (OSError, UnicodeError, ValueError) as exc:
@@ -736,24 +738,34 @@ class CodexRolloutAdapter(CodexTranscriptAdapter):
             except PermissionError as exc:
                 raise ValueError(str(exc)) from exc
             self._validate_automatic_snapshot_provenance(request, canonical, root_path)
-        session_ids: set[str] = set()
+        session_id = ""
+        extra_identities: list[str] = []
         messages: list[dict[str, str]] = []
         warnings: list[str] = []
         for line_number, row in self._iter_rows(canonical, include_line_number=True):
             if row.get("type") == "session_meta":
                 identity = self._session_id(row)
-                if identity:
-                    session_ids.add(identity)
+                if not identity:
+                    continue
+                if not session_id:
+                    session_id = identity
+                elif identity != session_id:
+                    extra_identities.append(identity)
             message = self._message(row)
             if message is None:
                 continue
             message["line"] = str(line_number)
             messages.append(message)
-        # Compacted Codex threads repeat the same session_meta identity after
-        # a context compaction; only a genuinely different id is ambiguous.
-        if not session_ids or len(session_ids) > 1 or not messages:
+        # The first session_meta record is the file's own thread identity (it
+        # matches the file name); identities appended afterwards by Codex
+        # compaction/fork are continuations of the same physical timeline.
+        if not session_id or not messages:
             raise ValueError("unsupported Codex rollout: complete session identity and messages are required")
-        session_id = next(iter(session_ids))
+        if extra_identities:
+            warnings.append(
+                f"rollout contains {len(extra_identities)} additional session_meta identities after compaction/fork; "
+                f"using the first identity {session_id}"
+            )
 
         unique: list[dict[str, str]] = []
         seen: set[str] = set()
