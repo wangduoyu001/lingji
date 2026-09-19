@@ -4142,3 +4142,14 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 - 过程记录：qdrant 本地模式单进程锁——Codex 拉起的 MCP 子进程与 sidecar 回填互斥，
   表现为回填轮间歇 degraded/unavailable（幂等重试可收敛）；长期方案=MCP 语义检索改走
   sidecar HTTP（列下轮）。sidecar 129df847 已装机。
+
+### WorkBuddy 记忆 MCP 验证 + 交接文档（9 月 18 日凌晨）
+
+- 核实主人指令"WorkBuddy 已开通 MCP"：`~/.workbuddy/bin/workbuddy-memory-mcp-server.py`
+  （纯标准库、只读、白名单=精选层，不碰原始 transcripts）实测可用——初始化成功、
+  23 个资源（全局 MEMORY.md 22KB + 每日/工作区日志）、list/search 两工具。
+- 交接入库：`交接.md`（分支根，76 行）——系统现状/本会话提交链/WorkBuddy 协同
+  （客户端池已随 64a89b48 提交、HANDOFF 文档位置、embedding 探活修复闭环其移交项）/
+  WorkBuddy 适配器路线推荐（文件适配器直读白名单根，隐私=只本地提炼）/运维要点。
+- 主人使用说明：Codex 新会话即自动加载 lingji_memory MCP 工具（search_memory 带
+  agent_id="codex"）。

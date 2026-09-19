@@ -9,6 +9,8 @@ from src.acceptance import AcceptanceChecker
 from src.acceptance_reports import AcceptanceReportStore
 from src.automatic_memory import SourceRegistry
 from src.retrieval.qdrant_provider import QdrantSemanticProvider
+_EMBED_PROBE_TTL_SECONDS = 60.0
+_EMBED_PROBE_CACHE: dict[str, Any] = {"at": 0.0, "payload": {}}
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.extraction.queue import SQLiteExtractionQueue, _without_lease_material
 from src.gateway.memory_statistics import MemoryStatisticsService
@@ -370,6 +372,41 @@ class LocalControlService:
             }
         return self.memory_statistics.vector_coverage()
 
+    def _probe_embedding_status(self) -> dict[str, Any]:
+        """真实探活嵌入模型（TTL 缓存）：available 不再依赖一次性 provider 的空计数器。"""
+        import time as _time
+
+        now = _time.monotonic()
+        cached = _EMBED_PROBE_CACHE.get("payload") or {}
+        if now - float(_EMBED_PROBE_CACHE.get("at") or 0) < _EMBED_PROBE_TTL_SECONDS and cached:
+            return cached
+        payload: dict[str, Any] = {
+            "active_model": str(getattr(self.settings, "embed_model", "") or ""),
+            "dimension": None,
+            "available": False,
+        }
+        try:
+            import json as _json
+            import urllib.request
+
+            url = f"{str(getattr(self.settings, 'ollama_base_url', '') or '').rstrip('/')}/api/embed"
+            request = urllib.request.Request(
+                url,
+                data=_json.dumps({"model": payload["active_model"], "input": "ping"}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                body = _json.load(response)
+            vectors = body.get("embeddings") or []
+            if vectors and vectors[0]:
+                payload["available"] = True
+                payload["dimension"] = len(vectors[0])
+        except Exception:
+            payload["available"] = False
+        _EMBED_PROBE_CACHE["at"] = now
+        _EMBED_PROBE_CACHE["payload"] = payload
+        return payload
+
     def _live_semantic_provider(self) -> tuple[Any, Any] | None:
         """按工作区解析语义集合，并复用向量回填的共享 Qdrant 客户端。"""
         try:
@@ -417,16 +454,7 @@ class LocalControlService:
             expected = len(database.semantic_chunk_rows())
             coverage_ratio = (vectors / expected) if expected else None
             state = "healthy" if expected and vectors >= expected else "degraded"
-            embedding_status: dict[str, Any] = {}
-            builder = getattr(self, "build_embedding_provider", None)
-            if builder is None:
-                from src.model_center import build_embedding_provider
-
-                builder = build_embedding_provider
-            embedding = builder(self.settings)
-            if embedding is not None:
-                embedding_status = dict(embedding.status() or {})
-                embedding.close()
+            embedding_status = self._probe_embedding_status()
             return {
                 "as_of": as_of,
                 "vectors": vectors,
