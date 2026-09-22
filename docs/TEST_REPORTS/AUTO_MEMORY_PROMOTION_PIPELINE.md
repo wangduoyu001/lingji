@@ -1,45 +1,49 @@
 # TEST REPORT — 自动记忆晋升管线（AUTO_MEMORY_PROMOTION_PIPELINE）
 
-- 日期：2026-09-22
-- 分支/HEAD：`codex/owner-source-intake-mac-repair`（含 `43a7786a` 之后的本轮实现提交）
-- 执行环境：macOS（darwin 25.5.0 arm64），仓库 worktree 直接运行 `python3 -m pytest`
-- 结论：**代码完成，待本机验收**。局部测试全部通过；未做重打包装机与主人开开关真机实测。
+- 日期：2026-09-22（代码 + 真机验收同日完成）
+- 分支/HEAD：`codex/owner-source-intake-mac-repair`，实现 `9a614cf1` + 修复 `4d6b42b0`/`f2a82fa0`/`52033dd9` + 文档提交
+- 执行环境：macOS（darwin 25.5.0 arm64）；生产数据根 `~/LingJiAcceptance/osimr-7e7f0707/app-data/production`
+- 最终装机：`/Applications/灵机.app` sidecar SHA-256 `6435ef10…`（182 运行时文件 + 80 个 .so/.dylib 逐个 ad-hoc 重签，`codesign --verify --deep --strict` 通过）
+- 结论：**本机验收通过，待主人最终确认**。App 保持打开。
 
-## 范围
-
-主人拍板的自动记忆晋升管线 + Evolving 迭代时间线（`docs/ACCEPTANCE/CHANGE_ACCEPTANCE_LOG.md` 同名条目）。实现细节见该条目"实现"段与 `docs/MODULES/CODE_MAP.md` "Owner auto promotion" 段。
-
-## 测试执行记录
+## 自动测试
 
 | 套件 | 结果 |
 | --- | --- |
-| `tests/test_auto_promotion_pipeline.py`（新增 13 例） | 13 passed |
-| `tests/test_automatic_memory_distillation.py` + `tests/test_memory_lifecycle.py` + `tests/test_automatic_memory_runtime.py` | 34 passed |
-| `tests/test_observability_api.py` + `tests/test_runtime_settings.py` + `tests/test_settings_governance.py` + `tests/test_settings_governance_api.py` | 26 passed |
-| `tests/test_auto_review_core.py` + `tests/test_auto_review_ai_api.py` + `tests/test_auto_memory_promotion.py` + `tests/test_permanent_memory_gateway.py` | 71 passed |
+| `tests/test_auto_promotion_pipeline.py`（14 例，含 limit 空转回归） | 14 passed |
+| `tests/test_automatic_memory_distillation.py`（17 例，含 3 例饿死回归） | 17 passed |
+| `tests/test_memory_lifecycle.py` + `tests/test_automatic_memory_runtime.py` | 通过 |
+| `tests/test_observability_api.py` + settings 四件套 | 26 passed |
+| `tests/test_auto_review_*` + `tests/test_auto_memory_promotion.py` + gateway | 71 passed |
 | `tests/test_packaged_control_api.py` | 18 passed |
 
-合计 162 passed, 0 failed。门禁：`python3 scripts/check_acceptance_sync.py` PASS。
+合计 166 passed, 0 failed。门禁 `scripts/check_acceptance_sync.py` PASS。
 
-## 新增单测覆盖（对应验收要求）
+## 真机验收记录（production）
 
-- 开关关闭=零写入：无审计事件、无 Core/Evolving 文件。
-- 晋升正路：达标行经 lifecycle 进入 `Core-Memory/General`，frontmatter `memory_tier: core`，审计 `promoted` 且哈希链可验证。
-- 门槛分支：类别不在白名单、置信度低于 0.90、置信度缺失（旧行）、通知类标题 → 均转 Evolving 并带原因码。
-- 去重：全文/要点级重复判 `duplicate`（零文件写入）；语义相似度 ≥0.92 判 `duplicate`（测试注入相似度函数）。
-- 冲突：同标题不同内容 → Evolving `title_conflict`，既有 Core 不增不改。
-- 每日上限：达到上限即 `capped`，不再晋升。
-- 幂等与迭代：同 conversation+revision 不重复处理；revision 升级重新评估，达标后晋升并在 Evolving 文件标记 `graduated`。
-- 审计链：`verify_auto_promotion_chain` 对真实事件验证通过，篡改任一字段后验证失败。
+1. **装机**：三轮"构建→覆盖安装→codesign 全量重签→health 验证"迭代（0799ebcd → 9c542d53 → 6435ef10）。每轮 health 均为 degraded 且仅剩已知 ffprobe warning（与装机前基线一致）；`confidence` 列由 distill 首轮自动 ALTER 迁移成功。
+2. **开关**：`PATCH /api/settings` 开启 `auto_promote_enabled`，runtime_settings.json 落盘确认；运行中切换 ≤15s 生效。
+3. **Evolving 轨**：首轮 5 条旧行（confidence 为空）转 Evolving，原因码 `confidence_missing`；后续 `title_conflict`、`category_not_whitelisted + notification_like + confidence_below_threshold` 等分支真实触发。共 19 个带日期时间线文件，frontmatter（topic/status/confidence/updated/tags）齐全，幂等 marker 就位。
+4. **晋升正路**：distill 修复后新行携带模型自评 confidence（首批 8 条：1.0×1、0.9×4、0.8×4）。真实晋升 1 条进 `03-Knowledge/Core-Memory/General/`：frontmatter `memory_tier: core`、`confidence: 0.9`、`proposed_by: lingji-auto`、来源追溯（conversation_id@revision + 模型名）齐全。
+5. **审计**：`auto_promotion_decision` 事件 25 条（24 evolving + 1 promoted），`verify_auto_promotion_chain` 校验 True；篡改检测由单测覆盖。
+6. **回滚**：关开关后 `run_once` 返回 `status: disabled`，审计事件 25→25 零写入；随后恢复开启（保持主人要的最终态）。
+7. **附带修复的实证**：distill 修复前 finished 全部 0.0s 空转、ready 停在 54；修复后单条 9.5-11.5s 真实云端提炼，ready 54→61 并持续增长（549 个从未提炼的会话开始被消化）。
 
-## 限制与未验证
+## 验收中发现并修复的回归
 
-1. 未重打包装机：生产 sidecar 仍运行 9-22 16:26 的瘦身版（`0b066312…`），不含本管线。
-2. 未真机实测开关：主人开启 `auto_promote_enabled` 后的一轮审计/vault/时间线观察待执行。
-3. 语义去重在测试中用注入的相似度函数；真机依赖 bge-m3 嵌入，懒加载路径未在真实 Ollama 上验证。
-4. 未重跑 2026-09-19 报告中的 229 项全量回归。
-5. 生产库既有 54 条 ready 行 confidence 为空，按设计不会自动晋升；只有新提炼行携带置信度。
+| 提交 | 问题 | 修复 |
+| --- | --- | --- |
+| `4d6b42b0` | 历史 ready 行 message_count 旧口径与实际不符 → 每轮满足候选条件却被秒跳且永不修正 | 秒跳路径无模型调用修正口径 |
+| `f2a82fa0` | 秒跳判断 SELECT 漏取 status 列，取不到默认按 ready → superseded 终态行每轮空转占位，**549 个会话从未被提炼**（生产真根因） | 候选查询排除 superseded；真实读取 status 列 |
+| `52033dd9` | 晋升管线 limit 截断在已决过滤之前 → 最老已决行占满每轮名额，首轮后 processed 恒 0 | 先过滤已决再截断 limit |
+
+## 限制与已知事项
+
+1. **存量消化规模**：54 条旧行 + 后续新行中未达标者将持续进 Evolving（当前 19 个文件，随管线轮转渐进增长）。这是"未达标不静默丢弃"的设计行为；主人可审阅后删除或整理，git 可回溯。
+2. **门槛是确定性规则**：晋升质量取决于提炼模型自评置信度。首批已出现任务性内容（如"验收文档同步任务分配"）达标晋升——若觉得过宽，可在设置页调高"晋升置信度门槛"（如 0.95）或调低"每日自动晋升上限"。
+3. 未重跑 2026-09-19 报告的 229 项全量回归；语义去重依赖 bge-m3（生产实测 1 条晋升经过真实嵌入比对）。
+4. 旧格式行（confidence 空）按设计永不自动晋升；只有新提炼行参与门槛。
 
 ## 回滚
 
-关闭 `auto_promote_enabled`（Desktop 设置页或 runtime_settings）。已晋升文件属于既有 Core，不做批量删除。
+关闭 `auto_promote_enabled`（Desktop 设置页"记忆自动化"组或 `PATCH /api/settings`）。已晋升文件属既有 Core，不做批量删除。应用级回滚：`app-data/rollback-sidecar-20260922-auto-promote/`（上一版 sidecar 三件套，SHA `0b066312…`）。

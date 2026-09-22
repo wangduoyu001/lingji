@@ -1,10 +1,12 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
-## 2026-09-22 自动记忆晋升管线（代码完成，待本机验收）
+## 2026-09-22 自动记忆晋升管线（本机验收通过，待主人确认）
 
-主人 2026-09-22 拍板（AGENTS.md §4 已修订）：记忆晋升从逐条审批改为自动门槛 + Evolving 迭代时间线。本轮在 `codex/owner-source-intake-mac-repair` 实现该管线，核心=`src/memory/auto_promotion.py`（确定性门槛 + promote/Evolving 双轨 + prev-hash 审计链），提炼层新增模型自评 `confidence`，runtime 常驻 `lingji-auto-promotion` daemon 线程，开关 `auto_promote_enabled` 默认关（Desktop 设置页"记忆自动化"组可开，回滚=关开关）。
+主人 2026-09-22 拍板（AGENTS.md §4 已修订）：记忆晋升从逐条审批改为自动门槛 + Evolving 迭代时间线。本轮实现并完成真机验收：`src/memory/auto_promotion.py`（确定性门槛 + promote/Evolving 双轨 + prev-hash 审计链），提炼层新增模型自评 `confidence`，runtime 常驻 `lingji-auto-promotion` daemon 线程，开关 `auto_promote_enabled` 已在生产开启（Desktop 设置页"记忆自动化"组可调，回滚=关开关）。
 
-测试：新增 13 项单测（门槛分支/三重去重/冲突→Evolving/每日上限/关=零写入/revision 幂等与毕业/审计链校验）全过；受影响模块局部测试共 162 项全过。未做：重打包装机、主人开开关真机实测一轮（审计+vault 文件+时间线）、上一轮 229 项全量回归重跑。既有 Core 只增不改的红线保持；生产装机仍运行 9-22 16:26 的瘦身版 sidecar。
+真机：生产 sidecar 已更新至 `6435ef10…`（codesign 全量重签验证过）；开关实测一轮全部通过——Evolving 时间线 19 文件、真实晋升 1 条进 Core-Memory、审计 25 条哈希链 True、回滚零写入验证过。验收中发现并修复 3 个回归（distill superseded 假候选饿死 549 会话的存量 bug、message_count 口径漂移、晋升管线 limit 空转），均带回归单测。合计 166 项局部测试通过。
+
+待办：主人最终确认体验；存量旧行（confidence 空）按设计不晋升只有新行参与门槛；Evolving 文件会随消化渐进增长，主人可审阅整理。详见 `docs/TEST_REPORTS/AUTO_MEMORY_PROMOTION_PIPELINE.md`。
 
 ## 2026-09-19 个人记忆实用优化
 
