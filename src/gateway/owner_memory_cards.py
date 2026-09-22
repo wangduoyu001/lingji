@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import math
+import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping
@@ -20,6 +22,8 @@ from src.sources import SourceQueryService, ViewerContext
 MAX_PREVIEW = 240
 MAX_EVIDENCE = 3
 MAX_SOURCE_PAGE = 200
+# 首页 summary 的缓存窗口：全量卡测量是秒级操作，首页每 20s 轮询。
+_SUMMARY_CACHE_TTL_SECONDS = 60.0
 
 
 @dataclass(frozen=True)
@@ -89,6 +93,9 @@ class OwnerMemoryCardProjector:
         self.gateway = gateway
         self.state_db = state_db
         self.workspace = str(workspace or "production")
+        self._summary_lock = threading.Lock()
+        self._summary_cache: dict[str, Any] | None = None
+        self._summary_cache_at: float = 0.0
 
     def list_cards(
         self,
@@ -145,7 +152,24 @@ class OwnerMemoryCardProjector:
         raise LookupError("memory card not found")
 
     def summary(self, *, viewer: ViewerContext | None = None) -> dict[str, Any]:
-        """Return full-card counts for Home without deriving from one page."""
+        """Return full-card counts for Home without deriving from one page.
+
+        全量卡测量在生产库上是秒级操作，而首页每 20s 轮询本接口：默认
+        viewer 的结果缓存 60s 并用单锁串行重算，避免轮询堆积把前端拖到
+        超时（超时后首页把统计显示成 0）。显式传入 viewer 时不走缓存。
+        """
+        if viewer is not None:
+            return self._summary_uncached(viewer=viewer)
+        with self._summary_lock:
+            now = time.monotonic()
+            if self._summary_cache is not None and now - self._summary_cache_at < _SUMMARY_CACHE_TTL_SECONDS:
+                return dict(self._summary_cache)
+            payload = self._summary_uncached(viewer=None)
+            self._summary_cache = dict(payload)
+            self._summary_cache_at = now
+            return dict(payload)
+
+    def _summary_uncached(self, *, viewer: ViewerContext | None) -> dict[str, Any]:
         selected_viewer = viewer or self.source_service.owner_viewer()
         all_cards = self._all_cards(selected_viewer)
         cards = [card for card in all_cards if str(card.freshness.get("state") or "") == "current"]

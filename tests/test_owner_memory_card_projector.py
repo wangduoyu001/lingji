@@ -593,3 +593,33 @@ def test_card_sort_uses_memory_id_as_deterministic_tie_breaker_for_equal_instant
     result = projector.list_cards(limit=2)
 
     assert [item["memory_id"] for item in result["items"]] == ["memory-b", "memory-a"]
+
+
+def test_home_summary_is_cached_and_serialized(monkeypatch):
+    """首页 summary 全量测量是秒级操作：默认 viewer 走 60s 缓存，防止 20s 轮询堆积超时显示 0。"""
+    import time as time_module
+
+    import src.gateway.owner_memory_cards as module
+
+    projector = OwnerMemoryCardProjector(FixtureDatabase(), FixtureSources(), FixtureStatistics())
+    calls = {"count": 0}
+    fake_now = {"value": 1000.0}
+    monkeypatch.setattr(projector, "_summary_uncached", lambda *, viewer: calls.__setitem__("count", calls["count"] + 1) or {"permanent": 11})
+    monkeypatch.setattr(module.time, "monotonic", lambda: fake_now["value"])
+
+    first = projector.summary()
+    second = projector.summary()
+    assert calls["count"] == 1, "TTL 内重复轮询必须命中缓存"
+    assert first == {"permanent": 11} and second == {"permanent": 11}
+
+    fake_now["value"] += module._SUMMARY_CACHE_TTL_SECONDS + 1
+    projector.summary()
+    assert calls["count"] == 2, "缓存过期后重算"
+
+    explicit = projector.summary(viewer=FixtureSources().owner_viewer())
+    assert calls["count"] == 3, "显式 viewer 不走缓存"
+
+    # 失效防护：缓存返回的是副本，外部改写不得污染下一次命中。
+    first["permanent"] = 0
+    assert projector.summary()["permanent"] == 11
+    assert time_module.monotonic() >= 0
