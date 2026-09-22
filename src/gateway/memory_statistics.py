@@ -11,6 +11,9 @@ _MAX_MISSING_IDS = 100
 
 
 class MemoryStatisticsService:
+    # 懒加载嵌入探活的失败防抖时间戳（monotonic）；类级默认保证任何构造
+    # 路径（含轻量测试桩）都可安全读取。
+    _probe_failed_at: float = 0.0
     """Build or read one truthful memory/vector status snapshot.
 
     A process that owns the MemoryGateway may publish live data. Other processes,
@@ -28,6 +31,8 @@ class MemoryStatisticsService:
         self.gateway = gateway
         self.snapshot_path = Path(snapshot_path) if snapshot_path is not None else None
         self.stale_after_seconds = max(float(stale_after_seconds), 1.0)
+        # 懒加载嵌入探活的失败防抖时间戳（monotonic）。
+        self._probe_failed_at: float = 0.0
 
     @staticmethod
     def snapshot_path_for(settings: Any, workspace: Any | None = None) -> Path:
@@ -198,6 +203,22 @@ class MemoryStatisticsService:
             }
         try:
             status = dict(provider.status())
+            if not status.get("available") and not int(status.get("request_count") or 0):
+                # 懒加载 provider 启动后从未被使用：available=false 只是"没有
+                # 计数"，不是真实故障。做一次轻量真实嵌入探活，避免把向量层
+                # 永久显示为未开启。失败结果缓存 60s，防止轮询打爆。
+                import time as _time
+
+                now = _time.monotonic()
+                if now - float(self._probe_failed_at or 0) >= 60.0:
+                    try:
+                        vectors = provider.embed_many(["ping"])
+                        if vectors and vectors[0]:
+                            status = dict(provider.status())
+                        else:
+                            self._probe_failed_at = now
+                    except Exception:
+                        self._probe_failed_at = now
             available = bool(status.get("available"))
             status["state"] = "healthy" if available else "unavailable"
             return status
