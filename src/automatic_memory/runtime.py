@@ -606,6 +606,20 @@ class AutomaticMemoryRuntime:
                     return 0.0
                 return dot / (norm_a * norm_b)
 
+            def _post_promotion_sync() -> dict[str, Any]:
+                # 晋升写 vault 后把 Core 目录对账进可重建投影；MemoryDatabase
+                # 每次调用独立连接，用完即弃，无句柄残留。语义分块由既有
+                # 后台向量回填接管。
+                from src.retrieval.incremental_sync import IncrementalMemorySynchronizer
+                from src.retrieval.memory_db import MemoryDatabase
+
+                database = MemoryDatabase(settings.memory_db_path)
+                return dict(
+                    IncrementalMemorySynchronizer(database).sync_core(
+                        settings.vault_path, settings.storage_path
+                    )
+                )
+
             return AutoMemoryPromotionPipeline(
                 settings=settings,
                 lifecycle=lifecycle,
@@ -613,6 +627,7 @@ class AutomaticMemoryRuntime:
                 memory_db_path=settings.memory_db_path,
                 semantic_similarity=_semantic_similarity,
                 setting_reader=_setting_reader,
+                post_promotion_sync=_post_promotion_sync,
             )
         except Exception:
             return None

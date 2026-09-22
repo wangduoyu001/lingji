@@ -345,7 +345,21 @@ class LocalControlService:
         # 尽力用工作区 Qdrant 实时修正向量计数，失败则保留快照并维持 stale 标记。
         live = self._live_semantic_counts()
         if live is None:
-            return snapshot
+            # embedded Qdrant 被服务进程持锁时 live 修正不可用（已知架构债）。
+            # 嵌入可用性不依赖 Qdrant：退回纯 HTTP 探活，避免把启动早期的
+            # 陈旧 available=false 永久展示为"向量未开启"。
+            probe = self._probe_embedding_status()
+            embedding = dict(snapshot.get("embedding") or {})
+            embedding.update(
+                {
+                    "active_model": probe.get("active_model"),
+                    "dimension": probe.get("dimension"),
+                    "available": probe.get("available"),
+                }
+            )
+            merged = dict(snapshot)
+            merged["embedding"] = embedding
+            return merged
         merged = dict(snapshot)
         merged.update({
             "source": "live",

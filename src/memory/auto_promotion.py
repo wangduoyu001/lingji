@@ -83,6 +83,7 @@ class AutoMemoryPromotionPipeline:
         memory_db_path: Path | str,
         semantic_similarity: Callable[[str, str], float] | None = None,
         setting_reader: Callable[[str], Any] | None = None,
+        post_promotion_sync: Callable[[], Any] | None = None,
         now: Callable[[], datetime] | None = None,
     ):
         self.settings = settings
@@ -91,6 +92,8 @@ class AutoMemoryPromotionPipeline:
         self.memory_db_path = Path(memory_db_path)
         self.semantic_similarity = semantic_similarity
         self.setting_reader = setting_reader
+        # 晋升落 vault 后的可重建投影同步（sync_core）；缺失时只写 vault。
+        self.post_promotion_sync = post_promotion_sync
         self.now = now or datetime.now
         self.evaluator = DeterministicAutoReviewEvaluator()
         self._last_run: dict[str, Any] = {"status": "never_run"}
@@ -207,6 +210,14 @@ class AutoMemoryPromotionPipeline:
             summary["evolving"] += 1
             self._record_decision(row, outcome="evolving", reasons=reasons, extra={**(extra or {}), "evolving_path": evolving_path})
             summary["outcomes"].append({"conversation_id": key[0], "outcome": "evolving", "reasons": reasons})
+
+        if summary["promoted"] > 0 and self.post_promotion_sync is not None:
+            # 新 Core 文件落 vault 后同步可重建投影（memory_documents/chunks），
+            # UI 的永久记忆计数与语义检索才能看到；失败不影响晋升结果。
+            try:
+                summary["projection_sync"] = dict(self.post_promotion_sync() or {})
+            except Exception as exc:
+                summary["projection_sync"] = {"error": exc.__class__.__name__}
 
         self._last_run = dict(summary)
         return dict(summary)

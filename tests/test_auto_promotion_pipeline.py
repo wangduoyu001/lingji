@@ -106,6 +106,7 @@ class AutoPromotionPipelineTests(unittest.TestCase):
         self.lifecycle = MemoryLifecycleService(VaultLayout(self.vault), self.state_db)
         self.overrides: dict[str, any] = {"auto_promote_enabled": True}
         self.now = datetime(2026, 9, 22, 12, 0, 0)
+        self.sync_calls: list[int] = []
         self.pipeline = AutoMemoryPromotionPipeline(
             settings=self.settings,
             lifecycle=self.lifecycle,
@@ -113,6 +114,7 @@ class AutoPromotionPipelineTests(unittest.TestCase):
             memory_db_path=self.memory_db,
             semantic_similarity=lambda text, document: 0.10,
             setting_reader=self.overrides.get,
+            post_promotion_sync=lambda: self.sync_calls.append(1) or {"added": 1},
             now=lambda: self.now,
         )
 
@@ -173,6 +175,23 @@ class AutoPromotionPipelineTests(unittest.TestCase):
         self.assertEqual(len(decisions), 1)
         self.assertEqual(decisions[0]["outcome"], "promoted")
         self.assertTrue(verify_auto_promotion_chain(decisions))
+        # 晋升后触发投影同步，结果并入 summary。
+        self.assertEqual(len(self.sync_calls), 1)
+        self.assertEqual(result.get("projection_sync"), {"added": 1})
+
+    def test_no_promotion_skips_projection_sync(self):
+        _seed(
+            self.memory_db,
+            "conv-2",
+            "周末出游计划",
+            "商量了周末出游的备选地点。",
+            ["备选地点包括海边和山区"],
+            category="其他",
+        )
+        result = self.pipeline.run_once()
+        self.assertEqual(result["evolving"], 1)
+        self.assertEqual(self.sync_calls, [])
+        self.assertNotIn("projection_sync", result)
 
     # ------------------------------------------------------- 门槛各分支
     def test_category_not_whitelisted_goes_evolving(self):
