@@ -68,3 +68,14 @@
 5. 已知既有缺陷（未修，记录待办）：sidecar 停机时 `ExtractionWorker remained alive after
    stop` 导致 shutdown RuntimeError（每次退出日志可见，不影响运行中服务）。
 6. 运维提醒：Ollama 现由 launchd 管理；`auto_promote_poll_seconds` 仅 config 层（运行中不可调）。
+
+## 追加（深夜三轮）："永久记忆还是 0" 的真正根因
+
+主人 UI 一直显示 0 而后端实测 11：首页"已入永久记忆"轮询
+`/api/memory/inspector/cards-summary`，该接口每请求全量测量 590 张卡，生产库上耗时
+18-19s，而首页每 20s 轮询一次——任何重叠/抖动即超时，前端 `cards ?? 0` 把无数据显示成 0。
+修复（`c0ba6262`）：默认 viewer 的 summary 结果缓存 60s 并以单锁串行重算（显式 viewer 不缓存）。
+实测：首次 18.8s 计算，后续命中 0.001-0.017s，permanent=11 稳定。新增 1 例缓存单测（34 例 projector 套件全过）。
+装机 sidecar SHA `d13becc8…`。
+另：连续三次观察到 App 在运行中被退出（sidecar 随之停机并报既有 ExtractionWorker 停机缺陷）——
+若是主人手动退出测试，重开灵机即可，修复已在装机内生效。
