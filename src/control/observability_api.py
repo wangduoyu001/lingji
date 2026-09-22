@@ -543,6 +543,12 @@ def register_observability_routes(app: Any, control: Any, secured: list[Any]) ->
         except Exception:
             listing["progress"] = {"active": False}
         try:
+            runtime = getattr(control, "runtime", None)
+            stats = dict(runtime.auto_promotion_stats) if runtime is not None else {"available": False}
+        except Exception:
+            stats = {"available": False}
+        listing["auto_promotion"] = stats
+        try:
             listing["models"] = distiller.installed_models()
         except Exception:
             listing["models"] = []

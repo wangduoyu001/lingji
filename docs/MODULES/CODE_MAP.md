@@ -477,6 +477,19 @@ src/memory/lifecycle.py
 src/retrieval/memory_db.py
 = rebuildable derived promotion and owner/Core boundary
 
+Owner auto promotion (2026-09-22, 主人拍板):
+src/memory/auto_promotion.py::AutoMemoryPromotionPipeline
+src/automatic_memory/runtime.py (lingji-auto-promotion daemon thread)
+src/automatic_memory/distillation.py (confidence column + prompt field)
+= deterministic gates (whitelist/notification/confidence/full-text+point+semantic
+dedup/title conflict/auto_review hard rules) over `distilled_knowledge`; promote
+via lifecycle promote path into Core-Memory or append dated timeline entries in
+`03-Knowledge/Evolving/<topic>.md` (graduated marker on promotion); prev-hash
+audit events `auto_promotion_decision` (`verify_auto_promotion_chain`);
+settings `auto_promote_enabled` 默认关（Desktop 设置页记忆自动化组；回滚=关开关；
+既有 Core 文件只增不改）。
+Focused tests: `tests/test_auto_promotion_pipeline.py`.
+
 Packaged automation E2E evidence:
 `tests/integration/test_automatic_memory_packaged_flow.py` launches the formal
 control-api composition in isolated Acceptance roots; the single authority is

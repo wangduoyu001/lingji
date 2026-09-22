@@ -35,6 +35,19 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
 
+def _clamp_confidence(value: Any) -> float | None:
+    """模型自评置信度裁剪到 [0,1]；缺失或非法返回 None（不自动晋升）。"""
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number:  # NaN
+        return None
+    return max(0.0, min(1.0, number))
+
+
 def _parse_model_json(raw: str) -> dict[str, Any] | None:
     """Best-effort parse of the model's JSON answer (handles fences/prose)."""
     text = str(raw or "").strip()
@@ -113,6 +126,11 @@ class KnowledgeDistiller:
         )
         try:
             conn.execute("ALTER TABLE distilled_knowledge ADD COLUMN superseded_by TEXT")
+        except Exception:
+            pass
+        try:
+            # 自动晋升门槛的原料字段；旧行无值视为"未评定"，不自动晋升。
+            conn.execute("ALTER TABLE distilled_knowledge ADD COLUMN confidence REAL")
         except Exception:
             pass
         conn.execute(
@@ -243,7 +261,10 @@ class KnowledgeDistiller:
             "你是记忆提炼器。阅读一段用户与AI的对话，提炼成知识要点。"
             '只返回 JSON 对象：{"short_title": "给这段对话起一个不超过16字的具体标题", '
             '"summary": "一句话总结这段对话产出了什么结论/决定/事实", '
-            '"key_points": ["要点1", "要点2", "要点3"], "category": "项目|技术|决策|问题|其他"}。'
+            '"key_points": ["要点1", "要点2", "要点3"], '
+            '"confidence": 0.0到1.0的小数表示这段结论作为长期事实的把握'
+            '（确定且被验证给高分，推测或临时状态给低分）, '
+            '"category": "项目|技术|决策|问题|其他"}。'
             "key_points 用短句，每条不超过40字，只保留有信息量的事实，不要寒暄。"
             "category 必须五选一：改代码/修Bug/搭环境=技术；定了方案或拍板=决策；"
             "遇到故障或报错=问题；启动或推进某个项目=项目；闲聊或无结论=其他。"
@@ -700,6 +721,7 @@ class KnowledgeDistiller:
         else:
             key_points = []
         category = str(parsed.get("category") or "其他").strip() or "其他"
+        confidence = _clamp_confidence(parsed.get("confidence"))
         short_title = str(parsed.get("short_title") or "").strip()
         if 2 <= len(short_title) <= 24 and "会话" not in short_title:
             title = short_title
@@ -741,8 +763,8 @@ class KnowledgeDistiller:
             INSERT INTO distilled_knowledge (
                 conversation_id, source_id, title, summary, key_points_json, category,
                 model, messages_digest, message_count, revision, occurred_at,
-                status, last_error, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', NULL, ?, ?)
+                status, last_error, created_at, updated_at, confidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', NULL, ?, ?, ?)
             ON CONFLICT(conversation_id) DO UPDATE SET
                 title = excluded.title,
                 summary = excluded.summary,
@@ -755,7 +777,8 @@ class KnowledgeDistiller:
                 occurred_at = excluded.occurred_at,
                 status = 'ready',
                 last_error = NULL,
-                updated_at = excluded.updated_at
+                updated_at = excluded.updated_at,
+                confidence = excluded.confidence
             """,
             (
                 conversation_id,
@@ -771,6 +794,7 @@ class KnowledgeDistiller:
                 str(conversation["started_at"] or now),
                 now if existing is None else now,
                 now,
+                confidence,
             ),
         )
         conn.commit()

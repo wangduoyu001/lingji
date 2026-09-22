@@ -144,6 +144,13 @@ class Settings(BaseSettings):
     auto_review_ai_enabled: bool = False
     auto_review_timeout_seconds: float = Field(default=20.0, ge=0.1, le=300.0)
 
+    # 自动记忆晋升（主人 2026-09-22 拍板）：默认关，主人显式开启；回滚=关开关。
+    auto_promote_enabled: bool = False
+    auto_promote_confidence_min: float = Field(default=0.90, ge=0.0, le=1.0)
+    auto_promote_daily_limit: int = Field(default=10, ge=1, le=100)
+    auto_promote_semantic_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
+    auto_promote_poll_seconds: float = Field(default=300.0, ge=30.0, le=86400.0)
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

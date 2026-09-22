@@ -1,6 +1,12 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
-## 2026-09-19 个人记忆实用优化（当前）
+## 2026-09-22 自动记忆晋升管线（代码完成，待本机验收）
+
+主人 2026-09-22 拍板（AGENTS.md §4 已修订）：记忆晋升从逐条审批改为自动门槛 + Evolving 迭代时间线。本轮在 `codex/owner-source-intake-mac-repair` 实现该管线，核心=`src/memory/auto_promotion.py`（确定性门槛 + promote/Evolving 双轨 + prev-hash 审计链），提炼层新增模型自评 `confidence`，runtime 常驻 `lingji-auto-promotion` daemon 线程，开关 `auto_promote_enabled` 默认关（Desktop 设置页"记忆自动化"组可开，回滚=关开关）。
+
+测试：新增 13 项单测（门槛分支/三重去重/冲突→Evolving/每日上限/关=零写入/revision 幂等与毕业/审计链校验）全过；受影响模块局部测试共 162 项全过。未做：重打包装机、主人开开关真机实测一轮（审计+vault 文件+时间线）、上一轮 229 项全量回归重跑。既有 Core 只增不改的红线保持；生产装机仍运行 9-22 16:26 的瘦身版 sidecar。
+
+## 2026-09-19 个人记忆实用优化
 
 主人授权本轮优化与卫生清理，当前产品源码为 `codex/owner-source-intake-mac-repair`，基线 `264b14d3`。下文旧候选和门禁状态只作历史背景。
 

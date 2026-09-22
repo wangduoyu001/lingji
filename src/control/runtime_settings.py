@@ -44,6 +44,35 @@ class RuntimeSettingsStore:
                 "",
                 256,
             ),
+            # 自动记忆晋升（主人 2026-09-22 拍板）：默认关，主人显式开启；回滚=关开关。
+            "auto_promote_enabled": self._annotate(
+                self._boolean(
+                    "memory_automation",
+                    "自动记忆晋升",
+                    "提炼结论达到置信度门槛且不与既有 Core 重复/冲突时自动进入永久记忆；未达标的写入 Evolving 时间线。默认关闭，需主人显式开启。",
+                    False,
+                ),
+                recommended="off",
+                recommendation_reason="先开启并观察 Evolving 时间线与审计记录，确认门槛质量后再保持开启。",
+                when_to_change="主人决定让灵机自动维护永久记忆时开启；回滚=直接关闭。",
+                risk_level="medium",
+            ),
+            "auto_promote_confidence_min": self._number(
+                "memory_automation",
+                "晋升置信度门槛",
+                "提炼行自评置信度达到该值才有资格自动晋升；更高更保守。",
+                0.90,
+                0.0,
+                1.0,
+            ),
+            "auto_promote_daily_limit": self._integer(
+                "memory_automation",
+                "每日自动晋升上限",
+                "每个自然日最多自动晋升的条目数；超出部分留待次日。",
+                10,
+                1,
+                100,
+            ),
             # Media extraction limits.
             "media_keyframe_interval_seconds": self._number(
                 "media_processing", "关键帧间隔（秒）", "每隔多少秒提取一张关键帧。", 30.0, 1.0, 86400.0

@@ -156,6 +156,9 @@ class AutomaticMemoryRuntime:
         self._distiller = self._build_distiller(settings)
         self._distill_stop = Event()
         self._distill_thread: Thread | None = None
+        self._promotion = self._build_auto_promotion(settings)
+        self._promotion_stop = Event()
+        self._promotion_thread: Thread | None = None
         if hasattr(self.scheduler, "heartbeat_work_callback"):
             self.scheduler.heartbeat_work_callback = self._touch_active_scan_work
         if hasattr(self.registry, "add_lifecycle_listener"):
@@ -287,6 +290,14 @@ class AutomaticMemoryRuntime:
             daemon=True,
         )
         self._distill_thread.start()
+        if self._promotion is not None and self._promotion_thread is None:
+            self._promotion_stop.clear()
+            self._promotion_thread = Thread(
+                target=self._promotion_loop,
+                name="lingji-auto-promotion",
+                daemon=True,
+            )
+            self._promotion_thread.start()
 
     def stop(self) -> None:
         with self._lock:
@@ -314,6 +325,7 @@ class AutomaticMemoryRuntime:
         if snapshot_error:
             errors.append(snapshot_error)
         self._distill_stop.set()
+        self._promotion_stop.set()
         with self._lock:
             self._cleanup_errors = errors
             self._cleanup_pending = bool(errors)
@@ -554,6 +566,80 @@ class AutomaticMemoryRuntime:
             return {"available": False}
         try:
             return dict(distiller.stats())
+        except Exception:
+            return {"available": False}
+
+    def _build_auto_promotion(self, settings: Any) -> Any | None:
+        """自动记忆晋升管线；构建便宜且不读开关（开关每轮动态判定，支持运行时切换）。"""
+        try:
+            from src.control.runtime_settings import RuntimeSettingsStore
+            from src.memory.auto_promotion import AutoMemoryPromotionPipeline
+            from src.memory.lifecycle import MemoryLifecycleService
+            from src.memory.vault_layout import VaultLayout
+
+            store = RuntimeSettingsStore(settings)
+            lifecycle = MemoryLifecycleService(VaultLayout(settings.vault_path), self.state_db)
+            semantic: dict[str, Any] = {"provider": None}
+
+            def _setting_reader(name: str) -> Any:
+                return store.snapshot()["values"].get(name)
+
+            def _semantic_similarity(text: str, document: str) -> float:
+                provider = semantic["provider"]
+                if provider is None:
+                    from src.model_center import build_embedding_provider
+
+                    provider = build_embedding_provider(settings)
+                    semantic["provider"] = provider
+                if provider is None:
+                    raise RuntimeError("embedding provider unavailable")
+                vectors = provider.embed_many([text, document])
+                if len(vectors) != 2:
+                    raise RuntimeError("embedding provider returned no vectors")
+                import math
+
+                first, second = vectors[0], vectors[1]
+                dot = sum(float(a) * float(b) for a, b in zip(first, second))
+                norm_a = math.sqrt(sum(float(a) * float(a) for a in first))
+                norm_b = math.sqrt(sum(float(b) * float(b) for b in second))
+                if not norm_a or not norm_b:
+                    return 0.0
+                return dot / (norm_a * norm_b)
+
+            return AutoMemoryPromotionPipeline(
+                settings=settings,
+                lifecycle=lifecycle,
+                state_db=self.state_db,
+                memory_db_path=settings.memory_db_path,
+                semantic_similarity=_semantic_similarity,
+                setting_reader=_setting_reader,
+            )
+        except Exception:
+            return None
+
+    def _promotion_loop(self) -> None:
+        """daemon：开关每轮动态读取；关闭时空转等待，绝不影响扫描与提炼。"""
+        poll = float(getattr(self.settings, "auto_promote_poll_seconds", 300.0) or 300.0)
+        backoff = Event()
+        while not self._promotion_stop.is_set():
+            pipeline = self._promotion
+            if pipeline is None or self._paused or not pipeline.enabled():
+                if self._promotion_stop.wait(timeout=15.0):
+                    return
+                continue
+            try:
+                pipeline.run_once(limit=5)
+            except Exception:
+                pass
+            backoff.wait(timeout=poll)
+
+    @property
+    def auto_promotion_stats(self) -> dict[str, Any]:
+        pipeline = self._promotion
+        if pipeline is None:
+            return {"available": False}
+        try:
+            return dict(pipeline.stats())
         except Exception:
             return {"available": False}
 
