@@ -203,15 +203,19 @@ class MemoryStatisticsService:
             }
         try:
             status = dict(provider.status())
-            if not status.get("available") and not int(status.get("request_count") or 0):
-                # 懒加载 provider 启动后从未被使用：available=false 只是"没有
-                # 计数"，不是真实故障。做一次轻量真实嵌入探活，避免把向量层
-                # 永久显示为未开启。失败结果缓存 60s，防止轮询打爆。
+            if not status.get("available"):
+                # provider 的 available 是历史计数语义：启动早期一次失败
+                # （last_error 置位）后，若再无成功请求，available 恒 false，
+                # UI 会把健康的向量层显示为未开启。探活前先清历史失败态，
+                # 探活成功即恢复真实可用；失败结果缓存 60s 防止轮询打爆。
                 import time as _time
 
                 now = _time.monotonic()
                 if now - float(self._probe_failed_at or 0) >= 60.0:
                     try:
+                        reset = getattr(provider, "reset_failures", None)
+                        if callable(reset):
+                            reset()
                         vectors = provider.embed_many(["ping"])
                         if vectors and vectors[0]:
                             status = dict(provider.status())

@@ -18,19 +18,27 @@ class _Provider:
         self.embed_ok = embed_ok
         self.request_count = 0
         self.embed_calls = 0
+        self.resets = 0
+        self.last_error = None
+
+    def reset_failures(self):
+        self.resets += 1
+        self.last_error = None
 
     def status(self):
-        # 与真实 provider 同语义：available 反映"是否已有成功请求"。
+        # 与真实 provider 同语义：available 需要"有成功请求且无历史错误"。
         return {
-            "available": self.request_count > 0,
+            "available": self.request_count > 0 and self.last_error is None,
             "active_model": "bge-m3" if self.request_count else None,
             "dimension": 1024 if self.request_count else None,
             "request_count": self.request_count,
+            "last_error": self.last_error,
         }
 
     def embed_many(self, texts):
         self.embed_calls += 1
         if not self.embed_ok:
+            self.last_error = "ollama down"
             raise RuntimeError("ollama down")
         self.request_count += len(texts)
         return [[0.1] * 1024 for _ in texts]
@@ -50,10 +58,20 @@ class EmbeddingStatusProbeTests(unittest.TestCase):
         provider = _Provider(embed_ok=True)
         payload = MemoryStatisticsService._embedding_status(object.__new__(MemoryStatisticsService), _Semantic(provider))
         self.assertEqual(provider.embed_calls, 1)
+        self.assertEqual(provider.resets, 1)
         self.assertTrue(payload["available"])
         self.assertEqual(payload["state"], "healthy")
         self.assertEqual(payload["active_model"], "bge-m3")
         self.assertEqual(payload["dimension"], 1024)
+
+    def test_stale_failure_after_early_error_recovers(self):
+        """启动早期失败过一次（有计数但 available=false）也必须探活恢复。"""
+        provider = _Provider(embed_ok=True)
+        provider.request_count = 3
+        provider.last_error = "startup timeout"
+        payload = MemoryStatisticsService._embedding_status(object.__new__(MemoryStatisticsService), _Semantic(provider))
+        self.assertEqual(provider.embed_calls, 1)
+        self.assertTrue(payload["available"])
 
     def test_probe_failure_is_cached_for_60s(self):
         service = object.__new__(MemoryStatisticsService)
@@ -66,12 +84,12 @@ class EmbeddingStatusProbeTests(unittest.TestCase):
         second = MemoryStatisticsService._embedding_status(service, semantic)
         self.assertEqual(provider.embed_calls, 1, "60s 内失败结果应缓存，不重复探活")
 
-    def test_used_provider_status_is_shown_as_is(self):
+    def test_healthy_provider_status_is_shown_as_is(self):
         provider = _Provider(embed_ok=True)
         provider.request_count = 5
         payload = MemoryStatisticsService._embedding_status(object.__new__(MemoryStatisticsService), _Semantic(provider))
         self.assertTrue(payload["available"])
-        self.assertEqual(provider.embed_calls, 0, "已有真实计数的 provider 不再探活")
+        self.assertEqual(provider.embed_calls, 0, "健康 provider 不再探活")
 
     def test_missing_provider_reports_configuration_required(self):
         payload = MemoryStatisticsService._embedding_status(object.__new__(MemoryStatisticsService), _Semantic(None))
