@@ -329,6 +329,27 @@ class AutoPromotionPipelineTests(unittest.TestCase):
         self.pipeline.run_once()
         self.assertEqual(len(self._decisions()), 1)
 
+    def test_decided_rows_do_not_exhaust_batch_limit(self):
+        """真机回归：最老的已决行不得占满每轮 limit 名额导致管线空转。"""
+        for index in range(3):
+            _seed(
+                self.memory_db,
+                f"conv-limit-{index}",
+                f"独立结论{index}号",
+                f"第{index}条独立确定的事实。",
+                [f"事实{index}"],
+                occurred_at=f"2026-09-2{index}T08:00:00",
+            )
+        first = self.pipeline.run_once(limit=2)
+        self.assertEqual(first["processed"], 2)
+        # 第二轮：前两条已决，limit=2 的名额必须轮到第三条。
+        second = self.pipeline.run_once(limit=2)
+        self.assertEqual(second["processed"], 1)
+        self.assertEqual(len(self._decisions()), 3)
+        # 全部决后：零处理但不报错。
+        third = self.pipeline.run_once(limit=2)
+        self.assertEqual(third["processed"], 0)
+
     def test_revision_bump_is_reprocessed_and_graduates_evolving(self):
         _seed(
             self.memory_db,

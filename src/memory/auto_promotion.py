@@ -139,13 +139,20 @@ class AutoMemoryPromotionPipeline:
             self._events_cache = None
 
     def _run_batch(self, summary: dict[str, Any], *, rows: list[dict[str, Any]], limit: int | None) -> dict[str, Any]:
+        # 先剔除已决行再截断 limit：否则最早的已决行永久占满每轮名额，
+        # 管线在首轮后空转（真机验收发现的回归）。
+        decided = self._decided_keys()
+        rows = [
+            row
+            for row in rows
+            if (str(row["conversation_id"]), int(row["revision"] or 0)) not in decided
+        ]
         if limit is not None:
             rows = rows[: max(int(limit), 0)]
         if not rows:
             self._last_run = dict(summary)
             return dict(summary)
 
-        decided = self._decided_keys()
         core_documents = self._load_core_documents()
         promoted_today = self._promoted_today()
         daily_limit = int(self._setting("auto_promote_daily_limit", 10) or 10)
