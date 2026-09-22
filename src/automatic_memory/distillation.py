@@ -418,13 +418,16 @@ class KnowledgeDistiller:
     # ------------------------------------------------------------- rows
     def _pending_conversations(self, conn: sqlite3.Connection, limit: int) -> list[dict[str, Any]]:
         # 导入是 append-only：消息数变化即代表对话有新内容，需要重提炼。
+        # superseded 是被更新结论有意取代的终态：会话内容没变就不重提炼复活，
+        # 否则它每轮满足 status != 'ready' 永久占住 started_at DESC 队列前排，
+        # 饿死真正未提炼的会话（failed 行保留重试语义）。
         rows = conn.execute(
             """
             SELECT c.conversation_id, c.source_id, c.title, c.started_at, c.message_count
             FROM conversation_records c
             LEFT JOIN distilled_knowledge d ON d.conversation_id = c.conversation_id
             WHERE d.conversation_id IS NULL
-               OR d.status != 'ready'
+               OR (d.status != 'ready' AND COALESCE(d.status, '') != 'superseded')
                OR d.message_count != (
                    SELECT COUNT(*) FROM message_records m WHERE m.conversation_id = c.conversation_id
                )
@@ -685,14 +688,20 @@ class KnowledgeDistiller:
     def _distill_one(self, conn: sqlite3.Connection, model: str, conversation: dict[str, Any]) -> bool:
         conversation_id = str(conversation["conversation_id"])
         title = str(conversation["title"] or "未命名对话")
+        # status 必须真实读取：历史上这里漏取 status 列导致"取不到即按 ready"
+        # 的错误默认，superseded 行被当成最新结论秒跳。
         existing = conn.execute(
-            "SELECT messages_digest, revision, message_count FROM distilled_knowledge WHERE conversation_id = ?",
+            "SELECT messages_digest, revision, status, message_count FROM distilled_knowledge WHERE conversation_id = ?",
             (conversation_id,),
         ).fetchone()
         digest = self._conversation_digest(conn, conversation_id)
         if digest is None:
             return False
-        if existing is not None and str(existing["messages_digest"]) == digest and str(existing["status"] if "status" in existing.keys() else "ready") == "ready":
+        if (
+            existing is not None
+            and str(existing["messages_digest"]) == digest
+            and str(existing["status"] or "ready") == "ready"
+        ):
             # 已是最新，视为成功。历史行的 message_count 可能是旧口径；若不在此处
             # 修正，该会话会永远满足候选条件（message_count 不匹配）并每轮空转，
             # 把 ORDER BY started_at DESC 队列前排占满，饿死真正未提炼的会话。

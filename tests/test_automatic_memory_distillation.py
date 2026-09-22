@@ -230,6 +230,40 @@ def test_stale_message_count_does_not_starve_undistilled_conversations(tmp_path:
     assert "conv-2" in distilled_ids
 
 
+def test_superseded_rows_leave_candidate_queue_and_never_revive(tmp_path: Path, ollama_server: str) -> None:
+    """superseded 是被更新结论取代的终态：不再进候选、不因 digest 相同被复活。
+
+    回归背景：秒跳判断漏取 status 列（取不到即按 ready），superseded 行每轮满足
+    status != 'ready' 进候选、每轮被秒跳成功，两个队列名额每轮空转，真正未提炼的
+    会话被永久饿死（生产 549 个会话从未被提炼）。
+    """
+    distiller = _distiller(tmp_path, ollama_server)
+    distiller.run_once(limit=10)
+    memory_db = tmp_path / "lingji_memory.db"
+    with sqlite3.connect(str(memory_db)) as conn:
+        conn.execute("UPDATE distilled_knowledge SET status = 'superseded' WHERE conversation_id = 'conv-0'")
+        conn.commit()
+    requests_before = len(_OllamaHandler.requests)
+
+    result = distiller.run_once(limit=10)
+    # superseded 行既不重提炼复活，也不作为成功计数空转。
+    assert len(_OllamaHandler.requests) == requests_before
+    assert result["distilled"] == 0
+    with sqlite3.connect(str(memory_db)) as conn:
+        status = str(conn.execute("SELECT status FROM distilled_knowledge WHERE conversation_id = 'conv-0'").fetchone()[0])
+        pending = conn.execute(
+            """
+            SELECT COUNT(*) FROM conversation_records c
+            LEFT JOIN distilled_knowledge d ON d.conversation_id = c.conversation_id
+            WHERE d.conversation_id IS NULL
+               OR (d.status != 'ready' AND COALESCE(d.status, '') != 'superseded')
+               OR d.message_count != (SELECT COUNT(*) FROM message_records m WHERE m.conversation_id = c.conversation_id)
+            """
+        ).fetchone()[0]
+    assert status == "superseded"
+    assert pending == 0
+
+
 def test_changed_messages_bump_revision(tmp_path: Path, ollama_server: str) -> None:
     distiller = _distiller(tmp_path, ollama_server)
     distiller.run_once(limit=10)
