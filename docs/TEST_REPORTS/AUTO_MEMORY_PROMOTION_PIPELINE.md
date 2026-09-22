@@ -47,3 +47,24 @@
 ## 回滚
 
 关闭 `auto_promote_enabled`（Desktop 设置页"记忆自动化"组或 `PATCH /api/settings`）。已晋升文件属既有 Core，不做批量删除。应用级回滚：`app-data/rollback-sidecar-20260922-auto-promote/`（上一版 sidecar 三件套，SHA `0b066312…`）。
+
+## 追加（深夜二轮）：主人实测反馈的两个显示问题
+
+主人反馈"永久记忆还是 1、向量未开启"。诊断与修复（提交 `97ece3d8`/`edd7ac8b`/`d9d505fe`）：
+
+1. **永久记忆计数不动**：UI 计数来自 `memory_documents` 投影（`core_memories`），而 `sync_core`
+   只在 gateway 启动时跑一次，运行中晋升的 Core 文件要等重启才进投影。修复：晋升管线新增
+   `post_promotion_sync` 回调，每轮有晋升后自动调 `IncrementalMemorySynchronizer.sync_core`
+   （MemoryDatabase 每次调用独立连接，无句柄残留）。实测：计数 1 → 11（含后续真实晋升）。
+2. **向量显示未开启**：两层原因。其一，`/api/overview` 的嵌入状态直接读懒加载 provider 的
+   历史计数（`available = 有成功且无 last_error`），启动早期一次失败即恒 false；现改为
+   status 路径真实探活（`reset_failures` + 一次轻量 embed，失败缓存 60s）。其二，探活如实
+   暴露了 **Ollama 服务本身已退出**（Connection refused ×8）——显示是诚实的。Ollama 已用
+   其既有 launchd 服务（`com.ollama.serve.plist`）重新托管，开机自启。
+3. 修复后实测：`core_memories=11`、`embedding available=true (bge-m3, 1024 维, healthy)`、
+   `vector state=healthy (19,801 向量，含 54 个新晋升 chunk 的补齐)`。
+4. 附加单测：`tests/test_vector_status_probe_fallback.py`（3 例）、
+   `tests/test_embedding_status_probe.py`（5 例）；相关套件合计 83 passed。
+5. 已知既有缺陷（未修，记录待办）：sidecar 停机时 `ExtractionWorker remained alive after
+   stop` 导致 shutdown RuntimeError（每次退出日志可见，不影响运行中服务）。
+6. 运维提醒：Ollama 现由 launchd 管理；`auto_promote_poll_seconds` 仅 config 层（运行中不可调）。
