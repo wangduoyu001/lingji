@@ -4170,3 +4170,10 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 ## 2026-09-22 MCP_SEARCH_RESULT_SLIMMING
 
 开发前约定：search_memory 的 MCP 返回投影瘦身为 AI 消费的最小字段集（memory_id、title、heading、text、memory_type、memory_tier、updated_at、score），其余元数据字段不再下发；gateway 与 Local Control API 返回结构不变（Desktop UI 依赖完整字段）；fetch_memory 保持可按 memory_id 取完整详情，信息不丢失。验收：新增投影单测（瘦身字段在、被删字段不在、非 dict 条目安全透传）；既有 MCP 相关测试全过；装机后实测单次返回字符数较默认 limit=10 的 42k 基线显著下降（目标降幅 >50%）；不改检索排序与召回逻辑。
+
+
+## 2026-09-22 AUTO_MEMORY_PROMOTION_PIPELINE（已登记待实施）
+
+主人拍板（治理变更，AGENTS.md §4 已同步修订）：取消"重要事实进永久记忆须逐条审批"；改为自动晋升门槛 + Evolving 迭代时间线。
+开发前约定：晋升入口复用 `src/memory/lifecycle.py promote_candidate` 与 auto_review 确定性评估；原料=`distilled_knowledge`；门槛=置信度阈值（起步 0.90）+ 与既有 Core 去重 + 冲突检测 + 类别白名单（事实/偏好/约束/项目结论，排除通知类）+ 每日上限（起步 10）；总开关 `auto_promote_enabled` 默认关、主人显式开启；每条晋升写审计（复用 auto_review 决策哈希链）；未达标或有冲突 → `vault/03-Knowledge/Evolving/<主题>.md` 追加带日期的时间线条目（git 提交天然时间线）；毕业后自动 promote 并在 Evolving 文件标记 graduated 及链接。
+验收：门槛各分支/去重/冲突转 Evolving/上限/开关关闭=零写入的单测；局部 pytest 全过；重打包装机后开开关实测一轮（审计记录 + vault 文件 + 时间线可查）；回滚=关开关；不批量改动既有 Core 文件。
