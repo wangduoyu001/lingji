@@ -50,3 +50,57 @@ def test_codex_mcp_tools_exist_and_do_not_expose_core_memory_writes():
         parameters = set(inspect.signature(function).parameters)
         assert "vault_path" not in parameters
         assert "core_memory" not in parameters
+
+
+def test_slim_search_results_keeps_agent_fields_and_drops_metadata():
+    from src.mcp_server import slim_search_results
+
+    payload = {
+        "query": "薏仁",
+        "agent_id": "codex",
+        "memory_revision": 1313,
+        "results": [
+            {
+                "memory_id": "LJ-EVIDENCE-1",
+                "chunk_id": "LJ-CHUNK-1",
+                "relative_path": "__structured__/evidence/LJ-EVIDENCE-1.md",
+                "title": "工作日志",
+                "heading": "复检结论",
+                "text": "薏仁台词命中",
+                "memory_type": "structured_evidence",
+                "memory_tier": "evidence",
+                "status": "active",
+                "review_status": "evidence",
+                "privacy": "private",
+                "recall_weight": 1.0,
+                "content_hash": "abc",
+                "score": 0.57,
+                "updated_at": "2026-09-19T21:00:00",
+                "tags": ["a"],
+                "relationships": {"decisions": []},
+            }
+        ],
+    }
+    slimmed = slim_search_results(payload)
+    assert slimmed["query"] == "薏仁"
+    assert "fetch_memory" in slimmed["detail_hint"]
+    row = slimmed["results"][0]
+    for key in ("memory_id", "title", "heading", "text", "memory_type", "memory_tier", "score", "updated_at"):
+        assert key in row
+    for key in ("chunk_id", "relative_path", "status", "review_status", "privacy", "recall_weight", "content_hash", "tags", "relationships"):
+        assert key not in row
+    # 原始 payload 不被就地修改
+    assert "chunk_id" in payload["results"][0]
+
+
+def test_slim_search_results_passes_through_unexpected_shapes():
+    from src.mcp_server import slim_search_results
+
+    assert slim_search_results(None) is None
+    assert slim_search_results(["not", "a", "dict"]) == ["not", "a", "dict"]
+    no_results = {"query": "x", "results": None}
+    assert slim_search_results(no_results) is no_results
+    mixed = {"results": [{"memory_id": "LJ-1"}, "opaque-string"]}
+    slimmed = slim_search_results(mixed)
+    assert slimmed["results"][1] == "opaque-string"
+    assert slimmed["results"][0] == {"memory_id": "LJ-1"}

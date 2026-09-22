@@ -21,6 +21,39 @@ from src.retrieval import MarkdownChunker
 from src.skills import SkillRegistry
 
 
+# MCP consumers (AI agents) only need identity, text and ranking; the full
+# metadata projection stays available via fetch_memory and the control API.
+_SEARCH_RESULT_FIELDS = (
+    "memory_id",
+    "title",
+    "heading",
+    "text",
+    "memory_type",
+    "memory_tier",
+    "updated_at",
+    "score",
+)
+
+
+def slim_search_results(payload: Any) -> Any:
+    """Project search_memory results down to the fields an AI agent consumes."""
+    if not isinstance(payload, dict):
+        return payload
+    results = payload.get("results")
+    if not isinstance(results, list):
+        return payload
+    slimmed = []
+    for item in results:
+        if not isinstance(item, dict):
+            slimmed.append(item)
+            continue
+        slimmed.append({key: item[key] for key in _SEARCH_RESULT_FIELDS if item.get(key) not in (None, "", [])})
+    projected = dict(payload)
+    projected["results"] = slimmed
+    projected["detail_hint"] = "use fetch_memory(memory_id) for full metadata and cited chunks"
+    return projected
+
+
 def build_codex_session_service(
     extraction_pipeline: Any,
     *,
@@ -184,11 +217,12 @@ def create_mcp_server(
         as_of: str | None = None,
     ) -> dict[str, Any]:
         """Search LingJi memories with full-text, metadata and optional semantic fusion."""
-        return memory_gateway.search_memory(
+        payload = memory_gateway.search_memory(
             agent(agent_id), query, limit=limit, project=project,
             memory_types=memory_types, tags=tags, include_archived=include_archived,
             mode=mode, as_of=as_of,
         )
+        return slim_search_results(payload)
 
     @mcp.tool()
     def fetch_memory(

@@ -49,3 +49,11 @@ python3 -m pytest tests/ -k "rollout or extraction or automatic_memory" -q   # 4
 - `distill_provider` 覆盖为 zhipu（云端）偏离 local 默认：隐私决策待确认。
 - 6 个既有测试失败（语义诊断分类 + evaluation 质量门）需独立修复。
 - 567 张待复核卡堆积（auto_review=OFF）、capture 20 个 failed 滞留、两个 chatgpt_export 源指向 acceptance 目录、主仓库脏工作区处置。
+
+## MCP search 结果瘦身（2026-09-22 追加）
+
+- 变更：`src/mcp_server.py` 新增 `slim_search_results` 投影，MCP `search_memory` 返回只保留 memory_id、title、heading、text、memory_type、memory_tier、updated_at、score 八字段并附 `detail_hint`（指引用 fetch_memory 取详情）；gateway 与 control API（含 inspector）返回结构不变。
+- 测试：`tests/test_codex_mcp_tools.py` 新增 2 项投影测试（字段保留/剔除/非 dict 透传/原 payload 不被修改），`test_codex_mcp_tools.py` 3 passed、`test_memory_retrieval.py` + `test_mcp_control_bridge.py` + `test_automatic_memory_mcp.py` 9 passed。
+- 装机：重建 sidecar（SHA-256 `0b066312…`），备份当前版至 `app-data/rollback-sidecar-20260922/`，替换后全量 ad-hoc 重签（80 个库文件 + exe），重启 App 后新进程 13632 监听 8766（本次完整启动约 1 分钟，较上次慢，属初始化序列正常范围）。
+- 实测（同查询"灵机项目 优化" limit=10）：**42,150 字符（≈14,050 token）→ 5,205 字符（≈1,735 token），降幅 88%**，超额完成 >50% 目标；10 条结果齐全。
+- 附注：inspector `q=` 参数只匹配标题/元数据（"桃园结义"仅在正文故 0 命中），MCP search 为全文检索——两者分工属既有设计，非回归。

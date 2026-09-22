@@ -4165,3 +4165,8 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 ## 2026-09-19 CODEX_ROLLOUT_MULTI_SESSION_META_REPAIR
 
 开发前约定：修复 codex_rollout 适配器对 Codex compact/fork 产生的"同一 rollout 文件含多条不同线程 session_meta"形态的错误拒绝（生产 17 个终态失败 job、连续三日每轮 partial_failure 19 的根因之一）。语义：以首条 session_meta 线程 id 作为会话身份（与文件名一致），后续不同 id 记 warning 不再拒绝；registry._detection_reason 对所有带 detect_schema 的适配器透出真实拒绝原因，取代误导性兜底文案。仅改 worktree 代码与测试；不部署生产、不重置生产终态 job（待主人确认后另行执行）。验收：新增/改造单测覆盖多 session_meta 接受、首条身份、warning 与无身份拒绝保留；局部 pytest 通过；不降低既有断言。"无可提取消息仍判失败"语义本轮不变，如实记录。
+
+
+## 2026-09-22 MCP_SEARCH_RESULT_SLIMMING
+
+开发前约定：search_memory 的 MCP 返回投影瘦身为 AI 消费的最小字段集（memory_id、title、heading、text、memory_type、memory_tier、updated_at、score），其余元数据字段不再下发；gateway 与 Local Control API 返回结构不变（Desktop UI 依赖完整字段）；fetch_memory 保持可按 memory_id 取完整详情，信息不丢失。验收：新增投影单测（瘦身字段在、被删字段不在、非 dict 条目安全透传）；既有 MCP 相关测试全过；装机后实测单次返回字符数较默认 limit=10 的 42k 基线显著下降（目标降幅 >50%）；不改检索排序与召回逻辑。
