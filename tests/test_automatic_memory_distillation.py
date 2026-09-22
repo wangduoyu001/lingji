@@ -165,6 +165,71 @@ def test_run_once_is_idempotent(tmp_path: Path, ollama_server: str) -> None:
     assert len(_OllamaHandler.requests) == requests_after_first
 
 
+def test_stale_message_count_candidate_is_repaired_without_model_call(tmp_path: Path, ollama_server: str) -> None:
+    """历史行 message_count 旧口径不匹配时：修正口径、不重调模型、两轮内不再占候选。
+
+    回归背景：生产库一批 ready 行的 message_count 是旧口径，每轮都满足候选条件
+    （message_count != 实际消息数）却被 digest 秒跳，且永不修正——它们永久占满
+    started_at DESC 队列前排，饿死真正未提炼的会话。
+    """
+    distiller = _distiller(tmp_path, ollama_server)
+    distiller.run_once(limit=10)
+    memory_db = tmp_path / "lingji_memory.db"
+    with sqlite3.connect(str(memory_db)) as conn:
+        conn.execute("UPDATE distilled_knowledge SET message_count = 0 WHERE conversation_id = 'conv-0'")
+        conn.commit()
+    requests_before = len(_OllamaHandler.requests)
+
+    result = distiller.run_once(limit=10)
+    # 口径修正不重调模型（秒跳成功计入 distilled，这里只认模型请求）。
+    assert len(_OllamaHandler.requests) == requests_before
+    with sqlite3.connect(str(memory_db)) as conn:
+        fixed = int(conn.execute("SELECT message_count FROM distilled_knowledge WHERE conversation_id = 'conv-0'").fetchone()[0])
+    assert fixed == 2
+
+    # 第二轮：conv-0 退出候选，pending 归零（不再每轮空转占位）。
+    result2 = distiller.run_once(limit=10)
+    assert result2["pending"] == 0
+    assert len(_OllamaHandler.requests) == requests_before
+
+
+def test_stale_message_count_does_not_starve_undistilled_conversations(tmp_path: Path, ollama_server: str) -> None:
+    """假候选不再永久占位：排队在后的未提炼会话在有限轮内被处理。"""
+    distiller = _distiller(tmp_path, ollama_server)
+    distiller.run_once(limit=10)
+    memory_db = tmp_path / "lingji_memory.db"
+    # 新增第三个会话（未提炼），同时把 conv-0 变成 message_count 旧口径的假候选。
+    with sqlite3.connect(str(memory_db)) as conn:
+        conn.execute(
+            "INSERT INTO conversation_records VALUES (?, 'src', ?, '2026-09-03T00:00:00+00:00', 2)",
+            ("conv-2", "对话 2"),
+        )
+        for seq in range(2):
+            conn.execute(
+                "INSERT INTO message_records VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    f"msg-2-{seq}",
+                    "conv-2",
+                    "user" if seq == 0 else "assistant",
+                    f"消息 2-{seq}：确定了新的发布流程。",
+                    f"hash-2-{seq}",
+                    f"2026-09-03T00:0{seq}:00+00:00",
+                    seq,
+                ),
+            )
+        conn.execute("UPDATE distilled_knowledge SET message_count = 0 WHERE conversation_id = 'conv-0'")
+        conn.commit()
+
+    # 第一轮消化假候选（修正口径，不调模型），第二轮必须轮到真正未提炼的 conv-2。
+    distiller.run_once(limit=1)
+    distiller.run_once(limit=1)
+    requests_now = len(_OllamaHandler.requests)
+    assert requests_now > 0
+    listing = distiller.list_entries(limit=10)
+    distilled_ids = {item["conversation_id"] for item in listing["items"]}
+    assert "conv-2" in distilled_ids
+
+
 def test_changed_messages_bump_revision(tmp_path: Path, ollama_server: str) -> None:
     distiller = _distiller(tmp_path, ollama_server)
     distiller.run_once(limit=10)

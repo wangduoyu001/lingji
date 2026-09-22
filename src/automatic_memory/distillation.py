@@ -686,14 +686,29 @@ class KnowledgeDistiller:
         conversation_id = str(conversation["conversation_id"])
         title = str(conversation["title"] or "未命名对话")
         existing = conn.execute(
-            "SELECT messages_digest, revision FROM distilled_knowledge WHERE conversation_id = ?",
+            "SELECT messages_digest, revision, message_count FROM distilled_knowledge WHERE conversation_id = ?",
             (conversation_id,),
         ).fetchone()
         digest = self._conversation_digest(conn, conversation_id)
         if digest is None:
             return False
         if existing is not None and str(existing["messages_digest"]) == digest and str(existing["status"] if "status" in existing.keys() else "ready") == "ready":
-            return True  # 已是最新，视为成功
+            # 已是最新，视为成功。历史行的 message_count 可能是旧口径；若不在此处
+            # 修正，该会话会永远满足候选条件（message_count 不匹配）并每轮空转，
+            # 把 ORDER BY started_at DESC 队列前排占满，饿死真正未提炼的会话。
+            actual_count = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM message_records WHERE conversation_id = ?",
+                    (conversation_id,),
+                ).fetchone()[0]
+            )
+            if int(existing["message_count"] or 0) != actual_count:
+                conn.execute(
+                    "UPDATE distilled_knowledge SET message_count = ? WHERE conversation_id = ?",
+                    (actual_count, conversation_id),
+                )
+                conn.commit()
+            return True
         messages, _digest_used, message_count = self._transcript_payload(conn, conversation_id)
         recent = conn.execute(
             """
