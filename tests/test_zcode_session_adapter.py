@@ -157,13 +157,11 @@ class ZcodePathPolicyTests(unittest.TestCase):
         )
 
     def test_exact_home_database_is_enumerated(self):
-        import os
-
         from src.automatic_memory.path_policy import enumerate_authorized_files
 
         home = Path.home()
         files = enumerate_authorized_files(
-            self._record(str(home / ".zcode" / "cli" / "db" / "db.sqlite")),
+            self._record(str(home / ".zcode" / "cli" / "db")),
             effective_home=str(home),
         )
         self.assertEqual(files, (home / ".zcode" / "cli" / "db" / "db.sqlite",))
@@ -184,14 +182,12 @@ class ZcodePathPolicyTests(unittest.TestCase):
 class ZcodeSourceRegistryTests(unittest.TestCase):
     """授权注册表放行精确 ZCode 库、继续拒绝其余敏感数据库路径。"""
 
-    def test_exact_home_database_is_canonical(self):
-        import os
-
+    def test_exact_home_database_directory_is_canonical(self):
         from src.automatic_memory.source_registry import _canonical_root
 
         home = Path.home()
-        canonical = _canonical_root(str(home / ".zcode" / "cli" / "db" / "db.sqlite"))
-        assert canonical == str(Path(os.path.abspath(home / ".zcode" / "cli" / "db" / "db.sqlite")))
+        canonical = _canonical_root(str(home / ".zcode" / "cli" / "db"))
+        assert canonical == str((home / ".zcode" / "cli" / "db").resolve())
 
     def test_other_sqlite_roots_stay_rejected(self):
         import tempfile

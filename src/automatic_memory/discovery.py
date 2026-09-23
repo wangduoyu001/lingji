@@ -127,7 +127,7 @@ def discover_source_metadata(settings: object) -> tuple[DiscoveredSource, ...]:
                 count, byte_count, earliest, latest, fmt,
                 {"kind": "authorize", "label": "允许接管 Codex", "source_kind": "codex_rollout"},
             ))
-        zcode_db = home / ".zcode" / "cli" / "db" / "db.sqlite"
+        zcode_db = home / ".zcode" / "cli" / "db"
         zcode_lexical = Path(os.path.abspath(str(zcode_db)))
         if any(parent.is_symlink() for parent in (zcode_lexical, *zcode_lexical.parents)):
             result.append(DiscoveredSource(
@@ -135,8 +135,9 @@ def discover_source_metadata(settings: object) -> tuple[DiscoveredSource, ...]:
                 "symbolic-link ZCode database is not traversed", None, None, None, None, "zcode_session",
                 {"kind": "authorize", "label": "允许接管 ZCode", "source_kind": "zcode_session"},
             ))
-        elif zcode_lexical.is_file():
-            stat = zcode_lexical.stat()
+        elif zcode_lexical.is_dir():
+            database = zcode_lexical / "db.sqlite"
+            stat = database.stat() if database.is_file() else zcode_lexical.stat()
             result.append(DiscoveredSource(
                 "zcode_session", "ZCode会话", str(zcode_lexical), "available", "metadata_discovery", None,
                 1, stat.st_size,
