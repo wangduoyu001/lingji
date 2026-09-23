@@ -130,6 +130,7 @@ class ZcodeSessionAdapterTests(unittest.TestCase):
         self.assertEqual(conversation.title, "适配器联调")
         # 注入的 system 上下文被剔除；同消息的两个 text part 合并为一条。
         self.assertEqual([m.role for m in conversation.messages], ["owner", "assistant"])
+        self.assertEqual([m.sequence for m in conversation.messages], [1, 2], "sequence 必须会话内唯一递增")
         self.assertIn("帮我把适配器写完", conversation.messages[0].content)
         self.assertIn("先实现解析。", conversation.messages[1].content)
         self.assertIn("再补上单测。", conversation.messages[1].content)

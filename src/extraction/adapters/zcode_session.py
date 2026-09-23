@@ -45,7 +45,7 @@ def _millis_to_iso(value: Any) -> str:
 
 class ZcodeSessionAdapter(ExtractionAdapter):
     name = "zcode_session"
-    version = "1.0.0"
+    version = "1.0.1"
     source_types = ("zcode_session",)
 
     def can_handle(
@@ -175,6 +175,25 @@ class ZcodeSessionAdapter(ExtractionAdapter):
                 messages[-1] = merged
                 continue
             messages.append(message)
+        if not messages:
+            return None
+        # sequence 必须会话内唯一（read model 唯一约束含 sequence）；part.sequence
+        # 是每条消息内部从 1 重新计数的，直接用会撞唯一键。
+        messages = [
+            StructuredMessage(
+                external_id=item.external_id,
+                role=item.role,
+                author=item.author,
+                occurred_at=item.occurred_at,
+                sequence=index + 1,
+                content=item.content,
+                projects=item.projects,
+                agent_scope=item.agent_scope,
+                raw_reference=item.raw_reference,
+                metadata=item.metadata,
+            )
+            for index, item in enumerate(messages)
+        ]
         if not messages:
             return None
         title = str(session_row["title"] or "").strip() or "ZCode 会话"
