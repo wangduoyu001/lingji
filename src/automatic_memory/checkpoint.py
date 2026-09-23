@@ -52,18 +52,52 @@ def _dir_usage(raw_root: Path) -> int:
     return total
 
 
+def nonterminal_job_raw_ids(state_db_path: Path) -> set[str]:
+    """未终态提取任务（queued/processing/failed）引用的 raw_id 集合。
+
+    准确性红线（2026-09-24 主人约束）：淘汰绝不能删掉还没提炼完成的快照，
+    否则那些内容永远进不了记忆层。failed 也保护——失败任务会自动重试，
+    raw 没了重试就永远不可能成功。
+    """
+    protected: set[str] = set()
+    try:
+        import sqlite3
+
+        conn = sqlite3.connect(f"file:{state_db_path}?mode=ro", uri=True, timeout=10)
+        try:
+            rows = conn.execute(
+                """
+                SELECT json_extract(payload_json, '$.raw_id')
+                FROM extraction_jobs
+                WHERE status IN ('queued', 'processing', 'failed')
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+        for (raw_id,) in rows:
+            if raw_id:
+                protected.add(str(raw_id))
+    except Exception:
+        # 查不到保护名单时宁可不淘汰（返回空集会让调用方维持配额报错语义）。
+        return set()
+    return protected
+
+
 def evict_raw_for_space(
     raw_root: Path,
     target_bytes: int,
     *,
     now: float | None = None,
     keep_recent: int = _KEEP_RECENT,
+    protected: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """把 raw 用量淘汰回 target_bytes 以下；返回淘汰记录列表。
 
     无淘汰空间可释放（全是受保护文件）时返回空列表，调用方维持原配额报错语义。
+    `protected`：准确性保护名单（未终态任务引用的 raw_id），永不淘汰。
     """
     now = now if now is not None else time.time()
+    protected = {str(item) for item in (protected or set())}
     if not raw_root.is_dir():
         return []
     entries: list[tuple[float, int, Path]] = []  # (mtime, size, path)
@@ -110,7 +144,7 @@ def evict_raw_for_space(
     for mtime, size, path in entries:
         if budget <= 0:
             break
-        if path.name in newest_names or path.name in large_names:
+        if path.name in newest_names or path.name in large_names or path.name in protected:
             continue
         age = now - mtime
         protect = _LARGE_PROTECT_SECONDS if size >= _LARGE_SNAPSHOT_BYTES else _SMALL_PROTECT_SECONDS
@@ -505,10 +539,16 @@ class SnapshotJobRunner:
                     size = path.stat().st_size
                     if raw_used + size > self.raw_max_bytes:
                         # 先尝试淘汰过保护期的旧快照腾位（占用不能无限膨胀）；
+                        # 未终态任务引用的快照在准确性保护名单里绝不淘汰；
                         # 仍不够才维持原"触顶拒绝写入"语义。
                         try:
                             target = int(self.raw_max_bytes * 0.7)
-                            evict_raw_for_space(self.snapshot.raw_root, target)
+                            protected_ids = nonterminal_job_raw_ids(
+                                Path(self.state_db.path)
+                            )
+                            evict_raw_for_space(
+                                self.snapshot.raw_root, target, protected=protected_ids
+                            )
                             raw_used = _dir_usage(self.snapshot.raw_root)
                         except Exception:
                             raw_used = max(raw_used, _dir_usage(self.snapshot.raw_root))

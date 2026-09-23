@@ -78,3 +78,45 @@ def test_hidden_files_ignored(tmp_path: Path):
     evicted = evict_raw_for_space(tmp_path, target_bytes=0, now=NOW)
     assert evicted == []  # 单个文件即全局最新 → 受保护
     assert log.exists(), "记账文件永不成为淘汰对象"
+
+
+def test_protected_raw_ids_never_evicted(tmp_path: Path):
+    """准确性红线：未终态任务引用的快照永不淘汰（哪怕超期超压）。"""
+    _make(tmp_path, "pending-job-raw.bin", 40, age_seconds=50 * 3600)
+    evicted = evict_raw_for_space(
+        tmp_path, target_bytes=10 * MB, now=NOW, protected={"pending-job-raw.bin"}
+    )
+    assert evicted == [], "保护名单里的文件必须存活"
+
+
+def test_nonterminal_job_raw_ids_reads_state_db(tmp_path: Path):
+    import sqlite3
+
+    from src.automatic_memory.checkpoint import nonterminal_job_raw_ids
+
+    db = tmp_path / "lingji_state.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "CREATE TABLE extraction_jobs (status TEXT, payload_json TEXT)"
+    )
+    for status, raw in (
+        ("queued", "raw-q"),
+        ("processing", "raw-p"),
+        ("failed", "raw-f"),
+        ("completed", "raw-done"),
+        ("cancelled", "raw-cancelled"),
+    ):
+        conn.execute(
+            "INSERT INTO extraction_jobs VALUES (?, ?)",
+            (status, f'{{"raw_id": "{raw}"}}'),
+        )
+    conn.commit()
+    conn.close()
+    protected = nonterminal_job_raw_ids(db)
+    assert protected == {"raw-q", "raw-p", "raw-f"}, "只有未终态任务进保护名单"
+
+
+def test_nonterminal_raw_ids_missing_db_returns_empty(tmp_path: Path):
+    from src.automatic_memory.checkpoint import nonterminal_job_raw_ids
+
+    assert nonterminal_job_raw_ids(tmp_path / "nope.db") == set()
