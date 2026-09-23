@@ -205,3 +205,21 @@ class ZcodeSourceRegistryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(PermissionError):
                 _canonical_root(str(Path(tmp) / "other.sqlite"))
+
+
+class SentinelWalTests(unittest.TestCase):
+    def test_wal_change_changes_sentinel(self):
+        import tempfile
+
+        from src.automatic_memory.checkpoint import SnapshotJobRunner
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "db.sqlite"
+            base.write_bytes(b"SQLite format 3\x00" + b"x" * 32)
+            before = SnapshotJobRunner._path_sentinel(base)
+            wal = base.with_name(base.name + "-wal")
+            self.assertNotIn(":wal", before)
+            wal.write_bytes(b"pending transaction frame")
+            after = SnapshotJobRunner._path_sentinel(base)
+            self.assertIn(":wal", after)
+            self.assertNotEqual(before, after, "WAL 变化必须改变哨兵")

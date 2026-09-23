@@ -587,7 +587,17 @@ class SnapshotJobRunner:
         stat = path.lstat()
         if not path.is_file() or path.is_symlink():
             return ""
-        return f"{stat.st_size}:{stat.st_mtime_ns}:{int(getattr(stat, 'st_ino', 0) or 0)}:{int(stat.st_mode)}"
+        sentinel = f"{stat.st_size}:{stat.st_mtime_ns}:{int(getattr(stat, 'st_ino', 0) or 0)}:{int(stat.st_mode)}"
+        # SQLite WAL：主库文件在 checkpoint 前不反映最新提交；WAL 的体积/时间
+        # 变化必须进入哨兵，否则 WAL 模式数据库源（如 ZCode 会话库）永远
+        # 被当作未变化而跳过采集。
+        try:
+            wal_stat = path.with_name(path.name + "-wal").lstat()
+            if wal_stat.st_size:
+                sentinel += f":wal{wal_stat.st_size}:{wal_stat.st_mtime_ns}"
+        except OSError:
+            pass
+        return sentinel
 
     @staticmethod
     def _sentinel_matches(stored: str, current: str) -> bool:
