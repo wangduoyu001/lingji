@@ -17,6 +17,7 @@ from typing import Any, Callable
 from src.storage import StateDatabase
 
 from .checkpoint import SnapshotJobRunner
+from .pipeline_health import PipelineHealth
 from .scheduler import AutomaticMemoryScheduler
 from .snapshot import ConsistentSnapshot
 from .source_registry import SourceRegistry
@@ -167,6 +168,11 @@ class AutomaticMemoryRuntime:
         self._backfill_wake = Event()
         self._backfill_stop = Event()
         self._backfill_thread: Thread | None = None
+        # 三个 daemon 的故障可见性：吞异常可以，但必须计数、限频上报、status 可见。
+        self._pipeline_health = {
+            name: PipelineHealth(name, state_db)
+            for name in ("distill", "promotion", "vector_backfill")
+        }
         if hasattr(self.scheduler, "heartbeat_work_callback"):
             self.scheduler.heartbeat_work_callback = self._touch_active_scan_work
         if hasattr(self.registry, "add_lifecycle_listener"):
@@ -485,6 +491,10 @@ class AutomaticMemoryRuntime:
             "max_change_detection_delay_seconds": _optional_float(
                 getattr(self.scheduler, "next_reconciliation_seconds", None)
             ),
+            "pipelines": {
+                name: health.snapshot()
+                for name, health in self._pipeline_health.items()
+            },
             "last_global_error": self._last_global_error() or cleanup_error,
         }
 
@@ -623,6 +633,7 @@ class AutomaticMemoryRuntime:
         batch = int(getattr(self.settings, "distill_batch_size", 2) or 2)
         bulk_poll = max(poll * 4.0, 60.0)
         backoff = Event()
+        health = self._pipeline_health["distill"]
         while not self._distill_stop.is_set():
             distiller = self._distiller
             if distiller is None or self._paused:
@@ -633,13 +644,18 @@ class AutomaticMemoryRuntime:
                 result = distiller.run_once(limit=batch)
                 status = str((result or {}).get("status") or "")
                 pending = int((result or {}).get("pending") or 0)
+                if status != "ok":
+                    health.record_failure(f"run_once status={status or 'empty'}")
+                else:
+                    health.record_success()
                 # 本地模型批量回填才需要拉长间隔控制发热；云端调用不占本机算力。
                 bulk = pending > batch * 4 and getattr(distiller, "provider", "local") == "local"
                 idle = bulk_poll if bulk else poll
                 if status != "ok":
                     idle = max(poll * 3.0, 60.0)
                 backoff.wait(timeout=idle)
-            except Exception:
+            except Exception as exc:
+                health.record_failure(f"{type(exc).__name__}: {exc}")
                 backoff.wait(timeout=max(poll * 3.0, 60.0))
 
     @property
@@ -719,6 +735,7 @@ class AutomaticMemoryRuntime:
         """daemon：开关每轮动态读取；关闭时空转等待，绝不影响扫描与提炼。"""
         poll = float(getattr(self.settings, "auto_promote_poll_seconds", 300.0) or 300.0)
         backoff = Event()
+        health = self._pipeline_health["promotion"]
         while not self._promotion_stop.is_set():
             pipeline = self._promotion
             if pipeline is None or self._paused or not pipeline.enabled():
@@ -727,8 +744,9 @@ class AutomaticMemoryRuntime:
                 continue
             try:
                 pipeline.run_once(limit=5)
-            except Exception:
-                pass
+                health.record_success()
+            except Exception as exc:
+                health.record_failure(f"{type(exc).__name__}: {exc}")
             backoff.wait(timeout=poll)
 
     def _wake_vector_backfill(self) -> None:
@@ -739,6 +757,7 @@ class AutomaticMemoryRuntime:
         """daemon：唤醒即追平向量积压（时间预算内循环），平时休眠。"""
         wake = self._backfill_wake
         stop = self._backfill_stop
+        health = self._pipeline_health["vector_backfill"]
         while not stop.is_set():
             if not wake.wait(timeout=15.0):
                 continue
@@ -750,8 +769,9 @@ class AutomaticMemoryRuntime:
                 continue
             try:
                 drain()
-            except Exception:
-                pass
+                health.record_success()
+            except Exception as exc:
+                health.record_failure(f"{type(exc).__name__}: {exc}")
 
     @property
     def auto_promotion_stats(self) -> dict[str, Any]:
