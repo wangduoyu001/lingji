@@ -4237,3 +4237,5 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 自动测试：`tests/test_pipeline_health.py`（6 例：限频/恢复/降级判定/坏 state_db 容错）、`tests/test_raw_retention.py`（6 例：最旧优先/最新5保护/大快照最新3份/保护期/记账）、门禁家族 91 例回绿；checkpoint/MCP/runtime 套件 18 例通过。
 真机验收（装机 9f2fd511 之后的下一版本）：runtime status 出现 pipelines 段；提炼循环人为失败时 state db 出现 pipeline_distill_failed 事件；raw 淘汰在下次配额压力时产生 .evicted.log。回滚=revert 对应提交。
 遗留（记录待查）：test_structured_evidence_lexical citation KeyError、test_automatic_memory_context_pack 语义失败 reason_code、test_automatic_memory_repair_round1 vault 目录断言、test_control_api 2 例（macOS 本地既有）——各为独立根因，与门禁家族无关。Vault 深度改造（Home 仪表盘/Evolving 主题归并/源笔记回链/晋升内容升级）方案已评估，待主人排期。
+
+追加（同日）：主人定硬上限"灵机占用不超过 5GB"。执行：①一次性淘汰 storage/raw 旧快照 568 个文件（6.12G→1.91G，走装机同款 evict_raw_for_space 含 .evicted.log 记账），数据根 7.2G→3.3G；②生产 .env 固化 `automatic_memory_raw_max_bytes=3221225472`（3GiB，淘汰触发线 2.1GiB），重启生效；③重启规程改用 `open -g`（后台启动不抢主人焦点，回应"界面自己弹出来"——系此前 open -a 前台激活所致，App 无自激活代码路径）。总占用峰值为 raw 上限 3G + backups 766M + 双 qdrant ~480M + memory.db ~215M ≈ 4.5G < 5GB。回滚=删 .env 该行恢复 10GiB。
