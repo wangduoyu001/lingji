@@ -774,6 +774,9 @@ def _run_quality_gate_impl(
                 "mode": question.mode,
                 "as_of": question.as_of,
             }
+            # mark 必须在逐题 try 之外：挪进 try 会让 stage-hook 的 RuntimeError
+            # 被吞成题目诊断，RUNNER_SCORING_FAILED 永远无法上报（bf0ab0a4 回归）。
+            tracker.mark("scoring")
             try:
                 # Capture the formal builder's selection-before-bound seam.  This
                 # is the same query/filter path used by build_context_pack and is
@@ -798,7 +801,6 @@ def _run_quality_gate_impl(
                 if isinstance(gateway_sections, (str, bytes)) or not isinstance(gateway_sections, Sequence):
                     raise ValueError("malformed Gateway sections")
                 gateway_empty_responses += int(not gateway_sections)
-                tracker.mark("scoring")
                 selected_evidence = select_context_evidence(gateway_pack, identity_registry, limit=_SELECTOR_LIMIT)
                 gateway_selector_calls += 1
                 unknown_facts = tuple(fact_id for fact_id in selected_evidence.fact_ids if fact_id not in fact_by_memory)

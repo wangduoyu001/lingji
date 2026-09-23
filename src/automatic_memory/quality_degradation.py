@@ -116,6 +116,19 @@ def measure_semantic_degradation(
     lexical_ids = [str(item.get("memory_id") or "") for item in lexical.get("results") or []]
     degraded_ids = [str(item.get("memory_id") or "") for item in degraded.get("results") or []]
     diagnostics = degraded.get("diagnostics") or {}
+    # 4R2 冻结契约（quality_evidence.CanonicalFunctionalEvidence）只接受
+    # {semantic, lexical, reason_code, source_authority} 四个键。检索层后来
+    # 增补的 lexical_hits/semantic_hits 计数键若原样透传会触发
+    # BLOCKED_4R2_REQUIRED，13 个门禁用例自 031bba96 起全红。按白名单投影：
+    # status 判定只用前两个键，行为不变；命中计数仍由检索层测试守卫。
+    if isinstance(diagnostics, Mapping):
+        diagnostics = {
+            key: diagnostics[key]
+            for key in ("semantic", "lexical", "reason_code", "source_authority")
+            if key in diagnostics
+        }
+    else:
+        diagnostics = {}
     return {
         "status": "ready" if bool(lexical_ids) and lexical_ids == degraded_ids
         and diagnostics.get("semantic") == "degraded"
