@@ -4222,3 +4222,9 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 变更：①`src/mcp_server.py` 新增 MCP 工具 `project_timeline`（22 号工具）：按主题关键词聚合蒸馏层（distilled_knowledge，按对话发生时间）与记忆检索（search_memory）结果，时间倒序归并、来源标注（source_id/kind）、token 受控（每条摘要截断 + max_chars 总预算 + limit 上限），满足"多个 AI 同一项目不同时间线整理到一起迭代"；聚合逻辑在 `src/mcp/timeline.py`（纯函数）。②`distillation.py` `list_entries` 条目补 `source_id` 字段（纯增量）。③主人需求：`~/.codex/AGENTS.md` 与 `~/.zcode/AGENTS.md` 新增"灵机记忆检索优先"节——需要项目背景/历史结论/交接上下文先 search_memory(limit=5)，检索不到再问主人，检索结果不复述全文，长期结论用 propose_memory 沉淀。
 自动测试：`tests/test_mcp_project_timeline.py`（4 例：list_entries 带 source_id / 双源时间倒序归并与来源标注 / limit 与字符预算截断 / 摘要归一化截断）；test_mcp_server、test_automatic_memory_mcp、test_codex_mcp_tools 14 例通过；蒸馏层套件回归通过。
 真机验收（装机后）：stdio bridge `tools/list` 出现 project_timeline；以真实主题（如"嵌入模型"）调用返回非空时间线（蒸馏条目带 conversation 来源、记忆条目带 memory_id）。AGENTS.md 引导随下次会话自然生效。回滚=revert 本提交；AGENTS.md 删除对应节。
+
+## 2026-09-23 DISTILL_EMPTY_QUEUE_STARVATION
+
+变更：提炼队列饿死修复（f2a82fa0 superseded 饿死的同族新变种）。无消息的空壳会话（导入即坏的 3 个 Codex 日汇总行）在 `_distill_one` 的 digest=None 路径直接 return False、不落任何行 → 永远满足"无提炼行"候选条件 → 以 0 秒失败永占 started_at DESC 队首，515 个有内容的真实候选永远轮不到；累计失败计数涨到 5,766（UI"失败 5766 段会自动重试"即此）。修复：该路径落 `status='empty'` 终态行（`_record_empty`），候选查询与 superseded 同样排除 empty；message_count=0 保留复活语义，消息将来被导入时经 message_count 条件自动重新入队。
+自动测试：`tests/test_automatic_memory_distillation.py` 追加 1 例（空壳会话落 empty 出队 + 消息导入后复活），套件 18 例通过。
+真机验收（装机后）：3 个空壳会话转为 empty 行；提炼队列推进到真实候选（ready 数持续增长、累计失败数停止暴涨）；UI 知识要点页进度条开始移动。回滚=revert 单提交（队列退回饿死态）。

@@ -427,7 +427,7 @@ class KnowledgeDistiller:
             FROM conversation_records c
             LEFT JOIN distilled_knowledge d ON d.conversation_id = c.conversation_id
             WHERE d.conversation_id IS NULL
-               OR (d.status != 'ready' AND COALESCE(d.status, '') != 'superseded')
+               OR (d.status != 'ready' AND COALESCE(d.status, '') NOT IN ('superseded', 'empty'))
                OR d.message_count != (
                    SELECT COUNT(*) FROM message_records m WHERE m.conversation_id = c.conversation_id
                )
@@ -697,6 +697,11 @@ class KnowledgeDistiller:
         ).fetchone()
         digest = self._conversation_digest(conn, conversation_id)
         if digest is None:
+            # 无消息的会话（坏导入/空壳行）永远提炼不出内容：必须落终态行出队，
+            # 否则它以 0 秒失败永占 started_at DESC 队首，饿死全部真实候选
+            # （f2a82fa0 superseded 饿死的同族新变种）。message_count=0 保留复活
+            # 语义：消息将来被导入时 message_count 条件会自动让它重新入队。
+            self._record_empty(conn, conversation_id)
             return False
         if (
             existing is not None
@@ -866,6 +871,39 @@ class KnowledgeDistiller:
                 parts.append("……（中间内容过长已省略）")
                 break
         return "\n".join(parts)
+
+    def _record_empty(self, conn: sqlite3.Connection, conversation_id: str) -> None:
+        """无消息会话的终态标记：出队停止空转；消息导入后经 message_count 条件复活。"""
+        row = conn.execute(
+            "SELECT source_id, title, started_at FROM conversation_records WHERE conversation_id = ?",
+            (conversation_id,),
+        ).fetchone()
+        if row is None:
+            return
+        now = _now()
+        conn.execute(
+            """
+            INSERT INTO distilled_knowledge (
+                conversation_id, source_id, title, summary, key_points_json, category,
+                model, messages_digest, message_count, revision, occurred_at,
+                status, last_error, created_at, updated_at
+            ) VALUES (?, ?, ?, '', '[]', '其他', '', '', 0, 0, ?, 'empty', 'no messages to distill', ?, ?)
+            ON CONFLICT(conversation_id) DO UPDATE SET
+                status = 'empty',
+                message_count = 0,
+                last_error = 'no messages to distill',
+                updated_at = excluded.updated_at
+            """,
+            (
+                conversation_id,
+                str(row["source_id"] or ""),
+                str(row["title"] or "未命名对话"),
+                str(row["started_at"] or now),
+                now,
+                now,
+            ),
+        )
+        conn.commit()
 
     def _record_failure(self, conn: sqlite3.Connection, conversation_id: str, error: str) -> None:
         row = conn.execute(

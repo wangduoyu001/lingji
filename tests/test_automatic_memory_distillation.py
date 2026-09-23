@@ -471,3 +471,48 @@ def test_zhipu_provider_distills_via_cloud_and_falls_back(tmp_path: Path, ollama
     assert result2["distilled"] == 2, "云端失败必须回退本机完成提炼"
     assert distiller2.list_entries(limit=1)["items"][0]["model"] == "test-chat:latest"
     _ = original_url, _Rewriter
+
+
+def test_messageless_conversation_leaves_queue_and_revives(tmp_path, ollama_server) -> None:
+    """空壳会话（导入即坏、无消息）必须落 empty 终态出队，不再 0 秒空转饿死队列。"""
+    db = tmp_path / "lingji_memory_empty.db"
+    _seed_memory_db(db)
+    with sqlite3.connect(str(db)) as conn:
+        conn.execute(
+            "INSERT INTO conversation_records VALUES ('conv-empty', 'src', '空会话', '2026-09-03T23:31:47+00:00', 0)"
+        )
+        conn.execute("DELETE FROM message_records WHERE conversation_id = 'conv-1'")
+        conn.commit()
+
+    distiller = KnowledgeDistiller(_Settings(db, ollama_server))
+    result = distiller.run_once(limit=10)
+    assert result["status"] == "ok"
+    assert result["distilled"] == 1, "只有 conv-0 有内容可提炼"
+
+    with sqlite3.connect(str(db)) as conn:
+        conn.row_factory = sqlite3.Row
+        statuses = {
+            str(row["conversation_id"]): str(row["status"])
+            for row in conn.execute("SELECT conversation_id, status FROM distilled_knowledge")
+        }
+    assert statuses.get("conv-0") == "ready"
+    assert statuses.get("conv-empty") == "empty", "无消息会话必须落 empty 终态"
+    assert statuses.get("conv-1") == "empty"
+
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    pending = distiller._pending_conversations(conn, 10)
+    conn.close()
+    assert pending == [], "empty 会话不得再进候选队列"
+
+    # 消息将来被导入 → message_count 条件自动复活
+    with sqlite3.connect(str(db)) as conn:
+        conn.execute(
+            "INSERT INTO message_records VALUES ('msg-e1','conv-empty','user','后来补上的内容','h-e1','2026-09-04T00:00:00+00:00',0)"
+        )
+        conn.commit()
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    pending = distiller._pending_conversations(conn, 10)
+    conn.close()
+    assert [str(row["conversation_id"]) for row in pending] == ["conv-empty"]
