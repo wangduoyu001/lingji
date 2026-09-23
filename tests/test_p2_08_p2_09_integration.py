@@ -20,7 +20,7 @@ def read(path: str) -> str:
 def test_runtime_and_auto_review_defaults_survive_combined_merge():
     settings = Settings(_env_file=None)
 
-    assert settings.embed_model == "bge-m3"
+    assert settings.embed_model == "qwen3-embedding:0.6b"
     assert settings.fallback_embed_model == "nomic-embed-text"
     assert settings.embed_model != settings.fallback_embed_model
     assert settings.auto_review_mode == "OFF"

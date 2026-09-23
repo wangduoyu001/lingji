@@ -76,7 +76,7 @@ def _service(*, telemetry):
 
 def test_embedding_defaults_use_distinct_primary_and_fallback():
     settings = Settings(_env_file=None)
-    assert settings.embed_model == "bge-m3"
+    assert settings.embed_model == "qwen3-embedding:0.6b"
     assert settings.fallback_embed_model == "nomic-embed-text"
     assert settings.embed_model != settings.fallback_embed_model
 
