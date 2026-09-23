@@ -39,6 +39,18 @@ def _optional_float(value: Any) -> float | None:
         return None
 
 
+def _effective_batch(base: int, pending: int) -> int:
+    """积压消化期自适应提速：历史积压大时批次 ×3（上限 8），稳态回基础批次。
+
+    云端通道单段 7-22s，基础批次 2 对几周攒下的数百段积压要 ~10 小时；
+    提 3 倍只影响积压期，稳态行为不变。
+    """
+    base = max(int(base), 1)
+    if int(pending) > 50:
+        return min(base * 3, 8)
+    return base
+
+
 class AutomaticMemoryRuntime:
     """Own one worker and one automatic-memory scheduler in one process.
 
@@ -634,6 +646,7 @@ class AutomaticMemoryRuntime:
         bulk_poll = max(poll * 4.0, 60.0)
         backoff = Event()
         health = self._pipeline_health["distill"]
+        next_batch = batch
         while not self._distill_stop.is_set():
             distiller = self._distiller
             if distiller is None or self._paused:
@@ -641,9 +654,10 @@ class AutomaticMemoryRuntime:
                     return
                 continue
             try:
-                result = distiller.run_once(limit=batch)
+                result = distiller.run_once(limit=next_batch)
                 status = str((result or {}).get("status") or "")
                 pending = int((result or {}).get("pending") or 0)
+                next_batch = _effective_batch(batch, pending)
                 if status != "ok":
                     health.record_failure(f"run_once status={status or 'empty'}")
                 else:

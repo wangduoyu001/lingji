@@ -184,3 +184,13 @@ def test_message_payload_records_embedding_model(tmp_path):
     payloads = {p.payload.get("message_id"): p.payload for p in points}
     assert payloads["m-1"].get("embedding_model") == "fake-embed"
     assert _point_id("m-1") > 0
+
+
+def test_effective_batch_scales_with_backlog():
+    from src.automatic_memory.runtime import _effective_batch
+
+    assert _effective_batch(2, 10) == 2, "稳态（积压<=50）保持基础批次"
+    assert _effective_batch(2, 200) == 6, "积压消化期批次 x3"
+    assert _effective_batch(4, 200) == 8, "上限 8"
+    assert _effective_batch(2, 0) == 2
+    assert _effective_batch(0, 200) >= 1, "异常配置兜底为至少 1"
