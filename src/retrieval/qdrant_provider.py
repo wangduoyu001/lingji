@@ -139,11 +139,11 @@ class QdrantSemanticProvider:
         if len(dimensions) != 1 or not dimensions or 0 in dimensions:
             raise ValueError("Embedding provider returned empty or inconsistent vector dimensions")
         dimension = next(iter(dimensions))
-        self._ensure_collection(dimension)
-
-        point_ids = [self.point_id(point.chunk_id) for point in selected]
         embedding_status = self.embedding_provider.status()
         active_model = embedding_status.get("active_model")
+        self._ensure_collection(dimension, active_model=str(active_model or ""))
+
+        point_ids = [self.point_id(point.chunk_id) for point in selected]
         structs = []
         for point_id, point, vector in zip(point_ids, selected, vectors):
             payload = self._payload(point, active_model=active_model)
@@ -389,9 +389,13 @@ class QdrantSemanticProvider:
                     close()
             self._client = None
 
-    def _ensure_collection(self, dimension: int) -> None:
+    def _ensure_collection(self, dimension: int, *, active_model: str = "") -> None:
+        if self._rebuild_required:
+            # 指纹/维度校验失败后拒绝继续写入，防止新旧模型的向量混入同一集合。
+            raise VectorDimensionMismatchError(self._last_error or "vector rebuild required")
         if self._collection_exists():
             self._check_collection_dimension(dimension)
+            self._check_collection_fingerprint(active_model)
             return
         try:
             self.client.create_collection(
@@ -418,6 +422,34 @@ class QdrantSemanticProvider:
             )
             self._last_error = error
             raise VectorDimensionMismatchError(error)
+
+    _FINGERPRINT_PAYLOAD_KEY = "embedding_model"
+
+    def _check_collection_fingerprint(self, active_model: str) -> None:
+        if not active_model:
+            return
+        try:
+            points, _ = self.client.scroll(
+                collection_name=self.collection,
+                limit=1,
+                with_payload=True,
+                with_vectors=False,
+            )
+        except Exception:
+            return
+        for point in points or []:
+            payload = getattr(point, "payload", None) or {}
+            recorded = str(payload.get(self._FINGERPRINT_PAYLOAD_KEY) or "").strip()
+            if recorded and recorded != active_model:
+                self._rebuild_required = True
+                error = (
+                    f"Qdrant collection {self.collection} was built with embedding model "
+                    f"'{recorded}' but the configured model is '{active_model}'; "
+                    "rebuild required to avoid mixed-model vectors"
+                )
+                self._last_error = error
+                raise VectorDimensionMismatchError(error)
+            return
 
     def _collection_exists(self) -> bool:
         try:

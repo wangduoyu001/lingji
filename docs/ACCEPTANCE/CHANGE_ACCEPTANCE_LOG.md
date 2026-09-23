@@ -4203,3 +4203,10 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 自动测试：`tests/test_zcode_session_adapter.py` 追加 2 例（真实 callback：积压追平至归零/无 provider 返回 None）；相关套件通过。
 真机验收（装机后）：核对完成后自动追平，`/api/vector/coverage` missing 归零、coverage=1.0；此后新入库内容的缺口只在本轮核对周期内短暂存在。回滚=revert 单提交。
 追加修复（同日）：回填从调度线程同步执行改为独立后台线程（`lingji-vector-backfill`，唤醒事件驱动、停机事件退出），调度核对只置事件不再阻塞 5 分钟；启动逻辑解耦（提炼关闭不影响晋升与回填线程）。真机验收：scan 立即返回，后台自动追平后 coverage 归零。
+
+
+## 2026-09-23 EMBEDDING_MODEL_SWITCH_QWEN3
+
+变更（主人拍板直接切换，WorkBuddy 负责下载模型）：`src/retrieval/qdrant_provider.py` 新增嵌入模型指纹校验——集合内数据点的 `embedding_model` 字段与当前配置模型不一致时置 `rebuild_required` 并拒绝写入（`VectorDimensionMismatchError`），防同维度换模型（bge-m3→Qwen3-0.6B 均为 1024 维）静默混库；维度校验逻辑保持。切换流程：验证新模型 → 改配置 embed_model=qwen3-embedding:0.6b（nomic 备胎不变）→ 清空旧向量集合 → 重启 → 后台回填线程全量重嵌 → 实测重校阈值（检索 0.55/去重 0.92 为 bge-m3 口径）→ 真实查询验收。回滚=配置切回 bge-m3 并重建。
+自动测试：`tests/test_chunk_vector_backfill.py` 追加 2 例指纹守卫（换模型拒绝+rebuild_required / 同模型继续可用）；相关套件通过。
+真机验收：切换后 coverage=100%、search_memory 真实查询返回、UI 语义索引数对齐。
