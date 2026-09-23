@@ -595,8 +595,23 @@ def test_card_sort_uses_memory_id_as_deterministic_tie_breaker_for_equal_instant
     assert [item["memory_id"] for item in result["items"]] == ["memory-b", "memory-a"]
 
 
-def test_home_summary_is_cached_and_serialized(monkeypatch):
-    """首页 summary 全量测量是秒级操作：默认 viewer 走 60s 缓存，防止 20s 轮询堆积超时显示 0。"""
+def _wait_background_refresh(projector, monkeypatch_target_module, expected_calls, deadline_s: float = 5.0) -> None:
+    import time as time_module
+
+    waited = 0.0
+    while projector._summary_refreshing.is_set() and waited < deadline_s:
+        time_module.sleep(0.05)
+        waited += 0.05
+    while projector._summary_refreshing.is_set():
+        time_module.sleep(0.05)
+
+
+def test_home_summary_stale_while_revalidate_keeps_poller_fast(monkeypatch):
+    """后端计算 15-25s 而前端超时 15s：过期缓存必须立即返回旧值并由后台刷新。
+
+    回归背景：同步重算让前端每次缓存过期后的轮询都超时，失败退避（最长 120s）
+    又比缓存寿命长，首页自锁在"永久记忆 0"。
+    """
     import time as time_module
 
     import src.gateway.owner_memory_cards as module
@@ -612,9 +627,17 @@ def test_home_summary_is_cached_and_serialized(monkeypatch):
     assert calls["count"] == 1, "TTL 内重复轮询必须命中缓存"
     assert first == {"permanent": 11} and second == {"permanent": 11}
 
+    # 过期：请求立即拿到旧值（前端永不超时），后台线程异步重算。
     fake_now["value"] += module._SUMMARY_CACHE_TTL_SECONDS + 1
-    projector.summary()
-    assert calls["count"] == 2, "缓存过期后重算"
+    stale = projector.summary()
+    assert stale == {"permanent": 11}
+    projector._summary_refreshing.wait(timeout=5)
+    for _ in range(100):
+        if calls["count"] == 2:
+            break
+        time_module.sleep(0.05)
+    assert calls["count"] == 2, "过期缓存必须触发一次后台刷新"
+    assert projector.summary() == {"permanent": 11}
 
     explicit = projector.summary(viewer=FixtureSources().owner_viewer())
     assert calls["count"] == 3, "显式 viewer 不走缓存"
@@ -622,4 +645,3 @@ def test_home_summary_is_cached_and_serialized(monkeypatch):
     # 失效防护：缓存返回的是副本，外部改写不得污染下一次命中。
     first["permanent"] = 0
     assert projector.summary()["permanent"] == 11
-    assert time_module.monotonic() >= 0

@@ -96,6 +96,7 @@ class OwnerMemoryCardProjector:
         self._summary_lock = threading.Lock()
         self._summary_cache: dict[str, Any] | None = None
         self._summary_cache_at: float = 0.0
+        self._summary_refreshing = threading.Event()
 
     def list_cards(
         self,
@@ -154,20 +155,53 @@ class OwnerMemoryCardProjector:
     def summary(self, *, viewer: ViewerContext | None = None) -> dict[str, Any]:
         """Return full-card counts for Home without deriving from one page.
 
-        全量卡测量在生产库上是秒级操作，而首页每 20s 轮询本接口：默认
-        viewer 的结果缓存 60s 并用单锁串行重算，避免轮询堆积把前端拖到
-        超时（超时后首页把统计显示成 0）。显式传入 viewer 时不走缓存。
+        全量卡测量在生产库上是 15-25s 的秒级操作，而首页每 20s 轮询、前端请求
+        超时 15s、失败退避最长 120s——同步计算必然周期性超时，前端把无数据
+        显示成 0 且失败退避比任何缓存都长，会自锁在失败态。
+
+        因此默认 viewer 走 stale-while-revalidate：任何请求立即返回缓存副本
+        （允许过期），过期时由单个后台线程刷新；仅进程启动后的首个请求同步
+        计算一次。显式传入 viewer 时不走缓存。
         """
         if viewer is not None:
             return self._summary_uncached(viewer=viewer)
+        cached = self._summary_cache
+        if cached is not None:
+            if time.monotonic() - self._summary_cache_at > _SUMMARY_CACHE_TTL_SECONDS:
+                self._schedule_summary_refresh()
+            return dict(cached)
         with self._summary_lock:
-            now = time.monotonic()
-            if self._summary_cache is not None and now - self._summary_cache_at < _SUMMARY_CACHE_TTL_SECONDS:
+            if self._summary_cache is not None:
                 return dict(self._summary_cache)
             payload = self._summary_uncached(viewer=None)
             self._summary_cache = dict(payload)
-            self._summary_cache_at = now
+            self._summary_cache_at = time.monotonic()
             return dict(payload)
+
+    def _schedule_summary_refresh(self) -> None:
+        """过期后由单个后台线程重算；重复调用在刷新进行中是空操作。"""
+        if self._summary_refreshing.is_set():
+            return
+        self._summary_refreshing.set()
+
+        def _refresh() -> None:
+            try:
+                with self._summary_lock:
+                    if time.monotonic() - self._summary_cache_at <= _SUMMARY_CACHE_TTL_SECONDS:
+                        return
+                    payload = self._summary_uncached(viewer=None)
+                    self._summary_cache = dict(payload)
+                    self._summary_cache_at = time.monotonic()
+            except Exception:
+                pass
+            finally:
+                self._summary_refreshing.clear()
+
+        threading.Thread(target=_refresh, name="memory-cards-summary-refresh", daemon=True).start()
+
+    def invalidate_summary_cache(self) -> None:
+        """数据变更后调用：下一条请求触发后台刷新（当前缓存仍兜底显示）。"""
+        self._summary_cache_at = 0.0
 
     def _summary_uncached(self, *, viewer: ViewerContext | None) -> dict[str, Any]:
         selected_viewer = viewer or self.source_service.owner_viewer()
