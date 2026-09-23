@@ -4181,3 +4181,10 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 真机验收（2026-09-22 晚，三次装机迭代）：构建→覆盖安装 `/Applications/灵机.app`（三件套+80 个 .so/.dylib+exe 逐个 ad-hoc 重签，`codesign --verify --deep --strict` 通过）→ health degraded 仅剩已知 ffprobe warning（与基线一致）→ `PATCH /api/settings` 开启 `auto_promote_enabled`（落盘验证）→ 实测：首轮 5 条旧行（confidence 空）转 Evolving 且原因码正确；审计 25 条（24 evolving + 1 promoted）哈希链校验 True；Evolving 19 个带日期时间线文件、frontmatter 齐全；真实晋升 1 条进 `Core-Memory/General`（frontmatter memory_tier: core/confidence/来源追溯齐全，proposed_by lingji-auto）；同标题冲突、通知类、类别白名单分支均真实触发；回滚验证=关开关跑一轮 status=disabled 审计 25→25 零写入，随后恢复开启（保持最终态）。App 保持打开等主人最终确认。
 验收中发现并修复的回归（各自独立提交+单测）：`4d6b42b0` 旧行 message_count 口径漂移造成假候选；`f2a82fa0` 秒跳判断漏取 status 列导致 superseded 终态行每轮空转占位、549 个会话从未被提炼（生产真根因）；`52033dd9` 晋升管线 limit 截断在已决过滤之前导致首轮后空转（自家代码真机首启即现）。三者均有专项回归单测。
 回滚=关开关（已晋升文件属既有 Core，保留不删）；不批量改动既有 Core 文件的红线未动。
+
+
+## 2026-09-23 ZCODE_MCP_CLIENT_ONBOARDING
+
+变更：`src/gateway/profiles.py` 默认身份注册表新增 `zcode`（ZCode，mcp_stdio，读工具+propose_memory，与 codex 同级；不改写 Core Memory 的红线不变），供 ZCode 以独立身份接入灵机 MCP（审计可区分，不与 Codex 混同）。ZCode 侧用户级配置 `~/.zcode/cli/config.json` → `mcp.servers.lingji_memory`（stdio bridge，`--agent zcode`，备份 `config.json.bak-lingji-mcp`）。
+自动测试：`tests/test_gateway_ai_profiles.py`（3 例：zcode 身份/未知身份拒绝/外部身份均不可改写 Core）；相关套件通过。
+真机验收：MCP rpc `tools/list` 返回 21 个工具；`search_memory` 以 `agent_id=zcode` 实测成功（装机 c1192893 之后的版本）。回滚=删除 ZCode 配置中的 server 条目；产品回滚=revert profiles.py 单行。

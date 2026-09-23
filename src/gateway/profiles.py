@@ -45,6 +45,7 @@ class AIProfileRegistry:
             AIClientProfile("gemini", "Gemini", "mcp_streamable_http", PROPOSAL_TOOLS, remote_privacy, 14000),
             AIClientProfile("kimi", "Kimi", "mcp_stdio", PROPOSAL_TOOLS, remote_privacy, 14000),
             AIClientProfile("deepseek", "DeepSeek", "mcp_stdio", PROPOSAL_TOOLS, remote_privacy, 14000),
+            AIClientProfile("zcode", "ZCode", "mcp_stdio", PROPOSAL_TOOLS, remote_privacy, 18000, can_write_managed_notes=True),
             AIClientProfile("ollama", "Ollama Local", "mcp_stdio", PROPOSAL_TOOLS, local_privacy, 20000, local_only=True),
         ]
         standard.append(AIClientProfile("lingji-local", "LingJi Local Agent", "internal", PROPOSAL_TOOLS, local_privacy, 24000, local_only=True, can_read_other_projects=True, can_write_managed_notes=True, can_archive_memory=True, can_modify_core_memory=True))
