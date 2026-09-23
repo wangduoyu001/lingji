@@ -57,7 +57,17 @@ class ZcodeSessionAdapter(ExtractionAdapter):
         del payload
         if source_type not in self.source_types:
             return False
-        return bool(input_path) and Path(input_path).suffix == ".sqlite" and Path(input_path).exists()
+        if not input_path:
+            return False
+        path = Path(input_path)
+        if not path.exists():
+            return False
+        # 快照产物以内容哈希命名（无后缀），用 SQLite 魔数识别而不是扩展名。
+        try:
+            with path.open("rb") as handle:
+                return handle.read(16).startswith(b"SQLite format 3\x00")
+        except OSError:
+            return False
 
     def extract(self, request: ExtractionRequest) -> ExtractionBatch:
         path = Path(request.input_path) if request.input_path else None

@@ -110,6 +110,14 @@ class ZcodeSessionAdapterTests(unittest.TestCase):
         self.assertFalse(self.adapter.can_handle("codex_rollout", self.db, {}))
         self.assertFalse(self.adapter.can_handle("zcode_session", self.tmp / "missing.sqlite", {}))
 
+    def test_can_handle_recognizes_hash_named_snapshot_by_magic(self):
+        # 快照产物以内容哈希命名（无后缀），必须按内容识别。
+        snapshot = self.tmp / "82d7337def35addcb425b7523a39cdb8"
+        snapshot.write_bytes(self.db.read_bytes())
+        self.assertTrue(self.adapter.can_handle("zcode_session", snapshot, {}))
+        snapshot.write_bytes(b"Not a sqlite database at all")
+        self.assertFalse(self.adapter.can_handle("zcode_session", snapshot, {}))
+
     def test_extract_projects_conversation_with_merged_parts(self):
         batch = self.adapter.extract(self._request())
         self.assertEqual(len(batch.structured_sources), 1)
