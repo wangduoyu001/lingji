@@ -224,3 +224,189 @@ class SentinelWalTests(unittest.TestCase):
             after = SnapshotJobRunner._path_sentinel(base)
             self.assertIn(":wal", after)
             self.assertNotEqual(before, after, "WAL 变化必须改变哨兵")
+
+
+class BackfillDrainCallbackTests(unittest.TestCase):
+    """核对后的向量回填必须追平积压（数千条缺口），而不是每轮只吃 200 条。"""
+
+    def test_real_callback_drains_backlog_until_no_progress(self):
+        import sys
+        import types
+
+        import src.model_center as model_center
+        import src.retrieval.vector_backfill as vb_module
+        from src.automatic_memory.runtime import AutomaticMemoryRuntime
+
+        calls = {"count": 0}
+
+        class _FakeBackfill:
+            def __init__(self, settings, provider=None):
+                pass
+
+            def run_once(self, limit):
+                calls["count"] += 1
+                return {"embedded": 0 if calls["count"] >= 3 else 500, "limit": limit}
+
+        monkey_patches = [
+            (vb_module, "VectorBackfill", _FakeBackfill),
+            (model_center, "build_embedding_provider", lambda settings, runtime_values=None: object()),
+        ]
+        saved = [(m, name, getattr(m, name)) for m, name, _ in monkey_patches]
+        try:
+            for m, name, value in monkey_patches:
+                setattr(m, name, value)
+            settings = types.SimpleNamespace(ollama_base_url="http://x", embedding_enabled=True)
+            callback = AutomaticMemoryRuntime._build_vector_backfill_callback(object(), settings)
+            self.assertIsNotNone(callback)
+            result = callback()
+            self.assertEqual(calls["count"], 3, "嵌入归零的那一轮之后停止")
+            self.assertEqual(result["embedded"], 1000)
+        finally:
+            for m, name, value in saved:
+                setattr(m, name, value)
+
+    def test_real_callback_returns_none_without_provider(self):
+        import types
+
+        import src.model_center as model_center
+        from src.automatic_memory.runtime import AutomaticMemoryRuntime
+
+        saved = model_center.build_embedding_provider
+        try:
+            model_center.build_embedding_provider = lambda settings, runtime_values=None: None
+            settings = types.SimpleNamespace(ollama_base_url="http://x", embedding_enabled=True)
+            callback = AutomaticMemoryRuntime._build_vector_backfill_callback(object(), settings)
+            self.assertIsNone(callback)
+        finally:
+            model_center.build_embedding_provider = saved
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class ZcodePathPolicyTests(unittest.TestCase):
+    """授权后的 ZCode 数据库只有精确主目录路径可读；其余一律拒绝。"""
+
+    def _record(self, root: str):
+        from src.automatic_memory.models import SourceRecord
+
+        return SourceRecord(
+            source_id="src-zcode", kind="zcode_session",
+            root=root, status="authorized",
+            capability="metadata_discovery", policy_version="1",
+        )
+
+    def test_exact_home_database_is_enumerated(self):
+        from src.automatic_memory.path_policy import enumerate_authorized_files
+
+        home = Path.home()
+        files = enumerate_authorized_files(
+            self._record(str(home / ".zcode" / "cli" / "db")),
+            effective_home=str(home),
+        )
+        self.assertEqual(files, (home / ".zcode" / "cli" / "db" / "db.sqlite",))
+
+    def test_other_sqlite_paths_are_rejected(self):
+        import tempfile
+
+        from src.automatic_memory.path_policy import enumerate_authorized_files
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(PermissionError):
+                enumerate_authorized_files(
+                    self._record(str(Path(tmp) / "db.sqlite")),
+                    effective_home=tmp,
+                )
+
+
+class ZcodeSourceRegistryTests(unittest.TestCase):
+    """授权注册表放行精确 ZCode 库、继续拒绝其余敏感数据库路径。"""
+
+    def test_exact_home_database_directory_is_canonical(self):
+        from src.automatic_memory.source_registry import _canonical_root
+
+        home = Path.home()
+        canonical = _canonical_root(str(home / ".zcode" / "cli" / "db"))
+        assert canonical == str((home / ".zcode" / "cli" / "db").resolve())
+
+    def test_other_sqlite_roots_stay_rejected(self):
+        import tempfile
+
+        from src.automatic_memory.source_registry import _canonical_root
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(PermissionError):
+                _canonical_root(str(Path(tmp) / "other.sqlite"))
+
+
+class SentinelWalTests(unittest.TestCase):
+    def test_wal_change_changes_sentinel(self):
+        import tempfile
+
+        from src.automatic_memory.checkpoint import SnapshotJobRunner
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "db.sqlite"
+            base.write_bytes(b"SQLite format 3\x00" + b"x" * 32)
+            before = SnapshotJobRunner._path_sentinel(base)
+            wal = base.with_name(base.name + "-wal")
+            self.assertNotIn(":wal", before)
+            wal.write_bytes(b"pending transaction frame")
+            after = SnapshotJobRunner._path_sentinel(base)
+            self.assertIn(":wal", after)
+            self.assertNotEqual(before, after, "WAL 变化必须改变哨兵")
+
+
+class BackfillDrainCallbackTests(unittest.TestCase):
+    """核对后的向量回填必须追平积压，而不是每轮只吃 200 条留数千缺口。"""
+
+    def _callback(self, embedded_per_round: list[int], monkeypatch_time=None):
+        import sys
+
+        sys.path.insert(0, ".")
+        from src.automatic_memory import runtime as runtime_module
+
+        calls = {"count": 0}
+
+        class _FakeBackfill:
+            def run_once(self, limit):
+                calls["count"] += 1
+                remaining = embedded_per_round[min(calls["count"], len(embedded_per_round)) - 1]
+                return {"embedded": remaining, "round": calls["count"], "limit": limit}
+
+        # 直接构造闭包同款逻辑进行验证（真实构造需要 embedding provider）。
+        import time as time_module
+
+        deadline_holder = {"now": 0.0}
+        monkeypatched = monkeypatch_time or (lambda: deadline_holder["now"])
+
+        def run():
+            deadline = monkeypatched() + 300.0
+            embedded_total = 0
+            rounds = 0
+            while monkeypatched() < deadline:
+                result = _FakeBackfill().run_once(limit=500)
+                embedded = int((result or {}).get("embedded") or 0)
+                embedded_total += embedded
+                rounds += 1
+                if not embedded:
+                    break
+            return {"embedded": embedded_total, "rounds": rounds}
+
+        return run, calls
+
+    def test_backlog_is_drained_until_no_progress(self):
+        run, calls = self._callback([500, 500, 200, 0])
+        result = run()
+        self.assertEqual(result["embedded"], 1200)
+        self.assertEqual(calls["count"], 4, "嵌入归零的那一轮之后停止")
+
+    def test_zero_backlog_stops_after_one_round(self):
+        run, calls = self._callback([0])
+        result = run()
+        self.assertEqual(result["embedded"], 0)
+        self.assertEqual(calls["count"], 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -491,7 +491,23 @@ class AutomaticMemoryRuntime:
             backfill = VectorBackfill(settings, provider=provider)
 
             def _run() -> object:
-                return backfill.run_once(limit=200)
+                # 每轮核对只补 200 条：新来源批量入库（如 ZCode 会话采集）会留下
+                # 数千条长期缺口，语义检索覆盖掉到 84% 却要等数小时。改为在时间
+                # 预算内循环追平积压；仍追不完的部分由下一轮核对继续，失败隔离
+                # 语义不变。
+                import time as _time
+
+                deadline = _time.monotonic() + 300.0
+                embedded_total = 0
+                rounds = 0
+                while _time.monotonic() < deadline:
+                    result = backfill.run_once(limit=500)
+                    embedded = int((result or {}).get("embedded") or 0)
+                    embedded_total += embedded
+                    rounds += 1
+                    if not embedded:
+                        break
+                return {"embedded": embedded_total, "rounds": rounds}
 
             return _run
         except Exception:

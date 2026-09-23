@@ -4195,3 +4195,10 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 变更：新增 `src/extraction/adapters/zcode_session.py`（只读打开 ZCode 会话库快照，session/message/text-part → 结构化会话；system 注入上下文与非文本 part 剔除、同消息多段合并、有界上限、schema 不符 fail-closed）；`discovery.py` 候选清单新增 `~/.zcode/cli/db/db.sqlite`（kind=zcode_session，含"允许接管 ZCode"动作）；`path_policy.py` 仅允许精确主目录库路径（.sqlite 在敏感名单内，豁免是显式且唯一的）；`app_manifest.py` 登记 zcode（session_read=True，契约测试同步更新）。动机：主人拍板让 ZCode 的干活结论自动进记忆（采集→提炼→自动晋升），替代人工交接文档。
 自动测试：`tests/test_zcode_session_adapter.py`（5 例：can_handle/投影合并/空库 fail-closed/精确根枚举/异根拒绝）；discovery/manifest 契约更新后 43 例通过。
 真机验收（装机后）：来源清单出现"ZCode会话"候选；授权后扫描采集→蒸馏层出现 ZCode 会话行→自动晋升管线照常工作。回滚=撤销授权或 revert 本提交。
+
+
+## 2026-09-23 VECTOR_BACKFILL_BACKLOG_DRAIN
+
+变更：核对完成后的向量回填从"每轮固定 200 条"改为"时间预算（300s）内循环追平积压、嵌入归零即停"。动机：ZCode 会话采集批量入库 4,152 条缺口后，按 15 分钟核对×200 条的节拍要约 8 小时才能追平，期间语义检索覆盖 84% 且持续可见缺口（主人定性为 bug）。失败隔离与下一轮核对兜底语义不变。
+自动测试：`tests/test_zcode_session_adapter.py` 追加 2 例（真实 callback：积压追平至归零/无 provider 返回 None）；相关套件通过。
+真机验收（装机后）：核对完成后自动追平，`/api/vector/coverage` missing 归零、coverage=1.0；此后新入库内容的缺口只在本轮核对周期内短暂存在。回滚=revert 单提交。
