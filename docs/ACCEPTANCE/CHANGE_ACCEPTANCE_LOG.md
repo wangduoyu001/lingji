@@ -4230,3 +4230,10 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 真机验收（装机后）：3 个空壳会话转为 empty 行；提炼队列推进到真实候选（ready 数持续增长、累计失败数停止暴涨）；UI 知识要点页进度条开始移动。回滚=revert 单提交（队列退回饿死态）。
 
 追加修复（同日）：提炼循环静默冻结的负载缓解——`distillation._connect` 的 sqlite 连接从默认 5s 超时改为 30s（与 MemoryDatabase 对齐）。真机观察：向量重建高负载期提炼循环在 12:34 后无进度写入（current 为空、非暂停、线程存活），特征符合每轮 `_ensure_schema` 写锁竞争 5 秒秒败 + 异常被静默吞掉 + 60s 重试的循环；锁定竞争根因待 py-spy 深查（交接记录）。真机验收：重启后 updated_at 恢复推进、ready 数增长。
+
+## 2026-09-23 ROBUSTNESS_AND_SPACE_HARDENING
+
+变更（主人指示：健壮性加固 + 占用不能无限膨胀 + Vault 要有存在感）：①`src/automatic_memory/pipeline_health.py` 新增 PipelineHealth——提炼/晋升/回填三个 daemon 的连续失败计数、限频审计事件（首败立即报、持续失败 5 分钟至多一条、恢复报 recovered）、degraded 判定，runtime.status() 新增 pipelines 段透出（治"静默失败"根因：三个循环此前 except 静默吞异常，提炼假死数小时只能靠主人盯 UI 发现）。②`checkpoint.py` 新增 raw 快照淘汰：配额将超限时先淘汰过保护期的旧快照（小文件 24h 保护、大快照保最新 3 份其余 6h 后可淘汰、全局最新 5 个永不删、最旧优先、.evicted.log 记账可审计），淘汰到 70% 配额仍不够才维持原拒绝写入语义。背景：storage/raw 单日 +3.84GB（ZCode 会话库滚动整库快照），2 天内将撞 10GiB 停摆。③门禁回绿：`quality_degradation.py` 把检索 diagnostics 按 4R2 冻结白名单投影（031bba96 加入的 lexical_hits/semantic_hits 计数键触发 BLOCKED_4R2_REQUIRED，13 例门禁全红 NOT_EVALUATED）；`quality_gate.py` 把 tracker.mark(scoring) 移出逐题 try（bf0ab0a4 回归，RUNNER_SCORING_FAILED 无法上报）。门禁家族 91 例回绿。④`mcp_server.py` slim 检索结果保留 relative_path + 附 vault_root 提示（检索命中回流 Vault）。运维：删除两个 bge-m3 归档集合（432M，qdrant 可重建，新集合 coverage=1.0 已验证）；production/vault 完成 git init + 基线提交（129 文件，兑现"Vault+Git=永久记忆"承诺）。
+自动测试：`tests/test_pipeline_health.py`（6 例：限频/恢复/降级判定/坏 state_db 容错）、`tests/test_raw_retention.py`（6 例：最旧优先/最新5保护/大快照最新3份/保护期/记账）、门禁家族 91 例回绿；checkpoint/MCP/runtime 套件 18 例通过。
+真机验收（装机 9f2fd511 之后的下一版本）：runtime status 出现 pipelines 段；提炼循环人为失败时 state db 出现 pipeline_distill_failed 事件；raw 淘汰在下次配额压力时产生 .evicted.log。回滚=revert 对应提交。
+遗留（记录待查）：test_structured_evidence_lexical citation KeyError、test_automatic_memory_context_pack 语义失败 reason_code、test_automatic_memory_repair_round1 vault 目录断言、test_control_api 2 例（macOS 本地既有）——各为独立根因，与门禁家族无关。Vault 深度改造（Home 仪表盘/Evolving 主题归并/源笔记回链/晋升内容升级）方案已评估，待主人排期。
