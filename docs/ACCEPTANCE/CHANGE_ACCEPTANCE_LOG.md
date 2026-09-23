@@ -4202,3 +4202,4 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 变更：核对完成后的向量回填从"每轮固定 200 条"改为"时间预算（300s）内循环追平积压、嵌入归零即停"。动机：ZCode 会话采集批量入库 4,152 条缺口后，按 15 分钟核对×200 条的节拍要约 8 小时才能追平，期间语义检索覆盖 84% 且持续可见缺口（主人定性为 bug）。失败隔离与下一轮核对兜底语义不变。
 自动测试：`tests/test_zcode_session_adapter.py` 追加 2 例（真实 callback：积压追平至归零/无 provider 返回 None）；相关套件通过。
 真机验收（装机后）：核对完成后自动追平，`/api/vector/coverage` missing 归零、coverage=1.0；此后新入库内容的缺口只在本轮核对周期内短暂存在。回滚=revert 单提交。
+追加修复（同日）：回填从调度线程同步执行改为独立后台线程（`lingji-vector-backfill`，唤醒事件驱动、停机事件退出），调度核对只置事件不再阻塞 5 分钟；启动逻辑解耦（提炼关闭不影响晋升与回填线程）。真机验收：scan 立即返回，后台自动追平后 coverage 归零。

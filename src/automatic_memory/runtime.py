@@ -131,7 +131,7 @@ class AutomaticMemoryRuntime:
                 heartbeat_seconds=float(
                     getattr(settings, "automatic_memory_heartbeat_seconds", 5.0)
                 ),
-                vector_backfill_callback=self._build_vector_backfill_callback(settings),
+                vector_backfill_callback=self._wake_vector_backfill,
             )
         self.scheduler = scheduler
         if worker is None:
@@ -159,6 +159,10 @@ class AutomaticMemoryRuntime:
         self._promotion = self._build_auto_promotion(settings)
         self._promotion_stop = Event()
         self._promotion_thread: Thread | None = None
+        self._backfill_drain = self._build_vector_backfill_callback(settings)
+        self._backfill_wake = Event()
+        self._backfill_stop = Event()
+        self._backfill_thread: Thread | None = None
         if hasattr(self.scheduler, "heartbeat_work_callback"):
             self.scheduler.heartbeat_work_callback = self._touch_active_scan_work
         if hasattr(self.registry, "add_lifecycle_listener"):
@@ -280,16 +284,18 @@ class AutomaticMemoryRuntime:
             self._start_distill_thread()
 
     def _start_distill_thread(self) -> None:
-        """提炼是可重建派生层：daemon 线程推进，不参与启停成败判定。"""
-        if self._distiller is None or self._distill_thread is not None:
-            return
-        self._distill_stop.clear()
-        self._distill_thread = Thread(
-            target=self._distill_loop,
-            name="lingji-knowledge-distiller",
-            daemon=True,
-        )
-        self._distill_thread.start()
+        """提炼是可重建派生层：daemon 线程推进，不参与启停成败判定。
+
+        晋升与向量回填线程在此一并启动，但各自独立存在（提炼关闭不影响
+        晋升与回填）。"""
+        if self._distiller is not None and self._distill_thread is None:
+            self._distill_stop.clear()
+            self._distill_thread = Thread(
+                target=self._distill_loop,
+                name="lingji-knowledge-distiller",
+                daemon=True,
+            )
+            self._distill_thread.start()
         if self._promotion is not None and self._promotion_thread is None:
             self._promotion_stop.clear()
             self._promotion_thread = Thread(
@@ -298,6 +304,15 @@ class AutomaticMemoryRuntime:
                 daemon=True,
             )
             self._promotion_thread.start()
+        if self._backfill_drain is not None and self._backfill_thread is None:
+            self._backfill_stop.clear()
+            self._backfill_wake.set()
+            self._backfill_thread = Thread(
+                target=self._backfill_loop,
+                name="lingji-vector-backfill",
+                daemon=True,
+            )
+            self._backfill_thread.start()
 
     def stop(self) -> None:
         with self._lock:
@@ -326,6 +341,8 @@ class AutomaticMemoryRuntime:
             errors.append(snapshot_error)
         self._distill_stop.set()
         self._promotion_stop.set()
+        self._backfill_stop.set()
+        self._backfill_wake.set()
         with self._lock:
             self._cleanup_errors = errors
             self._cleanup_pending = bool(errors)
@@ -663,6 +680,28 @@ class AutomaticMemoryRuntime:
             except Exception:
                 pass
             backoff.wait(timeout=poll)
+
+    def _wake_vector_backfill(self) -> None:
+        """核对完成后的非阻塞唤醒：调度线程绝不等待向量化。"""
+        self._backfill_wake.set()
+
+    def _backfill_loop(self) -> None:
+        """daemon：唤醒即追平向量积压（时间预算内循环），平时休眠。"""
+        wake = self._backfill_wake
+        stop = self._backfill_stop
+        while not stop.is_set():
+            if not wake.wait(timeout=15.0):
+                continue
+            wake.clear()
+            if stop.is_set() or self._paused:
+                continue
+            drain = self._backfill_drain
+            if drain is None:
+                continue
+            try:
+                drain()
+            except Exception:
+                pass
 
     @property
     def auto_promotion_stats(self) -> dict[str, Any]:
