@@ -62,6 +62,9 @@ def main() -> None:
         pipeline=pipeline,
         settings=settings,
         registry=service.automatic_memory_registry,
+        # chunk 级向量回填复用网关语义通道（同进程共享 Qdrant 客户端池），
+        # drain 线程才能自动追平 /api/vector/coverage 的缺口。
+        semantic_provider=getattr(getattr(gateway, "retriever", None), "semantic_provider", None),
     )
     service.runtime = runtime
     app = create_control_app(settings, service=service, token=token)

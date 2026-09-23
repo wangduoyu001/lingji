@@ -65,9 +65,13 @@ class AutomaticMemoryRuntime:
         worker: Any | None = None,
         path_provider: Callable[[Any, Any], Any] | None = None,
         platform_provider: Callable[[], str] | None = None,
+        semantic_provider: Any | None = None,
     ) -> None:
         self.state_db = state_db
         self.settings = settings
+        # 网关已有的语义写入通道（QdrantSemanticProvider）：chunk 回填复用它，
+        # 避免自建第二个 embedded Qdrant 客户端撞单进程锁。
+        self._semantic_provider = semantic_provider
         if pipeline is None and settings is not None:
             # Import lazily: extraction adapters import automatic_memory models
             # during bootstrap, so a module-level import would create a cycle.
@@ -506,25 +510,71 @@ class AutomaticMemoryRuntime:
             if provider is None:
                 return None
             backfill = VectorBackfill(settings, provider=provider)
+            chunk_drain = self._build_chunk_backfill(settings)
 
             def _run() -> object:
                 # 每轮核对只补 200 条：新来源批量入库（如 ZCode 会话采集）会留下
                 # 数千条长期缺口，语义检索覆盖掉到 84% 却要等数小时。改为在时间
                 # 预算内循环追平积压；仍追不完的部分由下一轮核对继续，失败隔离
-                # 语义不变。
+                # 语义不变。消息层与 chunk 层同一预算循环推进，两层都无进展才停。
                 import time as _time
 
                 deadline = _time.monotonic() + 300.0
                 embedded_total = 0
+                chunk_embedded_total = 0
                 rounds = 0
                 while _time.monotonic() < deadline:
                     result = backfill.run_once(limit=500)
                     embedded = int((result or {}).get("embedded") or 0)
                     embedded_total += embedded
+                    chunk_result = chunk_drain() if chunk_drain is not None else None
+                    chunk_embedded = int((chunk_result or {}).get("embedded") or 0)
+                    chunk_embedded_total += chunk_embedded
                     rounds += 1
-                    if not embedded:
+                    if not embedded and not chunk_embedded:
                         break
-                return {"embedded": embedded_total, "rounds": rounds}
+                return {
+                    "embedded": embedded_total,
+                    "chunk_embedded": chunk_embedded_total,
+                    "rounds": rounds,
+                }
+
+            return _run
+        except Exception:
+            return None
+
+    def _build_chunk_backfill(self, settings: Any) -> Callable[[], object] | None:
+        """chunk 级正式语义集合的自动补齐。
+
+        /api/vector/coverage 的缺口只有手动 vectorize 端点会补、从无自动触发，
+        这是缺口长存的根因；这里把 ChunkVectorBackfill 并入 drain 线程。
+        provider 复用网关的 semantic_provider（同进程共享 Qdrant 客户端池），
+        网关缺位（单测/词法网关）时保持 None，不改变既有行为。
+        """
+        provider = self._semantic_provider
+        if provider is None:
+            return None
+        try:
+            from src.retrieval.chunk_backfill import ChunkVectorBackfill
+            from src.retrieval.memory_db import MemoryDatabase
+
+            database = MemoryDatabase(settings.memory_db_path)
+            backfill = ChunkVectorBackfill(database, provider)
+
+            def _run() -> object:
+                # 全量重建实测嵌入为瓶颈（qwen3 0.6B ~2.5-4 条/秒）：每轮 500 条
+                # 摊薄 coverage/孤儿扫描的固定开销，一轮无进展即交还外层预算循环。
+                import time as _time
+
+                deadline = _time.monotonic() + 120.0
+                embedded_total = 0
+                while True:
+                    result = backfill.run_once(limit=500)
+                    embedded = int((result or {}).get("embedded") or 0)
+                    embedded_total += embedded
+                    if not embedded or _time.monotonic() >= deadline:
+                        break
+                return {"embedded": embedded_total}
 
             return _run
         except Exception:

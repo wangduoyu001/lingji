@@ -227,6 +227,9 @@ class VectorBackfill:
                         )
                     except Exception:
                         pass  # 集合已存在
+                    # 写入侧记下实际嵌入模型：同维度换模型后，集合指纹守卫
+                    # （QdrantSemanticProvider._check_collection_fingerprint）才有据可查。
+                    active_model = str((self.provider.status() or {}).get("active_model") or "")
                     client.upsert(
                         collection_name=self.collection,
                         points=[PointStruct(
@@ -238,6 +241,7 @@ class VectorBackfill:
                                 "conversation_id": row["conversation_id"],
                                 "occurred_at": row["occurred_at"],
                                 "content": str(row["content"] or "")[:800],
+                                "embedding_model": active_model,
                             },
                         )],
                     )
