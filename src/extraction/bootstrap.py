@@ -13,6 +13,7 @@ from .adapters.codex_session import CodexSessionAdapter
 from .adapters.generic_ai_history import GenericAIHistoryAdapter
 from .adapters.media import MediaExtractionAdapter
 from .adapters.web import WebCaptureAdapter
+from .adapters.zcode_session import ZcodeSessionAdapter
 from .pipeline import DocumentsWrittenCallback, ExtractionPipeline
 from .queue import SQLiteExtractionQueue
 from .registry import AdapterRegistry
@@ -47,6 +48,7 @@ def build_extraction_pipeline(
     registry.register(CodexRolloutAdapter())
     registry.register(CodexWorkReportAdapter(), structured_fallback=True)
     registry.register(CodexSessionAdapter())
+    registry.register(ZcodeSessionAdapter())
     registry.register(GenericAIHistoryAdapter())
     registry.register(WebCaptureAdapter(), structured_fallback=True)
     registry.register(MediaExtractionAdapter(settings.storage_path), structured_fallback=True)

@@ -19,6 +19,7 @@ _EXTENSIONS = {
     "chatgpt_export": {".json", ".zip"}, "codex_transcript": {".jsonl"}, "codex": {".jsonl"}, "codex_history": {".jsonl"},
     "generic_ai_history": {".json", ".jsonl", ".md", ".markdown"}, "history_inbox": {".json", ".jsonl", ".md", ".markdown"},
     "codex_rollout": {".jsonl"},
+    "zcode_session": {".sqlite"},
 }
 
 
@@ -32,6 +33,18 @@ def validate_codex_rollout_root(root: Path | str, effective_home: Path | str | N
     expected = {home / ".codex" / "sessions", home / ".codex" / "archived_sessions"}
     if resolved not in expected:
         raise PermissionError("Codex rollout root must be one exact effective-home root")
+    return resolved
+
+
+def validate_zcode_session_root(root: Path | str, effective_home: Path | str | None = None) -> Path:
+    """Only the exact effective-home ZCode session database is admissible."""
+    lexical = Path(os.path.abspath(str(Path(root).expanduser())))
+    if any(parent.is_symlink() for parent in (lexical, *lexical.parents)):
+        raise PermissionError("symbolic-link ZCode database is not allowed")
+    resolved = lexical.resolve(strict=False)
+    home = resolve_effective_home(env={"HOME": str(effective_home)} if effective_home else None)
+    if resolved != home / ".zcode" / "cli" / "db" / "db.sqlite":
+        raise PermissionError("ZCode session root must be the exact effective-home database")
     return resolved
 
 
@@ -86,6 +99,12 @@ def enumerate_authorized_files(
     if source.status != "authorized":
         return ()
     root = _reject_root(Path(source.root))
+    if source.kind == "zcode_session":
+        # The ZCode session database is intentionally a .sqlite file inside the
+        # sensitive-name set; only the exact effective-home database, validated
+        # first, is exempt. Nothing else in that directory is ever readable.
+        root = validate_zcode_session_root(root, effective_home)
+        return (root,)
     if _sensitive(root):
         raise PermissionError("unsafe credential/auth/private database source root")
     if source.kind == "codex_rollout":

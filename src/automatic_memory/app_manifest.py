@@ -77,6 +77,18 @@ APP_CATALOG: Mapping[str, AppCatalogEntry] = {
             detail="可自动发现本机 rollout 记录；主人授权后自动读取。",
         ),
         AppCatalogEntry(
+            "zcode", "ZCode",
+            app_names=(),
+            process_names=("zcode", "ZCode"),
+            capabilities={
+                "auto_discovery": True, "requires_authorization": True,
+                "official_export_inbox": False, "session_read": True,
+                "message_body_view": True, "model_process_status": True,
+            },
+            supported=True,
+            detail="可自动发现本机会话数据库；主人授权后自动读取。",
+        ),
+        AppCatalogEntry(
             "workbuddy", "WorkBuddy",
             app_names=("WorkBuddy.app",),
             process_names=("WorkBuddy", "workbuddy"),

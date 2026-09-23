@@ -94,7 +94,7 @@ def test_catalog_covers_owner_required_categories():
     assert required <= set(APP_CATALOG)
     for kind, entry in APP_CATALOG.items():
         assert set(entry.capabilities) == CAPABILITY_KEYS, kind
-        if kind not in {"chatgpt_official", "codex_rollout"}:
+        if kind not in {"chatgpt_official", "codex_rollout", "zcode"}:
             assert entry.capabilities["session_read"] is False, kind
 
 

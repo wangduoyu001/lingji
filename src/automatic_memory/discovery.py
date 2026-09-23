@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import platform
 import stat
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -125,6 +126,24 @@ def discover_source_metadata(settings: object) -> tuple[DiscoveredSource, ...]:
                 "codex_rollout", "Codex聊天记录", str(resolved), status, "metadata_discovery", reason,
                 count, byte_count, earliest, latest, fmt,
                 {"kind": "authorize", "label": "允许接管 Codex", "source_kind": "codex_rollout"},
+            ))
+        zcode_db = home / ".zcode" / "cli" / "db" / "db.sqlite"
+        zcode_lexical = Path(os.path.abspath(str(zcode_db)))
+        if any(parent.is_symlink() for parent in (zcode_lexical, *zcode_lexical.parents)):
+            result.append(DiscoveredSource(
+                "zcode_session", "ZCode会话", str(zcode_lexical), "unavailable", "metadata_discovery",
+                "symbolic-link ZCode database is not traversed", None, None, None, None, "zcode_session",
+                {"kind": "authorize", "label": "允许接管 ZCode", "source_kind": "zcode_session"},
+            ))
+        elif zcode_lexical.is_file():
+            stat = zcode_lexical.stat()
+            result.append(DiscoveredSource(
+                "zcode_session", "ZCode会话", str(zcode_lexical), "available", "metadata_discovery", None,
+                1, stat.st_size,
+                datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).isoformat(timespec="seconds"),
+                datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(timespec="seconds"),
+                "zcode_session",
+                {"kind": "authorize", "label": "允许接管 ZCode", "source_kind": "zcode_session"},
             ))
     configured_kinds: set[str] = set()
     for kind, display_name, attributes in values:
