@@ -4228,3 +4228,5 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 变更：提炼队列饿死修复（f2a82fa0 superseded 饿死的同族新变种）。无消息的空壳会话（导入即坏的 3 个 Codex 日汇总行）在 `_distill_one` 的 digest=None 路径直接 return False、不落任何行 → 永远满足"无提炼行"候选条件 → 以 0 秒失败永占 started_at DESC 队首，515 个有内容的真实候选永远轮不到；累计失败计数涨到 5,766（UI"失败 5766 段会自动重试"即此）。修复：该路径落 `status='empty'` 终态行（`_record_empty`），候选查询与 superseded 同样排除 empty；message_count=0 保留复活语义，消息将来被导入时经 message_count 条件自动重新入队。
 自动测试：`tests/test_automatic_memory_distillation.py` 追加 1 例（空壳会话落 empty 出队 + 消息导入后复活），套件 18 例通过。
 真机验收（装机后）：3 个空壳会话转为 empty 行；提炼队列推进到真实候选（ready 数持续增长、累计失败数停止暴涨）；UI 知识要点页进度条开始移动。回滚=revert 单提交（队列退回饿死态）。
+
+追加修复（同日）：提炼循环静默冻结的负载缓解——`distillation._connect` 的 sqlite 连接从默认 5s 超时改为 30s（与 MemoryDatabase 对齐）。真机观察：向量重建高负载期提炼循环在 12:34 后无进度写入（current 为空、非暂停、线程存活），特征符合每轮 `_ensure_schema` 写锁竞争 5 秒秒败 + 异常被静默吞掉 + 60s 重试的循环；锁定竞争根因待 py-spy 深查（交接记录）。真机验收：重启后 updated_at 恢复推进、ready 数增长。

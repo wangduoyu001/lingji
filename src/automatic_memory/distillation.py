@@ -98,7 +98,10 @@ class KnowledgeDistiller:
     def _connect(self) -> sqlite3.Connection:
         path = self._memory_db()
         assert path is not None, "memory db path must be available before connect"
-        conn = sqlite3.connect(str(path))
+        # 默认 5s 超时在向量重建/同步高负载下会持续撞 "database is locked"，
+        # 提炼循环把异常静默吞掉后表现为整条管线无声冻结（2026-09-23 真机复发）。
+        # 30s 与 MemoryDatabase 对齐：等锁而不是秒败。
+        conn = sqlite3.connect(str(path), timeout=30)
         conn.row_factory = sqlite3.Row
         return conn
 
