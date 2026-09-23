@@ -4188,3 +4188,10 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 变更：`src/gateway/profiles.py` 默认身份注册表新增 `zcode`（ZCode，mcp_stdio，读工具+propose_memory，与 codex 同级；不改写 Core Memory 的红线不变），供 ZCode 以独立身份接入灵机 MCP（审计可区分，不与 Codex 混同）。ZCode 侧用户级配置 `~/.zcode/cli/config.json` → `mcp.servers.lingji_memory`（stdio bridge，`--agent zcode`，备份 `config.json.bak-lingji-mcp`）。
 自动测试：`tests/test_gateway_ai_profiles.py`（3 例：zcode 身份/未知身份拒绝/外部身份均不可改写 Core）；相关套件通过。
 真机验收：MCP rpc `tools/list` 返回 21 个工具；`search_memory` 以 `agent_id=zcode` 实测成功（装机 c1192893 之后的版本）。回滚=删除 ZCode 配置中的 server 条目；产品回滚=revert profiles.py 单行。
+
+
+## 2026-09-23 ZCODE_SESSION_COLLECTION
+
+变更：新增 `src/extraction/adapters/zcode_session.py`（只读打开 ZCode 会话库快照，session/message/text-part → 结构化会话；system 注入上下文与非文本 part 剔除、同消息多段合并、有界上限、schema 不符 fail-closed）；`discovery.py` 候选清单新增 `~/.zcode/cli/db/db.sqlite`（kind=zcode_session，含"允许接管 ZCode"动作）；`path_policy.py` 仅允许精确主目录库路径（.sqlite 在敏感名单内，豁免是显式且唯一的）；`app_manifest.py` 登记 zcode（session_read=True，契约测试同步更新）。动机：主人拍板让 ZCode 的干活结论自动进记忆（采集→提炼→自动晋升），替代人工交接文档。
+自动测试：`tests/test_zcode_session_adapter.py`（5 例：can_handle/投影合并/空库 fail-closed/精确根枚举/异根拒绝）；discovery/manifest 契约更新后 43 例通过。
+真机验收（装机后）：来源清单出现"ZCode会话"候选；授权后扫描采集→蒸馏层出现 ZCode 会话行→自动晋升管线照常工作。回滚=撤销授权或 revert 本提交。
