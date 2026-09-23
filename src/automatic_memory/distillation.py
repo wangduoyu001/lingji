@@ -521,6 +521,7 @@ class KnowledgeDistiller:
             items.append(
                 {
                     "conversation_id": row["conversation_id"],
+                    "source_id": str(row["source_id"] or ""),
                     "title": row["title"],
                     "summary": row["summary"],
                     "key_points": [str(point) for point in key_points if str(point).strip()],

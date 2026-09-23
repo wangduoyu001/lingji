@@ -15,6 +15,7 @@ from src.mcp.extraction_submission import (
     validate_codex_work_report,
 )
 from src.mcp.project_context_tools import register_project_context_tools
+from src.mcp.timeline import build_timeline
 from src.project_context import ProjectRegistry, ProjectResolver
 from src.project_memory.runtime import build_project_context_service
 from src.retrieval import MarkdownChunker
@@ -286,6 +287,36 @@ def create_mcp_server(
     def recent_changes(agent_id: str | None = None, limit: int = 30) -> dict[str, Any]:
         """Return recently changed memories and auditable memory events."""
         return memory_gateway.recent_changes(agent(agent_id), limit=limit)
+
+    @mcp.tool()
+    def project_timeline(
+        topic: str,
+        agent_id: str | None = None,
+        limit: int = 20,
+        max_chars: int = 6000,
+    ) -> dict[str, Any]:
+        """Aggregate distilled facts and memory hits for one topic into a time-ordered, source-annotated timeline."""
+        bounded_limit = min(max(int(limit), 1), 50)
+        bounded_chars = min(max(int(max_chars), 200), 20000)
+        entries: list[dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
+        try:
+            from src.automatic_memory.distillation import KnowledgeDistiller
+
+            distilled = KnowledgeDistiller(settings).list_entries(
+                query=topic, limit=bounded_limit, order="occurred"
+            )
+            entries = list(distilled.get("items") or [])
+        except Exception:
+            entries = []
+        try:
+            payload = memory_gateway.search_memory(agent(agent_id), topic, limit=bounded_limit)
+            results = list(payload.get("results") or [])
+        except Exception:
+            results = []
+        return build_timeline(
+            topic, entries, results, limit=bounded_limit, max_chars=bounded_chars
+        )
 
     @mcp.tool()
     def memory_health(agent_id: str | None = None) -> dict[str, Any]:
