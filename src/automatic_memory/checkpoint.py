@@ -5,7 +5,9 @@ import json
 import math
 import os
 import threading
+import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal
 from uuid import uuid4
@@ -16,6 +18,121 @@ from src.storage.state_db import LeaseLostError
 
 from .models import ScanRun
 from .snapshot import ConsistentSnapshot, SnapshotResult
+
+
+# ---------------------------------------------------------------------------
+# raw 空间淘汰（主人约束：占用不能无限膨胀，2026-09-23）
+#
+# 触发时机：写入新快照前配额将超限时。规则宁可少删不删错：
+# - 全局最新 5 个文件永不淘汰（进行中的采集/提取窗口）；
+# - 小文件（<32MiB）24 小时内不淘汰；
+# - 大快照（>=32MiB，活动库整库拷贝，如 ZCode 会话库）只保护最新 3 个，
+#   其余 6 小时后可淘汰——它们是滚动副本，最新副本即当前事实；
+# - 从最旧开始淘汰直到用量回到 target；每次淘汰追加记账到 raw/.evicted.log
+#   （raw_id、大小、mtime），可审计、可解释。
+# 淘汰对象都是"可从活跃来源重新采集"的快照副本，不是主人原始数据。
+# ---------------------------------------------------------------------------
+
+_LARGE_SNAPSHOT_BYTES = 32 * 1024 * 1024
+_KEEP_RECENT = 5
+_KEEP_LARGE_COPIES = 3
+_SMALL_PROTECT_SECONDS = 24 * 3600
+_LARGE_PROTECT_SECONDS = 6 * 3600
+_EVICT_LOG_NAME = ".evicted.log"
+
+
+def _dir_usage(raw_root: Path) -> int:
+    total = 0
+    for entry in raw_root.iterdir():
+        try:
+            if entry.is_file():
+                total += entry.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def evict_raw_for_space(
+    raw_root: Path,
+    target_bytes: int,
+    *,
+    now: float | None = None,
+    keep_recent: int = _KEEP_RECENT,
+) -> list[dict[str, Any]]:
+    """把 raw 用量淘汰回 target_bytes 以下；返回淘汰记录列表。
+
+    无淘汰空间可释放（全是受保护文件）时返回空列表，调用方维持原配额报错语义。
+    """
+    now = now if now is not None else time.time()
+    if not raw_root.is_dir():
+        return []
+    entries: list[tuple[float, int, Path]] = []  # (mtime, size, path)
+    for entry in raw_root.iterdir():
+        if entry.name.startswith("."):
+            continue
+        try:
+            if not entry.is_file():
+                continue
+            stat = entry.stat()
+        except OSError:
+            continue
+        entries.append((stat.st_mtime, stat.st_size, entry))
+    if not entries:
+        return []
+    entries.sort(key=lambda item: item[0])  # 最旧优先
+
+    usage = sum(size for _m, size, _p in entries)
+    if usage <= target_bytes:
+        return []
+    budget = usage - target_bytes
+
+    # "最新 5 个"窗口保护只针对小文件；大快照由"最新 3 份 + 6h"单独管辖，
+    # 否则大文件被全局窗口连带保护，滚动副本永不收敛。
+    newest_names = {
+        path.name
+        for _m, _s, path in sorted(
+            (item for item in entries if item[1] < _LARGE_SNAPSHOT_BYTES),
+            key=lambda item: item[0],
+            reverse=True,
+        )[: max(keep_recent, 0)]
+    }
+    large_names = {
+        path.name
+        for _m, _s, path in sorted(
+            (item for item in entries if item[1] >= _LARGE_SNAPSHOT_BYTES),
+            key=lambda item: item[0],
+            reverse=True,
+        )[:_KEEP_LARGE_COPIES]
+    }
+
+    evicted: list[dict[str, Any]] = []
+    log_path = raw_root / _EVICT_LOG_NAME
+    for mtime, size, path in entries:
+        if budget <= 0:
+            break
+        if path.name in newest_names or path.name in large_names:
+            continue
+        age = now - mtime
+        protect = _LARGE_PROTECT_SECONDS if size >= _LARGE_SNAPSHOT_BYTES else _SMALL_PROTECT_SECONDS
+        if age < protect:
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            continue
+        record = {
+            "raw_id": path.name,
+            "bytes": size,
+            "mtime": datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat(),
+        }
+        evicted.append(record)
+        budget -= size
+        try:
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except OSError:
+            pass
+    return evicted
 
 
 @dataclass(frozen=True)
@@ -386,6 +503,15 @@ class SnapshotJobRunner:
                 result = self._reuse_snapshot(source_id, path, previous.get(relative))
                 if result is None:
                     size = path.stat().st_size
+                    if raw_used + size > self.raw_max_bytes:
+                        # 先尝试淘汰过保护期的旧快照腾位（占用不能无限膨胀）；
+                        # 仍不够才维持原"触顶拒绝写入"语义。
+                        try:
+                            target = int(self.raw_max_bytes * 0.7)
+                            evict_raw_for_space(self.snapshot.raw_root, target)
+                            raw_used = _dir_usage(self.snapshot.raw_root)
+                        except Exception:
+                            raw_used = max(raw_used, _dir_usage(self.snapshot.raw_root))
                     if raw_used + size > self.raw_max_bytes:
                         raise RuntimeError(
                             f"raw storage limit reached ({raw_used}/{self.raw_max_bytes} bytes); "
