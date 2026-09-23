@@ -93,10 +93,10 @@ class OwnerMemoryCardProjector:
         self.gateway = gateway
         self.state_db = state_db
         self.workspace = str(workspace or "production")
-        self._summary_lock = threading.Lock()
-        self._summary_cache: dict[str, Any] | None = None
-        self._summary_cache_at: float = 0.0
-        self._summary_refreshing = threading.Event()
+        self._cards_lock = threading.Lock()
+        self._cards_cache: tuple[tuple[Any, ...], list[OwnerMemoryCard]] | None = None
+        self._cards_cache_at: float = 0.0
+        self._cards_refreshing = threading.Event()
 
     def list_cards(
         self,
@@ -139,10 +139,12 @@ class OwnerMemoryCardProjector:
     ) -> dict[str, Any]:
         selected_viewer = viewer or self.source_service.owner_viewer()
         wanted = str(memory_id or "").strip()
+        # 卡详情必须实时（owner 打开单张卡看当前状态/动作），不走列表缓存；
+        # 这是既有行为：单卡查找本就全量构建。
         # Locate the selected projection without reading any message bodies.
         # Message detail is a separate explicit action on the selected
         # evidence row, so opening a card must remain preview-only too.
-        for card in self._all_cards(selected_viewer):
+        for card in self._all_cards_uncached(selected_viewer):
             if card.memory_id == wanted:
                 return {
                     "workspace": self.workspace,
@@ -155,55 +157,9 @@ class OwnerMemoryCardProjector:
     def summary(self, *, viewer: ViewerContext | None = None) -> dict[str, Any]:
         """Return full-card counts for Home without deriving from one page.
 
-        全量卡测量在生产库上是 15-25s 的秒级操作，而首页每 20s 轮询、前端请求
-        超时 15s、失败退避最长 120s——同步计算必然周期性超时，前端把无数据
-        显示成 0 且失败退避比任何缓存都长，会自锁在失败态。
-
-        因此默认 viewer 走 stale-while-revalidate：任何请求立即返回缓存副本
-        （允许过期），过期时由单个后台线程刷新；仅进程启动后的首个请求同步
-        计算一次。显式传入 viewer 时不走缓存。
+        卡构建已由 ``_all_cards`` 的 stale-while-revalidate 缓存兜底，聚合本身
+        是毫秒级；显式传入 viewer 仅影响可见性过滤。
         """
-        if viewer is not None:
-            return self._summary_uncached(viewer=viewer)
-        cached = self._summary_cache
-        if cached is not None:
-            if time.monotonic() - self._summary_cache_at > _SUMMARY_CACHE_TTL_SECONDS:
-                self._schedule_summary_refresh()
-            return dict(cached)
-        with self._summary_lock:
-            if self._summary_cache is not None:
-                return dict(self._summary_cache)
-            payload = self._summary_uncached(viewer=None)
-            self._summary_cache = dict(payload)
-            self._summary_cache_at = time.monotonic()
-            return dict(payload)
-
-    def _schedule_summary_refresh(self) -> None:
-        """过期后由单个后台线程重算；重复调用在刷新进行中是空操作。"""
-        if self._summary_refreshing.is_set():
-            return
-        self._summary_refreshing.set()
-
-        def _refresh() -> None:
-            try:
-                with self._summary_lock:
-                    if time.monotonic() - self._summary_cache_at <= _SUMMARY_CACHE_TTL_SECONDS:
-                        return
-                    payload = self._summary_uncached(viewer=None)
-                    self._summary_cache = dict(payload)
-                    self._summary_cache_at = time.monotonic()
-            except Exception:
-                pass
-            finally:
-                self._summary_refreshing.clear()
-
-        threading.Thread(target=_refresh, name="memory-cards-summary-refresh", daemon=True).start()
-
-    def invalidate_summary_cache(self) -> None:
-        """数据变更后调用：下一条请求触发后台刷新（当前缓存仍兜底显示）。"""
-        self._summary_cache_at = 0.0
-
-    def _summary_uncached(self, *, viewer: ViewerContext | None) -> dict[str, Any]:
         selected_viewer = viewer or self.source_service.owner_viewer()
         all_cards = self._all_cards(selected_viewer)
         cards = [card for card in all_cards if str(card.freshness.get("state") or "") == "current"]
@@ -236,6 +192,54 @@ class OwnerMemoryCardProjector:
     project = get_card
 
     def _all_cards(self, viewer: ViewerContext, *, allow_message_detail: bool = False) -> list[OwnerMemoryCard]:
+        """全量卡构建在生产库上是 15-25s 的操作，而首页 summary 与列表页都依赖它。
+
+        对默认 detail 级别做 stale-while-revalidate 缓存：任何请求立即返回缓存
+        副本（允许过期），过期时由单个后台线程刷新；仅进程启动后的首个请求同步
+        构建。viewer 按 (scope, agent_id) 区分，非 owner 视角不缓存。
+        """
+        cacheable = not allow_message_detail
+        key = (
+            getattr(viewer, "viewer_scope", "owner"),
+            getattr(viewer, "agent_id", None),
+        ) if cacheable else None
+        if key is not None:
+            cached = self._cards_cache
+            if cached is not None and cached[0] == key:
+                if time.monotonic() - self._cards_cache_at > _SUMMARY_CACHE_TTL_SECONDS:
+                    self._schedule_cards_refresh(key)
+                return list(cached[1])
+            if self._cards_cache is None:
+                cards = self._all_cards_uncached(viewer, allow_message_detail=allow_message_detail)
+                self._cards_cache = (key, list(cards))
+                self._cards_cache_at = time.monotonic()
+                return cards
+            # 有其他 viewer 的缓存：让该请求走同步构建（罕见路径），不改写缓存。
+            return self._all_cards_uncached(viewer, allow_message_detail=allow_message_detail)
+        return self._all_cards_uncached(viewer, allow_message_detail=allow_message_detail)
+
+    def _schedule_cards_refresh(self, key: tuple[Any, Any]) -> None:
+        if self._cards_refreshing.is_set():
+            return
+        self._cards_refreshing.set()
+
+        def _refresh() -> None:
+            try:
+                with self._cards_lock:
+                    if self._cards_cache is not None and self._cards_cache[0] == key and time.monotonic() - self._cards_cache_at <= _SUMMARY_CACHE_TTL_SECONDS:
+                        return
+                    viewer = self.source_service.owner_viewer()
+                    cards = self._all_cards_uncached(viewer)
+                    self._cards_cache = (key, list(cards))
+                    self._cards_cache_at = time.monotonic()
+            except Exception:
+                pass
+            finally:
+                self._cards_refreshing.clear()
+
+        threading.Thread(target=_refresh, name="memory-cards-refresh", daemon=True).start()
+
+    def _all_cards_uncached(self, viewer: ViewerContext, *, allow_message_detail: bool = False) -> list[OwnerMemoryCard]:
         documents = self._list_documents()
         documents.extend(self._candidate_documents())
         promoted_conversations: set[str] = set()

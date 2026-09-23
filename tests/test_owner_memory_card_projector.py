@@ -551,7 +551,7 @@ def _sort_fixture_card(memory_id: str, latest_evidence_at: str | None) -> OwnerM
         topic=memory_id,
         developments=(),
         conclusion=None,
-        freshness={},
+        freshness={"state": "current"},
         source={"latest_evidence_at": latest_evidence_at},
         layers={},
         trust={},
@@ -595,22 +595,20 @@ def test_card_sort_uses_memory_id_as_deterministic_tie_breaker_for_equal_instant
     assert [item["memory_id"] for item in result["items"]] == ["memory-b", "memory-a"]
 
 
-def _wait_background_refresh(projector, monkeypatch_target_module, expected_calls, deadline_s: float = 5.0) -> None:
+def _wait_cards_refresh(projector, deadline_s: float = 5.0) -> None:
     import time as time_module
 
     waited = 0.0
-    while projector._summary_refreshing.is_set() and waited < deadline_s:
+    while projector._cards_refreshing.is_set() and waited < deadline_s:
         time_module.sleep(0.05)
         waited += 0.05
-    while projector._summary_refreshing.is_set():
-        time_module.sleep(0.05)
 
 
 def test_home_summary_stale_while_revalidate_keeps_poller_fast(monkeypatch):
-    """后端计算 15-25s 而前端超时 15s：过期缓存必须立即返回旧值并由后台刷新。
+    """后端全量卡构建 15-25s 而前端超时 15s：过期缓存必须立即返回旧值并后台刷新。
 
     回归背景：同步重算让前端每次缓存过期后的轮询都超时，失败退避（最长 120s）
-    又比缓存寿命长，首页自锁在"永久记忆 0"。
+    又比缓存寿命长，首页自锁在"永久记忆 0"、要点页永远"0 / 尚未获得"。
     """
     import time as time_module
 
@@ -619,29 +617,41 @@ def test_home_summary_stale_while_revalidate_keeps_poller_fast(monkeypatch):
     projector = OwnerMemoryCardProjector(FixtureDatabase(), FixtureSources(), FixtureStatistics())
     calls = {"count": 0}
     fake_now = {"value": 1000.0}
-    monkeypatch.setattr(projector, "_summary_uncached", lambda *, viewer: calls.__setitem__("count", calls["count"] + 1) or {"permanent": 11})
+
+    def _fake_uncached(viewer, *, allow_message_detail=False):
+        calls["count"] += 1
+        return [_sort_fixture_card(f"memory-{calls['count']}", "2026-03-01T00:00:00Z")]
+
+    monkeypatch.setattr(projector, "_all_cards_uncached", _fake_uncached)
     monkeypatch.setattr(module.time, "monotonic", lambda: fake_now["value"])
 
-    first = projector.summary()
-    second = projector.summary()
-    assert calls["count"] == 1, "TTL 内重复轮询必须命中缓存"
-    assert first == {"permanent": 11} and second == {"permanent": 11}
+    # 首请求同步建缓存；后续请求从缓存取卡（列表/summary 都不再触发重算）。
+    first_cards = projector._all_cards(FixtureSources().owner_viewer())
+    assert calls["count"] == 1
+    summary_one = projector.summary()
+    listing = projector.list_cards(limit=5)
+    assert calls["count"] == 1, "TTL 内 summary/list 必须复用缓存卡"
+    assert summary_one["cards"] == 1 and listing["pagination"]["total"] == 1
+    assert first_cards[0].memory_id == "memory-1"
 
-    # 过期：请求立即拿到旧值（前端永不超时），后台线程异步重算。
+    # 过期：立即返回旧值，后台线程异步重算。
     fake_now["value"] += module._SUMMARY_CACHE_TTL_SECONDS + 1
-    stale = projector.summary()
-    assert stale == {"permanent": 11}
-    projector._summary_refreshing.wait(timeout=5)
+    stale_cards = projector._all_cards(FixtureSources().owner_viewer())
+    assert [c.memory_id for c in stale_cards] == ["memory-1"], "过期请求先拿旧值"
+    projector._cards_refreshing.wait(timeout=5)
     for _ in range(100):
         if calls["count"] == 2:
             break
         time_module.sleep(0.05)
     assert calls["count"] == 2, "过期缓存必须触发一次后台刷新"
-    assert projector.summary() == {"permanent": 11}
+    refreshed = projector._all_cards(FixtureSources().owner_viewer())
+    assert [c.memory_id for c in refreshed] == ["memory-2"], "刷新后拿到新数据"
 
-    explicit = projector.summary(viewer=FixtureSources().owner_viewer())
-    assert calls["count"] == 3, "显式 viewer 不走缓存"
+    # 允许消息明细的路径不读写缓存。
+    projector._all_cards(FixtureSources().owner_viewer(), allow_message_detail=True)
+    assert calls["count"] == 3
 
-    # 失效防护：缓存返回的是副本，外部改写不得污染下一次命中。
-    first["permanent"] = 0
-    assert projector.summary()["permanent"] == 11
+    # 缓存返回的是浅拷贝列表，外部改写不得污染缓存。
+    refreshed.append(None)
+    again = projector._all_cards(FixtureSources().owner_viewer())
+    assert None not in again
