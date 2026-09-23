@@ -179,3 +179,25 @@ class ZcodePathPolicyTests(unittest.TestCase):
                     self._record(str(Path(tmp) / "db.sqlite")),
                     effective_home=tmp,
                 )
+
+
+class ZcodeSourceRegistryTests(unittest.TestCase):
+    """授权注册表放行精确 ZCode 库、继续拒绝其余敏感数据库路径。"""
+
+    def test_exact_home_database_is_canonical(self):
+        import os
+
+        from src.automatic_memory.source_registry import _canonical_root
+
+        home = Path.home()
+        canonical = _canonical_root(str(home / ".zcode" / "cli" / "db" / "db.sqlite"))
+        assert canonical == str(Path(os.path.abspath(home / ".zcode" / "cli" / "db" / "db.sqlite")))
+
+    def test_other_sqlite_roots_stay_rejected(self):
+        import tempfile
+
+        from src.automatic_memory.source_registry import _canonical_root
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(PermissionError):
+                _canonical_root(str(Path(tmp) / "other.sqlite"))
