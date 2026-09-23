@@ -1,5 +1,13 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
+## 2026-09-23 chunk 回填自动化 + MCP project_timeline（真机验收通过，重建收尾中）
+
+交接文档 0g 三需求落地两项半：①chunk 向量回填自动化（缺口根因修复——此前只有手动端点会补；drain 线程并跑 ChunkVectorBackfill，runtime 接收网关 semantic_provider）；②MCP 新增第 22 个工具 `project_timeline`（蒸馏层+记忆检索按主题聚合时间线，真机实测 22 工具、「晋升管线」主题 18 条双源归并）；③`~/.codex/AGENTS.md` 与 `~/.zcode/AGENTS.md` 加「灵机记忆检索优先」引导（search_memory limit=5 先查再问主人）。
+
+**验收中发现并处置的既有缺陷**：嵌入模型切换（bge-m3→qwen3，同 1024 维）时 chunk 集合 `lingji_memory_production` 未按 0f 清单清空——22,401 条旧模型点留存触发指纹守卫拒绝写入（`rebuild_required=true`），语义检索混库不可信。已改名归档为 `.bge-m3-20260923`（含 meta 摘除，可回滚），由新自动回填以 qwen3 全量重建（26.6k chunks，防混库守卫在真机首次立功）。另：消息层 payload 此前缺 `embedding_model` 字段致守卫对消息层致盲，已补记。
+
+装机 sidecar `b08eb38a`+（codesign 全量重签）；AutoClaw 抢占 `*:8766` 再次发生（退出→灵机绑定→拉回共存）。测试：新增 7 例（drain 3+timeline 4）+相关套件 35 例通过。详见 `docs/TEST_REPORTS/CHUNK_BACKFILL_AUTOMATION_AND_PROJECT_TIMELINE.md` 与 CHANGE_ACCEPTANCE_LOG 同日两条目。
+
 ## 2026-09-22 自动记忆晋升管线（本机验收通过，待主人确认）
 
 主人 2026-09-22 拍板（AGENTS.md §4 已修订）：记忆晋升从逐条审批改为自动门槛 + Evolving 迭代时间线。本轮实现并完成真机验收：`src/memory/auto_promotion.py`（确定性门槛 + promote/Evolving 双轨 + prev-hash 审计链），提炼层新增模型自评 `confidence`，runtime 常驻 `lingji-auto-promotion` daemon 线程，开关 `auto_promote_enabled` 已在生产开启（Desktop 设置页"记忆自动化"组可调，回滚=关开关）。

@@ -4210,3 +4210,15 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 变更（主人拍板直接切换，WorkBuddy 负责下载模型）：`src/retrieval/qdrant_provider.py` 新增嵌入模型指纹校验——集合内数据点的 `embedding_model` 字段与当前配置模型不一致时置 `rebuild_required` 并拒绝写入（`VectorDimensionMismatchError`），防同维度换模型（bge-m3→Qwen3-0.6B 均为 1024 维）静默混库；维度校验逻辑保持。切换流程：验证新模型 → 改配置 embed_model=qwen3-embedding:0.6b（nomic 备胎不变）→ 清空旧向量集合 → 重启 → 后台回填线程全量重嵌 → 实测重校阈值（检索 0.55/去重 0.92 为 bge-m3 口径）→ 真实查询验收。回滚=配置切回 bge-m3 并重建。
 自动测试：`tests/test_chunk_vector_backfill.py` 追加 2 例指纹守卫（换模型拒绝+rebuild_required / 同模型继续可用）；相关套件通过。
 真机验收：切换后 coverage=100%、search_memory 真实查询返回、UI 语义索引数对齐。
+
+## 2026-09-23 CHUNK_BACKFILL_AUTOMATION
+
+变更：chunk 级正式语义集合回填自动化——缺口根因修复。`src/automatic_memory/runtime.py` 新增 `semantic_provider` 注入参数与 `_build_chunk_backfill`：drain 线程（lingji-vector-backfill）在既有消息层回填的同一 300s 预算循环里并跑 `ChunkVectorBackfill`（每轮 200 条，两层都归零才停），`run_control_api.py` 组装时传入网关 `retriever.semantic_provider`（同进程共享 Qdrant 客户端池，不自建第二客户端避免单进程锁冲突）。此前 chunks 层缺口（/api/vector/coverage missing=4,152）只有手动 /api/observability/vectorize 会补、从无自动触发。另：消息层 `VectorBackfill` 写入 payload 补记 `embedding_model`（embed 成功后 active_model 必已就绪），消除集合指纹守卫对消息层点的致盲。
+自动测试：`tests/test_runtime_chunk_backfill_drain.py`（3 例：drain 经网关 provider 补齐且幂等 / 无网关 provider 行为不变 / 消息层 payload 记录模型名）；相关套件 test_vector_backfill、test_chunk_vector_backfill、test_automatic_memory_runtime_flow、test_vector_status_probe_fallback、test_embedding_status_probe 共 21 例通过。
+真机验收（装机后）：不点手动 vectorize，观察 `/api/vector/coverage` missing 自动收敛至 0；UI 语义索引数与 coverage 一致。回滚=revert 本提交（手动端点仍可用，行为退回手动补齐）。
+
+## 2026-09-23 MCP_PROJECT_TIMELINE_AND_AI_ONBOARDING
+
+变更：①`src/mcp_server.py` 新增 MCP 工具 `project_timeline`（22 号工具）：按主题关键词聚合蒸馏层（distilled_knowledge，按对话发生时间）与记忆检索（search_memory）结果，时间倒序归并、来源标注（source_id/kind）、token 受控（每条摘要截断 + max_chars 总预算 + limit 上限），满足"多个 AI 同一项目不同时间线整理到一起迭代"；聚合逻辑在 `src/mcp/timeline.py`（纯函数）。②`distillation.py` `list_entries` 条目补 `source_id` 字段（纯增量）。③主人需求：`~/.codex/AGENTS.md` 与 `~/.zcode/AGENTS.md` 新增"灵机记忆检索优先"节——需要项目背景/历史结论/交接上下文先 search_memory(limit=5)，检索不到再问主人，检索结果不复述全文，长期结论用 propose_memory 沉淀。
+自动测试：`tests/test_mcp_project_timeline.py`（4 例：list_entries 带 source_id / 双源时间倒序归并与来源标注 / limit 与字符预算截断 / 摘要归一化截断）；test_mcp_server、test_automatic_memory_mcp、test_codex_mcp_tools 14 例通过；蒸馏层套件回归通过。
+真机验收（装机后）：stdio bridge `tools/list` 出现 project_timeline；以真实主题（如"嵌入模型"）调用返回非空时间线（蒸馏条目带 conversation 来源、记忆条目带 memory_id）。AGENTS.md 引导随下次会话自然生效。回滚=revert 本提交；AGENTS.md 删除对应节。

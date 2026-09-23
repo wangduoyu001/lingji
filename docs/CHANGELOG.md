@@ -2,6 +2,19 @@
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
 
+## 2026-09-23
+
+### MCP 新增 project_timeline 工具：多个 AI 同一项目时间线聚合查询（真机实测通过，待主人确认）
+
+- 灵机 MCP 新增第 22 个工具 `project_timeline`：按主题关键词把蒸馏层知识与记忆检索结果聚合为一条时间线——时间倒序、逐条标注来源（source_id/kind/category）、token 受控（摘要截断 + 总预算 + 条数上限）。Codex、ZCode 等多个 AI 现在可以直接问"这个主题前后发生了什么"，不必各自重新整理或反复问主人。
+- 配套在 `~/.codex/AGENTS.md` 与 `~/.zcode/AGENTS.md` 新增"灵机记忆检索优先"引导：AI 需要项目背景/历史结论先 `search_memory(limit=5)`，检索不到再问主人，检索结果不复述全文，长期结论用 `propose_memory` 沉淀。
+- 真机实测（装机 sidecar `b08eb38a` 经 stdio 桥）：`tools/list` 22 个工具含 `project_timeline`；主题「嵌入模型」返回 6 条、「晋升管线」返回 18 条（蒸馏条目带对话来源与 key_points、记忆条目带 memory_id），时间倒序正确。自动测试 4 例新增、MCP 层 14 例通过。
+
+### chunk 语义向量缺口自动补齐 + 嵌入模型切换后旧集合归档重建（重建进行中，待验收后回填数字）
+
+- 修复 chunk 语义索引缺口从无自动补齐的根因：向量回填 drain 线程现在在同一 300s 预算循环里同时追平消息层与 chunk 层缺口（每轮 200 条、两层都归零才停），不再依赖手动 vectorize；消息层向量 payload 补记 embedding_model，消除嵌入模型指纹守卫的盲区。以后新入库内容的语义索引缺口会在回填周期内自动收敛。
+- 发现并处置既有缺陷：bge-m3 → qwen3-embedding:0.6B 切换（同为 1024 维）时 chunk 语义集合未按清单清空，22,401 条旧 bge-m3 点留存、新模型写入被指纹守卫正确拒绝，混库期间语义检索结果不可信。2026-09-23 已将旧集合改名归档为 `lingji_memory_production.bge-m3-20260923`，App 重启后由自动回填以 qwen3 全量重建（26,582 chunks）——重建进行中，最终 coverage 数字待验收后回填。
+
 ## 2026-09-22
 
 ### 自动记忆晋升管线与 Evolving 迭代时间线（本机验收通过，待主人确认）
