@@ -39,11 +39,16 @@ def _count_markdown(directory: Path) -> int:
     return sum(1 for p in directory.rglob("*.md") if p.is_file())
 
 
-def build_home_markdown(vault: Path) -> str:
+def build_home_markdown(vault: Path, *, wiki_links: bool = True) -> str:
     core_dir = vault / "03-Knowledge" / "Core-Memory"
     evolving_dir = vault / "03-Knowledge" / "Evolving"
     core_latest = _latest_notes(core_dir, 8)
     evolving_latest = _latest_notes(evolving_dir, 8)
+
+    def ref(path: Path) -> str:
+        if wiki_links:
+            return _wiki(path, vault)
+        return "`" + path.relative_to(vault).as_posix() + "`"
 
     lines = [
         "---",
@@ -68,13 +73,13 @@ def build_home_markdown(vault: Path) -> str:
     ]
     if core_latest:
         for path in core_latest:
-            lines.append(f"- {_wiki(path, vault)}")
+            lines.append(f"- {ref(path)}")
     else:
         lines.append("- 暂无：达标事实会自动进入")
     lines += ["", "## 最近迭代时间线（未定论，持续演化）", ""]
     if evolving_latest:
         for path in evolving_latest:
-            lines.append(f"- {_wiki(path, vault)}")
+            lines.append(f"- {ref(path)}")
     else:
         lines.append("- 暂无")
     lines.append("")
@@ -98,4 +103,27 @@ def refresh_home_dashboard(vault_path: Any) -> dict[str, Any]:
     return {"path": str(home), "bytes": len(content.encode("utf-8")), "managed": True}
 
 
-__all__ = ["HOME_NAME", "build_home_markdown", "refresh_home_dashboard"]
+DELIVERY_NAME = "灵机记忆首页.md"
+
+
+def deliver_home_dashboard(vault_path: Any, delivery_dir: Any) -> dict[str, Any] | None:
+    """把记忆首页摘要投递到主人的真实 Obsidian 库（纯文本路径，链接不可点）。
+
+    只新增/更新 `灵机记忆首页.md` 一个托管文件；库内已有同名非托管文件时
+    改名让位。这是"灵机记忆库并入真实库"之前的存在感过渡方案。
+    """
+    target_dir = Path(str(delivery_dir)).expanduser()
+    if not target_dir.is_dir():
+        return None
+    target = target_dir / DELIVERY_NAME
+    if target.exists() and _MANAGED_MARKER not in target.read_text(encoding="utf-8-sig", errors="ignore")[:400]:
+        occupied = target.with_name(f"灵机记忆首页-主人的笔记-{_now_iso()[:10]}.md")
+        target.rename(occupied)
+    content = build_home_markdown(Path(str(vault_path)).expanduser(), wiki_links=False)
+    temporary = target.with_suffix(".md.tmp")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.replace(target)
+    return {"path": str(target), "bytes": len(content.encode("utf-8"))}
+
+
+__all__ = ["HOME_NAME", "DELIVERY_NAME", "build_home_markdown", "refresh_home_dashboard", "deliver_home_dashboard"]

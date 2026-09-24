@@ -153,6 +153,9 @@ class Settings(BaseSettings):
     auto_promote_daily_limit: int = Field(default=10, ge=1, le=100)
     auto_promote_semantic_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
     auto_promote_poll_seconds: float = Field(default=300.0, ge=30.0, le=86400.0)
+    # Home 仪表盘投递目录：设为主人真实 Obsidian 库根，打开即见记忆摘要；
+    # 留空停用投递。只新增/更新一个托管文件，绝不触碰库内其他内容。
+    memory_home_delivery_path: str = Field(default="")
 
     class Config:
         env_file = ".env"

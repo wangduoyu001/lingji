@@ -767,9 +767,12 @@ class AutomaticMemoryRuntime:
             try:
                 # Vault 根部 Home 仪表盘：主人打开 Obsidian 即见记忆生长。
                 # 托管文件只写 Home.md 一个，失败绝不影响晋升管线本身。
-                from src.memory.home_dashboard import refresh_home_dashboard
+                from src.memory.home_dashboard import refresh_home_dashboard, deliver_home_dashboard
 
                 refresh_home_dashboard(getattr(self.settings, "vault_path", ""))
+                delivery = str(getattr(self.settings, "memory_home_delivery_path", "") or "").strip()
+                if delivery:
+                    deliver_home_dashboard(getattr(self.settings, "vault_path", ""), delivery)
             except Exception:
                 pass
             backoff.wait(timeout=poll)

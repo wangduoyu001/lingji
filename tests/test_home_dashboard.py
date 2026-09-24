@@ -76,3 +76,40 @@ def test_managed_home_updates_in_place(tmp_path: Path):
     assert "永久记忆（Core）：2 篇" in text
     renamed = list(vault.glob("Home-主人的笔记-*.md"))
     assert renamed == [], "已托管文件原地更新，不再触发让位"
+
+
+def test_delivery_writes_plain_path_copy_to_real_vault(tmp_path: Path):
+    from src.memory.home_dashboard import DELIVERY_NAME, deliver_home_dashboard
+
+    vault = tmp_path / "vault"
+    _seed_vault(vault)
+    real = tmp_path / "real-obsidian"
+    real.mkdir()
+    result = deliver_home_dashboard(vault, real)
+    assert result is not None
+    delivered = real / DELIVERY_NAME
+    text = delivered.read_text(encoding="utf-8")
+    assert "lingji_managed: true" in text
+    assert "永久记忆（Core）：1 篇" in text
+    assert "[[" not in text, "投递版链接不可点，必须纯文本路径"
+    assert "`03-Knowledge/Core-Memory/General/core-a.md`" in text
+
+
+def test_delivery_missing_dir_returns_none(tmp_path: Path):
+    from src.memory.home_dashboard import deliver_home_dashboard
+
+    assert deliver_home_dashboard(tmp_path / "vault", tmp_path / "nope") is None
+
+
+def test_delivery_renames_aside_owner_file(tmp_path: Path):
+    from src.memory.home_dashboard import DELIVERY_NAME, deliver_home_dashboard
+
+    vault = tmp_path / "vault"
+    _seed_vault(vault)
+    real = tmp_path / "real-obsidian2"
+    real.mkdir()
+    owner_text = "# 我自己的记忆摘要"
+    (real / DELIVERY_NAME).write_text(owner_text, encoding="utf-8")
+    deliver_home_dashboard(vault, real)
+    renamed = list(real.glob("灵机记忆首页-主人的笔记-*.md"))
+    assert len(renamed) == 1 and renamed[0].read_text(encoding="utf-8") == owner_text
