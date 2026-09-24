@@ -726,6 +726,33 @@ class ExtractionPipeline:
                                                                       execution_id=request.job_id, adapter_name=adapter.name,
                                                                       adapter_version=adapter.version, indexing_succeeded=indexing_succeeded)
             return result
+        except LookupError:
+            # 空快照（0 字节/纯空白）没有可提炼的内容：记为 skipped_empty 完成，
+            # 不再伪装成"No approved extraction adapter"误导排障（2026-09-24
+            # 主人指出：队列 11 条失败里 10 条是这种空会话，真失败只有 1 条，
+            # 混在一起真断时分不出来）。有内容但 schema 不认的仍照常失败。
+            try:
+                is_empty = raw_path.stat().st_size == 0 or not raw_path.read_bytes().strip()
+            except OSError:
+                is_empty = False
+            if not is_empty:
+                raise
+            return {
+                "execution_id": request.job_id,
+                "source_type": source_type,
+                "adapter": "none",
+                "adapter_version": "0",
+                "indexed": False,
+                "skipped_empty": True,
+                "documents": 0,
+                "created": [],
+                "updated": [],
+                "skipped": [],
+                "paths": [],
+                "warnings": ["snapshot is empty; nothing to extract (skipped_empty)"],
+                "raw_snapshot": {"raw_path": str(raw_path), "sha256": actual_sha,
+                                 "size": raw_path.stat().st_size, "kind": source_type},
+            }
         finally:
             if temporary_path is not None:
                 temporary_path.unlink(missing_ok=True)
