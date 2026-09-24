@@ -761,6 +761,14 @@ class AutomaticMemoryRuntime:
                 health.record_success()
             except Exception as exc:
                 health.record_failure(f"{type(exc).__name__}: {exc}")
+            try:
+                # Vault 根部 Home 仪表盘：主人打开 Obsidian 即见记忆生长。
+                # 托管文件只写 Home.md 一个，失败绝不影响晋升管线本身。
+                from src.memory.home_dashboard import refresh_home_dashboard
+
+                refresh_home_dashboard(getattr(self.settings, "vault_path", ""))
+            except Exception:
+                pass
             backoff.wait(timeout=poll)
 
     def _wake_vector_backfill(self) -> None:
