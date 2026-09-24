@@ -33,6 +33,59 @@ def _wiki(path: Path, vault: Path) -> str:
     return f"[[{path.relative_to(vault).with_suffix('').as_posix()}]]"
 
 
+def _frontmatter_field(text: str, key: str) -> str:
+    """从 frontmatter 提取单行字段值（title/topic/category）。"""
+    import re
+
+    match = re.search(rf"^{key}:\s*(.+)$", text, re.MULTILINE)
+    return match.group(1).strip().strip("'\"") if match else ""
+
+
+def _display_title(path: Path, text: str) -> str:
+    """人话标题：优先 frontmatter title/topic，退化为去掉时间戳前缀的文件名。"""
+    field = _frontmatter_field(text, "title") or _frontmatter_field(text, "topic")
+    if field:
+        return field
+    stem = path.stem
+    import re
+
+    return re.sub(r"^\d{8}-\d{6}-", "", stem)
+
+
+def _note_summary(path: Path, text: str) -> str:
+    """一句话摘要：Core 取「核心记忆」节首句；Evolving 取最新「摘要：」行。"""
+    lines = text.splitlines()
+    in_core_section = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            in_core_section = "核心记忆" in stripped
+            continue
+        if in_core_section and stripped and not stripped.startswith(">"):
+            return stripped[:120]
+        if stripped.startswith("- 摘要：") or stripped.startswith("摘要："):
+            return stripped.replace("- 摘要：", "").replace("摘要：", "").strip()[:120]
+    return ""
+
+
+def _note_brief(path: Path, vault: Path, *, wiki_links: bool) -> str:
+    """渲染一条记忆为「**标题** — 摘要」；链接按场景切换。"""
+    try:
+        text = path.read_text(encoding="utf-8-sig", errors="ignore")
+    except OSError:
+        return ""
+    title = _display_title(path, text)
+    summary = _note_summary(path, text)
+    if wiki_links:
+        # Obsidian 别名语法：链接指向文件，显示人话标题
+        entry = f"- [[{path.relative_to(vault).with_suffix('').as_posix()}|{title}]]"
+    else:
+        entry = f"- **{title}**"
+    if summary:
+        entry += f" — {summary}"
+    return entry
+
+
 def _count_markdown(directory: Path) -> int:
     if not directory.is_dir():
         return 0
@@ -44,11 +97,6 @@ def build_home_markdown(vault: Path, *, wiki_links: bool = True) -> str:
     evolving_dir = vault / "03-Knowledge" / "Evolving"
     core_latest = _latest_notes(core_dir, 8)
     evolving_latest = _latest_notes(evolving_dir, 8)
-
-    def ref(path: Path) -> str:
-        if wiki_links:
-            return _wiki(path, vault)
-        return "`" + path.relative_to(vault).as_posix() + "`"
 
     lines = [
         "---",
@@ -72,14 +120,12 @@ def build_home_markdown(vault: Path, *, wiki_links: bool = True) -> str:
         "",
     ]
     if core_latest:
-        for path in core_latest:
-            lines.append(f"- {ref(path)}")
+        lines.extend(_note_brief(p, vault, wiki_links=wiki_links) for p in core_latest)
     else:
         lines.append("- 暂无：达标事实会自动进入")
     lines += ["", "## 最近迭代时间线（未定论，持续演化）", ""]
     if evolving_latest:
-        for path in evolving_latest:
-            lines.append(f"- {ref(path)}")
+        lines.extend(_note_brief(p, vault, wiki_links=wiki_links) for p in evolving_latest)
     else:
         lines.append("- 暂无")
     lines.append("")

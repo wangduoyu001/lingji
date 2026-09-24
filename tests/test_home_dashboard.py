@@ -14,7 +14,8 @@ def _seed_vault(vault: Path) -> None:
     core = vault / "03-Knowledge" / "Core-Memory" / "General"
     core.mkdir(parents=True, exist_ok=True)
     (core / "core-a.md").write_text(
-        "---\nid: LJ-MEM-1\n---\n核心事实 A\n", encoding="utf-8"
+        "---\nid: LJ-MEM-1\n---\n# core-a\n\n## 核心记忆\n\n核心事实 A 正文。\n",
+        encoding="utf-8",
     )
     evolving = vault / "03-Knowledge" / "Evolving" / "主题甲"
     evolving.mkdir(parents=True, exist_ok=True)
@@ -34,8 +35,8 @@ def test_refresh_creates_dashboard_with_counts_and_links(tmp_path: Path):
     assert "lingji_managed: true" in text
     assert "永久记忆（Core）：1 篇" in text
     assert "迭代时间线（Evolving）：1 篇" in text
-    assert "[[03-Knowledge/Core-Memory/General/core-a]]" in text
-    assert "[[03-Knowledge/Evolving/主题甲/主题甲-时间线]]" in text
+    assert "[[03-Knowledge/Core-Memory/General/core-a|core-a]] — 核心事实 A 正文。" in text
+    assert "[[03-Knowledge/Evolving/主题甲/主题甲-时间线|主题甲-时间线]]" in text
 
 
 def test_refresh_is_idempotent(tmp_path: Path):
@@ -92,7 +93,7 @@ def test_delivery_writes_plain_path_copy_to_real_vault(tmp_path: Path):
     assert "lingji_managed: true" in text
     assert "永久记忆（Core）：1 篇" in text
     assert "[[" not in text, "投递版链接不可点，必须纯文本路径"
-    assert "`03-Knowledge/Core-Memory/General/core-a.md`" in text
+    assert "- **core-a** — 核心事实 A 正文。" in text
 
 
 def test_delivery_missing_dir_returns_none(tmp_path: Path):
