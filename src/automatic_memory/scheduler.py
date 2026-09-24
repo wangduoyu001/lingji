@@ -66,7 +66,9 @@ class AutomaticMemoryScheduler:
         heartbeat_work_callback: Callable[[], Any] | None = None,
         event_watcher_enabled: bool = True,
         vector_backfill_callback: Callable[[], Any] | None = None,
+        snapshot_throttle_seconds: float = 1800.0,
     ) -> None:
+        self.snapshot_throttle_seconds = max(float(snapshot_throttle_seconds), 0.0)
         self.vector_backfill_callback = vector_backfill_callback
         self.state_db = state_db
         self.registry = source_registry
@@ -355,6 +357,11 @@ class AutomaticMemoryScheduler:
         if not owner:
             return future.result()
         try:
+            if reason in {"reconciliation", "event"}:
+                deferred = self._snapshot_throttle_deferral(source_id)
+                if deferred is not None:
+                    future.set_result(deferred)
+                    return deferred
             result = self._reconcile_once(source_id, reason=reason)
             future.set_result(result)
             return result
@@ -386,6 +393,47 @@ class AutomaticMemoryScheduler:
         except Exception:
             # 历史清理失败不影响主流程；下一轮核对自动重试。
             return
+
+    def _snapshot_throttle_deferral(self, source_id: str) -> ReconciliationReport | None:
+        """同源最小重拍间隔：未到期时本次核对跳过（不动哨兵，下轮自然重试）。
+
+        滚动变化的大库（如 ZCode 会话库）每次核对都整库重拷 148MB 级快照。
+        跳过语义：本次不扫描、不更新任何状态，到期的下一轮核对照常全量采集，
+        内容最多晚一个节流窗口入库（主人接受的代价，2026-09-24）。
+        manual/integrity 触发不受限，永远可立即采集。
+        """
+        throttle = self.snapshot_throttle_seconds
+        if throttle <= 0:
+            return None
+        try:
+            scans = self.state_db.list_automatic_memory_scans(source_id)
+        except Exception:
+            return None
+        latest_completed = next(
+            (s for s in scans if str(s.get("status") or "") == "completed"), None
+        )
+        if latest_completed is None:
+            return None
+        raw_updated = str(latest_completed.get("updated_at") or "")
+        if not raw_updated:
+            return None
+        try:
+            parsed = datetime.fromisoformat(raw_updated)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - parsed).total_seconds()
+        if age >= throttle:
+            return None
+        minutes_left = (throttle - age) / 60.0
+        return ReconciliationReport(
+            None, None, None, (), True,
+            next_action=(
+                f"snapshot throttled: last capture {age / 60:.0f}m ago, "
+                f"window {throttle / 60:.0f}m, ~{minutes_left:.0f}m until next capture"
+            ),
+        )
 
     def _reconcile_once(self, source_id: str, *, reason: str) -> ReconciliationReport:
         if self._paused:

@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     automatic_memory_reconciliation_seconds: int = Field(default=900, ge=60)
     automatic_memory_integrity_seconds: int = Field(default=86400, ge=3600)
     automatic_memory_raw_max_bytes: int = Field(default=10 * 1024 ** 3, ge=1)
+    # 同源最小重拍间隔：滚动变化的大库（如 ZCode 会话库）每次核对都整库重拷，
+    # 节流到该间隔（主人接受"最多晚半小时"的入库延迟，换空间可控）。
+    automatic_memory_snapshot_throttle_seconds: float = Field(default=1800.0, ge=0)
     manual_command_interval_minutes: int = 2
     extraction_request_interval_minutes: int = 1
 
@@ -128,7 +131,7 @@ class Settings(BaseSettings):
     memory_search_cache_size: int = 256
     memory_search_cache_ttl_seconds: float = 120.0
     # Raw semantic score before RRF; lexical matches are never gated by this.
-    memory_semantic_min_score: float = Field(default=0.55, ge=0.0, le=1.0)
+    memory_semantic_min_score: float = Field(default=0.65, ge=0.0, le=1.0)
     memory_default_context_chars: int = 12000
     memory_index_check_hours: float = 6.0
 
@@ -148,7 +151,7 @@ class Settings(BaseSettings):
     auto_promote_enabled: bool = False
     auto_promote_confidence_min: float = Field(default=0.90, ge=0.0, le=1.0)
     auto_promote_daily_limit: int = Field(default=10, ge=1, le=100)
-    auto_promote_semantic_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
+    auto_promote_semantic_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
     auto_promote_poll_seconds: float = Field(default=300.0, ge=30.0, le=86400.0)
 
     class Config:

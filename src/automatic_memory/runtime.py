@@ -148,6 +148,9 @@ class AutomaticMemoryRuntime:
                 heartbeat_seconds=float(
                     getattr(settings, "automatic_memory_heartbeat_seconds", 5.0)
                 ),
+                snapshot_throttle_seconds=float(
+                    getattr(settings, "automatic_memory_snapshot_throttle_seconds", 1800.0)
+                ),
                 vector_backfill_callback=self._wake_vector_backfill,
             )
         self.scheduler = scheduler

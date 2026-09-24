@@ -73,6 +73,22 @@ class RuntimeSettingsStore:
                 1,
                 100,
             ),
+            "auto_promote_semantic_threshold": self._number(
+                "memory_automation",
+                "晋升去重相似度门槛",
+                "新事实与既有记忆的语义相似度达到该值判为重复、不重复晋升。2026-09-24 按 qwen3 实测从 0.92 重校至 0.70（同义改写 0.73-0.95、无关 0.20-0.36）。",
+                0.70,
+                0.0,
+                1.0,
+            ),
+            "memory_semantic_min_score": self._number(
+                "memory_automation",
+                "语义检索最低分",
+                "语义召回低于该分的命中被剔除。2026-09-24 按 qwen3 实测从 0.55 重校至 0.65（相关查询 0.70+、模糊噪声最高 0.635）。",
+                0.65,
+                0.0,
+                1.0,
+            ),
             # Media extraction limits.
             "media_keyframe_interval_seconds": self._number(
                 "media_processing", "关键帧间隔（秒）", "每隔多少秒提取一张关键帧。", 30.0, 1.0, 86400.0
