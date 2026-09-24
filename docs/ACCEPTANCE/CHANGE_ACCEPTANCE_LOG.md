@@ -4247,3 +4247,5 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 追加（同日）：主人反馈 Obsidian 无变化——根因=主人打开的是 Documents/Obsidian Vault（薏仁，440K/4 篇），而灵机记忆库在应用数据根下独立目录，两者从不是同一个库。过渡方案上线：`memory_home_delivery_path` 配置（生产 .env 已指向主人真实库根），晋升循环刷新 Home 后同步投递纯文本路径版 `灵机记忆首页.md` 到真实库根（托管文件、同名让位、只碰这一个文件）。生产实测：投递文件已出现在主人库根。3 例新单测（投递/缺目录/让位）。**待主人拍板的架构正案**：vault_path 并入真实库（记忆正文迁入 Documents/Obsidian Vault/灵机记忆/ 子目录，Home 放根，链接可点）——涉及真实 Vault 写入与 127 篇迁移，等批准。
 
 追加（同日）：主人批评首页是"文件路径清单不是给人看的"。重写条目渲染：从笔记正文提取人话标题（frontmatter title/topic，退化去掉时间戳前缀）与一句话摘要（Core 取「核心记忆」节首句 / Evolving 取最新「摘要：」行），显示为「标题 — 摘要」；wiki 链接用 Obsidian 别名语法保持可点且显示标题。生产投递页实测：每条都是「Task5A 独立终审完成 — Task5A 独立终审通过，可进入 Task5B UI 开发」形态。测试同步更新，7 例通过，装机 3be3a1c9。
+
+追加（同日）：主人批准"并入真实库"——vault 迁移完成。①`run_packaged_control_api.py` 尊重数据根 .env 的 `VAULT_DIR=`（进程环境已设时仍环境优先）；②生产 .env 固化 `VAULT_DIR=/Users/wuhanwangduoyu/Documents/Obsidian Vault/灵机记忆`；③156 篇记忆 + git 历史迁入真实库「灵机记忆/」子目录（原数据根 vault/ 保留作回滚副本）；④晋升降级规则上线：标题含审查/终审/验收/修复/核查/Task N 等过程记录特征 → 强制 Evolving（process_log_downgraded），Core 只收主人有长期价值的结论，2 例单测；⑤Home.md 于新库根再生成（文件名级 wikilink + 人话标题/摘要），薏仁内容 0 改动。生产实测：灵机记忆/ 157 篇、Home 链接可点、health 200。回滚=删 .env VAULT_DIR 行 + 换回旧 vault 目录。
