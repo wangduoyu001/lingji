@@ -133,6 +133,18 @@ def configure_packaged_environment(
         "LINGJI_OWNER_DATA_ROOT": str(root),
     }
     target.update(required_values)
+    # 数据根 .env 可覆盖 VAULT_DIR（如把记忆库并入主人真实 Obsidian 库的
+    # 「灵机记忆/」子目录，2026-09-24 主人批准）。进程环境已设置时仍以环境优先。
+    if "VAULT_DIR" not in target:
+        env_file = root / ".env"
+        if env_file.is_file():
+            for line in env_file.read_text(encoding="utf-8-sig", errors="ignore").splitlines():
+                stripped = line.strip()
+                if stripped.startswith(("VAULT_DIR=", "vault_dir=")):
+                    value = stripped.split("=", 1)[1].strip().strip('"').strip("'")
+                    if value:
+                        target["VAULT_DIR"] = str(Path(value).expanduser())
+                    break
     target.setdefault("VAULT_DIR", str(root / "vault"))
 
     for directory in (

@@ -250,6 +250,11 @@ class AutoMemoryPromotionPipeline:
             reasons.append("category_not_whitelisted")
         if self._is_notification_title(title):
             reasons.append("notification_like")
+        if self._is_process_log_title(title):
+            # 过程记录降级（2026-09-24 主人批准）：AI 工作日志（审查/验收/修复
+            # 流水）对主人没有长期价值，直接进 Evolving 时间线，绝不进 Core。
+            reasons.append("process_log_downgraded")
+            return "evolving", list(dict.fromkeys(reasons)), {}
         confidence_min = float(self._setting("auto_promote_confidence_min", 0.90) or 0.90)
         if confidence is None:
             reasons.append("confidence_missing")
@@ -642,6 +647,16 @@ class AutoMemoryPromotionPipeline:
         if number > 1.0:
             return 1.0
         return number
+
+    _PROCESS_LOG_TITLE_PATTERN = re.compile(
+        r"(?i)(task\s?\d|审查|终审|验收|修复|核查|复检|问题发现|问题点|报告提交"
+        r"|spec\s?fail|needs[_-]?fixes|codex任务|\.md\b)"
+    )
+
+    @staticmethod
+    def _is_process_log_title(title: str) -> bool:
+        """AI 工作日志特征词（审查/验收/修复/Task N 流水）→ 降级 Evolving。"""
+        return bool(AutoMemoryPromotionPipeline._PROCESS_LOG_TITLE_PATTERN.search(title))
 
     @staticmethod
     def _is_notification_title(title: str) -> bool:

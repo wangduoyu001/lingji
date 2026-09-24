@@ -35,8 +35,8 @@ def test_refresh_creates_dashboard_with_counts_and_links(tmp_path: Path):
     assert "lingji_managed: true" in text
     assert "永久记忆（Core）：1 篇" in text
     assert "迭代时间线（Evolving）：1 篇" in text
-    assert "[[03-Knowledge/Core-Memory/General/core-a|core-a]] — 核心事实 A 正文。" in text
-    assert "[[03-Knowledge/Evolving/主题甲/主题甲-时间线|主题甲-时间线]]" in text
+    assert "[[core-a|core-a]] — 核心事实 A 正文。" in text
+    assert "[[主题甲-时间线|主题甲-时间线]]" in text
 
 
 def test_refresh_is_idempotent(tmp_path: Path):

@@ -77,8 +77,8 @@ def _note_brief(path: Path, vault: Path, *, wiki_links: bool) -> str:
     title = _display_title(path, text)
     summary = _note_summary(path, text)
     if wiki_links:
-        # Obsidian 别名语法：链接指向文件，显示人话标题
-        entry = f"- [[{path.relative_to(vault).with_suffix('').as_posix()}|{title}]]"
+        # 文件名级链接：Obsidian 全库按文件名解析，库结构变化不断链
+        entry = f"- [[{path.stem}|{title}]]"
     else:
         entry = f"- **{title}**"
     if summary:
