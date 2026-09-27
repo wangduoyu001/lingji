@@ -30,6 +30,48 @@ class MemoryDatabase:
         self._fts_tokenizer = "trigram"
         self._initialize()
 
+    def _ensure_relationship_columns(self, connection: sqlite3.Connection) -> None:
+        """Idempotently add rel_* identity virtual columns and their index.
+
+        PERF_RESOURCE_ROOT_CAUSE_20260927: structured-evidence provenance
+        lookups previously json_extract'ed three keys over every
+        structured_evidence row per written entry (21k rows / 28MB of JSON
+        parsed per lookup). The generated columns turn each lookup into an
+        index seek. Runs on every open: PRAGMA + IF NOT EXISTS are no-ops
+        once migrated.
+        """
+        table_exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='memory_documents'"
+        ).fetchone()
+        if table_exists is None:
+            return
+        # table_xinfo, not table_info: generated columns are hidden from
+        # table_info, so checking table_info would re-run ALTER on every open.
+        columns = {row[1] for row in connection.execute("PRAGMA table_xinfo(memory_documents)")}
+        for column_name, expression in (
+            ("rel_source_id", "json_extract(relationships_json, '$.source_id')"),
+            ("rel_conversation_id", "json_extract(relationships_json, '$.conversation_id')"),
+            ("rel_message_id", "json_extract(relationships_json, '$.message_id')"),
+        ):
+            if column_name not in columns:
+                try:
+                    connection.execute(
+                        f"ALTER TABLE memory_documents ADD COLUMN {column_name} TEXT "
+                        f"GENERATED ALWAYS AS ({expression}) VIRTUAL"
+                    )
+                except sqlite3.OperationalError as exc:
+                    # Two instances may open the same store concurrently; the
+                    # PRAGMA snapshot above can go stale between read and ALTER.
+                    if "duplicate column name" not in str(exc).lower():
+                        raise
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_memory_documents_identity
+                ON memory_documents(rel_source_id, rel_conversation_id, rel_message_id)
+                WHERE memory_type = 'structured_evidence'
+            """
+        )
+
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
@@ -59,6 +101,7 @@ class MemoryDatabase:
                 connection.execute("SELECT chunk_id, content_hash FROM memory_chunks LIMIT 0")
                 if version == SCHEMA_VERSION and fts is not None:
                     self._fts_tokenizer = "trigram" if "trigram" in str(fts["sql"]).lower() else "unicode61"
+                    self._ensure_relationship_columns(connection)
                     return
             except sqlite3.OperationalError:
                 # A new/old store still uses the normal additive initializer.
@@ -123,6 +166,7 @@ class MemoryDatabase:
                     ON memory_chunks(memory_id, ordinal);
                 """
             )
+            self._ensure_relationship_columns(connection)
             self._ensure_fts(connection)
             self._set_meta(connection, "schema_version", SCHEMA_VERSION)
             if self._get_meta(connection, "revision") is None:
@@ -308,6 +352,49 @@ class MemoryDatabase:
             revision = self._bump_revision(connection)
         return {"memory_id": str(entry.get("id")), "chunks": len(chunks), "revision": revision}
 
+    @staticmethod
+    def _covered_rows_digest(connection: sqlite3.Connection, watermark: str) -> str:
+        """Stable digest of every input a structured evidence sync reads.
+
+        Covers message rows at or before the watermark plus source and
+        conversation status rows: a source revoke or lifecycle change never
+        touches message rows, yet must still archive the projected evidence.
+        Any drift in this digest makes the next sync fall back to a full
+        resync, keeping the incremental fast path honest.
+        """
+        hasher = hashlib.sha256()
+        for message_id, content_hash in connection.execute(
+            "SELECT message_id, content_hash FROM message_records WHERE updated_at <= ? ORDER BY message_id",
+            (watermark,),
+        ):
+            hasher.update(f"m|{message_id}|{content_hash or ''};".encode("utf-8"))
+        # Only projection-relevant fields of ALREADY-PROJECTED identities:
+        # a source revoke or conversation retitle must archive/reproject its
+        # evidence, but brand-new sources must not trip the fallback (their
+        # rows are picked up by the watermark path). updated_at on these rows
+        # is an ingestion timestamp and must NOT be fed in.
+        for source_id, status in connection.execute(
+            """
+            SELECT DISTINCT d.rel_source_id, s.status
+            FROM memory_documents d
+            JOIN source_records s ON s.source_id = d.rel_source_id
+            WHERE d.memory_type = 'structured_evidence'
+            ORDER BY d.rel_source_id
+            """
+        ):
+            hasher.update(f"s|{source_id}|{status or ''};".encode("utf-8"))
+        for conversation_id, title in connection.execute(
+            """
+            SELECT DISTINCT d.rel_conversation_id, c.title
+            FROM memory_documents d
+            JOIN conversation_records c ON c.conversation_id = d.rel_conversation_id
+            WHERE d.memory_type = 'structured_evidence'
+            ORDER BY d.rel_conversation_id
+            """
+        ):
+            hasher.update(f"c|{conversation_id}|{title or ''};".encode("utf-8"))
+        return hasher.hexdigest()
+
     def sync_structured_evidence(
         self,
         *,
@@ -324,6 +411,25 @@ class MemoryDatabase:
         """
         chunker = chunker or MarkdownChunker()
         with self._lock, self._connection() as connection:
+            # PERF_RESOURCE_ROOT_CAUSE_20260927: incremental watermark sync.
+            # Full-table resync re-chunked and re-provenanced every stored
+            # message on each extraction batch. Strictly greater-than is safe
+            # because the watermark commits in the same transaction as the
+            # rows it covers: an uncommitted batch never advances it, and a
+            # read model that shares one ingestion timestamp replays nothing.
+            # First run (empty watermark) stays a full sync.
+            #
+            # In-place content rewrites (same message row updated without a
+            # newer updated_at — live session tails do this) are invisible to
+            # any timestamp watermark, so the rows already covered by the
+            # watermark carry a content digest; if it drifts, this round
+            # falls back to a full resync. New rows keep the cheap path.
+            watermark = str(self._get_meta(connection, "structured_evidence_sync_watermark") or "")
+            last_digest = self._get_meta(connection, "structured_evidence_sync_covered_digest")
+            if last_digest is not None:
+                covered_digest = self._covered_rows_digest(connection, watermark)
+                if covered_digest != str(last_digest):
+                    watermark = ""
             rows = connection.execute(
                 """
                 SELECT
@@ -339,8 +445,10 @@ class MemoryDatabase:
                 FROM message_records m
                 JOIN conversation_records c ON c.conversation_id = m.conversation_id
                 JOIN source_records s ON s.source_id = m.source_id
+                WHERE m.updated_at > ?
                 ORDER BY m.message_id
-                """
+                """,
+                (watermark,),
             ).fetchall()
 
             entries: list[tuple[dict[str, Any], list[MarkdownChunk]]] = []
@@ -422,24 +530,54 @@ class MemoryDatabase:
                 )
                 for entry, _chunks in entries
             }
+            # PERF_RESOURCE_ROOT_CAUSE_20260927: prefetch every prior evidence
+            # version for this batch in one indexed join instead of one
+            # json_extract table scan per entry. The temp table keeps the join
+            # on the rel_* generated-column index.
+            connection.execute(
+                """
+                CREATE TEMP TABLE IF NOT EXISTS _sync_identity (
+                    source_id TEXT NOT NULL,
+                    conversation_id TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    PRIMARY KEY (source_id, conversation_id, message_id)
+                ) WITHOUT ROWID
+                """
+            )
+            connection.execute("DELETE FROM _sync_identity")
+            connection.executemany(
+                "INSERT OR IGNORE INTO _sync_identity VALUES (?, ?, ?)",
+                sorted(target_identities),
+            )
+            prior_rows_by_identity: dict[tuple[str, str, str], list[sqlite3.Row]] = {}
+            for prior_row in connection.execute(
+                """
+                SELECT d.memory_id, d.content_hash, d.status, d.valid_from,
+                       d.valid_to, d.rel_source_id, d.rel_conversation_id, d.rel_message_id
+                FROM memory_documents d
+                JOIN _sync_identity b
+                  ON d.rel_source_id = b.source_id
+                 AND d.rel_conversation_id = b.conversation_id
+                 AND d.rel_message_id = b.message_id
+                WHERE d.memory_type = 'structured_evidence'
+                ORDER BY d.valid_from, d.memory_id
+                """
+            ).fetchall():
+                prior_rows_by_identity.setdefault(
+                    (
+                        str(prior_row["rel_source_id"] or ""),
+                        str(prior_row["rel_conversation_id"] or ""),
+                        str(prior_row["rel_message_id"] or ""),
+                    ),
+                    [],
+                ).append(prior_row)
             for entry, chunks in entries:
                 identity = (
                     str(entry.get("source_id") or ""),
                     str(entry.get("conversation_id") or ""),
                     str(entry.get("message_id") or ""),
                 )
-                prior_rows = connection.execute(
-                    """
-                    SELECT memory_id, content_hash, status, valid_from
-                    FROM memory_documents
-                    WHERE memory_type = 'structured_evidence'
-                      AND json_extract(relationships_json, '$.source_id') = ?
-                      AND json_extract(relationships_json, '$.conversation_id') = ?
-                      AND json_extract(relationships_json, '$.message_id') = ?
-                    ORDER BY valid_from, memory_id
-                    """,
-                    identity,
-                ).fetchall()
+                prior_rows = prior_rows_by_identity.get(identity, [])
                 prior = connection.execute(
                     "SELECT content_hash, status, valid_from, valid_to FROM memory_documents WHERE memory_id = ?",
                     (entry["id"],),
@@ -495,22 +633,28 @@ class MemoryDatabase:
             # derived projection still has an active document. Archive those
             # orphaned rows in this same transaction; keep their FTS text for
             # history/as_of and never touch ordinary Obsidian documents.
+            # PERF_RESOURCE_ROOT_CAUSE_20260927: orphan detection moved into
+            # SQL so it compares against the full message table via primary-key
+            # lookups instead of loading every active evidence row and parsing
+            # its relationships JSON in Python. This also keeps the check
+            # correct under incremental sync, where target_identities only
+            # covers the current batch.
             orphan_rows = connection.execute(
                 """
-                SELECT memory_id, relationships_json
-                FROM memory_documents
-                WHERE memory_type = 'structured_evidence' AND status = 'active'
+                SELECT d.memory_id, d.relationships_json
+                FROM memory_documents d
+                WHERE d.memory_type = 'structured_evidence' AND d.status = 'active'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM message_records m
+                      WHERE m.message_id = d.rel_message_id
+                        AND m.conversation_id = d.rel_conversation_id
+                        AND m.source_id = d.rel_source_id
+                  )
                 """
             ).fetchall()
             orphaned_at = datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
             for orphan in orphan_rows:
                 relationships = self._loads(orphan["relationships_json"], {})
-                identity = tuple(
-                    str(relationships.get(key) or "")
-                    for key in ("source_id", "conversation_id", "message_id")
-                )
-                if identity in target_identities:
-                    continue
                 relationships["invalidating_reason"] = "source_read_model_identity_removed"
                 connection.execute(
                     """
@@ -532,6 +676,22 @@ class MemoryDatabase:
                 "structured_evidence_chunk_count",
                 str(sum(len(chunks) for _, chunks in entries)),
             )
+            if rows:
+                # rows were selected with `updated_at > watermark`, so max is
+                # strictly newer (or watermark was empty on a full sync).
+                max_updated_at = max(str(row["updated_at"] or "") for row in rows)
+                self._set_meta(connection, "structured_evidence_sync_watermark", max_updated_at)
+                self._set_meta(
+                    connection,
+                    "structured_evidence_sync_covered_digest",
+                    self._covered_rows_digest(connection, max_updated_at),
+                )
+            else:
+                self._set_meta(
+                    connection,
+                    "structured_evidence_sync_covered_digest",
+                    self._covered_rows_digest(connection, watermark),
+                )
         return {
             "documents": len(entries),
             "chunks": sum(len(chunks) for _, chunks in entries),
@@ -549,6 +709,12 @@ class MemoryDatabase:
         chunker: MarkdownChunker | None = None,
     ) -> dict[str, int | bool]:
         """Rebuild only structured evidence projections from source rows."""
+        # PERF_RESOURCE_ROOT_CAUSE_20260927: a rebuild must resync everything,
+        # so the incremental watermark is dropped first.
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                "DELETE FROM memory_meta WHERE key = 'structured_evidence_sync_watermark'"
+            )
         return self.sync_structured_evidence(chunker=chunker)
 
     def upsert_derived_projection(

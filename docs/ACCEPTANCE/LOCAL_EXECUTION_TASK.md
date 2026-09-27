@@ -1,6 +1,39 @@
-# 当前本机任务：个人记忆实用优化
+# 当前本机任务：资源占用根治优化
 
-## 本轮：个人记忆实用优化（2026-09-19）
+## 本轮：资源占用根治优化（2026-09-27）
+
+```yaml
+task_id: PERF_RESOURCE_ROOT_CAUSE_20260927
+status: ACTIVE
+baseline_commit: a090676fa3afb921bca2ab27ed2fd5376e461018
+product_branch: codex/owner-source-intake-mac-repair
+execution_mode: PERF_ROOT_CAUSE_FIX_BATCH
+```
+
+诊断已实锤（sample 采样 + SQLite 执行计划验证）：lingji-core 持续烧满一核（~98%）的根因是 `sync_structured_evidence` 全量同步 21k 消息（每条重新 chunk + 逐条 json_extract 溯源全表扫描，memory_db.py:433）；UI 每秒轮询 discovery 端点全量重扫文件系统（持 GIL，卡 UI）；chunk 回填每次唤醒 O(N) 双向比对；acceptance 集合驻留生产进程。
+
+### 落地计划及完成标准
+
+- [~] A1 溯源物化+增量化（部分完成 2026-09-27）：rel_* 三键 VIRTUAL 生成列 + 复合部分索引已进 schema（table_xinfo 检测，幂等防并发 duplicate）；溯源查询改临时表批量预取（走新索引）；孤儿归档 SQL 化（三键 NOT EXISTS）；已覆盖输入指纹（消息 hash + 已投影 source 状态 + conversation title）漂移自动回退全量，保证 revoke/改写正确性。**关键发现：read model 是全量重建型（每批 DELETE 三表重插），updated_at 水位不成立——彻底增量化需 content-addressed 重构（memory_id 本身就是内容寻址：轻量行扫描 → 主键比对跳过未变行 → 只对变化行 chunk+upsert），列为下轮首选**。新增回归测试 4 例全绿；存量相关测试与基线一致（仅既有失败 test_formal_mcp_search_entry，与本轮无关）。
+- [ ] A2 UI 轮询节流：discovered/apps/processes 三端点 60s TTL 缓存；前端轮询降至 15-30s。
+- [ ] B1 入口价值预判：入队前三层规则（轮数/字数门槛 + 价值信号保底 + 阈值进 RuntimeSettingsStore），skipped 计数与滚动样本 UI 可见、可按来源重扫撤销；默认只拦 1-2 轮且零信号；绝不静默丢弃。
+- [ ] B2 回填 O(1) 预检：chunk_backfill 先比 qdrant count 与库内总数，一致即跳过全量比对。
+- [ ] B3 摘除 acceptance 集合：生产进程不驻留 acceptance 集合。
+- [ ] C vector_backfill 死代码 SQL 重写（增量 diff、不拉向量本体）；extraction_jobs.status 索引。
+
+### 验收总指标（真机实测）
+
+1. 空闲态 CPU < 5%（无新会话产生时采样 60s）
+2. 内存 < 1GB
+3. UI 无体感卡顿（轮询频率日志下降 90%+）
+4. 存量测试全绿 + 新增回归单测（批量等价性、增量水位、孤儿归档、生成列索引 EXPLAIN）
+5. 混库守卫回归验证通过
+
+流程：focused 测试 → PyInstaller 重打包重启 sidecar → 真机指标实测 → PROJECT_STATUS/TEST_REPORTS 同步。回滚：索引为加法可保留；缓存/预判/预检有开关可独立 revert；不改 Vault、不删 raw、不动主人数据。
+
+---
+
+## 历史：个人记忆实用优化（2026-09-19）
 
 ```yaml
 task_id: PERSONAL_MEMORY_PRACTICAL_OPTIMIZATION

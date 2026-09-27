@@ -1,5 +1,17 @@
 # 验收要求变更记录
 
+## 2026-09-27 · 资源占用根治优化（PERF_RESOURCE_ROOT_CAUSE_20260927）
+
+- 主人报灵机资源占用过高并连续追问更优解，实测诊断实锤三根因 + 两个结构问题：①`sync_structured_evidence` 每次全量同步 21k 消息，逐条 `json_extract` 溯源全表扫描（ relationships_json 28MB，采样栈过半 CPU 在 jsonExtractFunc）；②UI 每秒轮询 automatic-memory 七端点，discovered/apps/processes 每次全量文件系统重扫（纯 Python 持 GIL，卡 UI）；③chunk 回填每次唤醒 O(N) 双向全量比对。结构问题：入口无价值过滤（宽进严出）、acceptance 集合驻留生产进程（混库隐患）。
+- 本轮验收要求（任务单 `PERF_RESOURCE_ROOT_CAUSE_20260927`，status ACTIVE）：
+  - **A1**：rel_* 三键 VIRTUAL 生成列 + 复合部分索引必须进 schema 初始化代码（memory_db 可重建，迁移不能丢）；sync 改增量水位 + 临时表批量预取 + 孤儿归档 SQL 化；**新增回归单测：批量预取与逐条查询结果等价、增量水位两轮只处理新增、孤儿归档仍生效、EXPLAIN 确认索引命中**。
+  - **A2**：discovered/apps/processes 60s TTL 缓存 + 前端降频 15-30s；缓存必须有失效测试。
+  - **B1**：入口价值预判默认保守（1-2 轮且零信号才拦），阈值进 RuntimeSettingsStore 可调；skipped 计数+滚动样本 UI 可见、可按来源重扫撤销；**红线：绝不静默丢弃，误杀可撤销**。
+  - **B2/B3/C**：回填 O(1) count 预检、摘除 acceptance 集合、vector_backfill 死代码 SQL 重写、extraction_jobs.status 索引。
+  - **真机验收指标**：空闲 CPU<5%（60s 采样）、内存<1GB、轮询日志频率降 90%+、存量测试全绿、混库守卫回归通过。
+  - 改动必须 PyInstaller 重打包重启 sidecar 后真机实测；四项指标实测数据写入 TEST_REPORTS 新报告。
+- 回滚：索引/生成列为加法可保留；缓存 TTL、入口预判、count 预检均有开关或独立 revert；不改 Vault、不删 raw、不动主人数据。
+
 ## 2026-09-05 · 灵机可观测工作台（主人需求列表落地）
 
 - 主人下达完整可观测工作台需求（定位：主人只验证不操作，UI 是看灵机工作过程的窗口）。硬规则：
