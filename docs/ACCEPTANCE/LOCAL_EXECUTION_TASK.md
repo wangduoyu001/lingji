@@ -14,10 +14,10 @@ execution_mode: PERF_ROOT_CAUSE_FIX_BATCH
 
 ### 落地计划及完成标准
 
-- [~] A1 溯源物化+增量化（部分完成 2026-09-27）：rel_* 三键 VIRTUAL 生成列 + 复合部分索引已进 schema（table_xinfo 检测，幂等防并发 duplicate）；溯源查询改临时表批量预取（走新索引）；孤儿归档 SQL 化（三键 NOT EXISTS）；已覆盖输入指纹（消息 hash + 已投影 source 状态 + conversation title）漂移自动回退全量，保证 revoke/改写正确性。**关键发现：read model 是全量重建型（每批 DELETE 三表重插），updated_at 水位不成立——彻底增量化需 content-addressed 重构（memory_id 本身就是内容寻址：轻量行扫描 → 主键比对跳过未变行 → 只对变化行 chunk+upsert），列为下轮首选**。新增回归测试 4 例全绿；存量相关测试与基线一致（仅既有失败 test_formal_mcp_search_entry，与本轮无关）。
-- [ ] A2 UI 轮询节流：discovered/apps/processes 三端点 60s TTL 缓存；前端轮询降至 15-30s。
-- [ ] B1 入口价值预判：入队前三层规则（轮数/字数门槛 + 价值信号保底 + 阈值进 RuntimeSettingsStore），skipped 计数与滚动样本 UI 可见、可按来源重扫撤销；默认只拦 1-2 轮且零信号；绝不静默丢弃。
-- [ ] B2 回填 O(1) 预检：chunk_backfill 先比 qdrant count 与库内总数，一致即跳过全量比对。
+- [x] A1 溯源物化+批量预取（2026-09-27，commit 5aea694e）：rel_* 三键 VIRTUAL 生成列 + 复合部分索引已进 schema（table_xinfo 检测，幂等防并发 duplicate）；溯源查询改临时表批量预取（走新索引）；孤儿归档 SQL 化（三键 NOT EXISTS）；已覆盖输入指纹（消息 hash + 已投影 source 状态 + conversation title）漂移自动回退全量，保证 revoke/改写正确性。**关键发现：read model 是全量重建型（每批 DELETE 三表重插），updated_at 水位不成立——彻底增量化需 content-addressed 重构（memory_id 本身就是内容寻址：轻量行扫描 → 主键比对跳过未变行 → 只对变化行 chunk+upsert），列为下轮首选**。新增回归测试 4 例全绿；存量相关测试与基线一致（仅既有失败 test_formal_mcp_search_entry，与本轮无关）。
+- [x] A2 UI 轮询节流（2026-09-27，commit 42cae364）：discovered/apps/processes 三端点 60s TTL 进程级缓存（cached_discovery_snapshot）；MemorySourcesPage 轮询 8s→30s；缓存命中/TTL 过期/key 隔离 3 例单测全绿。
+- [ ] B1 入口价值预判（下轮实施，方案已定；入队点探查起点 scheduler.py:349）：入队前三层规则（轮数/字数门槛 + 价值信号保底 + 阈值进 RuntimeSettingsStore），skipped 计数与滚动样本 UI 可见、可按来源重扫撤销；默认只拦 1-2 轮且零信号；绝不静默丢弃。
+- [x] B2 回填 O(1) 预检（2026-09-27，commit cef08131）：MemoryDatabase.semantic_chunk_count() + run_once 计数相等即 fast-path 跳过三次 O(N) 扫描；计数漂移回退全量修复，回归测试覆盖。
 - [ ] B3 摘除 acceptance 集合：生产进程不驻留 acceptance 集合。
 - [ ] C vector_backfill 死代码 SQL 重写（增量 diff、不拉向量本体）；extraction_jobs.status 索引。
 
