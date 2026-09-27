@@ -28,6 +28,22 @@ execution_mode: PERF_ROOT_CAUSE_CLOSEOUT_BATCH
 2. 改动完成后 PyInstaller 重打包重启 sidecar，真机复测：空闲 CPU<5%、内存<1GB、ingestion 批处理突发峰值显著下降（对比本轮实测基线）。
 3. meta.json 中 acceptance 注册消失、生产 qdrant 无 acceptance 集合目录重建。
 4. PROJECT_STATUS/TEST_REPORTS/CHANGE_ACCEPTANCE_LOG 同步。
+6. **全量基线 diff（2026-09-27 晚，外部审计质疑后的补测）**：HEAD `37ea8711` 与基线 `a090676f` 各跑全量（HEAD 14 failed/1858 passed；基线 14 failed/1819 passed，+39 新测试全过），**失败集合逐条 diff 为空——本轮零新增回归**。基线既有失败完整清单（14 个，替代此前只列 4 个的漏报）：
+   - tests/integration/test_automatic_memory_packaged_flow.py::test_automatic_memory_packaged_flow_runs_twice_from_clean_acceptance_roots
+   - tests/test_automatic_memory_context_pack.py::test_hybrid_diagnostics_are_per_call_and_semantic_failure_is_safe
+   - tests/test_automatic_memory_repair_round1.py::test_automatic_snapshot_never_mutates_configured_vault_or_calls_document_sink
+   - tests/test_automatic_memory_runtime.py::test_stop_error_keeps_cleanup_pending_and_allows_retry
+   - tests/test_automatic_memory_scheduler.py::test_reconciliation_admits_once_and_persists_report
+   - tests/test_automatic_memory_scheduler.py::test_reconciliation_runs_after_event_silence
+   - tests/test_codex_mcp_tools.py::test_slim_search_results_keeps_agent_fields_and_drops_metadata
+   - tests/test_control_api.py::ControlApiTests::test_memory_vector_and_coverage_endpoints_return_shared_snapshot
+   - tests/test_control_api.py::ControlApiTests::test_settings_can_be_read_updated_and_reset
+   - tests/test_structured_evidence_lexical.py::test_formal_mcp_search_entry_returns_structured_message_citation
+   - tests/test_task6h_heartbeat.py::test_idle_runtime_persists_instance_bound_heartbeat_and_refreshes_without_reconciliation
+   - tests/test_task8e_safe_polling_fallback.py::test_fallback_manual_scan_and_revoke_stop_admission
+   - tests/test_task8e_safe_polling_fallback.py::test_fallback_pause_resume_restart_preserve_reconciliation_without_starting_watcher
+   - tests/test_task8e_safe_polling_fallback.py::test_fallback_stays_quiet_for_two_reconciliation_periods_and_discovers_on_schedule
+   修复排期见外部优化建议评审（MCP citation/slim search 为契约级，优先）。
 5. 最终状态（2026-09-27 晚）：A1/B1/B3/C 四项全部落地、focused 全绿（基线既有失败如实记录：test_formal_mcp_search_entry、test_reconciliation_runs_after_event_silence、test_reconciliation_admits_once_and_persists_report、test_memory_vector_and_coverage_endpoints_return_shared_snapshot）、PyInstaller 重打包重启 sidecar 完成。**真机复测：B3 守卫实锤生效（meta.json 仅剩 production 注册）；A1 重放 0.0247s/2000 消息零 chunk。空闲 CPU 持续 23-33% 的根因已定位：不是本轮代码缺陷，而是滚动大库（177MB 会话库）按 1800s 节流整库重拷+流式哈希+再提炼的设计行为——每 30 分钟一个约 6 分钟的周期，占空比恰为实测值；上一轮"空闲 0.0%"是采样窗口落在周期间隙。E 试错（dir-usage 缓存）已回滚。整体状态：代码完成，真机验收 PARTIAL，不得写 PASS；"空闲<5%"验收线对当前节流设计不成立，需主人决策（见下）。**
 
 回滚：全部为代码层改动可独立 revert；meta.json 清理只删 acceptance 注册条目不动数据；不改 Vault、不删 raw、不动主人数据。
