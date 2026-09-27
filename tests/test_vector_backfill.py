@@ -179,7 +179,9 @@ def test_backfill_removes_degenerate_and_duplicate_vectors(tmp_path: Path):
 
     零范数向量与跨点重复向量（不同内容嵌出同一向量）在余弦检索里会无条件
     回填高分（实测无关查询得 1.0），提供方级坍缩也无法靠重嵌修复：契约是
-    直接出索引（词法层仍在），且同轮不再重嵌入同批点。
+    直接出索引（词法层仍在），且同轮不再重嵌入同批点。深检需要拉全部向量
+    本体，改为 deep_check=True 显式触发（PERF_RESOURCE_CLOSEOUT_20260927B C）；
+    默认轮不再自动体检，但 give-up 名单在轻量轮同样生效。
     """
     from types import SimpleNamespace
 
@@ -209,13 +211,13 @@ def test_backfill_removes_degenerate_and_duplicate_vectors(tmp_path: Path):
     ])
     client.close()
     backfill = VectorBackfill(settings, provider=FakeProvider())
-    backfill.run_once(limit=10)
+    backfill.run_once(limit=10, deep_check=True)
     close_shared_client()
     client = QdrantClient(path=str(tmp_path / "qdrant"))
     points, _ = client.scroll(collection_name="lingji_automatic_memory", limit=10, with_vectors=True, with_payload=True)
     client.close()
     remaining = {(p.payload or {}).get("message_id") for p in points}
     assert remaining == set(), "degenerate points must be removed from the recall index"
-    again = backfill.run_once(limit=10)
+    again = backfill.run_once(limit=10)  # 默认轻量轮：give-up 名单同样阻断重嵌
     assert again["embedded"] == 0, "give-up list must stop re-embedding removed degenerate points"
     close_shared_client()

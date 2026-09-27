@@ -3,6 +3,10 @@ Qdrant collection (embedded mode, storage/qdrant).
 
 全自动向量化：无需任何人工点击。每次 run_once 以 message_id 为幂等键，
 已存在的向量跳过；单轮有界，多轮调用直到追平。数据全部留在本机。
+
+常规轮（deep_check=False，默认）只做 payload 层 id/content diff，不拉向量
+本体；退化向量体检（零范数剔除、坍缩簇治理）由 deep_check=True 显式触发，
+避免每轮把全部向量常驻内存。
 """
 
 from __future__ import annotations
@@ -78,36 +82,6 @@ class VectorBackfill:
         path.mkdir(parents=True, exist_ok=True)
         return _shared_client(path)
 
-    def _pending_message_rows(self, limit: int) -> list[dict[str, Any]]:
-        """优先返回尚未向量化的消息（按时间正序），不受窗口截断影响。"""
-        memory_db = Path(str(getattr(self.settings, "memory_db_path", "")))
-        if not memory_db.exists():
-            return []
-        with sqlite3.connect(str(memory_db)) as conn:
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                """
-                SELECT m.message_id, m.conversation_id, m.role, m.content, m.occurred_at, m.content_hash
-                FROM message_records m
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM (
-                        SELECT payload->>'message_id' AS mid
-                        FROM (
-                            SELECT json_extract(payload_json, '$.message_id') AS payload
-                            FROM (
-                                SELECT 1 AS payload_json, 1 AS message_id
-                            )
-                        )
-                    ) x WHERE x.mid = m.message_id
-                )
-                ORDER BY m.occurred_at ASC, m.message_id ASC
-                LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
-        # 上面的 NOT EXISTS 无法跨 qdrant —— 改为读 qdrant 已有 id 后在内存里过滤
-        return [dict(row) for row in rows]
-
     def _all_message_rows(self) -> list[dict[str, Any]]:
         """读取全部消息行（有界内存：只取 id/内容必要列）。"""
         memory_db = Path(str(getattr(self.settings, "memory_db_path", "")))
@@ -124,11 +98,12 @@ class VectorBackfill:
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def run_once(self, limit: int = 500) -> dict[str, Any]:
+    def run_once(self, limit: int = 500, *, deep_check: bool = False) -> dict[str, Any]:
+        """跑一轮回填；deep_check=True 时附带退化向量体检（拉全部向量本体）。"""
         with self._lock:
-            return self._run_once_locked(limit)
+            return self._run_once_locked(limit, deep_check=deep_check)
 
-    def _run_once_locked(self, limit: int) -> dict[str, Any]:
+    def _run_once_locked(self, limit: int, *, deep_check: bool = False) -> dict[str, Any]:
         from qdrant_client.models import PointIdsList, PointStruct, VectorParams
 
         client = self._client()
@@ -142,8 +117,10 @@ class VectorBackfill:
             # 嵌出同一向量的重复簇，会在召回里冒充实命中（无关查询回填 1.0 分）。
             # 重嵌无法修复提供方级坍缩：这些点直接出索引（词法层仍在），并记入
             # 进程级放弃名单，避免每轮“嵌入→删除”空转。
+            # 深检必须拉全部向量本体（2 万点 × 1024 维 float 常驻内存），只在
+            # deep_check=True 时执行；默认轮仅做 payload 层 id/content diff，
+            # 新嵌入的零范数防线保留在写入侧（upsert 前拒绝落库）。
             remove_ids: list[str] = []
-            repair_ids: set[str] = set()
             try:
                 try:
                     collection_missing = not client.collection_exists(collection_name=self.collection)
@@ -159,7 +136,8 @@ class VectorBackfill:
                     while True:
                         page, next_offset = client.scroll(
                             collection_name=self.collection, limit=10000,
-                            offset=scroll_offset, with_payload=True, with_vectors=True,
+                            offset=scroll_offset, with_payload=True,
+                            with_vectors=deep_check,
                         )
                         points.extend(page)
                         if not page or next_offset is None:
@@ -167,24 +145,26 @@ class VectorBackfill:
                         scroll_offset = next_offset
                 signatures: dict[tuple[float, ...], list[str]] = {}
                 for point in points:
-                    mid = (point.payload or {}).get("message_id")
+                    mid = str((point.payload or {}).get("message_id") or "")
                     if not mid:
                         continue
                     # 旧版本向量 payload 缺 content 但向量健康：重嵌入补写 payload。
                     if not str((point.payload or {}).get("content", "") or ""):
-                        repair_ids.add(str(mid))
                         continue
+                    existing_ids.add(mid)
+                    if not deep_check:
+                        continue  # 轻量轮未拉向量本体，跳过体检（否则会把全部点误判退化）
                     vector = list(getattr(point, "vector", None) or [])
                     if _vector_is_degenerate(vector):
-                        remove_ids.append(str(mid))
+                        remove_ids.append(mid)
                         continue
-                    existing_ids.add(str(mid))
-                    signatures.setdefault(tuple(round(float(x), 6) for x in vector), []).append(str(mid))
-                for members in signatures.values():
-                    # 不同内容嵌出同一向量 = 嵌入坍缩；内容相同的合法重复行不折腾。
-                    distinct_contents = {str((point.payload or {}).get("content", "") or "") for point in points if str((point.payload or {}).get("message_id") or "") in set(members)}
-                    if len(members) > 1 and len(distinct_contents) > 1:
-                        remove_ids.extend(members)
+                    signatures.setdefault(tuple(round(float(x), 6) for x in vector), []).append(mid)
+                if deep_check:
+                    for members in signatures.values():
+                        # 不同内容嵌出同一向量 = 嵌入坍缩；内容相同的合法重复行不折腾。
+                        distinct_contents = {str((point.payload or {}).get("content", "") or "") for point in points if str((point.payload or {}).get("message_id") or "") in set(members)}
+                        if len(members) > 1 and len(distinct_contents) > 1:
+                            remove_ids.extend(members)
             except Exception:
                 # 扫描存量点失败（并发/锁竞争）时绝不能当作“全都没有向量化”
                 # 盲目重嵌——那会把最老的一批每轮反复重写。中止本轮，稍后重试。
@@ -211,6 +191,10 @@ class VectorBackfill:
                             vectors_by_id[str(row["message_id"])] = vector
                 except Exception:
                     vectors_by_id = {}
+            # 集合创建移出逐条 upsert 循环：集合缺失且本批出现首个有效向量时创建
+            # 一次，维度取 provider 实际输出；创建失败（含并发下“已存在”）沿用
+            # 既有容错语义，由 upsert 自行成败，缺失留待下一轮 run_once 补建。
+            collection_ready = not collection_missing
             for row in pending:
                 try:
                     vector = vectors_by_id.get(str(row["message_id"]))
@@ -220,13 +204,15 @@ class VectorBackfill:
                     dim = len(vector) if vector else 0
                     if not dim or _vector_is_degenerate(vector):
                         continue  # 退化向量拒绝落库：宁缺毋滥，不留 1.0 分假命中源
-                    try:
-                        client.create_collection(
-                            collection_name=self.collection,
-                            vectors_config=VectorParams(size=dim, distance="Cosine"),
-                        )
-                    except Exception:
-                        pass  # 集合已存在
+                    if not collection_ready:
+                        try:
+                            client.create_collection(
+                                collection_name=self.collection,
+                                vectors_config=VectorParams(size=dim, distance="Cosine"),
+                            )
+                        except Exception:
+                            pass  # 集合已存在
+                        collection_ready = True
                     # 写入侧记下实际嵌入模型：同维度换模型后，集合指纹守卫
                     # （QdrantSemanticProvider._check_collection_fingerprint）才有据可查。
                     active_model = str((self.provider.status() or {}).get("active_model") or "")
