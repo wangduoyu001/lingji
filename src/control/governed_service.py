@@ -23,10 +23,16 @@ class GovernedLocalControlService(LocalControlService):
         self._sync_hardware_settings()
 
     def get_settings(self) -> dict[str, Any]:
-        return self.runtime_settings.snapshot(self._settings_capabilities())
+        from .runtime_settings import redact_secret_values
+
+        return redact_secret_values(self.runtime_settings.snapshot(self._settings_capabilities()))
 
     def preview_settings(self, values: Mapping[str, Any]) -> dict[str, Any]:
-        return self.runtime_settings.preview(values, capabilities=self._settings_capabilities())
+        from .runtime_settings import redact_secret_values
+
+        return redact_secret_values(
+            self.runtime_settings.preview(values, capabilities=self._settings_capabilities())
+        )
 
     def commit_settings(
         self,

@@ -27,7 +27,7 @@ from src.model_center import build_embedding_provider
 from src.obsidian.service import ObsidianService
 from src.storage import BackupManager, StateDatabase, StorageLifecycleManager
 
-from .runtime_settings import RuntimeSettingsStore
+from .runtime_settings import RuntimeSettingsStore, redact_secret_values
 
 
 class LocalControlService:
@@ -504,7 +504,7 @@ class LocalControlService:
             return None
 
     def get_settings(self) -> dict[str, Any]:
-        return self.runtime_settings.snapshot()
+        return redact_secret_values(self.runtime_settings.snapshot())
 
     def update_settings(
         self,
@@ -512,7 +512,7 @@ class LocalControlService:
         *,
         actor: str = "owner",
     ) -> dict[str, Any]:
-        snapshot = self.runtime_settings.update(values, actor=actor)
+        snapshot = redact_secret_values(self.runtime_settings.update(values, actor=actor))
         self._sync_hardware_settings()
         return snapshot
 
@@ -522,7 +522,7 @@ class LocalControlService:
         *,
         actor: str = "owner",
     ) -> dict[str, Any]:
-        snapshot = self.runtime_settings.reset(keys, actor=actor)
+        snapshot = redact_secret_values(self.runtime_settings.reset(keys, actor=actor))
         self._sync_hardware_settings()
         return snapshot
 

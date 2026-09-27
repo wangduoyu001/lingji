@@ -9,6 +9,37 @@ from typing import Any, Mapping
 _MEDIA_TYPES = {"media", "video", "audio"}
 
 
+# 密钥类设置（4.2，2026-09-27）：展示层一律脱敏，真值只进本机文件（chmod 600）。
+# 内部消费方（提炼/向量化的真实调用）直接走 snapshot()，不受脱敏影响。
+SECRET_SETTING_KEYS = ("zhipu_api_key",)
+
+
+def mask_secret(value: Any) -> str:
+    text = str(value or "")
+    if len(text) >= 12:
+        return f"{text[:4]}…{text[-4:]}"
+    return "…" if text else ""
+
+
+def redact_secret_values(payload: dict[str, Any]) -> dict[str, Any]:
+    """对设置快照做展示层脱敏：values 与 overrides 两处的密钥都要处理
+    （overrides 是原始覆盖表，漏了它 /api/settings 依旧泄漏全值）。"""
+    redacted = dict(payload)
+    for field in ("values", "overrides"):
+        section = payload.get(field)
+        if not isinstance(section, dict):
+            continue
+        masked = dict(section)
+        for key in SECRET_SETTING_KEYS:
+            if key in masked:
+                raw = str(masked.get(key) or "")
+                masked[key] = mask_secret(raw)
+                if field == "values":
+                    masked[f"{key}_set"] = bool(raw)
+        redacted[field] = masked
+    return redacted
+
+
 class RuntimeSettingsStore:
     """Persist owner-editable settings shared by UI, CLI and service layers."""
 
@@ -352,6 +383,10 @@ class RuntimeSettingsStore:
         for key, value in values.items():
             if key not in definitions:
                 raise KeyError(f"Unknown runtime setting: {key}")
+            if key in SECRET_SETTING_KEYS and str(value or ""):
+                current_real = str(current.get(key, definitions[key]["default"]) or "")
+                if str(value) == mask_secret(current_real):
+                    continue  # UI 回填掩码：视为未修改，绝不把掩码写回真值
             normalized = self._validate_value(key, value, definitions[key])
             default = definitions[key]["default"]
             if normalized == default:
@@ -497,6 +532,10 @@ class RuntimeSettingsStore:
                 encoding="utf-8",
             )
             temporary.replace(self.path)
+            try:
+                self.path.chmod(0o600)
+            except OSError:
+                pass
 
     @staticmethod
     def _validate_value(key: str, value: Any, definition: Mapping[str, Any]) -> Any:
