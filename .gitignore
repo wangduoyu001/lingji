@@ -81,3 +81,4 @@ scripts/_*.py
 
 # Tauri sidecar build output (PyInstaller artifacts, never committed)
 desktop/lingji-control/src-tauri/binaries/
+.zcodeignore
