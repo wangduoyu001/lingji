@@ -117,6 +117,9 @@ class AutomaticMemoryRuntime:
                 # Task 3 supplies the authorized path policy.
                 path_provider=path_provider or self._authorized_paths,
                 raw_max_bytes=int(getattr(settings, "automatic_memory_raw_max_bytes", 10 * 1024 ** 3)),
+                value_gate_enabled=bool(getattr(settings, "value_gate_enabled", False)),
+                value_gate_min_turns=int(getattr(settings, "value_gate_min_turns", 2)),
+                value_gate_min_chars=int(getattr(settings, "value_gate_min_chars", 300)),
             )
             configured_event_watcher = getattr(
                 settings, "automatic_memory_event_watcher_enabled", None

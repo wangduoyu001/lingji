@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     acceptance_qdrant_url: str = ""
     acceptance_qdrant_collection: str = "lingji_memory_acceptance"
 
+    # PERF_RESOURCE_ROOT_CAUSE_20260927 (B1): session value gate for the
+    # automatic-memory intake. Production defaults ON with a conservative
+    # floor (fewer than 2 messages AND fewer than 300 chars AND no value
+    # signal skips the pipeline); every skip is audited, never silent.
+    value_gate_enabled: bool = True
+    value_gate_min_turns: int = 2
+    value_gate_min_chars: int = 300
+
     # Single Obsidian Vault foundation
     vault_auto_init: bool = True
     vault_layout_version: str = "1"

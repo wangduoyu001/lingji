@@ -15,6 +15,7 @@ from uuid import uuid4
 from src.extraction.queue import SQLiteExtractionQueue
 from src.storage import StateDatabase
 from src.storage.state_db import LeaseLostError
+from src.automatic_memory.value_gate import evaluate_session_value
 
 from .models import ScanRun
 from .snapshot import ConsistentSnapshot, SnapshotResult
@@ -275,6 +276,9 @@ class SnapshotJobRunner:
         after_lease: Callable[[], None] | None = None,
         lease_ttl_seconds: float = 30.0,
         raw_max_bytes: int = 10 * 1024 ** 3,
+        value_gate_enabled: bool = False,
+        value_gate_min_turns: int = 2,
+        value_gate_min_chars: int = 300,
     ):
         if snapshot is None:
             snapshot = snapshotter
@@ -286,6 +290,12 @@ class SnapshotJobRunner:
         self.state_db = state_db if isinstance(state_db, StateDatabase) else StateDatabase(state_db)
         self.path_provider = path_provider
         self.lease_ttl_seconds = max(float(lease_ttl_seconds), 0.1)
+        # PERF_RESOURCE_ROOT_CAUSE_20260927 (B1): off by default so existing
+        # callers and tests keep today's semantics; production turns it on
+        # via settings (value_gate_enabled, value_gate_min_turns/chars).
+        self.value_gate_enabled = bool(value_gate_enabled)
+        self.value_gate_min_turns = max(int(value_gate_min_turns), 0)
+        self.value_gate_min_chars = max(int(value_gate_min_chars), 0)
         self.checkpoints = checkpoint_store or CheckpointStore(
             self.state_db, lease_ttl_seconds=self.lease_ttl_seconds
         )
@@ -568,10 +578,42 @@ class SnapshotJobRunner:
                         f"source changed during snapshot: {result.relative_path}"
                     )
                 raw_path = self.snapshot.raw_root / result.raw_id
+                # PERF_RESOURCE_ROOT_CAUSE_20260927 (B1): session value gate.
+                # Short sessions without any value signal skip the entire
+                # intake pipeline (queue, extraction, embedding, backfill).
+                # The decision is never silent: every skip lands in a JSONL
+                # audit trail, and the sentinel is still recorded so the
+                # unchanged file is not re-captured every round. A source
+                # rescan that changes the file invalidates the sentinel and
+                # re-admits the content.
+                gate_admission: dict[str, Any] | None = None
+                try:
+                    gate_text = raw_path.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    gate_text = ""
+                gate = (
+                    evaluate_session_value(
+                        [gate_text] if gate_text.strip() else [],
+                        min_turns=self.value_gate_min_turns,
+                        min_chars=self.value_gate_min_chars,
+                    )
+                    if self.value_gate_enabled
+                    else None
+                )
+                if gate is not None and not gate.approved:
+                    self._record_value_gate_skip(source_id, result, gate)
+                    gate_admission = {
+                        "status": "skipped_by_value_gate",
+                        "job_id": "",
+                        "existing_job": False,
+                    }
                 if self.before_queue is not None:
                     self.before_queue()
                 try:
-                    admission = self.queue.enqueue_authorized_snapshot(
+                    if gate_admission is not None:
+                        admission: dict[str, Any] = gate_admission
+                    else:
+                        admission = self.queue.enqueue_authorized_snapshot(
                         scan_id=scan_id,
                         lease_id=lease_id,
                         source_id=source_id,
@@ -742,6 +784,34 @@ class SnapshotJobRunner:
         return Path(path).expanduser().absolute().relative_to(
             Path(source["root"]).expanduser().absolute()
         ).as_posix()
+
+    def _record_value_gate_skip(self, source_id: str, result: Any, gate: Any) -> None:
+        """Append a value-gate skip to the bounded JSONL audit trail.
+
+        红线（B1）：绝不静默丢弃——每个被拒会话都留下可查记录（来源、原因、
+        规模），主人可按来源重扫撤销；审计失败绝不阻断采集。
+        """
+        try:
+            audit_root = self.snapshot.raw_root.parent / "runtime"
+            audit_root.mkdir(parents=True, exist_ok=True)
+            audit_path = audit_root / "value_gate_skipped.jsonl"
+            entry = {
+                "skipped_at": datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+                "source_id": source_id,
+                "raw_id": result.raw_id,
+                "relative_path": result.relative_path,
+                "reason": gate.reason,
+                "message_count": gate.message_count,
+                "total_chars": gate.total_chars,
+            }
+            with audit_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            lines = audit_path.read_text(encoding="utf-8").splitlines()
+            if len(lines) > 200:
+                audit_path.write_text("\n".join(lines[-200:]) + "\n", encoding="utf-8")
+        except Exception:
+            # Audit is best-effort: never block intake on trail failures.
+            pass
 
     @staticmethod
     def _sentinel(result: Any) -> str:
