@@ -1,7 +1,7 @@
 """raw 快照空间淘汰：占用不能无限膨胀（2026-09-23 主人约束）。
 
 规则：全局最新 5 个永不删；大快照（>=32MiB）只保最新 3 份、其余 6h 后可删；
-小文件 24h 保护；超 target 时最旧优先淘汰并记账 .evicted.log。
+小文件 6h 保护（2026-09-27 起，原 24h）；超 target 时最旧优先淘汰并记账 .evicted.log。
 """
 
 from __future__ import annotations
@@ -64,10 +64,10 @@ def test_recent_large_copy_beyond_three_is_still_protected_by_age(tmp_path: Path
     assert [item["raw_id"] for item in evicted if item["raw_id"] == "big-recent.bin"] == []
 
 
-def test_small_files_within_24h_protected(tmp_path: Path):
+def test_small_files_within_protect_window_protected(tmp_path: Path):
     _make(tmp_path, "fresh-small.bin", 1, age_seconds=2 * 3600)
     evicted = evict_raw_for_space(tmp_path, target_bytes=0, now=NOW)
-    assert evicted == [], "24h 内的小文件受保护，无可淘汰时返回空"
+    assert evicted == [], "保护窗内的小文件受保护，无可淘汰时返回空"
 
 
 def test_hidden_files_ignored(tmp_path: Path):
@@ -120,3 +120,12 @@ def test_nonterminal_raw_ids_missing_db_returns_empty(tmp_path: Path):
     from src.automatic_memory.checkpoint import nonterminal_job_raw_ids
 
     assert nonterminal_job_raw_ids(tmp_path / "nope.db") == set()
+
+
+def test_small_files_beyond_six_hours_are_evictable(tmp_path: Path):
+    """2026-09-27 起小文件保护窗 24h→6h：窗外的 7h 小文件可淘汰。"""
+    for index in range(5):  # 最新 5 个窗口保护由这批新鲜文件占满
+        _make(tmp_path, f"fresh-{index}.bin", 1, age_seconds=1 * 3600)
+    _make(tmp_path, "aged-small.bin", 5, age_seconds=7 * 3600)
+    evicted = evict_raw_for_space(tmp_path, target_bytes=1 * MB, now=NOW)
+    assert [item["raw_id"] for item in evicted] == ["aged-small.bin"]

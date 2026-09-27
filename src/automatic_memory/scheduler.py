@@ -37,6 +37,23 @@ class ReconciliationReport:
     next_action: str | None = None
 
 
+# 自适应快照节流（主人 2026-09-27 拍板：不得过度占用性能与硬盘）。整库重拷
+# 成本随快照体积线性增长，固定窗口会让大库的 CPU 占空比随体积膨胀。以最近
+# 一次真采集（非复用/非预判跳过）的最大快照字节数为成本代理，按实测综合吞吐
+# （拷贝+哈希+提炼 ≈ 0.5MB/s，177MB≈6 分钟）换算成本秒数，除以 5% 目标占空比
+# 得到窗口下限；小源仍在基准窗口内保持响应。
+_SNAPSHOT_COST_BYTES_PER_SECOND = 500_000.0
+_SNAPSHOT_DUTY_TARGET = 0.05
+
+
+def _sentinel_size(sentinel: Any) -> int:
+    """哨兵首段是捕获时的文件字节数（size:mtime_ns:inode:mode[:wal…]）。"""
+    try:
+        return int(str(sentinel or "").split(":", 1)[0])
+    except ValueError:
+        return 0
+
+
 class AutomaticMemoryScheduler:
     """Own automatic-memory lifecycle on top of the existing CronScheduler."""
 
@@ -424,14 +441,33 @@ class AutomaticMemoryScheduler:
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         age = (datetime.now(timezone.utc) - parsed).total_seconds()
-        if age >= throttle:
+        effective = throttle
+        try:
+            items = self.state_db.list_automatic_memory_scan_items(
+                str(latest_completed.get("scan_id") or "")
+            )
+        except Exception:
+            items = []
+        from src.automatic_memory.checkpoint import VALUE_GATE_SKIPPED_STATUS
+
+        for item in items:
+            status = str(item.get("status") or "").lower()
+            if status == "reused" or status == VALUE_GATE_SKIPPED_STATUS or status.endswith(":existing"):
+                continue  # 复用与预判跳过没有采集成本
+            size = _sentinel_size(item.get("sentinel"))
+            if size > 0:
+                effective = max(
+                    effective,
+                    size / _SNAPSHOT_COST_BYTES_PER_SECOND / _SNAPSHOT_DUTY_TARGET,
+                )
+        if age >= effective:
             return None
-        minutes_left = (throttle - age) / 60.0
+        minutes_left = (effective - age) / 60.0
         return ReconciliationReport(
             None, None, None, (), True,
             next_action=(
                 f"snapshot throttled: last capture {age / 60:.0f}m ago, "
-                f"window {throttle / 60:.0f}m, ~{minutes_left:.0f}m until next capture"
+                f"window {effective / 60:.0f}m, ~{minutes_left:.0f}m until next capture"
             ),
         )
 

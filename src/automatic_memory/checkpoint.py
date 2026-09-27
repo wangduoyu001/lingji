@@ -37,7 +37,10 @@ from .snapshot import ConsistentSnapshot, SnapshotResult
 _LARGE_SNAPSHOT_BYTES = 32 * 1024 * 1024
 _KEEP_RECENT = 5
 _KEEP_LARGE_COPIES = 3
-_SMALL_PROTECT_SECONDS = 24 * 3600
+# 小文件保护窗 24h→6h（主人 2026-09-27 拍板：不得过度占用硬盘）。24h 窗让
+# 小文件churn 独占 ~1.6GiB 保护地板，把 raw 上限压到保护地板之下；未终态
+# 任务引用的快照本就由准确性保护名单单独硬保护，6h 足够覆盖重试边缘。
+_SMALL_PROTECT_SECONDS = 6 * 3600
 _LARGE_PROTECT_SECONDS = 6 * 3600
 _EVICT_LOG_NAME = ".evicted.log"
 
