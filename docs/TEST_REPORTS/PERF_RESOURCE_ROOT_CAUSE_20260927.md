@@ -56,12 +56,18 @@
 - ❌ 内存 <1GB 未达标（活动期 RSS 峰值 2GB；前一日构建曾稳定到 108MB，波动原因未明）。
 - ⚠️ E 修复试错记录：假设 reconciliation 的 raw stat 扫描是热点 → TTL 缓存无改善 → 回滚。真实 raw=`storage/raw`（3.05GB/507 文件）。
 
-### 遗留热点证据链（下轮首选诊断）
+### 空闲 CPU 未达标根因（已定位：设计行为，非缺陷）
 
-1. sample 采样：一个 worker 线程 ~45% 采样在 SHA256（EVP_update/sha256_block_armv8）。
-2. 事件：structured_ingestion_completed 14 次/10 分钟、distill_failed 4、automatic_memory_reconciliation 92 次/10 分钟（不同时段波动）。
-3. 队列空、capture 因 raw 满被拒——热不在采集，疑似重复再提取 × read model 全量重建 × 提炼重试复合。
-4. 工具缺口：py-spy 本机离线安装失败（No matching distribution），下轮需联网安装后 `py-spy dump --pid <pid>` 抓 Python 层栈。
+1. 实锤链：`ps -M` 显示单线程独占全部 CPU（3:12/3:15）；lsof+find 抓到 `storage/raw/826debd0…` 文件 177MB 在采样窗口内持续增长；拷完时间 18:42 与重启时间吻合。
+2. 机制：滚动变化的大库（本会话所在的会话库，177MB）按 `snapshot_throttle_seconds=1800` 整库重拷+流式 SHA-256（即 EVP_update 热点）+再提炼；采集节奏记录（18:01/17:31/17:00/15:41）与 30 分钟窗口完全吻合——节流工作正常。
+3. 数学：每 30 分钟约 6 分钟重拷+提炼周期 → 占空比 ~20-26% = 实测稳态 CPU。上一轮"空闲 0.0%"是 60s 采样窗恰好落在周期间隙；"空闲<5%"这条验收线对整库重拷设计天然不成立。
+4. py-spy 已装好（wheel 本地安装法，见交接），如需进一步抓栈可 `sudo py-spy dump --pid <pid>`（需密码，本轮未用）。
+
+### 主人决策项（新增）
+
+- **节流窗口**：滚动大库每 30 分钟整库重拷一次是 2026-09-24 拍板的"最多晚半小时"代价；若要压 CPU，可把该源节流窗口调大（如 2h，成本按比例降）——需主人拍板，代理不擅自改。
+- **raw 满**：storage/raw 3.05GB/3GiB，新采集被拒。清理（归档后删）或提高 automatic_memory_raw_max_bytes。
+- **远期方向**：大库增量快照（只拷 WAL 增量）可同时解决 CPU 占空比与 raw 增长，属新一轮任务。
 
 ### 主人待决策
 

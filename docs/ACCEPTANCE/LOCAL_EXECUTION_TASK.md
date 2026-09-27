@@ -18,7 +18,7 @@ execution_mode: PERF_ROOT_CAUSE_CLOSEOUT_BATCH
 - [x] **B1 收尾**（2026-09-27 晚，commit f60fd015）：阈值（value_gate_enabled/min_turns/min_chars）进 RuntimeSettingsStore 设置目录并对运行中 runner 动态生效；gated skip 的 manifest_status 从误导性的 "queued" 改为独立值域 `skipped_by_value_gate`（值域核对）；新增 GET `/api/automatic-memory/value-gate/skipped`（滚动样本+计数）与 POST `/api/automatic-memory/value-gate/rescan`（按来源撤销 skip，下次扫描重采集重判定）；observability 状态映射补大白话。
 - [x] **B3 守卫**（2026-09-27 晚，commit 2d7e9d1c）：根因实锤——上轮归档只删集合目录，`<data-root>/qdrant/meta.json` 注册表仍登记 `lingji_memory_acceptance`，qdrant-local 每次打开按注册表重建空目录（12KB storage.sqlite）。修复：embedded 客户端池打开路径时自动注销"非本工作区且点数为 0"的外来集合注册（幂等守卫，有数据的集合只告警不删）；meta.json 实际清理随下次重启窗口执行。
 - [x] **C**（2026-09-27 晚，commit ea9e8703）：vector_backfill 死 SQL（`_pending_message_rows`，NOT EXISTS 无法跨 qdrant 的残留）删除；run_once 增量 diff 默认不拉向量本体（payload-only scroll）；退化向量/坍缩治理改为显式 deep 检查路径（语义保留、不再每轮全量拉向量）；`create_collection` 从逐条循环提前到集合缺失时一次性创建。extraction_jobs.status 索引已核实由 idx_extraction_jobs_due 前缀覆盖，无需新建。
-- [x] **E（真机复测追加，后又回滚：commit 3fb2f1d6 → revert 45c5bb59）**：空闲 CPU 未达标（持续 ~23-33%，队列空、日志静默）。最初假设 dir-usage stat 风暴，缓存修复后无改善即回滚——真实 raw 为 `storage/raw`（3.05GB、507 顶层文件，扫描微秒级）。遗留热点证据：worker 线程 ~45% 采样在 SHA256、structured_ingestion_completed 14 次/10 分钟、distill_failed——疑似重复再提取 × read model 全量重建 × 提炼重试复合热，下轮用 py-spy 定位（本机离线装不上）。
+- [x] **E（真机复测追加，后又回滚：commit 3fb2f1d6 → revert 45c5bb59）**：空闲 CPU 未达标（持续 ~23-33%，队列空、日志静默）。最初假设 dir-usage stat 风暴，缓存修复后无改善即回滚——真实 raw 为 `storage/raw`（3.05GB、507 顶层文件，扫描微秒级）。【已定位，见下】最初误判为待查热点，后经 lsof+文件增长+节流记录实锤：这是滚动大库（本会话所在的 177MB 会话库）按 1800s 节流整库重拷+流式 SHA-256 的设计行为，见「真机结果」节。
 
 ### 验收标准
 
@@ -26,7 +26,7 @@ execution_mode: PERF_ROOT_CAUSE_CLOSEOUT_BATCH
 2. 改动完成后 PyInstaller 重打包重启 sidecar，真机复测：空闲 CPU<5%、内存<1GB、ingestion 批处理突发峰值显著下降（对比本轮实测基线）。
 3. meta.json 中 acceptance 注册消失、生产 qdrant 无 acceptance 集合目录重建。
 4. PROJECT_STATUS/TEST_REPORTS/CHANGE_ACCEPTANCE_LOG 同步。
-5. 最终状态（2026-09-27 晚）：A1/B1/B3/C 四项全部落地、focused 全绿（基线既有失败如实记录：test_formal_mcp_search_entry、test_reconciliation_runs_after_event_silence、test_reconciliation_admits_once_and_persists_report、test_memory_vector_and_coverage_endpoints_return_shared_snapshot）、PyInstaller 重打包重启 sidecar 完成。**真机复测：B3 守卫实锤生效（meta.json 仅剩 production 注册）；A1 重放 0.0247s/2000 消息零 chunk；但空闲 CPU 线（<5%）与内存线未达标（持续 ~23-33%，活动期 RSS 峰值 2GB）——遗留热点已有明确证据链，诊断列为下轮首选。整体状态：代码完成，真机验收 PARTIAL，不得写 PASS。**
+5. 最终状态（2026-09-27 晚）：A1/B1/B3/C 四项全部落地、focused 全绿（基线既有失败如实记录：test_formal_mcp_search_entry、test_reconciliation_runs_after_event_silence、test_reconciliation_admits_once_and_persists_report、test_memory_vector_and_coverage_endpoints_return_shared_snapshot）、PyInstaller 重打包重启 sidecar 完成。**真机复测：B3 守卫实锤生效（meta.json 仅剩 production 注册）；A1 重放 0.0247s/2000 消息零 chunk。空闲 CPU 持续 23-33% 的根因已定位：不是本轮代码缺陷，而是滚动大库（177MB 会话库）按 1800s 节流整库重拷+流式哈希+再提炼的设计行为——每 30 分钟一个约 6 分钟的周期，占空比恰为实测值；上一轮"空闲 0.0%"是采样窗口落在周期间隙。E 试错（dir-usage 缓存）已回滚。整体状态：代码完成，真机验收 PARTIAL，不得写 PASS；"空闲<5%"验收线对当前节流设计不成立，需主人决策（见下）。**
 
 回滚：全部为代码层改动可独立 revert；meta.json 清理只删 acceptance 注册条目不动数据；不改 Vault、不删 raw、不动主人数据。
 
