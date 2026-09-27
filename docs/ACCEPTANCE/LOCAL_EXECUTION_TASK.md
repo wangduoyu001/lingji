@@ -1,6 +1,38 @@
-# 当前本机任务：资源占用根治优化
+# 当前本机任务：资源占用根治优化·收尾批
 
-## 本轮：资源占用根治优化（2026-09-27）
+## 本轮：资源占用收尾批（2026-09-27 晚）
+
+```yaml
+task_id: PERF_RESOURCE_CLOSEOUT_20260927B
+status: ACTIVE
+baseline_commit: f5fd11f2279912b8a6926185df43f37fab5a6c4d
+product_branch: codex/owner-source-intake-mac-repair
+execution_mode: PERF_ROOT_CAUSE_CLOSEOUT_BATCH
+```
+
+上一轮 PERF_RESOURCE_ROOT_CAUSE_20260927 真机验收通过（空闲 CPU 0.0%），但本会话复核发现运行中 sidecar 在持续 ingestion 时仍突发高 CPU（瞬时实测 ~15-95%，突发型）——每批 ingestion 触发 read model 全量重插 → sync 全量重 chunk 21k 消息，正是 A1 收尾要根治的残余热点。本轮完成四项收尾。
+
+### 落地计划及完成标准
+
+- [x] **A1 收尾**（2026-09-27 晚，commit c24ab5b6）：`sync_structured_evidence` content-addressed 增量重构——两阶段：①轻量行扫描（不含 content 列）逐行算 memory_id（hash(source|conv|msg|content_hash)）→ 临时表主键批量比对；②只对"文档不存在 / content_hash·status·title 需变"的行读 content + chunk + upsert。watermark/covered-digest 机制删除；`structured_evidence_document_count/chunk_count` meta 改为真实全量口径；title 漂移传播修复（现行为：title 变化永不落投影文档）；消息内容被清空时旧投影归档。回归：增量两轮零 chunk 调用、批量等价性（增量 vs rebuild 投影一致）、revoke/孤儿/空内容语义不回退。
+- [x] **B1 收尾**（2026-09-27 晚，commit f60fd015）：阈值（value_gate_enabled/min_turns/min_chars）进 RuntimeSettingsStore 设置目录并对运行中 runner 动态生效；gated skip 的 manifest_status 从误导性的 "queued" 改为独立值域 `skipped_by_value_gate`（值域核对）；新增 GET `/api/automatic-memory/value-gate/skipped`（滚动样本+计数）与 POST `/api/automatic-memory/value-gate/rescan`（按来源撤销 skip，下次扫描重采集重判定）；observability 状态映射补大白话。
+- [x] **B3 守卫**（2026-09-27 晚，commit 2d7e9d1c）：根因实锤——上轮归档只删集合目录，`<data-root>/qdrant/meta.json` 注册表仍登记 `lingji_memory_acceptance`，qdrant-local 每次打开按注册表重建空目录（12KB storage.sqlite）。修复：embedded 客户端池打开路径时自动注销"非本工作区且点数为 0"的外来集合注册（幂等守卫，有数据的集合只告警不删）；meta.json 实际清理随下次重启窗口执行。
+- [x] **C**（2026-09-27 晚，commit ea9e8703）：vector_backfill 死 SQL（`_pending_message_rows`，NOT EXISTS 无法跨 qdrant 的残留）删除；run_once 增量 diff 默认不拉向量本体（payload-only scroll）；退化向量/坍缩治理改为显式 deep 检查路径（语义保留、不再每轮全量拉向量）；`create_collection` 从逐条循环提前到集合缺失时一次性创建。extraction_jobs.status 索引已核实由 idx_extraction_jobs_due 前缀覆盖，无需新建。
+- [x] **E（真机复测追加，后又回滚：commit 3fb2f1d6 → revert 45c5bb59）**：空闲 CPU 未达标（持续 ~23-33%，队列空、日志静默）。最初假设 dir-usage stat 风暴，缓存修复后无改善即回滚——真实 raw 为 `storage/raw`（3.05GB、507 顶层文件，扫描微秒级）。遗留热点证据：worker 线程 ~45% 采样在 SHA256、structured_ingestion_completed 14 次/10 分钟、distill_failed——疑似重复再提取 × read model 全量重建 × 提炼重试复合热，下轮用 py-spy 定位（本机离线装不上）。
+
+### 验收标准
+
+1. 相关 focused 测试全绿（含新增回归）；存量失败如实报告，不得 skip 掩盖。
+2. 改动完成后 PyInstaller 重打包重启 sidecar，真机复测：空闲 CPU<5%、内存<1GB、ingestion 批处理突发峰值显著下降（对比本轮实测基线）。
+3. meta.json 中 acceptance 注册消失、生产 qdrant 无 acceptance 集合目录重建。
+4. PROJECT_STATUS/TEST_REPORTS/CHANGE_ACCEPTANCE_LOG 同步。
+5. 最终状态（2026-09-27 晚）：A1/B1/B3/C 四项全部落地、focused 全绿（基线既有失败如实记录：test_formal_mcp_search_entry、test_reconciliation_runs_after_event_silence、test_reconciliation_admits_once_and_persists_report、test_memory_vector_and_coverage_endpoints_return_shared_snapshot）、PyInstaller 重打包重启 sidecar 完成。**真机复测：B3 守卫实锤生效（meta.json 仅剩 production 注册）；A1 重放 0.0247s/2000 消息零 chunk；但空闲 CPU 线（<5%）与内存线未达标（持续 ~23-33%，活动期 RSS 峰值 2GB）——遗留热点已有明确证据链，诊断列为下轮首选。整体状态：代码完成，真机验收 PARTIAL，不得写 PASS。**
+
+回滚：全部为代码层改动可独立 revert；meta.json 清理只删 acceptance 注册条目不动数据；不改 Vault、不删 raw、不动主人数据。
+
+---
+
+## 上一轮：资源占用根治优化（2026-09-27，COMPLETED）
 
 ```yaml
 task_id: PERF_RESOURCE_ROOT_CAUSE_20260927

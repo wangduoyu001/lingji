@@ -1,5 +1,9 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
+## 2026-09-27 晚 资源占用收尾批（代码完成，真机验收 PARTIAL）
+
+收尾批 PERF_RESOURCE_CLOSEOUT_20260927B（报告见 TEST_REPORTS/PERF_RESOURCE_ROOT_CAUSE_20260927.md 收尾节）：**A1** sync 两阶段 content-addressed 重构（水位删除、title 漂移修复、重放零 chunk，c24ab5b6）；**B1** 阈值进 RuntimeSettingsStore（owner override > 静态配置 > 目录默认 precedence）+ skipped_by_value_gate 值域 + skipped/rescan 端点（f60fd015）；**B3** 客户端池混库守卫——真机实锤生效，acceptance 集合注册自动注销、不再重建（2d7e9d1c）；**C** vector_backfill payload-only 增量 diff（ea9e8703）。PyInstaller 重打包（SHA 99ebc06f…）部署重启。**真机未达标项**：空闲 CPU 仍 23-33%（队列空、日志静默；遗留热点=SHA256 密集 worker 线程 × 重复再提取 × read model 全量重建，下轮 py-spy 定位）；活动期 RSS 峰值 2GB。**dir-usage TTL 缓存假设证伪已回滚**（3fb2f1d6→45c5bb59）。**主人待决策：storage/raw 3.05GB/3GiB 上限已满，新采集被拒——清理或提高上限**。
+
 ## 2026-09-27 资源占用根治优化（真机验收通过）
 
 主人报灵机 CPU 持续满烧一核、内存偏高。采样+EXPLAIN 实锤根因后四项落地（任务单 PERF_RESOURCE_ROOT_CAUSE_20260927，报告见 TEST_REPORTS/PERF_RESOURCE_ROOT_CAUSE_20260927.md）：**A1** 证据溯源三键生成列+复合索引+批量预取+孤儿 SQL 化+输入指纹回退（commit 5aea694e）；**A2** discovery 三端点 60s TTL 缓存+Desktop 轮询 8s→30s（42cae364）；**B1** 会话价值门——低价值会话不入队、JSONL 审计绝不静默（34777239）；**B2** 回填计数预检 fast-path（cef08131）；**B3** acceptance 集合归档移除。sidecar 重打包（SHA `78732387…`）并重启。**真机：空闲 CPU 0.0%（改前 96-98% 持续）、内存 810MB（改前 1.74GB）、轮询日志降 90%+**。关键架构发现：read model 全量重建型（每批 DELETE 重插），updated_at 水位不成立，彻底增量化待 content-addressed 重构（memory_id 即内容寻址）；acceptance 集合被启动逻辑重建（12K 空）创建点待查。混库守卫真机复验通过。

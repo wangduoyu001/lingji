@@ -33,3 +33,42 @@
 - **B1 UI 增强（下轮）**：skipped 审计的 UI 展示端点、RuntimeSettingsStore 阈值调节、manifest_status=skipped:value-gate 的 UI 值域核对。
 - acceptance 集合重建点待查（config.py `acceptance_qdrant_collection` 是唯一字面量引用，创建经由 workspace 配置链）。
 - 回滚：`git revert` 四个 perf/feat 提交并重新打包即可；B1 有 `value_gate_enabled` 开关；数据层（生成列/索引/归档）均为加法或已归档。
+
+## 收尾批（PERF_RESOURCE_CLOSEOUT_20260927B，2026-09-27 晚）——代码完成，真机验收 PARTIAL
+
+分支 `codex/owner-source-intake-mac-repair`，HEAD `45c5bb59`。
+
+### 已实现并本机测试（未全部真机达标）
+
+| 改动 | commit | 验证 |
+|---|---|---|
+| A1 收尾：sync_structured_evidence 两阶段 content-addressed 重构（水位机制删除、title 漂移修复、空内容归档、真实全量 count meta） | `c24ab5b6` | 新增回归 4 例；相关 27 过 1 挂（基线既有）；2000 消息重放 0.0247s 零 chunk |
+| B1 收尾：阈值进 RuntimeSettingsStore（owner override > 静态配置 > 目录默认）、skipped_by_value_gate 值域、skipped/rescan 两端点 | `f60fd015` | 新增 5 例；相关 38 过（曾打破 3 个存量 api 测试，precedence 修复后全绿） |
+| B3 守卫：客户端池首次打开注销非本工作区空集合注册 | `2d7e9d1c` | 5 例回归；**真机实锤生效：重启后 meta.json 仅剩 lingji_memory_production，acceptance 注册与目录消失** |
+| C：vector_backfill payload-only 增量 diff（deep_check 显式体检）、死 SQL 删除、集合创建移出循环 | `ea9e8703` | 9 例全绿（含既有退化治理用例显式 deep_check） |
+| E：dir-usage TTL 缓存（错误假设） | `3fb2f1d6` → revert `45c5bb59` | 回滚，见下 |
+
+### 真机复测（新 sidecar SHA `02bf7346…`，PID 20282，8766 正常）
+
+- ✅ B3：acceptance 集合不再被重建（守卫自动注销注册，上轮遗留问题闭环）。
+- ✅ A1 单元基准：重放零 chunk（改前每批 ingestion 全量重 chunk 21k）。
+- ❌ 空闲 CPU <5% 未达标：队列空、日志静默下仍持续 23-33%（四连窗口）。
+- ❌ 内存 <1GB 未达标（活动期 RSS 峰值 2GB；前一日构建曾稳定到 108MB，波动原因未明）。
+- ⚠️ E 修复试错记录：假设 reconciliation 的 raw stat 扫描是热点 → TTL 缓存无改善 → 回滚。真实 raw=`storage/raw`（3.05GB/507 文件）。
+
+### 遗留热点证据链（下轮首选诊断）
+
+1. sample 采样：一个 worker 线程 ~45% 采样在 SHA256（EVP_update/sha256_block_armv8）。
+2. 事件：structured_ingestion_completed 14 次/10 分钟、distill_failed 4、automatic_memory_reconciliation 92 次/10 分钟（不同时段波动）。
+3. 队列空、capture 因 raw 满被拒——热不在采集，疑似重复再提取 × read model 全量重建 × 提炼重试复合。
+4. 工具缺口：py-spy 本机离线安装失败（No matching distribution），下轮需联网安装后 `py-spy dump --pid <pid>` 抓 Python 层栈。
+
+### 主人待决策
+
+- **raw 存储满**：storage/raw 3.05GB / 上限 3GiB（automatic_memory_raw_max_bytes），新采集被拒。需主人决定：清理（旧快照归档后删）或提高上限。代理不擅自清理主人数据。
+
+### 基线既有失败（与本轮无关，如实记录）
+
+test_formal_mcp_search_entry、test_reconciliation_runs_after_event_silence、test_reconciliation_admits_once_and_persists_report、test_memory_vector_and_coverage_endpoints_return_shared_snapshot。
+
+回滚：`git revert` c24ab5b6/f60fd015/2d7e9d1c/ea9e8703 并重新打包；B1 有开关；数据层加法可保留。

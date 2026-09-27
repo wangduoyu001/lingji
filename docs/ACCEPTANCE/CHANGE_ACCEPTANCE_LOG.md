@@ -1,5 +1,16 @@
 # 验收要求变更记录
 
+## 2026-09-27 晚 · 资源占用收尾批（PERF_RESOURCE_CLOSEOUT_20260927B，status ACTIVE）
+
+- 上一轮真机验收通过后发现残余热点：运行中 sidecar 在持续 ingestion 时仍突发高 CPU（实测瞬时 15-95% 突发型）——每批 ingestion 触发 read model 全量重插，sync 仍全量重 chunk 21k 消息。本轮四项收尾（任务单 `PERF_RESOURCE_CLOSEOUT_20260927B`）：
+  - **A1 收尾**：`sync_structured_evidence` 两阶段 content-addressed 重构（轻量无 content 扫描 → memory_id 主键比对 → 仅变化行二阶段读 content+chunk+upsert）；watermark/covered-digest 删除；title 漂移传播修复（原行为 title 变更永不落投影）；空内容消息旧投影归档；document/chunk count meta 改真实全量口径。回归测试必须覆盖：两轮零 chunk、增量与全量重建投影等价、revoke/孤儿归档语义不回退。
+  - **B1 收尾**：value_gate 三阈值进 RuntimeSettingsStore 目录并对运行中 runner 动态生效；gated skip 的 manifest_status 独立值域 `skipped_by_value_gate`（修正误标 queued 的状态矛盾）；新增 skipped 展示端点与按来源 rescan 撤销端点；状态映射补大白话。红线不变：绝不静默丢弃、误杀可撤销。
+  - **B3 守卫**：acceptance 集合重建根因 = `<data-root>/qdrant/meta.json` 注册表残留（上轮只删目录未注销），qdrant-local 每次打开重建空目录。embedded 客户端池加幂等守卫：自动注销非本工作区且点数为 0 的外来集合注册，有数据只告警不删；meta.json 实际清理随重启窗口执行。
+  - **C**：vector_backfill 死 SQL 删除、增量 diff 默认 payload-only（不拉向量本体）、退化治理改显式 deep 路径（语义保留）、create_collection 移出逐条循环。
+  - **E（真机复测追加后又回滚，commit 3fb2f1d6 → revert 45c5bb59）**：重打包后实测空闲态仍持续 ~23-33% CPU（队列空、日志静默）。最初假设为 reconciliation 每轮全量 stat 扫 raw 算占用，加 60s TTL 缓存后复测无改善——假设证伪：真实 raw 为 `<data-root>/storage/raw`（3.05GB、仅 507 个顶层文件，stat 扫描微秒级，`<data-root>/raw` 是空目录），dir-usage 无辜且缓存放宽了预算检查，故整体回滚。**遗留热点证据**（下轮首选诊断）：sample 显示一个 worker 线程 ~45% 采样在 SHA256（EVP_update），伴随 structured_ingestion_completed 14 次/10 分钟与 distill_failed——疑似重复再提取 × read model 全量重建 × 提炼重试的复合热；py-spy 本机离线装不上，下轮需联网装 py-spy 抓 Python 层栈定位。
+- 验收：focused 全绿 + 重打包重启 sidecar 后真机复测（空闲 CPU<5%、内存<1GB、ingestion 突发峰值下降）；meta.json 无 acceptance 注册。
+- 回滚：代码改动独立 revert；meta.json 只删 acceptance 注册条目；不改 Vault、不删 raw、不动主人数据。
+
 ## 2026-09-27 · 资源占用根治优化（PERF_RESOURCE_ROOT_CAUSE_20260927）
 
 - 主人报灵机资源占用过高并连续追问更优解，实测诊断实锤三根因 + 两个结构问题：①`sync_structured_evidence` 每次全量同步 21k 消息，逐条 `json_extract` 溯源全表扫描（ relationships_json 28MB，采样栈过半 CPU 在 jsonExtractFunc）；②UI 每秒轮询 automatic-memory 七端点，discovered/apps/processes 每次全量文件系统重扫（纯 Python 持 GIL，卡 UI）；③chunk 回填每次唤醒 O(N) 双向全量比对。结构问题：入口无价值过滤（宽进严出）、acceptance 集合驻留生产进程（混库隐患）。
