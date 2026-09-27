@@ -23,6 +23,14 @@ execution_mode: AUDIT_RESPONSE_BATCH
 - [x] **4.1 Vault git 自动提交**：晋升落库后 `_vault_git_autocommit` 补版本锚点（add -A + commit，绝不 push）；失败只告警不阻塞；回归 3 例。
 - [x] **部署验证**：SHA `dae0d1cb…`，ping 5.7ms，/api/settings 全值零泄漏，手动扫描 912ms 返回真实报告。
 
+### 第二批已完成（2026-09-27 夜·续，主人指示"按你的建议执行"）
+
+- [x] **3.2.1 证据独立通道**（commit d188fe24）：检索分通道重排——memory 通道（knowledge 等）优先、evidence 通道殿后并带 `retrieval_channel` 标签；证据永不丢弃仍可引用展开。修正点：真正生效的检索器是 `src/retrieval/enhanced.py`（包导出指向它而非 hybrid），其 fallback 路径在 _fuse 后会按分数重排——排序键已改为通道优先。回归 2 例 + 检索扩面 154 过。
+- [x] **4.3 Qdrant 双根核实 + 缺口收敛**：两集合粒度不同（lingji_memory_production=chunk 级正式语义、lingji_automatic_memory=消息级 MCP 召回），各有消费方，**非冗余，不删**。缺口根因=Ollama 未运行（嵌入不可用）——已拉起 Ollama，连续回填 796 缺口 → 0，之后 B2 快路径零成本待命（status=fast-path）。
+- [x] **5.2 主线收敛（本地完成，推送受阻）**：master 独有提交为 0（产品分支是严格超集，领先 736）→ 主仓 master 已 fast-forward 到 3f0ee2c2，master 的收集报错/坏测试随树更新消失。**推送 GitHub 被网络阻断**（SSL_ERROR_SYSCALL，今晚代理/网络故障延续）——按治理规则如实记录为阻塞项，网络恢复后 `git push origin HEAD:master` 一条命令完成。
+- [x] **5.4 卫生**：删除无引用死代码 src/control/work_api.py（与 work_routes.py 重复定义，api.py 实际用 work_routes）；.zcodeignore 入 .gitignore；3 周未动的 owner-memory-detail-drilldown worktree（干净）已移除。
+- [ ] 2.2 失败按源聚合 + PendingAction(owner)：子代理实现中，完成后单独提交。
+
 ### 待办（下一轮）
 
 - [ ] 2.2 失败按源聚合（1291→≤3）+ PendingAction(actor=owner) + 可行动信息。
