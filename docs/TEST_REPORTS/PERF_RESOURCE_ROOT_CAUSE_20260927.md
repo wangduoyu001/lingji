@@ -102,3 +102,25 @@ raw 当前 3.38GiB（旧机制 6h 内大副本仍在保护期），随保护窗�
 - vectorize/嵌入链路 >400s 挂起（Ollama 服务状态？）——若复现，给嵌入调用加超时熔断。
 - 排水轮内 SHA256 调用点：联网环境用 sudo py-spy 一次定位。
 - 大源到期（部署后 ~2h）的采集周期实测，确认占空比 ≤5-7%。
+
+## 审计响应批（AUDIT_RESPONSE_20260927，2026-09-27 夜）——服务挂死根因与四项修复
+
+外部优化建议书（基线 5e51f8bb）评审后落地。**根因修正**：挂死期线程转储显示多线程分别卡死在系统调用（提炼线程 getaddrinfo/DNS、提取线程 sqlite3.connect、capture_inbox iterdir），事件循环正常、CPU 零增长——建议书的"持 GIL 饿死事件循环"理论不成立；SIGTERM 优雅停机被卡死线程拖住导致进程"杀不掉"。
+
+| 项 | commit | 验证 |
+|---|---|---|
+| 全量基线 diff：HEAD vs a090676f 失败集合逐条相同（14=14），零新增回归，+39 新测试全过；完整 14 项清单入档任务单（替代漏报的 4 项） | `d67661a6` | 双侧全量各 4 分钟 |
+| MCP citation 断裂 + slim search 泄漏 relative_path（白名单去 relative_path、加 citation，vault 定位走 citation.path） | `6546e8d9` | 2 个契约测试转绿；15 过 2 挂（均基线既有） |
+| 健康看门狗：探活绕代理直连 loopback，3×20s 超时 → SIGTERM → 30s 宽限 → SIGKILL 升级 | `3e65e454` | 部署验证存活；LINGJI_WATCHDOG_ENABLED 可关 |
+| 提炼模型列表探针：单守护线程串行拉取，urllib timeout 不覆盖 DNS 的缺口补上，至多卡死一个线程 | `3e65e454` | 回归 3 例（卡死限时返回、无线程泄漏、错误缓存与恢复） |
+| 手动扫描移出 HTTP 线程池：专用单线程执行器 + 5 秒预算（快路径真实报告、慢路径受理即返回） | `3e65e454` | 回归 2 例 + 受影响 5 个 api 测试全绿 |
+| 177MB 大库哈希改 hashlib.file_digest（C 层释放 GIL） | `3e65e454` | 快照相关 77 过 2 挂（均基线既有） |
+| zhipu_api_key 脱敏：/api/settings values+overrides 双处掩码 + set 标志；掩码回写防护；文件 chmod 600；内部消费方走 snapshot() 拿全值 | `6c6dce9a` | 回归 6 例；真机 /api/settings 实测零泄漏 |
+| Vault git 自动提交：晋升后 add -A + commit 锚点，失败告警不阻塞，绝不 push | `2f552f0b` | 回归 3 例（脏仓提交/净仓 noop/非 git 软失败） |
+
+部署：SHA `dae0d1cb…`（PID 27710）。真机三项：ping 5.7ms；/api/settings 全值零泄漏；手动扫描 912ms 返回真实报告。
+
+### 已知限制与后续
+
+- 挂死的**最终微观成因**（系统解析器为何卡死 100 分钟）未钉死——需下次发生时 sudo py-spy 抓栈；看门狗已把不可用时长约束在 ~90 秒内。
+- 待办：失败按源聚合（2.2）、evidence 检索通道（3.2.1，需主人确认语义）、Qdrant 双根核实与 648 缺口（4.3）、master 收敛（5.2，需主人拍板）。
