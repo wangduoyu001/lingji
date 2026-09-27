@@ -1,3 +1,40 @@
+# 当前本机任务：外部优化审计响应
+
+## 本轮：外部优化审计响应（2026-09-27 夜）
+
+```yaml
+task_id: AUDIT_RESPONSE_20260927
+status: ACTIVE
+baseline_commit: 37ea8711
+product_branch: codex/owner-source-intake-mac-repair
+execution_mode: AUDIT_RESPONSE_BATCH
+```
+
+外部优化建议书（基线 5e51f8bb）评审后落地。**建议书机制修正**：其"同步拷贝持 GIL 饿死事件循环"与现场证据不符（挂死期零 CPU 增长、无持 GIL 帧）；真实机制 = 多后台线程分别卡死在系统调用（DNS/sqlite open/iterdir）+ SIGTERM 优雅停机被拖死。修复清单方向采纳、看门狗设计升级。
+
+### 已完成
+
+- [x] **0.1 服务恢复 + 日志归位**：挂死 110 分钟进程 SIGKILL 终止；sidecar stdout/stderr 归位 `logs/runtime-sidecar.log`；挂死证据归档 `logs/runtime-sidecar-hung-20260927.log`；手动重启一律剥离代理环境变量。
+- [x] **5.1 全量基线 diff**：HEAD 与基线 a090676f 失败集合逐条相同（14=14），**本轮零新增回归**；完整清单入档（此前只列 4 个系漏报）。MCP citation 断裂 + slim search 泄漏 relative_path 两个契约级缺陷已修（commit 6546e8d9，白名单去 relative_path 加 citation，vault 定位迁至 citation.path）。
+- [x] **0.2 健康看门狗**：进程内探活绕代理直连 loopback，任何 HTTP 响应（含 401）算活；连续 3 次 × 20s 超时 → SIGTERM，30s 宽限未退 → **SIGKILL 升级**（优雅停机会被卡死线程拖住，仅 SIGTERM 不够）。开关 LINGJI_WATCHDOG_ENABLED，默认开。
+- [x] **提炼 DNS 卡死修复**：`_available_models` 改进程级单线程探针（urllib timeout 管不住 getaddrinfo），至多卡死一个线程；调用方限时 8s 拿最近结果，探不动按空退避。
+- [x] **1.1 扫描移出 HTTP 线程池**：scan_now 走专用单线程执行器，5 秒预算内返回真实报告（快路径契约不变），超预算转"已受理"（进度走 /scans 轮询）；177MB 大库哈希改 `hashlib.file_digest`（C 层释放 GIL）；源级并发由既有调度器 single-flight 管辖。
+- [x] **4.2 密钥脱敏**：/api/settings 的 values 与 overrides 两处一律掩码（dac0…Tuqn）+ `*_set` 标志；掩码回写被识别为未修改绝不覆盖真值；runtime_settings.json chmod 600；内部消费方（提炼真实调用）继续走 snapshot() 拿全值。
+- [x] **4.1 Vault git 自动提交**：晋升落库后 `_vault_git_autocommit` 补版本锚点（add -A + commit，绝不 push）；失败只告警不阻塞；回归 3 例。
+- [x] **部署验证**：SHA `dae0d1cb…`，ping 5.7ms，/api/settings 全值零泄漏，手动扫描 912ms 返回真实报告。
+
+### 待办（下一轮）
+
+- [ ] 2.2 失败按源聚合（1291→≤3）+ PendingAction(actor=owner) + 可行动信息。
+- [ ] 3.2.1 evidence 移出 owner 检索主通道（独立 rank 通道，语义需主人确认）+ 价值门扩展到证据入库 + knowledge 增长 KPI。
+- [ ] 4.3 Qdrant 双根消费者核实（chunk 级 vs 消息级，并非简单冗余）+ 648 chunk 缺口回填 + coverage 诚实化 + >20k 点容量决策。
+- [ ] 5.2 主线收敛（master 726 commit 脱节，需主人拍板合入策略）+ master 坏测试修复。
+- [ ] 5.4 卫生：worktree 归档、死代码删除、文档归档索引。
+
+回滚：0.2/1.1/4.1/4.2 均可独立 revert；看门狗有 LINGJI_WATCHDOG_ENABLED=0 关闭；不改 Vault 语义、不删 raw、不动主人数据。
+
+---
+
 # 当前本机任务：资源占用根治优化·收尾批
 
 ## 本轮：资源占用收尾批（2026-09-27 晚）
