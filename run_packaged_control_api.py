@@ -275,12 +275,13 @@ def install_runtime_lifecycle(
         interval = 20.0
         threshold = 3
         grace_seconds = 30.0
-        startup_grace = 90.0  # 启动宽限：索引重建/回填可慢，不判死
+        boot_deadline_seconds = 600.0  # 启动期：索引重建/大集合打开可慢，给足死限
+        started_at = time.monotonic()
         import urllib.request
 
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        time.sleep(startup_grace)
         failures = 0
+        armed = False  # 首次探活成功后才武装：启动慢≠挂死（2026-09-27 夜误杀教训）
         while True:
             time.sleep(interval)
             request = _read_json(stop_path)
@@ -295,8 +296,16 @@ def install_runtime_lifecycle(
                     alive = 200 <= int(getattr(response, "status", 0) or 0) < 500
             except Exception:
                 alive = False
-            failures = 0 if alive else failures + 1
-            if failures < threshold:
+            if alive:
+                armed = True
+                failures = 0
+                continue
+            if not armed:
+                if time.monotonic() - started_at < boot_deadline_seconds:
+                    continue  # 启动期不判死，只等
+                # 启动超过死限仍无一次成功探活：升级一次，给 Tauri 重启机会
+            elif failures < threshold:
+                failures += 1
                 continue
             try:
                 os.kill(os.getpid(), signal.SIGTERM)
