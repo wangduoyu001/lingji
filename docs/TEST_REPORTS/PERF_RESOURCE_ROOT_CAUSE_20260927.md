@@ -124,3 +124,15 @@ raw 当前 3.38GiB（旧机制 6h 内大副本仍在保护期），随保护窗�
 
 - 挂死的**最终微观成因**（系统解析器为何卡死 100 分钟）未钉死——需下次发生时 sudo py-spy 抓栈；看门狗已把不可用时长约束在 ~90 秒内。
 - 待办：失败按源聚合（2.2）、evidence 检索通道（3.2.1，需主人确认语义）、Qdrant 双根核实与 648 缺口（4.3）、master 收敛（5.2，需主人拍板）。
+
+## 第二批（3.2.1/2.2/4.3/5.2/5.4，2026-09-27 夜·续，主人指示"按你的建议执行"）
+
+| 项 | commit | 验证 |
+|---|---|---|
+| 3.2.1 证据独立通道：memory 通道优先、evidence 殿后带 retrieval_channel 标签；修正点=真正生效的检索器在 src/retrieval/enhanced.py（包导出指向它），其 fallback 重排已改通道优先 | `d188fe24` | 回归 2 例 + 检索扩面 154 过 1 挂（基线既有） |
+| 4.3 Qdrant：双集合粒度不同（chunk 级 vs 消息级）各有消费方，非冗余不删；缺口根因=Ollama 未运行，拉起后连续回填 **796 缺口→0**，之后 B2 fast-path 零成本 | 运维+既有代码 | 6 轮回填实测 remaining 596→269→69→0 |
+| 5.2 主线收敛：master 独有提交为 0（产品分支严格超集领先 736）→ 主仓 master fast-forward 到 3f0ee2c2；**推送 GitHub 被网络阻断（SSL_ERROR_SYSCALL，今晚网络故障）**，恢复后 `git push origin HEAD:master` 即完成 | 本地 3f0ee2c2 | 性能测试收集正常（master 坏测试随树消失） |
+| 5.4 卫生：删死代码 work_api.py、.zcodeignore 入 .gitignore、3 周未动 worktree 移除 | `c67d4986` | api 导入验证正常 |
+| 2.2 失败按源聚合：failure_key 指纹聚合、1,284 次同因失败→1 行、1,291 旧格式行启动迁移为 1 行、PendingAction(actor=owner) 确定性 ID、新端点 /api/work/failures + history.failure_total | `8bd9`（见 git log） | 回归 9 例 + 215 相关测试全过 |
+
+部署：SHA `d631bef6…`（PID 31247）。真机：ping 1ms；/api/work/failures 返回聚合记录；/api/settings 零泄漏。
