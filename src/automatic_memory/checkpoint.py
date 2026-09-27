@@ -97,7 +97,22 @@ def read_value_gate_audit(
     return total, sample
 
 
-def _dir_usage(raw_root: Path) -> int:
+# PERF_RESOURCE_ROOT_CAUSE_20260927 收尾：raw 顶层每个快照一个文件，数量大时
+# 每次核对的全量 stat 扫描成为持续热点（实测 raw 存满后每个来源每轮核对都先
+# 走一遍再失败）。进程级 TTL 缓存把预算检查的陈旧度约束在 60s 内；运行中
+# 的增量记账（raw_used += stat_after.size）不受影响，超限幅度与现状同级。
+_DIR_USAGE_TTL_SECONDS = 60.0
+_DIR_USAGE_CACHE: dict[str, tuple[float, int]] = {}
+_DIR_USAGE_LOCK = threading.Lock()
+
+
+def _dir_usage(raw_root: Path, *, max_age_seconds: float = _DIR_USAGE_TTL_SECONDS) -> int:
+    key = str(raw_root)
+    now = time.monotonic()
+    with _DIR_USAGE_LOCK:
+        cached = _DIR_USAGE_CACHE.get(key)
+        if cached is not None and now - cached[0] < max_age_seconds:
+            return cached[1]
     total = 0
     for entry in raw_root.iterdir():
         try:
@@ -105,6 +120,8 @@ def _dir_usage(raw_root: Path) -> int:
                 total += entry.stat().st_size
         except OSError:
             continue
+    with _DIR_USAGE_LOCK:
+        _DIR_USAGE_CACHE[key] = (time.monotonic(), total)
     return total
 
 
