@@ -62,8 +62,11 @@ class HybridRetriever(BaseHybridRetriever):
             # This is the existing lexical fallback channel fused with the
             # same base authority/filter/dedup path; it is not a second retriever.
             combined = self._fuse(query, combined, [], normalized)
+            # 证据独立通道（3.2.1）：_fuse 已打 retrieval_channel 标签，
+            # 这里重排必须保持 memory 通道优先、evidence 殿后，通道内按分数。
             combined.sort(
                 key=lambda item: (
+                    0 if str(item.get("retrieval_channel") or "memory") == "evidence" else 1,  # reverse=True 下 memory=1 在前
                     float(item.get("retrieval_score") or 0.0),
                     self._importance_value(item.get("importance")),
                     str(item.get("updated_at") or ""),

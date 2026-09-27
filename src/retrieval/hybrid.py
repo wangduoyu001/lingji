@@ -63,6 +63,9 @@ class SearchFilters:
         )
 
 
+_EVIDENCE_MEMORY_TYPE = "structured_evidence"
+
+
 class HybridRetriever:
     """Fuse lexical, optional semantic and metadata signals using RRF."""
 
@@ -449,7 +452,20 @@ class HybridRetriever:
                 if conflicts:
                     winner["authority_conflicts"] = conflicts
             deduped = [item for item in deduped if str(item.get("memory_id") or "") not in hidden]
-        return deduped
+        # 3.2.1 证据独立通道（主人 2026-09-27 拍板）：structured_evidence 是
+        # 溯源证据而非主人记忆，混排会让 99.8% 的证据淹没真知识。分通道排序：
+        # memory 通道（core/evolving/knowledge 等）优先，evidence 通道殿后并
+        # 带标签；证据仍随结果返回供引用与原文展开，绝不丢弃。
+        memory_channel: list[dict[str, Any]] = []
+        evidence_channel: list[dict[str, Any]] = []
+        for item in deduped:
+            if str(item.get("memory_type") or "") == _EVIDENCE_MEMORY_TYPE:
+                item["retrieval_channel"] = "evidence"
+                evidence_channel.append(item)
+            else:
+                item["retrieval_channel"] = "memory"
+                memory_channel.append(item)
+        return memory_channel + evidence_channel
 
     @staticmethod
     def _candidate_key(item: dict[str, Any]) -> str:
