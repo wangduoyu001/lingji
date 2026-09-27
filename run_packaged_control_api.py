@@ -260,12 +260,70 @@ def install_runtime_lifecycle(
             time.sleep(max(0.05, float(poll_seconds)))
 
     atexit.register(cleanup)
+
+    def health_watchdog() -> None:
+        """带升级的进程内健康看门狗（2026-09-27 事故）。
+
+        多线程卡死在系统调用（DNS/文件打开/目录列举）时，端口仍在听但 HTTP
+        零响应，且 SIGTERM 的优雅停机会被卡死线程拖住、进程"杀不掉"。
+        探活绕过环境代理直连 loopback（任何 HTTP 响应——含 401——都算活着）；
+        连续超时先 SIGTERM，宽限期内未恢复则 SIGKILL，把不可用时长约束在
+        阈值 × 间隔 + 宽限之内。
+        """
+        if str(os.environ.get("LINGJI_WATCHDOG_ENABLED", "1")).strip().lower() in {"0", "false", "off"}:
+            return
+        interval = 20.0
+        threshold = 3
+        grace_seconds = 30.0
+        startup_grace = 90.0  # 启动宽限：索引重建/回填可慢，不判死
+        import urllib.request
+
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        time.sleep(startup_grace)
+        failures = 0
+        while True:
+            time.sleep(interval)
+            request = _read_json(stop_path)
+            if request and request.get("instance_id") == instance_id:
+                failures = 0  # 有意停机在途，看门狗不插手
+                continue
+            alive = False
+            try:
+                with opener.open(
+                    f"http://127.0.0.1:{int(port)}/api/runtime/ping", timeout=5.0
+                ) as response:
+                    alive = 200 <= int(getattr(response, "status", 0) or 0) < 500
+            except Exception:
+                alive = False
+            failures = 0 if alive else failures + 1
+            if failures < threshold:
+                continue
+            try:
+                os.kill(os.getpid(), signal.SIGTERM)
+            except Exception:
+                pass
+            deadline = time.monotonic() + grace_seconds
+            while time.monotonic() < deadline:
+                time.sleep(1.0)
+                request = _read_json(stop_path)
+                if request and request.get("instance_id") == instance_id:
+                    return  # 有意停机接手，放弃强杀
+            os.kill(os.getpid(), signal.SIGKILL)
+            return
+
+    atexit.register(cleanup)
     thread = threading.Thread(
         target=monitor,
         name="lingji-sidecar-stop-monitor",
         daemon=True,
     )
     thread.start()
+    watchdog = threading.Thread(
+        target=health_watchdog,
+        name="lingji-sidecar-health-watchdog",
+        daemon=True,
+    )
+    watchdog.start()
     return state
 
 

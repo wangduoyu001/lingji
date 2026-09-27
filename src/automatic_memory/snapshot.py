@@ -500,11 +500,10 @@ class ConsistentSnapshot:
 
     @staticmethod
     def _sha256_file(path: Path) -> str:
-        digest = hashlib.sha256()
+        # file_digest 在 C 层一次完成读+哈希并释放 GIL：177MB 大库的流式哈希
+        # 曾以 Python 循环逐块持 GIL 执行（2026-09-27 挂死事故的加重因素）。
         with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
+            return hashlib.file_digest(handle, "sha256").hexdigest()
 
     @staticmethod
     def _fsync_directory(path: Path) -> None:

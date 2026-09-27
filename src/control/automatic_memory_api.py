@@ -541,6 +541,9 @@ def register_automatic_memory_routes(
         if runtime is None:
             raise HTTPException(status_code=409, detail="automatic-memory runtime is not composed")
         result = call(lambda: runtime.scan_now(request.source_id))
+        if isinstance(result, dict) and result.get("status") == "admitted":
+            # 受理即返回：真实进度走 /scans 轮询（2026-09-27 事故加固）。
+            return result
         if isinstance(result, dict) and result.get("scan_id"):
             # scan_now returns a reconciliation report; the durable scan row
             # is the sole count-evidence authority for action responses.

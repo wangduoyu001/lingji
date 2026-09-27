@@ -14,6 +14,7 @@ from pathlib import Path
 from threading import Event, RLock, Thread
 from typing import Any, Callable
 
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from src.storage import StateDatabase
 
 from .checkpoint import SnapshotJobRunner
@@ -188,6 +189,15 @@ class AutomaticMemoryRuntime:
         self._promotion_stop = Event()
         self._promotion_thread: Thread | None = None
         self._backfill_drain = self._build_vector_backfill_callback(settings)
+        # 手动扫描专用单线程执行器（2026-09-27 事故加固）：整库重拷+哈希绝不
+        # 占用 FastAPI 线程池；单 worker 天然串行化手动扫描（源级并发另有
+        # 调度器 single-flight 管辖）。
+        from concurrent.futures import ThreadPoolExecutor
+
+        self._scan_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lingji-manual-scan")
+        # 快路径（早退/小源）在预算内同步返回真实报告，兼容既有契约；
+        # 超预算才转"已受理"。
+        self._scan_now_budget_seconds = 5.0
         self._backfill_wake = Event()
         self._backfill_stop = Event()
         self._backfill_thread: Thread | None = None
@@ -858,7 +868,36 @@ class AutomaticMemoryRuntime:
             return {"available": False}
 
     def scan_now(self, source_id: str) -> dict[str, object]:
-        result = self.scheduler.reconcile(source_id, reason="manual")
+        """手动核对：立即受理、在专用执行器中执行（2026-09-27 事故加固）。
+
+        扫描（整库重拷+流式哈希）不再同步占用 HTTP 线程池；响应只代表
+        "已受理"，真实进度经 /api/automatic-memory/scans 轮询。无效来源
+        仍同步报错（快路径，不进执行器）。
+        """
+        def _source_id(item: Any) -> str:
+            if isinstance(item, dict):
+                return str(item.get("source_id") or "")
+            return str(getattr(item, "source_id", "") or "")
+
+        known = any(_source_id(item) == str(source_id) for item in self.registry.list_sources())
+        if not known:
+            raise LookupError(f"unknown source: {source_id}")
+
+        def _run() -> Any:
+            return self.scheduler.reconcile(source_id, reason="manual")
+
+        future = self._scan_executor.submit(_run)
+        try:
+            result = future.result(timeout=self._scan_now_budget_seconds)
+        except FuturesTimeoutError:
+            # 慢路径（整库重拷/哈希）：限时预算内没跑完就转"已受理"，绝不让
+            # HTTP 线程池等它；剩余工作在专用执行器里继续，进度走 /scans 轮询。
+            return {
+                "source_id": source_id,
+                "status": "admitted",
+                "complete": True,
+                "next_action": "manual scan admitted; progress via /api/automatic-memory/scans",
+            }
         if is_dataclass(result):
             value = asdict(result)
             value["source_id"] = source_id

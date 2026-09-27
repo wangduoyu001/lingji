@@ -24,6 +24,66 @@ from typing import Any, Callable
 TRANSCRIPT_CHAR_BUDGET = 3500
 TRANSCRIPT_MESSAGE_CAP = 60
 _CHAT_TIMEOUT_SECONDS = 300.0
+
+
+# 模型列表探针（2026-09-27 事故修复）：单守护线程串行拉取 /api/tags，
+# 结果带时间戳缓存。urllib timeout 覆盖不了 socket.getaddrinfo——解析器
+# 卡死时探针线程至多卡死一个，调用方限时等待，拿不到就用最近结果或空。
+_MODEL_LIST_FRESH_SECONDS = 300.0
+_MODEL_LIST_DEADLINE_SECONDS = 8.0
+_PROBE_STATES: dict[str, "_ModelListProbe"] = {}
+_PROBE_STATES_LOCK = threading.Lock()
+
+
+class _ModelListProbe:
+    def __init__(self, base_url: str) -> None:
+        self._base_url = base_url
+        self._wake = threading.Event()
+        self._done = threading.Event()
+        self._lock = threading.Lock()
+        self._fetched_at = 0.0
+        self._models: list[tuple[str, int]] = []
+        threading.Thread(target=self._loop, name="lingji-model-list-probe", daemon=True).start()
+
+    def fetch(self) -> list[tuple[str, int]] | None:
+        """新鲜缓存直接返回；否则唤醒探针限时等待，超时返回 None（不缓存）。"""
+        with self._lock:
+            if time.monotonic() - self._fetched_at < _MODEL_LIST_FRESH_SECONDS:
+                return self._models
+        self._done.clear()
+        self._wake.set()
+        self._done.wait(_MODEL_LIST_DEADLINE_SECONDS)
+        with self._lock:
+            if time.monotonic() - self._fetched_at < _MODEL_LIST_FRESH_SECONDS:
+                return self._models
+        return None
+
+    def _loop(self) -> None:
+        import urllib.request
+
+        while True:
+            self._wake.wait()
+            self._wake.clear()
+            models: list[tuple[str, int]] = []
+            try:
+                with urllib.request.urlopen(
+                    f"{self._base_url}/api/tags", timeout=_TAGS_TIMEOUT_SECONDS
+                ) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                for item in payload.get("models", []):
+                    name = str(item.get("name") or "")
+                    if name:
+                        try:
+                            size = int(item.get("size") or 0)
+                        except (TypeError, ValueError):
+                            size = 0
+                        models.append((name, size))
+            except Exception:
+                models = []
+            with self._lock:
+                self._models = models
+                self._fetched_at = time.monotonic()
+            self._done.set()
 _TAGS_TIMEOUT_SECONDS = 5.0
 _EMBEDDING_MODEL_HINTS = ("embed", "bge", "minilm", "e5")
 _NON_FINITE_JSON = re.compile(r",\s*([\]}])")
@@ -169,24 +229,20 @@ class KnowledgeDistiller:
 
     # ------------------------------------------------------------ model io
     def _available_models(self) -> list[tuple[str, int]]:
-        """返回 [(模型名, 体积字节)]；体积用于优先选小模型（提炼无需大模型）。"""
-        try:
-            import urllib.request
+        """返回 [(模型名, 体积字节)]；体积用于优先选小模型（提炼无需大模型）。
 
-            with urllib.request.urlopen(f"{self.base_url}/api/tags", timeout=_TAGS_TIMEOUT_SECONDS) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-            models = []
-            for item in payload.get("models", []):
-                name = str(item.get("name") or "")
-                if name:
-                    try:
-                        size = int(item.get("size") or 0)
-                    except (TypeError, ValueError):
-                        size = 0
-                    models.append((name, size))
-            return models
-        except Exception:
-            return []
+        走进程级单线程探针：urllib 的 timeout 只约束连接/读，管不住
+        socket.getaddrinfo（DNS 解析）阶段——2026-09-27 事故中提炼线程被
+        解析器卡死 100+ 分钟并拖住优雅停机。探针至多卡死一个线程，调用方
+        按截止时间拿最近一次结果；探不动时返回空（本轮退避，绝不无限阻塞）。
+        """
+        with _PROBE_STATES_LOCK:
+            probe = _PROBE_STATES.get(self.base_url)
+            if probe is None:
+                probe = _ModelListProbe(self.base_url)
+                _PROBE_STATES[self.base_url] = probe
+        models = probe.fetch()
+        return list(models) if models else []
 
     @property
     def configured_model(self) -> str:
