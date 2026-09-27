@@ -253,6 +253,8 @@ def project_item_status(item_status: str, job_status: str | None) -> dict[str, A
             return {"status": "merged", "label": "已合并（之前已导入过相同内容）"}
         return {"status": "kept", "label": "已保留并提取"}
     item = (item_status or "").lower()
+    if item == "skipped_by_value_gate":
+        return {"status": "skipped", "label": "入口价值预判跳过（未入队，可重扫撤销）"}
     if item == "queued":
         return {"status": "pending", "label": "未处理"}
     if item == "failed":

@@ -89,6 +89,29 @@ class RuntimeSettingsStore:
                 0.0,
                 1.0,
             ),
+            # 入口价值预判（PERF_RESOURCE_CLOSEOUT_20260927B）：可调、可见、可撤销。
+            "value_gate_enabled": self._boolean(
+                "intake_gate",
+                "入口价值预判",
+                "太短又没有任何价值信号的会话不再进入提炼流水线，节省 raw 存储、队列、提炼和向量的全链路成本。红线：绝不静默丢弃，每个被拦会话都留审计记录，误拦可在来源页重扫撤销。",
+                True,
+            ),
+            "value_gate_min_turns": self._integer(
+                "intake_gate",
+                "价值预判·最少消息轮数",
+                "会话消息条数低于该值，且字数也低于字数门槛、没有任何价值信号时才会被拦下；被拦会话可在来源页重扫撤销，绝不静默丢弃。",
+                2,
+                0,
+                100,
+            ),
+            "value_gate_min_chars": self._integer(
+                "intake_gate",
+                "价值预判·最少字数",
+                "会话总字数低于该值，且轮数也低于轮数门槛、没有任何价值信号时才会被拦下；被拦会话可在来源页重扫撤销，绝不静默丢弃。",
+                300,
+                0,
+                100000,
+            ),
             # Media extraction limits.
             "media_keyframe_interval_seconds": self._number(
                 "media_processing", "关键帧间隔（秒）", "每隔多少秒提取一张关键帧。", 30.0, 1.0, 86400.0

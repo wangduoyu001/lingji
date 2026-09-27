@@ -2038,6 +2038,43 @@ class StateDatabase:
             )
             return int(cursor.rowcount)
 
+    def clear_automatic_memory_scan_items_by_status(
+        self,
+        status: str,
+        *,
+        source_id: str | None = None,
+        event_type: str = "value_gate_rescan_requested",
+    ) -> int:
+        """Delete manifest rows with the given status so the next scan re-admits them.
+
+        B1 收尾红线：入口价值预判必须可撤销。删除 manifest 行即同时清掉哨兵，
+        下次扫描会因 sentinel 缺失重新采集并按当前阈值重新判定；删除动作本身
+        写入事件审计，即使清到 0 行也留下"重扫被请求"的痕迹，绝不静默。
+        """
+        timestamp = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        with self._lock, self._connection() as connection:
+            cursor = connection.execute(
+                """
+                DELETE FROM automatic_memory_scan_items
+                WHERE status = ? AND (? IS NULL OR source_id = ?)
+                """,
+                (status, source_id, source_id),
+            )
+            cleared = int(cursor.rowcount)
+            connection.execute(
+                """
+                INSERT INTO events(event_type, entity_type, entity_id, payload_json, created_at)
+                VALUES (?, 'automatic_memory_source', ?, ?, ?)
+                """,
+                (
+                    event_type,
+                    source_id,
+                    self._json({"cleared": cleared, "status": status}),
+                    timestamp,
+                ),
+            )
+            return cleared
+
     def upsert_automatic_memory_scan_item_owned(
         self,
         scan_id: str,

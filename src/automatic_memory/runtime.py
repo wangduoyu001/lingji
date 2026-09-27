@@ -104,6 +104,10 @@ class AutomaticMemoryRuntime:
         self.registry = registry or SourceRegistry(state_db)
         self.snapshot = snapshot
         self.runner = runner
+        # B1 收尾：runner 阈值 provider 复用一个懒创建的 RuntimeSettingsStore
+        # （存 self 上，与提炼/晋升各自独立），读失败回退静态 settings 值。
+        self._runner_settings_store: Any | None = None
+        self._runner_settings_store_failed = False
         if scheduler is None:
             self.snapshot = snapshot or ConsistentSnapshot(
                 self.registry,
@@ -120,6 +124,7 @@ class AutomaticMemoryRuntime:
                 value_gate_enabled=bool(getattr(settings, "value_gate_enabled", False)),
                 value_gate_min_turns=int(getattr(settings, "value_gate_min_turns", 2)),
                 value_gate_min_chars=int(getattr(settings, "value_gate_min_chars", 300)),
+                value_gate_config_provider=self._value_gate_config,
             )
             configured_event_watcher = getattr(
                 settings, "automatic_memory_event_watcher_enabled", None
@@ -200,6 +205,44 @@ class AutomaticMemoryRuntime:
             self.registry.add_lifecycle_listener(self._on_source_lifecycle_projection)
         if hasattr(self.pipeline, "add_lifecycle_callback"):
             self.pipeline.add_lifecycle_callback(self._on_extraction_lifecycle)
+
+    def _value_gate_config(self) -> tuple[bool, int, int]:
+        """动态读取入口价值预判阈值；主人改设置后运行中 runner 立即生效。
+
+        B1 收尾：store 懒创建并复用（存 self 上）；任何读取异常都回退构造
+        时的静态 settings 值，绝不因设置读取失败阻断扫描。
+        """
+        settings = self.settings
+        if self._runner_settings_store is None and not self._runner_settings_store_failed:
+            try:
+                from src.control.runtime_settings import RuntimeSettingsStore
+
+                self._runner_settings_store = RuntimeSettingsStore(settings)
+            except Exception:
+                self._runner_settings_store_failed = True
+        store = self._runner_settings_store
+        if store is not None:
+            try:
+                # 只取主人在设置页显式写下的覆盖项（overrides）；目录默认值
+                # 不得压过静态配置（env/config），否则部署级开关会被悄悄翻掉。
+                overrides = store.snapshot()["overrides"]
+                fallback = (
+                    bool(getattr(settings, "value_gate_enabled", False)),
+                    int(getattr(settings, "value_gate_min_turns", 2)),
+                    int(getattr(settings, "value_gate_min_chars", 300)),
+                )
+                return (
+                    bool(overrides.get("value_gate_enabled", fallback[0])),
+                    int(overrides.get("value_gate_min_turns", fallback[1])),
+                    int(overrides.get("value_gate_min_chars", fallback[2])),
+                )
+            except Exception:
+                pass
+        return (
+            bool(getattr(settings, "value_gate_enabled", False)),
+            int(getattr(settings, "value_gate_min_turns", 2)),
+            int(getattr(settings, "value_gate_min_chars", 300)),
+        )
 
     def _on_source_lifecycle_projection(self, source: Any) -> None:
         sink = getattr(self.pipeline, "structured_sink", None)

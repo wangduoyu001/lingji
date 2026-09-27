@@ -41,6 +41,61 @@ _SMALL_PROTECT_SECONDS = 24 * 3600
 _LARGE_PROTECT_SECONDS = 6 * 3600
 _EVICT_LOG_NAME = ".evicted.log"
 
+# PERF_RESOURCE_CLOSEOUT_20260927B：入口价值预判的共享常量与审计工具。
+# runner 写入与 API 读取必须走同一路径函数，避免两处路径漂移。
+VALUE_GATE_AUDIT_FILENAME = "value_gate_skipped.jsonl"
+VALUE_GATE_AUDIT_MAX_ENTRIES = 200
+VALUE_GATE_SKIPPED_STATUS = "skipped_by_value_gate"
+
+
+def value_gate_audit_path(raw_root: Path) -> Path:
+    """被拦会话审计文件的唯一权威路径：``<raw_root>/../runtime/``。"""
+    return Path(raw_root).parent / "runtime" / VALUE_GATE_AUDIT_FILENAME
+
+
+def append_value_gate_audit(raw_root: Path, entry: dict[str, Any]) -> None:
+    """Best-effort 追加审计并滚动截断；审计失败绝不阻断采集。"""
+    try:
+        audit_path = value_gate_audit_path(raw_root)
+        audit_path.parent.mkdir(parents=True, exist_ok=True)
+        with audit_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        lines = audit_path.read_text(encoding="utf-8").splitlines()
+        if len(lines) > VALUE_GATE_AUDIT_MAX_ENTRIES:
+            audit_path.write_text(
+                "\n".join(lines[-VALUE_GATE_AUDIT_MAX_ENTRIES:]) + "\n", encoding="utf-8"
+            )
+    except Exception:
+        pass
+
+
+def read_value_gate_audit(
+    raw_root: Path, *, limit: int = 50
+) -> tuple[int, list[dict[str, Any]]]:
+    """返回（被拦会话条数, 倒序最新 limit 条记录）；文件不存在返回 0 条。
+
+    total 只数被拦会话（带 reason 的条目）；rescan_requested 之类的动作
+    标记计入样本流但不冒充被拦会话数。
+    """
+    try:
+        lines = value_gate_audit_path(raw_root).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return 0, []
+    entries: list[dict[str, Any]] = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            entries.append(parsed)
+    total = sum(1 for entry in entries if entry.get("action") is None)
+    sample = list(reversed(entries[-limit:])) if limit > 0 else []
+    return total, sample
+
 
 def _dir_usage(raw_root: Path) -> int:
     total = 0
@@ -279,6 +334,7 @@ class SnapshotJobRunner:
         value_gate_enabled: bool = False,
         value_gate_min_turns: int = 2,
         value_gate_min_chars: int = 300,
+        value_gate_config_provider: Callable[[], tuple[bool, int, int]] | None = None,
     ):
         if snapshot is None:
             snapshot = snapshotter
@@ -296,6 +352,9 @@ class SnapshotJobRunner:
         self.value_gate_enabled = bool(value_gate_enabled)
         self.value_gate_min_turns = max(int(value_gate_min_turns), 0)
         self.value_gate_min_chars = max(int(value_gate_min_chars), 0)
+        # B1 收尾：阈值可由 provider 每次判定时动态读取（RuntimeSettingsStore），
+        # 主人改设置后运行中的 runner 立即生效；provider 异常时回退静态值。
+        self.value_gate_config_provider = value_gate_config_provider
         self.checkpoints = checkpoint_store or CheckpointStore(
             self.state_db, lease_ttl_seconds=self.lease_ttl_seconds
         )
@@ -591,13 +650,14 @@ class SnapshotJobRunner:
                     gate_text = raw_path.read_text(encoding="utf-8", errors="replace")
                 except Exception:
                     gate_text = ""
+                gate_enabled, gate_min_turns, gate_min_chars = self._value_gate_config()
                 gate = (
                     evaluate_session_value(
                         [gate_text] if gate_text.strip() else [],
-                        min_turns=self.value_gate_min_turns,
-                        min_chars=self.value_gate_min_chars,
+                        min_turns=gate_min_turns,
+                        min_chars=gate_min_chars,
                     )
-                    if self.value_gate_enabled
+                    if gate_enabled
                     else None
                 )
                 if gate is not None and not gate.approved:
@@ -647,7 +707,12 @@ class SnapshotJobRunner:
                 job_id = str(admission.get("job_id") or "")
                 existing_payload = admission.get("payload") if isinstance(admission.get("payload"), dict) else {}
                 association = "existing" if admission.get("existing_job") and str(existing_payload.get("scan_id") or "") != scan_id else "new"
-                manifest_status = f"job:{job_id}:{association}" if job_id else "queued"
+                # B1 收尾：被拒会话从未入队，不得伪装成 "queued"；显式记录
+                # skipped_by_value_gate，主人可在来源页看到并在重扫后撤销。
+                if str(admission.get("status") or "") == VALUE_GATE_SKIPPED_STATUS:
+                    manifest_status = VALUE_GATE_SKIPPED_STATUS
+                else:
+                    manifest_status = f"job:{job_id}:{association}" if job_id else "queued"
                 self.checkpoints.save(checkpoint, manifest_status=manifest_status)
                 cursor = result.relative_path
                 source_sentinel = sentinel
@@ -785,17 +850,29 @@ class SnapshotJobRunner:
             Path(source["root"]).expanduser().absolute()
         ).as_posix()
 
+    def _value_gate_config(self) -> tuple[bool, int, int]:
+        """每次判定时取当前 (enabled, min_turns, min_chars)。
+
+        provider 存在时以其为准（运行中动态生效）；provider 失败回退构造时
+        的静态值，保证判定永远不会因设置读取失败而停摆。
+        """
+        if self.value_gate_config_provider is not None:
+            try:
+                enabled, min_turns, min_chars = self.value_gate_config_provider()
+                return bool(enabled), max(int(min_turns), 0), max(int(min_chars), 0)
+            except Exception:
+                pass
+        return self.value_gate_enabled, self.value_gate_min_turns, self.value_gate_min_chars
+
     def _record_value_gate_skip(self, source_id: str, result: Any, gate: Any) -> None:
         """Append a value-gate skip to the bounded JSONL audit trail.
 
         红线（B1）：绝不静默丢弃——每个被拒会话都留下可查记录（来源、原因、
         规模），主人可按来源重扫撤销；审计失败绝不阻断采集。
         """
-        try:
-            audit_root = self.snapshot.raw_root.parent / "runtime"
-            audit_root.mkdir(parents=True, exist_ok=True)
-            audit_path = audit_root / "value_gate_skipped.jsonl"
-            entry = {
+        append_value_gate_audit(
+            self.snapshot.raw_root,
+            {
                 "skipped_at": datetime.now(timezone.utc).isoformat(timespec="microseconds"),
                 "source_id": source_id,
                 "raw_id": result.raw_id,
@@ -803,15 +880,8 @@ class SnapshotJobRunner:
                 "reason": gate.reason,
                 "message_count": gate.message_count,
                 "total_chars": gate.total_chars,
-            }
-            with audit_path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
-            lines = audit_path.read_text(encoding="utf-8").splitlines()
-            if len(lines) > 200:
-                audit_path.write_text("\n".join(lines[-200:]) + "\n", encoding="utf-8")
-        except Exception:
-            # Audit is best-effort: never block intake on trail failures.
-            pass
+            },
+        )
 
     @staticmethod
     def _sentinel(result: Any) -> str:
@@ -898,4 +968,12 @@ class SnapshotJobRunner:
         )
 
 
-__all__ = ["CheckpointStore", "ResumeToken", "SnapshotJobRunner"]
+__all__ = [
+    "CheckpointStore",
+    "ResumeToken",
+    "SnapshotJobRunner",
+    "VALUE_GATE_SKIPPED_STATUS",
+    "append_value_gate_audit",
+    "read_value_gate_audit",
+    "value_gate_audit_path",
+]

@@ -6,13 +6,18 @@ import math
 import threading
 import time
 from dataclasses import asdict, is_dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
 from src.automatic_memory import AuthorizationScope, SourceRegistry, discover_source_metadata
 from src.automatic_memory.app_manifest import discover_app_manifest, discover_running_processes
+from src.automatic_memory.checkpoint import (
+    VALUE_GATE_SKIPPED_STATUS,
+    append_value_gate_audit,
+    read_value_gate_audit,
+)
 from src.automatic_memory.home import resolve_effective_home
 from src.automatic_memory.job_facts import (
     association_from_status,
@@ -74,6 +79,12 @@ class AutomaticMemoryScanActionRequest(BaseModel):
 
 class AutomaticMemoryRuntimeActionRequest(BaseModel):
     confirmation: bool = True
+
+
+class AutomaticMemoryValueGateRescanRequest(BaseModel):
+    """按来源撤销入口价值预判拦截；body 可省略表示撤销全部来源。"""
+
+    source_id: str | None = None
 
 
 _SCAN_DTO_FIELDS = (
@@ -212,6 +223,7 @@ _SCAN_ITEM_REASON_MAP = {
     ("completed", "reused"): "命中复用，未重复导入",
     ("completed", "failed"): "提取失败",
     ("completed", "cancelled"): "提取已取消",
+    ("completed", "skipped_by_value_gate"): "入口价值预判跳过（未入队，可重扫撤销）",
 }
 
 
@@ -316,6 +328,8 @@ def _manifest_item_result_and_stage(
     status = str((manifest_item or {}).get("status") or "processed").lower()
     if associated_job is not None:
         return _scan_item_result_and_stage(associated_job)
+    if status == "skipped_by_value_gate":
+        return "completed", "skipped_by_value_gate", False, None, None, None
     if status == "reused":
         return "completed", "reused", False, None, None, None
     if status in {"queued", "retrying"}:
@@ -564,6 +578,63 @@ def register_automatic_memory_routes(
         # Resume is the durable retry transition for a paused scan.
         result = call(lambda: registry.retry_scan(request.scan_id))
         return project_scan_dto(result)
+
+    def _value_gate_raw_root() -> Path:
+        runtime = getattr(control, "runtime", None)
+        snapshot = getattr(runtime, "snapshot", None)
+        raw_root = getattr(snapshot, "raw_root", None)
+        if raw_root:
+            return Path(str(raw_root))
+        settings = getattr(control, "settings", control)
+        return Path(str(getattr(settings, "storage_path", "storage"))) / "raw"
+
+    def _value_gate_current_config() -> tuple[bool, int, int]:
+        runtime = getattr(control, "runtime", None)
+        runner = getattr(runtime, "runner", None)
+        reader = getattr(runner, "_value_gate_config", None)
+        if callable(reader):
+            try:
+                enabled, min_turns, min_chars = reader()
+                return bool(enabled), int(min_turns), int(min_chars)
+            except Exception:
+                pass
+        settings = getattr(control, "settings", control)
+        return (
+            bool(getattr(settings, "value_gate_enabled", False)),
+            int(getattr(settings, "value_gate_min_turns", 2)),
+            int(getattr(settings, "value_gate_min_chars", 300)),
+        )
+
+    @app.get("/api/automatic-memory/value-gate/skipped", dependencies=secured)
+    def value_gate_skipped(limit: int = 50) -> dict[str, Any]:
+        """被入口价值预判拦下的会话：计数 + 滚动样本（绝不静默）。"""
+        enabled, min_turns, min_chars = _value_gate_current_config()
+        total, entries = read_value_gate_audit(_value_gate_raw_root(), limit=limit)
+        return {
+            "enabled": enabled,
+            "thresholds": {"min_turns": min_turns, "min_chars": min_chars},
+            "total": total,
+            "entries": entries,
+        }
+
+    @app.post("/api/automatic-memory/value-gate/rescan", dependencies=secured)
+    def value_gate_rescan(request: AutomaticMemoryValueGateRescanRequest) -> dict[str, Any]:
+        """按来源撤销入口价值预判拦截；下次扫描重新采集、按当前阈值重新判定。"""
+        state_db = getattr(control, "state_db", None)
+        if state_db is None:
+            raise HTTPException(status_code=409, detail="state database is not composed")
+        source_id = (request.source_id or "").strip() or None
+        cleared = call(lambda: state_db.clear_automatic_memory_scan_items_by_status(
+            VALUE_GATE_SKIPPED_STATUS, source_id=source_id
+        ))
+        # 审计文件追加撤销痕迹（滚动复用），历史记录不物理删除。
+        append_value_gate_audit(_value_gate_raw_root(), {
+            "action": "rescan_requested",
+            "source_id": source_id,
+            "cleared": cleared,
+            "requested_at": datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+        })
+        return {"cleared": cleared, "source_id": source_id}
 
     @app.get("/api/automatic-memory/sources", dependencies=secured)
     def list_sources() -> list[dict[str, Any]]:
