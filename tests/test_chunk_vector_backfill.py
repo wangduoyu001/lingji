@@ -96,6 +96,49 @@ if __name__ == "__main__":
     unittest.main()
 
 
+    def test_equal_counts_take_fast_path_without_id_sweeps(self):
+        import tempfile
+
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCallback = temp_dir.cleanup
+        root = Path(temp_dir.name)
+        vault = root / "vault"
+        storage = root / "storage"
+        database = MemoryDatabase(storage / "lingji_memory.db")
+        indexer = PEMISIndex(vault, storage)
+        vault.mkdir(parents=True, exist_ok=True)
+        _note(vault, "03-Knowledge/A/fastpath.md", "LJ-MEM-FAST", "快速路径", "# 快速路径\n\n计数一致时跳过全量比对。\n")
+        indexer.build_index()
+        database.rebuild_from_index(indexer.get_all(), vault, MarkdownChunker(max_chars=200, overlap_chars=20))
+
+        ws = workspace(root)
+        provider = QdrantSemanticProvider(ws, FakeEmbeddingProvider())
+        backfill = ChunkVectorBackfill(database, provider)
+        first = backfill.run_once(limit=100)
+        self.assertGreater(first["embedded"], 0, "collection must be filled first")
+
+        coverage_calls: list[list[str]] = []
+        original_coverage = provider.coverage
+
+        def spy_coverage(ids):
+            coverage_calls.append(list(ids))
+            return original_coverage(ids)
+
+        provider.coverage = spy_coverage
+
+        second = backfill.run_once(limit=100)
+        self.assertEqual(second["status"], "fast-path")
+        self.assertEqual(second["embedded"], 0)
+        self.assertEqual(coverage_calls, [], "fast path must not sweep collection ids")
+
+        # Counts drift -> the full sweep path must come back and repair.
+        provider.delete(database.semantic_chunk_rows()[0]["chunk_id"])
+        third = backfill.run_once(limit=100)
+        self.assertEqual(third["status"], "ok")
+        self.assertGreater(third["embedded"], 0, "drift must be repaired by the full sweep")
+
+
+
 class EmbeddingFingerprintGuardTests(unittest.TestCase):
     """同维度换嵌入模型必须被指纹校验拦截（防静默混库，9-23 主人拍板换 Qwen3 前置安全网）。"""
 

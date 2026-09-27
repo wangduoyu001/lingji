@@ -1264,6 +1264,21 @@ class MemoryDatabase:
             output.append(item)
         return output
 
+    def semantic_chunk_count(self) -> int:
+        """Row count of the canonical semantic chunk projection (same JOIN as
+        semantic_chunk_rows, so the two counts are directly comparable)."""
+
+        with self._connection() as connection:
+            return int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM memory_chunks AS c
+                    JOIN memory_documents AS d ON d.memory_id = c.memory_id
+                    """
+                ).fetchone()[0]
+            )
+
     def semantic_chunk_rows(self) -> list[dict[str, Any]]:
         """Return every canonical chunk row for semantic indexing (bounded fields)."""
 

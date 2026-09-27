@@ -32,6 +32,25 @@ class ChunkVectorBackfill:
 
     def run_once(self, limit: int = 200) -> dict[str, Any]:
         limit = max(int(limit), 1)
+        # PERF_RESOURCE_ROOT_CAUSE_20260927 (B2): every drain wake-up used to
+        # pay three O(collection) sweeps (row fetch, coverage probe, full id
+        # scroll) even when nothing drifted. Equal counts mean no missing and
+        # no orphan points in almost every case, so the sweeps are skipped; a
+        # compensating missing+orphan pair is rare and surfaces on the next
+        # count change.
+        try:
+            indexed_count = int(self.provider.count())
+        except Exception:
+            indexed_count = -1
+        expected_count = int(self.database.semantic_chunk_count())
+        if indexed_count >= 0 and expected_count > 0 and indexed_count == expected_count:
+            return {
+                "embedded": 0,
+                "remaining": 0,
+                "expected": expected_count,
+                "status": "fast-path",
+            }
+
         rows = self.database.semantic_chunk_rows()
         if not rows:
             return {"embedded": 0, "remaining": 0, "expected": 0, "status": "empty"}
