@@ -30,12 +30,52 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from pathlib import Path
 from typing import Any
 
 _LOCK = threading.Lock()
 _CLIENTS: dict[str, Any] = {}
+_GUARDED_PATHS: set[str] = set()
+_LOGGER = logging.getLogger(__name__)
+
+# 混库守卫（PERF_RESOURCE_ROOT_CAUSE_20260927 B3）：qdrant-local 把集合注册表
+# 持久化在 <path>/meta.json。若归档只删除了集合目录而没有注销注册，下次任何
+# 进程打开同一路径时，qdrant-local 都会按注册表重建空目录——实测生产数据根的
+# lingji_memory_acceptance 集合因此每次启动都被重建（2026-09-27 15:26:17 实锤）。
+# 守卫规则刻意保守：只注销「非本工作区集合名 + lingji_memory_ 前缀 + 点数为 0」
+# 的注册；有数据的外来集合只告警，绝不静默删除。
+def _deregister_foreign_empty_collections(client: Any, own_collection: str) -> None:
+    try:
+        response = client.get_collections()
+        items = getattr(response, "collections", response)
+        names = {str(getattr(collection, "name", "")) for collection in items}
+    except Exception:
+        return
+    for name in sorted(names):
+        if not name or name == own_collection or not name.startswith("lingji_memory_"):
+            continue
+        try:
+            count = int(client.count(collection_name=name, exact=True).count)
+        except Exception:
+            continue
+        if count != 0:
+            _LOGGER.warning(
+                "embedded qdrant path hosts non-empty foreign collection %r; "
+                "left untouched (mixed-collection guard)",
+                name,
+            )
+            continue
+        try:
+            client.delete_collection(collection_name=name)
+            _LOGGER.warning(
+                "deregistered empty foreign collection %r from embedded qdrant "
+                "storage (mixed-collection guard; registration was stale)",
+                name,
+            )
+        except Exception:
+            continue
 
 
 def _normalize(path: str | Path) -> str:
@@ -43,18 +83,29 @@ def _normalize(path: str | Path) -> str:
     return str(Path(path).expanduser())
 
 
-def shared_embedded_client(path: str | Path) -> Any:
-    """返回 ``path`` 对应的进程级共享客户端；首次调用时创建（幂等）。"""
+def shared_embedded_client(path: str | Path, *, own_collection: str | None = None) -> Any:
+    """返回 ``path`` 对应的进程级共享客户端；首次调用时创建（幂等）。
+
+    ``own_collection`` 由工作区感知的调用方传入（如语义 provider 传自己的集合名），
+    使首次打开该路径时执行一次混库守卫：注销残留的、空的外来 ``lingji_memory_*``
+    集合注册。
+    """
     key = _normalize(path)
     with _LOCK:
         client = _CLIENTS.get(key)
         if client is not None:
+            if own_collection and key not in _GUARDED_PATHS:
+                _GUARDED_PATHS.add(key)
+                _deregister_foreign_empty_collections(client, own_collection)
             return client
         from qdrant_client import QdrantClient
 
         Path(key).mkdir(parents=True, exist_ok=True)
         client = QdrantClient(path=key)
         _CLIENTS[key] = client
+        if own_collection and key not in _GUARDED_PATHS:
+            _GUARDED_PATHS.add(key)
+            _deregister_foreign_empty_collections(client, own_collection)
         return client
 
 
@@ -69,6 +120,7 @@ def close_all() -> None:
                 except Exception:
                     pass
         _CLIENTS.clear()
+        _GUARDED_PATHS.clear()
 
 
 def pooled_paths() -> list[str]:

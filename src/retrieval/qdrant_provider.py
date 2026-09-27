@@ -100,7 +100,7 @@ class QdrantSemanticProvider:
                     # 被拒），这里若自建就会把网关/回填已持有的客户端顶掉，
                     # 表现为 "Storage folder ... is already accessed by another
                     # instance of Qdrant client"，语义通道整段消失。
-                    self._client = shared_embedded_client(path)
+                    self._client = shared_embedded_client(path, own_collection=self.collection)
                     # 池里的客户端不是本对象独占，close() 不得连带关闭它。
                     self._owns_client = False
             except Exception as exc:
