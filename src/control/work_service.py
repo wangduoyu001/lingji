@@ -19,6 +19,9 @@ class WorkControlService:
     def pending_actions(self) -> dict[str, Any]:
         return self.projector.pending_actions()
 
+    def failures(self, limit: int = 50) -> dict[str, Any]:
+        return self.projector.failures(limit=limit)
+
     def work_timeline(self, work_id: str) -> dict[str, Any]:
         return self.projector.timeline(work_id)
 

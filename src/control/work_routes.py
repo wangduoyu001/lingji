@@ -36,6 +36,10 @@ def register_work_routes(app: Any, control: Any, secured: list[Any]) -> None:
     ) -> dict[str, Any]:
         return safe(lambda: control.work_history(limit=limit, offset=offset))
 
+    @app.get('/api/work/failures', dependencies=secured)
+    def failure_records(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
+        return safe(lambda: control.failures(limit=limit))
+
     @app.get('/api/work/timeline/{work_id}', dependencies=secured)
     def work_timeline(work_id: str) -> dict[str, Any]:
         return safe(lambda: control.work_timeline(work_id))

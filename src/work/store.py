@@ -1,13 +1,79 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
-from typing import Any, Literal, Mapping
+from typing import Any, Iterable, Literal, Mapping, Sequence
 
 from src.storage.state_db import StateDatabase
 
 from .models import ExecutionEvent, Failure, NextAction, Outcome, PendingAction, WorkItem
+
+# 指纹剥离的是易变部分（路径、任务号、时间戳、哈希、裸数字），保留错误类别，
+# 否则同一持久故障会因文件名/时间不同而无法聚合成一行。
+_FAILURE_NOISE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bLJ-JOB-[0-9A-Za-z]+\b"),
+    re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"),
+    re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?"),
+    re.compile(r"(?:[A-Za-z]:)?[^\s'\"，。；;()（）]*[/\\][^\s'\"，。；;()（）]*"),
+    re.compile(r"\b[0-9a-fA-F]{16,}\b"),
+)
+
+# 命中即把失败路由给主人（PendingAction actor="owner"）；顺序即优先级。
+_OWNER_HINT_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (
+        ("no approved extraction adapter", "no approved adapter", "adapter not approved"),
+        "该来源缺少可用的提取适配器：可在来源页停用该来源，或等待新版本支持后再启用。",
+    ),
+    (
+        ("size limit", "too large", "storage limit reached", "超限", "过大"),
+        "来源文件超出大小限制：可在来源页移除或拆分过大文件，或等待版本放宽限制。",
+    ),
+    (
+        ("unsupported", "malformed", "not valid", "invalid json", "invalid format", "无法解析", "格式错误", "配置"),
+        "来源内容或配置当前无法处理：请检查该来源的格式与设置，或在来源页停用该来源。",
+    ),
+)
+
+_FAILURE_EVIDENCE_LIMIT = 10
+
+
+def normalize_failure_reason(reason: str) -> str:
+    """Collapse one failure text into its stable category for fingerprinting."""
+    text = str(reason or "")
+    for pattern in _FAILURE_NOISE_PATTERNS:
+        text = pattern.sub(" ", text)
+    text = re.sub(r"\b\d+\b", " ", text)
+    text = re.sub(r"\s+", " ", text).strip().lower()
+    return text or "unknown failure"
+
+
+def failure_key_for(source_id: str, stage: str, normalized_reason: str) -> str:
+    """failure_key = sha256(source_id, stage, normalized_reason)[:16]."""
+    material = "\x00".join((str(source_id or ""), str(stage or ""), str(normalized_reason or "")))
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
+
+
+def classify_failure_action(reason: str, retryable: bool) -> tuple[str, str]:
+    """Return (actor, owner_hint). "system" failures must never enter 需要我."""
+    if retryable:
+        return "system", ""
+    text = str(reason or "").lower()
+    for needles, hint in _OWNER_HINT_RULES:
+        if any(needle in text for needle in needles):
+            return "owner", hint
+    return "system", ""
+
+
+def _merge_bounded(existing: Any, incoming: Iterable[str], limit: int) -> list[str]:
+    merged = [str(item) for item in (existing or []) if str(item or "").strip()][:limit]
+    for item in incoming:
+        text = str(item or "").strip()
+        if text and text not in merged:
+            merged.append(text)
+    return merged[:limit]
 
 
 class WorkStore:
@@ -45,7 +111,10 @@ class WorkStore:
                 );
                 CREATE TABLE IF NOT EXISTS work_failures (
                     failure_id TEXT PRIMARY KEY, work_id TEXT NOT NULL, stage TEXT NOT NULL,
-                    reason TEXT NOT NULL, retryable INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
+                    reason TEXT NOT NULL, retryable INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL,
+                    failure_key TEXT, source_id TEXT, occurrence_count INTEGER NOT NULL DEFAULT 1,
+                    first_seen_at TEXT, last_seen_at TEXT, detail_json TEXT NOT NULL DEFAULT '{}',
+                    requires_owner INTEGER NOT NULL DEFAULT 0
                 );
                 """
             )
@@ -53,6 +122,15 @@ class WorkStore:
                 "work_items": {"updated_at": "TEXT"},
                 "work_outcomes": {"created_at": "TEXT"},
                 "pending_actions": {"action_id": "TEXT", "actor": "TEXT NOT NULL DEFAULT 'owner'", "created_at": "TEXT"},
+                "work_failures": {
+                    "failure_key": "TEXT",
+                    "source_id": "TEXT",
+                    "occurrence_count": "INTEGER NOT NULL DEFAULT 1",
+                    "first_seen_at": "TEXT",
+                    "last_seen_at": "TEXT",
+                    "detail_json": "TEXT NOT NULL DEFAULT '{}'",
+                    "requires_owner": "INTEGER NOT NULL DEFAULT 0",
+                },
             }.items():
                 present = {str(row[1]) for row in connection.execute(f"PRAGMA table_info({table})")}
                 for name, definition in columns.items():
@@ -74,7 +152,53 @@ class WorkStore:
             connection.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_actions_action_id_unique ON pending_actions(action_id)"
             )
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_work_failures_failure_key ON work_failures(failure_key)")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_work_failures_source_recent ON work_failures(source_id, last_seen_at)")
+            self._merge_legacy_failure_rows(connection)
         self.reconcile_extraction_jobs()
+
+    @staticmethod
+    def _merge_legacy_failure_rows(connection: sqlite3.Connection) -> None:
+        """One-time collapse of pre-aggregation rows: same source+stage+reason keeps one row.
+
+        聚合上线前，同一持久故障被逐扫描写成大量 work_failures 行；此处把它们合并成
+        聚合口径（计数=合并行数），否则历史库的失败数字永远停留在膨胀值。
+        """
+        stale = connection.execute(
+            """
+            SELECT rowid, failure_id, work_id, stage, reason, created_at
+            FROM work_failures
+            WHERE failure_key IS NULL OR failure_key = ''
+            """
+        ).fetchall()
+        if not stale:
+            return
+        sources = {
+            str(row[0] or ""): str(row[1] or "")
+            for row in connection.execute("SELECT work_id, source_id FROM work_items").fetchall()
+        }
+        groups: dict[str, list[sqlite3.Row]] = {}
+        for row in stale:
+            key = failure_key_for(
+                sources.get(str(row["work_id"]), ""),
+                str(row["stage"]),
+                normalize_failure_reason(str(row["reason"])),
+            )
+            groups.setdefault(key, []).append(row)
+        for key, rows in groups.items():
+            rows.sort(key=lambda item: (str(item["created_at"] or ""), int(item["rowid"])))
+            keep = rows[-1]
+            connection.execute(
+                """
+                UPDATE work_failures
+                SET failure_key = ?, source_id = ?, occurrence_count = ?,
+                    first_seen_at = ?, last_seen_at = ?
+                WHERE failure_id = ?
+                """,
+                (key, sources.get(str(keep["work_id"]), ""), len(rows), rows[0]["created_at"], keep["created_at"], keep["failure_id"]),
+            )
+            for row in rows[:-1]:
+                connection.execute("DELETE FROM work_failures WHERE failure_id = ?", (row["failure_id"],))
 
     @staticmethod
     def _json(value: Any) -> str:
@@ -135,12 +259,319 @@ class WorkStore:
 
     def save_failure(self, failure: Failure) -> None:
         with self.state._lock, self.state._connection() as connection:
-            connection.execute("INSERT OR REPLACE INTO work_failures(failure_id, work_id, stage, reason, retryable, created_at) VALUES (?, ?, ?, ?, ?, ?)", (failure.failure_id, failure.work_id, failure.stage, failure.reason, int(failure.retryable), failure.created_at))
+            self._upsert_failure_record(
+                connection,
+                work_id=failure.work_id,
+                stage=failure.stage,
+                reason=failure.reason,
+                retryable=failure.retryable,
+                occurred_at=failure.created_at,
+            )
 
     def get_failure(self, work_id: str) -> Failure | None:
         with self.state._connection() as connection:
-            row = connection.execute("SELECT failure_id, stage, reason, retryable, created_at FROM work_failures WHERE work_id = ? ORDER BY created_at DESC LIMIT 1", (work_id,)).fetchone()
-        return Failure(work_id=work_id, failure_id=row[0], stage=row[1], reason=row[2], retryable=bool(row[3]), created_at=row[4]) if row else None
+            row = connection.execute(
+                """
+                SELECT failure_id, stage, reason, retryable, created_at, failure_key, source_id,
+                       occurrence_count, first_seen_at, last_seen_at, detail_json
+                FROM work_failures WHERE work_id = ? ORDER BY created_at DESC LIMIT 1
+                """,
+                (work_id,),
+            ).fetchone()
+            if row is None:
+                # 聚合后失败行挂在首次/最近一次失败的 work 上；同来源的其他失败工作
+                # 通过 source_id 取回同一条聚合事实，而不是显示成"无失败明细"。
+                source_row = connection.execute("SELECT source_id FROM work_items WHERE work_id = ?", (work_id,)).fetchone()
+                source_id = str(source_row[0] or "").strip() if source_row else ""
+                if source_id:
+                    row = connection.execute(
+                        """
+                        SELECT failure_id, stage, reason, retryable, created_at, failure_key, source_id,
+                               occurrence_count, first_seen_at, last_seen_at, detail_json
+                        FROM work_failures WHERE source_id = ?
+                        ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1
+                        """,
+                        (source_id,),
+                    ).fetchone()
+        if not row:
+            return None
+        try:
+            detail = json.loads(row[10] or "{}")
+        except json.JSONDecodeError:
+            detail = {}
+        return Failure(
+            work_id=work_id,
+            failure_id=row[0],
+            stage=row[1],
+            reason=row[2],
+            retryable=bool(row[3]),
+            created_at=row[4],
+            failure_key=str(row[5] or ""),
+            source_id=str(row[6] or ""),
+            occurrence_count=int(row[7] or 1),
+            first_seen_at=str(row[8] or ""),
+            last_seen_at=str(row[9] or ""),
+            detail=detail if isinstance(detail, dict) else {},
+        )
+
+    def list_failure_records(self, limit: int = 50, *, source_id: str | None = None) -> list[dict[str, Any]]:
+        """Aggregated failure ledger: one row per source+stage+reason fingerprint."""
+        if int(limit) < 1:
+            raise ValueError("limit must be positive")
+        query = """
+            SELECT failure_id, work_id, stage, reason, retryable, created_at, failure_key, source_id,
+                   occurrence_count, first_seen_at, last_seen_at, detail_json, requires_owner
+            FROM work_failures
+        """
+        params: list[Any] = []
+        if source_id:
+            query += " WHERE source_id = ?"
+            params.append(str(source_id))
+        query += " ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT ?"
+        params.append(int(limit))
+        with self.state._connection() as connection:
+            rows = connection.execute(query, tuple(params)).fetchall()
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                detail = json.loads(row[11] or "{}")
+            except json.JSONDecodeError:
+                detail = {}
+            records.append({
+                "failure_id": row[0],
+                "work_id": row[1],
+                "stage": row[2],
+                "reason": row[3],
+                "retryable": bool(row[4]),
+                "created_at": row[5],
+                "failure_key": str(row[6] or ""),
+                "source_id": str(row[7] or ""),
+                "occurrence_count": int(row[8] or 1),
+                "first_seen_at": str(row[9] or ""),
+                "last_seen_at": str(row[10] or ""),
+                "requires_owner": bool(row[12]),
+                "detail": detail if isinstance(detail, dict) else {},
+            })
+        return records
+
+    def count_failure_records(self) -> int:
+        """失败对账口径：聚合后的持久失败条数，不是逐扫描逐文件的行数。"""
+        with self.state._connection() as connection:
+            row = connection.execute("SELECT COUNT(*) FROM work_failures").fetchone()
+        return int(row[0] or 0)
+
+    def record_source_failure(
+        self,
+        work_id: str,
+        *,
+        stage: str,
+        reason: str,
+        retryable: bool = False,
+        source_id: str | None = None,
+        source_title: str | None = None,
+        files: Sequence[str] = (),
+        job_ids: Sequence[str] = (),
+        raw_error: str | None = None,
+        attempts: int | None = None,
+        occurred_at: str | None = None,
+    ) -> dict[str, Any]:
+        """Aggregate one failure occurrence by source+stage+reason and route its actor.
+
+        同一 failure_key 只递增计数并刷新有界 evidence，不新增行；owner 类失败维护
+        恰好一条未完成 PendingAction（确定性 action_id，重复出现只更新）。
+        """
+        normalized = normalize_failure_reason(reason)
+        actor, owner_hint = classify_failure_action(reason, retryable)
+        timestamp = occurred_at or datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        incoming_files = [str(item or "").strip() for item in files if str(item or "").strip()]
+        incoming_job_ids = [str(item or "").strip() for item in job_ids if str(item or "").strip()]
+        with self.state._lock, self.state._connection() as connection:
+            resolved_source = str(source_id or "").strip()
+            resolved_title = str(source_title or "").strip()
+            if not resolved_source or not resolved_title:
+                work_row = connection.execute(
+                    "SELECT source_id, title FROM work_items WHERE work_id = ?", (work_id,)
+                ).fetchone()
+                if work_row is not None:
+                    resolved_source = resolved_source or str(work_row[0] or "").strip()
+                    resolved_title = resolved_title or str(work_row[1] or "").strip()
+            key = failure_key_for(resolved_source, stage, normalized)
+            existing = connection.execute(
+                "SELECT occurrence_count, detail_json FROM work_failures WHERE failure_key = ?",
+                (key,),
+            ).fetchone()
+            detail: dict[str, Any] = {}
+            if existing is not None:
+                try:
+                    loaded = json.loads(existing["detail_json"] or "{}")
+                    detail = dict(loaded) if isinstance(loaded, dict) else {}
+                except json.JSONDecodeError:
+                    detail = {}
+            detail["files"] = _merge_bounded(detail.get("files"), incoming_files, _FAILURE_EVIDENCE_LIMIT)
+            detail["job_ids"] = _merge_bounded(detail.get("job_ids"), incoming_job_ids, _FAILURE_EVIDENCE_LIMIT)
+            detail["file_count"] = max(int(detail.get("file_count") or 0), len(incoming_files), len(detail["files"]))
+            detail["job_count"] = max(int(detail.get("job_count") or 0), len(incoming_job_ids), len(detail["job_ids"]))
+            try:
+                attempt_value = int(attempts) if attempts is not None else 0
+            except (TypeError, ValueError):
+                attempt_value = 0
+            detail["attempts_max"] = max(int(detail.get("attempts_max") or 0), attempt_value)
+            detail["raw_error"] = (str(raw_error or "").strip() or str(detail.get("raw_error") or ""))[:500]
+            detail["source_title"] = resolved_title or str(detail.get("source_title") or "")
+            detail["owner_hint"] = owner_hint or str(detail.get("owner_hint") or "")
+            detail["last_work_id"] = str(work_id)
+            if existing is None:
+                connection.execute(
+                    """
+                    INSERT INTO work_failures(
+                        failure_id, work_id, stage, reason, retryable, created_at,
+                        failure_key, source_id, occurrence_count, first_seen_at, last_seen_at,
+                        detail_json, requires_owner
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+                    """,
+                    (
+                        f"failure-agg:{key}", work_id, stage, str(reason or "")[:2000], int(retryable), timestamp,
+                        key, resolved_source, timestamp, timestamp, self._json(detail), int(actor == "owner"),
+                    ),
+                )
+                occurrences = 1
+                self._append_failure_audit(
+                    connection,
+                    failure_key=key,
+                    source_id=resolved_source,
+                    stage=stage,
+                    reason=reason,
+                    normalized=normalized,
+                    occurrences=occurrences,
+                    actor=actor,
+                    files=detail["files"],
+                    created_at=timestamp,
+                )
+            else:
+                occurrences = int(existing["occurrence_count"] or 1) + 1
+                connection.execute(
+                    """
+                    UPDATE work_failures
+                    SET last_seen_at = ?, occurrence_count = ?, detail_json = ?, reason = ?,
+                        retryable = ?, requires_owner = ?, work_id = ?
+                    WHERE failure_key = ?
+                    """,
+                    (timestamp, occurrences, self._json(detail), str(reason or "")[:2000], int(retryable), int(actor == "owner"), work_id, key),
+                )
+            if actor == "owner":
+                self._upsert_owner_pending_action(
+                    connection,
+                    failure_key=key,
+                    work_id=work_id,
+                    hint=owner_hint,
+                    occurrences=occurrences,
+                    timestamp=timestamp,
+                )
+        return {
+            "failure_key": key,
+            "source_id": resolved_source,
+            "stage": stage,
+            "occurrences": occurrences,
+            "actor": actor,
+            "requires_owner": actor == "owner",
+        }
+
+    @staticmethod
+    def _upsert_owner_pending_action(
+        connection: sqlite3.Connection,
+        *,
+        failure_key: str,
+        work_id: str,
+        hint: str,
+        occurrences: int,
+        timestamp: str,
+    ) -> None:
+        action_id = f"failure-owner:{failure_key}"
+        description = hint if occurrences <= 1 else f"{hint}（已累计 {occurrences} 次）"
+        row = connection.execute("SELECT id, resolved FROM pending_actions WHERE action_id = ?", (action_id,)).fetchone()
+        if row is None:
+            connection.execute(
+                "INSERT INTO pending_actions(work_id, description, resolved, action_id, actor, created_at) VALUES (?, ?, 0, ?, 'owner', ?)",
+                (work_id, description, action_id, timestamp),
+            )
+        elif int(row["resolved"] or 0) == 0:
+            # 同 key 未完成的待办只更新，不重复创建；已解决的保持解决状态。
+            connection.execute(
+                "UPDATE pending_actions SET work_id = ?, description = ?, created_at = ? WHERE id = ?",
+                (work_id, description, timestamp, row["id"]),
+            )
+
+    @staticmethod
+    def _append_failure_audit(
+        connection: sqlite3.Connection,
+        *,
+        failure_key: str,
+        source_id: str,
+        stage: str,
+        reason: str,
+        normalized: str,
+        occurrences: int,
+        actor: str,
+        files: list[str],
+        created_at: str,
+    ) -> None:
+        """一次性的全局审计事件（stable_event_id 幂等）；后续重复计入聚合行本身。"""
+        stable_event_id = f"work-failure-aggregated:{failure_key}"
+        if connection.execute("SELECT 1 FROM events WHERE stable_event_id = ? LIMIT 1", (stable_event_id,)).fetchone():
+            return
+        connection.execute(
+            """
+            INSERT INTO events(event_type, entity_type, entity_id, payload_json, created_at, stable_event_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "work.failure_aggregated",
+                "work_failure",
+                source_id or None,
+                json.dumps({
+                    "failure_key": failure_key,
+                    "stage": stage,
+                    "reason": str(reason or "")[:500],
+                    "normalized_reason": normalized,
+                    "occurrences": occurrences,
+                    "actor": actor,
+                    "files": files[:_FAILURE_EVIDENCE_LIMIT],
+                }, ensure_ascii=False, sort_keys=True),
+                created_at,
+                stable_event_id,
+            ),
+        )
+
+    def _upsert_failure_record(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        work_id: str,
+        stage: str,
+        reason: str,
+        retryable: bool,
+        occurred_at: str,
+    ) -> None:
+        """Aggregate the durable failure row by source+stage+reason (transition path)."""
+        work_row = connection.execute("SELECT source_id FROM work_items WHERE work_id = ?", (work_id,)).fetchone()
+        source_id = str(work_row[0] or "").strip() if work_row is not None else ""
+        key = failure_key_for(source_id, stage, normalize_failure_reason(reason))
+        existing = connection.execute("SELECT failure_id FROM work_failures WHERE failure_key = ?", (key,)).fetchone()
+        if existing is None:
+            connection.execute(
+                """
+                INSERT INTO work_failures(
+                    failure_id, work_id, stage, reason, retryable, created_at,
+                    failure_key, source_id, occurrence_count, first_seen_at, last_seen_at, detail_json, requires_owner
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, '{}', 0)
+                """,
+                (f"failure-agg:{key}", work_id, stage, str(reason or "")[:2000], int(retryable), occurred_at, key, source_id, occurred_at, occurred_at),
+            )
+        else:
+            connection.execute(
+                "UPDATE work_failures SET last_seen_at = ?, occurrence_count = occurrence_count + 1, work_id = ? WHERE failure_key = ?",
+                (occurred_at, work_id, key),
+            )
 
     def add_pending_action(self, action: PendingAction) -> None:
         with self.state._lock, self.state._connection() as connection:
@@ -233,8 +664,13 @@ class WorkStore:
         stage: str = "extraction",
         retryable: bool = False,
         occurred_at: str | None = None,
+        skip_failure_record: bool = False,
     ) -> None:
-        """Apply one idempotent extraction lifecycle transition atomically."""
+        """Apply one idempotent extraction lifecycle transition atomically.
+
+        skip_failure_record：调用方已通过 record_source_failure 写入聚合失败行时，
+        跳过这里的默认聚合写，避免同一失败按两条不同指纹重复入账。
+        """
         if phase not in {"retrying", "completed", "failed"}:
             raise ValueError(f"Unsupported extraction transition: {phase}")
         timestamp = occurred_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -285,7 +721,10 @@ class WorkStore:
             evidence_json = self._json(dict(evidence))
             if phase == "retrying":
                 connection.execute("DELETE FROM work_outcomes WHERE work_id = ?", (work_id,))
-                connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
+                connection.execute(
+                    "UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0 AND (action_id IS NULL OR action_id NOT LIKE 'failure-owner:%')",
+                    (work_id,),
+                )
                 connection.execute(
                     """
                     INSERT OR IGNORE INTO execution_events(event_id, work_id, event_type, detail_json, created_at)
@@ -318,6 +757,18 @@ class WorkStore:
                     (f"work:{work_id}:extraction.completed", work_id, self._json({"summary": summary, "evidence": dict(evidence)}), timestamp),
                 )
                 connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
+                # 该来源恢复可提取后，历史失败留下的 owner 待办已过时，一并关闭。
+                source_row = connection.execute("SELECT source_id FROM work_items WHERE work_id = ?", (work_id,)).fetchone()
+                source_id = str(source_row[0] or "").strip() if source_row is not None else ""
+                if source_id:
+                    connection.execute(
+                        """
+                        UPDATE pending_actions SET resolved = 1
+                        WHERE resolved = 0 AND action_id LIKE 'failure-owner:%'
+                          AND work_id IN (SELECT work_id FROM work_items WHERE source_id = ?)
+                        """,
+                        (source_id,),
+                    )
                 connection.execute(
                     """
                     INSERT INTO work_next_actions(work_id, action_id, description, actor, created_at)
@@ -327,14 +778,15 @@ class WorkStore:
                     (work_id, f"next:{work_id}:completed", "系统继续维护可检索记忆", timestamp),
                 )
             else:
-                failure_id = f"failure:{work_id}:{stage}"
-                connection.execute(
-                    """
-                    INSERT OR REPLACE INTO work_failures(failure_id, work_id, stage, reason, retryable, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (failure_id, work_id, stage, summary, int(retryable), timestamp),
-                )
+                if not skip_failure_record:
+                    self._upsert_failure_record(
+                        connection,
+                        work_id=work_id,
+                        stage=stage,
+                        reason=summary,
+                        retryable=retryable,
+                        occurred_at=timestamp,
+                    )
                 connection.execute(
                     """
                     INSERT INTO work_outcomes(work_id, status, summary, evidence_json, created_at)
@@ -351,14 +803,21 @@ class WorkStore:
                     (f"work:{work_id}:failed:{stage}", work_id, self._json({"stage": stage, "reason": summary, "retryable": retryable, "evidence": dict(evidence)}), timestamp),
                 )
                 if retryable:
-                    connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
+                    connection.execute(
+                        "UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0 AND (action_id IS NULL OR action_id NOT LIKE 'failure-owner:%')",
+                        (work_id,),
+                    )
                     action_id = f"next:{work_id}:retrying"
                     description = "重试处理"
                     actor = "system"
                 else:
                     # 不可重试的失败是最终事实，不是主人的待办：自动关闭旧待办，
                     # 系统接管下一步（失败明细已在处理详情/工作记录可查）。
-                    connection.execute("UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0", (work_id,))
+                    # failure-owner 待办例外：它正是这条失败路由给主人的可行动待办。
+                    connection.execute(
+                        "UPDATE pending_actions SET resolved = 1 WHERE work_id = ? AND resolved = 0 AND (action_id IS NULL OR action_id NOT LIKE 'failure-owner:%')",
+                        (work_id,),
+                    )
                     action_id = f"next:{work_id}:failed-auto"
                     description = "自动记录失败原因，已保留原始文件，不影响已导入内容"
                     actor = "system"

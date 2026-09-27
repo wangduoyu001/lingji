@@ -41,6 +41,15 @@ class WorkProjector:
         self.store.reconcile_extraction_jobs()
         return {"pending_actions": [dict(item.__dict__) for item in self.store.list_pending(limit=limit)]}
 
+    def failures(self, limit: int = 50) -> dict[str, Any]:
+        """聚合失败台账：一条失败对应一个 来源+阶段+原因指纹，不是逐扫描逐文件。"""
+        if int(limit) < 1:
+            raise ValueError("limit must be positive")
+        return {
+            "failures": self.store.list_failure_records(int(limit)),
+            "total": self.store.count_failure_records(),
+        }
+
     @staticmethod
     def _friendly_summary(fact: dict[str, Any]) -> dict[str, Any]:
         work = fact.get("work") or {}
@@ -83,7 +92,8 @@ class WorkProjector:
             fact["summary"] = self._friendly_summary(fact)
             items.append(fact)
         total = self.store.count_work()
-        return {"items": items, "limit": int(limit), "offset": int(offset), "total": total, "has_more": int(offset) + len(items) < total}
+        # 失败对账口径：聚合后的持久失败条数，供页面展示真实失败数而非膨胀值。
+        return {"items": items, "limit": int(limit), "offset": int(offset), "total": total, "failure_total": self.store.count_failure_records(), "has_more": int(offset) + len(items) < total}
 
     def resolve_pending(self, action_id: str) -> dict[str, Any]:
         action = self.store.resolve_pending_action(action_id)

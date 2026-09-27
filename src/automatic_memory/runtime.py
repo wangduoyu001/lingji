@@ -1062,7 +1062,18 @@ class AutomaticMemoryRuntime:
             if item.get("_automatic_memory_association") != "existing"
         ]
         if failed_jobs:
-            self.work_bridge.record_failure(work_id, stage="extraction", reason="一个或多个来源文件提取失败，其他来源仍可继续", retryable=False, evidence={"scan_id": scan_id, "completed_jobs": len(completed_jobs), "failed_jobs": [item.get("job_id") for item in failed_jobs], "processing_status": "partial_failure" if completed_jobs else "failed"})
+            # 逐文件携带可行动信息：相对路径、job_id、原始适配器错误、尝试次数，
+            # 供失败聚合（work_failures 按来源+阶段+原因指纹）与主人待办使用。
+            file_failures = []
+            for item in failed_jobs:
+                payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+                file_failures.append({
+                    "relative_path": str(payload.get("relative_path") or ""),
+                    "job_id": str(item.get("job_id") or ""),
+                    "error": str(item.get("last_error") or ""),
+                    "attempts": item.get("attempts"),
+                })
+            self.work_bridge.record_failure(work_id, stage="extraction", reason="一个或多个来源文件提取失败，其他来源仍可继续", retryable=False, evidence={"scan_id": scan_id, "completed_jobs": len(completed_jobs), "failed_jobs": [item.get("job_id") for item in failed_jobs], "processing_status": "partial_failure" if completed_jobs else "failed"}, file_failures=file_failures)
             self._scan_reports.pop(scan_id, None)
             return
         queued_raw = getattr(report, "queued", None) if report is not None else None

@@ -70,3 +70,10 @@ class Failure:
     retryable: bool = False
     failure_id: str = field(default_factory=lambda: str(uuid4()))
     created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
+    # 聚合口径字段：同 failure_key 的重复失败不新增行，只累计次数并刷新证据。
+    failure_key: str = ""
+    source_id: str = ""
+    occurrence_count: int = 1
+    first_seen_at: str = ""
+    last_seen_at: str = ""
+    detail: dict[str, Any] = field(default_factory=dict)
