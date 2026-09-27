@@ -78,3 +78,27 @@
 test_formal_mcp_search_entry、test_reconciliation_runs_after_event_silence、test_reconciliation_admits_once_and_persists_report、test_memory_vector_and_coverage_endpoints_return_shared_snapshot。
 
 回滚：`git revert` c24ab5b6/f60fd015/2d7e9d1c/ea9e8703 并重新打包；B1 有开关；数据层加法可保留。
+
+## 主人拍板落地（性能/硬盘双重收敛，2026-09-27 晚，commit addbfef8）
+
+主人指示"不得过度占用性能与硬盘空间（包括备份），其他按最优解"。三项落地：
+
+| 项 | 内容 | 验证 |
+|---|---|---|
+| 自适应快照节流 | 窗口 = max(30min, 最近真采集最大快照字节 ÷ 0.5MB/s ÷ 5%)；大源自动拉长（177MB→124min），小源保持响应 | 回归 7 例；真机静止 CPU **1%**（此前 23-33%） |
+| 小文件保护窗 24h→6h | churn 保护地板 ~1.6GiB→~0.4GiB | 回归 10 例 |
+| raw 上限 3GiB→2GiB | 数据根 .env（备份 .env.bak-20260927） | 手动触发采集：逐出+采集正常完成，.evicted.log 有账 |
+
+### 根因定性修正（替代上一节"遗留热点证据链"的未定论）
+
+持续 26% CPU 的机制 = **唤醒→300 秒回填排水循环接力**：旧 30 分钟节流下核对频繁完成，每次完成唤醒排水（消息层全量滚动比对 + chunk 层比对 + 嵌入），循环接力表现为准连续烧 CPU；重启后积压+唤醒风暴放大。faulthandler（lldb 同用户注入）证明静止期全部 Python 线程空闲——燃烧随排水起止。当前静止 1%。残余不确定：排水轮内具体 SHA256 调用点未钉死（py-spy 需 sudo 密码）；vectorize 端点观测到 >400s 挂起于 Ollama 嵌入等待（0% CPU），列为观察项。
+
+### 磁盘收敛路径
+
+raw 当前 3.38GiB（旧机制 6h 内大副本仍在保护期），随保护窗过期在 ≤6h 内收敛到 2GiB 上限附近；稳态地板（6h 大副本 ×3 + 6h 小文件）≈1.2-1.5GiB。备份维度审计：生产 backups 为空，~/LingJiAcceptance/backups 仅 42MB 归档包（保留）。
+
+### 后续观察项（下一轮）
+
+- vectorize/嵌入链路 >400s 挂起（Ollama 服务状态？）——若复现，给嵌入调用加超时熔断。
+- 排水轮内 SHA256 调用点：联网环境用 sudo py-spy 一次定位。
+- 大源到期（部署后 ~2h）的采集周期实测，确认占空比 ≤5-7%。

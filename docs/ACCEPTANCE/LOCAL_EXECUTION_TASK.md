@@ -19,6 +19,8 @@ execution_mode: PERF_ROOT_CAUSE_CLOSEOUT_BATCH
 - [x] **B3 守卫**（2026-09-27 晚，commit 2d7e9d1c）：根因实锤——上轮归档只删集合目录，`<data-root>/qdrant/meta.json` 注册表仍登记 `lingji_memory_acceptance`，qdrant-local 每次打开按注册表重建空目录（12KB storage.sqlite）。修复：embedded 客户端池打开路径时自动注销"非本工作区且点数为 0"的外来集合注册（幂等守卫，有数据的集合只告警不删）；meta.json 实际清理随下次重启窗口执行。
 - [x] **C**（2026-09-27 晚，commit ea9e8703）：vector_backfill 死 SQL（`_pending_message_rows`，NOT EXISTS 无法跨 qdrant 的残留）删除；run_once 增量 diff 默认不拉向量本体（payload-only scroll）；退化向量/坍缩治理改为显式 deep 检查路径（语义保留、不再每轮全量拉向量）；`create_collection` 从逐条循环提前到集合缺失时一次性创建。extraction_jobs.status 索引已核实由 idx_extraction_jobs_due 前缀覆盖，无需新建。
 - [x] **E（真机复测追加，后又回滚：commit 3fb2f1d6 → revert 45c5bb59）**：空闲 CPU 未达标（持续 ~23-33%，队列空、日志静默）。最初假设 dir-usage stat 风暴，缓存修复后无改善即回滚——真实 raw 为 `storage/raw`（3.05GB、507 顶层文件，扫描微秒级）。【已定位，见下】最初误判为待查热点，后经 lsof+文件增长+节流记录实锤：这是滚动大库（本会话所在的 177MB 会话库）按 1800s 节流整库重拷+流式 SHA-256 的设计行为，见「真机结果」节。
+- [x] **F（主人拍板落地，2026-09-27 晚，commit addbfef8）**：主人指示"不得过度占用性能与硬盘（含备份），其他按最优解"。落地：①自适应快照节流——窗口 = max(基准 30 分钟, 最近一次真采集最大快照字节 ÷ 0.5MB/s ÷ 5% 目标占空比)，大源自动拉长间隔（177MB 库 → ~124 分钟），小源保持基准响应，单源 CPU 占空比自限 ~5%；②小文件保护窗 24h→6h（churn 地板从 ~1.6GiB 降到 ~0.4GiB）；③raw 上限 3GiB→2GiB（数据根 .env，备份 .env.bak-20260927）。回归：test_snapshot_adaptive_throttle.py 7 例 + test_raw_retention.py 10 例全绿。
+- [x] **真机验证（SHA df8c9f96，PID 22173）**：静止 CPU **1%**（此前 23-33%）；手动触发采集 → 逐出+采集链路在 2GiB 上限下正常完成（.evicted.log 有账）。**根因定性修正**：持续 26% CPU = 唤醒→300 秒回填排水循环接力（旧核对风暴高频唤醒），非单一缺陷；静止期的具体 SHA256 调用点未最终钉死（py-spy 需 sudo），时间线相关性已实锤。vectorize 端点观测到 >400s 挂起于 Ollama 嵌入等待（0% CPU），列为观察项。
 
 ### 验收标准
 
