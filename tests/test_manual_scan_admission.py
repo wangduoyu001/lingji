@@ -78,9 +78,9 @@ def test_scan_now_admits_and_executes_in_background(tmp_path: Path) -> None:
     assert terminal, "受理后的扫描必须在专用执行器中真实执行到终态"
 
 
-def test_scan_now_rejects_unknown_source_synchronously(tmp_path: Path) -> None:
+def test_scan_now_reports_unknown_source_without_raising(tmp_path: Path) -> None:
+    """未知来源沿用旧契约：不抛异常，同步返回带 errors 的报告。"""
     state, registry, runtime = _runtime(tmp_path, tmp_path / "empty")
-    import pytest
-
-    with pytest.raises(LookupError):
-        runtime.scan_now("src-does-not-exist")
+    result = runtime.scan_now("src-does-not-exist")
+    assert isinstance(result, dict)
+    assert result.get("errors") or result.get("complete") is False
