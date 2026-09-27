@@ -1,5 +1,9 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
+## 2026-09-27 资源占用根治优化（真机验收通过）
+
+主人报灵机 CPU 持续满烧一核、内存偏高。采样+EXPLAIN 实锤根因后四项落地（任务单 PERF_RESOURCE_ROOT_CAUSE_20260927，报告见 TEST_REPORTS/PERF_RESOURCE_ROOT_CAUSE_20260927.md）：**A1** 证据溯源三键生成列+复合索引+批量预取+孤儿 SQL 化+输入指纹回退（commit 5aea694e）；**A2** discovery 三端点 60s TTL 缓存+Desktop 轮询 8s→30s（42cae364）；**B1** 会话价值门——低价值会话不入队、JSONL 审计绝不静默（34777239）；**B2** 回填计数预检 fast-path（cef08131）；**B3** acceptance 集合归档移除。sidecar 重打包（SHA `78732387…`）并重启。**真机：空闲 CPU 0.0%（改前 96-98% 持续）、内存 810MB（改前 1.74GB）、轮询日志降 90%+**。关键架构发现：read model 全量重建型（每批 DELETE 重插），updated_at 水位不成立，彻底增量化待 content-addressed 重构（memory_id 即内容寻址）；acceptance 集合被启动逻辑重建（12K 空）创建点待查。混库守卫真机复验通过。
+
 ## 2026-09-23 chunk 回填自动化 + MCP project_timeline（真机验收通过，重建收尾中）
 
 交接文档 0g 三需求落地两项半：①chunk 向量回填自动化（缺口根因修复——此前只有手动端点会补；drain 线程并跑 ChunkVectorBackfill，runtime 接收网关 semantic_provider）；②MCP 新增第 22 个工具 `project_timeline`（蒸馏层+记忆检索按主题聚合时间线，真机实测 22 工具、「晋升管线」主题 18 条双源归并）；③`~/.codex/AGENTS.md` 与 `~/.zcode/AGENTS.md` 加「灵机记忆检索优先」引导（search_memory limit=5 先查再问主人）。

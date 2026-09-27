@@ -4,7 +4,7 @@
 
 ```yaml
 task_id: PERF_RESOURCE_ROOT_CAUSE_20260927
-status: ACTIVE
+status: COMPLETED
 baseline_commit: a090676fa3afb921bca2ab27ed2fd5376e461018
 product_branch: codex/owner-source-intake-mac-repair
 execution_mode: PERF_ROOT_CAUSE_FIX_BATCH
@@ -29,7 +29,15 @@ execution_mode: PERF_ROOT_CAUSE_FIX_BATCH
 4. 存量测试全绿 + 新增回归单测（批量等价性、增量水位、孤儿归档、生成列索引 EXPLAIN）
 5. 混库守卫回归验证通过
 
-流程：focused 测试 → PyInstaller 重打包重启 sidecar → 真机指标实测 → PROJECT_STATUS/TEST_REPORTS 同步。回滚：索引为加法可保留；缓存/预判/预检有开关可独立 revert；不改 Vault、不删 raw、不动主人数据。
+流程：focused 测试 → PyInstaller 重打包重启 sidecar → 真机指标实测 → PROJECT_STATUS/TEST_REPORTS 同步。
+
+### 真机结果（2026-09-27，详见 docs/TEST_REPORTS/PERF_RESOURCE_ROOT_CAUSE_20260927.md）
+
+- [x] 空闲 CPU 0.0%（改前 96-98% 持续）
+- [x] 内存 810MB RSS（改前 1.74GB）
+- [x] 轮询日志 14 行/分钟（改前 120-300）
+- [x] 混库守卫：部分达成——acceptance 集合移除后被启动逻辑重建（12K 空），创建点待查
+- sidecar SHA-256 `78732387…`，PID 13751，8766 监听正常，MCP 词法检索正常回滚：索引为加法可保留；缓存/预判/预检有开关可独立 revert；不改 Vault、不删 raw、不动主人数据。
 
 ---
 
