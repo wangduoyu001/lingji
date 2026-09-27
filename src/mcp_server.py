@@ -24,8 +24,9 @@ from src.skills import SkillRegistry
 
 # MCP consumers (AI agents) only need identity, text and ranking; the full
 # metadata projection stays available via fetch_memory and the control API.
-# relative_path 必须保留：AI 回答时引导主人回 Vault 对应笔记（2026-09-23
-# 主人反馈 Vault 没有存在感——检索命中不回流 Vault 是根因之一）。
+# 引用可验证契约：命中必须携带 citation（message_id / content_hash /
+# raw_reference / citation.path 等），AI 引用时主人可按 citation 核对来源；
+# 顶层 relative_path 属内部元数据，vault 定位统一走 citation.path。
 _SEARCH_RESULT_FIELDS = (
     "memory_id",
     "title",
@@ -35,7 +36,7 @@ _SEARCH_RESULT_FIELDS = (
     "memory_tier",
     "updated_at",
     "score",
-    "relative_path",
+    "citation",
 )
 
 
@@ -54,8 +55,9 @@ def slim_search_results(payload: Any) -> Any:
         slimmed.append({key: item[key] for key in _SEARCH_RESULT_FIELDS if item.get(key) not in (None, "", [])})
     projected = dict(payload)
     projected["results"] = slimmed
-    if any(item.get("relative_path") for item in slimmed if isinstance(item, dict)):
-        # 检索命中回流 Vault：AI 引用时可注明 vault 内路径（主人可点开核对）。
+    if any(isinstance(item, dict) and item.get("relative_path") for item in results):
+        # 检索命中回流 Vault：AI 引用时可结合 vault_root 与 citation.path
+        # 引导主人回 Vault 对应笔记（2026-09-23 主人反馈 Vault 没有存在感）。
         projected["vault_root"] = str(settings.vault_path)
     projected["detail_hint"] = "use fetch_memory(memory_id) for full metadata and cited chunks"
     return projected
