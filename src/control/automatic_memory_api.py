@@ -3,9 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import math
+import threading
+import time
 from dataclasses import asdict, is_dataclass
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
@@ -22,6 +24,29 @@ from src.automatic_memory.export_inbox import ensure_all_export_inboxes, ensure_
 
 class ExportInboxEnsureRequest(BaseModel):
     kind: str = Field(min_length=1)
+
+
+# PERF_RESOURCE_ROOT_CAUSE_20260927 (A2): the Desktop shell polls these
+# discovery endpoints every few seconds from several components, and every
+# hit used to rescan the filesystem from scratch (pure-Python, GIL-holding).
+# Scan results are cached process-wide behind a short TTL: source discovery
+# is day-scale information, so a stale window of this size is invisible to
+# the owner while the rescan cost drops to zero.
+_DISCOVERY_CACHE_TTL_SECONDS = 60.0
+_discovery_cache: dict[str, tuple[float, Any]] = {}
+_discovery_cache_lock = threading.Lock()
+
+
+def cached_discovery_snapshot(key: str, producer: Callable[[], Any]) -> Any:
+    now = time.monotonic()
+    with _discovery_cache_lock:
+        hit = _discovery_cache.get(key)
+        if hit is not None and now - hit[0] < _DISCOVERY_CACHE_TTL_SECONDS:
+            return hit[1]
+    value = producer()
+    with _discovery_cache_lock:
+        _discovery_cache[key] = (time.monotonic(), value)
+    return value
 
 
 class AutomaticMemoryAuthorizationRequest(BaseModel):
@@ -547,38 +572,42 @@ def register_automatic_memory_routes(
     @app.get("/api/automatic-memory/discovered", dependencies=secured)
     def discovered_sources() -> list[dict[str, Any]]:
         settings = getattr(control, "settings", control)
-        result: list[dict[str, Any]] = []
-        for item in discover_source_metadata(settings):
-            payload = asdict(item)
-            # Keep owner actions explicit and machine-readable.  The API does
-            # not authorize anything here; the POST route remains the sole
-            # authorization boundary.
-            if item.kind == "codex_rollout":
-                payload["owner_action"] = {
-                    "kind": "authorize",
-                    "label": "允许接管 Codex",
-                    "source_kind": "codex_rollout",
-                }
-            elif item.kind == "chatgpt_export":
-                payload["owner_action"] = {
-                    "kind": "select_official_export",
-                    "label": "选择官方导出目录",
-                    "source_kind": "chatgpt_export",
-                }
-            result.append(payload)
-        return result
+
+        def _scan() -> list[dict[str, Any]]:
+            result: list[dict[str, Any]] = []
+            for item in discover_source_metadata(settings):
+                payload = asdict(item)
+                # Keep owner actions explicit and machine-readable.  The API does
+                # not authorize anything here; the POST route remains the sole
+                # authorization boundary.
+                if item.kind == "codex_rollout":
+                    payload["owner_action"] = {
+                        "kind": "authorize",
+                        "label": "允许接管 Codex",
+                        "source_kind": "codex_rollout",
+                    }
+                elif item.kind == "chatgpt_export":
+                    payload["owner_action"] = {
+                        "kind": "select_official_export",
+                        "label": "选择官方导出目录",
+                        "source_kind": "chatgpt_export",
+                    }
+                result.append(payload)
+            return result
+
+        return cached_discovery_snapshot("discovered", _scan)
 
     @app.get("/api/automatic-memory/apps", dependencies=secured)
     def installed_ai_apps() -> list[dict[str, Any]]:
         """Owner-facing manifest of locally detected AI software (read-only)."""
         settings = getattr(control, "settings", control)
-        return discover_app_manifest(settings)
+        return cached_discovery_snapshot("apps", lambda: discover_app_manifest(settings))
 
     @app.get("/api/automatic-memory/processes", dependencies=secured)
     def running_ai_processes() -> list[dict[str, Any]]:
         """Whitelisted running AI process rows with owner-safe fields only."""
         settings = getattr(control, "settings", control)
-        return discover_running_processes(settings)
+        return cached_discovery_snapshot("processes", lambda: discover_running_processes(settings))
 
     @app.get("/api/automatic-memory/export-inbox", dependencies=secured)
     def export_inbox_list() -> list[dict[str, Any]]:

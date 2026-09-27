@@ -89,7 +89,7 @@ type DetailState = { response: ScanDetailResponse; offset: number };
 export default function MemorySourcesPage({ api, active, onOpenInspector }: { api: LingJiApi; active: boolean; onOpenInspector?: (target: CaptureInspectorTarget) => void }) {
   const sourceApi = useMemo(() => new MemorySourcesApi(api), [api]);
   const load = useCallback(() => sourceApi.snapshot(), [sourceApi]);
-  const resource = usePollingResource<MemorySourcesSnapshot>({ fetcher: load, enabled: active, intervalMs: 8_000, staleAfterMs: 30_000 });
+  const resource = usePollingResource<MemorySourcesSnapshot>({ fetcher: load, enabled: active, intervalMs: 30_000, staleAfterMs: 90_000 });
   const [busyKeys, setBusyKeys] = useState<Record<string, boolean>>({});
   const [pageNotice, setPageNotice] = useState<NoticeState | null>(null);
   const [sourceNotices, setSourceNotices] = useState<Record<string, SourceNoticeState>>({});
