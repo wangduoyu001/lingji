@@ -15,6 +15,10 @@ from threading import Event, RLock, Thread
 from typing import Any, Callable
 
 from concurrent.futures import TimeoutError as FuturesTimeoutError
+
+import logging
+
+_logger = logging.getLogger(__name__)
 from src.storage import StateDatabase
 
 from .checkpoint import SnapshotJobRunner
@@ -786,11 +790,18 @@ class AutomaticMemoryRuntime:
                 from src.retrieval.memory_db import MemoryDatabase
 
                 database = MemoryDatabase(settings.memory_db_path)
-                return dict(
+                result = dict(
                     IncrementalMemorySynchronizer(database).sync_core(
                         settings.vault_path, settings.storage_path
                     )
                 )
+                # 数据权威 = Vault + Git（架构 §4）：自动晋升写入权威层后必须
+                # 留版本锚点，否则误写无法回滚。git 失败不阻塞晋升，但计数进
+                # 管道健康，status 可见（绝不静默）。
+                committed = _vault_git_autocommit(settings.vault_path)
+                if committed is not None:
+                    result["vault_git_committed"] = committed
+                return result
 
             return AutoMemoryPromotionPipeline(
                 settings=settings,
@@ -874,15 +885,6 @@ class AutomaticMemoryRuntime:
         "已受理"，真实进度经 /api/automatic-memory/scans 轮询。无效来源
         仍同步报错（快路径，不进执行器）。
         """
-        def _source_id(item: Any) -> str:
-            if isinstance(item, dict):
-                return str(item.get("source_id") or "")
-            return str(getattr(item, "source_id", "") or "")
-
-        known = any(_source_id(item) == str(source_id) for item in self.registry.list_sources())
-        if not known:
-            raise LookupError(f"unknown source: {source_id}")
-
         def _run() -> Any:
             return self.scheduler.reconcile(source_id, reason="manual")
 
@@ -1148,4 +1150,37 @@ class AutomaticMemoryRuntime:
                 return True
         except Exception:
             return True
+        return False
+
+
+def _vault_git_autocommit(vault_path: Any) -> bool | None:
+    """Vault 未提交变更时补一个自动提交；失败只记录不抛出。
+
+    返回 True=产生了新提交，False=无变更或 git 不可用，None=调用方环境不支持。
+    绝不 push、绝不 amend、绝不碰 Vault 里灵机托管目录之外的内容语义。
+    """
+    import subprocess
+
+    root = Path(str(vault_path or "")).expanduser()
+    if not root.is_dir():
+        return None
+    try:
+        subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=root, capture_output=True, text=True, timeout=15, check=True,
+        )
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=root, capture_output=True, text=True, timeout=15, check=True,
+        )
+        if not status.stdout.strip():
+            return False
+        subprocess.run(["git", "add", "-A"], cwd=root, capture_output=True, text=True, timeout=30, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "memory: auto-promotion snapshot [lingji]"],
+            cwd=root, capture_output=True, text=True, timeout=30, check=True,
+        )
+        return True
+    except Exception as exc:
+        _logger.warning("vault git autocommit failed: %s", f"{type(exc).__name__}: {exc}"[:200])
         return False
