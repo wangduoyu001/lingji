@@ -16,10 +16,10 @@ execution_mode: PERF_ROOT_CAUSE_FIX_BATCH
 
 - [x] A1 溯源物化+批量预取（2026-09-27，commit 5aea694e）：rel_* 三键 VIRTUAL 生成列 + 复合部分索引已进 schema（table_xinfo 检测，幂等防并发 duplicate）；溯源查询改临时表批量预取（走新索引）；孤儿归档 SQL 化（三键 NOT EXISTS）；已覆盖输入指纹（消息 hash + 已投影 source 状态 + conversation title）漂移自动回退全量，保证 revoke/改写正确性。**关键发现：read model 是全量重建型（每批 DELETE 三表重插），updated_at 水位不成立——彻底增量化需 content-addressed 重构（memory_id 本身就是内容寻址：轻量行扫描 → 主键比对跳过未变行 → 只对变化行 chunk+upsert），列为下轮首选**。新增回归测试 4 例全绿；存量相关测试与基线一致（仅既有失败 test_formal_mcp_search_entry，与本轮无关）。
 - [x] A2 UI 轮询节流（2026-09-27，commit 42cae364）：discovered/apps/processes 三端点 60s TTL 进程级缓存（cached_discovery_snapshot）；MemorySourcesPage 轮询 8s→30s；缓存命中/TTL 过期/key 隔离 3 例单测全绿。
-- [ ] B1 入口价值预判（下轮实施，方案已定；入队点探查起点 scheduler.py:349）：入队前三层规则（轮数/字数门槛 + 价值信号保底 + 阈值进 RuntimeSettingsStore），skipped 计数与滚动样本 UI 可见、可按来源重扫撤销；默认只拦 1-2 轮且零信号；绝不静默丢弃。
+- [x] B1 入口价值预判（2026-09-27，commit 34777239）：value_gate.py 纯规则引擎（<2 轮且 <300 字符且零信号才拒；代码/链接/决策词/命令/路径为信号）；SnapshotJobRunner admit 处接入（gate_admission 合成走既有状态机，sentinel 照记防重复捕获）；审计 JSONL runtime/value_gate_skipped.jsonl（滚动 200 条，绝不静默）；config 默认开（value_gate_enabled=True），测试路径经 getattr 缺省关闭；单测 6 例全绿。**UI skipped 展示端点与 RuntimeSettingsStore 阈值调节列下轮**：入队前三层规则（轮数/字数门槛 + 价值信号保底 + 阈值进 RuntimeSettingsStore），skipped 计数与滚动样本 UI 可见、可按来源重扫撤销；默认只拦 1-2 轮且零信号；绝不静默丢弃。
 - [x] B2 回填 O(1) 预检（2026-09-27，commit cef08131）：MemoryDatabase.semantic_chunk_count() + run_once 计数相等即 fast-path 跳过三次 O(N) 扫描；计数漂移回退全量修复，回归测试覆盖。
 - [ ] B3 摘除 acceptance 集合：生产进程不驻留 acceptance 集合。
-- [ ] C vector_backfill 死代码 SQL 重写（增量 diff、不拉向量本体）；extraction_jobs.status 索引。
+- [ ] C（下轮）：vector_backfill 死代码 SQL 重写（增量 diff、不拉向量本体）；extraction_jobs.status 索引经核实已由 idx_extraction_jobs_due 的 status 前缀覆盖，无需新建。
 
 ### 验收总指标（真机实测）
 
