@@ -65,6 +65,8 @@ class WorkProjector:
             "completed": "已完成",
             "success": "已完成",
             "failed": "处理失败",
+            # merged 行默认不进履历；直接深链查看时说明其失败已并入来源聚合。
+            "merged": "已并入历史失败聚合",
         }.get(status)
         result = {
             "completed": "成功",

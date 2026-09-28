@@ -39,6 +39,14 @@ _OWNER_HINT_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
 
 _FAILURE_EVIDENCE_LIMIT = 10
 
+# work_items 的聚合状态：该行的失败事实已并入同来源聚合代表行，投影层不再单列。
+# 保留行本身（而不是物理删除）以维持 execution_events / work_outcomes / 待办的
+# 引用完整性；重试该行仍可正常复活为 retrying/completed。
+MERGED_WORK_STATUS = "merged"
+
+_AGGREGATED_TITLE_SUFFIX = "（历史失败已聚合，共 {count} 次扫描）"
+_AGGREGATED_TITLE_PATTERN = re.compile(r"（历史失败已聚合，共 \d+ 次扫描）$")
+
 
 def normalize_failure_reason(reason: str) -> str:
     """Collapse one failure text into its stable category for fingerprinting."""
@@ -155,6 +163,7 @@ class WorkStore:
             connection.execute("CREATE INDEX IF NOT EXISTS idx_work_failures_failure_key ON work_failures(failure_key)")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_work_failures_source_recent ON work_failures(source_id, last_seen_at)")
             self._merge_legacy_failure_rows(connection)
+            self._merge_legacy_failed_work_items(connection)
         self.reconcile_extraction_jobs()
 
     @staticmethod
@@ -201,6 +210,129 @@ class WorkStore:
                 connection.execute("DELETE FROM work_failures WHERE failure_id = ?", (row["failure_id"],))
 
     @staticmethod
+    def _merge_legacy_failed_work_items(connection: sqlite3.Connection) -> None:
+        """One-time backfill: collapse historical per-scan failed work_items by source.
+
+        work_failures 聚合上线之前，同一持久故障源每次扫描都会新写一行 failed
+        work_item（生产库曾积压 1,297 行，主要是 codex_rollout 缺适配器），主人的
+        工作履历因此整屏红字。此处按 source_id 从宽归组（标题不含原因指纹，无法
+        更细分）：每组保留最早创建的一行为聚合代表（标题标注聚合次数，updated_at
+        刷新为组内最新），其余行改为 merged 状态，投影层不再展示。completed /
+        accepted / running 等其他状态的行永不参与；某来源只剩一行 failed 时自然
+        跳过，这正是幂等条件——重开数据库不会重复执行。
+        """
+        sources = connection.execute(
+            """
+            SELECT source_id FROM work_items
+            WHERE status = 'failed' AND source_id IS NOT NULL AND TRIM(source_id) <> ''
+            GROUP BY source_id HAVING COUNT(*) > 1
+            """
+        ).fetchall()
+        for row in sources:
+            WorkStore._converge_failed_work_items(connection, str(row[0]))
+
+    @staticmethod
+    def _converge_failed_work_items(connection: sqlite3.Connection, source_id: str) -> dict[str, Any] | None:
+        """Collapse one source's failed work_items into the earliest representative row.
+
+        启动迁移与运行期新失败落账共用：运行期在 failed 迁移写入后立即收敛，保证
+        持久失败源不会随扫描次数无界新增 failed 行。只朝行数减少的方向工作，绝不
+        触碰 completed / accepted 等非 failed 行。返回归并说明；无可归并时返回 None。
+        """
+        resolved_source = str(source_id or "").strip()
+        if not resolved_source:
+            return None
+        rows = connection.execute(
+            """
+            SELECT work_id, title, created_at, updated_at FROM work_items
+            WHERE source_id = ? AND status = 'failed'
+            ORDER BY created_at ASC, rowid ASC
+            """,
+            (resolved_source,),
+        ).fetchall()
+        if len(rows) < 2:
+            return None
+        keep = rows[0]
+        represented = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM work_items WHERE source_id = ? AND status IN ('failed', 'merged')",
+                (resolved_source,),
+            ).fetchone()[0]
+        )
+        base_title = _AGGREGATED_TITLE_PATTERN.sub("", str(keep["title"] or "")).strip() or "扫描失败"
+        latest = max(str(row["updated_at"] or row["created_at"] or "") for row in rows)
+        connection.execute(
+            "UPDATE work_items SET title = ?, updated_at = ? WHERE work_id = ?",
+            (base_title + _AGGREGATED_TITLE_SUFFIX.format(count=represented), latest, keep["work_id"]),
+        )
+        connection.execute(
+            "UPDATE work_items SET status = ? WHERE source_id = ? AND status = 'failed' AND work_id <> ?",
+            (MERGED_WORK_STATUS, resolved_source, keep["work_id"]),
+        )
+        WorkStore._append_merge_audit(
+            connection,
+            source_id=resolved_source,
+            before_rows=len(rows),
+            after_rows=1,
+            merged_rows=len(rows) - 1,
+            represented_scans=represented,
+            representative_work_id=str(keep["work_id"]),
+            created_at=latest,
+        )
+        return {
+            "source_id": resolved_source,
+            "merged_rows": len(rows) - 1,
+            "represented_scans": represented,
+            "representative_work_id": str(keep["work_id"]),
+        }
+
+    @staticmethod
+    def _append_merge_audit(
+        connection: sqlite3.Connection,
+        *,
+        source_id: str,
+        before_rows: int,
+        after_rows: int,
+        merged_rows: int,
+        represented_scans: int,
+        representative_work_id: str,
+        created_at: str,
+    ) -> None:
+        """归并必须留全局审计（来源、前后行数、合并行数、代表 work_id）。
+
+        stable_event_id 含前后行数与时间戳：同一次归并天然只发生一次（归并后条件
+        即消失），再次归并是新事实，应当留下新事件而不是被幂等规则吞掉。
+        """
+        stable_event_id = f"work-failed-items-merged:{source_id}:{before_rows}:{created_at}"
+        if connection.execute("SELECT 1 FROM events WHERE stable_event_id = ? LIMIT 1", (stable_event_id,)).fetchone():
+            return
+        connection.execute(
+            """
+            INSERT INTO events(event_type, entity_type, entity_id, payload_json, created_at, stable_event_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "work.failed_items_merged",
+                "work_item",
+                source_id,
+                json.dumps(
+                    {
+                        "source_id": source_id,
+                        "before_failed_rows": before_rows,
+                        "after_failed_rows": after_rows,
+                        "merged_rows": merged_rows,
+                        "represented_scans": represented_scans,
+                        "representative_work_id": representative_work_id,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
+                created_at,
+                stable_event_id,
+            ),
+        )
+
+    @staticmethod
     def _json(value: Any) -> str:
         return json.dumps(value if value is not None else {}, ensure_ascii=False, sort_keys=True)
 
@@ -221,7 +353,12 @@ class WorkStore:
 
     def get_work_by_source_id(self, source_id: str) -> WorkItem | None:
         with self.state._connection() as connection:
-            row = connection.execute("SELECT work_id, title, source_id, status, owner_approved, created_at, updated_at FROM work_items WHERE source_id = ? ORDER BY created_at LIMIT 1", (source_id,)).fetchone()
+            # merged 行不再是该来源的活跃代表，崩溃重放定位工作时跳过它们，
+            # 避免把已并入聚合的行重新翻回 failed。
+            row = connection.execute(
+                "SELECT work_id, title, source_id, status, owner_approved, created_at, updated_at FROM work_items WHERE source_id = ? AND status <> 'merged' ORDER BY created_at LIMIT 1",
+                (source_id,),
+            ).fetchone()
         return self._work(row) if row else None
 
     def touch_work(self, work_id: str, *, updated_at: str | None = None) -> bool:
@@ -838,6 +975,14 @@ class WorkStore:
                 "UPDATE work_items SET status = ?, updated_at = ? WHERE work_id = ?",
                 (item_status, timestamp, work_id),
             )
+            if phase == "failed":
+                # 新失败落账后立即按来源收敛：同来源已有失败行时，本行转为聚合代表
+                # 或并入既有代表，持久故障不再随扫描次数在工作履历里逐行累积。
+                failed_source_row = connection.execute(
+                    "SELECT source_id FROM work_items WHERE work_id = ?", (work_id,)
+                ).fetchone()
+                if failed_source_row is not None:
+                    self._converge_failed_work_items(connection, str(failed_source_row[0] or ""))
 
     def reconcile_extraction_jobs(self) -> None:
         """Replay terminal extraction facts after a crash between queue and callback."""
@@ -889,19 +1034,25 @@ class WorkStore:
             rows = connection.execute(query, tuple(params)).fetchall()
         return [PendingAction(action_id=r[0], work_id=r[1], description=r[2], resolved=bool(r[3]), actor=r[4] or "owner", created_at=r[5] or "") for r in rows]
 
-    def count_work(self) -> int:
+    def count_work(self, *, include_merged: bool = False) -> int:
+        """工作履历总数；默认不含 merged 行（其失败事实已并入同来源代表行）。"""
+        query = "SELECT COUNT(*) FROM work_items"
+        if not include_merged:
+            query += " WHERE status <> 'merged'"
         with self.state._connection() as connection:
-            row = connection.execute("SELECT COUNT(*) FROM work_items").fetchone()
+            row = connection.execute(query).fetchone()
         return int(row[0] if row else 0)
 
-    def list_work(self, limit: int = 20, *, offset: int = 0) -> list[WorkItem]:
+    def list_work(self, limit: int = 20, *, offset: int = 0, include_merged: bool = False) -> list[WorkItem]:
         if int(limit) < 1 or int(offset) < 0:
             raise ValueError("limit must be positive and offset must not be negative")
+        query = "SELECT work_id, title, source_id, status, owner_approved, created_at, updated_at FROM work_items"
+        if not include_merged:
+            # merged 行不进入履历分页：单列展示会让主人的工作履历回到整屏红字。
+            query += " WHERE status <> 'merged'"
+        query += " ORDER BY COALESCE(updated_at, created_at) DESC, work_id DESC LIMIT ? OFFSET ?"
         with self.state._connection() as connection:
-            rows = connection.execute(
-                "SELECT work_id, title, source_id, status, owner_approved, created_at, updated_at FROM work_items ORDER BY COALESCE(updated_at, created_at) DESC, work_id DESC LIMIT ? OFFSET ?",
-                (int(limit), int(offset)),
-            ).fetchall()
+            rows = connection.execute(query, (int(limit), int(offset))).fetchall()
         return [self._work(r) for r in rows]
 
     def list_events(self, work_id: str, limit: int = 100, *, ascending: bool = False) -> list[ExecutionEvent]:
