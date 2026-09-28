@@ -19,8 +19,8 @@ public_summary_path: PENDING
 public_hashes_path: PENDING
 cleanup_before: PASS
 cleanup_after: PENDING
-remote_branch_verified: false
-remote_commit_verified: false
+remote_branch_verified: true
+remote_commit_verified: true
 remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
@@ -33,7 +33,8 @@ finished_at: 2026-09-27T23:59:00+08:00
 进行中说明：审计响应四批全部完成（控制面加固、资源收敛、失败治理含历史归并、证据价值门），
 部署 sidecar SHA `7a51dd4b…`（确定性构建对应 product_commit 90d363d7，PID 41538），生产实测：failed work_items 1,298→3、
 聚合台账 9 条（owner 标志正确）、/api/settings 零泄漏、静止 CPU 1%。全量测试零新增回归。
-剩余两步：①GitHub 推送（本地 master 已收敛，网络阻断 BLOCKED_PUSH_NETWORK）；②主人体验确认。
+master 已推送并远程复读确认（origin/master = 18e1adc5，fast-forward 自 ced1128e，
+BLOCKED_PUSH_NETWORK 解除）。剩余：主人体验确认。
 下方历史回执仅作记录。
 
 
@@ -90,8 +91,8 @@ public_summary_path: PENDING
 public_hashes_path: PENDING
 cleanup_before: PASS
 cleanup_after: PENDING
-remote_branch_verified: false
-remote_commit_verified: false
+remote_branch_verified: true
+remote_commit_verified: true
 remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
@@ -147,8 +148,8 @@ public_summary_path: NOT_APPLICABLE
 public_hashes_path: NOT_APPLICABLE
 cleanup_before: PASS
 cleanup_after: PASS
-remote_branch_verified: false
-remote_commit_verified: false
+remote_branch_verified: true
+remote_commit_verified: true
 remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
@@ -189,8 +190,8 @@ public_summary_path: NOT_APPLICABLE_FOCUSED_ONLY
 public_hashes_path: NOT_APPLICABLE_FOCUSED_ONLY
 cleanup_before: PASS
 cleanup_after: PASS
-remote_branch_verified: false
-remote_commit_verified: false
+remote_branch_verified: true
+remote_commit_verified: true
 remote_report_verified: false
 remote_result_verified: false
 pr_comment_verified: false
