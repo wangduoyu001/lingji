@@ -133,18 +133,22 @@ def configure_packaged_environment(
         "LINGJI_OWNER_DATA_ROOT": str(root),
     }
     target.update(required_values)
-    # 数据根 .env 可覆盖 VAULT_DIR（如把记忆库并入主人真实 Obsidian 库的
-    # 「灵机记忆/」子目录，2026-09-24 主人批准）。进程环境已设置时仍以环境优先。
-    if "VAULT_DIR" not in target:
-        env_file = root / ".env"
-        if env_file.is_file():
-            for line in env_file.read_text(encoding="utf-8-sig", errors="ignore").splitlines():
-                stripped = line.strip()
-                if stripped.startswith(("VAULT_DIR=", "vault_dir=")):
-                    value = stripped.split("=", 1)[1].strip().strip('"').strip("'")
-                    if value:
-                        target["VAULT_DIR"] = str(Path(value).expanduser())
-                    break
+    # 数据根 .env 是部署配置面：白名单键读入进程环境（进程环境已设置时仍以
+    # 环境优先）。VAULT_DIR（2026-09-24）与 VALUE_GATE_EVIDENCE_ENABLED
+    # （2026-09-28 证据层价值门）先后加入。
+    env_file = root / ".env"
+    if env_file.is_file():
+        for line in env_file.read_text(encoding="utf-8-sig", errors="ignore").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            key = key.strip()
+            if key == "VAULT_DIR" and "VAULT_DIR" not in target:
+                if value.strip():
+                    target["VAULT_DIR"] = str(Path(value.strip().strip('"').strip("'")).expanduser())
+            elif key.upper() == "VALUE_GATE_EVIDENCE_ENABLED":
+                target.setdefault("VALUE_GATE_EVIDENCE_ENABLED", value.strip())
     target.setdefault("VAULT_DIR", str(root / "vault"))
 
     for directory in (
