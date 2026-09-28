@@ -444,10 +444,34 @@ class MemoryDatabase:
         body = f"[{entry['role']}] {body_content}"
         return entry, chunker.chunk(memory_id, body)
 
+    @staticmethod
+    def _evidence_value_gate_config(value_gate: Mapping[str, Any] | None) -> tuple[bool, int, int]:
+        """证据层价值门配置：显式参数优先，否则应用配置（默认开，2 轮/300 字）。
+
+        独立于 intake 层的 value_gate_enabled——两层可分别回滚。
+        """
+        if value_gate is not None:
+            return (
+                bool(value_gate.get("enabled", True)),
+                max(int(value_gate.get("min_turns", 2)), 0),
+                max(int(value_gate.get("min_chars", 300)), 0),
+            )
+        try:
+            from src.config import settings as app_settings
+
+            return (
+                bool(getattr(app_settings, "value_gate_evidence_enabled", True)),
+                max(int(getattr(app_settings, "value_gate_min_turns", 2)), 0),
+                max(int(getattr(app_settings, "value_gate_min_chars", 300)), 0),
+            )
+        except Exception:
+            return True, 2, 300
+
     def sync_structured_evidence(
         self,
         *,
         chunker: MarkdownChunker | None = None,
+        value_gate: Mapping[str, Any] | None = None,
     ) -> dict[str, int | bool]:
         """Materialize structured message rows into the existing lexical index.
 
@@ -477,6 +501,15 @@ class MemoryDatabase:
         ``removed`` counts active projections archived this round;
         ``revision`` advances only when something was written; ``full_rebuild``
         is always False.
+
+        价值门延伸（主人 2026-09-28 拍板）：``value_gate`` 传入
+        ``{"enabled": bool, "min_turns": int, "min_chars": int}``；None 时从
+        应用配置读取（默认开，2 轮 / 300 字）。判定是会话级的：轮数与字数
+        双低的会话再做信号检测（代码/链接/路径/决策措辞保底），无信号的会话
+        证据不物化，已物化的归档（invalidating_reason=
+        ``value_gate_below_floor``）。归档可逆——阈值放宽后同一内容寻址文档
+        会经 status 漂移自动重新激活。红线：证据行与 FTS 全文保留，绝不物理
+        删除；归档/拦截计数进返回值，绝不静默。
         """
         chunker = chunker or MarkdownChunker()
         empty_hash = self._content_fallback_hash("")
@@ -505,6 +538,8 @@ class MemoryDatabase:
             expected: list[tuple[str, str, str, str, sqlite3.Row]] = []
             expected_rows: list[tuple[str, str, str, str, str, str, str]] = []
             fallback_identities: list[tuple[str, str, str]] = []
+            gate_enabled, gate_turns, gate_chars = self._evidence_value_gate_config(value_gate)
+            conversation_stats: dict[str, list[int]] = {}
             rows = connection.execute(
                 """
                 SELECT
@@ -516,6 +551,7 @@ class MemoryDatabase:
                     m.role, m.author, m.occurred_at, m.sequence,
                     m.content_hash, m.raw_reference, m.privacy,
                     m.projects_json, m.agent_scope_json, m.updated_at,
+                    length(COALESCE(m.content, '')) AS content_length,
                     s.metadata_json AS source_metadata_json
                 FROM message_records m
                 JOIN conversation_records c ON c.conversation_id = m.conversation_id
@@ -540,8 +576,52 @@ class MemoryDatabase:
                 title = str(row["conversation_title"] or row["message_id"])
                 version_key = "|".join((*identity, content_hash))
                 memory_id = "LJ-EVIDENCE-" + hashlib.sha256(version_key.encode("utf-8")).hexdigest()[:24].upper()
+                stats = conversation_stats.setdefault(str(row["conversation_id"] or ""), [0, 0])
+                stats[0] += 1
+                stats[1] += int(row["content_length"] or 0)
                 expected.append((memory_id, content_hash, document_status, title, row))
                 expected_rows.append((memory_id, content_hash, document_status, title, *identity))
+            # 会话级价值判定：双低候选批量拉原文做信号检测（候选本就是短会话，
+            # 量小）。有信号放行，无信号进低价值集合。
+            low_value_conversations: set[str] = set()
+            if gate_enabled:
+                from src.automatic_memory.value_gate import evaluate_session_value
+
+                candidates = [
+                    conv
+                    for conv, (turns, chars) in conversation_stats.items()
+                    if turns < gate_turns and chars < gate_chars
+                ]
+                for conv in candidates:
+                    texts = [
+                        str(text_row[0] or "")
+                        for text_row in connection.execute(
+                            """
+                            SELECT m.content FROM message_records m
+                            WHERE m.conversation_id = ? AND TRIM(COALESCE(m.content, '')) <> ''
+                            """,
+                            (conv,),
+                        )
+                    ]
+                    if not evaluate_session_value(
+                        texts, min_turns=gate_turns, min_chars=gate_chars
+                    ).approved:
+                        low_value_conversations.add(conv)
+                if low_value_conversations:
+                    before = len(expected_rows)
+                    expected = [
+                        item
+                        for item in expected
+                        if str(item[4]["conversation_id"] or "") not in low_value_conversations
+                    ]
+                    expected_rows = [
+                        item for item in expected_rows if item[5] not in low_value_conversations
+                    ]
+                    gate_skipped = before - len(expected_rows)
+                else:
+                    gate_skipped = 0
+            else:
+                gate_skipped = 0
             connection.executemany(
                 "INSERT OR REPLACE INTO _sync_expected VALUES (?, ?, ?, ?, ?, ?, ?)",
                 expected_rows,
@@ -888,20 +968,66 @@ class MemoryDatabase:
                     (orphaned_at, self._json(relationships), orphaned_at, str(orphan["memory_id"])),
                 )
                 removed += 1
+            # 价值门归档：低价值会话上已物化的 active 证据在这一轮收敛为
+            # archived。FTS 全文保留（history/as_of 仍可解释），阈值放宽后
+            # 同一内容寻址文档经 status 漂移自动重新激活，可逆。
+            if gate_enabled and low_value_conversations:
+                connection.execute(
+                    """
+                    CREATE TEMP TABLE _sync_low_value (conversation_id TEXT PRIMARY KEY) WITHOUT ROWID
+                    """
+                )
+                connection.executemany(
+                    "INSERT OR IGNORE INTO _sync_low_value VALUES (?)",
+                    [(conv,) for conv in sorted(low_value_conversations)],
+                )
+                gate_rows = connection.execute(
+                    """
+                    SELECT d.memory_id, d.relationships_json
+                    FROM memory_documents d
+                    WHERE d.memory_type = 'structured_evidence' AND d.status = 'active'
+                      AND EXISTS (
+                          SELECT 1 FROM _sync_low_value v
+                          WHERE v.conversation_id = d.rel_conversation_id
+                      )
+                    """
+                ).fetchall()
+                gated_at = datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+                for gate_row in gate_rows:
+                    relationships = self._loads(gate_row["relationships_json"], {})
+                    relationships["invalidating_reason"] = "value_gate_below_floor"
+                    connection.execute(
+                        """
+                        UPDATE memory_documents
+                        SET status = 'archived', valid_to = ?, relationships_json = ?,
+                            pin_to_context = 0, updated_at = ?
+                        WHERE memory_id = ? AND status = 'active'
+                        """,
+                        (gated_at, self._json(relationships), gated_at, str(gate_row["memory_id"])),
+                    )
+                gate_archived = len(gate_rows)
+                removed += gate_archived
+            else:
+                gate_archived = 0
             if added or updated or removed:
                 revision = self._bump_revision(connection)
             else:
                 revision = int(self._get_meta(connection, "revision") or 0)
             # Real totals over the whole projection, not just this round:
             # both metas are diagnostics and have no external consumers.
+            # 可用记忆口径：只数 active（archived/superseded 是可解释历史，
+            # 不再代表"入库记忆"的量）。
             document_count = connection.execute(
-                "SELECT COUNT(*) FROM memory_documents WHERE memory_type = 'structured_evidence'"
+                """
+                SELECT COUNT(*) FROM memory_documents
+                WHERE memory_type = 'structured_evidence' AND status = 'active'
+                """
             ).fetchone()[0]
             chunk_count = connection.execute(
                 """
                 SELECT COUNT(*) FROM memory_chunks c
                 JOIN memory_documents d ON d.memory_id = c.memory_id
-                WHERE d.memory_type = 'structured_evidence'
+                WHERE d.memory_type = 'structured_evidence' AND d.status = 'active'
                 """
             ).fetchone()[0]
             self._set_meta(connection, "structured_evidence_document_count", str(document_count))
@@ -915,12 +1041,16 @@ class MemoryDatabase:
             "unchanged": unchanged,
             "revision": revision,
             "full_rebuild": False,
+            "value_gate_archived": gate_archived,
+            "value_gate_skipped_messages": gate_skipped,
+            "value_gate_conversations": len(low_value_conversations) if gate_enabled else 0,
         }
 
     def rebuild_structured_evidence(
         self,
         *,
         chunker: MarkdownChunker | None = None,
+        value_gate: Mapping[str, Any] | None = None,
     ) -> dict[str, int | bool]:
         """Rebuild only structured evidence projections from source rows.
 
@@ -928,7 +1058,7 @@ class MemoryDatabase:
         against the projection on each run, so a rebuild is simply an
         unconditional sync; there is no watermark left to drop.
         """
-        return self.sync_structured_evidence(chunker=chunker)
+        return self.sync_structured_evidence(chunker=chunker, value_gate=value_gate)
 
     def upsert_derived_projection(
         self,

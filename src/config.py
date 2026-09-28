@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     value_gate_enabled: bool = True
     value_gate_min_turns: int = 2
     value_gate_min_chars: int = 300
+    # 证据层价值门（主人 2026-09-28 拍板：向证据入库延伸）。库默认保守关闭
+    # （与 intake 门禁同模式：测试路径缺省关），生产经数据根 .env 显式打开；
+    # 独立开关可单独回滚，被拦证据归档不删除，阈值放宽后自动重新激活。
+    value_gate_evidence_enabled: bool = False
 
     # Single Obsidian Vault foundation
     vault_auto_init: bool = True
