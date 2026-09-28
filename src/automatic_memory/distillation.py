@@ -317,14 +317,19 @@ class KnowledgeDistiller:
 
     def _build_prompt(self, title: str, transcript: str) -> list[dict[str, str]]:
         system = (
-            "你是记忆提炼器。阅读一段用户与AI的对话，提炼成知识要点。"
+            "你是记忆提炼器。阅读一段用户与AI的对话，只提取真正值得长期保留的关键节点。"
+            "只记四类内容：①关键决策或拍板（定了什么方案、为什么）；②结论及其推导过程或根因"
+            "（查明了什么、为什么是这样）；③关键状态变化（完成/上线/迁移/回滚/修好了什么）；"
+            "④不可复得的关键步骤（之后无法从别处得知的操作序列）。"
             '只返回 JSON 对象：{"short_title": "给这段对话起一个不超过16字的具体标题", '
-            '"summary": "一句话总结这段对话产出了什么结论/决定/事实", '
-            '"key_points": ["要点1", "要点2", "要点3"], '
+            '"summary": "一句话说明关键结论/决定/变化（没有关键内容时留空字符串）", '
+            '"key_points": ["要点1", "要点2"], '
             '"confidence": 0.0到1.0的小数表示这段结论作为长期事实的把握'
             '（确定且被验证给高分，推测或临时状态给低分）, '
             '"category": "项目|技术|决策|问题|其他"}。'
-            "key_points 用短句，每条不超过40字，只保留有信息量的事实，不要寒暄。"
+            "红线：宁缺毋滥。纯操作过程、寒暄、例行检查、中间调试流水、没有结论的讨论，"
+            "一律返回 \"key_points\": [] 且 \"summary\": \"\"——没有关键节点就不产出，"
+            "绝不为凑数把流水账包装成要点。key_points 用短句，每条不超过40字。"
             "category 必须五选一：改代码/修Bug/搭环境=技术；定了方案或拍板=决策；"
             "遇到故障或报错=问题；启动或推进某个项目=项目；闲聊或无结论=其他。"
             "如果这段对话推翻或升级了近期某个旧结论（旧标题见下），"
@@ -486,7 +491,7 @@ class KnowledgeDistiller:
             FROM conversation_records c
             LEFT JOIN distilled_knowledge d ON d.conversation_id = c.conversation_id
             WHERE d.conversation_id IS NULL
-               OR (d.status != 'ready' AND COALESCE(d.status, '') NOT IN ('superseded', 'empty'))
+               OR (d.status != 'ready' AND COALESCE(d.status, '') NOT IN ('superseded', 'empty', 'no_key_content'))
                OR d.message_count != (
                    SELECT COUNT(*) FROM message_records m WHERE m.conversation_id = c.conversation_id
                )
@@ -514,6 +519,11 @@ class KnowledgeDistiller:
             self._ensure_schema(conn)
             total_convs = int(conn.execute("SELECT COUNT(*) FROM conversation_records").fetchone()[0])
             ready = int(conn.execute("SELECT COUNT(*) FROM distilled_knowledge WHERE status = 'ready'").fetchone()[0])
+            # pending 口径 = 真正待提炼的数量：扣除已提炼与全部终态
+            # （superseded/empty/no_key_content 都不是待办）。
+            settled = int(conn.execute(
+                "SELECT COUNT(*) FROM distilled_knowledge WHERE status != 'ready'"
+            ).fetchone()[0])
             by_category: dict[str, int] = {}
             for row in conn.execute(
                 "SELECT category, COUNT(*) AS n FROM distilled_knowledge WHERE status = 'ready' GROUP BY category"
@@ -525,7 +535,7 @@ class KnowledgeDistiller:
         return {
             "total": total_convs,
             "ready": ready,
-            "pending": max(0, total_convs - ready),
+            "pending": max(0, total_convs - ready - settled),
             "by_category": by_category,
             "model": model,
             "available": model is not None,
@@ -640,6 +650,7 @@ class KnowledgeDistiller:
             model = used_model_label
         distilled = 0
         failed = 0
+        skipped = 0
         with self._connect() as conn:
             self._ensure_schema(conn)
             pending = self._pending_conversations(conn, max(1, int(limit)))
@@ -655,11 +666,19 @@ class KnowledgeDistiller:
                     failed += 1
                     continue
                 self._publish_finished(conn, used_model_label, str(conversation["title"] or "未命名对话"), time.monotonic() - started, bool(outcome))
-                if outcome:
+                if outcome == "skipped":
+                    skipped += 1
+                elif outcome:
                     distilled += 1
                 else:
                     failed += 1
-        return {"status": "ok", "distilled": distilled, "failed": failed, **self.stats()}
+        return {
+            "status": "ok",
+            "distilled": distilled,
+            "failed": failed,
+            "skipped_no_key_content": skipped,
+            **self.stats(),
+        }
 
     # ------------------------------------------------------------- progress
     def _publish_current(self, conn: sqlite3.Connection, model: str, conversation: dict[str, Any]) -> None:
@@ -798,10 +817,10 @@ class KnowledgeDistiller:
             prompt[-1]["content"] += f"\n\n近期已有结论的标题（若本次对话推翻其中某个，返回 supersedes 字段）：\n{listing}"
         answer, used_model = self._chat_dispatch(model, prompt)
         parsed = _parse_model_json(answer)
-        if parsed is None or not str(parsed.get("summary") or "").strip():
+        if parsed is None:
             self._record_failure(conn, conversation_id, "模型输出无法解析为知识要点")
             return False
-        summary = str(parsed.get("summary")).strip()
+        summary = str(parsed.get("summary") or "").strip()
         raw_points = parsed.get("key_points")
         if isinstance(raw_points, str):
             key_points = [segment.strip() for segment in re.split(r"[;；\n]", raw_points) if segment.strip()]
@@ -809,6 +828,18 @@ class KnowledgeDistiller:
             key_points = [str(point).strip() for point in raw_points if str(point).strip()]
         else:
             key_points = []
+        key_points = [point for point in key_points if point]
+        # 主人原则（2026-09-28）：不为记忆而记忆。模型按提示词契约明确返回空
+        # 产出（summary/key_points 字段存在且为空）= 这段对话没有关键节点：
+        # 落终态出队（绝不反复重试），内容将来变化时经 message_count 条件自动
+        # 复活重新提炼。summary 空但要点非空仍入库；完全不符契约形状的输出
+        # 仍是失败（保留重试），不冒充"没有值得记的"。
+        if not summary and not key_points:
+            if "summary" in parsed or "key_points" in parsed:
+                self._record_no_key_content(conn, conversation_id, digest)
+                return "skipped"
+            self._record_failure(conn, conversation_id, "模型输出无法解析为知识要点")
+            return False
         category = str(parsed.get("category") or "其他").strip() or "其他"
         confidence = _clamp_confidence(parsed.get("confidence"))
         short_title = str(parsed.get("short_title") or "").strip()
@@ -930,6 +961,46 @@ class KnowledgeDistiller:
                 parts.append("……（中间内容过长已省略）")
                 break
         return "\n".join(parts)
+
+    def _record_no_key_content(
+        self, conn: sqlite3.Connection, conversation_id: str, digest: str
+    ) -> None:
+        """无关键节点会话的终态标记：出队不重试；消息数变化时自动复活重新提炼。"""
+        row = conn.execute(
+            "SELECT source_id, title, started_at, message_count FROM conversation_records WHERE conversation_id = ?",
+            (conversation_id,),
+        ).fetchone()
+        if row is None:
+            return
+        now = _now()
+        message_count = int(row["message_count"] or 0)
+        conn.execute(
+            """
+            INSERT INTO distilled_knowledge (
+                conversation_id, source_id, title, summary, key_points_json, category,
+                model, messages_digest, message_count, revision, occurred_at,
+                status, last_error, created_at, updated_at
+            ) VALUES (?, ?, ?, '', '[]', '其他', '', ?, ?, 0, ?, 'no_key_content',
+                      'no key content worth remembering', ?, ?)
+            ON CONFLICT(conversation_id) DO UPDATE SET
+                status = 'no_key_content',
+                messages_digest = excluded.messages_digest,
+                message_count = excluded.message_count,
+                last_error = excluded.last_error,
+                updated_at = excluded.updated_at
+            """,
+            (
+                conversation_id,
+                str(row["source_id"] or ""),
+                str(row["title"] or "未命名对话")[:80],
+                digest,
+                message_count,
+                str(row["started_at"] or now),
+                now,
+                now,
+            ),
+        )
+        conn.commit()
 
     def _record_empty(self, conn: sqlite3.Connection, conversation_id: str) -> None:
         """无消息会话的终态标记：出队停止空转；消息导入后经 message_count 条件复活。"""
