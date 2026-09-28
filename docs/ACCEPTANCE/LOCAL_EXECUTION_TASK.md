@@ -5,9 +5,23 @@
 ```yaml
 task_id: AUDIT_RESPONSE_20260927
 status: ACTIVE
-baseline_commit: 37ea8711
-product_branch: codex/owner-source-intake-mac-repair
 execution_mode: AUDIT_RESPONSE_BATCH
+repository: wangduoyu001/lingji
+product_branch: codex/owner-source-intake-mac-repair
+product_commit: 8417f44d4c68994d20b187540b97a90261f0f044
+product_pr: NONE_NOT_A_RELEASE_GATE
+artifact_name: NONE_LOCAL_SIDECAR_ONLY
+artifact_id: NONE_LOCAL_SIDECAR_ONLY
+report_branch: acceptance/audit-response-20260927
+report_path: docs/TEST_REPORTS/AUDIT_RESPONSE_20260927.md
+public_summary_path: PENDING
+public_hashes_path: PENDING
+result_receipt_path: docs/ACCEPTANCE/LOCAL_EXECUTION_RESULT.md
+cleanup_before_required: true
+cleanup_after_required: true
+remote_verification_required: true
+owner_confirmation_required: true
+baseline_commit_note: work started at 37ea8711; product_commit pins the verified head
 ```
 
 外部优化建议书（基线 5e51f8bb）评审后落地。**建议书机制修正**：其"同步拷贝持 GIL 饿死事件循环"与现场证据不符（挂死期零 CPU 增长、无持 GIL 帧）；真实机制 = 多后台线程分别卡死在系统调用（DNS/sqlite open/iterdir）+ SIGTERM 优雅停机被拖死。修复清单方向采纳、看门狗设计升级。

@@ -1,4 +1,39 @@
 # LingJi 本机执行结果回执
+# LingJi 本机执行结果回执
+
+## 当前回执：AUDIT_RESPONSE_20260927（外部优化审计响应，进行中）
+
+```yaml
+task_id: AUDIT_RESPONSE_20260927
+status: RUNNING
+verdict: PENDING
+execution_mode: AUDIT_RESPONSE_BATCH
+repository: wangduoyu001/lingji
+product_pr: NONE_NOT_A_RELEASE_GATE
+product_commit: 8417f44d4c68994d20b187540b97a90261f0f044
+task_instruction_commit: PENDING
+report_branch: acceptance/audit-response-20260927
+report_commit: PENDING
+report_path: docs/TEST_REPORTS/AUDIT_RESPONSE_20260927.md
+public_summary_path: PENDING
+public_hashes_path: PENDING
+cleanup_before: PASS
+cleanup_after: PENDING
+remote_branch_verified: false
+remote_commit_verified: false
+remote_report_verified: false
+remote_result_verified: false
+pr_comment_verified: false
+local_temp_root_absent: true
+owner_observation: PENDING
+started_at: 2026-09-27T21:00:00+08:00
+finished_at: 2026-09-27T23:59:00+08:00
+```
+
+进行中说明：审计响应已完成三批（控制面加固、资源收敛、失败治理），全量测试零新增回归；
+master 收敛已在本地完成（fast-forward），GitHub 推送被网络阻断（SSL_ERROR_SYSCALL），
+恢复后推送并远程复读；owner_observation 待主人体验确认。下方历史回执仅作记录。
+
 
 ## 2026-09-19 当前回执
 
@@ -29,12 +64,17 @@ Prior candidate `43009a0dfdf3cd7b949d871cc9054286f17d607e` is explicitly
 recorded as `OWNER_UI_REPAIR_REQUIRED` for raw source titles/English error and
 duplicate macOS lexical-alias source cards; it is not a PASS result.
 
-## 0. 当前任务回执
+## 历史回执：OWNER_SOURCE_INTAKE_MAC_REPAIR（已收尾，被后续任务取代）
+
+判定说明：该任务的技术交付与隔离验收完成，但真机四指标两项未达标（空闲 CPU、内存），
+按当时实测如实记 FAIL；其残留热点已由 PERF_RESOURCE_ROOT_CAUSE →
+PERF_RESOURCE_CLOSEOUT → AUDIT_RESPONSE 系列后续任务根治（空闲 CPU 1%、资源收敛、
+控制面加固）。本块仅作历史记录，不再被门禁视为当前任务。
 
 ```yaml
 task_id: OWNER_SOURCE_INTAKE_MAC_REPAIR
-status: RUNNING
-verdict: PENDING
+status: COMPLETED
+verdict: FAIL
 execution_mode: OWNER_SOURCE_INTAKE_PRODUCT_AND_MAC_REPAIR
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
