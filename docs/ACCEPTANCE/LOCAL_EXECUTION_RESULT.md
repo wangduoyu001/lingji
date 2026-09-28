@@ -10,7 +10,7 @@ verdict: PENDING
 execution_mode: AUDIT_RESPONSE_BATCH
 repository: wangduoyu001/lingji
 product_pr: NONE_NOT_A_RELEASE_GATE
-product_commit: 90d363d765bc5d7143c0438dbcee1d70408e3dc0
+product_commit: c46ebdd5770f2cc26ab1d01b4701e2a9daf7ecdf
 task_instruction_commit: PENDING
 report_branch: acceptance/audit-response-20260927
 report_commit: PENDING
@@ -34,7 +34,9 @@ finished_at: 2026-09-27T23:59:00+08:00
 部署 sidecar SHA `7a51dd4b…`（确定性构建对应 product_commit 90d363d7，PID 41538），生产实测：failed work_items 1,298→3、
 聚合台账 9 条（owner 标志正确）、/api/settings 零泄漏、静止 CPU 1%。全量测试零新增回归。
 master 已推送并远程复读确认（origin/master = 18e1adc5，fast-forward 自 ced1128e，
-BLOCKED_PUSH_NETWORK 解除）。剩余：主人体验确认。
+BLOCKED_PUSH_NETWORK 解除）。价值门延伸已落地：提炼只记关键节点（决策/结论及推导/状态变化/关键步骤），
+无关键内容的会话落 no_key_content 终态不重试、内容变化自动复活；顺带修复
+summary 缺键时 "None" 字符串入库的隐藏 bug。剩余：主人体验确认。
 下方历史回执仅作记录。
 
 
