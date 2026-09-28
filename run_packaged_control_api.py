@@ -281,6 +281,7 @@ def install_runtime_lifecycle(
         grace_seconds = 30.0
         boot_deadline_seconds = 600.0  # 启动期：索引重建/大集合打开可慢，给足死限
         started_at = time.monotonic()
+        import urllib.error
         import urllib.request
 
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -297,9 +298,14 @@ def install_runtime_lifecycle(
                 with opener.open(
                     f"http://127.0.0.1:{int(port)}/api/runtime/ping", timeout=5.0
                 ) as response:
-                    alive = 200 <= int(getattr(response, "status", 0) or 0) < 500
+                    alive = True  # 任何 2xx-4xx 响应 = 进程在服务
+            except urllib.error.HTTPError as exc:
+                # 401/403/500 也是"进程活着"的证据（裸探针不带 token 必然
+                # 401；urlopen 对 4xx/5xx 抛 HTTPError 而非返回 response——
+                # 2026-09-28 两次误杀的直接原因）。
+                alive = 400 <= int(getattr(exc, "code", 0) or 0) < 600
             except Exception:
-                alive = False
+                alive = False  # 连接拒绝/超时 = 真死
             if alive:
                 armed = True
                 failures = 0
