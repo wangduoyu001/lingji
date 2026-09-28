@@ -8,7 +8,7 @@ status: ACTIVE
 execution_mode: AUDIT_RESPONSE_BATCH
 repository: wangduoyu001/lingji
 product_branch: codex/owner-source-intake-mac-repair
-product_commit: ddbd080a04f5355a465892555d4b53ada3d80ab5
+product_commit: 90d363d765bc5d7143c0438dbcee1d70408e3dc0
 product_pr: NONE_NOT_A_RELEASE_GATE
 artifact_name: NONE_LOCAL_SIDECAR_ONLY
 artifact_id: NONE_LOCAL_SIDECAR_ONLY
