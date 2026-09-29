@@ -231,3 +231,32 @@ def test_save_index_survives_non_json_native_values(tmp_path):
 
     saved = _json.loads(indexer.index_path.read_text(encoding="utf-8"))
     assert saved["entries"]["a"]["updated"] == "2026-09-29 12:00:00"
+
+
+def test_overview_ttl_cache_collapses_polled_rebuilds():
+    import threading
+    import time as _time
+
+    from src.control.service import LocalControlService
+
+    service = LocalControlService.__new__(LocalControlService)
+    service._overview_lock = threading.Lock()
+    service._overview_cache = None
+    calls = {"count": 0}
+
+    def _build():
+        calls["count"] += 1
+        return {"health": {"status": "healthy"}, "tick": calls["count"]}
+
+    service._build_overview = _build  # type: ignore[method-assign]
+
+    first = service.overview()
+    second = service.overview()
+    assert calls["count"] == 1, "TTL 内的重复轮询必须命中缓存"
+    assert second is first
+
+    # 过期后重建一次
+    stamp, payload = service._overview_cache
+    service._overview_cache = (stamp - service._OVERVIEW_CACHE_TTL_SECONDS - 1, payload)
+    service.overview()
+    assert calls["count"] == 2

@@ -4297,3 +4297,10 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 追加（同日第二轮装机）：产品 Head 3812f0d2 重新打包装机。sidecar exe sha256 efd84fac…（182 文件，契约检查通过）；DMG sha256 6728f1f2…，arm64，codesign --deep --strict 通过。安装规程：AppleEvent 退出 + 精确 PID 清理（一个残留 core 进程 TERM 不退按规程 kill -9 单点处理）→ 旧 App 备份至 backups/灵机.app.prev-0140428c-20260929-1715 → ditto 覆盖 → 签名复核 → open -g 重启，21s 就绪（health 401 口径）。
 装机后真机验证：①/api/brain/status 三段全数上报：failure_ledger.total=9（真实原因指纹，含 "No approved extraction adapter for source type: codex_rollout" ×399/+18——正是此前无人报告的存量问题，现在状态页直接可见）；pipelines distill/promotion/vector_backfill 全部未降级；extraction_queue completed=1054/failed=15；warnings 空（三段读取全部成功）。②真实发布版 UI 截图目检：主导航三项（首页/记忆库/状态）上线、首页新口径（灵机为你记住了什么 + 系统自动处理中的事项）渲染正常、记忆库页正常加载。③状态页交互场景由 563 行 Playwright 冒烟在完全相同的前端构建上全场景验证（PASS），后端载荷形状与页面消费逐字段对齐；App 保持打开等待主人随时查看。代理坐标点击导航尝试因窗口 z 序变化可能误触主人其他应用，已立即停止（避免干扰主人桌面），不影响验收结论。
 回滚=恢复 backups 中对应旧 App。
+
+## 2026-09-29 OVERVIEW_LATENCY_FLAP_AND_HONEST_OFFLINE（主人报"UI 什么都不显示"根因修复）
+
+根因链（真机实测）：/api/overview 串行聚合 8 个子调用（health 1.1s + memory 1.6s + vector 2.3s + providers 2.0s + 其余）合计 7~11s；Desktop 外壳每 10s 轮询它、前端默认超时 15s，叠加请求拖长后频繁超时 → useLingJiConnection 一次失败即 setState("offline") → 全部数据轮询停摆（active=false）→ 首页 cards/pending 区块渲染成"最近没有值得记住的关键内容——正常现象"式的空态文案 → 主人看到"什么都不显示"；12s 自动恢复循环造成 connected/offline 抖动（侧栏"自动记忆运行中"与"连接中断"并存、右上角徽章来回切）。后端本身健康（cards 8 条、pending 0、ping 200），纯属聚合慢 + 单次失败零容错。
+修复：①overview 加 20s TTL 缓存（overview() 拆为缓存包装 + _build_overview；状态聚合允许 ≤20s 陈旧，换毫秒级响应；brain_status 同收益）；②连接轮询三振容错：单次瞬时失败只记错误不再判离线，连续 3 次失败或连续 3 次明确 unhealthy 才 offline（恢复路径 ensureConnection 不变）；③overview 请求超时放宽至 30s（缓存后正常毫秒级，只防极端）；④首页诚实断连态：active=false 时显示"连接暂时断开，正在自动恢复。数据没有丢失"而非"正常现象，没有内容"；卡片读取失败单独提示，不再与真空态混淆。
+自动测试：tests/test_runtime_truth.py 新增 overview TTL 缓存单测（TTL 内命中/过期重建），8 例通过；npm run build 通过；owner-ui-menu-fast-track 563 行全场景 PASS。
+真机验收（装机后）：/api/overview P95 < 1s；连续观察 3 分钟外壳无"自动恢复中"徽章闪烁、无"连接中断"文案；首页数据区在连接正常时显示真实内容。回滚=revert 本提交。

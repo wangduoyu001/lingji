@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, LingJiApi, isTauriDesktopRuntime } from "../api";
 import type { RuntimeBootstrapStatus, RuntimeStatus } from "../runtimeTypes";
 import type { Row } from "../types";
@@ -44,10 +44,13 @@ export function useLingJiConnection() {
   const [runtimeBusy, setRuntimeBusy] = useState("");
   const [ownerStopped, setOwnerStopped] = useState(false);
   const [error, setError] = useState("");
+  // 2026-09-29 主人报"UI 什么都不显示"：一次瞬时超时就把状态打成 offline，
+  // 数据轮询全部停摆、界面只剩空态文案。改为连续 3 次失败才判离线。
+  const pollingFailureRef = useRef(0);
 
   const readOverview = useCallback(async () => {
     await api.tryTauriToken();
-    const next = await api.get<Row>("/api/overview");
+    const next = await api.get<Row>("/api/overview", { timeoutMs: 30_000 });
     setOverview(next);
     setState("connected");
     setError("");
@@ -174,18 +177,23 @@ export function useLingJiConnection() {
     if (state !== "connected") return;
     const timer = window.setInterval(() => {
       void Promise.all([
-        api.get<Row>("/api/overview"),
+        api.get<Row>("/api/overview", { timeoutMs: 30_000 }),
         invoke<RuntimeStatus>(GUARDED_RUNTIME_COMMANDS.status),
       ])
         .then(([next, runtime]) => {
+          pollingFailureRef.current = 0;
           setOverview(next);
           setRuntimeStatus(runtime);
           setError("");
-          if (!runtime.healthy) setState("offline");
+          if (!runtime.healthy) {
+            pollingFailureRef.current += 1;
+            if (pollingFailureRef.current >= 3) setState("offline");
+          }
         })
         .catch((reason) => {
-          setState("offline");
+          pollingFailureRef.current += 1;
           setError(connectionMessage(reason));
+          if (pollingFailureRef.current >= 3) setState("offline");
         });
     }, 10_000);
     return () => window.clearInterval(timer);

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -52,6 +54,12 @@ class LocalControlService:
         self.state_db = state_db or StateDatabase(settings.state_db_path)
         self.automatic_memory_registry = automatic_memory_registry or SourceRegistry(self.state_db)
         self.work_control = WorkControlService(self.state_db)
+        # overview 被 Desktop 外壳每 10s 轮询；串行聚合 8 个 1~2s 子调用会拖到
+        # 7~11s，前端按 15s 超时判死 → 连接状态在 connected/offline 间抖动、
+        # 数据轮询停摆（2026-09-29 主人报"UI 什么都不显示"的根因）。加短 TTL
+        # 缓存：状态聚合允许 ≤20s 陈旧，换毫秒级响应与稳定连接。
+        self._overview_lock = threading.Lock()
+        self._overview_cache: tuple[float, dict[str, Any]] | None = None
         self.runtime_settings = RuntimeSettingsStore(settings, state_db=self.state_db)
         self.obsidian = ObsidianService(
             settings, runtime_settings=self.runtime_settings, state_db=self.state_db
@@ -591,7 +599,22 @@ class LocalControlService:
     def health(self) -> dict[str, Any]:
         return self.health_checker.run()
 
+    _OVERVIEW_CACHE_TTL_SECONDS = 20.0
+
     def overview(self) -> dict[str, Any]:
+        lock = getattr(self, "_overview_lock", None)
+        if lock is None:
+            return self._build_overview()
+        with lock:
+            cache = getattr(self, "_overview_cache", None)
+            now = time.monotonic()
+            if cache is not None and now - cache[0] < self._OVERVIEW_CACHE_TTL_SECONDS:
+                return cache[1]
+            payload = self._build_overview()
+            self._overview_cache = (now, payload)
+            return payload
+
+    def _build_overview(self) -> dict[str, Any]:
         inventory = self.storage.inventory()
         settings_snapshot = self.runtime_settings.snapshot()
         values = settings_snapshot["values"]

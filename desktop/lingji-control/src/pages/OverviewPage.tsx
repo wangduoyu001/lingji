@@ -55,12 +55,30 @@ export default function OverviewPage({ api, active, onNavigate }: { data: Row | 
     return { title, body };
   };
 
+  // 断连时诚实呈现：数据没有丢失，恢复后自动刷新——不能把"没数据"说成
+  // "正常现象，没有内容"（2026-09-29 主人报"UI 什么都不显示"的直接观感来源）。
+  if (!active) {
+    return (
+      <div className="home-narrative">
+        <section className="home-section">
+          <h2 className="home-headline">灵机为你记住了什么</h2>
+          <Notice kind="warning">与灵机的连接暂时断开，正在自动恢复。数据没有丢失，恢复后这里会自动刷新。</Notice>
+        </section>
+        <section className="home-section home-footer">
+          <span className="home-footer-line">灵机在本机自动整理你的记录：只记关键节点，原文永远保留，随时可回溯。</span>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="home-narrative">
       <section className="home-section">
         <h2 className="home-headline">灵机为你记住了什么</h2>
         {cardsResource.loading && cards.length === 0 ? (
           <p className="home-muted">正在读取记忆…</p>
+        ) : cardsResource.error ? (
+          <Notice kind="warning">记忆卡片暂时读取失败，正在自动重试；已记内容不会丢失。</Notice>
         ) : remembered.length === 0 ? (
           <Empty text="最近没有值得记住的关键内容——正常现象，灵机只记关键节点，不为记忆而记忆。" />
         ) : (
