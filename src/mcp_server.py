@@ -22,11 +22,15 @@ from src.retrieval import MarkdownChunker
 from src.skills import SkillRegistry
 
 
+from src.mcp.tool_payload import tool_result
+
 # MCP consumers (AI agents) only need identity, text and ranking; the full
 # metadata projection stays available via fetch_memory and the control API.
-# 引用可验证契约：命中必须携带 citation（message_id / content_hash /
-# raw_reference / citation.path 等），AI 引用时主人可按 citation 核对来源；
-# 顶层 relative_path 属内部元数据，vault 定位统一走 citation.path。
+# 引用可验证契约：命中必须携带 citation 的核对四字段（citation.path /
+# message_id / content_hash / raw_reference），AI 引用时主人可按 citation
+# 核对来源；heading/行号/内部 ID 等其余 citation 字段降级为 fetch_memory
+# 二跳内容，来源归因由 raw_reference 承载。顶层 relative_path 属内部元数据，
+# vault 定位统一走 citation.path。
 _SEARCH_RESULT_FIELDS = (
     "memory_id",
     "title",
@@ -38,6 +42,28 @@ _SEARCH_RESULT_FIELDS = (
     "score",
     "citation",
 )
+
+_CITATION_FIELDS = ("path", "message_id", "content_hash", "raw_reference")
+
+# recent_changes 的完整行（relationships 等 40+ 字段）只有 Control API 与
+# fetch_memory 需要；AI 侧只需要"什么变了、何时变的"，详情走二跳。
+_RECENT_MEMORY_FIELDS = (
+    "memory_id",
+    "relative_path",
+    "title",
+    "memory_type",
+    "memory_tier",
+    "status",
+    "updated_at",
+    "agent_scope",
+)
+
+_EVENT_FIELDS = ("event_id", "event_type", "entity_type", "entity_id", "created_at")
+_EVENT_PAYLOAD_MAX_CHARS = 240
+
+
+def _project_fields(item: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
+    return {key: item[key] for key in fields if item.get(key) not in (None, "", [])}
 
 
 def slim_search_results(payload: Any) -> Any:
@@ -52,7 +78,11 @@ def slim_search_results(payload: Any) -> Any:
         if not isinstance(item, dict):
             slimmed.append(item)
             continue
-        slimmed.append({key: item[key] for key in _SEARCH_RESULT_FIELDS if item.get(key) not in (None, "", [])})
+        row = _project_fields(item, _SEARCH_RESULT_FIELDS)
+        citation = item.get("citation")
+        if isinstance(citation, dict):
+            row["citation"] = _project_fields(citation, _CITATION_FIELDS)
+        slimmed.append(row)
     projected = dict(payload)
     projected["results"] = slimmed
     if any(isinstance(item, dict) and item.get("relative_path") for item in results):
@@ -60,6 +90,43 @@ def slim_search_results(payload: Any) -> Any:
         # 引导主人回 Vault 对应笔记（2026-09-23 主人反馈 Vault 没有存在感）。
         projected["vault_root"] = str(settings.vault_path)
     projected["detail_hint"] = "use fetch_memory(memory_id) for full metadata and cited chunks"
+    return projected
+
+
+def slim_recent_changes(payload: Any, *, event_payload_max_chars: int = _EVENT_PAYLOAD_MAX_CHARS) -> Any:
+    """Project recent_changes down to identity + freshness for AI consumers."""
+    if not isinstance(payload, dict):
+        return payload
+    projected = dict(payload)
+    memories = payload.get("memories")
+    if isinstance(memories, list):
+        slimmed = []
+        for item in memories:
+            if not isinstance(item, dict):
+                slimmed.append(item)
+                continue
+            row = _project_fields(item, _RECENT_MEMORY_FIELDS)
+            tags = item.get("tags")
+            if isinstance(tags, list) and tags:
+                row["tags"] = list(tags[:8])
+            slimmed.append(row)
+        projected["memories"] = slimmed
+    events = payload.get("events")
+    if isinstance(events, list):
+        slimmed_events = []
+        for event in events:
+            if not isinstance(event, dict):
+                slimmed_events.append(event)
+                continue
+            row = _project_fields(event, _EVENT_FIELDS)
+            payload_json = str(event.get("payload_json") or "")
+            if payload_json:
+                if len(payload_json) > event_payload_max_chars:
+                    payload_json = payload_json[:event_payload_max_chars] + "…"
+                row["payload_json"] = payload_json
+            slimmed_events.append(row)
+        projected["events"] = slimmed_events
+    projected["detail_hint"] = "use fetch_memory(memory_id) for full metadata; complete rows stay on the control API"
     return projected
 
 
@@ -84,9 +151,9 @@ def register_codex_mcp_tools(mcp: Any, codex_service: CodexSessionService) -> No
     """Register the explicit Codex project/session bridge. No Core Memory writes."""
 
     @mcp.tool()
-    def lingji_resolve_project(workspace_path: str) -> dict[str, Any]:
+    def lingji_resolve_project(workspace_path: str):
         """Resolve a Codex workspace to a manifest, registry or Git-backed LingJi project."""
-        return codex_service.resolve_project(workspace_path)
+        return tool_result(codex_service.resolve_project(workspace_path))
 
     @mcp.tool()
     def lingji_start_session(
@@ -95,15 +162,15 @@ def register_codex_mcp_tools(mcp: Any, codex_service: CodexSessionService) -> No
         title: str = "",
         task: str = "",
         branch: str = "",
-    ) -> dict[str, Any]:
+    ):
         """Start or recover one Codex session for the resolved project."""
-        return codex_service.start_session(
+        return tool_result(codex_service.start_session(
             workspace_path=workspace_path,
             external_session_id=external_session_id,
             title=title,
             task=task,
             branch=branch,
-        )
+        ))
 
     @mcp.tool()
     def lingji_checkpoint(
@@ -117,9 +184,9 @@ def register_codex_mcp_tools(mcp: Any, codex_service: CodexSessionService) -> No
         blockers: list[Any] | None = None,
         next_steps: list[Any] | None = None,
         commits: list[str] | None = None,
-    ) -> dict[str, Any]:
+    ):
         """Append an idempotent, sanitized Codex checkpoint to the active session."""
-        return codex_service.checkpoint(
+        return tool_result(codex_service.checkpoint(
             session_id,
             event_id=event_id,
             kind=kind,
@@ -130,7 +197,7 @@ def register_codex_mcp_tools(mcp: Any, codex_service: CodexSessionService) -> No
             blockers=blockers or [],
             next_steps=next_steps or [],
             commits=commits or [],
-        )
+        ))
 
     @mcp.tool()
     def lingji_close_session(
@@ -140,16 +207,16 @@ def register_codex_mcp_tools(mcp: Any, codex_service: CodexSessionService) -> No
         status: str = "completed",
         decisions: list[Any] | None = None,
         remaining_tasks: list[Any] | None = None,
-    ) -> dict[str, Any]:
+    ):
         """Close a Codex session without promoting any content to Core Memory."""
-        return codex_service.close_session(
+        return tool_result(codex_service.close_session(
             session_id,
             event_id=event_id,
             summary=summary,
             status=status,
             decisions=decisions or [],
             remaining_tasks=remaining_tasks or [],
-        )
+        ))
 
 
 def create_mcp_server(
@@ -224,14 +291,14 @@ def create_mcp_server(
         include_archived: bool = False,
         mode: str = "current",
         as_of: str | None = None,
-    ) -> dict[str, Any]:
+    ):
         """Search LingJi memories with full-text, metadata and optional semantic fusion."""
         payload = memory_gateway.search_memory(
             agent(agent_id), query, limit=limit, project=project,
             memory_types=memory_types, tags=tags, include_archived=include_archived,
             mode=mode, as_of=as_of,
         )
-        return slim_search_results(payload)
+        return tool_result(slim_search_results(payload))
 
     @mcp.tool()
     def fetch_memory(
@@ -240,13 +307,13 @@ def create_mcp_server(
         agent_id: str | None = None,
         mode: str = "current",
         as_of: str | None = None,
-    ) -> dict[str, Any]:
+    ):
         """Fetch one memory and its cited chunks by stable ID or Vault-relative path."""
         result = memory_gateway.fetch_memory(
             agent(agent_id), memory_id=memory_id, relative_path=relative_path,
             mode=mode, as_of=as_of,
         )
-        return result or {"found": False}
+        return tool_result(result or {"found": False})
 
     @mcp.tool()
     def get_core_memory(
@@ -255,9 +322,9 @@ def create_mcp_server(
         limit: int = 50,
         mode: str = "current",
         as_of: str | None = None,
-    ) -> dict[str, Any]:
+    ):
         """Return owner-approved core memories scoped to this AI and project."""
-        return memory_gateway.get_core_memory(agent(agent_id), project=project, limit=limit, mode=mode, as_of=as_of)
+        return tool_result(memory_gateway.get_core_memory(agent(agent_id), project=project, limit=limit, mode=mode, as_of=as_of))
 
     @mcp.tool()
     def build_context_pack(
@@ -266,14 +333,14 @@ def create_mcp_server(
         tags: list[str] | None = None, include_core: bool = True,
         include_archived: bool = False,
         mode: str = "current", as_of: str | None = None,
-    ) -> dict[str, Any]:
+    ):
         """Build a bounded context pack containing core and retrieved memories with citations."""
-        return memory_gateway.build_context_pack(
+        return tool_result(memory_gateway.build_context_pack(
             agent(agent_id), query=query, project=project, max_chars=max_chars,
             memory_types=memory_types, tags=tags, include_core=include_core,
             include_archived=include_archived,
             mode=mode, as_of=as_of,
-        )
+        ))
 
     @mcp.tool()
     def propose_memory(
@@ -282,19 +349,20 @@ def create_mcp_server(
         tags: list[str] | None = None, importance: str = "medium",
         privacy: str = "private", confidence: str | float | None = None,
         sources: list[str] | None = None,
-    ) -> dict[str, Any]:
+    ):
         """Create a reviewable memory candidate. This never writes directly to core memory."""
         metadata = {
             "memory_type": memory_type, "project": project or [], "tags": tags or [],
             "importance": importance, "privacy": privacy,
             "confidence": confidence if confidence is not None else "", "sources": sources or [],
         }
-        return memory_gateway.propose_memory(agent(agent_id), title, content, metadata)
+        return tool_result(memory_gateway.propose_memory(agent(agent_id), title, content, metadata))
 
     @mcp.tool()
-    def recent_changes(agent_id: str | None = None, limit: int = 30) -> dict[str, Any]:
-        """Return recently changed memories and auditable memory events."""
-        return memory_gateway.recent_changes(agent(agent_id), limit=limit)
+    def recent_changes(agent_id: str | None = None, limit: int = 30):
+        """Return recently changed memories and auditable memory events (slim projection)."""
+        payload = memory_gateway.recent_changes(agent(agent_id), limit=limit)
+        return tool_result(slim_recent_changes(payload))
 
     @mcp.tool()
     def project_timeline(
@@ -302,7 +370,7 @@ def create_mcp_server(
         agent_id: str | None = None,
         limit: int = 20,
         max_chars: int = 6000,
-    ) -> dict[str, Any]:
+    ):
         """Aggregate distilled facts and memory hits for one topic into a time-ordered, source-annotated timeline."""
         bounded_limit = min(max(int(limit), 1), 50)
         bounded_chars = min(max(int(max_chars), 200), 20000)
@@ -322,20 +390,20 @@ def create_mcp_server(
             results = list(payload.get("results") or [])
         except Exception:
             results = []
-        return build_timeline(
+        return tool_result(build_timeline(
             topic, entries, results, limit=bounded_limit, max_chars=bounded_chars
-        )
+        ))
 
     @mcp.tool()
-    def memory_health(agent_id: str | None = None) -> dict[str, Any]:
+    def memory_health(agent_id: str | None = None):
         """Check retrieval database integrity, revision and AI profiles."""
-        return memory_gateway.memory_health(agent(agent_id))
+        return tool_result(memory_gateway.memory_health(agent(agent_id)))
 
     @mcp.tool()
     def enqueue_chatgpt_export(
         path: str, project_id: str | None = None, force: bool = False,
         process_now: bool = False, privacy_scan: bool = True,
-    ) -> dict[str, Any]:
+    ):
         """Queue an official ChatGPT ZIP/JSON export for local extraction."""
         job = pipeline.enqueue(
             "chatgpt", input_path=path,
@@ -344,21 +412,21 @@ def create_mcp_server(
         )
         if process_now:
             outcome = pipeline.process_job(job["job_id"])
-            return durable_job_response(
+            return tool_result(durable_job_response(
                 outcome.get("job") or pipeline.queue.get(job["job_id"]),
                 message="Durable extraction job processed through the queue",
-            ) | ({"result": outcome.get("result") or {}} if "result" in outcome else {})
-        return durable_job_response(job)
+            ) | ({"result": outcome.get("result") or {}} if "result" in outcome else {}))
+        return tool_result(durable_job_response(job))
 
     @mcp.tool()
     def submit_codex_work_report(
         report: dict[str, Any],
         force: bool = False,
         process_now: bool = False,
-    ) -> dict[str, Any]:
+    ):
         """Validate and queue a versioned Codex Work Report; never auto-approve it."""
         normalized = validate_codex_work_report(report)
-        return enqueue_durable_submission(
+        return tool_result(enqueue_durable_submission(
             pipeline,
             "codex",
             payload=normalized,
@@ -366,7 +434,7 @@ def create_mcp_server(
             adapter_name="codex_work_report",
             force=force,
             process_now=process_now,
-        )
+        ))
 
     @mcp.tool()
     def capture_web_source(
@@ -376,12 +444,12 @@ def create_mcp_server(
         media_url: str = "", transcript: str = "", ocr_text: str = "",
         project_id: str | None = None, allow_network_fetch: bool = False,
         force: bool = False, process_now: bool = False,
-    ) -> dict[str, Any]:
+    ):
         """Queue a webpage or social/video share using supplied content or a safe public fetch."""
         source_type = platform if platform in {
             "wechat_article", "video_channel", "douyin", "xiaohongshu"
         } else "web"
-        return enqueue_durable_submission(
+        return tool_result(enqueue_durable_submission(
             pipeline,
             source_type,
             payload={
@@ -401,41 +469,41 @@ def create_mcp_server(
             adapter_name="web_capture",
             force=force,
             process_now=process_now,
-        )
+        ))
 
     @mcp.tool()
-    def register_skill(manifest: dict[str, Any]) -> dict[str, Any]:
+    def register_skill(manifest: dict[str, Any]):
         """Register or update a Skill manifest in Obsidian without copying executable code."""
-        return skill_registry.register(manifest)
+        return tool_result(skill_registry.register(manifest))
 
     @mcp.tool()
-    def sync_skill_directory(path: str, limit: int = 500) -> dict[str, Any]:
+    def sync_skill_directory(path: str, limit: int = 500):
         """Scan SKILL.md files and update the Obsidian Skill registry."""
-        return skill_registry.sync_directory(path, limit=limit)
+        return tool_result(skill_registry.sync_directory(path, limit=limit))
 
     @mcp.tool()
-    def list_skills(status: str | None = None, limit: int = 200) -> dict[str, Any]:
+    def list_skills(status: str | None = None, limit: int = 200):
         """List registered Skills and their verification state."""
-        return {"status": skill_registry.status(), "skills": skill_registry.list(status=status, limit=limit)}
+        return tool_result({"status": skill_registry.status(), "skills": skill_registry.list(status=status, limit=limit)})
 
     @mcp.tool()
-    def extraction_job_status(job_id: str) -> dict[str, Any]:
+    def extraction_job_status(job_id: str):
         """Return one durable extraction job."""
-        return durable_job_response(pipeline.queue.get(job_id), message="Durable extraction job status")
+        return tool_result(durable_job_response(pipeline.queue.get(job_id), message="Durable extraction job status"))
 
     @mcp.tool()
-    def extraction_queue_status() -> dict[str, Any]:
+    def extraction_queue_status():
         """Return queue counters, registered adapters and Skill status."""
-        return {
+        return tool_result({
             "queue": pipeline.queue.stats(),
             "adapters": pipeline.registry.list(),
             "skills": skill_registry.status(),
-        }
+        })
 
     @mcp.tool()
-    def process_extraction_jobs(limit: int = 5) -> dict[str, Any]:
+    def process_extraction_jobs(limit: int = 5):
         """Process pending extraction jobs immediately on this local machine."""
-        return pipeline.process_pending(limit=limit)
+        return tool_result(pipeline.process_pending(limit=limit))
 
     @mcp.resource("lingji://memory/health")
     def health_resource() -> str:

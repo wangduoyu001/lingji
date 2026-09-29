@@ -662,7 +662,15 @@ def _registered_mcp_functions(gateway):
         raise AssertionError("production MCP search_memory registration is unavailable")
     if not callable(getattr(tools.get("build_context_pack"), "fn", None)):
         raise AssertionError("production MCP build_context_pack registration is unavailable")
-    return {name: tools[name].fn for name in ("search_memory", "build_context_pack")}
+
+    def _unwrap(function):
+        # 工具函数现返回单份 CallToolResult（compact JSON 文本），解包回载荷便于断言
+        def payload_callable(*args, **kwargs):
+            call_result = function(*args, **kwargs)
+            return json.loads(call_result.content[0].text)
+        return payload_callable
+
+    return {name: _unwrap(tools[name].fn) for name in ("search_memory", "build_context_pack")}
 
 
 def _formal_qdrant_fallback(root: Path, *, required_packaged_text: str | None = None) -> dict[str, Any]:

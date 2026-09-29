@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import mcp.types as _real_mcp_types
 
 from src.gateway.profiles import AIProfileRegistry
 from src.retrieval.context_pack import ContextPackRequest
+
+
+def _payload(result):
+    return json.loads(result.content[0].text)
 
 
 class _FakeMCP:
@@ -56,6 +63,7 @@ def test_mcp_registered_build_context_pack_preserves_scope_contract(monkeypatch)
     from src import mcp_server
 
     mcp_package = types.ModuleType("mcp")
+    mcp_package.types = _real_mcp_types
     mcp_server_package = types.ModuleType("mcp.server")
     fastmcp_package = types.ModuleType("mcp.server.fastmcp")
     fastmcp_package.FastMCP = _FakeMCP
@@ -85,6 +93,7 @@ def test_mcp_registered_build_context_pack_preserves_scope_contract(monkeypatch)
         mode="why",
         as_of="2026-03-01T00:00:00Z",
     )
+    result = _payload(result)
     assert result["request"]["agent_id"] == "chatgpt"
     assert result["request"]["project"] == "LingJi"
     assert result["request"]["mode"] == "why"
@@ -129,6 +138,7 @@ def test_mcp_registered_real_gateway_excludes_current_stale_and_renders_why(monk
     )
     monkeypatch.setitem(sys.modules, "src.config", config)
     mcp_package = types.ModuleType("mcp")
+    mcp_package.types = _real_mcp_types
     mcp_server_package = types.ModuleType("mcp.server")
     fastmcp_package = types.ModuleType("mcp.server.fastmcp")
     fastmcp_package.FastMCP = _FakeMCP
@@ -170,6 +180,8 @@ def test_mcp_registered_real_gateway_excludes_current_stale_and_renders_why(monk
         project="LingJi",
         mode="why",
     )
+    current = _payload(current)
+    why = _payload(why)
     assert "memory-old" not in current["markdown"]
     assert "memory-old" in why["markdown"]
     assert "status_superseded" in why["markdown"]
@@ -206,6 +218,7 @@ def test_mcp_registered_real_gateway_retrieves_short_chinese_with_diagnostics(mo
     )
     monkeypatch.setitem(sys.modules, "src.config", config)
     mcp_package = types.ModuleType("mcp")
+    mcp_package.types = _real_mcp_types
     mcp_server_package = types.ModuleType("mcp.server")
     fastmcp_package = types.ModuleType("mcp.server.fastmcp")
     fastmcp_package.FastMCP = _FakeMCP
@@ -234,6 +247,7 @@ def test_mcp_registered_real_gateway_retrieves_short_chinese_with_diagnostics(mo
         project="LingJi",
         mode="current",
     )
+    result = _payload(result)
     assert "memory-lingji" in {item["memory_id"] for item in result["sections"]}
     assert "message-lingji" in result["markdown"]
     assert result["diagnostics"]["semantic"] == "unavailable"

@@ -2,6 +2,15 @@
 
 > Format（格式）: `[ISO 日期] 变更说明（作者或参考）`
 
+## 2026-09-29
+
+### MCP 工具载荷单份化 + recent_changes/citation 瘦身：AI 侧检索 token 减半以上（代码完成，待打包装机验收）
+
+- 修复根因（同版本探针实测）：mcp 1.29.1 会把带 dict 返回注解的 MCP 工具载荷同时序列化进 content 与 structuredContent，协议层双份——此前每次 search_memory / recent_changes 等 22 个工具调用的返回都被 AI 侧按两份计费。现在全部工具返回显式 CallToolResult（单份紧凑 JSON）。
+- `recent_changes` 增加瘦身投影：记忆行只留标识与时间字段（完整 relationships 40+ 字段不再进 AI 上下文，详情走 fetch_memory 或 Control API），事件 payload 截断；该工具是本次 5～8 万 token 会话开销的最大来源。
+- `search_memory` 的 citation 收紧为核对四字段（path/message_id/content_hash/raw_reference），引用可验证契约不变，长外部 ID 降级为二跳。
+- 数据链路零改动：网关、采集、存储、Desktop（走 Control API）行为不变；运行中已装后端为旧打包，需下次打包装机后生效。
+
 ## 2026-09-23
 
 ### MCP 新增 project_timeline 工具：多个 AI 同一项目时间线聚合查询（真机实测通过，待主人确认）
