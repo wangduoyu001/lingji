@@ -311,3 +311,10 @@ def test_last_global_error_ignores_owner_revocation_notices():
 
     runtime.state_db = _DB([{"last_error": "qdrant connection refused"}], [])
     assert runtime._last_global_error() == "qdrant connection refused"
+
+    runtime.state_db = _DB(
+        [],
+        [{"event_type": "work.failed_items_merged", "payload_json": '{"merged_rows": 1}'},
+         {"event_type": "memory_index_synced"}],
+    )
+    assert runtime._last_global_error() is None, "例行记账事件不是故障"

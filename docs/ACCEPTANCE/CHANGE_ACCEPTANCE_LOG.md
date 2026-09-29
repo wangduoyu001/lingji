@@ -4315,3 +4315,5 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 真机验收（装机后）：状态页 11 面板数值与真实后端一致（存储总占用应为真实字节数、最近动态应为真实事件中文标签）；零决策按钮红线保持。回滚=revert 本提交。
 
 追加（同日仪表盘批次装机后）：状态页上线即发挥作用——watcher_status 暴露两个真实问题并当场处置：①raw 存储达 2.30GB 触顶 2GiB 上限（.env 9-28 收紧值），自动淘汰因 514 个当日快照全在 24h 保护期内无可淘汰、按设计拒绝新写入（当前日志 2 次 refusal）→ 采集面临最长 20h 停摆；处置=按系统报错自带处方与 9-23 主人批准值恢复 .env raw 上限 3GiB 并重启（总占用仍 < 5GB 硬上限；今晚保护期过后自动淘汰会回收），重启后 refusal 清零、队列继续推进（completed 1054→1056）。②`last_global_error: "source authorization revoked"` 为假警报：src-42dd7a81 是 9-23 错误配置（把 db.sqlite 文件当来源根）6 分钟后被 src-4e7acbb4 正确来源取代的吊销墓碑——吊销是主人主动终态、revoke 无删除接口属审计设计，不应作为系统故障永久挂状态页。修复 `_last_global_error`：跳过"主人主动吊销/改授权"类通告（owner-intentional notice），真实故障照常上报；新增单测 3 断言（吊销通告忽略/真实故障上报/普通错误保留），test_runtime_truth 9 例、runtime_flow 套件通过。
+
+追加（同日第五轮装机验证）：吊销假警报清除后暴露同根因第二例——`work.failed_items_merged`（失败台账例行归并：1018 个扫描的重复失败行合并为 1 行代表行）因事件名含 "failed" 被捞为全局错误。补记账事件豁免（frozenset 精确匹配事件类型），单测加"记账事件不是故障"断言；test_runtime_truth 10 例通过。

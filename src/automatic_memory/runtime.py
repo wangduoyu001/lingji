@@ -1151,6 +1151,9 @@ class AutomaticMemoryRuntime:
         "source authorization changed during reconciliation",
     )
 
+    # 例行记账事件（含 "failed" 字样但不是故障）：失败台账归并只合并重复行。
+    _GLOBAL_ERROR_BOOKKEEPING_EVENTS = frozenset({"work.failed_items_merged"})
+
     @classmethod
     def _is_owner_intentional_notice(cls, message: str) -> bool:
         lowered = message.lower()
@@ -1164,6 +1167,8 @@ class AutomaticMemoryRuntime:
                     return str(error)[:2000]
             for row in self.state_db.recent_events(limit=100):
                 event_type = str(row.get("event_type") or "")
+                if event_type in self._GLOBAL_ERROR_BOOKKEEPING_EVENTS:
+                    continue
                 if "failed" not in event_type and "error" not in event_type:
                     continue
                 payload = row.get("payload_json")
