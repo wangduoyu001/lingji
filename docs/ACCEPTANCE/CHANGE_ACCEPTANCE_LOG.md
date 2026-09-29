@@ -4304,3 +4304,6 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 修复：①overview 加 20s TTL 缓存（overview() 拆为缓存包装 + _build_overview；状态聚合允许 ≤20s 陈旧，换毫秒级响应；brain_status 同收益）；②连接轮询三振容错：单次瞬时失败只记错误不再判离线，连续 3 次失败或连续 3 次明确 unhealthy 才 offline（恢复路径 ensureConnection 不变）；③overview 请求超时放宽至 30s（缓存后正常毫秒级，只防极端）；④首页诚实断连态：active=false 时显示"连接暂时断开，正在自动恢复。数据没有丢失"而非"正常现象，没有内容"；卡片读取失败单独提示，不再与真空态混淆。
 自动测试：tests/test_runtime_truth.py 新增 overview TTL 缓存单测（TTL 内命中/过期重建），8 例通过；npm run build 通过；owner-ui-menu-fast-track 563 行全场景 PASS。
 真机验收（装机后）：/api/overview P95 < 1s；连续观察 3 分钟外壳无"自动恢复中"徽章闪烁、无"连接中断"文案；首页数据区在连接正常时显示真实内容。回滚=revert 本提交。
+
+追加（同日第三轮装机）：产品 Head d58cac62 打包装机。sidecar exe sha256 2a494958…；DMG sha256 1bd5011f…，codesign --deep --strict 通过。旧 App 备份至 backups/灵机.app.prev-efd84fac-20260929-1746。
+装机后真机验证：①/api/overview 延迟：冷构建 7.3s → 缓存命中 1.5~3ms（约 4000 倍），20s TTL 与 10s 轮询配合下不再出现叠加慢请求；②2 分钟稳定性观察：overview 轮询全部 200、日志零 5xx，外壳无超时判离线条件（叠加三振容错双保险）；③运维备注：整包替换后第一次 `open -g` 与旧进程退出存在 LaunchServices 竞态、进程未拉起，重新 open 即正常（后续装机规程在退出确认后增加二次 open 兜底）。App 保持运行，主人随时可查看；代理不再抢焦点截屏（主人正在使用桌面）。
