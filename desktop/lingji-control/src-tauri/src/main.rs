@@ -305,6 +305,22 @@ fn main() -> tauri::Result<()> {
                 api.prevent_exit();
             }
         }
+        // 主窗口点关闭 = 隐藏到托盘（不销毁），否则窗口没了只能重启 App。
+        tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::CloseRequested { api, .. },
+            ..
+        } if label == "main" => {
+            if let Some(window) = app_handle.get_webview_window("main") {
+                let _ = window.hide();
+            }
+            api.prevent_close();
+        }
+        // macOS Dock 图标点击 / open -a 灵机：把主窗口带回来（2026-09-28：
+        // 之前关闭后无法唤回，主人以为 App 坏了）。
+        tauri::RunEvent::Reopen { .. } => {
+            show_main_window(app_handle);
+        }
         tauri::RunEvent::Exit => {
             app_handle.state::<RuntimeManager>().shutdown();
         }
