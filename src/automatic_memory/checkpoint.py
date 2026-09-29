@@ -18,7 +18,7 @@ from src.storage.state_db import LeaseLostError
 from src.automatic_memory.value_gate import evaluate_session_value
 
 from .models import ScanRun
-from .snapshot import ConsistentSnapshot, SnapshotResult
+from .snapshot import ConsistentSnapshot, FileStat, SnapshotResult
 
 
 # ---------------------------------------------------------------------------
@@ -334,6 +334,7 @@ class SnapshotJobRunner:
         after_lease: Callable[[], None] | None = None,
         lease_ttl_seconds: float = 30.0,
         raw_max_bytes: int = 10 * 1024 ** 3,
+        zcode_incremental_enabled: bool = True,
         value_gate_enabled: bool = False,
         value_gate_min_turns: int = 2,
         value_gate_min_chars: int = 300,
@@ -343,6 +344,10 @@ class SnapshotJobRunner:
             snapshot = snapshotter
         if snapshot is None or queue is None or state_db is None:
             raise TypeError("snapshot, queue and state_db are required")
+        # 写放大治理（主人 2026-09-29：大量硬盘写入必须优化）：zcode 活库
+        # 每变化一次整库拷贝 ~186MB，改为按会话增量导出（水位线），失败自动
+        # 回退整库快照，绝不阻断采集。
+        self.zcode_incremental_enabled = bool(zcode_incremental_enabled)
         self.snapshot = snapshot
         self.raw_max_bytes = max(int(raw_max_bytes), 1)
         self.queue = queue
@@ -606,9 +611,47 @@ class SnapshotJobRunner:
             for path in paths:
                 self._assert_heartbeat()
                 relative = self._relative(source, path)
-                result = self._reuse_snapshot(source_id, path, previous.get(relative))
+                increment = (
+                    self._prepare_zcode_increment(source_id, path)
+                    if self._zcode_increment_applicable(source, path)
+                    else None
+                )
+                if increment is not None and increment.get("state") == "unchanged":
+                    # 水位线内没有新消息：等价哨兵命中，本轮零写入。
+                    processed += 1
+                    if self.before_checkpoint is not None:
+                        self.before_checkpoint(processed, total)
+                    try:
+                        live_sentinel = self._path_sentinel(path)
+                    except OSError:
+                        live_sentinel = source_sentinel
+                    checkpoint = ResumeToken(
+                        scan_id, relative, live_sentinel or source_sentinel, lease_id, attempt
+                    )
+                    self.checkpoints.save(checkpoint, manifest_status="no_increment")
+                    cursor = relative
+                    self.state_db.update_automatic_memory_scan_owned(
+                        scan_id,
+                        lease_id,
+                        lease_ttl_seconds=self.lease_ttl_seconds,
+                        progress=processed,
+                        total=total,
+                        updated_at=self._updated_at(),
+                    )
+                    self._assert_heartbeat()
+                    if crash_index is not None and processed >= crash_index:
+                        return self._pause(scan_id, checkpoint)
+                    continue
+                result = (
+                    None
+                    if increment is not None
+                    else self._reuse_snapshot(source_id, path, previous.get(relative))
+                )
                 if result is None:
-                    size = path.stat().st_size
+                    capture_path = (
+                        Path(increment["path"]) if increment is not None else path
+                    )
+                    size = capture_path.stat().st_size
                     if raw_used + size > self.raw_max_bytes:
                         # 先尝试淘汰过保护期的旧快照腾位（占用不能无限膨胀）；
                         # 未终态任务引用的快照在准确性保护名单里绝不淘汰；
@@ -629,10 +672,15 @@ class SnapshotJobRunner:
                             f"raw storage limit reached ({raw_used}/{self.raw_max_bytes} bytes); "
                             "existing evidence preserved; free space or raise automatic_memory_raw_max_bytes"
                         )
-                    result = self.snapshot.capture(
-                        source_id, path, scan_id=scan_id, lease_id=lease_id,
-                        lease_guard=self._assert_heartbeat,
-                    )
+                    if increment is not None:
+                        result = self._commit_increment_raw(
+                            Path(increment["path"]), source_id
+                        )
+                    else:
+                        result = self.snapshot.capture(
+                            source_id, path, scan_id=scan_id, lease_id=lease_id,
+                            lease_guard=self._assert_heartbeat,
+                        )
                     # Conservative within-scan accounting also bounds staging space.
                     raw_used += result.stat_after.size
                 if not result.stable:
@@ -698,6 +746,10 @@ class SnapshotJobRunner:
                         "raw committed before queue admission; orphan raw evidence "
                         f"raw_id={result.raw_id} relative_path={result.relative_path}: {exc}"
                     ) from exc
+                if increment is not None and increment.get("state") == "ready":
+                    # raw 落位且入队成功才前进水位线；中途任何失败，下一轮
+                    # 导出的是超集，提取按内容哈希幂等，绝不丢数据。
+                    self._commit_zcode_watermark(source_id, int(increment["watermark"]))
                 processed += 1
                 if self.before_checkpoint is not None:
                     self.before_checkpoint(processed, total)
@@ -852,6 +904,99 @@ class SnapshotJobRunner:
         return Path(path).expanduser().absolute().relative_to(
             Path(source["root"]).expanduser().absolute()
         ).as_posix()
+
+    def _zcode_increment_applicable(self, source: Any, path: Path) -> bool:
+        """仅 zcode_session 来源的 db.sqlite 走增量路径；其余来源行为不变。"""
+        if not self.zcode_incremental_enabled:
+            return False
+        try:
+            return (
+                str(source.get("kind") or "") == "zcode_session"
+                and Path(path).name == "db.sqlite"
+            )
+        except AttributeError:
+            return False
+
+    def _prepare_zcode_increment(self, source_id: str, db_path: Path) -> dict[str, Any] | None:
+        """导出自水位线以来的会话增量。
+
+        返回 {"state": "unchanged"}（无新消息）、{"state": "ready", ...}
+        （增量文件已就绪）；任何失败返回 None → 回退整库快照路径。
+        增量绝不阻断采集，这是唯一铁律。
+        """
+        try:
+            from .incremental import export_increment, load_watermark
+
+            storage_path = self.snapshot.raw_root.parent
+            watermark = load_watermark(storage_path, source_id)
+            staging = self.snapshot.raw_root.parent / "automatic_memory_staging"
+            staging.mkdir(parents=True, exist_ok=True)
+            out_path = staging / f"zcode-increment-{source_id}-{uuid4().hex}.sqlite"
+            export = export_increment(Path(db_path), watermark, out_path)
+            if export is None:
+                return {"state": "unchanged"}
+            return {
+                "state": "ready",
+                "path": out_path,
+                "watermark": export.watermark,
+                "sessions": export.sessions,
+                "messages": export.messages,
+                "bytes": export.bytes_written,
+            }
+        except Exception:
+            return None
+
+    def _commit_zcode_watermark(self, source_id: str, watermark: int) -> None:
+        try:
+            from .incremental import save_watermark
+
+            save_watermark(self.snapshot.raw_root.parent, source_id, int(watermark))
+        except Exception:
+            # 水位线不前进 → 下一轮导出超集，提取按内容哈希幂等，无害。
+            pass
+
+    def _commit_increment_raw(self, temp_path: Path, source_id: str) -> SnapshotResult:
+        """把增量文件以内容寻址命名落位 raw（同文件系统原子改名）。
+
+        capture() 要求路径在授权根内，而增量文件属于灵机自己的暂存产物，
+        因此走这条等价但更简单的提交路径：哈希命名 + 原子改名 + fsync。
+        """
+        import hashlib
+
+        raw_root = self.snapshot.raw_root
+        raw_root.mkdir(parents=True, exist_ok=True)
+        digest = hashlib.sha256()
+        with Path(temp_path).open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        raw_id = digest.hexdigest()
+        final = raw_root / raw_id
+        if final.exists():
+            Path(temp_path).unlink(missing_ok=True)
+        else:
+            os.replace(Path(temp_path), final)
+            dir_fd = os.open(raw_root, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        stat = final.stat()
+        file_stat = FileStat(
+            size=stat.st_size,
+            mtime_ns=stat.st_mtime_ns,
+            inode=stat.st_ino,
+            mode=stat.st_mode,
+        )
+        return SnapshotResult(
+            source_id=source_id,
+            relative_path=raw_id,
+            raw_id=raw_id,
+            sha256=raw_id,
+            stat_before=file_stat,
+            stat_after=file_stat,
+            stable=True,
+            attempt=1,
+        )
 
     def _value_gate_config(self) -> tuple[bool, int, int]:
         """每次判定时取当前 (enabled, min_turns, min_chars)。

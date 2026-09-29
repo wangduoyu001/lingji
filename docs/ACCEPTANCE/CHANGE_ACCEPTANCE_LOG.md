@@ -4319,3 +4319,11 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 追加（同日第五轮装机验证）：吊销假警报清除后暴露同根因第二例——`work.failed_items_merged`（失败台账例行归并：1018 个扫描的重复失败行合并为 1 行代表行）因事件名含 "failed" 被捞为全局错误。补记账事件豁免（frozenset 精确匹配事件类型），单测加"记账事件不是故障"断言；test_runtime_truth 10 例通过。
 
 追加（同日第五、六轮装机）：①Head 03905f29（sidecar f1efb37c…，DMG df857a36…）：吊销假警报清除验证通过，但暴露同根因第二例（work.failed_items_merged 记账事件被捞为全局错误）。②Head d66998c1（sidecar ac6692ae…，DMG 27871745…）最终装机：真机验证 全局错误=None、三管线下健康、队列 1056 completed/15 failed、总占用 3.11GB（今日会话快照量大，24h 保护期过后自动淘汰回收，3GiB raw 上限有余量，硬上限 5GB 内）、warnings 空。backups 链：prev-2a494958-1822 → prev-f1efb37c-1840（各代可整体回滚）。运行中 App 保持打开。
+
+## 2026-09-29 ZCODE_INCREMENTAL_SNAPSHOT（主人指示"大量使用硬盘必须优化"）
+
+根因（实测）：raw 消耗的主体是 ZCode 活库（~186MB 单文件）的**整库快照写放大**——活库每变化一次就整库拷贝一份，重会话日 2.32GB/518 文件（13 个 100-180MB 副本全部是同一个库的连续版本，内容 99% 相同）；实际新增数据每周期仅 KB~MB 级，放大百倍。已验证非「不变也拷」：size+mtime+WAL 哨兵命中即跳过（checkpoint.py:648），消耗与真实使用量成正比；SSD 寿命诚实校准 ~1TB/年为额定值零头，但空间churn/触顶停摆/能耗均为真实代价。
+修复（按会话增量导出，写放大从 ~100x 降到 ~1x）：①新增 `src/automatic_memory/incremental.py`：只读 WAL 连接导出"自水位线以来有新消息的会话"（整个会话自包含、只带 text 部件），产出与生产适配器 schema 完全一致的小型 SQLite 增量库——`ZcodeSessionAdapter` 零改动直接消费，citation 指向稳定的小文件。水位线=已导出 message rowid，存 storage/automatic_memory_watermarks/<source_id>.json（tmp+rename 原子写）。崩溃安全：水位线只在增量 raw 落位且入队成功后前进；任何失败下一轮导出超集，提取按内容哈希幂等，绝不丢数据。②checkpoint 接线：仅 `zcode_session` 来源的 `db.sqlite` 走增量路径（构造参数 `zcode_incremental_enabled` 默认开）；无新消息记 `no_increment` manifest（带活库真实哨兵，后续无变化轮次零 pending）零写入；导出/落位/入队任何一步失败自动回退整库快照路径（增量绝不阻断采集，唯一铁律）；其他来源（codex_rollout 文件级、chatgpt_export 一次性）行为不变。③增量落位走 `_commit_increment_raw`（内容寻址+同 fs 原子改名+fsync 目录），不占用授权根、不碰 capture 的一致性机械（增量文件本身是静态产物）。
+预期效果：重会话日 raw 写入从 2.32GB/日 降到 MB 级（≈实际新增会话量）；raw 稳态占用从"日 GB 级滚动"变为"历史基线 + 每日增量"，3GiB 上限成为纯安全网；磁盘写入量降约两个数量级。
+自动测试：新增 tests/test_zcode_increment.py 4 例（增量自包含+适配器零改动兼容 / 水位线 None→delta 语义+会话级投影稳定 / 回滚超集崩安全 / checkpoint 全接线：增量落位 raw、入队 source_type=zcode_session、水位线前进、二轮零入队且 manifest 显式 no_increment）。回归：value_gate/task6r/raw_retention/zcode_session_adapter/owner_real_history/resume/runtime_truth 全绿；scheduler 2 例失败经未改动树复现为既有项（与本变更无关）。首轮接线测试先后拦截两处真实缺陷（checkpoint manifest 写入列名、no_increment 分支哨兵为空导致 scan_item 丢失）——测试先行发挥了作用。
+真机验收（装机后）：生产 raw 出现 watermark 文件与 <186MB 的增量库；下一周期有新消息时 raw 新增文件为 MB 级增量而非整库副本；dashboard 存储面板持续可见。回滚=revert 本提交（增量路径整段消失，回退整库快照）。
