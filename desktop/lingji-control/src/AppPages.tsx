@@ -1,7 +1,7 @@
 import type { LingJiApi } from "./api";
 import AcceptancePage from "./pages/AcceptancePage";
 import ActivityPage from "./pages/ActivityPage";
-import AttentionPage from "./pages/AttentionPage";
+import SystemStatusPage from "./pages/SystemStatusPage";
 import AutoReviewPage from "./pages/AutoReviewPage";
 import BackupsPage from "./pages/BackupsPage";
 import BrainStatusPage from "./pages/BrainStatusPage";
@@ -54,7 +54,7 @@ export default function AppPages(props: AppPagesProps) {
     {page === "changes_ledger" && <ChangesLedgerPage api={api} active={connected} />}
     {page === "processing_detail" && <ProcessingDetailPage api={api} active={connected} />}
     {page === "activity" && <ActivityPage api={api} active={connected} />}
-    {page === "attention" && <AttentionPage api={api} active={connected} />}
+    {page === "attention" && <SystemStatusPage api={api} active={connected} />}
     {page === "diagnostics" && <DiagnosticsPage onNavigate={onNavigate} />}
     {page === "brain_status" && <BrainStatusPage api={api} active={connected} />}
     {page === "memory_inspector" && <MemoryInspectorLoopPage api={api} active={connected} target={inspectorTarget} />}

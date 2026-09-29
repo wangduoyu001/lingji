@@ -16,7 +16,8 @@ const formatTime = (value: unknown): string => {
 /**
  * 首页 = 产品叙事，不是监控面板（主人 2026-09-28 反馈重做）。
  * 三段式：①灵机今天为你记住了什么（关键节点，大字卡片）
- *        ②需要你拍板的事（含失败治理生成的 owner 待办）
+ *        ②系统自动处理中的事项（失败治理生成的记录，只读可见，主人 2026-09-29
+ *          指示：不再留"等主人拍板"的环节，问题自动亮在状态页）
  *        ③底部一行系统状态。
  * 数据全部来自既有只读投影（owner memory cards / pending actions），
  * 不新增第二套存储。
@@ -87,15 +88,15 @@ export default function OverviewPage({ api, active, onNavigate }: { data: Row | 
       </section>
 
       <section className="home-section">
-        <h2 className="home-headline">需要你拍板的事</h2>
+        <h2 className="home-headline">系统自动处理中的事项</h2>
         {pending === null ? (
-          <p className="home-muted">正在读取待办…</p>
+          <p className="home-muted">正在读取状态…</p>
         ) : ownerPending.length === 0 ? (
-          <Empty text="现在没有需要你决定的事——灵机能自己处理的都在自己处理。" />
+          <Empty text="一切正常——没有需要留意的异常。" />
         ) : (
           <>
             <p className="home-summary">
-              有 <strong>{ownerPending.length}</strong> 件事需要你决定：
+              <strong>{ownerPending.length}</strong> 条事项由灵机自动重试或保守处理，无需你操作：
             </p>
             <div className="home-actions">
               {ownerPending.map((item) => (
@@ -105,6 +106,9 @@ export default function OverviewPage({ api, active, onNavigate }: { data: Row | 
                 </div>
               ))}
             </div>
+            <button className="home-secondary-link" onClick={() => onNavigate("attention")}>
+              看全部状态 →
+            </button>
           </>
         )}
         {systemPending.length > 0 && (

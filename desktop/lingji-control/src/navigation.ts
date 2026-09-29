@@ -6,9 +6,9 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
 ];
 
 export const PRIMARY_NAVIGATION: NavigationItem[] = [
-  { id: "overview", label: "首页", hint: "灵机今天为你记住了什么、有什么需要你拍板", group: "observe", icon: "home" },
+  { id: "overview", label: "首页", hint: "灵机今天为你记住了什么、系统正在自动处理什么", group: "observe", icon: "home" },
   { id: "memory_library", label: "记忆库", hint: "灵机记住的全部内容：知识要点 + 对话原文，每条可打开", group: "observe", icon: "inspect" },
-  { id: "attention", label: "需要我", hint: "只显示现在需要你决定的事项", group: "observe", icon: "review" },
+  { id: "attention", label: "状态", hint: "所有功能的实时状态与最近异常；系统自动处理，无需你操作", group: "observe", icon: "pulse" },
 ];
 
 export const ADVANCED_NAVIGATION: NavigationItem[] = [

@@ -39,6 +39,46 @@ export type TaskSummary = {
   [key: string]: unknown;
 };
 
+export type PipelineHealthSnapshot = {
+  name?: string | null;
+  consecutive_failures?: number | null;
+  total_failures?: number | null;
+  degraded?: boolean | null;
+  last_error?: string | null;
+  last_success_at?: string | null;
+  last_failure_at?: string | null;
+  [key: string]: unknown;
+};
+
+export type FailureLedgerRecord = {
+  failure_key?: string | null;
+  source_id?: string | null;
+  stage?: string | null;
+  reason?: string | null;
+  retryable?: boolean | null;
+  requires_owner?: boolean | null;
+  occurrence_count?: number | null;
+  last_seen_at?: string | null;
+  [key: string]: unknown;
+};
+
+export type FailureLedger = {
+  failures?: FailureLedgerRecord[];
+  total?: number | null;
+  [key: string]: unknown;
+};
+
+export type ExtractionQueueStats = {
+  queued?: number | null;
+  retrying?: number | null;
+  running?: number | null;
+  completed?: number | null;
+  failed?: number | null;
+  cancelled?: number | null;
+  pending?: number | null;
+  [key: string]: unknown;
+};
+
 export type BrainStatusSummary = {
   memory_count: number | null;
   memory_chunk_count: number | null;
@@ -69,6 +109,9 @@ export type BrainStatusSummary = {
   status_source: string | null;
   status_stale: boolean;
   status_as_of: string | null;
+  pipelines: Record<string, PipelineHealthSnapshot>;
+  extraction_queue: ExtractionQueueStats | null;
+  failure_ledger: FailureLedger | null;
   warnings: StatusWarning[];
   [key: string]: unknown;
 };
@@ -133,6 +176,24 @@ export function normalizeBrainStatus(value: unknown): BrainStatusSummary {
     status_source: nullableString(source.status_source),
     status_stale: Boolean(source.status_stale),
     status_as_of: nullableString(source.status_as_of),
+    pipelines: Object.fromEntries(
+      Object.entries(
+        source.pipelines && typeof source.pipelines === "object"
+          ? (source.pipelines as Record<string, unknown>)
+          : {},
+      ).map(([name, item]) => [
+        name,
+        item && typeof item === "object" ? (item as PipelineHealthSnapshot) : {},
+      ]),
+    ),
+    extraction_queue:
+      source.extraction_queue && typeof source.extraction_queue === "object"
+        ? (source.extraction_queue as ExtractionQueueStats)
+        : null,
+    failure_ledger:
+      source.failure_ledger && typeof source.failure_ledger === "object"
+        ? (source.failure_ledger as FailureLedger)
+        : null,
     warnings: rawWarnings.filter((item): item is StatusWarning => Boolean(item && typeof item === "object")),
   };
 }

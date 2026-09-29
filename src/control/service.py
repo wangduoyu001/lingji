@@ -228,6 +228,25 @@ class LocalControlService:
             *warnings,
         ]
 
+        # 主人 2026-09-29 指示：状态页必须详细显示所有功能状态，问题不能只靠
+        # 主人发现。三段各自故障隔离：某段读不到只追加 warning，不拖垮整体。
+        pipelines: dict[str, Any] = {}
+        try:
+            runtime_status = self.runtime.status() if self.runtime is not None else {}
+            pipelines = dict(runtime_status.get("pipelines") or {})
+        except Exception as exc:
+            warnings.append(self._status_warning("automatic_pipelines_unavailable", "automatic_memory", exc))
+        extraction_queue: dict[str, Any] = {}
+        try:
+            extraction_queue = dict(self.queue.stats())
+        except Exception as exc:
+            warnings.append(self._status_warning("extraction_queue_unavailable", "extraction", exc))
+        failure_ledger: dict[str, Any] = {}
+        try:
+            failure_ledger = self.failures(limit=20)
+        except Exception as exc:
+            warnings.append(self._status_warning("failure_ledger_unavailable", "failures", exc))
+
         return {
             "memory_count": memory.get("documents"),
             "memory_chunk_count": memory.get("chunks"),
@@ -254,6 +273,9 @@ class LocalControlService:
             "status_source": memory_runtime.get("source"),
             "status_stale": bool(memory_runtime.get("stale")) or bool(telemetry.get("stale")),
             "status_as_of": memory_runtime.get("as_of") or telemetry.get("collected_at"),
+            "pipelines": pipelines,
+            "extraction_queue": extraction_queue,
+            "failure_ledger": failure_ledger,
             "warnings": warnings,
         }
 

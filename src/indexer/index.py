@@ -502,7 +502,10 @@ class PEMISIndex:
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         temp_path = self.index_path.with_suffix(".json.tmp")
         with open(temp_path, "w", encoding="utf-8") as handle:
-            json.dump(index, handle, ensure_ascii=False, indent=2)
+            # default=str：Vault frontmatter 解析可能带 datetime 等非 JSON 原生
+            # 类型；此前这里直接崩溃导致索引 JSON 持久化失败（晋升后 500、
+            # 索引停留旧状态），序列化为 ISO 字符串保底。
+            json.dump(index, handle, ensure_ascii=False, indent=2, default=str)
         temp_path.replace(self.index_path)
 
     def _load(self):

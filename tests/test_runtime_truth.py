@@ -52,6 +52,26 @@ class _Queue:
     def list(self, *, limit: int):
         return []
 
+    def stats(self):
+        return {"queued": 1, "retrying": 0, "running": 0, "completed": 4, "failed": 2, "cancelled": 0, "pending": 1}
+
+
+class _Runtime:
+    def status(self):
+        return {
+            "pipelines": {
+                "distill": {
+                    "name": "distill",
+                    "consecutive_failures": 2,
+                    "total_failures": 5,
+                    "degraded": True,
+                    "last_error": "lock timeout",
+                    "last_success_at": "2026-09-29T10:00:00",
+                    "last_failure_at": "2026-09-29T12:00:00",
+                }
+            }
+        }
+
 
 def _service(*, telemetry):
     service = LocalControlService.__new__(LocalControlService)
@@ -71,7 +91,52 @@ def _service(*, telemetry):
     service.memory_statistics = _Statistics()
     service.compute_policy = lambda: {"requested_mode": "auto"}
     service.queue = _Queue()
+    service.runtime = None
+    service.failures = lambda limit: {"failures": [], "total": 0}
     return service
+
+
+def test_brain_status_surfaces_pipelines_queue_and_failure_ledger():
+    service = _service(telemetry={"collected_at": None, "source": "unavailable", "stale": True, "errors": [], "gpus": []})
+    service.runtime = _Runtime()
+    service.failures = lambda limit: {
+        "failures": [
+            {
+                "failure_key": "k1",
+                "stage": "parse",
+                "reason": "bad file",
+                "retryable": True,
+                "requires_owner": True,
+                "occurrence_count": 3,
+                "last_seen_at": "2026-09-29T12:00:00",
+            }
+        ],
+        "total": 1,
+    }
+
+    status = service.brain_status()
+
+    assert status["pipelines"]["distill"]["degraded"] is True
+    assert status["extraction_queue"]["failed"] == 2
+    assert status["failure_ledger"]["total"] == 1
+    assert status["failure_ledger"]["failures"][0]["stage"] == "parse"
+
+
+def test_brain_status_isolates_missing_status_sections_as_warnings():
+    service = _service(telemetry={"collected_at": None, "source": "unavailable", "stale": True, "errors": [], "gpus": []})
+    service.runtime = SimpleNamespace(status=lambda: (_ for _ in ()).throw(RuntimeError("runtime unavailable")))
+    service.failures = lambda limit: (_ for _ in ()).throw(RuntimeError("ledger unavailable"))
+    service.queue = SimpleNamespace(stats=lambda: (_ for _ in ()).throw(RuntimeError("queue unavailable")))
+
+    status = service.brain_status()
+
+    assert status["pipelines"] == {}
+    assert status["extraction_queue"] == {}
+    assert status["failure_ledger"] == {}
+    codes = {warning["code"] for warning in status["warnings"]}
+    assert "failure_ledger_unavailable" in codes
+    assert "extraction_queue_unavailable" in codes
+    assert "automatic_pipelines_unavailable" in codes
 
 
 def test_embedding_defaults_use_distinct_primary_and_fallback():
@@ -148,3 +213,21 @@ def test_brain_status_uses_null_for_unknown_inventory_values():
 
     assert status["chat_model"] is None
     assert status["installed_models"] is None
+
+
+def test_save_index_survives_non_json_native_values(tmp_path):
+    from datetime import datetime
+
+    from src.indexer.index import PEMISIndex
+
+    indexer = PEMISIndex.__new__(PEMISIndex)
+    indexer.vault_path = tmp_path / "vault"
+    indexer.storage_dir = tmp_path / "storage"
+    indexer.index_path = indexer.storage_dir / "memory_index.json"
+
+    indexer.save_index({"meta": {"version": "2.2", "total": 1}, "entries": {"a": {"updated": datetime(2026, 9, 29, 12, 0, 0)}}})
+
+    import json as _json
+
+    saved = _json.loads(indexer.index_path.read_text(encoding="utf-8"))
+    assert saved["entries"]["a"]["updated"] == "2026-09-29 12:00:00"
