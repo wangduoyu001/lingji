@@ -165,6 +165,7 @@ class AutomaticMemoryRuntime:
                     getattr(settings, "automatic_memory_snapshot_throttle_seconds", 1800.0)
                 ),
                 vector_backfill_callback=self._wake_vector_backfill,
+                maintenance_callback=self._raw_space_maintenance,
             )
         self.scheduler = scheduler
         if worker is None:
@@ -843,6 +844,33 @@ class AutomaticMemoryRuntime:
             except Exception:
                 pass
             backoff.wait(timeout=poll)
+
+    def _raw_space_maintenance(self) -> None:
+        """raw 超限的主动逐出：逐出原是采集路径的被动行为，复用期长时间
+        不采集会让超限状态无限滞留（2026-09-29 体检发现 raw 2.64GiB/2GiB）。
+        失败静默——下轮核对会再试。"""
+        try:
+            from src.automatic_memory.checkpoint import evict_raw_for_space, nonterminal_job_raw_ids
+
+            snapshot = getattr(self, "snapshot", None)
+            raw_root = getattr(snapshot, "raw_root", None)
+            raw_max = int(getattr(self.runner, "raw_max_bytes", 0) or 0)
+            if raw_root is None or raw_max <= 0:
+                return
+            from pathlib import Path as _Path
+
+            usage_root = _Path(str(raw_root))
+            total = sum(
+                entry.stat().st_size
+                for entry in usage_root.iterdir()
+                if entry.is_file() and not entry.name.startswith(".")
+            )
+            if total <= raw_max:
+                return
+            protected = nonterminal_job_raw_ids(_Path(str(self.state_db.path)))
+            evict_raw_for_space(usage_root, int(raw_max * 0.7), protected=protected)
+        except Exception:
+            return
 
     def _wake_vector_backfill(self) -> None:
         """核对完成后的非阻塞唤醒：调度线程绝不等待向量化。"""

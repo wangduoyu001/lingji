@@ -84,8 +84,10 @@ class AutomaticMemoryScheduler:
         event_watcher_enabled: bool = True,
         vector_backfill_callback: Callable[[], Any] | None = None,
         snapshot_throttle_seconds: float = 1800.0,
+        maintenance_callback: Callable[[], None] | None = None,
     ) -> None:
         self.snapshot_throttle_seconds = max(float(snapshot_throttle_seconds), 0.0)
+        self.maintenance_callback = maintenance_callback
         self.vector_backfill_callback = vector_backfill_callback
         self.state_db = state_db
         self.registry = source_registry
@@ -380,6 +382,7 @@ class AutomaticMemoryScheduler:
                     future.set_result(deferred)
                     return deferred
             result = self._reconcile_once(source_id, reason=reason)
+            self._run_maintenance()
             future.set_result(result)
             return result
         except BaseException as exc:
@@ -388,6 +391,16 @@ class AutomaticMemoryScheduler:
         finally:
             with self._lock:
                 self._inflight.pop(source_id, None)
+
+    def _run_maintenance(self) -> None:
+        """每轮核对后跑一次系统维护回调；失败隔离，绝不影响扫描结果。"""
+        callback = getattr(self, "maintenance_callback", None)
+        if callback is None:
+            return
+        try:
+            callback()
+        except Exception:
+            return
 
     def _run_vector_backfill(self) -> None:
         """每轮核对成功后自动补算一批向量；失败隔离，绝不影响扫描。"""

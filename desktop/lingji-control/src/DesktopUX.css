@@ -245,3 +245,25 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ===== 首页产品叙事（2026-09-28 重做）===== */
+.home-narrative { max-width: 980px; margin: 0 auto; padding: 24px 8px 48px; display: flex; flex-direction: column; gap: 32px; }
+.home-section { display: flex; flex-direction: column; gap: 12px; }
+.home-headline { font-size: 20px; font-weight: 700; margin: 0; }
+.home-summary { margin: 0; color: var(--text-secondary, #9aa3b2); }
+.home-summary strong { color: var(--text-primary, #e8eaf0); font-size: 18px; }
+.home-muted { margin: 0; color: var(--text-secondary, #9aa3b2); font-size: 13px; }
+.home-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.home-memory-card { display: flex; flex-direction: column; gap: 8px; text-align: left; padding: 16px; border-radius: 12px; background: var(--panel-bg, #151923); border: 1px solid var(--border-color, #262c3a); cursor: pointer; transition: border-color .15s ease, transform .15s ease; }
+.home-memory-card:hover { border-color: var(--accent, #4f7cff); transform: translateY(-2px); }
+.home-memory-title { font-size: 15px; font-weight: 600; color: var(--text-primary, #e8eaf0); }
+.home-memory-body { font-size: 13px; line-height: 1.6; color: var(--text-secondary, #9aa3b2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.home-memory-meta { font-size: 11px; color: var(--text-tertiary, #6b7280); }
+.home-secondary-link { align-self: flex-start; background: none; border: none; color: var(--accent, #4f7cff); cursor: pointer; font-size: 13px; padding: 0; }
+.home-actions { display: flex; flex-direction: column; gap: 10px; }
+.home-action-card { padding: 14px 16px; border-radius: 12px; display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--border-color, #262c3a); background: var(--panel-bg, #151923); }
+.home-action-card.owner { border-color: rgba(255, 170, 60, .55); }
+.home-action-body { font-size: 14px; line-height: 1.6; color: var(--text-primary, #e8eaf0); }
+.home-action-meta { font-size: 11px; color: var(--text-tertiary, #6b7280); }
+.home-footer { border-top: 1px solid var(--border-color, #262c3a); padding-top: 16px; }
+.home-footer-line { color: var(--text-tertiary, #6b7280); font-size: 12px; }

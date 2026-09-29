@@ -6,15 +6,16 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
 ];
 
 export const PRIMARY_NAVIGATION: NavigationItem[] = [
-  { id: "overview", label: "首页", hint: "灵机正在干什么、刚刚做了什么、一切是否正常", group: "observe", icon: "home" },
+  { id: "overview", label: "首页", hint: "灵机今天为你记住了什么、有什么需要你拍板", group: "observe", icon: "home" },
   { id: "memory_library", label: "记忆库", hint: "灵机记住的全部内容：知识要点 + 对话原文，每条可打开", group: "observe", icon: "inspect" },
-  { id: "memory_sources", label: "原始数据", hint: "扫描到的全部记录：来源、文件、每条对话原文", group: "observe", icon: "vault" },
-  { id: "timeline_page", label: "时间线", hint: "按时间看两件事：灵机新提炼了什么、数据发生了什么变化", group: "observe", icon: "logs" },
-  { id: "work_ledger", label: "检查记录", hint: "每一次自动检查：按批次看每一步处理了多少、结果如何", group: "observe", icon: "logs" },
-  { id: "processing_detail", label: "处理流水", hint: "按环节看全部数据：获取/解析/提炼/记忆/向量化", group: "observe", icon: "pulse" },
+  { id: "attention", label: "需要我", hint: "只显示现在需要你决定的事项", group: "observe", icon: "review" },
 ];
 
 export const ADVANCED_NAVIGATION: NavigationItem[] = [
+  { id: "memory_sources", label: "原始数据", hint: "扫描到的全部记录：来源、文件、每条对话原文", group: "advanced", icon: "vault" },
+  { id: "timeline_page", label: "时间线", hint: "按时间看两件事：灵机新提炼了什么、数据发生了什么变化", group: "advanced", icon: "logs" },
+  { id: "work_ledger", label: "检查记录", hint: "每一次自动检查：按批次看每一步处理了多少、结果如何", group: "advanced", icon: "logs" },
+  { id: "processing_detail", label: "处理流水", hint: "按环节看全部数据：获取/解析/提炼/记忆/向量化", group: "advanced", icon: "pulse" },
   { id: "memory_cards", label: "要点转永久记忆", hint: "手动挑选提炼要点并确认进永久记忆（日常无需使用）", group: "advanced", icon: "inspect" },
   { id: "permanent_memory", label: "永久记忆(确认)", hint: "主人逐条确认过的长期记忆", group: "advanced", icon: "inspect" },
   { id: "changes_ledger", label: "变更账本", hint: "系统级事件流水（时间线页已覆盖日常视图）", group: "advanced", icon: "logs" },
@@ -41,7 +42,6 @@ export const ADVANCED_NAVIGATION: NavigationItem[] = [
 // Legacy direct routes remain addressable without becoming ordinary menu entries.
 export const LEGACY_NAVIGATION: NavigationItem[] = [
   { id: "diagnostics", label: "高级诊断", hint: "遇到问题时查看详细信息", group: "advanced", icon: "settings" },
-  { id: "attention", label: "需要我", hint: "只显示现在需要你决定的事项", group: "observe", icon: "review" },
 ];
 
 export const NAVIGATION: NavigationItem[] = [...PRIMARY_NAVIGATION, ...LEGACY_NAVIGATION, ...ADVANCED_NAVIGATION];
