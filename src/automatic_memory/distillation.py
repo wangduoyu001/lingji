@@ -524,6 +524,9 @@ class KnowledgeDistiller:
             settled = int(conn.execute(
                 "SELECT COUNT(*) FROM distilled_knowledge WHERE status != 'ready'"
             ).fetchone()[0])
+            failed_queue = int(conn.execute(
+                "SELECT COUNT(*) FROM distilled_knowledge WHERE status = 'failed'"
+            ).fetchone()[0])
             by_category: dict[str, int] = {}
             for row in conn.execute(
                 "SELECT category, COUNT(*) AS n FROM distilled_knowledge WHERE status = 'ready' GROUP BY category"
@@ -536,6 +539,7 @@ class KnowledgeDistiller:
             "total": total_convs,
             "ready": ready,
             "pending": max(0, total_convs - ready - settled),
+            "failed_queue": failed_queue,
             "by_category": by_category,
             "model": model,
             "available": model is not None,

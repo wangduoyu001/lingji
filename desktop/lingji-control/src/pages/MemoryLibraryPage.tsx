@@ -34,6 +34,7 @@ export type KnowledgeStats = {
   total: number;
   ready: number;
   pending: number;
+  failed_queue?: number;
   by_category: Record<string, number>;
   model?: string | null;
   available: boolean;
@@ -45,6 +46,7 @@ export type KnowledgeProgress = {
   finished?: Array<{ title: string; seconds: number; ok: boolean; at: string }>;
   cumulative_distilled?: number;
   cumulative_failed?: number;
+  failed_queue?: number;
 };
 export type KnowledgeModel = { name: string; size_bytes: number; active: boolean };
 
@@ -190,7 +192,9 @@ export function KnowledgeSection({ api, active }: { api: LingJiApi; active: bool
           </div>
           <small className="knowledge-progress-caption">
             {stats ? `进度 ${stats.ready} / ${stats.total} 段（${stats.total ? Math.round((stats.ready / stats.total) * 100) : 0}%）` : "进度尚未获得"}
-            {progress?.cumulative_failed ? ` · 失败 ${progress.cumulative_failed} 段会自动重试` : ""}
+            {stats?.failed_queue
+              ? ` · 失败 ${stats.failed_queue} 段正在自动重试`
+              : " · 无失败积压"}
           </small>
         </div>
         <div className="knowledge-progress-side">
