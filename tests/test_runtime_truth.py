@@ -98,6 +98,17 @@ def _service(*, telemetry):
 
 def test_brain_status_surfaces_pipelines_queue_and_failure_ledger():
     service = _service(telemetry={"collected_at": None, "source": "unavailable", "stale": True, "errors": [], "gpus": []})
+    service.overview = lambda: {
+        "health": {"status": "healthy"},
+        "storage": {"totals": {"bytes": 3_000_000_000, "files": 1200, "disk_free_bytes": 50_000_000_000}, "alerts": {"over_configured_limit": False, "below_minimum_free": False}},
+        "providers": {"qdrant": {"state": "healthy"}},
+        "vector_coverage": {"missing": 7},
+        "scheduler": [{"name": "reconciliation", "enabled": True}],
+        "events": [
+            {"event_type": "memory_searched", "entity_id": "zcode", "created_at": "2026-09-29T12:00:00", "payload": {"count": 1}},
+            "opaque",
+        ],
+    }
     service.runtime = _Runtime()
     service.work_control = SimpleNamespace(failures=lambda limit: {
         "failures": [
@@ -120,6 +131,15 @@ def test_brain_status_surfaces_pipelines_queue_and_failure_ledger():
     assert status["extraction_queue"]["failed"] == 2
     assert status["failure_ledger"]["total"] == 1
     assert status["failure_ledger"]["failures"][0]["stage"] == "parse"
+    # 全量仪表盘透出（主人 2026-09-29：尽量把所有信息都放在 UI 上）
+    assert status["storage_summary"]["totals"]["bytes"] == 3_000_000_000
+    assert status["providers"]["qdrant"]["state"] == "healthy"
+    assert status["vector_coverage"]["missing"] == 7
+    assert status["scheduler_jobs"][0]["name"] == "reconciliation"
+    assert status["watcher_status"]["automation_mode"] is None or isinstance(status["watcher_status"]["automation_mode"], str)
+    assert status["recent_events"][0]["event_type"] == "memory_searched"
+    assert status["recent_events"][0]["payload_json"].startswith("{")
+    assert len(status["recent_events"]) == 1, "异形事件必须被剔除"
 
 
 def test_brain_status_isolates_missing_status_sections_as_warnings():

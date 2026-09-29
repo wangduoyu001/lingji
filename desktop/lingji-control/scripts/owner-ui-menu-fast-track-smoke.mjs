@@ -207,6 +207,23 @@ try {
       },
       extraction_queue: { queued: 1, retrying: 0, running: 0, completed: 10, failed: 2, cancelled: 0, pending: 1 },
       failure_ledger: { failures: [{ failure_key: "k1", stage: "parse", reason: "bad file", retryable: true, requires_owner: false, occurrence_count: 3, last_seen_at: "2026-09-29T08:00:00" }], total: 1 },
+      storage_summary: {
+        totals: { bytes: 3_200_000_000, files: 1200, disk_free_bytes: 50_000_000_000 },
+        categories: { raw: { bytes: 1_900_000_000, files: 800 }, backups: { bytes: 760_000_000, files: 12 } },
+        alerts: { over_configured_limit: false, below_minimum_free: false },
+      },
+      providers: {
+        qdrant: { state: "healthy" },
+        embedding: { state: "healthy", active_model: "qwen3-embedding:0.6b" },
+        faster_whisper: { available: false, capability: "asr" },
+      },
+      vector_coverage: { missing: 7, total: 35559 },
+      scheduler_jobs: [{ name: "reconciliation", enabled: true, run_count: 42, next_run_at: "2026-09-29T09:00:00" }],
+      recent_events: [
+        { event_type: "automatic_memory_reconciliation", entity_id: "src-1", created_at: "2026-09-29T08:30:00", payload_json: "{\"queued\": 0}" },
+        { event_type: "memory_searched", entity_id: "zcode", created_at: "2026-09-29T08:31:00", payload_json: "{}" },
+      ],
+      watcher_status: { automation_mode: "event_watcher", event_watcher_enabled: true, authorized_watcher_count: 2, next_reconciliation_seconds: 900, last_global_error: null },
       warnings: [],
     });
     if (url.pathname === "/api/work/pending-actions") { state.pendingReads += 1; return fulfill(route, { pending_actions: state.pendingActions }); }
@@ -268,6 +285,16 @@ try {
   assert.ok(statusText.includes("失败台账（1 条"), "failure ledger count must be visible");
   assert.ok(statusText.includes("bad file"), "failure ledger reason must be visible");
   assert.ok(statusText.includes("失败任务"), "extraction queue failures must be visible");
+  // 全量仪表盘面板（主人 2026-09-29：尽量把所有信息都放在 UI 上）
+  assert.ok(statusText.includes("存储与占用"), "storage panel must be visible");
+  assert.ok(statusText.includes("灵机总占用"), "storage total must be visible");
+  assert.ok(statusText.includes("采集与调度"), "watcher/scheduler panel must be visible");
+  assert.ok(statusText.includes("事件监听（文件一变就处理）"), "automation mode must be human readable");
+  assert.ok(statusText.includes("服务依赖"), "providers panel must be visible");
+  assert.ok(statusText.includes("语义覆盖"), "vector coverage panel must be visible");
+  assert.ok(statusText.includes("最近动态"), "recent events panel must be visible");
+  assert.ok(statusText.includes("自动扫描核对"), "event labels must be translated for the owner");
+  assert.ok(statusText.includes("语音转写 — 未安装"), "optional media providers must be honestly labelled");
   assert.equal(await page.locator(".system-status-page").getByRole("button", { name: /我已确认|立即重试|去处理/ }).count(), 0, "status page must not offer decision buttons");
   assert.ok(state.requests.some((url) => url.endsWith("/api/brain/status")), "status page must read the aggregated brain status endpoint");
   await page.locator(".desktop-nav-primary").getByRole("button", { name: "首页", exact: true }).click();

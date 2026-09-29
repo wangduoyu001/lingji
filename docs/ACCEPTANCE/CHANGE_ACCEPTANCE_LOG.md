@@ -4307,3 +4307,9 @@ chunk 集合更名 lingji_memory_acceptance→lingji_memory_production 引出 qd
 
 追加（同日第三轮装机）：产品 Head d58cac62 打包装机。sidecar exe sha256 2a494958…；DMG sha256 1bd5011f…，codesign --deep --strict 通过。旧 App 备份至 backups/灵机.app.prev-efd84fac-20260929-1746。
 装机后真机验证：①/api/overview 延迟：冷构建 7.3s → 缓存命中 1.5~3ms（约 4000 倍），20s TTL 与 10s 轮询配合下不再出现叠加慢请求；②2 分钟稳定性观察：overview 轮询全部 200、日志零 5xx，外壳无超时判离线条件（叠加三振容错双保险）；③运维备注：整包替换后第一次 `open -g` 与旧进程退出存在 LaunchServices 竞态、进程未拉起，重新 open 即正常（后续装机规程在退出确认后增加二次 open 兜底）。App 保持运行，主人随时可查看；代理不再抢焦点截屏（主人正在使用桌面）。
+
+## 2026-09-29 FULL_DASHBOARD_STATUS_PAGE（主人指示"尽量把所有信息都放在 UI 上"）
+
+变更：状态页从 6 面板扩到 11 面板，成为灵机全量仪表盘。①后端 /api/brain/status 透出 6 组新字段（全部来自已缓存的 overview 与 runtime status，零额外开销，各段故障隔离不变）：storage_summary（总占用/分类明细/超限与磁盘下限告警）、providers（Qdrant/嵌入/可选媒体能力）、vector_coverage（未向量化缺口）、scheduler_jobs（调度任务精简字段）、recent_events（最近 15 条事件精简：类型/时间/payload 截断 200 字符）、watcher_status（自动化方式/监听来源数/下次核对/全局错误）。②前端状态页新增五面板：存储与占用（对着主人配置的上限告警，超限红字提示自动淘汰行为）、采集与调度（事件监听模式人话化、授权来源数、下次核对、调度任务列表）、服务依赖（Qdrant/嵌入健康 + 可选媒体能力诚实标注"未安装不影响记忆与检索"）、语义覆盖（缺口条目高亮"回填线程自动追平"）、最近动态（事件类型中文对照，如 automatic_memory_reconciliation→自动扫描核对；只显示人话标签+时间，不暴露原始 ID/JSON——维持 owner 界面无技术字段红线）。③测试：brain_status 仪表盘透出断言（存储/依赖/覆盖/调度/事件精简+异形剔除）；冒烟 mock 扩展新字段并新增 9 条面板断言；首轮实现因最近动态渲染原始 payload_json 违反"无技术字段"断言被冒烟拦截，改为纯人话标签后 PASS。
+自动测试：tests/test_runtime_truth.py 8 例通过；npm run build 通过；owner-ui-menu-fast-track 573 行全场景 PASS。
+真机验收（装机后）：状态页 11 面板数值与真实后端一致（存储总占用应为真实字节数、最近动态应为真实事件中文标签）；零决策按钮红线保持。回滚=revert 本提交。

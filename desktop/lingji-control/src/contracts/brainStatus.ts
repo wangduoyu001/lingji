@@ -79,6 +79,42 @@ export type ExtractionQueueStats = {
   [key: string]: unknown;
 };
 
+export type StorageSummary = {
+  totals?: { bytes?: number | null; files?: number | null; disk_free_bytes?: number | null } | null;
+  categories?: Record<string, { bytes?: number | null; files?: number | null; path?: string | null }> | null;
+  alerts?: { over_configured_limit?: boolean | null; below_minimum_free?: boolean | null } | null;
+  [key: string]: unknown;
+};
+
+export type SchedulerJobRow = {
+  name?: string | null;
+  enabled?: boolean | null;
+  interval_seconds?: number | null;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  run_count?: number | null;
+  paused_reason?: string | null;
+  [key: string]: unknown;
+};
+
+export type RecentEventRow = {
+  event_type?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  created_at?: string | null;
+  payload_json?: string | null;
+  [key: string]: unknown;
+};
+
+export type WatcherStatus = {
+  automation_mode?: string | null;
+  event_watcher_enabled?: boolean | null;
+  authorized_watcher_count?: number | null;
+  next_reconciliation_seconds?: number | null;
+  last_global_error?: string | null;
+  [key: string]: unknown;
+};
+
 export type BrainStatusSummary = {
   memory_count: number | null;
   memory_chunk_count: number | null;
@@ -112,6 +148,12 @@ export type BrainStatusSummary = {
   pipelines: Record<string, PipelineHealthSnapshot>;
   extraction_queue: ExtractionQueueStats | null;
   failure_ledger: FailureLedger | null;
+  storage_summary: StorageSummary | null;
+  providers: Record<string, unknown>;
+  vector_coverage: Record<string, unknown> | null;
+  scheduler_jobs: SchedulerJobRow[];
+  recent_events: RecentEventRow[];
+  watcher_status: WatcherStatus | null;
   warnings: StatusWarning[];
   [key: string]: unknown;
 };
@@ -193,6 +235,26 @@ export function normalizeBrainStatus(value: unknown): BrainStatusSummary {
     failure_ledger:
       source.failure_ledger && typeof source.failure_ledger === "object"
         ? (source.failure_ledger as FailureLedger)
+        : null,
+    storage_summary:
+      source.storage_summary && typeof source.storage_summary === "object"
+        ? (source.storage_summary as StorageSummary)
+        : null,
+    providers:
+      source.providers && typeof source.providers === "object" ? (source.providers as Record<string, unknown>) : {},
+    vector_coverage:
+      source.vector_coverage && typeof source.vector_coverage === "object"
+        ? (source.vector_coverage as Record<string, unknown>)
+        : null,
+    scheduler_jobs: Array.isArray(source.scheduler_jobs)
+      ? source.scheduler_jobs.filter((item): item is SchedulerJobRow => Boolean(item && typeof item === "object"))
+      : [],
+    recent_events: Array.isArray(source.recent_events)
+      ? source.recent_events.filter((item): item is RecentEventRow => Boolean(item && typeof item === "object"))
+      : [],
+    watcher_status:
+      source.watcher_status && typeof source.watcher_status === "object"
+        ? (source.watcher_status as WatcherStatus)
         : null,
     warnings: rawWarnings.filter((item): item is StatusWarning => Boolean(item && typeof item === "object")),
   };

@@ -21,6 +21,23 @@ function shortTime(value: unknown): string {
   return text.replace("T", " ").slice(0, 19);
 }
 
+const EVENT_LABELS: Record<string, string> = {
+  memory_searched: "记忆检索",
+  memory_fetched: "读取记忆详情",
+  memory_proposed: "提交记忆提案",
+  memory_candidate_created: "生成记忆候选",
+  memory_index_rebuilt: "记忆索引重建",
+  memory_index_synced: "记忆索引同步",
+  automatic_memory_reconciliation: "自动扫描核对",
+  context_pack_built: "构建上下文包",
+  memory_gateway: "记忆服务",
+};
+
+function eventLabel(value: unknown): string {
+  const raw = String(value ?? "");
+  return EVENT_LABELS[raw] ?? raw ?? "未知事件";
+}
+
 function pipelineState(pipeline: PipelineHealthSnapshot): { label: string; kind: "ok" | "warning" | "error" } {
   if (pipeline.degraded) return { label: "降级（连续失败，自动重试中）", kind: "error" };
   if ((pipeline.consecutive_failures ?? 0) > 0) return { label: "有失败（自动重试中）", kind: "warning" };
@@ -125,6 +142,131 @@ export default function SystemStatusPage({ api, active }: { api: LingJiApi; acti
           </div>
         ) : (
           <Empty text="没有失败记录。" />
+        )}
+      </Panel>
+
+      <Panel title="存储与占用（上限由你的设置决定）">
+        {(() => {
+          const totals = data.storage_summary?.totals ?? null;
+          const alerts = data.storage_summary?.alerts ?? null;
+          const categories = Object.entries(data.storage_summary?.categories ?? {})
+            .map(([name, row]) => ({ name, bytes: typeof row?.bytes === "number" ? row.bytes : 0, files: row?.files }))
+            .sort((a, b) => b.bytes - a.bytes)
+            .slice(0, 6);
+          return (
+            <>
+              {alerts?.over_configured_limit && (
+                <Notice kind="error">已超过你配置的存储上限。灵机会按最旧优先自动淘汰可清理数据，正式记忆不受影响。</Notice>
+              )}
+              {alerts?.below_minimum_free && (
+                <Notice kind="warning">磁盘剩余空间低于下限，灵机会保守处理写入。</Notice>
+              )}
+              <div className="metric-grid">
+                <Metric title="灵机总占用" value={totals?.bytes === null || totals?.bytes === undefined ? "未知" : formatBytes(totals.bytes)} detail={`文件 ${nullableText(totals?.files, "未知")} 个`} />
+                <Metric title="磁盘剩余" value={totals?.disk_free_bytes === null || totals?.disk_free_bytes === undefined ? "未知" : formatBytes(totals.disk_free_bytes)} detail="低于下限会自动保守写入" />
+              </div>
+              {categories.length ? (
+                <div className="list">
+                  {categories.map((row) => (
+                    <div className="list-row" key={row.name}>
+                      <div>
+                        <strong>{row.name}</strong>
+                        <small>{formatBytes(row.bytes)} · {nullableText(row.files, "未知")} 个文件</small>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <Empty text="存储分类暂无数据。" />
+              )}
+            </>
+          );
+        })()}
+      </Panel>
+
+      <Panel title="采集与调度（自动盯盘，无需你操作）">
+        {(() => {
+          const watcher = data.watcher_status;
+          const jobs = data.scheduler_jobs ?? [];
+          const mode = String(watcher?.automation_mode ?? "");
+          const modeLabel = mode === "event_watcher" ? "事件监听（文件一变就处理）" : mode ? mode : "未知";
+          const nextSeconds = watcher?.next_reconciliation_seconds;
+          return (
+            <div className="list">
+              <div className="list-row"><div><strong>运行方式 — {modeLabel}</strong><small>已授权来源 {nullableText(watcher?.authorized_watcher_count, "未知")} 个 · 事件监听{watcher?.event_watcher_enabled ? "已启用" : "未启用"}</small></div></div>
+              <div className="list-row"><div><strong>下次全面核对</strong><small>{typeof nextSeconds === "number" ? `约 ${Math.round(nextSeconds / 60)} 分钟后` : "等待调度"}</small></div></div>
+              {watcher?.last_global_error ? <div className="list-row"><div><strong style={{ color: "inherit" }}>最近全局错误</strong><small>{String(watcher.last_global_error).slice(0, 260)}</small></div></div> : null}
+              {jobs.length ? jobs.map((job) => (
+                <div className="list-row" key={String(job.name)}>
+                  <div>
+                    <strong>{nullableText(job.name)} — {job.enabled ? "已启用" : "已暂停"}</strong>
+                    <small>{job.run_count === null || job.run_count === undefined ? "" : `已运行 ${job.run_count} 次 · `}{job.last_run_at ? `上次 ${shortTime(job.last_run_at)} · ` : ""}{job.next_run_at ? `下次 ${shortTime(job.next_run_at)}` : ""}{job.paused_reason ? ` · ${String(job.paused_reason)}` : ""}</small>
+                  </div>
+                </div>
+              )) : <Empty text="调度任务暂无记录。" />}
+            </div>
+          );
+        })()}
+      </Panel>
+
+      <Panel title="服务依赖（本地服务健康）">
+        {(() => {
+          const providers = data.providers ?? {};
+          const optional = (["faster_whisper", "paddleocr", "pyscenedetect"] as const).map((name) => {
+            const row = providers[name] as { available?: boolean; capability?: string } | undefined;
+            const labels: Record<string, string> = { faster_whisper: "语音转写", paddleocr: "图片文字识别", pyscenedetect: "镜头切分" };
+            return { name: labels[name] ?? name, available: Boolean(row?.available) };
+          });
+          const qdrant = providers.qdrant as { state?: string } | undefined;
+          const embedding = providers.embedding as { state?: string; active_model?: string } | undefined;
+          return (
+            <div className="list">
+              <div className="list-row"><div><strong>向量数据库 Qdrant — {nullableText(qdrant?.state)}</strong><small>语义检索的本地依赖</small></div></div>
+              <div className="list-row"><div><strong>嵌入服务 — {nullableText(embedding?.state)}</strong><small>当前模型 {nullableText(embedding?.active_model)}</small></div></div>
+              {optional.map((item) => (
+                <div className="list-row" key={item.name}>
+                  <div>
+                    <strong>{item.name} — {item.available ? "可用" : "未安装"}</strong>
+                    <small>可选的媒体分析能力，未安装不影响记忆与检索</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </Panel>
+
+      <Panel title="语义覆盖（未向量化存量，自动追平）">
+        {data.vector_coverage && Object.keys(data.vector_coverage).length ? (
+          <div className="list">
+            {Object.entries(data.vector_coverage).filter(([, value]) => typeof value !== "object").map(([key, value]) => (
+              <div className="list-row" key={key}>
+                <div>
+                  <strong>{key.includes("missing") ? `待补齐（${key}）` : key}</strong>
+                  <small>{typeof value === "number" ? `${value} 条` : String(value)}{key.includes("missing") && typeof value === "number" && value > 0 ? " · 回填线程自动追平" : ""}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty text="暂无覆盖率数据。" />
+        )}
+      </Panel>
+
+      <Panel title="最近动态（灵机刚刚做了什么）">
+        {data.recent_events?.length ? (
+          <div className="list">
+            {data.recent_events.map((event, index) => (
+              <div className="list-row" key={`${event.event_type ?? "event"}-${index}`}>
+                <div>
+                  <strong>{eventLabel(event.event_type)}</strong>
+                  <small>{shortTime(event.created_at)}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty text="暂无动态记录。" />
         )}
       </Panel>
 

@@ -241,6 +241,7 @@ class LocalControlService:
         # 主人 2026-09-29 指示：状态页必须详细显示所有功能状态，问题不能只靠
         # 主人发现。三段各自故障隔离：某段读不到只追加 warning，不拖垮整体。
         pipelines: dict[str, Any] = {}
+        runtime_status: dict[str, Any] = {}
         try:
             runtime_status = self.runtime.status() if self.runtime is not None else {}
             pipelines = dict(runtime_status.get("pipelines") or {})
@@ -256,6 +257,38 @@ class LocalControlService:
             failure_ledger = self.work_control.failures(limit=20)
         except Exception as exc:
             warnings.append(self._status_warning("failure_ledger_unavailable", "failures", exc))
+
+        # 全量仪表盘（主人 2026-09-29："尽量把所有信息都放在 UI 上"）——
+        # 数据来自已缓存的 overview 与 runtime status，透出即可，不额外加重。
+        storage_summary = dict(overview.get("storage") or {})
+        provider_payload = dict(overview.get("providers") or {})
+        coverage_payload = dict(overview.get("vector_coverage") or {})
+        scheduler_rows = [
+            {
+                key: item[key]
+                for key in ("name", "enabled", "interval_seconds", "next_run_at", "last_run_at", "run_count", "paused_reason")
+                if item.get(key) not in (None, "")
+            }
+            for item in (overview.get("scheduler") or [])
+            if isinstance(item, Mapping)
+        ]
+        slim_events: list[dict[str, Any]] = []
+        for item in (overview.get("events") or [])[:15]:
+            if not isinstance(item, Mapping):
+                continue
+            slim_events.append(
+                {
+                    "event_type": item.get("event_type"),
+                    "entity_type": item.get("entity_type"),
+                    "entity_id": item.get("entity_id"),
+                    "created_at": item.get("created_at"),
+                    "payload_json": json.dumps(item.get("payload") or {}, ensure_ascii=False, default=str)[:200],
+                }
+            )
+        watcher_status = {
+            key: runtime_status.get(key)
+            for key in ("automation_mode", "event_watcher_enabled", "authorized_watcher_count", "next_reconciliation_seconds", "last_global_error")
+        }
 
         return {
             "memory_count": memory.get("documents"),
@@ -286,6 +319,12 @@ class LocalControlService:
             "pipelines": pipelines,
             "extraction_queue": extraction_queue,
             "failure_ledger": failure_ledger,
+            "storage_summary": storage_summary,
+            "providers": provider_payload,
+            "vector_coverage": coverage_payload,
+            "scheduler_jobs": scheduler_rows,
+            "recent_events": slim_events,
+            "watcher_status": watcher_status,
             "warnings": warnings,
         }
 
