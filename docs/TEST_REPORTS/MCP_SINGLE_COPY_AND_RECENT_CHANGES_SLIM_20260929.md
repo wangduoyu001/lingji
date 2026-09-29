@@ -42,3 +42,18 @@ python3 -m pytest tests/integration/test_automatic_memory_packaged_flow.py -q
 ## 限制
 
 - 运行中生产后端（lingji-core.exe）为旧打包，本变更需下次打包装机后在真机生效；生效后按 CHANGE_ACCEPTANCE_LOG 对应条目做装机验收。
+
+## 第二轮追加（同日，状态页与修复批次）
+
+```text
+python3 -m pytest tests/test_runtime_truth.py -q → 7 passed
+desktop: npm run build → 通过；npm run test:owner-ui-menu-fast-track → PASS（563 行全场景）
+```
+
+新增覆盖：brain_status 三段聚合与故障隔离告警码、save_index datetime 回归、
+failure_ledger 数据源修正后的桩适配；冒烟脚本刷新到当前 3 项导航与状态页场景
+（降级管线名/最近错误/失败台账计数与原因/队列失败/零决策按钮断言）。
+
+真机（Head 3812f0d2，sidecar efd84fac…，DMG 6728f1f2…）：/api/brain/status
+failure_ledger.total=9（真实原因指纹）、pipelines 三守护未降级、queue completed=1054/failed=15、
+warnings 空；真实 App 截图确认 3 项主导航与新首页；App 保持打开。
