@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from src.acceptance import AcceptanceChecker
 from src.acceptance_reports import AcceptanceReportStore
 from src.automatic_memory import SourceRegistry
+from src.control.work_service import WorkControlService
 from src.retrieval.qdrant_provider import QdrantSemanticProvider
 _EMBED_PROBE_TTL_SECONDS = 60.0
 _EMBED_PROBE_CACHE: dict[str, Any] = {"at": 0.0, "payload": {}}
@@ -50,6 +51,7 @@ class LocalControlService:
         self.settings = settings
         self.state_db = state_db or StateDatabase(settings.state_db_path)
         self.automatic_memory_registry = automatic_memory_registry or SourceRegistry(self.state_db)
+        self.work_control = WorkControlService(self.state_db)
         self.runtime_settings = RuntimeSettingsStore(settings, state_db=self.state_db)
         self.obsidian = ObsidianService(
             settings, runtime_settings=self.runtime_settings, state_db=self.state_db
@@ -243,7 +245,7 @@ class LocalControlService:
             warnings.append(self._status_warning("extraction_queue_unavailable", "extraction", exc))
         failure_ledger: dict[str, Any] = {}
         try:
-            failure_ledger = self.failures(limit=20)
+            failure_ledger = self.work_control.failures(limit=20)
         except Exception as exc:
             warnings.append(self._status_warning("failure_ledger_unavailable", "failures", exc))
 

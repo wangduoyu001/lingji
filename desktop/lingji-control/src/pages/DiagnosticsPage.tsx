@@ -11,7 +11,7 @@ const GROUPS: Array<{ title: string; description: string; pages: PageId[] }> = [
   {
     title: "数据与索引",
     description: "检查项目、记忆、来源、向量、投喂和 Obsidian 数据。",
-    pages: ["codex_workspace", "memory_inspector", "memory_review", "memory_cards", "vector_center", "capture_center", "media", "obsidian"],
+    pages: ["memory_sources", "codex_workspace", "memory_inspector", "memory_review", "memory_cards", "vector_center", "capture_center", "media", "obsidian"],
   },
   {
     title: "模型与算力",

@@ -92,14 +92,14 @@ def _service(*, telemetry):
     service.compute_policy = lambda: {"requested_mode": "auto"}
     service.queue = _Queue()
     service.runtime = None
-    service.failures = lambda limit: {"failures": [], "total": 0}
+    service.work_control = SimpleNamespace(failures=lambda limit: {"failures": [], "total": 0})
     return service
 
 
 def test_brain_status_surfaces_pipelines_queue_and_failure_ledger():
     service = _service(telemetry={"collected_at": None, "source": "unavailable", "stale": True, "errors": [], "gpus": []})
     service.runtime = _Runtime()
-    service.failures = lambda limit: {
+    service.work_control = SimpleNamespace(failures=lambda limit: {
         "failures": [
             {
                 "failure_key": "k1",
@@ -112,7 +112,7 @@ def test_brain_status_surfaces_pipelines_queue_and_failure_ledger():
             }
         ],
         "total": 1,
-    }
+    })
 
     status = service.brain_status()
 
@@ -125,7 +125,7 @@ def test_brain_status_surfaces_pipelines_queue_and_failure_ledger():
 def test_brain_status_isolates_missing_status_sections_as_warnings():
     service = _service(telemetry={"collected_at": None, "source": "unavailable", "stale": True, "errors": [], "gpus": []})
     service.runtime = SimpleNamespace(status=lambda: (_ for _ in ()).throw(RuntimeError("runtime unavailable")))
-    service.failures = lambda limit: (_ for _ in ()).throw(RuntimeError("ledger unavailable"))
+    service.work_control = SimpleNamespace(failures=lambda limit: (_ for _ in ()).throw(RuntimeError("ledger unavailable")))
     service.queue = SimpleNamespace(stats=lambda: (_ for _ in ()).throw(RuntimeError("queue unavailable")))
 
     status = service.brain_status()

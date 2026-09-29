@@ -194,12 +194,28 @@ try {
     if (url.pathname === "/api/memory/inspector/messages/restricted-message") return fulfill(route, { item: { message_id: "restricted-message", content: "受限来源主人显式核对后的全文。" } });
     if (url.pathname.startsWith("/api/memory/inspector/messages/") && url.pathname.split("/").pop() === "restricted-message") return fulfill(route, { item: { message_id: "restricted-message", content: "受限来源主人显式核对后的全文。" } });
     if (url.pathname === "/api/memory/inspector/messages/message-1") return setTimeout(() => fulfill(route, { item: { message_id: "message-1", content: "这是旧卡片来源正文。" } }), 500);
+    if (url.pathname === "/api/brain/status") return fulfill(route, {
+      memory_count: 12, memory_chunk_count: 30, memory_bytes: 2048, memory_revision: 7, memory_state: "healthy",
+      vector_count: 30, vector_state: "healthy", vector_collection: "lingji_memory_production", vector_dimension: 1024, vector_rebuild_required: false,
+      embedding_state: "healthy", chat_model: "qwen3:8b", embed_model: "qwen3-embedding:0.6b", installed_models: 2,
+      gpus: [], compute_mode: "auto", cuda_version: null,
+      recent_tasks: [], processing_status: "healthy", system_status: "healthy", workspace: "production",
+      status_source: "live", status_stale: false, status_as_of: "2026-09-29T08:00:00Z",
+      pipelines: {
+        distill: { name: "distill", consecutive_failures: 0, total_failures: 0, degraded: false, last_error: null, last_success_at: "2026-09-29T08:00:00", last_failure_at: null },
+        promotion: { name: "promotion", consecutive_failures: 2, total_failures: 5, degraded: true, last_error: "lock timeout", last_success_at: "2026-09-29T07:00:00", last_failure_at: "2026-09-29T08:00:00" },
+      },
+      extraction_queue: { queued: 1, retrying: 0, running: 0, completed: 10, failed: 2, cancelled: 0, pending: 1 },
+      failure_ledger: { failures: [{ failure_key: "k1", stage: "parse", reason: "bad file", retryable: true, requires_owner: false, occurrence_count: 3, last_seen_at: "2026-09-29T08:00:00" }], total: 1 },
+      warnings: [],
+    });
     if (url.pathname === "/api/work/pending-actions") { state.pendingReads += 1; return fulfill(route, { pending_actions: state.pendingActions }); }
     if (url.pathname === "/api/work/current") return fulfill(route, { work: null, events: [], outcome: null, next_action: null });
     if (url.pathname === "/api/work/history") return fulfill(route, { items: [], total: 0, has_more: false, limit: 3, offset: 0 });
     return fulfill(route, { detail: "not found" }, 404);
   });
 
+  page.on("pageerror", (error) => console.error("PAGEERROR:", String(error).slice(0, 400)));
   await page.goto(viteOrigin, { waitUntil: "domcontentloaded" });
   const actionBackdrop = page.locator(".action-modal-backdrop");
   try {
@@ -209,17 +225,16 @@ try {
   } catch {
     // 本 fixture 未触发全局提醒时直接继续。
   }
-  await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "灵机为你记住了什么", exact: true }).waitFor();
   assert.equal(await page.getByRole("heading", { name: "需要先完成设置", exact: true }).count(), 0, "healthy Core must not be presented as setup required by a memory runtime warning");
 
   const sidebarStatusText = await page.locator(".desktop-sidebar-status").innerText();
   assert.equal(sidebarStatusText.includes("8766"), false, "ordinary runtime warning must not expose the control port");
 
   const primaryLabels = await page.locator(".desktop-nav-primary .desktop-nav-item strong").allTextContents();
-  assert.deepEqual(primaryLabels, ['首页', '记忆库', '原始数据', '时间线', '检查记录', '处理流水'], "ordinary navigation must have exactly the owner panels");
-  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ['首页', '记忆库', '原始数据', '时间线', '检查记录', '处理流水'], "ordinary navigation must expose exact accessible labels");
-  assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "活动记录", exact: true }).count(), 0, "activity must stay out of the ordinary sidebar");
-  assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "需要我", exact: true }).count(), 0, "attention must not permanently occupy the ordinary sidebar");
+  assert.deepEqual(primaryLabels, ['首页', '记忆库', '状态'], "ordinary navigation must have exactly the owner panels");
+  assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ['首页', '记忆库', '状态'], "ordinary navigation must expose exact accessible labels");
+  assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "需要我", exact: true }).count(), 0, "decision queue must stay out of the ordinary sidebar (owner 2026-09-29)");
   const advanced = page.locator("details.desktop-advanced-disclosure");
   assert.equal(await advanced.count(), 1, "advanced diagnostics must be a single disclosure");
   assert.equal(await advanced.evaluate((node) => node.open), false, "advanced diagnostics must be collapsed by default");
@@ -238,34 +253,29 @@ try {
   assert.equal(await advanced.evaluate((node) => node.open), false, "advanced diagnostics disclosure must close again");
 
   assert.equal(await page.locator(".overview-next-step").count(), 0, "Home must not present a manual next-step control");
-  await page.getByText("目前不需要你处理", { exact: true }).waitFor();
-  const homeText = await page.locator(".overview-page").innerText();
-  assert.equal(/memory-card-1|source-codex|\{/.test(homeText), false, "Home ordinary copy must not expose IDs or JSON");
-
-  state.pendingActions = [{ action_id: "action-fixture", work_id: "work-fixture", description: "确认发布计划" }];
+  // 主人 2026-09-29：不再有"等主人拍板"环节——首页只读呈现自动处理事项，
+  // 状态页摊开全部功能状态（管线/队列/失败台账），零操作按钮。
+  state.pendingActions = [{ action_id: "action-fixture", work_id: "work-fixture", actor: "owner", description: "确认发布计划" }];
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.getByRole("heading", { name: "灵机运行正常", exact: true }).waitFor();
-  await page.getByText("有一件事需要你决定", { exact: true }).waitFor();
-  await page.locator(".overview-attention-link").waitFor();
-  await page.locator(".overview-attention-link").click();
-  await page.getByRole("heading", { name: "需要我", exact: true }).waitFor();
-  await page.getByText("确认发布计划", { exact: true }).waitFor();
-  assert.ok(state.pendingReads > 0, "attention page must read the shared pending-actions endpoint on activation");
-  state.pendingActions = [null];
-  await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
-  await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
-  await page.getByText("待办正在自动确认，当前不把未读取当作“没有待办”。", { exact: true }).waitFor();
-  assert.equal(await page.locator(".overview-attention-link").count(), 0, "unknown pending must not surface a home attention entry");
-  state.pendingActions = [{}];
-  await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
-  await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
-  await page.getByText("待办正在自动确认，当前不把未读取当作“没有待办”。", { exact: true }).waitFor();
-  assert.equal(await page.locator(".overview-attention-link").count(), 0, "malformed pending must not surface a home attention entry");
+  await page.getByRole("heading", { name: "灵机为你记住了什么", exact: true }).waitFor();
+  await page.getByText("条事项由灵机自动重试或保守处理，无需你操作：").waitFor();
+  await page.getByRole("button", { name: "看全部状态 →", exact: true }).click();
+  await page.getByRole("heading", { name: "状态", exact: true }).waitFor();
+  await page.getByText("自动记忆管线（提炼 / 晋升 / 回填）", { exact: true }).waitFor();
+  const statusText = await page.locator(".system-status-page").innerText();
+  assert.ok(statusText.includes("降级（连续失败，自动重试中）"), "degraded pipeline must be visible by name");
+  assert.ok(statusText.includes("lock timeout"), "pipeline last error must be visible");
+  assert.ok(statusText.includes("失败台账（1 条"), "failure ledger count must be visible");
+  assert.ok(statusText.includes("bad file"), "failure ledger reason must be visible");
+  assert.ok(statusText.includes("失败任务"), "extraction queue failures must be visible");
+  assert.equal(await page.locator(".system-status-page").getByRole("button", { name: /我已确认|立即重试|去处理/ }).count(), 0, "status page must not offer decision buttons");
+  assert.ok(state.requests.some((url) => url.endsWith("/api/brain/status")), "status page must read the aggregated brain status endpoint");
+  await page.locator(".desktop-nav-primary").getByRole("button", { name: "首页", exact: true }).click();
+  await page.getByRole("heading", { name: "灵机为你记住了什么", exact: true }).waitFor();
   state.pendingActions = [];
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
-  await page.getByText("目前不需要你处理", { exact: true }).waitFor();
-  assert.equal(await page.locator(".overview-attention-link").count(), 0, "empty pending must not surface a home attention entry");
+  await page.getByRole("heading", { name: "灵机为你记住了什么", exact: true }).waitFor();
+  await page.getByText("一切正常——没有需要留意的异常。", { exact: true }).waitFor();
 
   const ftAdvanced = page.locator("details.desktop-advanced-disclosure");
   await ftAdvanced.locator("summary").click();
@@ -513,7 +523,13 @@ try {
 
   await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange")); });
   const hiddenSourceReads = state.sourceReads;
-  await page.locator(".desktop-nav-item").filter({ hasText: "原始数据" }).click();
+  const srcAdvanced = page.locator("details.desktop-advanced-disclosure");
+  await srcAdvanced.evaluate((node) => { node.open = true; });
+  await srcAdvanced.getByRole("button", { name: "打开高级诊断", exact: true }).click();
+  await page.locator(".desktop-content").getByRole("heading", { name: "高级诊断", exact: true }).waitFor();
+  const srcGroup = page.locator("details.diagnostics-group").filter({ hasText: "数据与索引" });
+  if (!(await srcGroup.evaluate((node) => node.open))) await srcGroup.locator("summary").click();
+  await srcGroup.getByRole("button", { name: "原始数据", exact: true }).click();
   await page.getByRole("heading", { name: "原始数据", exact: true }).first().waitFor();
   const sourceCard = page.locator('[data-source-kind="codex_rollout"]');
   await sourceCard.waitFor();
@@ -540,17 +556,14 @@ try {
   await scanPanel.waitFor();
   assert.equal((await scanPanel.innerText()).includes("fixture failure"), false, "last_error must stay out of the owner scan panel");
 
-  state.pendingActions = [{ action_id: "attention-empty-fixture", work_id: "work-empty", description: "临时进入待办页" }];
-  await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
-  await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
-  await page.locator(".overview-attention-link").waitFor();
-  await page.locator(".overview-attention-link").click();
-  await page.getByRole("heading", { name: "需要我", exact: true }).waitFor();
+  state.pendingActions = [{ action_id: "attention-empty-fixture", work_id: "work-empty", actor: "owner", description: "临时进入状态页" }];
+  await page.locator(".desktop-nav-primary").getByRole("button", { name: "状态", exact: true }).click();
+  await page.getByRole("heading", { name: "状态", exact: true }).waitFor();
+  await page.getByText("自动记忆管线（提炼 / 晋升 / 回填）", { exact: true }).waitFor();
   state.pendingActions = [];
-  await page.waitForTimeout(8500);
-  await page.getByText("现在没有需要你处理的事项。灵机会继续自动工作。", { exact: true }).waitFor();
-  const attentionText = await page.locator(".observation-page").innerText();
-  assert.equal(/source-codex|memory-card-1|\{/.test(attentionText), false, "zero-attention ordinary copy must not expose technical fields");
+  await page.waitForTimeout(16000);
+  const attentionText = await page.locator(".system-status-page").innerText();
+  assert.equal(/source-codex|memory-card-1|\{/.test(attentionText), false, "status page ordinary copy must not expose technical fields");
 
   await page.setViewportSize({ width: 1024, height: 900 });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "1024px owner views must not overflow horizontally");

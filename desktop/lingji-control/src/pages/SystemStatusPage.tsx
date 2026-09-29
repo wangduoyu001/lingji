@@ -38,8 +38,8 @@ export default function SystemStatusPage({ api, active }: { api: LingJiApi; acti
   if (!active) return <Empty text="连接灵机后显示全部功能状态。" />;
   if (resource.loading && !resource.data) return <Empty text="正在读取系统状态…" />;
   if (resource.error && !resource.data) return <Notice kind="error">系统状态暂时无法读取，正在自动重试：{resource.error.message}</Notice>;
-
-  const data: BrainStatusSummary = resource.data as BrainStatusSummary;
+  const data = resource.data as BrainStatusSummary | null;
+  if (!data) return <Empty text="正在等待状态数据…" />;
   const pipelines = Object.entries(data.pipelines ?? {});
   const degradedPipelines = pipelines.filter(([, item]) => item.degraded);
   const queue = data.extraction_queue ?? {};
