@@ -1144,21 +1144,36 @@ class AutomaticMemoryRuntime:
             self._paused = False
         return self.status()
 
+    # 主人主动吊销来源是合法终态（审计墓碑），不是系统故障；把它当全局错误
+    # 会在状态页永久挂一条假警报（2026-09-29 状态页上线当天实况）。
+    _GLOBAL_ERROR_SUPPRESSED_MARKERS = (
+        "source authorization revoked",
+        "source authorization changed during reconciliation",
+    )
+
+    @classmethod
+    def _is_owner_intentional_notice(cls, message: str) -> bool:
+        lowered = message.lower()
+        return any(marker in lowered for marker in cls._GLOBAL_ERROR_SUPPRESSED_MARKERS)
+
     def _last_global_error(self) -> str | None:
         try:
             for row in self.state_db.list_automatic_memory_scans():
                 error = row.get("last_error")
-                if error:
+                if error and not self._is_owner_intentional_notice(str(error)):
                     return str(error)[:2000]
             for row in self.state_db.recent_events(limit=100):
                 event_type = str(row.get("event_type") or "")
                 if "failed" not in event_type and "error" not in event_type:
                     continue
                 payload = row.get("payload_json")
+                candidate = ""
                 if isinstance(payload, str) and payload:
-                    return payload[:2000]
-                if payload:
-                    return str(payload)[:2000]
+                    candidate = payload
+                elif payload:
+                    candidate = str(payload)
+                if candidate and not self._is_owner_intentional_notice(candidate):
+                    return candidate[:2000]
         except Exception:
             return None
         return None

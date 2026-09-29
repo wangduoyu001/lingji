@@ -31,6 +31,8 @@ const EVENT_LABELS: Record<string, string> = {
   automatic_memory_reconciliation: "自动扫描核对",
   context_pack_built: "构建上下文包",
   memory_gateway: "记忆服务",
+  work_failed_items_merged: "失败台账归并",
+  work_failure_recorded: "记录失败台账",
 };
 
 function eventLabel(value: unknown): string {

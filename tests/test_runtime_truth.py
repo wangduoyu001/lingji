@@ -280,3 +280,34 @@ def test_overview_ttl_cache_collapses_polled_rebuilds():
     service._overview_cache = (stamp - service._OVERVIEW_CACHE_TTL_SECONDS - 1, payload)
     service.overview()
     assert calls["count"] == 2
+
+
+def test_last_global_error_ignores_owner_revocation_notices():
+    from src.automatic_memory.runtime import AutomaticMemoryRuntime
+
+    runtime = AutomaticMemoryRuntime.__new__(AutomaticMemoryRuntime)
+
+    class _DB:
+        def __init__(self, scans, events):
+            self._scans, self._events = scans, events
+
+        def list_automatic_memory_scans(self):
+            return self._scans
+
+        def recent_events(self, limit=100):
+            return self._events
+
+    runtime.state_db = _DB(
+        [{"last_error": "source authorization revoked during reconciliation"}],
+        [{"event_type": "memory_searched"}],
+    )
+    assert runtime._last_global_error() is None, "主人吊销来源不是系统故障，不得当全局错误"
+
+    runtime.state_db = _DB(
+        [{"last_error": "source authorization revoked during reconciliation"}],
+        [{"event_type": "automatic_memory_reconciliation_failed", "payload_json": '{"error": "lock timeout"}'}],
+    )
+    assert runtime._last_global_error() == '{"error": "lock timeout"}', "真实故障必须照常上报"
+
+    runtime.state_db = _DB([{"last_error": "qdrant connection refused"}], [])
+    assert runtime._last_global_error() == "qdrant connection refused"
