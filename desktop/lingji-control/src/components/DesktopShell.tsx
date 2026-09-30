@@ -10,6 +10,7 @@ import {
 } from "../runtimeTypes";
 import type { NavigationItem, PageId } from "../types";
 import NavIcon from "./NavIcon";
+import { THEMES, useTheme } from "../hooks/useTheme";
 
 type Props = {
   page: PageId;
@@ -51,6 +52,7 @@ export default function DesktopShell({
   children,
 }: Props) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const { theme, setTheme } = useTheme();
   const shortCommit = releaseMetadata?.commit && releaseMetadata.commit !== "development"
     ? releaseMetadata.commit.slice(0, 8)
     : "dev";
@@ -79,6 +81,20 @@ export default function DesktopShell({
           <div className="desktop-brand-copy">
             <strong>灵机</strong>
             <span>你的第二大脑</span>
+          </div>
+          <div className="desktop-theme-switch" role="radiogroup" aria-label="界面主题">
+            {THEMES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                title={item.label}
+                aria-checked={theme === item.id}
+                role="radio"
+                className={theme === item.id ? "theme-dot on" : "theme-dot"}
+                style={{ ["--dot" as string]: item.dot }}
+                onClick={() => setTheme(item.id)}
+              />
+            ))}
           </div>
         </div>
 

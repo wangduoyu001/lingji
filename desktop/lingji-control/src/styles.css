@@ -29,6 +29,105 @@
   --radius-sm: 10px;
 }
 
+/* ===== 主题体系（2026-09-30 主人拍板：四个设计方向全做、可切换） =====
+   nord = 默认主题，Codex 同款深蓝灰（调研 codex-theme-v1 的低饱和工程质感）；
+   aurora = 原青绿极光（即 :root 兜底值，保留为可选主题）；
+   cyber = 赛博终端紫罗兰；command = 指挥舱琥珀×深蓝。
+   切换机制：DesktopShell 根节点 data-theme + localStorage 持久化。 */
+[data-theme="nord"] {
+  --bg: #2e3440;
+  --surface: #353d4b;
+  --surface-2: #3b4252;
+  --surface-3: #434c5e;
+  --surface-hover: #434c5e;
+  --line: rgba(216, 222, 233, .08);
+  --line-strong: rgba(216, 222, 233, .16);
+  --text: #eceff4;
+  --text-soft: #c7cdd8;
+  --muted: #9aa4b2;
+  --muted-2: #7b8494;
+  --accent: #88c0d0;
+  --accent-strong: #5c99d6;
+  --accent-soft: rgba(136, 192, 208, .14);
+  --danger: #d08790;
+  --danger-soft: rgba(191, 97, 106, .14);
+  --warning: #ebcb8b;
+  --warning-soft: rgba(235, 203, 139, .12);
+  --good: #a3be8c;
+  --good-soft: rgba(163, 190, 140, .14);
+  --shadow: 0 14px 40px rgba(20, 24, 32, .35);
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+[data-theme="cyber"] {
+  --bg: #08080c;
+  --surface: #110f1a;
+  --surface-2: #17141f;
+  --surface-3: #1e1929;
+  --surface-hover: #241e30;
+  --line: rgba(139, 92, 246, .14);
+  --line-strong: rgba(139, 92, 246, .28);
+  --text: #ede9fe;
+  --text-soft: #c9c2e5;
+  --muted: #8f87ab;
+  --muted-2: #6b6389;
+  --accent: #a78bfa;
+  --accent-strong: #8b5cf6;
+  --accent-soft: rgba(139, 92, 246, .14);
+  --danger: #f18b8b;
+  --danger-soft: rgba(241, 139, 139, .12);
+  --warning: #e6b86b;
+  --warning-soft: rgba(230, 184, 107, .12);
+  --good: #7dd3a8;
+  --good-soft: rgba(125, 211, 168, .12);
+  --shadow: 0 18px 48px rgba(0, 0, 0, .4);
+}
+[data-theme="command"] {
+  --bg: #0a1220;
+  --surface: #131f33;
+  --surface-2: #182840;
+  --surface-3: #1e3148;
+  --surface-hover: #243a55;
+  --line: rgba(148, 163, 184, .12);
+  --line-strong: rgba(148, 163, 184, .22);
+  --text: #e2e8f0;
+  --text-soft: #c3cddd;
+  --muted: #8494ab;
+  --muted-2: #5f7089;
+  --accent: #38bdf8;
+  --accent-strong: #0284c7;
+  --accent-soft: rgba(56, 189, 248, .13);
+  --danger: #f18b8b;
+  --danger-soft: rgba(241, 139, 139, .12);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, .12);
+  --good: #6ee7b7;
+  --good-soft: rgba(110, 231, 183, .12);
+  --shadow: 0 18px 48px rgba(2, 8, 20, .45);
+}
+[data-theme="aurora"] {
+  --bg: #0b0d12;
+  --surface: #11141b;
+  --surface-2: #171b24;
+  --surface-3: #1d222d;
+  --surface-hover: #202632;
+  --line: rgba(255, 255, 255, .08);
+  --line-strong: rgba(255, 255, 255, .14);
+  --text: #eef2f7;
+  --text-soft: #c7d0dc;
+  --muted: #8793a4;
+  --muted-2: #657184;
+  --accent: #77d6b3;
+  --accent-strong: #49b98f;
+  --accent-soft: rgba(73, 185, 143, .14);
+  --danger: #f18b8b;
+  --danger-soft: rgba(241, 139, 139, .12);
+  --warning: #e6b86b;
+  --warning-soft: rgba(230, 184, 107, .12);
+  --good: #77d6a3;
+  --good-soft: rgba(119, 214, 163, .12);
+}
+
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; }
 body { margin: 0; min-width: 980px; overflow: hidden; color: var(--text); background: var(--bg); }
@@ -51,6 +150,13 @@ code { color: #8fe0c3; font-family: "Cascadia Code", Consolas, monospace; }
 .desktop-brand-copy strong, .desktop-brand-copy span { display: block; }
 .desktop-brand-copy strong { font-size: 17px; letter-spacing: .02em; }
 .desktop-brand-copy span { margin-top: 3px; color: var(--muted); font-size: 11px; }
+
+/* 主题切换器：四个色点（2026-09-30 四主题全做）。 */
+.desktop-brand { position: relative; }
+.desktop-theme-switch { position: absolute; top: 8px; right: 0; display: flex; gap: 6px; }
+.theme-dot { width: 13px; height: 13px; padding: 0; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, .25); background: var(--dot, #88c0d0); opacity: .45; transition: opacity .15s ease, transform .15s ease, border-color .15s ease; }
+.theme-dot:hover { opacity: .8; }
+.theme-dot.on { opacity: 1; border-color: #fff; transform: scale(1.12); box-shadow: 0 0 0 2px rgba(255, 255, 255, .12); }
 
 .desktop-nav { min-height: 0; flex: 1; overflow-y: auto; padding: 0 2px 12px; }
 .desktop-nav-group { padding: 0 0 14px; }
