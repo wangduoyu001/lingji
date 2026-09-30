@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
+import mcp.types as _real_mcp_types
+
 from src.extraction.bootstrap import build_extraction_pipeline
 from src.gateway.bootstrap import build_memory_gateway
 from src.retrieval.hybrid import SearchFilters
@@ -13,6 +15,11 @@ from src.sources.read_model import SourceReadModel
 from src.automatic_memory import AuthorizationScope, SourceRegistry
 from src.automatic_memory.runtime import AutomaticMemoryRuntime
 from src.storage import StateDatabase
+
+
+def _tool_payload(result):
+    """MCP 工具自 2026-09-29 起返回单份 CallToolResult，解出唯一 JSON 文本块。"""
+    return json.loads(result.content[0].text)
 
 
 def _settings(root: Path) -> SimpleNamespace:
@@ -126,6 +133,7 @@ def _formal_mcp_server(monkeypatch, gateway):
             return lambda function: function
 
     mcp_package = types.ModuleType("mcp")
+    mcp_package.types = _real_mcp_types
     mcp_server_package = types.ModuleType("mcp.server")
     fastmcp_package = types.ModuleType("mcp.server.fastmcp")
     fastmcp_package.FastMCP = FakeMCP
@@ -326,7 +334,7 @@ def test_formal_mcp_search_entry_returns_structured_message_citation(monkeypatch
 
     try:
         server = _formal_mcp_server(monkeypatch, gateway)
-        result = server.tools["search_memory"]("mcp structured evidence")
+        result = _tool_payload(server.tools["search_memory"]("mcp structured evidence"))
         assert result["results"]
         assert result["results"][0]["memory_type"] == "structured_evidence"
         assert result["results"][0]["citation"]["message_id"]
@@ -347,12 +355,12 @@ def test_state_db_revoke_and_expiry_are_excluded_from_current_gateway_context_an
         registry.revoke(authorized.source_id)
         assert not gateway.search_memory("chatgpt", "lifecycle evidence must be revoked")["results"]
         assert gateway.build_context_pack("chatgpt", query="lifecycle evidence must be revoked", include_core=False)["sections"] == []
-        assert not server.tools["search_memory"]("lifecycle evidence must be revoked")["results"]
+        assert not _tool_payload(server.tools["search_memory"]("lifecycle evidence must be revoked"))["results"]
         registry.set_status(authorized.source_id, "authorized")
         assert gateway.search_memory("chatgpt", "lifecycle evidence must be revoked")["results"]
         registry.set_status(authorized.source_id, "expired", reason="test expiry")
         assert not gateway.search_memory("chatgpt", "lifecycle evidence must be revoked")["results"]
-        assert not server.tools["search_memory"]("lifecycle evidence must be revoked")["results"]
+        assert not _tool_payload(server.tools["search_memory"]("lifecycle evidence must be revoked"))["results"]
         historical = gateway.search_memory("chatgpt", "lifecycle evidence must be revoked", mode="history")
         assert historical["results"]
         as_of = gateway.search_memory(

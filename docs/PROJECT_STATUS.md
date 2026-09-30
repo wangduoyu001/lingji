@@ -1,5 +1,9 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
+## 2026-09-30 全面复验 + 修复批（真机验收 PASS，修复已落地待重包装机）
+
+主人指令全面验收 + 修复（滚动记录统一见 `docs/MAINTENANCE_LOG.md` 迭代 #1，2026-09-30 起排查优化类唯一迭代文档）。复验：静止 CPU 1.9%/RSS 967MB 达标（突发=验收会话自摄入）、settings 零泄漏、MCP 22 工具单份化、UI 跨投影一致；全量 1915 passed，基线外 3 失败甄别后全部修复——①`quality_gate._call_formal_mcp` 适配 CallToolResult（MCP 对照分支恢复，quality gate 测试转绿）+ `test_structured_evidence_lexical` 解包适配（**基线既有失败 test_formal_mcp_search_entry 一并修复**，9 passed）；②`test_p2_08_p2_09_integration` 更新为 3 项主菜单现状契约（6 passed）；③ping 401 定性为看门狗裸探针设计行为，access log 噪音过滤已加 `run_control_api.py`（待重打包装机生效）。文档：建 `MAINTENANCE_LOG.md` 总账，历史文档全面排查无过期冒充。遗留观察：vector degraded（backfill 追平中）、storage/raw 2.3GB/2GiB 上限待主人决策。
+
 ## 2026-09-27 晚 资源占用收尾批（代码完成，真机验收 PARTIAL）
 
 收尾批 PERF_RESOURCE_CLOSEOUT_20260927B（报告见 TEST_REPORTS/PERF_RESOURCE_ROOT_CAUSE_20260927.md 收尾节）：**A1** sync 两阶段 content-addressed 重构（水位删除、title 漂移修复、重放零 chunk，c24ab5b6）；**B1** 阈值进 RuntimeSettingsStore（owner override > 静态配置 > 目录默认 precedence）+ skipped_by_value_gate 值域 + skipped/rescan 端点（f60fd015）；**B3** 客户端池混库守卫——真机实锤生效，acceptance 集合注册自动注销、不再重建（2d7e9d1c）；**C** vector_backfill payload-only 增量 diff（ea9e8703）。PyInstaller 重打包（SHA 99ebc06f…）部署重启。**真机未达标项**：空闲 CPU 仍 23-33%（队列空、日志静默；遗留热点=SHA256 密集 worker 线程 × 重复再提取 × read model 全量重建，下轮 py-spy 定位）；活动期 RSS 峰值 2GB。**dir-usage TTL 缓存假设证伪已回滚**（3fb2f1d6→45c5bb59）。**主人待决策：storage/raw 3.05GB/3GiB 上限已满，新采集被拒——清理或提高上限**。

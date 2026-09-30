@@ -2,8 +2,10 @@
 
 ## 2026-09-30 · 全面复验（COMPREHENSIVE_ACCEPTANCE_20260930，只读验收轮）
 
-- 主人指令"再次全面检查灵机 全面验收"。本轮**零产品代码变更**，纯验收：全量 pytest 1915 passed / 16 failed（基线 14 项中 13 项逐条一致 + slim_search 基线失败确认已修复 + 3 项基线外新失败甄别定性）、门禁双 PASS、compileall PASS、认证边界与 15 端点真机全过、settings 零泄漏、MCP 22 工具单份化与 slim 契约核验（recent_changes 的 relative_path 为白名单设计内字段）、Desktop UI 截图跨投影一致、静止 CPU 1.9%/RSS 967MB 达标（突发窗口为验收会话自摄入，队列无积压）。报告：`docs/TEST_REPORTS/COMPREHENSIVE_ACCEPTANCE_20260930.md`。
-- **遗留修复项（下一轮进入任务单）**：①P1 产品行为缺陷——9-29 MCP 单份化（`tool_result`→CallToolResult）消费方适配不完整：quality_gate.py:830 MCP pack 路径解析失败后永久降级（parity 永远 failed、每问题少一遍 selector 对照），同根测试 `test_structured_evidence_lexical.py::test_state_db_revoke_and_expiry…` 漏解包；修复方向为适配消费方，禁止回退单份化。②P2 陈旧测试 `test_p2_08_p2_09_integration.py` 断言已移除的 AttentionPage.tsx，需按 3 项导航契约重写。③P2 Desktop 主进程 ping 401 占 89%（2,492/2,794），疑似 runtime_manager token 根解析指向错误 data-root，"任何 HTTP 响应算活"兜底掩盖了身份配置缺陷，建议修复 token 根。④观察项：vector_state=degraded（backfill 正常运行、rebuild_required=false）；storage/raw 2.3GB/2GiB 上限已满仍待主人决策。
+- 主人指令"再次全面检查灵机 全面验收"。本轮**零产品代码变更**，纯验收：全量 pytest 1915 passed / 16 failed（基线 14 项中 13 项逐条一致 + slim_search 基线失败确认已修复 + 3 项基线外新失败甄别定性）、门禁双 PASS、compileall PASS、认证边界与 15 端点真机全过、settings 零泄漏、MCP 22 工具单份化与 slim 契约核验（recent_changes 的 relative_path 为白名单设计内字段）、Desktop UI 截图跨投影一致、静止 CPU 1.9%/RSS 967MB 达标（突发窗口为验收会话自摄入，队列无积压）。报告：`docs/MAINTENANCE_LOG.md` 迭代 #1（排查优化总账，2026-09-30 起唯一迭代文档）。
+- **修复落地（同日主人指令"有问题就修复"，全部完成）**：①P1——`quality_gate.py::_call_formal_mcp` 增加 CallToolResult `.content` 块解包（不回退单份化），MCP 对照分支恢复工作，`test_real_quality_gate_reports_measured_result` 转绿；同根测试缺口 `test_structured_evidence_lexical` 加 `_tool_payload()` 解包 + 假 mcp 包挂真 `mcp.types`，全文件 9 passed，**基线既有失败 test_formal_mcp_search_entry 一并修复**。②P2 陈旧断言——`test_p2_08_p2_09_integration` 更新为当前契约（attention 路由=SystemStatusPage、observe 3 项主菜单、只读零 fetch/POST），6 passed。③ping 401 定性修正为看门狗裸探针设计行为（非 token 根缺陷）；access log 噪音在 `run_control_api.py` 加 `_ProbePingAccessFilter`（带行为单测），待下次打包装机生效。④文档治理——建 `docs/MAINTENANCE_LOG.md` 排查优化总账（唯一迭代文档），验收报告并入并删除一次性文件，`DOCUMENTATION_MAINTENANCE.md` 权威表登记。
+- 验收变更要求：修复轮聚焦测试全绿 + 相关模块无新增失败；`run_control_api.py` 变更属运行时入口，重打包装机后复核 access log 无 ping 噪音；文档类变更走本轮 `docs/MAINTENANCE_LOG.md` 记录。
+- 回滚：quality_gate/测试/run_control_api 改动均可独立 revert；MAINTENANCE_LOG 为纯新增文档。
 - 回滚：无代码变更无需回滚；本轮临时文件（截图/采样/日志副本）随报告归档清理。
 
 ## 2026-09-27 晚 · 资源占用收尾批（PERF_RESOURCE_CLOSEOUT_20260927B，status ACTIVE）

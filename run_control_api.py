@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from pathlib import Path
 
@@ -14,6 +15,18 @@ from src.extraction.bootstrap import build_extraction_pipeline
 from src.storage import StateDatabase
 from src.gateway.bootstrap import build_memory_gateway
 from src.control.settings_catalog import CompleteOwnerSettingsRegistry
+
+
+class _ProbePingAccessFilter(logging.Filter):
+    """过滤看门狗裸探针的 access log。
+
+    进程内健康看门狗每 20 秒发一次不带 token 的 GET /api/runtime/ping
+    （run_packaged_control_api.health_watchdog，设计上 401 即"活着"的证据），
+    每条约 2.5 条/分钟、17 小时 2,492 条，对排障只有噪音价值。
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/api/runtime/ping" not in record.getMessage()
 
 
 def load_or_create_token(path: Path) -> str:
@@ -103,6 +116,7 @@ def main() -> None:
     app.on_event("shutdown")(shutdown_runtime)
     try:
         runtime.start()
+        logging.getLogger("uvicorn.access").addFilter(_ProbePingAccessFilter())
         uvicorn.run(
             app,
             host=settings.control_api_host,

@@ -113,14 +113,15 @@ def test_desktop_uses_shared_polling_and_shadow_dashboard_without_execution_cont
     app_pages = read("desktop/lingji-control/src/AppPages.tsx")
     dashboard = read("desktop/lingji-control/src/pages/AutoReviewPage.tsx")
     polling = read("desktop/lingji-control/src/hooks/usePollingResource.ts")
-    attention = read("desktop/lingji-control/src/pages/AttentionPage.tsx")
+    # 2026-09-29 状态页重构：attention 路由改由 SystemStatusPage 渲染（AttentionPage.tsx 已移除）。
+    attention = read("desktop/lingji-control/src/pages/SystemStatusPage.tsx")
     diagnostics = read("desktop/lingji-control/src/pages/DiagnosticsPage.tsx")
 
     for page_id in ("overview", "activity", "attention", "diagnostics"):
         assert f'id: "{page_id}"' in navigation
-    # 2026-09 菜单收敛后的契约：日常使用固定 6 页，手动确认类全部收进高级诊断。
-    assert navigation.count('group: "observe"') == 7  # 6 项主菜单 + 遗留 attention 路由
-    for observe_id in ("overview", "memory_library", "memory_sources", "timeline_page", "work_ledger", "processing_detail"):
+    # 2026-09-29 菜单收敛后的契约：日常使用固定 3 页（首页/记忆库/状态），其余全部收进高级诊断。
+    assert navigation.count('group: "observe"') == 3
+    for observe_id in ("overview", "memory_library", "attention"):
         assert f'id: "{observe_id}"' in navigation
     assert 'id: "memory_cards"' in navigation and '要点转永久记忆' in navigation
     assert "PRIMARY_NAVIGATION" in navigation
@@ -129,11 +130,12 @@ def test_desktop_uses_shared_polling_and_shadow_dashboard_without_execution_cont
     assert 'page === "auto_review"' in app_pages
     assert 'page === "attention"' in app_pages
     assert "ADVANCED_NAVIGATION" in diagnostics
-    assert '"/api/work/pending-actions"' in attention
-    assert "pendingActionsFrom" in attention
+    # SystemStatusPage 只读契约：共享轮询 + 失败台账展示 + 零决策/零写入。
     assert "usePollingResource" in attention
+    assert "failure_ledger" in attention
     assert "pending_review_count" not in attention
     assert "/api/auto-review/metrics" not in attention
+    assert "fetch(" not in attention and "POST" not in attention
     assert "usePollingResource" in dashboard
     assert "AbortController" in polling
     assert "inFlightRef" in polling

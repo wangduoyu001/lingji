@@ -502,6 +502,11 @@ def _call_formal_mcp(server: Any, arguments: Mapping[str, Any]) -> Mapping[str, 
         and not isinstance(result[0], (str, bytes))
     ):
         result = result[0]
+    # 2026-09-29 起 MCP 工具统一返回单份 CallToolResult（src/mcp/tool_payload.py），
+    # 其 content 块列表走下方既有的"仅接受 JSON 文本块"解包路径。
+    call_result_content = getattr(result, "content", None)
+    if isinstance(call_result_content, Sequence) and not isinstance(call_result_content, (str, bytes)):
+        result = call_result_content
     if isinstance(result, Mapping):
         return result
     # FastMCP returns ContentBlocks for the registered invocation.  Only a

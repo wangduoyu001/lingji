@@ -2,7 +2,7 @@
 
 ## 2026-09-30 全面复验小节（COMPREHENSIVE_ACCEPTANCE_20260930，只读验收轮）
 
-主人指令"再次全面检查灵机 全面验收"。本轮为独立只读复验（非任务单新任务，不改变 AUDIT_RESPONSE_20260927 的 ACTIVE/待主人确认状态），完整证据见 `docs/TEST_REPORTS/COMPREHENSIVE_ACCEPTANCE_20260930.md`。
+主人指令"再次全面检查灵机 全面验收"。本轮为独立只读复验（非任务单新任务，不改变 AUDIT_RESPONSE_20260927 的 ACTIVE/待主人确认状态），完整证据见总账 `docs/MAINTENANCE_LOG.md` 迭代 #1（按主人 2026-09-30 指令，排查优化类记录统一在该文档迭代，不再新建报告文件）。
 
 ```text
 task_id: COMPREHENSIVE_ACCEPTANCE_20260930
