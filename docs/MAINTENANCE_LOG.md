@@ -19,6 +19,34 @@
 
 ---
 
+## 迭代 #3：2026-09-30 全面验收（重启后复验）+ Phase 1→Phase 2 差距评估
+
+**复验（raw 修复 + sidecar 重启后）**：memory/vector/embedding 全 healthy（vector degraded 自愈）、管线零降级、队列无积压、meta.json 无 acceptance 残留（B3 守卫重启窗口验证 ✓）、静止 CPU 13.9%→恢复期结束后应继续回落、raw 1.31GiB 稳定在 2GiB 纪律内、Desktop 存活。master 落差收敛：产品分支领先 20、master 独有 0（可 fast-forward）。
+
+**距离 Phase 2（机会中心）的差距清单**（Gate = Phase 1 自动门禁+真机+主人观察+报告清理全闭环 PASS）：
+
+A. 工程收尾（阻塞 Phase 1 PASS）：
+1. 质量门 MEASURED_FAIL 未翻案——frozen 100 题诊断（9-8 产物）`citation_hits 0/106`、phase FAIL；4r2-readiness NOT_REACHED。本轮已修 quality gate MCP parity 降级路径，需在隔离根用当前代码重跑质量门（预期显著改善或暴露真差距）。
+2. 全量 11 个基线既有失败未甄别清零（scheduler 超时类 ×2、control_api 快照类 ×2、task8e fallback 类 ×3、packaged_flow、context_pack、repair_round1、heartbeat）；22 skipped 未逐条登记。
+3. 装机滞后：quality gate 修复、ping 日志过滤等源码改进未重打包装机，运行实例仍是 663277f2 的包。
+4. master fast-forward 合并（20 commit，零冲突风险）。
+
+B. 主人体验收尾（阻塞 Phase 1 PASS）：
+5. 两个 ACTIVE 任务（审计响应批、资源收尾批）的主人体验确认从未完成——按规矩不确认不收口。
+6. Evolving 时间线文件待主人审阅；晋升管线待主人最终确认。
+7. 主人体感验收轮从未执行（M5"看不出灵机做了什么"结论后的系列修复只有技术验收）。
+
+C. 平台与流程（Phase 1 范围内）：
+8. Windows 双平台构建/真机验收从未执行（Mac 是唯一开发机）——需主人拍板 Phase 1 内做或顺延。
+9. full/release 门禁未在当前代码树完整跑过（最近一次 release gate 是 8 月底 FAIL）。
+
+D. 记忆质量长期项（不阻塞）：
+10. 真实问题集召回率标定（当前质量门仅合成语料）；raw 引用回收；JSONL 字节游标。
+
+**建议收官路径**：重打包装机 → 隔离根重跑质量门 → 基线失败甄别清零 → full 门禁 + master 合并 → 主人体感验收轮 + 两个 ACTIVE 任务收口 → Phase 1 PASS → Phase 2 启动（第一步：审计现有机会代码，禁止第二套存储/UI）。
+
+---
+
 ## 迭代 #2：2026-09-30 raw 上限"又满了"排查——配置被静默还原，已恢复并回收 1.45GiB
 
 主人追问"raw 2.3GB/2GiB 上限昨天不是解决了吗"。排查结论：**9-29 的写入放大修复有效（今日无新 186MB 级整库副本），"满"是配置被静默还原**——
