@@ -11,6 +11,7 @@
 | 事实 | 详细权威 |
 |---|---|
 | 当前阶段、真实进度、阻塞、下一步 | `docs/PROJECT_STATUS.md` |
+| 排查、优化、全面检查与修复轮的滚动记录 | `docs/MAINTENANCE_LOG.md`（唯一迭代文档，不新建同类报告） |
 | 稳定架构、数据权威、端口和长期边界 | `docs/ARCHITECTURE.md` |
 | 代码入口、模块所有权、局部测试 | `docs/MODULES/CODE_MAP.md` |
 | 尚未进入当前阶段的需求 | `docs/MODULES/FUTURE_DEVELOPMENT_TODO.md` |
