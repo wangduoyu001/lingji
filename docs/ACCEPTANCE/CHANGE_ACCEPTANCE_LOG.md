@@ -1,5 +1,11 @@
 # 验收要求变更记录
 
+## 2026-09-30 晚 · 四主题可切换界面（主人拍板"都要"）
+
+- 主人裁定四个设计方向全部落地、可切换（对标 Codex codex-theme-v1 主题机制）。落地（commit a767db60）：`styles.css` 四套主题变量（`data-theme`：**nord 默认**（Codex 同款深蓝灰 #2e3440/#88c0d0 低饱和）+ aurora（原青绿，即 :root 兜底值）+ cyber（紫罗兰）+ command（琥珀×深蓝））；`hooks/useTheme.ts` 切换 + localStorage 持久化（key `lingji-theme`）；`DesktopShell` 品牌区右上角四色点切换器。
+- 验收要求：前端 build 绿 + owner-ui-menu-fast-track 冒烟 PASS（已过）；重打包装机后主人肉眼核对四主题切换与持久化（重启 App 主题保持）；各主题下文字对比度可读、无布局错位。
+- 回滚：revert a767db60 即回单一主题；localStorage key 独立无迁移负担。
+
 ## 2026-09-30 · 全面复验（COMPREHENSIVE_ACCEPTANCE_20260930，只读验收轮）
 
 - 主人指令"再次全面检查灵机 全面验收"。本轮**零产品代码变更**，纯验收：全量 pytest 1915 passed / 16 failed（基线 14 项中 13 项逐条一致 + slim_search 基线失败确认已修复 + 3 项基线外新失败甄别定性）、门禁双 PASS、compileall PASS、认证边界与 15 端点真机全过、settings 零泄漏、MCP 22 工具单份化与 slim 契约核验（recent_changes 的 relative_path 为白名单设计内字段）、Desktop UI 截图跨投影一致、静止 CPU 1.9%/RSS 967MB 达标（突发窗口为验收会话自摄入，队列无积压）。报告：`docs/MAINTENANCE_LOG.md` 迭代 #1（排查优化总账，2026-09-30 起唯一迭代文档）。
