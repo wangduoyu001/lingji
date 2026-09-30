@@ -19,6 +19,28 @@
 
 ---
 
+## 迭代 #10：2026-09-30 傍晚 收官复核批——工程门禁全绿、遗留观察项关闭、仓库卫生清理、下一阶段就绪
+
+主人指令"全面验收 + 深度清理过期文档和残留垃圾 + 准备下一阶段开发"。
+
+**全面复核（零产品代码变更）**：
+1. 全量 pytest `1932 passed / 1 failed / 22 skipped`（5:09），与迭代 #8 基线逐项一致，**零新增回归**；唯一失败 = 在案 P1 缺陷守卫 `test_automatic_memory_packaged_flow`（knowledge 层绕过授权过滤，故意保持失败）。
+2. 三门禁 PASS：acceptance_sync / local_execution_handoff / compileall。
+3. 生产实例 live 复核（memory_health）：memory 28,817 文档 / 37,102 chunks / 79 core / 0 孤儿块、integrity ok；embedding qwen3 verified；**vector healthy（37,102/37,102 覆盖 100%，迭代 #1 遗留观察项"vector degraded"关闭）**；8766 存活（0.42s 响应）、8767 无监听。
+4. 附带确认：raw 上限问题已由迭代 #2 收敛（1.41GiB < 2GiB），晨间章节"待主人决策"口径作废。
+
+**仓库卫生（本轮清理）**：
+- 补交迭代 #9 遗留的 `Cargo.toml` macos-private-api feature（commit b9d3c3cb，毛玻璃已交付产物的必需依赖，验收同步门禁随之转 PASS）。
+- 删除可再生成本地垃圾：43 个 `__pycache__`/`.pytest_cache`、`build/sidecar-macos` 126MB PyInstaller 中间产物、`output/validation` 4 份过期 full-pytest 日志。
+- 进程甄别：4 个 `run_mcp_server.py` stdio 进程父进程全部存活（1 Codex CLI + 2 zcode-cli 活会话），**不是残留，不杀**；`LingJiAcceptance/backups` 28MB 为 9-27 在案回滚锚点，保留。
+- 文档排查：迭代 #1 已做 95+ 文档全量排查（无过期冒充），本轮增量复核无新增散落文件；`交接.md` 停在 9-29 已覆盖更新。
+
+**待主人拍板（不阻塞）**：git 内跟踪的与产品无关个人内容（`01_直播话术`/`02_AI工具库`/`03_一人公司`/`05_视频采集`/`解析灵感库`/`_知识库*.md` 等 ~250 文件约 2MB）建议未来迁移独立仓库后从主线移除；`PEMIS/` 保留（Phase 2 机会面板审计源）。
+
+**下一阶段就绪（详见 PROJECT_STATUS 顶部）**：Phase 1 工程侧全部就绪，剩两项——①P1 knowledge 层授权过滤修复（唯一在案产品缺陷，需溯源链设计后单独立项）；②主人体验确认（毛玻璃 UI、晋升管线、Evolving 审阅、质量门最终 PASS 判定）。
+
+---
+
 ## 迭代 #9：2026-09-30 UI 重定方向——砍彩色主题，落地 macOS 系统毛玻璃 + 完整平铺菜单（真机交付）
 
 主人三条反馈：①UI 还是旧的（根因=桌面壳进程从未重启，覆盖安装后旧进程仍在前台）；②菜单要和设计稿一致全展开，不是只露三项；③不要"劣质彩色主题"，要 Mac 原生透明毛玻璃质感。

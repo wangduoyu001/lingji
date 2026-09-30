@@ -1,5 +1,9 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
+## 2026-09-30 傍晚 收官复核批（工程门禁全绿，Phase 1 只剩 P1 修复 + 主人确认）
+
+主人指令"全面验收 + 深度清理 + 准备下一阶段"。全量 pytest `1932 passed / 1 failed / 22 skipped` 与迭代 #8 基线逐项一致（唯一失败 = 在案 P1 守卫），acceptance_sync / handoff / compileall 三门禁 PASS；生产实例 live 全 healthy——**vector degraded 遗留观察项已自愈关闭**（37,102 向量覆盖 100%、0 孤儿块）。仓库卫生：补交毛玻璃必需的 Cargo.toml feature（b9d3c3cb）、清理 126MB 构建中间产物与过期日志/缓存，MCP 残留进程甄别为活会话不杀。**下一阶段就绪状态**：Phase 1 工程侧全部就绪，剩余两项——①P1 knowledge 层绕过授权过滤缺陷（唯一在案产品缺陷，需溯源链设计单独立项，守卫测试保持失败）；②主人体验确认（毛玻璃 UI、质量门最终 PASS 判定、晋升管线与 Evolving 审阅）。Phase 2（机会中心）启动前置不变：Phase 1 正式 PASS，第一步审计现有 `src/opp_generator.py`、`src/opportunities/` 与旧 PEMIS 数据，禁止第二套存储/UI。滚动记录见 `docs/MAINTENANCE_LOG.md` 迭代 #10。
+
 ## 2026-09-30 全面复验 + 修复批（真机验收 PASS，修复已落地待重包装机）
 
 主人指令全面验收 + 修复（滚动记录统一见 `docs/MAINTENANCE_LOG.md` 迭代 #1，2026-09-30 起排查优化类唯一迭代文档）。复验：静止 CPU 1.9%/RSS 967MB 达标（突发=验收会话自摄入）、settings 零泄漏、MCP 22 工具单份化、UI 跨投影一致；全量 1915 passed，基线外 3 失败甄别后全部修复——①`quality_gate._call_formal_mcp` 适配 CallToolResult（MCP 对照分支恢复，quality gate 测试转绿）+ `test_structured_evidence_lexical` 解包适配（**基线既有失败 test_formal_mcp_search_entry 一并修复**，9 passed）；②`test_p2_08_p2_09_integration` 更新为 3 项主菜单现状契约（6 passed）；③ping 401 定性为看门狗裸探针设计行为，access log 噪音过滤已加 `run_control_api.py`（待重打包装机生效）。文档：建 `MAINTENANCE_LOG.md` 总账，历史文档全面排查无过期冒充。遗留观察：vector degraded（backfill 追平中）、storage/raw 2.3GB/2GiB 上限待主人决策。
