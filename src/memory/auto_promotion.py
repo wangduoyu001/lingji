@@ -457,6 +457,11 @@ class AutoMemoryPromotionPipeline:
             proposed["path"],
             owner_confirmed=True,
             target_category="General",
+            # 晋升 = 主人门槛批准进入 Core Memory，必须对 AI 可见。propose 阶段
+            # 写入的 agent_scope=["lingji-auto"]（管线内部身份，AIProfileRegistry
+            # 无此 profile）若沿用，已批准记忆将对所有 agent 不可见（2026-09-30
+            # 真实召回标定发现的批量缺陷：74 条 core 知识全盲）。
+            agent_scope=["all"],
         )
         return str(promoted.get("relative_path") or "")
 

@@ -179,6 +179,27 @@ class AutoPromotionPipelineTests(unittest.TestCase):
         self.assertEqual(len(self.sync_calls), 1)
         self.assertEqual(result.get("projection_sync"), {"added": 1})
 
+    def test_promoted_core_memory_is_visible_to_ai_agents(self):
+        """晋升 = 批准进 Core Memory，scope 必须对 AI 可见（2026-09-30 真实召回标定）。
+
+        缺陷史：propose 阶段写入 agent_scope=["lingji-auto"]（管线内部身份，
+        AIProfileRegistry 无此 profile），promote 沿用后 74 条 core 知识对
+        codex/zcode 全部不可见。
+        """
+        _seed(
+            self.memory_db,
+            "conv-scope",
+            "ZCode 快照增量导出方案",
+            "增量快照按会话自包含导出并用水位线去重。",
+            ["水位线在 storage/automatic_memory_watermarks"],
+        )
+        self.pipeline.run_once()
+        core = self._core_files()
+        self.assertEqual(len(core), 1)
+        text = core[0].read_text(encoding="utf-8-sig")
+        # agent_scope 必须是全域可见；proposed_by 保留 lingji-auto（提议者审计字段）。
+        self.assertIn("agent_scope:\n- all", text)
+
     def test_no_promotion_skips_projection_sync(self):
         _seed(
             self.memory_db,
