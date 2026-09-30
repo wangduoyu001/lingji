@@ -1,5 +1,9 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
+## 2026-09-30 晚 P1 修复落地（全量首次零失败，sidecar 已装机）
+
+主人指令"全部按照建议执行"。**守卫测试失败真相反转**：739 行失败并非"knowledge 层绕过授权"，而是**价值门拦截测试夹具**（夹具按整文件判定恒 1 轮，只能靠 ≥300 字符或价值信号过门；四处夹具 270-293 字符全部被 `skipped_by_value_gate`，证据从未入库）。修复（commit 26cb7d5f）：①四处夹具补真实价值信号（不关门禁不降阈值）；②真缺口一并修——`source_authority.py` 授权过滤扩展到一切带 `automatic_memory_source_id` 的派生层，**豁免 core+approved**（主人批准的 Core 不随撤销隐藏）；③`_promote_row` 晋升文件自带来源链（frontmatter→relationships 自动落库）；④存量核实后不做 Vault 回填（79 条全为豁免面、distilled_knowledge 表已存 source_id）。**测试：守卫测试 7:41 首次全程通过；全量 1939 passed / 0 failed / 22 skipped 零失败**。sidecar SHA `b85f3341…` 装机重启，live 全 healthy。**Qdrant 容量决策（已拍板执行）**：embedded 实证健康（37k 点），增速 ~500-1,000 分块/天，行动阈值 10-20 万点届时迁本机 Docker，云服务器方案否决（隐私/可用性/需改代码，收益不成立）。Phase 1 剩余不变：主人体验确认（毛玻璃 UI、质量门最终判定、晋升管线确认）→ Phase 1 PASS → Phase 2 机会中心。
+
 ## 2026-09-30 傍晚 收官复核批（工程门禁全绿，Phase 1 只剩 P1 修复 + 主人确认）
 
 主人指令"全面验收 + 深度清理 + 准备下一阶段"。全量 pytest `1932 passed / 1 failed / 22 skipped` 与迭代 #8 基线逐项一致（唯一失败 = 在案 P1 守卫），acceptance_sync / handoff / compileall 三门禁 PASS；生产实例 live 全 healthy——**vector degraded 遗留观察项已自愈关闭**（37,102 向量覆盖 100%、0 孤儿块）。仓库卫生：补交毛玻璃必需的 Cargo.toml feature（b9d3c3cb）、清理 126MB 构建中间产物与过期日志/缓存，MCP 残留进程甄别为活会话不杀。**下一阶段就绪状态**：Phase 1 工程侧全部就绪，剩余两项——①P1 knowledge 层绕过授权过滤缺陷（唯一在案产品缺陷，需溯源链设计单独立项，守卫测试保持失败）；②主人体验确认（毛玻璃 UI、质量门最终 PASS 判定、晋升管线与 Evolving 审阅）。Phase 2（机会中心）启动前置不变：Phase 1 正式 PASS，第一步审计现有 `src/opp_generator.py`、`src/opportunities/` 与旧 PEMIS 数据，禁止第二套存储/UI。滚动记录见 `docs/MAINTENANCE_LOG.md` 迭代 #10。

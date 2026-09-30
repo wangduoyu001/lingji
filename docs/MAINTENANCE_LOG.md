@@ -19,6 +19,24 @@
 
 ---
 
+## 迭代 #11：2026-09-30 晚 P1 修复落地——守卫测试误诊纠正、全量首次零失败、sidecar 装机
+
+主人指令"全部按照你的建议执行"（P1 修复 + Qdrant 容量建议）。
+
+**守卫测试 739 行失败的真相（误诊纠正）**：迭代 #8 将其诊断为"knowledge 层绕过授权过滤"。本轮用验收根库实测 + `evaluate_session_value` 真实函数复现证明真实根因是**价值门拦截测试夹具**：夹具按整个 raw 文件文本判定（恒 1 轮），只能靠字数 ≥300 或价值信号过门——主夹具 303 字符擦线过，过期夹具 280 字符、坏源 270、好源 280、"event" 夹具 293 全部被 `skipped_by_value_gate`，证据从未进入词法层，history/lexical 断言必然为空。修复=给四处夹具补真实价值信号（"fix"），不关门禁不降阈值。
+
+**P1 真实修复（knowledge 层授权缺口是真实代码事实，一并落地）**：
+1. 读侧（commit 26cb7d5f）：`source_authority.py` 授权过滤扩展到一切携带 `automatic_memory_source_id` 的派生条目；**豁免 core+approved**（主人门槛批准的 Core 不随来源撤销隐藏，与"Core 批量删除须主人批准"一致）。
+2. 写侧：`auto_promotion.py::_promote_row` 晋升元数据补 `automatic_memory_source_id`（frontmatter → properties → relationships 自动落库），新单测断言锁定。
+3. 存量收敛：生产 79 条 knowledge/preference 全部 core+approved（豁免面），Evolving 未入索引（0 条），995 条 distilled_knowledge 表已存 source_id——**Vault frontmatter 回填无行为收益，不做**。
+4. Qdrant 容量决策落档：37,102 点 embedded 实证健康（20k 关口已过），增速 ~500-1,000 分块/天 → 100k 约 2.5-4 个月；**行动阈值 10-20 万点，届时迁本机 Docker Qdrant（数据不出机器）；云服务器方案否决**（连接池为 embedded-only 需改代码、向量是私人对话语义指纹不出本机、检索变网络依赖而收益仅省几百 MB 内存；多机共享需求出现时用 Tailscale 内网入口，规格 2GB/20GB 足够）。
+
+**测试结果**：新单测 6 例 + 既有授权套件 11 例 + 晋升回归 61 例全绿；守卫测试 `test_automatic_memory_packaged_flow` 修复后 **7:41 全程通过**（价值门上线以来首次，含双验收根 + 30%/70% 崩溃矩阵 + 全部 10 场景）；**全量 pytest `1939 passed / 0 failed / 22 skipped`（10:33）——零失败**（此前基线恒含 1 个守卫失败）。22 skipped 保持逐条在案的条件性 skip。
+
+**装机**：sidecar 重打包 SHA `b85f334178fccb0d5793ff7cc295ce9c586519af3800343cab37034c8340d4a2`，覆盖安装至 /Applications/灵机.app（ad-hoc 全量重签验证过）并重启；真机 ping 15.8ms、memory_health live 全 healthy（28,928 文档 / 37,221 分块 / 79 core / 0 孤儿 / 向量覆盖 100%）。启动追赶期 RSS 偏高属已知现象，按"避免重踩 #1"等回落后再判空闲指标。
+
+---
+
 ## 迭代 #10：2026-09-30 傍晚 收官复核批——工程门禁全绿、遗留观察项关闭、仓库卫生清理、下一阶段就绪
 
 主人指令"全面验收 + 深度清理过期文档和残留垃圾 + 准备下一阶段开发"。
