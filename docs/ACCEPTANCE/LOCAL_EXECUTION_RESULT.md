@@ -1,7 +1,30 @@
 # LingJi 本机执行结果回执
-# LingJi 本机执行结果回执
 
-## 当前回执：AUDIT_RESPONSE_20260927（外部优化审计响应，进行中）
+## 2026-09-30 全面复验小节（COMPREHENSIVE_ACCEPTANCE_20260930，只读验收轮）
+
+主人指令"再次全面检查灵机 全面验收"。本轮为独立只读复验（非任务单新任务，不改变 AUDIT_RESPONSE_20260927 的 ACTIVE/待主人确认状态），完整证据见 `docs/TEST_REPORTS/COMPREHENSIVE_ACCEPTANCE_20260930.md`。
+
+```text
+task_id: COMPREHENSIVE_ACCEPTANCE_20260930
+status: COMPLETED
+verdict: PASS_WITH_FINDINGS
+product_head: 1c7374098571d34a1103f3403f38920f6dc3bc09
+deployed_sidecar_sha256_prefix: 16c023ca3d63a30c（= 装机记录 Head 663277f2，代码与运行实例一致）
+full_pytest: 16 failed / 1915 passed / 22 skipped（基线逐条 diff：13 一致 + slim_search 确认修复 + 3 新失败甄别定性）
+gates: acceptance_sync PASS / handoff PASS / compileall PASS
+api: 认证边界 401/401/200；settings 零泄漏；failures 聚合 542 实锤；15 端点全过
+mcp: 22 工具 + 单份化 + slim 契约 PASS
+ui: 真机截图跨投影一致（9/15、27969/36141/36127/251MB 与 API、库实测吻合）；degraded 诚实展示
+resources: 静止 CPU 1.9% / RSS 967MB 达标；突发=验收会话自摄入（队列无积压）
+findings: P1 quality_gate MCP 分支永久降级（9-29 单份化适配缺口，同根 1 测试漏解包）；
+  P2 陈旧 AttentionPage 断言；P2 Desktop ping 401 占 89%（token 根疑点）；
+  观察项：vector degraded（backfill 正常）、raw 2.3GB/2GiB 上限待主人决策
+product_code_changed: false / owner_data_touched: false / production_pollution_count: 0
+```
+
+## 历史回执：AUDIT_RESPONSE_20260927（外部优化审计响应）
+
+> 以下为 2026-09-27 轮回执快照（任务单中该任务仍 ACTIVE、待主人体验确认收口）；2026-09-30 复验结论见本文件顶部。
 
 ```yaml
 task_id: AUDIT_RESPONSE_20260927
