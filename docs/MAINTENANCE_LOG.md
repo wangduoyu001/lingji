@@ -19,6 +19,21 @@
 
 ---
 
+## 迭代 #9：2026-09-30 UI 重定方向——砍彩色主题，落地 macOS 系统毛玻璃 + 完整平铺菜单（真机交付）
+
+主人三条反馈：①UI 还是旧的（根因=桌面壳进程从未重启，覆盖安装后旧进程仍在前台）；②菜单要和设计稿一致全展开，不是只露三项；③不要"劣质彩色主题"，要 Mac 原生透明毛玻璃质感。
+
+执行（commit 0b83a413）：
+1. **旧壳未重启问题**：`open -a` 只激活旧进程——覆盖安装后必须杀掉 lingji-control-center 旧进程再启动。已重启并验证新 UI 生效。
+2. **主题覆盖根因**：styles.css 中后部存在两个"暖纸浅绿"`:root` 覆盖块（历史 Owner-facing visual layer），后写胜出原则把一切暗色主题盖掉；且 paper 段夹带大量无作用域浅色硬编码（.desktop-sidebar #edf2ee、.desktop-toolbar rgba(246,248,246) 等）。处理：浅色块降级为 `[data-theme="paper"]` 可选主题，最终视觉层置于文件末尾统一覆盖。
+3. **macOS 毛玻璃**：tauri.conf 启用 `macOSPrivateApi + transparent + windowEffects(sidebar vibrancy)`；CSS 全 webview 透明，侧栏直接透出系统材质，主内容区轻雾面（深浅色跟随系统 prefers-color-scheme 自动适配）；砍掉四主题色点切换器（useTheme 删除），全局唯一高级视觉。
+4. **菜单全展开**：高级诊断从 `<details>` 折叠改为平铺菜单组（ADVANCED_NAVIGATION 26 项全部直接可见，含补回孤儿页"高级诊断"入口）；smoke 契约同步（details 断言 → 平铺断言 + 旧入口替换）。
+5. **交付验证**：build 绿、smoke PASS、DMG 重打包覆盖安装（adb3d0ab→29074393→3c871a91→最终 vibrancy 版）、ping 200、真机截图确认深浅色材质、完整菜单、主人在用时间线页。
+
+遗留：windowEffects 截图不可见（窗口级截图只拍 webview 层），拖动窗口到亮背景即可感受透明材质；主人深度体验确认照旧待其便利进行。
+
+---
+
 ## 迭代 #8：2026-09-30 主人令"直接干"——在案失败 2→1，测试守住新发现的 P1 撤销边界缺陷
 
 1. **stop_error flaky 根因修复（产品一行）**：`last_global_error` 取值顺序为"历史扫描错误 or cleanup_error"，启动首拍异步对账的瞬时错误（run_once status=empty）会遮蔽刚发生的 stop 失败。改为 `cleanup_error or _last_global_error()`（当前动作失败最优先展示）。5 连跑 + 全文件 17 passed 稳定。
