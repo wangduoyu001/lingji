@@ -1,7 +1,7 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { usePollingResource } from "../hooks/usePollingResource";
 import type { LingJiApi } from "../api";
-import { PRIMARY_NAVIGATION } from "../navigation";
+import { ADVANCED_NAVIGATION, PRIMARY_NAVIGATION } from "../navigation";
 import type { ReleaseMetadata } from "../hooks/useReleaseMetadata";
 import type { ConnectionState } from "../hooks/useLingJiConnection";
 import {
@@ -10,7 +10,6 @@ import {
 } from "../runtimeTypes";
 import type { NavigationItem, PageId } from "../types";
 import NavIcon from "./NavIcon";
-import { THEMES, useTheme } from "../hooks/useTheme";
 
 type Props = {
   page: PageId;
@@ -52,7 +51,6 @@ export default function DesktopShell({
   children,
 }: Props) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const { theme, setTheme } = useTheme();
   const shortCommit = releaseMetadata?.commit && releaseMetadata.commit !== "development"
     ? releaseMetadata.commit.slice(0, 8)
     : "dev";
@@ -82,20 +80,6 @@ export default function DesktopShell({
             <strong>灵机</strong>
             <span>你的第二大脑</span>
           </div>
-          <div className="desktop-theme-switch" role="radiogroup" aria-label="界面主题">
-            {THEMES.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                title={item.label}
-                aria-checked={theme === item.id}
-                role="radio"
-                className={theme === item.id ? "theme-dot on" : "theme-dot"}
-                style={{ ["--dot" as string]: item.dot }}
-                onClick={() => setTheme(item.id)}
-              />
-            ))}
-          </div>
         </div>
 
         <nav className="desktop-nav desktop-nav-primary">
@@ -119,13 +103,27 @@ export default function DesktopShell({
         </nav>
         {connected && api != null && <SidebarModelSwitch api={api} onNavigate={onNavigate} page={page} />}
 
-        <details className="desktop-advanced-disclosure">
-          <summary className="desktop-diagnostics-link">高级诊断</summary>
-          <div className="desktop-advanced-disclosure-body">
-            <p>日常不需要进入这里。状态异常或需要核查时，再打开详细页面。</p>
-            <button className="desktop-advanced-open" onClick={() => onNavigate("diagnostics")}>打开高级诊断</button>
+        {/* 2026-09-30 主人反馈：菜单要和设计稿一致、全部直接可见，不做折叠披露。 */}
+        <div className="desktop-advanced-group">
+          <div className="desktop-nav-group-title">高级诊断</div>
+          <div className="desktop-nav-items">
+            {ADVANCED_NAVIGATION.map((item) => (
+              <button
+                key={item.id}
+                className={page === item.id ? "desktop-nav-item active" : "desktop-nav-item"}
+                onClick={() => onNavigate(item.id)}
+                title={item.hint}
+                aria-label={item.label}
+                aria-current={page === item.id ? "page" : undefined}
+              >
+                <span className="desktop-nav-icon"><NavIcon name={item.icon} /></span>
+                <span className="desktop-nav-copy">
+                  <strong>{item.label}</strong>
+                </span>
+              </button>
+            ))}
           </div>
-        </details>
+        </div>
 
         <div className="desktop-sidebar-status">
           <div className="desktop-status-line">

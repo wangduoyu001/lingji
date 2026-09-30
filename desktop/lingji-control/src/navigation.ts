@@ -12,6 +12,7 @@ export const PRIMARY_NAVIGATION: NavigationItem[] = [
 ];
 
 export const ADVANCED_NAVIGATION: NavigationItem[] = [
+  { id: "diagnostics", label: "高级诊断", hint: "遇到问题时查看详细信息", group: "advanced", icon: "settings" },
   { id: "memory_sources", label: "原始数据", hint: "扫描到的全部记录：来源、文件、每条对话原文", group: "advanced", icon: "vault" },
   { id: "timeline_page", label: "时间线", hint: "按时间看两件事：灵机新提炼了什么、数据发生了什么变化", group: "advanced", icon: "logs" },
   { id: "work_ledger", label: "检查记录", hint: "每一次自动检查：按批次看每一步处理了多少、结果如何", group: "advanced", icon: "logs" },

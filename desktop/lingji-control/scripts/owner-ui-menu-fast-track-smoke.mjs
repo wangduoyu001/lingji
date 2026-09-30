@@ -252,12 +252,12 @@ try {
   assert.deepEqual(primaryLabels, ['首页', '记忆库', '状态'], "ordinary navigation must have exactly the owner panels");
   assert.deepEqual(await page.locator(".desktop-nav-primary .desktop-nav-item").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label"))), ['首页', '记忆库', '状态'], "ordinary navigation must expose exact accessible labels");
   assert.equal(await page.locator(".desktop-nav-primary").getByRole("button", { name: "需要我", exact: true }).count(), 0, "decision queue must stay out of the ordinary sidebar (owner 2026-09-29)");
-  const advanced = page.locator("details.desktop-advanced-disclosure");
-  assert.equal(await advanced.count(), 1, "advanced diagnostics must be a single disclosure");
-  assert.equal(await advanced.evaluate((node) => node.open), false, "advanced diagnostics must be collapsed by default");
-  await advanced.locator("summary").click();
-  await advanced.getByRole("button", { name: "打开高级诊断", exact: true }).waitFor();
-  await advanced.getByRole("button", { name: "打开高级诊断", exact: true }).click();
+  // 2026-09-30 主人契约升级：高级诊断不再是折叠披露，而是与设计稿一致的平铺菜单组（全部直接可见）。
+  const advancedGroup = page.locator(".desktop-advanced-group");
+  assert.equal(await advancedGroup.count(), 1, "advanced diagnostics must be a flat always-visible menu group");
+  assert.equal(await advancedGroup.locator(".desktop-nav-item").count(), 26, "advanced group must list every advanced page");
+  assert.equal((await advancedGroup.locator(".desktop-nav-group-title").innerText()).trim(), "高级诊断", "advanced group must be titled 高级诊断 and always visible");
+  await advancedGroup.getByRole("button", { name: "高级诊断", exact: true }).click();
   await page.locator(".desktop-content").getByRole("heading", { name: "高级诊断", exact: true }).waitFor();
   const taskGroup = page.locator("details.diagnostics-group").filter({ hasText: "运行与错误" });
   if (!(await taskGroup.evaluate((node) => node.open))) await taskGroup.locator("summary").click();
@@ -266,8 +266,6 @@ try {
   await page.locator(".desktop-content").getByRole("heading", { name: "活动记录", exact: true }).first().waitFor();
   await page.locator(".desktop-nav-item").filter({ hasText: "首页" }).click();
   await page.getByRole("heading", { name: "首页", exact: true }).waitFor();
-  await advanced.locator("summary").click();
-  assert.equal(await advanced.evaluate((node) => node.open), false, "advanced diagnostics disclosure must close again");
 
   assert.equal(await page.locator(".overview-next-step").count(), 0, "Home must not present a manual next-step control");
   // 主人 2026-09-29：不再有"等主人拍板"环节——首页只读呈现自动处理事项，
@@ -304,9 +302,8 @@ try {
   await page.getByRole("heading", { name: "灵机为你记住了什么", exact: true }).waitFor();
   await page.getByText("一切正常——没有需要留意的异常。", { exact: true }).waitFor();
 
-  const ftAdvanced = page.locator("details.desktop-advanced-disclosure");
-  await ftAdvanced.locator("summary").click();
-  await ftAdvanced.getByRole("button", { name: "打开高级诊断", exact: true }).click();
+  const ftAdvanced = page.locator(".desktop-advanced-group");
+  await ftAdvanced.getByRole("button", { name: "高级诊断", exact: true }).click();
   await page.locator(".desktop-content").getByRole("heading", { name: "高级诊断", exact: true }).waitFor();
   const ftCardsGroup = page.locator("details.diagnostics-group").filter({ hasText: "数据与索引" });
   if (!(await ftCardsGroup.evaluate((node) => node.open))) await ftCardsGroup.locator("summary").click();
@@ -550,9 +547,8 @@ try {
 
   await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, value: true }); document.dispatchEvent(new Event("visibilitychange")); });
   const hiddenSourceReads = state.sourceReads;
-  const srcAdvanced = page.locator("details.desktop-advanced-disclosure");
-  await srcAdvanced.evaluate((node) => { node.open = true; });
-  await srcAdvanced.getByRole("button", { name: "打开高级诊断", exact: true }).click();
+  const srcAdvanced = page.locator(".desktop-advanced-group");
+  await srcAdvanced.getByRole("button", { name: "高级诊断", exact: true }).click();
   await page.locator(".desktop-content").getByRole("heading", { name: "高级诊断", exact: true }).waitFor();
   const srcGroup = page.locator("details.diagnostics-group").filter({ hasText: "数据与索引" });
   if (!(await srcGroup.evaluate((node) => node.open))) await srcGroup.locator("summary").click();

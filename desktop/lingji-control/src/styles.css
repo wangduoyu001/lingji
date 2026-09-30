@@ -1,132 +1,35 @@
 :root {
-  font-family: Inter, "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
-  color: #eef2f7;
-  background: #0b0d12;
+  font-family: Inter, "SF Pro Text", -apple-system, "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  color: #1d2430;
+  background: transparent;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --bg: #0b0d12;
-  --surface: #11141b;
-  --surface-2: #171b24;
-  --surface-3: #1d222d;
-  --surface-hover: #202632;
-  --line: rgba(255, 255, 255, .08);
-  --line-strong: rgba(255, 255, 255, .14);
-  --text: #eef2f7;
-  --text-soft: #c7d0dc;
-  --muted: #8793a4;
-  --muted-2: #657184;
-  --accent: #77d6b3;
-  --accent-strong: #49b98f;
-  --accent-soft: rgba(73, 185, 143, .14);
-  --danger: #f18b8b;
-  --danger-soft: rgba(241, 139, 139, .12);
-  --warning: #e6b86b;
-  --warning-soft: rgba(230, 184, 107, .12);
-  --good: #77d6a3;
-  --good-soft: rgba(119, 214, 163, .12);
-  --shadow: 0 18px 48px rgba(0, 0, 0, .22);
-  --radius: 16px;
-  --radius-sm: 10px;
-}
-
-/* ===== 主题体系（2026-09-30 主人拍板：四个设计方向全做、可切换） =====
-   nord = 默认主题，Codex 同款深蓝灰（调研 codex-theme-v1 的低饱和工程质感）；
-   aurora = 原青绿极光（即 :root 兜底值，保留为可选主题）；
-   cyber = 赛博终端紫罗兰；command = 指挥舱琥珀×深蓝。
-   切换机制：DesktopShell 根节点 data-theme + localStorage 持久化。 */
-[data-theme="nord"] {
-  --bg: #2e3440;
-  --surface: #353d4b;
-  --surface-2: #3b4252;
-  --surface-3: #434c5e;
-  --surface-hover: #434c5e;
-  --line: rgba(216, 222, 233, .08);
-  --line-strong: rgba(216, 222, 233, .16);
-  --text: #eceff4;
-  --text-soft: #c7cdd8;
-  --muted: #9aa4b2;
-  --muted-2: #7b8494;
-  --accent: #88c0d0;
-  --accent-strong: #5c99d6;
-  --accent-soft: rgba(136, 192, 208, .14);
-  --danger: #d08790;
-  --danger-soft: rgba(191, 97, 106, .14);
-  --warning: #ebcb8b;
-  --warning-soft: rgba(235, 203, 139, .12);
-  --good: #a3be8c;
-  --good-soft: rgba(163, 190, 140, .14);
-  --shadow: 0 14px 40px rgba(20, 24, 32, .35);
+  --bg: transparent;
+  --surface: rgba(255, 255, 255, .74);
+  --surface-2: rgba(255, 255, 255, .58);
+  --surface-3: rgba(255, 255, 255, .46);
+  --surface-hover: rgba(29, 36, 48, .05);
+  --line: rgba(29, 36, 48, .10);
+  --line-strong: rgba(29, 36, 48, .18);
+  --text: #1d2430;
+  --text-soft: #3f4a5a;
+  --muted: #6a7382;
+  --muted-2: #8a92a0;
+  --accent: #0068da;
+  --accent-strong: #084fa8;
+  --accent-soft: rgba(0, 104, 218, .10);
+  --danger: #d0342c;
+  --danger-soft: rgba(208, 52, 44, .10);
+  --warning: #b25e09;
+  --warning-soft: rgba(178, 94, 9, .10);
+  --good: #1f8a4c;
+  --good-soft: rgba(31, 138, 76, .10);
+  --shadow: 0 16px 44px rgba(20, 28, 44, .16);
   --radius: 12px;
   --radius-sm: 8px;
 }
-[data-theme="cyber"] {
-  --bg: #08080c;
-  --surface: #110f1a;
-  --surface-2: #17141f;
-  --surface-3: #1e1929;
-  --surface-hover: #241e30;
-  --line: rgba(139, 92, 246, .14);
-  --line-strong: rgba(139, 92, 246, .28);
-  --text: #ede9fe;
-  --text-soft: #c9c2e5;
-  --muted: #8f87ab;
-  --muted-2: #6b6389;
-  --accent: #a78bfa;
-  --accent-strong: #8b5cf6;
-  --accent-soft: rgba(139, 92, 246, .14);
-  --danger: #f18b8b;
-  --danger-soft: rgba(241, 139, 139, .12);
-  --warning: #e6b86b;
-  --warning-soft: rgba(230, 184, 107, .12);
-  --good: #7dd3a8;
-  --good-soft: rgba(125, 211, 168, .12);
-  --shadow: 0 18px 48px rgba(0, 0, 0, .4);
-}
-[data-theme="command"] {
-  --bg: #0a1220;
-  --surface: #131f33;
-  --surface-2: #182840;
-  --surface-3: #1e3148;
-  --surface-hover: #243a55;
-  --line: rgba(148, 163, 184, .12);
-  --line-strong: rgba(148, 163, 184, .22);
-  --text: #e2e8f0;
-  --text-soft: #c3cddd;
-  --muted: #8494ab;
-  --muted-2: #5f7089;
-  --accent: #38bdf8;
-  --accent-strong: #0284c7;
-  --accent-soft: rgba(56, 189, 248, .13);
-  --danger: #f18b8b;
-  --danger-soft: rgba(241, 139, 139, .12);
-  --warning: #fbbf24;
-  --warning-soft: rgba(251, 191, 36, .12);
-  --good: #6ee7b7;
-  --good-soft: rgba(110, 231, 183, .12);
-  --shadow: 0 18px 48px rgba(2, 8, 20, .45);
-}
-[data-theme="aurora"] {
-  --bg: #0b0d12;
-  --surface: #11141b;
-  --surface-2: #171b24;
-  --surface-3: #1d222d;
-  --surface-hover: #202632;
-  --line: rgba(255, 255, 255, .08);
-  --line-strong: rgba(255, 255, 255, .14);
-  --text: #eef2f7;
-  --text-soft: #c7d0dc;
-  --muted: #8793a4;
-  --muted-2: #657184;
-  --accent: #77d6b3;
-  --accent-strong: #49b98f;
-  --accent-soft: rgba(73, 185, 143, .14);
-  --danger: #f18b8b;
-  --danger-soft: rgba(241, 139, 139, .12);
-  --warning: #e6b86b;
-  --warning-soft: rgba(230, 184, 107, .12);
-  --good: #77d6a3;
-  --good-soft: rgba(119, 214, 163, .12);
-}
+
+
 
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; }
@@ -381,7 +284,7 @@ tbody tr:hover { background: rgba(255,255,255,.018); }
 }
 
 /* Owner-facing visual layer: warm paper, sage accents, and quieter evidence. */
-:root {
+[data-theme="paper"] {
   color: #20302a;
   background: #f6f8f6;
   --bg: #f6f8f6;
@@ -408,7 +311,7 @@ tbody tr:hover { background: rgba(255,255,255,.018); }
 }
 body { min-width: 0; color: var(--text); background: var(--bg); }
 .desktop-frame { grid-template-columns: 224px minmax(0, 1fr); background: var(--bg); }
-.desktop-sidebar { background: #edf2ee; border-right-color: var(--line); }
+[data-theme="paper"] .desktop-sidebar { background: #edf2ee; border-right-color: var(--line); }
 .desktop-brand-mark { box-shadow: none; }
 .desktop-nav-copy small { display: none; }
 .desktop-nav-item { min-height: 44px; grid-template-columns: 30px minmax(0, 1fr); color: var(--text-soft); }
@@ -420,11 +323,11 @@ body { min-width: 0; color: var(--text); background: var(--bg); }
 .desktop-toolbar p { color: var(--muted); font-size: 13px; }
 .desktop-content { max-width: 1160px; width: 100%; margin: 0 auto; }
 .panel, .loop-panel { background: var(--surface); border-color: var(--line); box-shadow: var(--shadow); }
-.metric { background: #fff; border-color: var(--line); }
+[data-theme="paper"] .metric { background: #fff; border-color: var(--line); }
 .metric span, .metric small { color: var(--muted); }
 .button.secondary { color: var(--text-soft); border-color: var(--line-strong); background: var(--surface); }
 .desktop-connection-badge { border-color: var(--line); background: var(--surface); }
-input, textarea, select { color: var(--text); border-color: var(--line-strong); background: #fff; }
+[data-theme="paper"] input, [data-theme="paper"] textarea, [data-theme="paper"] select { color: var(--text); border-color: var(--line-strong); background: #fff; }
 
 @media (max-width: 1080px) {
   body { min-width: 900px; }
@@ -449,7 +352,7 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 }
 
 /* Owner observation surface: quiet paper, clear hierarchy, automation first. */
-:root {
+[data-theme="paper"] {
   color: #20302a;
   background: #f6f8f6;
   --bg: #f6f8f6;
@@ -477,7 +380,7 @@ input, textarea, select { color: var(--text); border-color: var(--line-strong); 
 html, body, #root { background: var(--bg); }
 body { min-width: 0; color: var(--text); }
 .desktop-frame { grid-template-columns: 224px minmax(0, 1fr); background: var(--bg); }
-.desktop-sidebar { padding: 24px 16px 16px; background: #edf3ee; border-right: 1px solid var(--line); }
+[data-theme="paper"] .desktop-sidebar { padding: 24px 16px 16px; background: #edf3ee; border-right: 1px solid var(--line); }
 .desktop-brand { padding: 0 8px 30px; }
 .desktop-brand-mark { width: 40px; height: 40px; color: #fff; background: var(--accent); border: 0; border-radius: 12px; box-shadow: none; }
 .desktop-brand-copy strong { color: var(--text); font-size: 18px; }
@@ -486,7 +389,7 @@ body { min-width: 0; color: var(--text); }
 .desktop-nav-group-title { display: none; }
 .desktop-nav-items { gap: 5px; }
 .desktop-nav-item { min-height: 44px; grid-template-columns: 32px minmax(0, 1fr); padding: 7px 9px; color: var(--text-soft); border-radius: 12px; }
-.desktop-nav-item:hover { color: var(--text); background: #e3ece5; }
+[data-theme="paper"] .desktop-nav-item:hover { color: var(--text); background: #e3ece5; }
 .desktop-nav-item.active { color: var(--text); border-color: transparent; background: var(--accent-soft); }
 .desktop-nav-icon { width: 30px; height: 30px; color: var(--muted); background: transparent; }
 .desktop-nav-item.active .desktop-nav-icon { color: var(--accent); background: transparent; }
@@ -879,3 +782,64 @@ div.owner-memory-layer-track { display: flex; flex-wrap: wrap; gap: 6px; }
 .dashboard-chip { display: grid; gap: 5px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
 .dashboard-chip small { color: var(--muted); font-size: 12px; }
 .dashboard-chip .pill { justify-self: start; }
+
+/* ===== 最终视觉层：macOS 系统毛玻璃（2026-09-30 主人拍板） =====
+   窗口 transparent + windowEffects(sidebar vibrancy)：webview 全透明，
+   侧栏直接透出系统毛玻璃材质；主内容区轻雾面白，文字深色，系统蓝点缀。
+   本层置于文件末尾，覆盖早期一切浅色/深色硬编码。 */
+html, body, #root { background: transparent !important; }
+.desktop-frame { background: transparent !important; }
+.desktop-sidebar {
+  background: transparent !important;
+  border-right: 1px solid rgba(29, 36, 48, .08) !important;
+}
+.desktop-brand-mark { color: #fff !important; background: linear-gradient(160deg, #3c8ce7, #0068da) !important; border: 0 !important; box-shadow: 0 6px 18px rgba(0, 104, 218, .28) !important; }
+.desktop-nav-item { color: #3f4a5a !important; }
+.desktop-nav-item:hover { background: rgba(29, 36, 48, .06) !important; }
+.desktop-nav-item.active { color: #1d2430 !important; background: rgba(255, 255, 255, .62) !important; border-color: rgba(29, 36, 48, .08) !important; box-shadow: 0 1px 6px rgba(20, 28, 44, .08); }
+.desktop-nav-icon { background: transparent !important; }
+.desktop-nav-item.active .desktop-nav-icon { color: #0068da !important; }
+.desktop-main {
+  background: rgba(250, 251, 253, .62) !important;
+  backdrop-filter: blur(28px) saturate(1.6);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6);
+}
+.desktop-toolbar {
+  background: rgba(255, 255, 255, .5) !important;
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border-bottom: 1px solid rgba(29, 36, 48, .07) !important;
+}
+.panel, .loop-panel { background: rgba(255, 255, 255, .72) !important; backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5); border: 1px solid rgba(29, 36, 48, .07) !important; box-shadow: 0 8px 28px rgba(20, 28, 44, .08) !important; }
+.metric { background: rgba(255, 255, 255, .6) !important; }
+input, textarea, select { background: rgba(255, 255, 255, .66) !important; color: #1d2430 !important; }
+.desktop-sidebar-status, .desktop-status-line strong { color: #3f4a5a !important; }
+.desktop-advanced-group { padding: 0 0 14px; }
+.desktop-advanced-group .desktop-nav-items { display: grid; gap: 4px; }
+
+/* 系统深色模式：材质转暗、文字转浅（跟随系统，无需切换器） */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #e8ecf3;
+    --text: #e8ecf3;
+    --text-soft: #c6cdd9;
+    --muted: #98a1b0;
+    --muted-2: #79828f;
+    --line: rgba(232, 236, 243, .10);
+    --line-strong: rgba(232, 236, 243, .18);
+    --surface: rgba(44, 50, 62, .68);
+    --surface-2: rgba(44, 50, 62, .5);
+    --accent: #6cb2ff;
+    --accent-strong: #3f8fef;
+    --accent-soft: rgba(108, 178, 255, .14);
+  }
+  .desktop-sidebar { border-right-color: rgba(232, 236, 243, .09) !important; }
+  .desktop-nav-item { color: #c6cdd9 !important; }
+  .desktop-nav-item.active { color: #eef2f8 !important; background: rgba(255, 255, 255, .10) !important; border-color: rgba(232, 236, 243, .12) !important; }
+  .desktop-nav-item:hover { background: rgba(255, 255, 255, .06) !important; }
+  .desktop-main { background: rgba(28, 32, 40, .58) !important; }
+  .desktop-toolbar { background: rgba(28, 32, 40, .5) !important; border-bottom-color: rgba(232, 236, 243, .08) !important; }
+  .panel, .loop-panel { background: rgba(44, 50, 62, .62) !important; border-color: rgba(232, 236, 243, .08) !important; }
+  .metric { background: rgba(255, 255, 255, .06) !important; }
+  input, textarea, select { background: rgba(255, 255, 255, .07) !important; color: #e8ecf3 !important; }
+}
