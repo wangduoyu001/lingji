@@ -19,6 +19,21 @@
 
 ---
 
+## 迭代 #4：2026-09-30 Phase 1 收官执行——基线失败 14→2、新 sidecar 装机、真机复测达标
+
+主人指令"把你能干的干了"。本轮执行收官路径的工程部分：
+
+1. **基线既有失败甄别清零：14 → 2**（最终全量 1929 passed / 2 failed / 22 skipped）：
+   - **产品缺陷修复 1 项**：`scheduler.py::_snapshot_throttle_deferral` 的节流短路曾**先于授权检查**——撤销/过期的源被 defer 返回 complete=True，授权边界被掩盖；修复后授权边界优先于节流（revoke 立即拒绝）。
+   - **测试契约更新 9 项**（每项均有在案产品变更依据，非降断言）：①scheduler ×2 + task8e ×3 + packaged_flow 节流变体——9-27 F 项自适应节流（同源 30 分钟最小重拍）为新契约，测试显式 `snapshot_throttle_seconds=0` 隔离两个契约；②context_pack reason_code——WorkBuddy 9-17 R1"结果层解释优先"（双 0 报 no_matches，通道故障仍由 semantic=degraded 标注）；③control_api ×2——9-17 R5 vector/status 的 Qdrant live 计数修正是有意设计（快照之上叠加，测试环境空 qdrant 确定性 0）；④heartbeat——9 月批次 `run_on_start` 启动即对账合法，契约收紧为"heartbeat 刷新不触发 reconciliation"（基线取首拍后）；⑤repair_round1——9-22 晋升管线的 VaultLayout 骨架初始化合法，基线移到 start() 后。packaged_flow 额外把 75s 超时放宽到 150s（60s clamp + 采集 + 裕度，忠实"一个周期内"语义）。
+   - **剩 2 项如实记录**：packaged_flow（throttle 变体已修、失败点已推进至 reconciliation 事件 reason 匹配深水区，在案时序类）；stop_error（flaky 抖动：stop 超时 vs run_once 状态竞争，本轮某次全量曾通过）。
+   - **22 skipped 逐条登记**：全部为条件性 skip——symlink 平台能力 ×6、PowerShell host 缺失 ×1、frontend dist 未构建 ×1、100k 基准显式 opt-in ×1、条件导入/兼容守卫其余——无失败伪装。
+2. **新 sidecar 打包装机**：SHA `9da34027…`（含 quality gate MCP 适配、ping 日志过滤、授权边界优先），覆盖安装至 /Applications/灵机.app 并重启（PID 41524，ping 200/4.8ms）。**真机复测：ping 401 噪音清零**（新实例 65 秒 0 条 access log，过滤器生效）、CPU 1.2%/RSS 829MB 达标。
+3. **质量门（frozen 100 题）**：隔离根重跑确认管线健康（MCP parity 不再永久 failed、selector 计数恢复）；但 `report=None` + corpus 导入失败表明**完整测量需按 MEMORY_QUALITY_TRIAL 协议的真实数据环境**，快速隔离跑无法复现 9-8 的测量口径——列入主人拍板项（Phase 1 收官的关键一步）。
+4. master fast-forward 合并随本轮提交执行。
+
+---
+
 ## 迭代 #3：2026-09-30 全面验收（重启后复验）+ Phase 1→Phase 2 差距评估
 
 **复验（raw 修复 + sidecar 重启后）**：memory/vector/embedding 全 healthy（vector degraded 自愈）、管线零降级、队列无积压、meta.json 无 acceptance 残留（B3 守卫重启窗口验证 ✓）、静止 CPU 13.9%→恢复期结束后应继续回落、raw 1.31GiB 稳定在 2GiB 纪律内、Desktop 存活。master 落差收敛：产品分支领先 20、master 独有 0（可 fast-forward）。
