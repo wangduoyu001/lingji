@@ -1898,7 +1898,13 @@ class MemoryDatabase:
         clean = " ".join(str(query or "").strip().split())
         if not clean:
             return ""
-        if self._fts_tokenizer == "trigram" and not quote_terms:
-            return clean.replace('"', '""')
-        terms = [term for term in clean.replace('"', " ").split() if term]
+        # 2026-09-30 真实召回标定：trigram 裸整句查询有两个真实缺陷——①标题中的
+        # `#` `·` `/` 等 FTS5 语法字符让 MATCH 直接 OperationalError（此前只靠
+        # 异常兜底转 quote_terms）；②跨空格/换行的整句连续匹配在 chunk 分行后
+        # 必然 MISS。改为：一律按空白拆词、短语 AND（各词独立连续即可）；
+        # <3 字符 token 无法被 trigram 索引（AND 会全灭），在还有其他词时丢弃，
+        # 全部过短时回退整句带引号短语（交由引擎如实返回 0）。
+        terms = [term for term in clean.replace('"', " ").split() if len(term) >= 3]
+        if not terms:
+            terms = [clean]
         return " AND ".join(f'"{term.replace(chr(34), chr(34) * 2)}"' for term in terms)

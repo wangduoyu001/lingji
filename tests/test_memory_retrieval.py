@@ -210,6 +210,30 @@ class MemorySearchFallbackTests(unittest.TestCase):
         self.assertTrue(hits, "two-char CJK query must fall back to substring matching")
         self.assertEqual(hits[0]["memory_id"], "LJ-MEM-YIREN")
 
+    def test_fts_expression_survives_special_chars_and_multiline_chunks(self):
+        """2026-09-30 真实召回标定发现的两个词法缺陷。
+
+        ①标题含 `#` `·` 等 FTS5 语法字符时裸整句 MATCH 直接 OperationalError；
+        ②chunk 内换行把标题打散后，跨空白整句连续匹配必然 MISS。
+        表达式必须按空白拆词、短语 AND、丢弃 <3 字符 token。
+        """
+        title = "Codex · # AGENTS.md 指令说明"
+        self._note(
+            "03-Knowledge/Cooking/agents-note.md",
+            "LJ-MEM-AGENTS-NOTE",
+            title,
+            "# Codex · # AGENTS.md 指令说明\n\n指令说明：保持简洁，结论优先。\n",
+        )
+        self._rebuild()
+        # ①特殊符号标题自命中（不再 OperationalError → 空结果）
+        hits = self.database.search_fts(title, limit=5)
+        self.assertTrue(hits, "special-char title must self-hit")
+        self.assertEqual(hits[0]["memory_id"], "LJ-MEM-AGENTS-NOTE")
+        # ②多词查询在 chunk 含换行时仍命中（短语 AND，各自连续即可）
+        hits2 = self.database.search_fts("AGENTS.md 指令说明", limit=5)
+        self.assertTrue(hits2, "multi-word query must hit across chunk line breaks")
+        self.assertEqual(hits2[0]["memory_id"], "LJ-MEM-AGENTS-NOTE")
+
     def test_search_diagnostics_report_per_channel_hits(self):
         """诊断必须报告每条通道的实际命中数（WorkBuddy 2026-09-17 R1）。
 
