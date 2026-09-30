@@ -171,6 +171,9 @@ class AutoPromotionPipelineTests(unittest.TestCase):
         text = core[0].read_text(encoding="utf-8-sig")
         self.assertIn("方案 A 为生产部署方案", text)
         self.assertIn("memory_tier: core", text)
+        # 晋升文件 frontmatter 必须自带来源链（2026-09-30 P1 修复）：来源撤销
+        # 时授权过滤要靠 relationships.automatic_memory_source_id 管辖派生层。
+        self.assertIn("automatic_memory_source_id: src", text)
         decisions = self._decisions()
         self.assertEqual(len(decisions), 1)
         self.assertEqual(decisions[0]["outcome"], "promoted")

@@ -1,5 +1,15 @@
 # 验收要求变更记录
 
+## 2026-09-30 晚 · P1 修复：knowledge 层纳入来源授权过滤 + 守卫测试真实根因修复
+
+- **守卫测试误诊修正（2026-09-30 晚实测证据）**：迭代 #8 将 `test_automatic_memory_packaged_flow` 739 行失败诊断为"knowledge 层绕过授权过滤"。本轮用验收根实测 + `evaluate_session_value` 真实函数复现证明真实根因是**过期夹具被价值门拦截**：夹具整文件 280 字符 < 300 字数下限、1 轮、无价值信号 → `skipped_by_value_gate`，证据从未进入词法层，history 模式自然为空（主夹具 303 字符属擦线通过）。knowledge 层过滤缺口是真实存在的代码事实（`source_authority.py` 仅拦 `structured_evidence`），但不是该测试失败的原因。
+- **产品修复 ①（读侧）**：`src/retrieval/source_authority.py` 扩展授权过滤到一切携带 `automatic_memory_source_id` 的条目（不再限 `structured_evidence`）；**豁免 `memory_tier=core 且 review_status=approved`**（主人门槛批准的 Core 记忆视为本人重新确认，不随来源撤销隐藏——与"Core 批量删除须主人明确批准"既有规则一致）。
+- **产品修复 ②（写侧）**：`src/memory/auto_promotion.py::_promote_row` 晋升元数据补 `automatic_memory_source_id`（来自 distilled_knowledge.source_id），经既有 `_upsert_document` properties→relationships 通路自动落库，未来新晋升文件自带来源链。
+- **存量回填（数据核实后收敛范围）**：生产库实测全部 79 条 knowledge/preference 文档均为 core+approved（豁免面），Evolving 文件未入词法索引（0 条），995 条 distilled_knowledge 表本身已保留 source_id——**79 个 Vault 文件的 frontmatter 回填无行为收益，不做**，避免对主人永久记忆文件的无谓churn。
+- **测试修复**：三个测试夹具补真实价值信号/长度通过价值门（不关门禁、不降阈值）：过期源消息追加 "lifecycle regression fix"（280 字符无信号被拒）；坏源 `broken.json` 保留非法 schema 但填充至足量字符+信号（要在 worker 里 fail-closed 出 failed job）；好源消息追加 "fix" 信号（要在 worker 产出 completed job）。新增 source_authority 扩展单测（非 core 撤销源被拦、approved-core 豁免、无链接不受影响、StateDB 不可用 fail-closed）。
+- 验收要求：守卫测试 `test_automatic_memory_packaged_flow` 全程转绿（含 739 行 history 断言以真实证据通过）；新增单测全绿；全量 pytest 不低于 1932 passed 且唯一允许失败为 0（守卫转绿后应为 1933+ passed / 0 failed / 22 skipped 基线）；sidecar 重打包装机后 ping/健康复验。
+- 回滚：source_authority.py 与 auto_promotion.py 改动可独立 revert；测试夹具改动随用例 revert。
+
 ## 2026-09-30 晚 · 补交 macOS 毛玻璃必需的 Cargo feature（验收同步门禁修复）
 
 - 迭代 #9 毛玻璃交付时（commit 0b83a413），`desktop/lingji-control/src-tauri/Cargo.toml` 的 `tauri = { features = ["macos-private-api", ...] }` 改动遗留在工作区未提交——`tauri.conf.json` 的 `macOSPrivateApi: true` + transparent + windowEffects(vibrancy) 依赖该 cargo feature，缺它桌面端无法编译出透明/毛玻璃能力。已交付 DMG 即用此工作区状态构建（产物实证可编译），本次补交使仓库与已交付产物一致。

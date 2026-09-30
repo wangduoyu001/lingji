@@ -872,7 +872,9 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
             (sidecar.get("/api/automatic-memory/runtime") or {}).get("automation_mode") or ""
         )
         event_before_ids = {str(row["scan_id"]) for row in sidecar.get("/api/automatic-memory/scans")}
-        _fixture_history(source_dir / "history.json", conversation="event", message="event driven acceptance fact")
+        # 价值门信号词同前：短会话若无信号会被 skipped_by_value_gate，
+        # 词法层无文档，下游 qdrant 降级场景的 required_packaged_text 必空。
+        _fixture_history(source_dir / "history.json", conversation="event", message="event driven acceptance fact reconciliation fix")
         if automation_mode == "event_watcher":
             event_scan = _automatic_scan_until_terminal(sidecar, source_id, event_before_ids, reasons={"event"}, timeout=30.0)
         else:
@@ -917,7 +919,10 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
 
         expiry_dir = root / "expiry-source"
         expiry_dir.mkdir()
-        _fixture_history(expiry_dir / "history.json", conversation="expiry", message="EXPIRY_EVIDENCE")
+        # 价值门（B1）会拦截"轮数少 且 字数少 且 零信号"的会话；夹具必须带
+        # 真实价值信号（"fix"）否则证据被 skipped_by_value_gate，词法层
+        # 无文档，history 断言无从谈起（2026-09-30 实测：280<300 字符被拒）。
+        _fixture_history(expiry_dir / "history.json", conversation="expiry", message="EXPIRY_EVIDENCE lifecycle regression fix")
         expiring = _authorize(sidecar, expiry_dir, expires_at=datetime.now(timezone.utc) + timedelta(seconds=3), grant_id="expiry-grant")
         runtime_paused = sidecar.post("/api/automatic-memory/pause-runtime", {"confirmation": True})
         assert runtime_paused["paused"] is True
@@ -934,11 +939,13 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
         evidence["scenarios"]["6_lifecycle"] = {"paused": runtime_paused, "resumed": runtime_resumed, "expired": expired_body, "expiry_scan": expiry_scan, "expiry_authority": expiry_authority}
 
         # Corrupt and healthy sources are independently authorized and scanned
-        # through the same scheduler/worker composition.
+        # through the same scheduler/worker composition. 两份夹具都必须携带真实
+        # 价值信号（"fix"）通过价值门：坏源要在 worker 里 fail-closed 出 failed
+        # job，好源要产出 completed job——被价值门拦截就什么都不会发生。
         bad_dir, good_dir = root / "corrupt-source", root / "healthy-source"
         bad_dir.mkdir(); good_dir.mkdir()
-        (bad_dir / "broken.json").write_text("{not a supported history}", encoding="utf-8")
-        _fixture_history(good_dir / "good.json", conversation="healthy", message="isolated source fact")
+        (bad_dir / "broken.json").write_text("{not a supported history} fix decision rollout " * 12, encoding="utf-8")
+        _fixture_history(good_dir / "good.json", conversation="healthy", message="isolated source fact survives corrupt neighbor fix")
         bad_source = _authorize(sidecar, bad_dir, grant_id="corrupt-grant")
         good_source = _authorize(sidecar, good_dir, grant_id="healthy-grant")
         bad_scan = _scan_until_terminal(sidecar, bad_source["source_id"])

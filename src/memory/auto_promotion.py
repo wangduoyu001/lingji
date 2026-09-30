@@ -448,6 +448,10 @@ class AutoMemoryPromotionPipeline:
                 "confidence": confidence if confidence is not None else "",
                 "category": str(row.get("category") or ""),
                 "conversation_id": str(row["conversation_id"]),
+                # 晋升文件自带来源链（distilled_knowledge.source_id）：frontmatter
+                # 经 upsert_from_entry 的 properties 通路进入 relationships 的
+                # automatic_memory_source_id，来源撤销时的授权过滤才有管辖依据。
+                "automatic_memory_source_id": str(row.get("source_id") or ""),
                 "revision": int(row["revision"] or 0),
                 "distill_model": str(row.get("model") or ""),
                 "tags": ["source/distilled-knowledge"],
