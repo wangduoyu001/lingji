@@ -1,5 +1,11 @@
 # 验收要求变更记录
 
+## 2026-09-30 晚 · 补交 macOS 毛玻璃必需的 Cargo feature（验收同步门禁修复）
+
+- 迭代 #9 毛玻璃交付时（commit 0b83a413），`desktop/lingji-control/src-tauri/Cargo.toml` 的 `tauri = { features = ["macos-private-api", ...] }` 改动遗留在工作区未提交——`tauri.conf.json` 的 `macOSPrivateApi: true` + transparent + windowEffects(vibrancy) 依赖该 cargo feature，缺它桌面端无法编译出透明/毛玻璃能力。已交付 DMG 即用此工作区状态构建（产物实证可编译），本次补交使仓库与已交付产物一致。
+- 验收要求：无新增测试（构建配置项，产物即证据：vibrancy DMG 已装机且真机截图确认透明材质）；验收同步门禁（check_acceptance_sync）转 PASS。
+- 回滚：单独 revert 该 Cargo.toml 行即回退；但会使 tauri.conf 的 macOSPrivateApi 失效，毛玻璃不可用。
+
 ## 2026-09-30 晚 · 四主题可切换界面（主人拍板"都要"）
 
 - 主人裁定四个设计方向全部落地、可切换（对标 Codex codex-theme-v1 主题机制）。落地（commit a767db60）：`styles.css` 四套主题变量（`data-theme`：**nord 默认**（Codex 同款深蓝灰 #2e3440/#88c0d0 低饱和）+ aurora（原青绿，即 :root 兜底值）+ cyber（紫罗兰）+ command（琥珀×深蓝））；`hooks/useTheme.ts` 切换 + localStorage 持久化（key `lingji-theme`）；`DesktopShell` 品牌区右上角四色点切换器。
