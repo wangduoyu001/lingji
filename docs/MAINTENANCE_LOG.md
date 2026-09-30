@@ -19,6 +19,16 @@
 
 ---
 
+## 迭代 #8：2026-09-30 主人令"直接干"——在案失败 2→1，测试守住新发现的 P1 撤销边界缺陷
+
+1. **stop_error flaky 根因修复（产品一行）**：`last_global_error` 取值顺序为"历史扫描错误 or cleanup_error"，启动首拍异步对账的瞬时错误（run_once status=empty）会遮蔽刚发生的 stop 失败。改为 `cleanup_error or _last_global_error()`（当前动作失败最优先展示）。5 连跑 + 全文件 17 passed 稳定。
+2. **packaged_flow 深水区真根因**：测试的 `LINGJI_*` 前缀 env 从未生效（Settings 无前缀桥），快照节流一直 1800s 在 defer 所有 reconciliation——此前"修好"用的是同坏前缀。改用测试已有的无前缀 env 组（`AUTOMATIC_MEMORY_SNAPSHOT_THROTTLE_SECONDS=0`）后，卡数周的场景全通，失败点从 886 行推进到 739 行。
+3. **739 行暴露新 P1 缺陷（测试守住，下轮修复）**：`source_authority.filter_current/allows_current` 只拦 `memory_type=structured_evidence` 层——**撤销/过期来源提炼出的 knowledge 层完全绕过授权过滤**，current 模式仍可被 AI 检索，违反撤销语义（历史词法失效使该断言恒真，从未真正执行过；词法修复后第一次暴露真缺陷——历史失败掩盖真实缺陷的又一实证）。修复需 knowledge 层溯源链设计（conversation_id → source 映射读时拦截或撤销时联动派生层），涉及提炼→蒸馏→晋升全链，按稳定性标准单独立项，不在无设计下硬改。`test_automatic_memory_packaged_flow` 保持失败作为该缺陷的守卫（不降断言不 skip）。
+4. **最终全量：1932 passed / 1 failed / 22 skipped**（唯一失败=上条守卫）。
+5. 真机态：新包（sidecar c838b076 / DMG adb3d0ab）运行中，ping 401 噪音清零持续有效；四主题已装机，色点切换待主人随手验收。
+
+---
+
 ## 迭代 #7：2026-09-30 主人指令"全部干"——四主题全量落地、整包装机、质量门终考收口
 
 主人拍板"四个都要"，对标 Codex 主题机制全部落地：

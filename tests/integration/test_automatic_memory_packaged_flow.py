@@ -438,9 +438,6 @@ class PackagedSidecar:
                 "LINGJI_WORKSPACE": "acceptance",
                 "LINGJI_AUTOMATIC_MEMORY_DEBOUNCE_SECONDS": "1",
                 "LINGJI_AUTOMATIC_MEMORY_RECONCILIATION_SECONDS": "1",
-                # 双轮流程的第二轮 reconciliation 依赖立即重扫；快照节流
-                # （2026-09-27 起默认 1800s）会静默 defer 掉第二轮，显式关闭。
-                "LINGJI_AUTOMATIC_MEMORY_SNAPSHOT_THROTTLE_SECONDS": "0",
                 "LINGJI_AUTOMATIC_MEMORY_INTEGRITY_SECONDS": "3600",
                 "LINGJI_SCHEDULER_POLL_SECONDS": "0.05",
                 "LINGJI_EXTRACTION_POLL_SECONDS": "0.05",
@@ -451,6 +448,11 @@ class PackagedSidecar:
                 # LINGJI-prefixed discovery/control seams above as well.
                 "AUTOMATIC_MEMORY_DEBOUNCE_SECONDS": "1",
                 "AUTOMATIC_MEMORY_RECONCILIATION_SECONDS": "60",
+                # 双轮流程的第二轮 reconciliation 依赖立即重扫；快照节流
+                # （2026-09-27 起默认 1800s）会把非 manual 触发静默 defer 掉
+                # （defer 无 scan 无事件），显式关闭。注意 Settings 无 LINGJI_
+                # 前缀桥，必须用无前缀名（2026-09-30 定位的失败根因）。
+                "AUTOMATIC_MEMORY_SNAPSHOT_THROTTLE_SECONDS": "0",
                 "AUTOMATIC_MEMORY_INTEGRITY_SECONDS": "3600",
                 "SCHEDULER_POLL_SECONDS": "0.05",
                 "EXTRACTION_POLL_SECONDS": "0.05",

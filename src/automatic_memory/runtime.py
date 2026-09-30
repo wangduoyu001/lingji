@@ -571,7 +571,10 @@ class AutomaticMemoryRuntime:
                 name: health.snapshot()
                 for name, health in self._pipeline_health.items()
             },
-            "last_global_error": self._last_global_error() or cleanup_error,
+            # 刚刚发生的 stop/清理失败必须最优先展示：历史扫描错误的
+            # 异步入账（如启动首拍 run_once 的瞬时错误）不得遮蔽它，
+            # 否则主人看到的"最近全局错误"与刚才的动作对不上（2026-09-30）。
+            "last_global_error": cleanup_error or self._last_global_error(),
         }
 
     def _touch_active_scan_work(self) -> None:
