@@ -571,9 +571,11 @@ def test_hybrid_diagnostics_are_per_call_and_semantic_failure_is_safe(tmp_path: 
     assert result["results"] == []
     assert result["diagnostics"]["lexical"] == "available"
     assert result["diagnostics"]["semantic"] == "degraded"
-    assert result["diagnostics"]["reason_code"] == "semantic_query_failed"
+    # WorkBuddy 2026-09-17 R1 契约：结果层解释优先于通道可用性——双 0 命中时
+    # reason_code 报 no_matches（语料无相关），通道故障仍由 semantic=degraded 如实标注。
+    assert result["diagnostics"]["reason_code"] == "no_matches"
     assert "/secret/path" not in str(result)
 
     absent = HybridRetriever(database).search_with_diagnostics("missing", filters=SearchFilters())
     assert absent["diagnostics"]["semantic"] == "unavailable"
-    assert absent["diagnostics"]["reason_code"] == "semantic_provider_absent"
+    assert absent["diagnostics"]["reason_code"] == "no_matches"

@@ -307,12 +307,14 @@ def test_repair_docs_do_not_leave_pending_metadata_or_trailing_whitespace():
 def test_automatic_snapshot_never_mutates_configured_vault_or_calls_document_sink(tmp_path: Path, monkeypatch):
     settings, state, registry, source, _ = _generic_source(tmp_path)
     pipeline = build_extraction_pipeline(settings)
-    before = sorted(str(path.relative_to(settings.vault_path)) for path in settings.vault_path.rglob("*"))
     def fail_write(*args, **kwargs):
         raise AssertionError("automatic snapshot must not call VaultExtractionSink.write_batch")
     monkeypatch.setattr(pipeline.sink, "write_batch", fail_write)
     runtime = AutomaticMemoryRuntime(state_db=state, pipeline=pipeline, settings=settings, registry=registry)
     runtime.start()
+    # 晋升管线（2026-09-22 起）构造时会对 Vault 做标准目录骨架初始化（VaultLayout.ensure）；
+    # 本测试的契约是"扫描/提炼过程不写 Vault 内容"——基线取骨架初始化之后。
+    before = sorted(str(path.relative_to(settings.vault_path)) for path in settings.vault_path.rglob("*"))
     try:
         runtime.scan_now(source.source_id)
         deadline = time.time() + 5

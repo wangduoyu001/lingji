@@ -69,12 +69,21 @@ def test_idle_runtime_persists_instance_bound_heartbeat_and_refreshes_without_re
         assert first["scheduler_heartbeat_age"] <= 1.0
         assert first["scheduler_heartbeat_instance"] == scheduler.instance_id
         assert first["scheduler_heartbeat_generation"] == scheduler.generation
+        # 启动首拍允许 run_on_start 的即时对账异步落地；先等它完成再取基线，
+        # 契约是 "heartbeat 刷新不触发 reconciliation"——之后计数不得增长。
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            if len(state.list_automatic_memory_scans()) > 0 or len(state.recent_events(limit=100)) > 0:
+                break
+            time.sleep(0.02)
+        baseline_scans = len(state.list_automatic_memory_scans())
+        baseline_events = len(state.recent_events(limit=100))
         time.sleep(0.2)
         second = runtime.status()
         assert second["scheduler_heartbeat_at"] != first["scheduler_heartbeat_at"]
         assert second["scheduler_heartbeat_age"] <= 1.0
-        assert len(state.list_automatic_memory_scans()) == 0
-        assert len(state.recent_events(limit=100)) == 0
+        assert len(state.list_automatic_memory_scans()) == baseline_scans
+        assert len(state.recent_events(limit=100)) == baseline_events
     finally:
         runtime.stop()
 

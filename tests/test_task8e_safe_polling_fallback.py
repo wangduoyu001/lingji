@@ -184,6 +184,7 @@ def test_fallback_stays_quiet_for_two_reconciliation_periods_and_discovers_on_sc
         poll_seconds=0.02,
         reconciliation_seconds=1,
         integrity_seconds=3600,
+        snapshot_throttle_seconds=0,
     )
     scheduler.start()
     try:
@@ -210,6 +211,7 @@ def test_fallback_pause_resume_restart_preserve_reconciliation_without_starting_
         poll_seconds=0.02,
         reconciliation_seconds=1,
         integrity_seconds=3600,
+        snapshot_throttle_seconds=0,
     )
     scheduler.start()
     time.sleep(0.1)
@@ -232,6 +234,7 @@ def test_fallback_pause_resume_restart_preserve_reconciliation_without_starting_
         poll_seconds=0.02,
         reconciliation_seconds=1,
         integrity_seconds=3600,
+        snapshot_throttle_seconds=0,
     )
     restarted.start()
     time.sleep(1.1)

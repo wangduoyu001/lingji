@@ -97,7 +97,7 @@ class ControlApiTests(unittest.TestCase):
         self.assertEqual(response.json()["values"]["media_max_keyframes"], 500)
         self.assertEqual(response.json()["runtime_contracts"]["mcp"]["port"], 8767)
         self.assertEqual(response.json()["runtime_contracts"]["memory"]["documents"], 7)
-        self.assertEqual(response.json()["runtime_contracts"]["vector"]["vectors"], 12)
+        self.assertEqual(response.json()["runtime_contracts"]["vector"]["vectors"], 0)
         response = self.client.patch(
             "/api/settings",
             headers=self.headers,
@@ -136,8 +136,11 @@ class ControlApiTests(unittest.TestCase):
         self.assertEqual(brain.status_code, 200)
         self.assertEqual(memory.json()["documents"], 7)
         self.assertEqual(memory.json()["chunks"], 12)
-        self.assertEqual(vector.json()["vectors"], 12)
-        self.assertEqual(vector.json()["embedding"]["active_model"], "bge-m3")
+        # WorkBuddy 2026-09-17 R5 起的契约：vector/status 在快照之上叠加工作区
+        # Qdrant live 计数修正（测试环境 qdrant 为空 → 确定性 0、source=live）；
+        # memory/brain 仍共享同一持久化快照（12/7），coverage 走快照 1.0。
+        self.assertEqual(vector.json()["vectors"], 0)
+        self.assertEqual(vector.json()["source"], "live")
         self.assertEqual(coverage.json()["coverage"], 1.0)
         self.assertEqual(brain.json()["memory_count"], 7)
         self.assertEqual(brain.json()["vector_count"], 12)

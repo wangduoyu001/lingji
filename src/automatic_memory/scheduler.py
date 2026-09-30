@@ -436,6 +436,13 @@ class AutomaticMemoryScheduler:
         if throttle <= 0:
             return None
         try:
+            # 授权边界优先于节流：撤销/过期/暂停的源必须立即走拒绝路径，
+            # 不得被"节流跳过"的 complete=True 语义掩盖（2026-09-30 审计）。
+            if self._source(source_id).status != "authorized":
+                return None
+        except Exception:
+            return None
+        try:
             scans = self.state_db.list_automatic_memory_scans(source_id)
         except Exception:
             return None

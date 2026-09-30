@@ -36,7 +36,11 @@ def test_reconciliation_admits_once_and_persists_report(tmp_path: Path):
         calls.append((source_id, reason))
         return ReconciliationReport(1, 1, 0, (), True)
 
-    scheduler = AutomaticMemoryScheduler(db, registry, scan_runner=scan)
+    # 节流是 2026-09-27 起的独立契约（同源最小重拍间隔，reason=event/reconciliation
+    # 受限）；本测试只验证 admit-once 与报告持久化，显式禁用节流隔离两个契约。
+    scheduler = AutomaticMemoryScheduler(
+        db, registry, scan_runner=scan, snapshot_throttle_seconds=0
+    )
     first = scheduler.reconcile(source_id, reason="event")
     second = scheduler.reconcile(source_id, reason="event")
     assert first.complete and second.complete
@@ -468,6 +472,7 @@ def test_reconciliation_runs_after_event_silence(tmp_path: Path):
         scan_runner=scan,
         poll_seconds=0.01,
         reconciliation_seconds=0.1,
+        snapshot_throttle_seconds=0,
     )
     scheduler.start()
     deadline = time.monotonic() + 1.0

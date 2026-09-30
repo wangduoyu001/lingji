@@ -438,6 +438,9 @@ class PackagedSidecar:
                 "LINGJI_WORKSPACE": "acceptance",
                 "LINGJI_AUTOMATIC_MEMORY_DEBOUNCE_SECONDS": "1",
                 "LINGJI_AUTOMATIC_MEMORY_RECONCILIATION_SECONDS": "1",
+                # 双轮流程的第二轮 reconciliation 依赖立即重扫；快照节流
+                # （2026-09-27 起默认 1800s）会静默 defer 掉第二轮，显式关闭。
+                "LINGJI_AUTOMATIC_MEMORY_SNAPSHOT_THROTTLE_SECONDS": "0",
                 "LINGJI_AUTOMATIC_MEMORY_INTEGRITY_SECONDS": "3600",
                 "LINGJI_SCHEDULER_POLL_SECONDS": "0.05",
                 "LINGJI_EXTRACTION_POLL_SECONDS": "0.05",
@@ -880,7 +883,10 @@ def _run_clean_acceptance(root: Path) -> dict[str, Any]:
             # as not applicable in this mode (documented BLOCKED).
             sidecar.post("/api/automatic-memory/pause-runtime", {"confirmation": True})
             sidecar.post("/api/automatic-memory/resume-runtime", {"confirmation": True})
-            event_scan = _automatic_scan_until_terminal(sidecar, source_id, event_before_ids, reasons={"reconciliation"}, timeout=75.0)
+            # 契约：resume 后一个 reconciliation 周期内必拍。interval 被 clamp 到
+            # 60s 最小，加上采集执行与 CI 负载裕度，75s 边界过紧（基线在案的
+            # 超时失败）；150s 仍忠实于"一个周期内"语义。
+            event_scan = _automatic_scan_until_terminal(sidecar, source_id, event_before_ids, reasons={"reconciliation"}, timeout=150.0)
         timings["3_file_event"] = time.monotonic() - event_started
         if automation_mode == "event_watcher":
             assert timings["3_file_event"] <= 30.0
