@@ -1,5 +1,9 @@
 # PROJECT_STATUS.md — LingJi 当前状态
 
+## 2026-10-03 全面复验（全量零回归保持 + Ollama 断供根治）
+
+主人指令"再次全面验收灵机。有问题直接修复"（滚动记录见 `docs/MAINTENANCE_LOG.md` 迭代 #12）。全量 pytest `1939 passed / 0 failed / 22 skipped` 与迭代 #11 基线逐项一致，三门禁 PASS；live 全 healthy（29,210 文档 / 37,541 分块）、settings 零泄漏、MCP 22 工具、空闲 CPU ~3% / RSS 1311MB。**唯一发现：机器重启后 Ollama 不自启导致嵌入断供（9-27 同因第二次复发），向量缺口 11 块**——已拉起并回填追平 100%，安装 LaunchAgent `com.lingji.ollama`（开机自启 + KeepAlive）根治。零产品代码变更。Phase 1 剩余不变：主人体验确认（毛玻璃 UI、质量门最终判定、晋升管线确认）→ Phase 1 PASS → Phase 2 机会中心。
+
 ## 2026-09-30 晚 P1 修复落地（全量首次零失败，sidecar 已装机）
 
 主人指令"全部按照建议执行"。**守卫测试失败真相反转**：739 行失败并非"knowledge 层绕过授权"，而是**价值门拦截测试夹具**（夹具按整文件判定恒 1 轮，只能靠 ≥300 字符或价值信号过门；四处夹具 270-293 字符全部被 `skipped_by_value_gate`，证据从未入库）。修复（commit 26cb7d5f）：①四处夹具补真实价值信号（不关门禁不降阈值）；②真缺口一并修——`source_authority.py` 授权过滤扩展到一切带 `automatic_memory_source_id` 的派生层，**豁免 core+approved**（主人批准的 Core 不随撤销隐藏）；③`_promote_row` 晋升文件自带来源链（frontmatter→relationships 自动落库）；④存量核实后不做 Vault 回填（79 条全为豁免面、distilled_knowledge 表已存 source_id）。**测试：守卫测试 7:41 首次全程通过；全量 1939 passed / 0 failed / 22 skipped 零失败**。sidecar SHA `b85f3341…` 装机重启，live 全 healthy。**Qdrant 容量决策（已拍板执行）**：embedded 实证健康（37k 点），增速 ~500-1,000 分块/天，行动阈值 10-20 万点届时迁本机 Docker，云服务器方案否决（隐私/可用性/需改代码，收益不成立）。Phase 1 剩余不变：主人体验确认（毛玻璃 UI、质量门最终判定、晋升管线确认）→ Phase 1 PASS → Phase 2 机会中心。

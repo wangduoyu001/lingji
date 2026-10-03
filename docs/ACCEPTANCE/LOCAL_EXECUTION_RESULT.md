@@ -1,5 +1,28 @@
 # LingJi 本机执行结果回执
 
+## 2026-10-03 全面复验小节（COMPREHENSIVE_ACCEPTANCE_20261003，独立复验轮 + 环境修复）
+
+主人指令"再次全面验收灵机。有问题直接修复"。独立复验（不改 AUDIT_RESPONSE_20260927 的 ACTIVE/待主人确认状态），完整证据见总账 `docs/MAINTENANCE_LOG.md` 迭代 #12。
+
+```text
+task_id: COMPREHENSIVE_ACCEPTANCE_20261003
+status: COMPLETED
+verdict: PASS_WITH_ENV_FIX
+product_head: 93c5172c（= origin/master，与迭代 #11 基线一致，零产品代码变更）
+deployed_sidecar_sha256_prefix: b85f3341…（当日 22:08 随机器启动）
+full_pytest: 1939 passed / 0 failed / 22 skipped（14:02，与迭代 #11 零失败基线逐项一致）
+gates: compileall PASS / acceptance_sync PASS（产品影响 0）/ handoff PASS
+api: 认证边界 401/200 正确；settings 零泄漏（掩码+_set 标志）；work failures 聚合正常
+mcp: stdio 实测 22 工具，与基线一致；8767 无监听
+live_health: 发现 Ollama 未随机器启动（同 9-27 根因第二次复发）→ 已拉起并手动 vectorize
+  回填追平（37,541/37,541 = 100%，embedding_state=healthy）；已安装 LaunchAgent
+  com.lingji.ollama（RunAtLoad+KeepAlive）根治，launchd 拉起验证通过
+resources: 空闲 CPU ~3%（20s TIME 差值）/ RSS 1311MB（当日使用增长，预算内）
+env_change: ~/Library/LaunchAgents/com.lingji.ollama.plist（本机环境修复，非仓库代码）
+repo_hygiene: 清理 __pycache__×43、build/sidecar-macos 126MB、本轮临时日志
+product_code_changed: false / owner_data_touched: false / production_pollution_count: 0
+```
+
 ## 2026-09-30 全面复验小节（COMPREHENSIVE_ACCEPTANCE_20260930，只读验收轮）
 
 主人指令"再次全面检查灵机 全面验收"。本轮为独立只读复验（非任务单新任务，不改变 AUDIT_RESPONSE_20260927 的 ACTIVE/待主人确认状态），完整证据见总账 `docs/MAINTENANCE_LOG.md` 迭代 #1（按主人 2026-09-30 指令，排查优化类记录统一在该文档迭代，不再新建报告文件）。

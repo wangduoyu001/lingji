@@ -1,6 +1,6 @@
 # MAINTENANCE_LOG.md — 排查优化总账（唯一迭代文档）
 
-> Updated: 2026-09-30
+> Updated: 2026-10-03
 > Status: CURRENT_AUTHORITY（排查优化/全面检查/修复轮的唯一滚动记录）
 > 完整治理规则：`docs/DEVELOPMENT_RULES.md`、`docs/DOCUMENTATION_MAINTENANCE.md`
 
@@ -16,6 +16,29 @@
 - **当前权威**：`PROJECT_STATUS.md`（状态）、`ARCHITECTURE.md`（架构）、`MODULES/CODE_MAP.md`（代码）、`ACCEPTANCE/`（验收）、`CHANGELOG.md`（用户可感知变化）、`DOCUMENTATION_MAINTENANCE.md`（文档角色契约）、本文件（排查优化总账）。
 - **已核查合规的历史档案**（均有头部角色降级声明，不冒充当前状态，按契约默认保留，Git 历史可查）：`MODULES/P0_*、P2_*` 25 个实施记录（入口 `MODULES/README.md`）、docs 根 12 个阶段/设计报告（PHASE_02/03、MEDIA_EXTRACTION、WINDOWS_DB、REAL_ENVIRONMENT、RUNTIME_MEDIA、OBSIDIAN_*、AUTH_CREDENTIAL、PERMANENT_MEMORY_AND_RECALL 等）、`superpowers/plans/` 17 个实施计划（其中 owner-source-intake 计划被 AGENTS.md 引用）、入门存根 4 个（ENVIRONMENT/GETTING_STARTED/CONFIGURATION/DATA_FLOW，均已改为指向权威的重定向页）。
 - **未发现过期冒充文档**。本次排查的处置决定：不批量删除（遵守 DOCUMENTATION_MAINTENANCE §5"历史证据默认保留"）；对历史档案的判断以本地图为准，不需要逐个打开。
+
+---
+
+## 迭代 #12：2026-10-03 全面复验——全量零回归保持，Ollama 断供根因修复（LaunchAgent 自启）
+
+主人指令"再次全面验收灵机。有问题直接修复"。独立复验轮（基线 = 迭代 #11：HEAD `93c5172c` = origin/master，sidecar `b85f3341…` 当日 22:08 随机器启动）。
+
+**验收结果（零产品代码变更）**：
+1. 全量 pytest `1939 passed / 0 failed / 22 skipped`（14:02）——与迭代 #11 基线逐项一致，**零回归保持**；22 skipped 维持在案条件性 skip。
+2. 三门禁 PASS：compileall / acceptance_sync（产品影响 0）/ local_execution_handoff。
+3. live 复核：ping 200（认证边界无凭证 401 正确）；memory/vector/embedding 全 healthy（29,210 文档 / 37,541 分块 / revision 2549，当日有真实使用增长）；settings 零泄漏（`zhipu_api_key = dac0…Tuqn` 掩码 + `_set` 标志位在）；MCP stdio 实测 22 工具与基线一致；8767 无监听；work failures 聚合正常。
+4. 空闲指标：CPU ~3%（20s TIME 差值法）、RSS 1311MB（当日使用量高于上轮 967MB 属正常缓存增长，峰值预算内）。
+
+**发现并修复：Ollama 嵌入断供（第二次同因复发，本轮根治）**：
+- 现象：embedding_state=unavailable、嵌入失败 20 次、向量缺口 11 块（37,530/37,541，coverage 99.97%）。根因 = 机器当日重启后 `ollama serve`（手动 nohup 拉起，非服务）不在了——与迭代 #4（9-27 审计响应"缺口根因=Ollama 未运行"）同因。
+- 修复：①拉起 Ollama（`~/video-tools-bin/ollama`，qwen3-embedding:0.6b 在位）；②手动触发 `/api/observability/vectorize` 回填——11 块全部追平（remaining=0），覆盖恢复 100%、embedding_state=healthy；③**根治：安装 LaunchAgent `~/Library/LaunchAgents/com.lingji.ollama.plist`**（RunAtLoad + KeepAlive + 固定 127.0.0.1:11434，日志 `~/Library/Logs/lingji-ollama.log`），launchd 拉起验证通过——开机自启 + 进程挂掉自动重启，断供不再依赖人工发现。
+- 产品侧行为正确（如实 degraded/unavailable 诚实展示），本轮不改产品代码。
+
+**附带发现（不构成缺陷，记录在案）**：向量回填线程是"导入事件唤醒"语义（`_backfill_loop` 只在 `_wake_vector_backfill` 置位时工作），启动时不追存量缺口——凡嵌入服务中断期间产生的新分块都会滞留到下一次手动 vectorize 或新导入。Ollama 自启修复后此窗口应不再出现；若再次出现"缺口滞留"，优先查嵌入服务而不是回填逻辑。
+
+**卫生**：清理 43 个 `__pycache__`/`.pytest_cache`、`build/sidecar-macos` 126MB、本轮临时日志；`交接.md` 覆盖更新并随本轮提交（上轮收尾遗漏提交）。
+
+**遗留不变**：Phase 1 只剩主人体验确认（毛玻璃 UI、质量门最终判定、晋升管线与 Evolving 审阅、AUDIT_RESPONSE_20260927 收口）；raw 1.7G/2GiB（余量 ~15%，按迭代 #2 口径持续观察）。
 
 ---
 
